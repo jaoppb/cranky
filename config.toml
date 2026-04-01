@@ -1,0 +1,27 @@
+[bar]
+background = "#1a1b26"
+text_color = "#c0caf5"
+font_family = "JetBrainsMono Nerd Font"
+font_size = 14.0
+scale = 1.0
+height = 40
+
+[bar.margin]
+top = 8
+bottom = -8
+left = 8
+right = 8
+
+[bar.border]
+size = 2
+color = "#7aa2f7"
+radius = 8.0
+
+[[modules.left]]
+name = "workspace"
+enable = true
+border_radius = 4.0
+
+[[modules.right]]
+name = "hour"
+enable = true
