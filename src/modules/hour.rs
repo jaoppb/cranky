@@ -1,13 +1,12 @@
 use crate::modules::{CrankyModule, Event, UpdateAction};
 use crate::render::RenderContext;
 use chrono::Local;
-use tiny_skia::{Color, PixmapMut, Rect};
-use thiserror::Error;
 use serde::Deserialize;
+use thiserror::Error;
+use tiny_skia::{Color, PixmapMut, Rect};
 
 #[derive(Error, Debug)]
-pub enum HourError {
-}
+pub enum HourError {}
 
 #[derive(Debug, Deserialize, Default, Clone)]
 pub struct HourConfig {
@@ -35,7 +34,11 @@ impl CrankyModule for HourModule {
     type Error = HourError;
     type Config = HourConfig;
 
-    fn init(&mut self, config: Self::Config, _bar_config: &crate::config::BarConfig) -> Result<(), Self::Error> {
+    fn init(
+        &mut self,
+        config: Self::Config,
+        _bar_config: &crate::config::BarConfig,
+    ) -> Result<(), Self::Error> {
         if let Some(format) = config.format {
             self.format = format;
         }
@@ -57,7 +60,13 @@ impl CrankyModule for HourModule {
         }
     }
 
-    fn view(&self, pixmap: &mut PixmapMut, area: Rect, context: &mut RenderContext, _monitor: &str) {
+    fn view(
+        &self,
+        pixmap: &mut PixmapMut,
+        area: Rect,
+        context: &mut RenderContext,
+        _monitor: &str,
+    ) {
         use crate::render::TextStyling;
         let styling = TextStyling::new(
             14.0,
@@ -68,13 +77,7 @@ impl CrankyModule for HourModule {
 
         let y_offset = context.calculate_vertical_offset(area, styling.line_height());
 
-        context.render_text(
-            pixmap,
-            &self.current_time,
-            styling,
-            area.left(),
-            y_offset,
-        );
+        context.render_text(pixmap, &self.current_time, styling, area.left(), y_offset);
     }
 
     fn measure(&self, context: &mut RenderContext, _monitor: &str) -> f32 {

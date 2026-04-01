@@ -177,20 +177,11 @@ impl WaylandManager {
             .as_ref()
             .ok_or_else(|| CoreError::Global("Missing zwlr_layer_shell_v1".to_string()))?;
 
-        let globals = WaylandGlobals::new(
-            compositor.clone(),
-            shm.clone(),
-            layer_shell.clone(),
-        );
+        let globals = WaylandGlobals::new(compositor.clone(), shm.clone(), layer_shell.clone());
 
         for info in &self.state.outputs {
-            let bar = bar::Bar::new(
-                info,
-                &globals,
-                &self.state.config,
-                &qh,
-            )
-            .map_err(|e| CoreError::Global(e.to_string()))?;
+            let bar = bar::Bar::new(info, &globals, &self.state.config, &qh)
+                .map_err(|e| CoreError::Global(e.to_string()))?;
             self.state.bars.push(bar);
         }
 
@@ -404,10 +395,10 @@ mod tests {
     fn test_core_error_display() {
         let err = CoreError::Connection("failed".to_string());
         assert_eq!(format!("{}", err), "Wayland connection failed: failed");
-        
+
         let err = CoreError::Global("missing".to_string());
         assert_eq!(format!("{}", err), "Wayland global error: missing");
-        
+
         let err = CoreError::Dispatch("timed out".to_string());
         assert_eq!(format!("{}", err), "Wayland dispatch error: timed out");
     }
@@ -416,14 +407,18 @@ mod tests {
     fn test_wayland_manager_new_fail() {
         // Without WAYLAND_DISPLAY, it should fail
         let old_val = std::env::var_os("WAYLAND_DISPLAY");
-        unsafe { std::env::remove_var("WAYLAND_DISPLAY"); }
-        
+        unsafe {
+            std::env::remove_var("WAYLAND_DISPLAY");
+        }
+
         let config = Config::default();
         let res = WaylandManager::new(config);
         assert!(res.is_err());
-        
+
         if let Some(val) = old_val {
-            unsafe { std::env::set_var("WAYLAND_DISPLAY", val); }
+            unsafe {
+                std::env::set_var("WAYLAND_DISPLAY", val);
+            }
         }
     }
 
@@ -434,12 +429,12 @@ mod tests {
             std::ptr::write(&mut info.name, "HDMI-A-1".to_string());
             std::ptr::write(&mut info.scale, 1);
         }
-        
+
         assert_eq!(info.name(), "HDMI-A-1");
         assert_eq!(info.scale(), 1);
-        
+
         // Don't test output() getter as it returns reference to uninitialized memory which is dangerous
-        
+
         std::mem::forget(info);
     }
 

@@ -19,7 +19,6 @@ pub struct Config {
     modules: ModulesConfig,
 }
 
-
 impl Config {
     pub fn load_from_path<P: AsRef<Path>>(path: P) -> Result<Self> {
         let content = std::fs::read_to_string(path)?;
@@ -257,11 +256,11 @@ mod tests {
         assert_eq!(config.bar().background(), "#1a1b26");
         assert_eq!(config.bar().height(), 30);
         assert_eq!(config.bar().vertical_alignment(), VerticalAlignment::Center);
-        
+
         let border = config.bar().border();
         assert_eq!(border.radius(), 8.0);
         assert_eq!(border.color(), "#7aa2f7");
-        
+
         let margin = config.bar().margin();
         assert_eq!(margin.top(), 5);
         assert_eq!(margin.bottom(), 0);
@@ -271,7 +270,7 @@ mod tests {
         assert_eq!(config.modules().left().len(), 1);
         assert_eq!(config.modules().left()[0].name(), "workspace");
         assert!(config.modules().left()[0].is_enabled());
-        
+
         assert_eq!(config.modules().center().len(), 1);
         assert_eq!(config.modules().right().len(), 1);
     }
@@ -285,16 +284,16 @@ mod tests {
             [modules]
         "##;
         let config = Config::from_str(toml_str).unwrap();
-        
+
         let modules = config.modules();
         assert!(modules.left().is_empty());
         assert!(modules.center().is_empty());
         assert!(modules.right().is_empty());
-        
+
         let bar = config.bar();
         let border = bar.border();
         assert_eq!(border.size(), 0.0);
-        
+
         let margin = bar.margin();
         assert_eq!(margin.left(), 0);
         assert_eq!(margin.right(), 0);
@@ -306,10 +305,10 @@ mod tests {
         let bar_default = BarConfig::default();
         assert_eq!(bar_default.background(), "#000000");
         assert_eq!(bar_default.height(), 30);
-        
+
         let margin_default = MarginConfig::default();
         assert_eq!(margin_default.top(), 0);
-        
+
         let border_default = BorderConfig::default();
         assert_eq!(border_default.size(), 0.0);
         assert_eq!(border_default.color(), "#000000");
@@ -318,7 +317,10 @@ mod tests {
     #[test]
     fn test_module_config_new() {
         let mut options = HashMap::new();
-        options.insert("key".to_string(), serde_json::Value::String("value".to_string()));
+        options.insert(
+            "key".to_string(),
+            serde_json::Value::String("value".to_string()),
+        );
         let mc = ModuleConfig::new("test".to_string(), true, options);
         assert_eq!(mc.name(), "test");
         assert!(mc.is_enabled());

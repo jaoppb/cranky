@@ -333,9 +333,8 @@ mod tests {
                 Workspace::new(2, "eDP-1".to_string()),
             ])
         });
-        mock.expect_get_monitors().returning(|| {
-            Ok(vec![Monitor::new("eDP-1".to_string(), 1)])
-        });
+        mock.expect_get_monitors()
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
 
         let mut module = WorkspaceModule::with_provider(Box::new(mock));
         let config = WorkspaceConfig::default();
@@ -418,7 +417,7 @@ mod tests {
         let area = Rect::from_xywh(0.0, 0.0, 100.0, 30.0).unwrap();
 
         module.view(&mut pixmap, area, &mut context, "eDP-1");
-        
+
         // Active background color should be present (default: #3b4261 -> RGB(59, 66, 97))
         let expected_color = tiny_skia::Color::from_rgba8(59, 66, 97, 255);
         assert_pixmap_has_color!(pixmap, expected_color);
@@ -494,9 +493,8 @@ mod tests {
     #[test]
     fn test_workspace_view_rounded() {
         let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces().returning(|| {
-            Ok(vec![Workspace::new(1, "eDP-1".to_string())])
-        });
+        mock.expect_get_workspaces()
+            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
         mock.expect_get_monitors()
             .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
 
@@ -513,7 +511,7 @@ mod tests {
         let area = Rect::from_xywh(0.0, 0.0, 100.0, 30.0).unwrap();
 
         module.view(&mut pixmap, area, &mut context, "eDP-1");
-        
+
         let expected_color = tiny_skia::Color::from_rgba8(59, 66, 97, 255);
         assert_pixmap_has_color!(pixmap, expected_color);
     }

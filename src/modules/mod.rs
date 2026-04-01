@@ -357,7 +357,7 @@ mod tests {
         let action = UpdateAction::Redraw;
         assert_eq!(action, UpdateAction::Redraw);
         assert_ne!(action, UpdateAction::None);
-        
+
         let event = Event::Timer;
         let event_clone = event.clone();
         match event_clone {
@@ -369,7 +369,7 @@ mod tests {
     fn test_registry_error_display() {
         let err = RegistryError::NotFound("test".to_string());
         assert_eq!(format!("{}", err), "Module not found: test");
-        
+
         let sub_err = std::io::Error::new(std::io::ErrorKind::Other, "io error");
         let err = RegistryError::InitFailed("test".to_string(), Box::new(sub_err));
         assert!(format!("{}", err).contains("Module initialization failed for 'test'"));
@@ -382,11 +382,11 @@ mod tests {
             areas: Arc::new(Mutex::new(Vec::new())),
             update_action: UpdateAction::None,
         };
-        
+
         // Testing that AnyModule methods (which are implemented via the generic impl) work
         let event_action = AnyModule::update(&mut mock, Event::Timer);
         assert_eq!(event_action, UpdateAction::None);
-        
+
         let mut context = RenderContext::new();
         let width = AnyModule::measure(&mock, &mut context, "eDP-1");
         assert_eq!(width, 100.0);
@@ -401,7 +401,7 @@ mod tests {
             update_action: UpdateAction::Redraw,
         };
         registry.left_modules.push(Box::new(mock));
-        
+
         let action = registry.update(Event::Timer);
         assert_eq!(action, UpdateAction::Redraw);
     }
@@ -415,7 +415,7 @@ mod tests {
             ModuleConfig::new("hour".to_string(), true, options),          // Enabled
         ];
         let bar_config = crate::config::BarConfig::default();
-        
+
         let modules = registry.create_modules(&configs, &bar_config).unwrap();
         assert_eq!(modules.len(), 1); // Only the enabled one
     }
@@ -440,7 +440,6 @@ mod tests {
             areas: areas.clone(),
             update_action: UpdateAction::None,
         });
-
 
         registry.left_modules.push(m1);
         registry.center_modules.push(m2);
@@ -473,6 +472,5 @@ mod tests {
         // Offset: 0.0 + (1000.0 - 60.0) / 2.0 = 470.0
         assert_eq!(rendered_areas[2].left(), 470.0);
         assert_eq!(rendered_areas[2].width(), 60.0);
-
     }
 }

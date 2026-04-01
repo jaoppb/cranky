@@ -1,8 +1,8 @@
 use cosmic_text::{
     Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache, SwashContent, SwashImage,
 };
+use log::{debug, info};
 use tiny_skia::{Color, Paint, PixmapMut, Rect, Transform};
-use log::{info, debug};
 
 use crate::config::VerticalAlignment;
 
@@ -87,8 +87,14 @@ impl RenderContext {
         start_x: f32,
         start_y: f32,
     ) {
-        info!("Rendering text '{}' at ({}, {}) with scale {}", text, start_x, start_y, self.scale);
-        let metrics = Metrics::new(styling.font_size() * self.scale, styling.line_height() * self.scale);
+        info!(
+            "Rendering text '{}' at ({}, {}) with scale {}",
+            text, start_x, start_y, self.scale
+        );
+        let metrics = Metrics::new(
+            styling.font_size() * self.scale,
+            styling.line_height() * self.scale,
+        );
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
 
         let mut attrs = Attrs::new();
@@ -107,7 +113,10 @@ impl RenderContext {
                 glyph_count += 1;
                 // start_x and start_y are in logical units
                 // run.line_y is already in physical units (from scaled metrics)
-                let physical_glyph = glyph.physical((start_x * self.scale, start_y * self.scale + run.line_y), 1.0);
+                let physical_glyph = glyph.physical(
+                    (start_x * self.scale, start_y * self.scale + run.line_y),
+                    1.0,
+                );
                 let image = match self
                     .swash_cache
                     .get_image(&mut self.font_system, physical_glyph.cache_key)
@@ -119,8 +128,12 @@ impl RenderContext {
                 let x = physical_glyph.x + image.placement.left;
                 let y = physical_glyph.y - image.placement.top;
 
-                if glyph_count % 10 == 0 || glyph_count < 5 { // Avoid too much log spam
-                     debug!("Glyph at ({}, {}), size {}x{}", x, y, image.placement.width, image.placement.height);
+                if glyph_count % 10 == 0 || glyph_count < 5 {
+                    // Avoid too much log spam
+                    debug!(
+                        "Glyph at ({}, {}), size {}x{}",
+                        x, y, image.placement.width, image.placement.height
+                    );
                 }
 
                 match image.content {
@@ -136,7 +149,10 @@ impl RenderContext {
     }
 
     pub fn measure_text(&mut self, text: &str, styling: TextStyling) -> f32 {
-        let metrics = Metrics::new(styling.font_size() * self.scale, styling.line_height() * self.scale);
+        let metrics = Metrics::new(
+            styling.font_size() * self.scale,
+            styling.line_height() * self.scale,
+        );
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
 
         let mut attrs = Attrs::new();
@@ -153,7 +169,12 @@ impl RenderContext {
         for run in buffer.layout_runs() {
             width = width.max(run.line_w);
         }
-        info!("Measured text '{}': width={}, scaled_width={}", text, width / self.scale, width);
+        info!(
+            "Measured text '{}': width={}, scaled_width={}",
+            text,
+            width / self.scale,
+            width
+        );
         width / self.scale
     }
 }
@@ -265,43 +286,57 @@ mod tests {
     fn test_render_glyphs() {
         let mut pixmap_data = vec![0; 10 * 10 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 10, 10).unwrap();
-        
+
         let mut image = unsafe { std::mem::MaybeUninit::<SwashImage>::uninit().assume_init() };
         unsafe {
             std::ptr::write(&mut image.content, SwashContent::Mask);
-            std::ptr::write(&mut image.placement, cosmic_text::Placement {
-                left: 0,
-                top: 0,
-                width: 2,
-                height: 2,
-            });
+            std::ptr::write(
+                &mut image.placement,
+                cosmic_text::Placement {
+                    left: 0,
+                    top: 0,
+                    width: 2,
+                    height: 2,
+                },
+            );
             std::ptr::write(&mut image.data, vec![255, 255, 255, 255]);
         }
-        
+
         render_mask_glyph(&mut pixmap, &image, 0, 0, Color::BLACK);
-        
-        let mut image_color = unsafe { std::mem::MaybeUninit::<SwashImage>::uninit().assume_init() };
+
+        let mut image_color =
+            unsafe { std::mem::MaybeUninit::<SwashImage>::uninit().assume_init() };
         unsafe {
             std::ptr::write(&mut image_color.content, cosmic_text::SwashContent::Color);
-            std::ptr::write(&mut image_color.placement, cosmic_text::Placement {
-                left: 0,
-                top: 0,
-                width: 1,
-                height: 1,
-            });
+            std::ptr::write(
+                &mut image_color.placement,
+                cosmic_text::Placement {
+                    left: 0,
+                    top: 0,
+                    width: 1,
+                    height: 1,
+                },
+            );
             std::ptr::write(&mut image_color.data, vec![255, 0, 0, 255]);
         }
         render_color_glyph(&mut pixmap, &image_color, 5, 5);
-        
-        let mut image_subpixel = unsafe { std::mem::MaybeUninit::<SwashImage>::uninit().assume_init() };
+
+        let mut image_subpixel =
+            unsafe { std::mem::MaybeUninit::<SwashImage>::uninit().assume_init() };
         unsafe {
-            std::ptr::write(&mut image_subpixel.content, cosmic_text::SwashContent::SubpixelMask);
-            std::ptr::write(&mut image_subpixel.placement, cosmic_text::Placement {
-                left: 0,
-                top: 0,
-                width: 1,
-                height: 1,
-            });
+            std::ptr::write(
+                &mut image_subpixel.content,
+                cosmic_text::SwashContent::SubpixelMask,
+            );
+            std::ptr::write(
+                &mut image_subpixel.placement,
+                cosmic_text::Placement {
+                    left: 0,
+                    top: 0,
+                    width: 1,
+                    height: 1,
+                },
+            );
             std::ptr::write(&mut image_subpixel.data, vec![255, 255, 255]); // RGB
         }
         render_subpixel_glyph(&mut pixmap, &image_subpixel, 2, 2, Color::WHITE);
@@ -315,7 +350,7 @@ mod tests {
     fn test_text_styling() {
         let color = Color::from_rgba8(255, 0, 0, 255);
         let styling = TextStyling::new(14.0, 20.0, color, "Arial".to_string());
-        
+
         assert_eq!(styling.font_size(), 14.0);
         assert_eq!(styling.line_height(), 20.0);
         assert_eq!(styling.color().red(), color.red());
@@ -329,13 +364,22 @@ mod tests {
         let content_height = 20.0;
 
         context.set_vertical_alignment(VerticalAlignment::Top);
-        assert_eq!(context.calculate_vertical_offset(area, content_height), 10.0);
+        assert_eq!(
+            context.calculate_vertical_offset(area, content_height),
+            10.0
+        );
 
         context.set_vertical_alignment(VerticalAlignment::Center);
-        assert_eq!(context.calculate_vertical_offset(area, content_height), 10.0 + (50.0 - 20.0) / 2.0);
+        assert_eq!(
+            context.calculate_vertical_offset(area, content_height),
+            10.0 + (50.0 - 20.0) / 2.0
+        );
 
         context.set_vertical_alignment(VerticalAlignment::Bottom);
-        assert_eq!(context.calculate_vertical_offset(area, content_height), 10.0 + 50.0 - 20.0);
+        assert_eq!(
+            context.calculate_vertical_offset(area, content_height),
+            10.0 + 50.0 - 20.0
+        );
     }
 
     #[test]

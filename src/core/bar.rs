@@ -275,13 +275,13 @@ impl Bar {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tiny_skia::*;
     use crate::assert_pixmap_has_color;
+    use crate::core::CrankyState;
     use memmap2::MmapMut;
+    use tiny_skia::*;
+    use wayland_client::QueueHandle;
     use wayland_client::protocol::wl_shm::WlShm;
     use wayland_client::protocol::wl_shm_pool::WlShmPool;
-    use wayland_client::QueueHandle;
-    use crate::core::CrankyState;
 
     #[test]
     fn test_bar_methods() {
@@ -299,15 +299,15 @@ mod tests {
 
         bar.set_configured();
         assert!(bar.configured);
-        
+
         unsafe {
             std::ptr::write(&mut bar.monitor_name, "test-monitor".to_string());
         }
         assert_eq!(bar.monitor_name(), "test-monitor");
-        
+
         // Test layer_surface getter (just calling it, not using the result)
         let _ = bar.layer_surface();
-        
+
         std::mem::forget(bar);
     }
 
@@ -318,14 +318,15 @@ mod tests {
             std::ptr::write(&mut bar.width, 100);
             std::ptr::write(&mut bar.scale, 1);
         }
-        
+
         let shm = unsafe { std::mem::MaybeUninit::<WlShm>::uninit().assume_init() };
-        let qh = unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-        
+        let qh =
+            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
+
         // width is already 100
         bar.set_width(&shm, 100, &qh);
         assert_eq!(bar.width, 100);
-        
+
         std::mem::forget(bar);
         std::mem::forget(shm);
         std::mem::forget(qh);
@@ -334,27 +335,28 @@ mod tests {
     #[test]
     fn test_bar_set_width_small_change() {
         let mut bar = unsafe { std::mem::MaybeUninit::<Bar>::uninit().assume_init() };
-        
+
         unsafe {
             std::ptr::write(&mut bar.width, 100);
             std::ptr::write(&mut bar.height, 30);
             std::ptr::write(&mut bar.scale, 1);
-            
+
             let mmap = MmapMut::map_anon(1000 * 1000).unwrap();
             let pool = std::mem::MaybeUninit::<WlShmPool>::uninit().assume_init();
             let shm_buffer = ShmBuffer::test_new(mmap, pool);
-            
+
             std::ptr::write(&mut bar.shm_buffer, shm_buffer);
             std::ptr::write(&mut bar.buffer, None);
         }
-        
+
         let shm = unsafe { std::mem::MaybeUninit::<WlShm>::uninit().assume_init() };
-        let qh = unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-        
+        let qh =
+            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
+
         // Change width to 110, required size = 110*30*4 = 13200 < 1000000
         bar.set_width(&shm, 110, &qh);
         assert_eq!(bar.width, 110);
-        
+
         std::mem::forget(bar);
         std::mem::forget(shm);
         std::mem::forget(qh);
@@ -365,7 +367,7 @@ mod tests {
         let rect = Rect::from_xywh(0.0, 0.0, 100.0, 50.0).unwrap();
         let path = create_rounded_rect_path(rect, 10.0);
         assert!(path.is_some());
-        
+
         let path = create_rounded_rect_path(rect, 0.0);
         assert!(path.is_some());
 
@@ -381,15 +383,8 @@ mod tests {
 
         let rect = Rect::from_xywh(10.0, 10.0, 80.0, 80.0).unwrap();
         let bg_color = Color::from_rgba8(255, 0, 0, 255);
-        
-        draw_rounded_rect(
-            &mut pixmap,
-            rect,
-            bg_color,
-            0.0,
-            Color::TRANSPARENT,
-            0.0,
-        );
+
+        draw_rounded_rect(&mut pixmap, rect, bg_color, 0.0, Color::TRANSPARENT, 0.0);
 
         assert_pixmap_has_color!(pixmap, bg_color);
     }
@@ -403,15 +398,8 @@ mod tests {
         let rect = Rect::from_xywh(10.0, 10.0, 80.0, 80.0).unwrap();
         let bg_color = Color::from_rgba8(255, 0, 0, 255);
         let border_color = Color::from_rgba8(0, 255, 0, 255);
-        
-        draw_rounded_rect(
-            &mut pixmap,
-            rect,
-            bg_color,
-            2.0,
-            border_color,
-            0.0,
-        );
+
+        draw_rounded_rect(&mut pixmap, rect, bg_color, 2.0, border_color, 0.0);
 
         assert_pixmap_has_color!(pixmap, bg_color);
         assert_pixmap_has_color!(pixmap, border_color);
@@ -425,15 +413,8 @@ mod tests {
 
         let rect = Rect::from_xywh(10.0, 10.0, 80.0, 80.0).unwrap();
         let bg_color = Color::from_rgba8(255, 0, 0, 255);
-        
-        draw_rounded_rect(
-            &mut pixmap,
-            rect,
-            bg_color,
-            0.0,
-            Color::TRANSPARENT,
-            10.0,
-        );
+
+        draw_rounded_rect(&mut pixmap, rect, bg_color, 0.0, Color::TRANSPARENT, 10.0);
 
         assert_pixmap_has_color!(pixmap, bg_color);
     }

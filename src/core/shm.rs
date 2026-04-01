@@ -1,14 +1,14 @@
-use std::fs::File;
-use std::io::{Result, Error, ErrorKind};
-use std::os::unix::io::AsRawFd;
+use crate::core::CrankyState;
 use memmap2::MmapMut;
+use std::env;
+use std::fs::File;
+use std::io::{Error, ErrorKind, Result};
+use std::os::unix::io::AsRawFd;
+use std::os::unix::io::BorrowedFd;
+use std::path::PathBuf;
+use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
-use wayland_client::QueueHandle;
-use crate::core::CrankyState;
-use std::os::unix::io::BorrowedFd;
-use std::env;
-use std::path::PathBuf;
 
 pub struct ShmBuffer {
     mmap: MmapMut,
@@ -37,7 +37,12 @@ fn create_shm_file(size: usize) -> Result<File> {
 }
 
 impl ShmBuffer {
-    pub fn new(shm: &WlShm, width: u32, height: u32, qh: &QueueHandle<CrankyState>) -> Result<Self> {
+    pub fn new(
+        shm: &WlShm,
+        width: u32,
+        height: u32,
+        qh: &QueueHandle<CrankyState>,
+    ) -> Result<Self> {
         let size = (width * height * 4) as usize;
         let file = create_shm_file(size)?;
 
@@ -75,7 +80,9 @@ mod tests {
     fn test_create_shm_file() {
         // Ensure XDG_RUNTIME_DIR is set for the test
         if env::var_os("XDG_RUNTIME_DIR").is_none() {
-            unsafe { env::set_var("XDG_RUNTIME_DIR", "/tmp"); }
+            unsafe {
+                env::set_var("XDG_RUNTIME_DIR", "/tmp");
+            }
         }
 
         let size = 1024;
@@ -86,17 +93,19 @@ mod tests {
     #[test]
     fn test_shm_buffer_methods() {
         if env::var_os("XDG_RUNTIME_DIR").is_none() {
-            unsafe { env::set_var("XDG_RUNTIME_DIR", "/tmp"); }
+            unsafe {
+                env::set_var("XDG_RUNTIME_DIR", "/tmp");
+            }
         }
         let size = 4096;
         let file = create_shm_file(size).unwrap();
         let mmap = unsafe { MmapMut::map_mut(&file).unwrap() };
         let pool = unsafe { std::mem::MaybeUninit::<WlShmPool>::uninit().assume_init() };
-        
+
         let mut buffer = ShmBuffer { mmap, pool };
         assert_eq!(buffer.size(), size);
         assert_eq!(buffer.mmap_mut().len(), size);
-        
+
         std::mem::forget(buffer); // Avoid dropping uninitialized WlShmPool
     }
 

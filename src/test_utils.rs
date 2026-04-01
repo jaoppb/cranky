@@ -5,12 +5,12 @@ macro_rules! assert_pixel_color {
         let (r, g, b, a) = $crate::test_utils::get_pixel_color(&mut $pixmap, $x, $y);
         let expected = $expected_color;
         let actual = tiny_skia::Color::from_rgba8(r, g, b, a);
-        
+
         let diff_r = (actual.red() - expected.red()).abs();
         let diff_g = (actual.green() - expected.green()).abs();
         let diff_b = (actual.blue() - expected.blue()).abs();
         let diff_a = (actual.alpha() - expected.alpha()).abs();
-        
+
         let tolerance = 0.01;
         if diff_r > tolerance || diff_g > tolerance || diff_b > tolerance || diff_a > tolerance {
             panic!(
@@ -29,13 +29,18 @@ macro_rules! assert_pixmap_has_color {
         let expected = $expected_color;
         let data = $pixmap.data_mut();
         for i in (0..data.len()).step_by(4) {
-            let actual = tiny_skia::Color::from_rgba8(data[i], data[i+1], data[i+2], data[i+3]);
+            let actual =
+                tiny_skia::Color::from_rgba8(data[i], data[i + 1], data[i + 2], data[i + 3]);
             let diff_r = (actual.red() - expected.red()).abs();
             let diff_g = (actual.green() - expected.green()).abs();
             let diff_b = (actual.blue() - expected.blue()).abs();
             let diff_a = (actual.alpha() - expected.alpha()).abs();
             let tolerance = 0.01;
-            if diff_r <= tolerance && diff_g <= tolerance && diff_b <= tolerance && diff_a <= tolerance {
+            if diff_r <= tolerance
+                && diff_g <= tolerance
+                && diff_b <= tolerance
+                && diff_a <= tolerance
+            {
                 found = true;
                 break;
             }
@@ -68,7 +73,7 @@ mod tests {
         let mut pixmap_data = vec![0; 10 * 10 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 10, 10).unwrap();
         pixmap.fill(Color::from_rgba8(255, 128, 64, 255));
-        
+
         let (r, g, b, a) = get_pixel_color(&mut pixmap, 5, 5);
         assert_eq!(r, 255);
         assert_eq!(g, 128);
@@ -90,7 +95,7 @@ mod tests {
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 10, 10).unwrap();
         let color = Color::from_rgba8(100, 200, 50, 255);
         pixmap.fill(color);
-        
+
         assert_pixel_color!(pixmap, 0, 0, color);
         assert_pixmap_has_color!(pixmap, color);
     }

@@ -45,13 +45,17 @@ mod tests {
     #[test]
     fn test_get_config_path() {
         let old_home = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", "/tmp/test-home"); }
-        
+        unsafe {
+            std::env::set_var("HOME", "/tmp/test-home");
+        }
+
         let path = get_config_path();
         assert!(path.to_string_lossy().contains("/tmp/test-home"));
-        
+
         if let Some(home) = old_home {
-            unsafe { std::env::set_var("HOME", home); }
+            unsafe {
+                std::env::set_var("HOME", home);
+            }
         }
     }
 
@@ -74,11 +78,11 @@ mod tests {
             [modules]
         "##;
         std::fs::write(&config_path, config_content).unwrap();
-        
+
         let config = load_config(&config_path).unwrap();
         assert_eq!(config.bar().background(), "#123456");
         assert_eq!(config.bar().height(), 42);
-        
+
         let _ = std::fs::remove_file(config_path);
     }
 }

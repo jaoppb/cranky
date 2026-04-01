@@ -87,7 +87,7 @@ impl HyprlandProvider for RealHyprlandProvider {
 pub fn get_monitors() -> Result<Vec<Monitor>, HyprError> {
     let signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|_| HyprError::NoInstance)?;
     let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|_| HyprError::NoInstance)?;
-    
+
     let socket_path = PathBuf::from(xdg_runtime_dir)
         .join("hypr")
         .join(signature)
@@ -95,10 +95,10 @@ pub fn get_monitors() -> Result<Vec<Monitor>, HyprError> {
 
     let mut stream = UnixStream::connect(socket_path)?;
     stream.write_all(b"j/monitors")?;
-    
+
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
-    
+
     let monitors: Vec<Monitor> = serde_json::from_str(&response)?;
     Ok(monitors)
 }
@@ -106,7 +106,7 @@ pub fn get_monitors() -> Result<Vec<Monitor>, HyprError> {
 pub fn get_workspaces() -> Result<Vec<Workspace>, HyprError> {
     let signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|_| HyprError::NoInstance)?;
     let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|_| HyprError::NoInstance)?;
-    
+
     let socket_path = PathBuf::from(xdg_runtime_dir)
         .join("hypr")
         .join(signature)
@@ -114,10 +114,10 @@ pub fn get_workspaces() -> Result<Vec<Workspace>, HyprError> {
 
     let mut stream = UnixStream::connect(socket_path)?;
     stream.write_all(b"j/workspaces")?;
-    
+
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
-    
+
     let workspaces: Vec<Workspace> = serde_json::from_str(&response)?;
     Ok(workspaces)
 }
@@ -143,8 +143,11 @@ mod tests {
     #[test]
     fn test_hypr_error_display() {
         let err = HyprError::NoInstance;
-        assert_eq!(format!("{}", err), "Hyprland instance signature not found. Is Hyprland running?");
-        
+        assert_eq!(
+            format!("{}", err),
+            "Hyprland instance signature not found. Is Hyprland running?"
+        );
+
         let err = HyprError::Io(std::io::Error::new(std::io::ErrorKind::Other, "test"));
         assert!(format!("{}", err).contains("IO error: test"));
     }
