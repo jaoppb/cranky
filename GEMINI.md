@@ -19,4 +19,5 @@
     - Created `test_utils.rs` with `assert_pixel_color!` and `assert_pixmap_has_color!` macros for rendering verification.
     - Achieved 100% coverage on `config.rs`, `hyprland.rs`, `workspace.rs`, `test_utils.rs`, and `utils.rs`.
     - Integrated `cargo-llvm-cov` for coverage reporting.
+- **Workspace Focus Logic:** Implemented distinguishing between `active` (visible on the globally focused monitor) and `focused` (visible on a non-focused monitor) workspaces. Added `focused` boolean to `Monitor` struct and updated `WorkspaceModule` to track the globally focused monitor and render with different styling accordingly.
 

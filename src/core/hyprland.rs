@@ -40,6 +40,7 @@ pub struct Monitor {
     name: String,
     #[serde(rename = "activeWorkspace")]
     active_workspace: ActiveWorkspace,
+    focused: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -48,12 +49,13 @@ pub struct ActiveWorkspace {
 }
 
 impl Monitor {
-    pub fn new(name: String, active_workspace_id: i32) -> Self {
+    pub fn new(name: String, active_workspace_id: i32, focused: bool) -> Self {
         Self {
             name,
             active_workspace: ActiveWorkspace {
                 id: active_workspace_id,
             },
+            focused,
         }
     }
 
@@ -63,6 +65,10 @@ impl Monitor {
 
     pub fn active_workspace_id(&self) -> i32 {
         self.active_workspace.id
+    }
+
+    pub fn focused(&self) -> bool {
+        self.focused
     }
 }
 
@@ -135,9 +141,10 @@ mod tests {
 
     #[test]
     fn test_monitor_getters() {
-        let m = Monitor::new("eDP-1".to_string(), 1);
+        let m = Monitor::new("eDP-1".to_string(), 1, true);
         assert_eq!(m.name(), "eDP-1");
         assert_eq!(m.active_workspace_id(), 1);
+        assert!(m.focused());
     }
 
     #[test]

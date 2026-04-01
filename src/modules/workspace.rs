@@ -19,12 +19,18 @@ pub struct WorkspaceConfig {
     #[serde(default)]
     active: ActiveWorkspaceConfig,
     #[serde(default)]
+    focused: FocusedWorkspaceConfig,
+    #[serde(default)]
     border_radius: f32,
 }
 
 impl WorkspaceConfig {
     pub fn active(&self) -> &ActiveWorkspaceConfig {
         &self.active
+    }
+
+    pub fn focused(&self) -> &FocusedWorkspaceConfig {
+        &self.focused
     }
 
     pub fn border_radius(&self) -> f32 {
@@ -36,6 +42,7 @@ impl Default for WorkspaceConfig {
     fn default() -> Self {
         Self {
             active: ActiveWorkspaceConfig::default(),
+            focused: FocusedWorkspaceConfig::default(),
             border_radius: 0.0,
         }
     }
@@ -62,6 +69,30 @@ impl Default for ActiveWorkspaceConfig {
 }
 
 fn default_active_bg() -> String {
+    "#565f89".to_string()
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct FocusedWorkspaceConfig {
+    #[serde(default = "default_focused_bg")]
+    background_color: String,
+}
+
+impl FocusedWorkspaceConfig {
+    pub fn background_color(&self) -> &str {
+        &self.background_color
+    }
+}
+
+impl Default for FocusedWorkspaceConfig {
+    fn default() -> Self {
+        Self {
+            background_color: default_focused_bg(),
+        }
+    }
+}
+
+fn default_focused_bg() -> String {
     "#3b4261".to_string()
 }
 
@@ -69,8 +100,10 @@ pub struct WorkspaceModule {
     provider: Box<dyn HyprlandProvider>,
     workspaces: Vec<Workspace>,
     active_workspaces: HashMap<String, i32>,
+    focused_monitor: String,
     font_family: String,
     active_background: Color,
+    focused_background: Color,
     border_radius: f32,
 }
 
@@ -80,8 +113,10 @@ impl WorkspaceModule {
             provider: Box::new(RealHyprlandProvider),
             workspaces: Vec::new(),
             active_workspaces: HashMap::new(),
+            focused_monitor: String::new(),
             font_family: String::new(),
-            active_background: Color::from_rgba8(59, 66, 97, 255),
+            active_background: parse_color(&default_active_bg()),
+            focused_background: parse_color(&default_focused_bg()),
             border_radius: 0.0,
         }
     }
@@ -91,8 +126,10 @@ impl WorkspaceModule {
             provider,
             workspaces: Vec::new(),
             active_workspaces: HashMap::new(),
+            focused_monitor: String::new(),
             font_family: String::new(),
-            active_background: Color::from_rgba8(59, 66, 97, 255),
+            active_background: parse_color(&default_active_bg()),
+            focused_background: parse_color(&default_focused_bg()),
             border_radius: 0.0,
         }
     }
@@ -156,6 +193,7 @@ impl CrankyModule for WorkspaceModule {
         _bar_config: &crate::config::BarConfig,
     ) -> Result<(), Self::Error> {
         self.active_background = parse_color(config.active().background_color());
+        self.focused_background = parse_color(config.focused().background_color());
         self.border_radius = config.border_radius();
 
         match self.provider.get_workspaces() {
@@ -174,6 +212,9 @@ impl CrankyModule for WorkspaceModule {
                 for m in monitors {
                     self.active_workspaces
                         .insert(m.name().to_string(), m.active_workspace_id());
+                    if m.focused() {
+                        self.focused_monitor = m.name().to_string();
+                    }
                 }
             }
             Err(e) => {
@@ -207,13 +248,24 @@ impl CrankyModule for WorkspaceModule {
 
         match self.provider.get_monitors() {
             Ok(monitors) => {
-                for m in monitors {
+                for m in &monitors {
                     let old_id = self.active_workspaces.get(m.name()).cloned().unwrap_or(-1);
                     if old_id != m.active_workspace_id() {
                         self.active_workspaces
                             .insert(m.name().to_string(), m.active_workspace_id());
                         redraw = true;
                     }
+                }
+
+                let new_focused = monitors
+                    .iter()
+                    .find(|m| m.focused())
+                    .map(|m| m.name().to_string())
+                    .unwrap_or_default();
+
+                if new_focused != self.focused_monitor {
+                    self.focused_monitor = new_focused;
+                    redraw = true;
                 }
             }
             Err(e) => {
@@ -236,6 +288,7 @@ impl CrankyModule for WorkspaceModule {
             .collect();
 
         let active_id = self.active_workspaces.get(monitor).cloned().unwrap_or(-1);
+        let is_monitor_focused = self.focused_monitor == monitor;
         let scale = context.scale();
 
         let styling = TextStyling::new(
@@ -261,21 +314,27 @@ impl CrankyModule for WorkspaceModule {
         let mut x_offset = area.left();
         for ws in monitor_workspaces {
             let label = ws.id().to_string();
-            let is_active = ws.id() == active_id;
+            let is_visible = ws.id() == active_id;
 
-            if is_active {
+            if is_visible {
                 // Background rectangle (already in physical pixels because we scale the logical coordinates)
                 let bg_x = x_offset * scale;
                 let bg_y = (area.top() + (area.height() - item_size) / 2.0) * scale;
                 let bg_w = item_size * scale;
                 let bg_h = item_size * scale;
 
+                let background_color = if is_monitor_focused {
+                    self.active_background
+                } else {
+                    self.focused_background
+                };
+
                 if let Some(bg_rect) = Rect::from_xywh(bg_x, bg_y, bg_w, bg_h) {
                     self.fill_rounded_rect(
                         pixmap,
                         bg_rect,
                         self.border_radius * scale,
-                        self.active_background,
+                        background_color,
                     );
                 }
 
@@ -334,7 +393,7 @@ mod tests {
             ])
         });
         mock.expect_get_monitors()
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         let mut module = WorkspaceModule::with_provider(Box::new(mock));
         let config = WorkspaceConfig::default();
@@ -344,6 +403,7 @@ mod tests {
 
         assert_eq!(module.workspaces.len(), 2);
         assert_eq!(module.active_workspaces.get("eDP-1"), Some(&1));
+        assert_eq!(module.focused_monitor, "eDP-1");
     }
 
     #[test]
@@ -356,7 +416,7 @@ mod tests {
             .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
         mock.expect_get_monitors()
             .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         // 2nd calls (update) - change active workspace
         mock.expect_get_workspaces()
@@ -364,7 +424,7 @@ mod tests {
             .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
         mock.expect_get_monitors()
             .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 2)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 2, true)]));
 
         let mut module = WorkspaceModule::with_provider(Box::new(mock));
         module
@@ -382,7 +442,7 @@ mod tests {
         mock.expect_get_workspaces()
             .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
         mock.expect_get_monitors()
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         let mut module = WorkspaceModule::with_provider(Box::new(mock));
         module
@@ -404,7 +464,7 @@ mod tests {
             ])
         });
         mock.expect_get_monitors()
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         let mut module = WorkspaceModule::with_provider(Box::new(mock));
         module
@@ -418,7 +478,43 @@ mod tests {
 
         module.view(&mut pixmap, area, &mut context, "eDP-1");
 
-        // Active background color should be present (default: #3b4261 -> RGB(59, 66, 97))
+        // monitor "eDP-1" IS focused (from init), so it should have active_background
+        // default active_background: #565f89 -> RGB(86, 95, 137)
+        let expected_color = tiny_skia::Color::from_rgba8(86, 95, 137, 255);
+        assert_pixmap_has_color!(pixmap, expected_color);
+    }
+
+    #[test]
+    fn test_workspace_view_focused_on_other_monitor() {
+        let mut mock = MockHyprlandProvider::new();
+        mock.expect_get_workspaces().returning(|| {
+            Ok(vec![
+                Workspace::new(1, "eDP-1".to_string()),
+                Workspace::new(2, "HDMI-A-1".to_string()),
+            ])
+        });
+        mock.expect_get_monitors().returning(|| {
+            Ok(vec![
+                Monitor::new("eDP-1".to_string(), 1, true),
+                Monitor::new("HDMI-A-1".to_string(), 2, false),
+            ])
+        });
+
+        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        module
+            .init(WorkspaceConfig::default(), &BarConfig::default())
+            .unwrap();
+
+        let mut pixmap_data = vec![0; 100 * 30 * 4];
+        let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 100, 30).unwrap();
+        let mut context = RenderContext::new();
+        let area = Rect::from_xywh(0.0, 0.0, 100.0, 30.0).unwrap();
+
+        // View HDMI-A-1 (which is NOT focused)
+        module.view(&mut pixmap, area, &mut context, "HDMI-A-1");
+
+        // monitor "HDMI-A-1" IS NOT focused, so it should have focused_background
+        // default focused_background: #3b4261 -> RGB(59, 66, 97)
         let expected_color = tiny_skia::Color::from_rgba8(59, 66, 97, 255);
         assert_pixmap_has_color!(pixmap, expected_color);
     }
@@ -429,7 +525,7 @@ mod tests {
         mock.expect_get_workspaces()
             .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
         mock.expect_get_monitors()
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         let mut module = WorkspaceModule::with_provider(Box::new(mock));
         module
@@ -464,7 +560,7 @@ mod tests {
             .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
         mock.expect_get_monitors()
             .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         mock.expect_get_workspaces()
             .times(1)
@@ -496,11 +592,12 @@ mod tests {
         mock.expect_get_workspaces()
             .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
         mock.expect_get_monitors()
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         let mut module = WorkspaceModule::with_provider(Box::new(mock));
         let config = WorkspaceConfig {
             active: ActiveWorkspaceConfig::default(),
+            focused: FocusedWorkspaceConfig::default(),
             border_radius: 4.0,
         };
         module.init(config, &BarConfig::default()).unwrap();
@@ -512,7 +609,9 @@ mod tests {
 
         module.view(&mut pixmap, area, &mut context, "eDP-1");
 
-        let expected_color = tiny_skia::Color::from_rgba8(59, 66, 97, 255);
+        // monitor "eDP-1" IS focused (from init), so it should have active_background
+        // default active_background: #565f89 -> RGB(86, 95, 137)
+        let expected_color = tiny_skia::Color::from_rgba8(86, 95, 137, 255);
         assert_pixmap_has_color!(pixmap, expected_color);
     }
 
@@ -524,7 +623,7 @@ mod tests {
             .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
         mock.expect_get_monitors()
             .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         mock.expect_get_workspaces().times(1).returning(|| {
             Ok(vec![
@@ -534,7 +633,7 @@ mod tests {
         });
         mock.expect_get_monitors()
             .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         let mut module = WorkspaceModule::with_provider(Box::new(mock));
         module
@@ -554,14 +653,14 @@ mod tests {
             .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
         mock.expect_get_monitors()
             .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         mock.expect_get_workspaces()
             .times(1)
             .returning(|| Ok(vec![Workspace::new(2, "eDP-1".to_string())]));
         mock.expect_get_monitors()
             .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1)]));
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
 
         let mut module = WorkspaceModule::with_provider(Box::new(mock));
         module
@@ -571,5 +670,48 @@ mod tests {
         let action = module.update(Event::Timer);
         assert_eq!(action, UpdateAction::Redraw);
         assert_eq!(module.workspaces[0].id(), 2);
+    }
+
+    #[test]
+    fn test_workspace_config_deserialization() {
+        let json = r##"{
+            "active": { "background_color": "#ff0000" },
+            "focused": { "background_color": "#00ff00" },
+            "border_radius": 5.0
+        }"##;
+        let config: WorkspaceConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.active().background_color(), "#ff0000");
+        assert_eq!(config.focused().background_color(), "#00ff00");
+        assert_eq!(config.border_radius(), 5.0);
+    }
+
+    #[test]
+    fn test_workspace_update_focus_change() {
+        let mut mock = MockHyprlandProvider::new();
+
+        // 1st calls (init)
+        mock.expect_get_workspaces()
+            .times(1)
+            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
+        mock.expect_get_monitors()
+            .times(1)
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
+
+        // 2nd calls (update) - change focused monitor (even if active workspace ID is same)
+        mock.expect_get_workspaces()
+            .times(1)
+            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
+        mock.expect_get_monitors()
+            .times(1)
+            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, false)]));
+
+        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        module
+            .init(WorkspaceConfig::default(), &BarConfig::default())
+            .unwrap();
+
+        let action = module.update(Event::Timer);
+        assert_eq!(action, UpdateAction::Redraw);
+        assert_eq!(module.focused_monitor, ""); // none are focused in this mock result
     }
 }
