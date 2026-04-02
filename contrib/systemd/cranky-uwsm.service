@@ -1,0 +1,13 @@
+[Unit]
+Description=Cranky Wayland Bar (UWSM-managed)
+Documentation=https://github.com/jaoppb/cranky
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+# Wraps the execution in its own cgroup slice via UWSM
+ExecStart=/usr/bin/uwsm app -- /usr/bin/cranky
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

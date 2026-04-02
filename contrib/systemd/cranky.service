@@ -1,0 +1,11 @@
+[Unit]
+Description=Cranky Wayland Bar
+Documentation=https://github.com/jaoppb/cranky
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/cranky
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
