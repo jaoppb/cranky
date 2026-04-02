@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Ensure tag is on main branch
+        run: |
+          if ! git branch -r --contains ${{ github.ref }} | grep -q 'origin/main'; then
+            echo "Error: Tag ${{ github.ref_name }} is not reachable from origin/main."
+            exit 1
+          fi
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libwayland-dev libdbus-1-dev
+
+      - name: Sync version and push
+        id: sync_version
+        run: |
+          TAG_VERSION=${GITHUB_REF_NAME#v}
+          CURRENT_VERSION=$(grep -m 1 '^version =' Cargo.toml | cut -d '"' -f 2)
+          echo "Tag version: $TAG_VERSION"
+          echo "Current version: $CURRENT_VERSION"
+
+          if [ "$TAG_VERSION" != "$CURRENT_VERSION" ]; then
+            echo "Updating Cargo.toml to $TAG_VERSION..."
+            sed -i "0,/^version = .*/s//version = \"$TAG_VERSION\"/" Cargo.toml
+
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git add Cargo.toml
+            git commit -m "chore: bump version to $TAG_VERSION"
+            git push origin HEAD:main
+
+            # Re-tag the commit with the updated Cargo.toml
+            git tag -f $GITHUB_REF_NAME
+            git push origin $GITHUB_REF_NAME --force
+          else
+            echo "Versions match. No update needed."
+          fi
+
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp target/release/cranky dist/
+          tar -czvf dist/cranky-${{ github.ref_name }}-x86_64-linux.tar.gz -C dist cranky
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/cranky-${{ github.ref_name }}-x86_64-linux.tar.gz
+          generate_release_notes: true
