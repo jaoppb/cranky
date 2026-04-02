@@ -28,6 +28,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pkg-config libwayland-dev libdbus-1-dev
 
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          cache: true
+
       - name: Sync version and push
         id: sync_version
         run: |
@@ -39,24 +44,22 @@ jobs:
           if [ "$TAG_VERSION" != "$CURRENT_VERSION" ]; then
             echo "Updating Cargo.toml to $TAG_VERSION..."
             sed -i "0,/^version = .*/s//version = \"$TAG_VERSION\"/" Cargo.toml
+            
+            # Update Cargo.lock
+            cargo check
 
             git config --global user.name "github-actions[bot]"
             git config --global user.email "github-actions[bot]@users.noreply.github.com"
-            git add Cargo.toml
+            git add Cargo.toml Cargo.lock
             git commit -m "chore: bump version to $TAG_VERSION"
             git push origin HEAD:main
 
-            # Re-tag the commit with the updated Cargo.toml
+            # Re-tag the commit with the updated Cargo.toml and Cargo.lock
             git tag -f $GITHUB_REF_NAME
             git push origin $GITHUB_REF_NAME --force
           else
             echo "Versions match. No update needed."
           fi
-
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          cache: true
 
       - name: Build release binary
         run: cargo build --release
