@@ -65,10 +65,12 @@ jobs:
         run: |
           mkdir -p dist
           cp target/release/cranky dist/
-          tar -czvf dist/cranky-${{ github.ref_name }}-x86_64-linux.tar.gz -C dist cranky
+          cp README.md dist/
+          cp LICENSE dist/
+          tar -czvf dist/cranky-${{ github.ref_name }}-x86_64.tar.gz -C dist cranky README.md LICENSE
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/cranky-${{ github.ref_name }}-x86_64-linux.tar.gz
+          files: dist/cranky-${{ github.ref_name }}-x86_64.tar.gz
           generate_release_notes: true
