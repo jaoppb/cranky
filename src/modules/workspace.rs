@@ -121,6 +121,7 @@ impl WorkspaceModule {
         }
     }
 
+    #[cfg(test)]
     pub fn with_provider(provider: Box<dyn HyprlandProvider>) -> Self {
         Self {
             provider,

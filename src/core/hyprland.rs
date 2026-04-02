@@ -22,6 +22,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    #[cfg(test)]
     pub fn new(id: i32, monitor: String) -> Self {
         Self { id, monitor }
     }
@@ -49,6 +50,7 @@ pub struct ActiveWorkspace {
 }
 
 impl Monitor {
+    #[cfg(test)]
     pub fn new(name: String, active_workspace_id: i32, focused: bool) -> Self {
         Self {
             name,
