@@ -58,6 +58,14 @@ Each module must implement a `CrankyModule` trait:
 - Each monitor will have its own dedicated instance of the bar (surface).
 - The `Workspace` module will filter workspaces based on the monitor's unique identifier.
 
+## Next Steps
+
+[ ] Gradient support to borders
+[ ] Optional border color for unfocused workspace to match window
+[ ] Hot-Reload for config
+[ ] Get modules more modular by allowing runtime dynamic libraries (needs more analysis)
+[ ] Fix font family not switching
+
 ## Configuration Schema (`~/.config/cranky/config.toml`)
 
 ```toml
@@ -100,21 +108,3 @@ enable = true
 show_cpu = true
 show_mem = true
 ```
-
-## Progress
-
-- [x] Refined project specifications
-- [x] Initial project structure and Cargo.toml
-- [x] Configuration system with TOML support
-- [x] Modular "addon-like" trait architecture
-- [x] Module Registry for dynamic loading
-- [x] High-performance rendering with `tiny-skia` and `cosmic-text`
-- [x] Hour module implementation
-- [x] Wayland connection and layer-shell integration
-- [ ] Multi-monitor support
-- [ ] Additional modules (Notifications, Media, etc.)
-
-- **Unit Tests:** Mandatory 80% coverage for all modules and core logic (excluding boilerplate Wayland/Ffi calls).
-- **Mocking:** Use mock DBus and Wayland interfaces to test module updates and rendering logic in isolation.
-- **CI/CD:** Automated test runs on every commit.
-- **Benchmarking:** Periodic profiling to ensure low CPU/Memory footprint.
