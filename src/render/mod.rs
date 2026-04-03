@@ -97,12 +97,7 @@ impl RenderContext {
         );
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
 
-        let mut attrs = Attrs::new();
-        if !styling.font_family().is_empty() {
-            attrs = attrs.family(Family::Name(styling.font_family()));
-        } else {
-            attrs = attrs.family(Family::Monospace);
-        }
+        let attrs = Attrs::new().family(get_family(styling.font_family()));
 
         buffer.set_text(&mut self.font_system, text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(&mut self.font_system, false);
@@ -155,12 +150,7 @@ impl RenderContext {
         );
         let mut buffer = Buffer::new(&mut self.font_system, metrics);
 
-        let mut attrs = Attrs::new();
-        if !styling.font_family().is_empty() {
-            attrs = attrs.family(Family::Name(styling.font_family()));
-        } else {
-            attrs = attrs.family(Family::Monospace);
-        }
+        let attrs = Attrs::new().family(get_family(styling.font_family()));
 
         buffer.set_text(&mut self.font_system, text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(&mut self.font_system, false);
@@ -176,6 +166,18 @@ impl RenderContext {
             width
         );
         width / self.scale
+    }
+}
+
+fn get_family(name: &str) -> Family<'_> {
+    match name.to_lowercase().as_str() {
+        "monospace" => Family::Monospace,
+        "serif" => Family::Serif,
+        "sans-serif" => Family::SansSerif,
+        "cursive" => Family::Cursive,
+        "fantasy" => Family::Fantasy,
+        "" => Family::Monospace,
+        _ => Family::Name(name),
     }
 }
 
@@ -388,5 +390,26 @@ mod tests {
         assert_eq!(context.scale(), 1.0);
         context.set_scale(2.0);
         assert_eq!(context.scale(), 2.0);
+    }
+
+    #[test]
+    fn test_font_switching() {
+        let mut context = RenderContext::new();
+        let text = "Hello World";
+        let color = Color::BLACK;
+
+        let mono_styling = TextStyling::new(14.0, 20.0, color, "monospace".to_string());
+        let serif_styling = TextStyling::new(14.0, 20.0, color, "serif".to_string());
+
+        let mono_width = context.measure_text(text, mono_styling);
+        let serif_width = context.measure_text(text, serif_styling);
+
+        // If font switching is working, these should likely be different
+        // unless they fallback to the same font.
+        // But for "monospace" and "serif", they should definitely be different on most systems.
+        assert_ne!(
+            mono_width, serif_width,
+            "Font switching did not affect width"
+        );
     }
 }

@@ -64,7 +64,8 @@ Each module must implement a `CrankyModule` trait:
 [ ] Optional border color for unfocused workspace to match window
 [ ] Hot-Reload for config
 [ ] Get modules more modular by allowing runtime dynamic libraries (needs more analysis)
-[ ] Fix font family not switching
+[x] Fix font family not switching
+[ ] Allow the border matching the hyprland config
 
 ## Configuration Schema (`~/.config/cranky/config.toml`)
 
