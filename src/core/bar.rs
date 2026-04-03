@@ -238,7 +238,6 @@ impl Bar {
         &self.layer_surface
     }
 
-    #[cfg(test)]
     pub fn monitor_name(&self) -> &str {
         &self.monitor_name
     }

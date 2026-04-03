@@ -66,6 +66,8 @@ Each module must implement a `CrankyModule` trait:
 [ ] Get modules more modular by allowing runtime dynamic libraries (needs more analysis)
 [x] Fix font family not switching
 [ ] Allow the border matching the hyprland config
+[ ] Change event waiting mode to allow events happening before the 100ms sleep
+[x] When a new monitor is connected, the bar is appearing
 
 ## Configuration Schema (`~/.config/cranky/config.toml`)
 

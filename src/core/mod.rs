@@ -39,6 +39,7 @@ pub struct WaylandManager {
 
 pub struct OutputInfo {
     output: WlOutput,
+    id: u32,
     name: String,
     scale: i32,
 }
@@ -86,16 +87,68 @@ impl WaylandGlobals {
 }
 
 impl CrankyState {
-    fn get_output_info(&mut self, output: &WlOutput) -> &mut OutputInfo {
-        if let Some(index) = self.outputs.iter().position(|i| &i.output == output) {
-            &mut self.outputs[index]
+    fn add_output(&mut self, id: u32, output: WlOutput) {
+        self.outputs.push(OutputInfo {
+            output,
+            id,
+            name: String::new(),
+            scale: 1,
+        });
+    }
+
+    fn remove_output(&mut self, id: u32) {
+        if let Some(index) = self.outputs.iter().position(|i| i.id == id) {
+            let info = self.outputs.remove(index);
+            log::info!("Output removed: {} (id: {})", info.name, info.id);
+            self.bars.retain(|b| b.monitor_name() != info.name);
+        }
+    }
+
+    fn get_output_info(&self, output: &WlOutput) -> Option<&OutputInfo> {
+        self.outputs.iter().find(|i| &i.output == output)
+    }
+
+    fn get_output_info_mut(&mut self, output: &WlOutput) -> Option<&mut OutputInfo> {
+        self.outputs.iter_mut().find(|i| &i.output == output)
+    }
+
+    fn globals(&self) -> Option<WaylandGlobals> {
+        match (&self.compositor, &self.shm, &self.layer_shell) {
+            (Some(c), Some(s), Some(l)) => Some(WaylandGlobals::new(c.clone(), s.clone(), l.clone())),
+            _ => None,
+        }
+    }
+
+    fn create_bar_for_output(&mut self, output: &WlOutput, qh: &QueueHandle<Self>) {
+        let (info_name, info_scale) = if let Some(info) = self.get_output_info(output) {
+            if info.name.is_empty() {
+                return;
+            }
+            (info.name.clone(), info.scale)
         } else {
-            self.outputs.push(OutputInfo {
-                output: output.clone(),
-                name: String::new(),
-                scale: 1,
-            });
-            self.outputs.last_mut().unwrap()
+            return;
+        };
+
+        // Check if bar already exists
+        if self.bars.iter().any(|b| b.monitor_name() == info_name) {
+            return;
+        }
+
+        if let Some(globals) = self.globals() {
+            log::info!(
+                "Creating bar for output: {} (scale: {})",
+                info_name, info_scale
+            );
+
+            let bar_res = {
+                let info = self.get_output_info(output).unwrap();
+                bar::Bar::new(info, &globals, &self.config, qh)
+            };
+
+            match bar_res {
+                Ok(bar) => self.bars.push(bar),
+                Err(e) => log::error!("Failed to create bar for output {}: {}", info_name, e),
+            }
         }
     }
 }
@@ -159,32 +212,6 @@ impl WaylandManager {
             .roundtrip(&mut self.state)
             .map_err(|e| CoreError::Dispatch(e.to_string()))?;
 
-        let qh = self.event_queue.handle();
-
-        let compositor = self
-            .state
-            .compositor
-            .as_ref()
-            .ok_or_else(|| CoreError::Global("Missing wl_compositor".to_string()))?;
-        let shm = self
-            .state
-            .shm
-            .as_ref()
-            .ok_or_else(|| CoreError::Global("Missing wl_shm".to_string()))?;
-        let layer_shell = self
-            .state
-            .layer_shell
-            .as_ref()
-            .ok_or_else(|| CoreError::Global("Missing zwlr_layer_shell_v1".to_string()))?;
-
-        let globals = WaylandGlobals::new(compositor.clone(), shm.clone(), layer_shell.clone());
-
-        for info in &self.state.outputs {
-            let bar = bar::Bar::new(info, &globals, &self.state.config, &qh)
-                .map_err(|e| CoreError::Global(e.to_string()))?;
-            self.state.bars.push(bar);
-        }
-
         loop {
             // 1. Flush requests
             let _ = self.connection.flush();
@@ -227,29 +254,32 @@ impl Dispatch<WlRegistry, ()> for CrankyState {
         _conn: &Connection,
         qh: &QueueHandle<Self>,
     ) {
-        if let wl_registry::Event::Global {
-            name,
-            interface,
-            version,
-        } = event
-        {
-            match &interface[..] {
+        match event {
+            wl_registry::Event::Global {
+                name,
+                interface,
+                version,
+            } => match &interface[..] {
                 "wl_compositor" => {
-                    state.compositor =
-                        Some(proxy.bind::<WlCompositor, _, _>(name, version, qh, ()));
+                    state.compositor = Some(proxy.bind::<WlCompositor, _, _>(name, version, qh, ()));
                 }
                 "wl_shm" => {
                     state.shm = Some(proxy.bind::<WlShm, _, _>(name, version, qh, ()));
                 }
                 "wl_output" => {
-                    proxy.bind::<WlOutput, _, _>(name, version, qh, ());
+                    let output = proxy.bind::<WlOutput, _, _>(name, version, qh, ());
+                    state.add_output(name, output);
                 }
                 "zwlr_layer_shell_v1" => {
                     state.layer_shell =
                         Some(proxy.bind::<ZwlrLayerShellV1, _, _>(name, version, qh, ()));
                 }
                 _ => {}
+            },
+            wl_registry::Event::GlobalRemove { name } => {
+                state.remove_output(name);
             }
+            _ => {}
         }
     }
 }
@@ -285,19 +315,26 @@ impl Dispatch<WlOutput, ()> for CrankyState {
         event: wl_output::Event,
         _data: &(),
         _conn: &Connection,
-        _qh: &QueueHandle<Self>,
+        qh: &QueueHandle<Self>,
     ) {
         match event {
             wl_output::Event::Name { name } => {
                 log::info!("Output name: {}", name);
-                state.get_output_info(proxy).name = name;
+                if let Some(info) = state.get_output_info_mut(proxy) {
+                    info.name = name;
+                }
             }
             wl_output::Event::Description { description } => {
                 log::info!("Output description: {}", description);
             }
             wl_output::Event::Scale { factor } => {
                 log::info!("Output scale factor for {:?}: {}", proxy, factor);
-                state.get_output_info(proxy).scale = factor;
+                if let Some(info) = state.get_output_info_mut(proxy) {
+                    info.scale = factor;
+                }
+            }
+            wl_output::Event::Done => {
+                state.create_bar_for_output(proxy, qh);
             }
             _ => {}
         }
@@ -426,6 +463,7 @@ mod tests {
     fn test_output_info_getters() {
         let mut info = unsafe { std::mem::MaybeUninit::<OutputInfo>::uninit().assume_init() };
         unsafe {
+            std::ptr::write(&mut info.id, 1);
             std::ptr::write(&mut info.name, "HDMI-A-1".to_string());
             std::ptr::write(&mut info.scale, 1);
         }
