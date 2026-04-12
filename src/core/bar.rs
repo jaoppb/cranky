@@ -320,6 +320,39 @@ impl Bar {
             self.buffer = None; // Invalidate buffer on resize
         }
     }
+
+    pub fn update_config(&mut self, shm: &WlShm, config: &Config, qh: &QueueHandle<CrankyState>) {
+        let bar_config = config.bar();
+        let height = bar_config.height();
+        let margin = bar_config.margin();
+
+        if self.height != height {
+            self.height = height;
+            self.layer_surface.set_size(0, height);
+
+            let scaled_width = self.scaled_width();
+            let scaled_height = self.scaled_height();
+            let required_size = (scaled_width * scaled_height * 4) as usize;
+
+            if required_size > self.shm_buffer.size() {
+                if let Ok(new_shm) = ShmBuffer::new(shm, scaled_width, scaled_height, qh) {
+                    self.shm_buffer = new_shm;
+                }
+            }
+            self.buffer = None;
+        }
+
+        self.layer_surface.set_margin(
+            margin.top(),
+            margin.right(),
+            margin.bottom(),
+            margin.left(),
+        );
+        self.layer_surface
+            .set_exclusive_zone(height as i32 + margin.top() + margin.bottom());
+
+        self.surface.commit();
+    }
 }
 
 #[cfg(test)]

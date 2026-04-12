@@ -253,7 +253,9 @@ impl WaylandManager {
 
                 // Re-render all bars
                 let qh = self.event_queue.handle();
+                let shm = self.state.shm.as_ref().unwrap().clone();
                 for bar in &mut self.state.bars {
+                    bar.update_config(&shm, &self.state.config, &qh);
                     bar.render(
                         &self.state.config,
                         &self.state.registry,
@@ -267,7 +269,9 @@ impl WaylandManager {
             // 4. Periodic update check
             if self.state.registry.update(Event::Timer) == UpdateAction::Redraw {
                 let qh = self.event_queue.handle();
+                let shm = self.state.shm.as_ref().unwrap().clone();
                 for bar in &mut self.state.bars {
+                    bar.update_config(&shm, &self.state.config, &qh);
                     bar.render(
                         &self.state.config,
                         &self.state.registry,
