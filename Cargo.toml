@@ -1,6 +1,6 @@
 [package]
 name = "cranky"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 authors = ["jao"]
 description = "A minimalist, performant, and modular bar for Hyprland"
