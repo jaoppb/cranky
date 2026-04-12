@@ -1,9 +1,12 @@
 use crate::config::Config;
 use crate::modules::{Event, ModuleRegistry, UpdateAction};
-use tokio::sync::mpsc;
+use std::os::unix::io::{AsFd, AsRawFd, RawFd};
 use thiserror::Error;
+use tokio::io::unix::AsyncFd;
+use tokio::sync::mpsc;
 use wayland_client::{
     Connection, Dispatch, EventQueue, QueueHandle,
+    backend::WaylandError,
     protocol::{
         wl_compositor::WlCompositor,
         wl_output::{self, WlOutput},
@@ -11,6 +14,13 @@ use wayland_client::{
         wl_shm::WlShm,
     },
 };
+
+struct WaylandFd(RawFd);
+impl AsRawFd for WaylandFd {
+    fn as_raw_fd(&self) -> RawFd {
+        self.0
+    }
+}
 use wayland_protocols_wlr::layer_shell::v1::client::{
     zwlr_layer_shell_v1::{self, ZwlrLayerShellV1},
     zwlr_layer_surface_v1::{self, ZwlrLayerSurfaceV1},
@@ -218,6 +228,10 @@ impl WaylandManager {
             .roundtrip(&mut self.state)
             .map_err(|e| CoreError::Dispatch(e.to_string()))?;
 
+        let raw_fd = self.connection.as_fd().as_raw_fd();
+        let async_fd = AsyncFd::new(WaylandFd(raw_fd))
+            .map_err(|e| CoreError::Global(format!("Failed to create AsyncFd: {}", e)))?;
+
         loop {
             // 1. Flush requests
             let _ = self.connection.flush();
@@ -227,63 +241,90 @@ impl WaylandManager {
                 .dispatch_pending(&mut self.state)
                 .map_err(|e| CoreError::Dispatch(e.to_string()))?;
 
-            // 3. Try to read new events
-            if let Some(guard) = self.event_queue.prepare_read() {
-                let _ = guard.read();
-            }
+            let mut read_guard = self.event_queue.prepare_read();
 
-            // Check for config updates
-            while let Ok(res) = config_rx.try_recv() {
-                match res {
-                    Ok(new_config) => {
-                        log::info!("Config updated, reloading...");
-                        if let Err(e) = self.state.registry.load(&new_config) {
-                            log::error!("Failed to reload modules: {}", e);
-                            self.state.error_message = Some(format!("{}", e));
-                        } else {
-                            self.state.config = new_config;
-                            self.state.error_message = None;
+            tokio::select! {
+                // Wayland events
+                read_ready = async_fd.readable(), if read_guard.is_some() => {
+                    if let Ok(mut guard) = read_ready {
+                        let r_guard = read_guard.take().unwrap();
+                        match r_guard.read() {
+                            Ok(_) => {
+                                guard.retain_ready();
+                            }
+                            Err(WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                                guard.clear_ready();
+                            }
+                            Err(e) => {
+                                log::error!("Wayland read error: {:?}", e);
+                            }
+                        }
+                    } else {
+                        drop(read_guard);
+                    }
+                }
+
+                // If we can't prepare_read (it returned None), we need to yield to allow dispatch_pending to run again
+                _ = tokio::task::yield_now(), if read_guard.is_none() => {
+                    // Re-looping immediately calls dispatch_pending
+                }
+
+                // Periodic update check (100ms)
+                _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
+                    drop(read_guard);
+                    if self.state.registry.update(Event::Timer) == UpdateAction::Redraw {
+                        let qh = self.event_queue.handle();
+                        let shm = self.state.shm.as_ref().unwrap().clone();
+                        for bar in &mut self.state.bars {
+                            bar.update_config(&shm, &self.state.config, &qh);
+                            bar.render(
+                                &self.state.config,
+                                &self.state.registry,
+                                &mut self.state.render_context,
+                                &self.state.error_message,
+                                &qh,
+                            );
                         }
                     }
-                    Err(e) => {
-                        log::error!("Config reload error: {}", e);
-                        self.state.error_message = Some(format!("{}", e));
+                }
+
+                // Config updates
+                res = config_rx.recv() => {
+                    drop(read_guard);
+                    if let Some(res) = res {
+                        match res {
+                            Ok(new_config) => {
+                                log::info!("Config updated, reloading...");
+                                if let Err(e) = self.state.registry.load(&new_config) {
+                                    log::error!("Failed to reload modules: {}", e);
+                                    self.state.error_message = Some(format!("{}", e));
+                                } else {
+                                    self.state.config = new_config;
+                                    self.state.error_message = None;
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Config reload error: {}", e);
+                                self.state.error_message = Some(format!("{}", e));
+                            }
+                        }
+
+                        // Re-render all bars
+                        let qh = self.event_queue.handle();
+                        let shm = self.state.shm.as_ref().unwrap().clone();
+                        for bar in &mut self.state.bars {
+                            bar.update_config(&shm, &self.state.config, &qh);
+                            bar.render(
+                                &self.state.config,
+                                &self.state.registry,
+                                &mut self.state.render_context,
+                                &self.state.error_message,
+                                &qh,
+                            );
+                        }
                     }
                 }
-
-                // Re-render all bars
-                let qh = self.event_queue.handle();
-                let shm = self.state.shm.as_ref().unwrap().clone();
-                for bar in &mut self.state.bars {
-                    bar.update_config(&shm, &self.state.config, &qh);
-                    bar.render(
-                        &self.state.config,
-                        &self.state.registry,
-                        &mut self.state.render_context,
-                        &self.state.error_message,
-                        &qh,
-                    );
-                }
             }
-
-            // 4. Periodic update check
-            if self.state.registry.update(Event::Timer) == UpdateAction::Redraw {
-                let qh = self.event_queue.handle();
-                let shm = self.state.shm.as_ref().unwrap().clone();
-                for bar in &mut self.state.bars {
-                    bar.update_config(&shm, &self.state.config, &qh);
-                    bar.render(
-                        &self.state.config,
-                        &self.state.registry,
-                        &mut self.state.render_context,
-                        &self.state.error_message,
-                        &qh,
-                    );
-                }
-            }
-
-            // 5. Sleep to avoid 100% CPU and allow other tasks
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     }
 }
