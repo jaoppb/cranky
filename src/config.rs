@@ -1,3 +1,4 @@
+use crate::utils::ParsedColor;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -50,7 +51,7 @@ pub enum VerticalAlignment {
 #[derive(Debug, Deserialize, Clone)]
 pub struct BarConfig {
     #[serde(default = "default_background")]
-    background: String,
+    background: ParsedColor,
     #[serde(default = "default_height")]
     height: u32,
     #[serde(default)]
@@ -73,8 +74,8 @@ impl Default for BarConfig {
     }
 }
 
-fn default_background() -> String {
-    "#000000".to_string()
+fn default_background() -> ParsedColor {
+    ParsedColor::Solid(tiny_skia::Color::BLACK)
 }
 
 fn default_height() -> u32 {
@@ -82,7 +83,7 @@ fn default_height() -> u32 {
 }
 
 impl BarConfig {
-    pub fn background(&self) -> &str {
+    pub fn background(&self) -> &ParsedColor {
         &self.background
     }
 
@@ -138,7 +139,7 @@ pub struct BorderConfig {
     #[serde(default)]
     size: f32,
     #[serde(default = "default_border_color")]
-    color: String,
+    color: ParsedColor,
     #[serde(default)]
     radius: f32,
 }
@@ -153,8 +154,8 @@ impl Default for BorderConfig {
     }
 }
 
-fn default_border_color() -> String {
-    "#000000".to_string()
+fn default_border_color() -> ParsedColor {
+    ParsedColor::Solid(tiny_skia::Color::BLACK)
 }
 
 impl BorderConfig {
@@ -162,7 +163,7 @@ impl BorderConfig {
         self.size
     }
 
-    pub fn color(&self) -> &str {
+    pub fn color(&self) -> &ParsedColor {
         &self.color
     }
 
@@ -253,13 +254,19 @@ mod tests {
         "##;
 
         let config = Config::from_str(toml_str).unwrap();
-        assert_eq!(config.bar().background(), "#1a1b26");
+        assert_eq!(
+            config.bar().background(),
+            &ParsedColor::try_from("#1a1b26").unwrap()
+        );
         assert_eq!(config.bar().height(), 30);
         assert_eq!(config.bar().vertical_alignment(), VerticalAlignment::Center);
 
         let border = config.bar().border();
         assert_eq!(border.radius(), 8.0);
-        assert_eq!(border.color(), "#7aa2f7");
+        assert_eq!(
+            border.color(),
+            &ParsedColor::try_from("#7aa2f7").unwrap()
+        );
 
         let margin = config.bar().margin();
         assert_eq!(margin.top(), 5);
@@ -303,7 +310,10 @@ mod tests {
     #[test]
     fn test_default_configs() {
         let bar_default = BarConfig::default();
-        assert_eq!(bar_default.background(), "#000000");
+        assert_eq!(
+            bar_default.background(),
+            &ParsedColor::Solid(tiny_skia::Color::BLACK)
+        );
         assert_eq!(bar_default.height(), 30);
 
         let margin_default = MarginConfig::default();
@@ -311,7 +321,10 @@ mod tests {
 
         let border_default = BorderConfig::default();
         assert_eq!(border_default.size(), 0.0);
-        assert_eq!(border_default.color(), "#000000");
+        assert_eq!(
+            border_default.color(),
+            &ParsedColor::Solid(tiny_skia::Color::BLACK)
+        );
     }
 
     #[test]

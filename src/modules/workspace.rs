@@ -1,7 +1,7 @@
 use crate::core::hyprland::{HyprlandProvider, RealHyprlandProvider, Workspace};
 use crate::modules::{CrankyModule, Event, UpdateAction};
 use crate::render::{RenderContext, TextStyling};
-use crate::utils::parse_color;
+use crate::utils::ParsedColor;
 use log::error;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -51,11 +51,11 @@ impl Default for WorkspaceConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct ActiveWorkspaceConfig {
     #[serde(default = "default_active_bg")]
-    background_color: String,
+    background_color: ParsedColor,
 }
 
 impl ActiveWorkspaceConfig {
-    pub fn background_color(&self) -> &str {
+    pub fn background_color(&self) -> &ParsedColor {
         &self.background_color
     }
 }
@@ -68,18 +68,18 @@ impl Default for ActiveWorkspaceConfig {
     }
 }
 
-fn default_active_bg() -> String {
-    "#565f89".to_string()
+fn default_active_bg() -> ParsedColor {
+    ParsedColor::try_from("#565f89").unwrap()
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct FocusedWorkspaceConfig {
     #[serde(default = "default_focused_bg")]
-    background_color: String,
+    background_color: ParsedColor,
 }
 
 impl FocusedWorkspaceConfig {
-    pub fn background_color(&self) -> &str {
+    pub fn background_color(&self) -> &ParsedColor {
         &self.background_color
     }
 }
@@ -92,8 +92,8 @@ impl Default for FocusedWorkspaceConfig {
     }
 }
 
-fn default_focused_bg() -> String {
-    "#3b4261".to_string()
+fn default_focused_bg() -> ParsedColor {
+    ParsedColor::try_from("#3b4261").unwrap()
 }
 
 pub struct WorkspaceModule {
@@ -102,8 +102,8 @@ pub struct WorkspaceModule {
     active_workspaces: HashMap<String, i32>,
     focused_monitor: String,
     font_family: String,
-    active_background: Color,
-    focused_background: Color,
+    active_background: ParsedColor,
+    focused_background: ParsedColor,
     border_radius: f32,
 }
 
@@ -115,8 +115,8 @@ impl WorkspaceModule {
             active_workspaces: HashMap::new(),
             focused_monitor: String::new(),
             font_family: String::new(),
-            active_background: parse_color(&default_active_bg()),
-            focused_background: parse_color(&default_focused_bg()),
+            active_background: default_active_bg(),
+            focused_background: default_focused_bg(),
             border_radius: 0.0,
         }
     }
@@ -129,24 +129,23 @@ impl WorkspaceModule {
             active_workspaces: HashMap::new(),
             focused_monitor: String::new(),
             font_family: String::new(),
-            active_background: parse_color(&default_active_bg()),
-            focused_background: parse_color(&default_focused_bg()),
+            active_background: default_active_bg(),
+            focused_background: default_focused_bg(),
             border_radius: 0.0,
         }
     }
 
-    fn fill_rounded_rect(&self, pixmap: &mut PixmapMut, rect: Rect, radius: f32, color: Color) {
+    fn fill_rounded_rect(&self, pixmap: &mut PixmapMut, rect: Rect, radius: f32, color: &ParsedColor) {
         let x = rect.left();
         let y = rect.top();
         let w = rect.width();
         let h = rect.height();
         let r = radius.min(w / 2.0).min(h / 2.0);
 
+        let paint = color.to_paint(rect);
+
         if r <= 0.0 {
             let path = PathBuilder::from_rect(rect);
-            let mut paint = Paint::default();
-            paint.set_color(color);
-            paint.anti_alias = true;
             pixmap.fill_path(
                 &path,
                 &paint,
@@ -170,9 +169,6 @@ impl WorkspaceModule {
         pb.close();
 
         if let Some(path) = pb.finish() {
-            let mut paint = Paint::default();
-            paint.set_color(color);
-            paint.anti_alias = true;
             pixmap.fill_path(
                 &path,
                 &paint,
@@ -193,8 +189,8 @@ impl CrankyModule for WorkspaceModule {
         config: Self::Config,
         _bar_config: &crate::config::BarConfig,
     ) -> Result<(), Self::Error> {
-        self.active_background = parse_color(config.active().background_color());
-        self.focused_background = parse_color(config.focused().background_color());
+        self.active_background = config.active().background_color().clone();
+        self.focused_background = config.focused().background_color().clone();
         self.border_radius = config.border_radius();
 
         match self.provider.get_workspaces() {
@@ -325,9 +321,9 @@ impl CrankyModule for WorkspaceModule {
                 let bg_h = item_size * scale;
 
                 let background_color = if is_monitor_focused {
-                    self.active_background
+                    &self.active_background
                 } else {
-                    self.focused_background
+                    &self.focused_background
                 };
 
                 if let Some(bg_rect) = Rect::from_xywh(bg_x, bg_y, bg_w, bg_h) {
@@ -681,8 +677,14 @@ mod tests {
             "border_radius": 5.0
         }"##;
         let config: WorkspaceConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(config.active().background_color(), "#ff0000");
-        assert_eq!(config.focused().background_color(), "#00ff00");
+        assert_eq!(
+            config.active().background_color(),
+            &ParsedColor::try_from("#ff0000").unwrap()
+        );
+        assert_eq!(
+            config.focused().background_color(),
+            &ParsedColor::try_from("#00ff00").unwrap()
+        );
         assert_eq!(config.border_radius(), 5.0);
     }
 

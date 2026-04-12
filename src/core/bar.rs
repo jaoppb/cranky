@@ -2,7 +2,7 @@ use crate::config::Config;
 use crate::core::shm::ShmBuffer;
 use crate::core::{CrankyState, OutputInfo, WaylandGlobals};
 use crate::render::RenderContext;
-use crate::utils::parse_color;
+use crate::utils::ParsedColor;
 use tiny_skia::PixmapMut;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::{wl_buffer::WlBuffer, wl_shm::WlShm, wl_surface::WlSurface};
@@ -44,17 +44,58 @@ fn create_rounded_rect_path(rect: tiny_skia::Rect, radius: f32) -> Option<tiny_s
     pb.finish()
 }
 
+fn create_paint<'a>(color: &ParsedColor, rect: tiny_skia::Rect) -> tiny_skia::Paint<'a> {
+    let mut paint = tiny_skia::Paint::default();
+    paint.anti_alias = true;
+
+    match color {
+        ParsedColor::Solid(c) => {
+            paint.set_color(*c);
+        }
+        ParsedColor::Gradient(colors, angle) => {
+            let stops: Vec<tiny_skia::GradientStop> = colors
+                .iter()
+                .enumerate()
+                .map(|(i, &c)| {
+                    tiny_skia::GradientStop::new(i as f32 / (colors.len() - 1) as f32, c)
+                })
+                .collect();
+
+            // Calculate start and end points based on angle (degrees)
+            // 0deg: Left to Right
+            // 90deg: Top to Bottom
+            let angle_rad = angle.to_radians();
+            let center_x = rect.left() + rect.width() / 2.0;
+            let center_y = rect.top() + rect.height() / 2.0;
+
+            let x_offset = angle_rad.cos() * rect.width() / 2.0;
+            let y_offset = angle_rad.sin() * rect.height() / 2.0;
+
+            let start = tiny_skia::Point::from_xy(center_x - x_offset, center_y - y_offset);
+            let end = tiny_skia::Point::from_xy(center_x + x_offset, center_y + y_offset);
+
+            paint.shader = tiny_skia::LinearGradient::new(
+                start,
+                end,
+                stops,
+                tiny_skia::SpreadMode::Pad,
+                tiny_skia::Transform::identity(),
+            )
+            .unwrap();
+        }
+    }
+    paint
+}
+
 fn draw_rounded_rect(
     pixmap: &mut tiny_skia::PixmapMut,
     rect: tiny_skia::Rect,
-    bg_color: tiny_skia::Color,
+    bg_color: &ParsedColor,
     border_size: f32,
-    border_color: tiny_skia::Color,
+    border_color: &ParsedColor,
     border_radius: f32,
 ) {
-    let mut bg_paint = tiny_skia::Paint::default();
-    bg_paint.set_color(bg_color);
-    bg_paint.anti_alias = true;
+    let bg_paint = create_paint(bg_color, rect);
 
     if border_radius > 0.0 {
         if let Some(path) = create_rounded_rect_path(rect, border_radius) {
@@ -67,10 +108,7 @@ fn draw_rounded_rect(
             );
 
             if border_size > 0.0 {
-                let mut border_paint = tiny_skia::Paint::default();
-                border_paint.set_color(border_color);
-                border_paint.anti_alias = true;
-
+                let border_paint = create_paint(border_color, rect);
                 let stroke = tiny_skia::Stroke {
                     width: border_size,
                     ..Default::default()
@@ -88,10 +126,7 @@ fn draw_rounded_rect(
         pixmap.fill_rect(rect, &bg_paint, tiny_skia::Transform::identity(), None);
 
         if border_size > 0.0 {
-            let mut border_paint = tiny_skia::Paint::default();
-            border_paint.set_color(border_color);
-            border_paint.anti_alias = true;
-
+            let border_paint = create_paint(border_color, rect);
             let stroke = tiny_skia::Stroke {
                 width: border_size,
                 ..Default::default()
@@ -197,9 +232,9 @@ impl Bar {
         draw_rounded_rect(
             &mut pixmap,
             rect,
-            parse_color(config.bar().background()),
+            config.bar().background(),
             border_size,
-            parse_color(border.color()),
+            border.color(),
             border_radius,
         );
 
@@ -384,7 +419,14 @@ mod tests {
         let rect = Rect::from_xywh(10.0, 10.0, 80.0, 80.0).unwrap();
         let bg_color = Color::from_rgba8(255, 0, 0, 255);
 
-        draw_rounded_rect(&mut pixmap, rect, bg_color, 0.0, Color::TRANSPARENT, 0.0);
+        draw_rounded_rect(
+            &mut pixmap,
+            rect,
+            &ParsedColor::Solid(bg_color),
+            0.0,
+            &ParsedColor::Solid(Color::TRANSPARENT),
+            0.0,
+        );
 
         assert_pixmap_has_color!(pixmap, bg_color);
     }
@@ -399,7 +441,14 @@ mod tests {
         let bg_color = Color::from_rgba8(255, 0, 0, 255);
         let border_color = Color::from_rgba8(0, 255, 0, 255);
 
-        draw_rounded_rect(&mut pixmap, rect, bg_color, 2.0, border_color, 0.0);
+        draw_rounded_rect(
+            &mut pixmap,
+            rect,
+            &ParsedColor::Solid(bg_color),
+            2.0,
+            &ParsedColor::Solid(border_color),
+            0.0,
+        );
 
         assert_pixmap_has_color!(pixmap, bg_color);
         assert_pixmap_has_color!(pixmap, border_color);
@@ -414,7 +463,14 @@ mod tests {
         let rect = Rect::from_xywh(10.0, 10.0, 80.0, 80.0).unwrap();
         let bg_color = Color::from_rgba8(255, 0, 0, 255);
 
-        draw_rounded_rect(&mut pixmap, rect, bg_color, 0.0, Color::TRANSPARENT, 10.0);
+        draw_rounded_rect(
+            &mut pixmap,
+            rect,
+            &ParsedColor::Solid(bg_color),
+            0.0,
+            &ParsedColor::Solid(Color::TRANSPARENT),
+            10.0,
+        );
 
         assert_pixmap_has_color!(pixmap, bg_color);
     }

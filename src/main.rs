@@ -80,7 +80,10 @@ mod tests {
         std::fs::write(&config_path, config_content).unwrap();
 
         let config = load_config(&config_path).unwrap();
-        assert_eq!(config.bar().background(), "#123456");
+        assert_eq!(
+            config.bar().background(),
+            &crate::utils::ParsedColor::try_from("#123456").unwrap()
+        );
         assert_eq!(config.bar().height(), 42);
 
         let _ = std::fs::remove_file(config_path);
