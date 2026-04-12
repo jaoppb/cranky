@@ -12,6 +12,14 @@ pub enum ConfigError {
     Io(#[from] std::io::Error),
 }
 
+#[derive(Error, Debug)]
+pub enum ReloadError {
+    #[error(transparent)]
+    Config(#[from] ConfigError),
+    #[error(transparent)]
+    Registry(#[from] crate::modules::RegistryError),
+}
+
 pub type Result<T> = std::result::Result<T, ConfigError>;
 
 #[derive(Debug, Deserialize, Clone, Default)]

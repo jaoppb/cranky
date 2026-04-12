@@ -192,6 +192,7 @@ impl Bar {
         config: &Config,
         registry: &crate::modules::ModuleRegistry,
         context: &mut RenderContext,
+        error_message: &Option<String>,
         qh: &QueueHandle<CrankyState>,
     ) {
         if !self.configured {
@@ -241,11 +242,25 @@ impl Bar {
         context.set_vertical_alignment(config.bar().vertical_alignment());
         context.set_scale(self.scale as f32);
 
-        // Render modules
-        let area =
-            tiny_skia::Rect::from_xywh(0.0, 0.0, self.width as f32, self.height as f32).unwrap();
+        if let Some(error) = error_message {
+            let styling = crate::render::TextStyling::new(
+                14.0,
+                20.0,
+                tiny_skia::Color::from_rgba8(255, 0, 0, 255),
+                "monospace".to_string(),
+            );
+            let y_offset = context.calculate_vertical_offset(
+                tiny_skia::Rect::from_xywh(0.0, 0.0, self.width as f32, self.height as f32).unwrap(),
+                14.0,
+            );
+            context.render_text(&mut pixmap, error, styling, 10.0, y_offset);
+        } else {
+            // Render modules
+            let area =
+                tiny_skia::Rect::from_xywh(0.0, 0.0, self.width as f32, self.height as f32).unwrap();
 
-        registry.view(&mut pixmap, area, context, &self.monitor_name);
+            registry.view(&mut pixmap, area, context, &self.monitor_name);
+        }
 
         // Recreate buffer only if needed
         if self.buffer.is_none() {

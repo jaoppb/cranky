@@ -6,7 +6,7 @@ use log::error;
 use serde::Deserialize;
 use std::collections::HashMap;
 use thiserror::Error;
-use tiny_skia::{Color, FillRule, Paint, PathBuilder, PixmapMut, Rect, Transform};
+use tiny_skia::{Color, FillRule, PathBuilder, PixmapMut, Rect, Transform};
 
 #[derive(Error, Debug)]
 pub enum WorkspaceError {

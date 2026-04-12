@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::modules::{Event, ModuleRegistry, UpdateAction};
+use tokio::sync::mpsc;
 use thiserror::Error;
 use wayland_client::{
     Connection, Dispatch, EventQueue, QueueHandle,
@@ -157,6 +158,7 @@ pub struct CrankyState {
     registry: ModuleRegistry,
     config: Config,
     render_context: crate::render::RenderContext,
+    error_message: Option<String>,
 
     // Globals
     compositor: Option<WlCompositor>,
@@ -189,6 +191,7 @@ impl WaylandManager {
             registry,
             config,
             render_context: crate::render::RenderContext::new(),
+            error_message: None,
             compositor: None,
             shm: None,
             layer_shell: None,
@@ -203,7 +206,10 @@ impl WaylandManager {
         })
     }
 
-    pub async fn run(mut self) -> Result<()> {
+    pub async fn run(
+        mut self,
+        mut config_rx: mpsc::Receiver<std::result::Result<Config, crate::config::ReloadError>>,
+    ) -> Result<()> {
         // Initial dispatch to get globals and output info
         self.event_queue
             .roundtrip(&mut self.state)
@@ -226,6 +232,38 @@ impl WaylandManager {
                 let _ = guard.read();
             }
 
+            // Check for config updates
+            while let Ok(res) = config_rx.try_recv() {
+                match res {
+                    Ok(new_config) => {
+                        log::info!("Config updated, reloading...");
+                        if let Err(e) = self.state.registry.load(&new_config) {
+                            log::error!("Failed to reload modules: {}", e);
+                            self.state.error_message = Some(format!("{}", e));
+                        } else {
+                            self.state.config = new_config;
+                            self.state.error_message = None;
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("Config reload error: {}", e);
+                        self.state.error_message = Some(format!("{}", e));
+                    }
+                }
+
+                // Re-render all bars
+                let qh = self.event_queue.handle();
+                for bar in &mut self.state.bars {
+                    bar.render(
+                        &self.state.config,
+                        &self.state.registry,
+                        &mut self.state.render_context,
+                        &self.state.error_message,
+                        &qh,
+                    );
+                }
+            }
+
             // 4. Periodic update check
             if self.state.registry.update(Event::Timer) == UpdateAction::Redraw {
                 let qh = self.event_queue.handle();
@@ -234,6 +272,7 @@ impl WaylandManager {
                         &self.state.config,
                         &self.state.registry,
                         &mut self.state.render_context,
+                        &self.state.error_message,
                         &qh,
                     );
                 }
@@ -417,6 +456,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for CrankyState {
                     &state.config,
                     &state.registry,
                     &mut state.render_context,
+                    &state.error_message,
                     qh,
                 );
             }

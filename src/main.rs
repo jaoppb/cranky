@@ -1,4 +1,4 @@
-use log::info;
+use log::{error, info};
 mod config;
 mod core;
 mod modules;
@@ -8,17 +8,21 @@ mod utils;
 #[macro_use]
 pub mod test_utils;
 
+use config::{Config, ConfigError, ReloadError};
+use notify::{Event, RecursiveMode, Watcher};
+use tokio::sync::mpsc;
+
 fn get_config_path() -> std::path::PathBuf {
     std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default())
         .join(".config/cranky/config.toml")
 }
 
-fn load_config(path: &std::path::Path) -> Result<config::Config, Box<dyn std::error::Error>> {
+fn load_config(path: &std::path::Path) -> Result<Config, ConfigError> {
     if path.exists() {
-        Ok(config::Config::load_from_path(path)?)
+        Config::load_from_path(path)
     } else {
         info!("Config not found, using default placeholder config");
-        Ok(config::Config::from_str(include_str!("../config.toml"))?)
+        Config::from_str(include_str!("../config.toml"))
     }
 }
 
@@ -29,11 +33,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting Cranky bar...");
 
-    // Load config
-    let config = load_config(&get_config_path())?;
+    let config_path = get_config_path();
+    // Load initial config
+    let config = load_config(&config_path)?;
+
+    let (tx, rx) = mpsc::channel(1);
+
+    let config_path_clone = config_path.clone();
+    let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| match res {
+        Ok(event) => {
+            if event.kind.is_modify() {
+                info!("Config file modified, reloading...");
+                match load_config(&config_path_clone) {
+                    Ok(new_config) => {
+                        let _ = tx.blocking_send(Ok(new_config));
+                    }
+                    Err(e) => {
+                        error!("Failed to load updated config: {}", e);
+                        let _ = tx.blocking_send(Err(ReloadError::from(e)));
+                    }
+                }
+            }
+        }
+        Err(e) => error!("watch error: {:?}", e),
+    })?;
+
+    if let Some(parent) = config_path.parent() {
+        if parent.exists() {
+            watcher.watch(parent, RecursiveMode::NonRecursive)?;
+        }
+    }
 
     let wayland_manager = core::WaylandManager::new(config)?;
-    wayland_manager.run().await?;
+    wayland_manager.run(rx).await?;
 
     Ok(())
 }
