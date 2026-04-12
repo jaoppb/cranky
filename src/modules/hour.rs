@@ -57,6 +57,7 @@ impl CrankyModule for HourModule {
                     UpdateAction::None
                 }
             }
+            _ => UpdateAction::None,
         }
     }
 

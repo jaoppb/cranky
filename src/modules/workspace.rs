@@ -1,8 +1,7 @@
-use crate::core::hyprland::{HyprlandProvider, RealHyprlandProvider, Workspace};
+use crate::core::hyprland::{Workspace};
 use crate::modules::{CrankyModule, Event, UpdateAction};
 use crate::render::{RenderContext, TextStyling};
 use crate::utils::ParsedColor;
-use log::error;
 use serde::Deserialize;
 use std::collections::HashMap;
 use thiserror::Error;
@@ -97,7 +96,6 @@ fn default_focused_bg() -> ParsedColor {
 }
 
 pub struct WorkspaceModule {
-    provider: Box<dyn HyprlandProvider>,
     workspaces: Vec<Workspace>,
     active_workspaces: HashMap<String, i32>,
     focused_monitor: String,
@@ -110,21 +108,6 @@ pub struct WorkspaceModule {
 impl WorkspaceModule {
     pub fn new() -> Self {
         Self {
-            provider: Box::new(RealHyprlandProvider),
-            workspaces: Vec::new(),
-            active_workspaces: HashMap::new(),
-            focused_monitor: String::new(),
-            font_family: String::new(),
-            active_background: default_active_bg(),
-            focused_background: default_focused_bg(),
-            border_radius: 0.0,
-        }
-    }
-
-    #[cfg(test)]
-    pub fn with_provider(provider: Box<dyn HyprlandProvider>) -> Self {
-        Self {
-            provider,
             workspaces: Vec::new(),
             active_workspaces: HashMap::new(),
             focused_monitor: String::new(),
@@ -192,42 +175,20 @@ impl CrankyModule for WorkspaceModule {
         self.active_background = config.active().background_color().clone();
         self.focused_background = config.focused().background_color().clone();
         self.border_radius = config.border_radius();
-
-        match self.provider.get_workspaces() {
-            Ok(mut ws) => {
-                ws.sort_by_key(|w| w.id());
-                self.workspaces = ws;
-            }
-            Err(e) => {
-                error!("Failed to get initial workspaces: {}", e);
-                self.workspaces = Vec::new();
-            }
-        }
-
-        match self.provider.get_monitors() {
-            Ok(monitors) => {
-                for m in monitors {
-                    self.active_workspaces
-                        .insert(m.name().to_string(), m.active_workspace_id());
-                    if m.focused() {
-                        self.focused_monitor = m.name().to_string();
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to get initial monitors: {}", e);
-            }
-        }
-
         Ok(())
     }
 
-    fn update(&mut self, _event: Event) -> UpdateAction {
-        let mut redraw = false;
+    fn update(&mut self, event: Event) -> UpdateAction {
+        match event {
+            Event::HyprlandUpdate {
+                workspaces,
+                monitors,
+            } => {
+                let mut redraw = false;
 
-        match self.provider.get_workspaces() {
-            Ok(mut new_workspaces) => {
+                let mut new_workspaces = workspaces;
                 new_workspaces.sort_by_key(|w| w.id());
+
                 if new_workspaces.len() != self.workspaces.len()
                     || new_workspaces
                         .iter()
@@ -237,14 +198,7 @@ impl CrankyModule for WorkspaceModule {
                     self.workspaces = new_workspaces;
                     redraw = true;
                 }
-            }
-            Err(e) => {
-                error!("Failed to update workspaces: {}", e);
-            }
-        }
 
-        match self.provider.get_monitors() {
-            Ok(monitors) => {
                 for m in &monitors {
                     let old_id = self.active_workspaces.get(m.name()).cloned().unwrap_or(-1);
                     if old_id != m.active_workspace_id() {
@@ -264,16 +218,14 @@ impl CrankyModule for WorkspaceModule {
                     self.focused_monitor = new_focused;
                     redraw = true;
                 }
-            }
-            Err(e) => {
-                error!("Failed to update monitors: {}", e);
-            }
-        }
 
-        if redraw {
-            UpdateAction::Redraw
-        } else {
-            UpdateAction::None
+                if redraw {
+                    UpdateAction::Redraw
+                } else {
+                    UpdateAction::None
+                }
+            }
+            Event::Timer => UpdateAction::None,
         }
     }
 
@@ -378,25 +330,24 @@ mod tests {
     use super::*;
     use crate::assert_pixmap_has_color;
     use crate::config::BarConfig;
-    use crate::core::hyprland::{MockHyprlandProvider, Monitor, Workspace};
+    use crate::core::hyprland::{Monitor, Workspace};
 
     #[test]
     fn test_workspace_init() {
-        let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces().returning(|| {
-            Ok(vec![
-                Workspace::new(1, "eDP-1".to_string()),
-                Workspace::new(2, "eDP-1".to_string()),
-            ])
-        });
-        mock.expect_get_monitors()
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        let mut module = WorkspaceModule::new();
         let config = WorkspaceConfig::default();
         let bar_config = BarConfig::default();
 
         module.init(config, &bar_config).unwrap();
+
+        let event = Event::HyprlandUpdate {
+            workspaces: vec![
+                Workspace::new(1, "eDP-1".to_string()),
+                Workspace::new(2, "eDP-1".to_string()),
+            ],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        };
+        module.update(event);
 
         assert_eq!(module.workspaces.len(), 2);
         assert_eq!(module.active_workspaces.get("eDP-1"), Some(&1));
@@ -405,46 +356,38 @@ mod tests {
 
     #[test]
     fn test_workspace_update() {
-        let mut mock = MockHyprlandProvider::new();
-
-        // 1st calls (init)
-        mock.expect_get_workspaces()
-            .times(1)
-            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        // 2nd calls (update) - change active workspace
-        mock.expect_get_workspaces()
-            .times(1)
-            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 2, true)]));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        let mut module = WorkspaceModule::new();
         module
             .init(WorkspaceConfig::default(), &BarConfig::default())
             .unwrap();
 
-        let action = module.update(Event::Timer);
+        // 1st update
+        module.update(Event::HyprlandUpdate {
+            workspaces: vec![Workspace::new(1, "eDP-1".to_string())],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        });
+
+        // 2nd update - change active workspace
+        let action = module.update(Event::HyprlandUpdate {
+            workspaces: vec![Workspace::new(1, "eDP-1".to_string())],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 2, true)],
+        });
+
         assert_eq!(action, UpdateAction::Redraw);
         assert_eq!(module.active_workspaces.get("eDP-1"), Some(&2));
     }
 
     #[test]
     fn test_workspace_measure() {
-        let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces()
-            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        let mut module = WorkspaceModule::new();
         module
             .init(WorkspaceConfig::default(), &BarConfig::default())
             .unwrap();
+
+        module.update(Event::HyprlandUpdate {
+            workspaces: vec![Workspace::new(1, "eDP-1".to_string())],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        });
 
         let mut context = RenderContext::new();
         let width = module.measure(&mut context, "eDP-1");
@@ -453,20 +396,18 @@ mod tests {
 
     #[test]
     fn test_workspace_view() {
-        let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces().returning(|| {
-            Ok(vec![
-                Workspace::new(1, "eDP-1".to_string()),
-                Workspace::new(2, "eDP-1".to_string()),
-            ])
-        });
-        mock.expect_get_monitors()
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        let mut module = WorkspaceModule::new();
         module
             .init(WorkspaceConfig::default(), &BarConfig::default())
             .unwrap();
+
+        module.update(Event::HyprlandUpdate {
+            workspaces: vec![
+                Workspace::new(1, "eDP-1".to_string()),
+                Workspace::new(2, "eDP-1".to_string()),
+            ],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        });
 
         let mut pixmap_data = vec![0; 100 * 30 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 100, 30).unwrap();
@@ -483,24 +424,21 @@ mod tests {
 
     #[test]
     fn test_workspace_view_focused_on_other_monitor() {
-        let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces().returning(|| {
-            Ok(vec![
-                Workspace::new(1, "eDP-1".to_string()),
-                Workspace::new(2, "HDMI-A-1".to_string()),
-            ])
-        });
-        mock.expect_get_monitors().returning(|| {
-            Ok(vec![
-                Monitor::new("eDP-1".to_string(), 1, true),
-                Monitor::new("HDMI-A-1".to_string(), 2, false),
-            ])
-        });
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        let mut module = WorkspaceModule::new();
         module
             .init(WorkspaceConfig::default(), &BarConfig::default())
             .unwrap();
+
+        module.update(Event::HyprlandUpdate {
+            workspaces: vec![
+                Workspace::new(1, "eDP-1".to_string()),
+                Workspace::new(2, "HDMI-A-1".to_string()),
+            ],
+            monitors: vec![
+                Monitor::new("eDP-1".to_string(), 1, true),
+                Monitor::new("HDMI-A-1".to_string(), 2, false),
+            ],
+        });
 
         let mut pixmap_data = vec![0; 100 * 30 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 100, 30).unwrap();
@@ -518,86 +456,40 @@ mod tests {
 
     #[test]
     fn test_workspace_update_no_change() {
-        let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces()
-            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        let mut module = WorkspaceModule::new();
         module
             .init(WorkspaceConfig::default(), &BarConfig::default())
             .unwrap();
 
-        let action = module.update(Event::Timer);
-        assert_eq!(action, UpdateAction::None);
-    }
+        let event = Event::HyprlandUpdate {
+            workspaces: vec![Workspace::new(1, "eDP-1".to_string())],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        };
+        module.update(event.clone());
 
-    #[test]
-    fn test_workspace_init_error() {
-        let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces()
-            .returning(|| Err(crate::core::hyprland::HyprError::NoInstance));
-        mock.expect_get_monitors()
-            .returning(|| Err(crate::core::hyprland::HyprError::NoInstance));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
-        module
-            .init(WorkspaceConfig::default(), &BarConfig::default())
-            .unwrap();
-
-        assert_eq!(module.workspaces.len(), 0);
-    }
-
-    #[test]
-    fn test_workspace_update_error() {
-        let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces()
-            .times(1)
-            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        mock.expect_get_workspaces()
-            .times(1)
-            .returning(|| Err(crate::core::hyprland::HyprError::NoInstance));
-        mock.expect_get_monitors()
-            .times(1)
-            .returning(|| Err(crate::core::hyprland::HyprError::NoInstance));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
-        module
-            .init(WorkspaceConfig::default(), &BarConfig::default())
-            .unwrap();
-
-        let action = module.update(Event::Timer);
+        let action = module.update(event);
         assert_eq!(action, UpdateAction::None);
     }
 
     #[test]
     fn test_workspace_new() {
-        // This test will use the real provider, but we just want to exercise the code path.
-        // It might fail if HYPRLAND_INSTANCE_SIGNATURE is not set, but we don't care about the result here,
-        // just that it doesn't panic and the code is covered.
         let _module = WorkspaceModule::new();
     }
 
     #[test]
     fn test_workspace_view_rounded() {
-        let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces()
-            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        let mut module = WorkspaceModule::new();
         let config = WorkspaceConfig {
             active: ActiveWorkspaceConfig::default(),
             focused: FocusedWorkspaceConfig::default(),
             border_radius: 4.0,
         };
         module.init(config, &BarConfig::default()).unwrap();
+
+        module.update(Event::HyprlandUpdate {
+            workspaces: vec![Workspace::new(1, "eDP-1".to_string())],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        });
 
         let mut pixmap_data = vec![0; 100 * 30 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 100, 30).unwrap();
@@ -614,57 +506,45 @@ mod tests {
 
     #[test]
     fn test_workspace_update_len_change() {
-        let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces()
-            .times(1)
-            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        mock.expect_get_workspaces().times(1).returning(|| {
-            Ok(vec![
-                Workspace::new(1, "eDP-1".to_string()),
-                Workspace::new(2, "eDP-1".to_string()),
-            ])
-        });
-        mock.expect_get_monitors()
-            .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        let mut module = WorkspaceModule::new();
         module
             .init(WorkspaceConfig::default(), &BarConfig::default())
             .unwrap();
 
-        let action = module.update(Event::Timer);
+        module.update(Event::HyprlandUpdate {
+            workspaces: vec![Workspace::new(1, "eDP-1".to_string())],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        });
+
+        let action = module.update(Event::HyprlandUpdate {
+            workspaces: vec![
+                Workspace::new(1, "eDP-1".to_string()),
+                Workspace::new(2, "eDP-1".to_string()),
+            ],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        });
+
         assert_eq!(action, UpdateAction::Redraw);
         assert_eq!(module.workspaces.len(), 2);
     }
 
     #[test]
     fn test_workspace_update_id_change() {
-        let mut mock = MockHyprlandProvider::new();
-        mock.expect_get_workspaces()
-            .times(1)
-            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        mock.expect_get_workspaces()
-            .times(1)
-            .returning(|| Ok(vec![Workspace::new(2, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        let mut module = WorkspaceModule::new();
         module
             .init(WorkspaceConfig::default(), &BarConfig::default())
             .unwrap();
 
-        let action = module.update(Event::Timer);
+        module.update(Event::HyprlandUpdate {
+            workspaces: vec![Workspace::new(1, "eDP-1".to_string())],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        });
+
+        let action = module.update(Event::HyprlandUpdate {
+            workspaces: vec![Workspace::new(2, "eDP-1".to_string())],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        });
+
         assert_eq!(action, UpdateAction::Redraw);
         assert_eq!(module.workspaces[0].id(), 2);
     }
@@ -690,30 +570,22 @@ mod tests {
 
     #[test]
     fn test_workspace_update_focus_change() {
-        let mut mock = MockHyprlandProvider::new();
-
-        // 1st calls (init)
-        mock.expect_get_workspaces()
-            .times(1)
-            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, true)]));
-
-        // 2nd calls (update) - change focused monitor (even if active workspace ID is same)
-        mock.expect_get_workspaces()
-            .times(1)
-            .returning(|| Ok(vec![Workspace::new(1, "eDP-1".to_string())]));
-        mock.expect_get_monitors()
-            .times(1)
-            .returning(|| Ok(vec![Monitor::new("eDP-1".to_string(), 1, false)]));
-
-        let mut module = WorkspaceModule::with_provider(Box::new(mock));
+        let mut module = WorkspaceModule::new();
         module
             .init(WorkspaceConfig::default(), &BarConfig::default())
             .unwrap();
 
-        let action = module.update(Event::Timer);
+        module.update(Event::HyprlandUpdate {
+            workspaces: vec![Workspace::new(1, "eDP-1".to_string())],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, true)],
+        });
+
+        // 2nd update - change focused monitor (even if active workspace ID is same)
+        let action = module.update(Event::HyprlandUpdate {
+            workspaces: vec![Workspace::new(1, "eDP-1".to_string())],
+            monitors: vec![Monitor::new("eDP-1".to_string(), 1, false)],
+        });
+
         assert_eq!(action, UpdateAction::Redraw);
         assert_eq!(module.focused_monitor, ""); // none are focused in this mock result
     }

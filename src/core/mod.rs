@@ -180,6 +180,10 @@ pub struct CrankyState {
 
     // Bars
     bars: Vec<bar::Bar>,
+
+    // Hyprland
+    hyprland_provider: Box<dyn crate::core::hyprland::HyprlandProvider>,
+    focused_monitor: Option<String>,
 }
 
 impl WaylandManager {
@@ -207,6 +211,8 @@ impl WaylandManager {
             layer_shell: None,
             outputs: Vec::new(),
             bars: Vec::new(),
+            hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
+            focused_monitor: None,
         };
 
         Ok(Self {
@@ -272,13 +278,43 @@ impl WaylandManager {
                 // Periodic update check (100ms)
                 _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
                     drop(read_guard);
-                    if self.state.registry.update(Event::Timer) == UpdateAction::Redraw {
+                    let mut redraw = self.state.registry.update(Event::Timer) == UpdateAction::Redraw;
+
+                    // Centralized Hyprland polling
+                    let workspaces = self.state.hyprland_provider.get_workspaces().unwrap_or_default();
+                    let monitors = self.state.hyprland_provider.get_monitors().unwrap_or_default();
+
+                    let new_focused = monitors
+                        .iter()
+                        .find(|m| m.focused())
+                        .map(|m| m.name().to_string());
+
+                    if new_focused != self.state.focused_monitor {
+                        self.state.focused_monitor = new_focused;
+                        redraw = true;
+                    }
+
+                    if self.state.registry.update(Event::HyprlandUpdate {
+                        workspaces,
+                        monitors,
+                    }) == UpdateAction::Redraw {
+                        redraw = true;
+                    }
+
+                    if redraw {
                         let qh = self.event_queue.handle();
                         let shm = self.state.shm.as_ref().unwrap().clone();
                         for bar in &mut self.state.bars {
-                            bar.update_config(&shm, &self.state.config, &qh);
+                            let bar_config = if Some(bar.monitor_name()) == self.state.focused_monitor.as_deref() {
+                                self.state.config.bar().clone()
+                            } else {
+                                self.state.config.bar().as_unfocused()
+                            };
+
+                            bar.update_config(&shm, &self.state.config, &bar_config, &qh);
                             bar.render(
                                 &self.state.config,
+                                &bar_config,
                                 &self.state.registry,
                                 &mut self.state.render_context,
                                 &self.state.error_message,
@@ -313,9 +349,16 @@ impl WaylandManager {
                         let qh = self.event_queue.handle();
                         let shm = self.state.shm.as_ref().unwrap().clone();
                         for bar in &mut self.state.bars {
-                            bar.update_config(&shm, &self.state.config, &qh);
+                            let bar_config = if Some(bar.monitor_name()) == self.state.focused_monitor.as_deref() {
+                                self.state.config.bar().clone()
+                            } else {
+                                self.state.config.bar().as_unfocused()
+                            };
+
+                            bar.update_config(&shm, &self.state.config, &bar_config, &qh);
                             bar.render(
                                 &self.state.config,
+                                &bar_config,
                                 &self.state.registry,
                                 &mut self.state.render_context,
                                 &self.state.error_message,
@@ -497,8 +540,16 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for CrankyState {
                         bar.set_width(shm, width, qh);
                     }
                 }
+
+                let bar_config = if Some(bar.monitor_name()) == state.focused_monitor.as_deref() {
+                    state.config.bar().clone()
+                } else {
+                    state.config.bar().as_unfocused()
+                };
+
                 bar.render(
                     &state.config,
+                    &bar_config,
                     &state.registry,
                     &mut state.render_context,
                     &state.error_message,

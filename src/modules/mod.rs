@@ -6,7 +6,6 @@ use thiserror::Error;
 use tiny_skia::PixmapMut;
 
 pub mod hour;
-#[macro_use]
 pub mod workspace;
 
 #[derive(Error, Debug)]
@@ -22,6 +21,10 @@ pub type RegistryResult<T> = std::result::Result<T, RegistryError>;
 #[derive(Debug, Clone)]
 pub enum Event {
     Timer,
+    HyprlandUpdate {
+        workspaces: Vec<crate::core::hyprland::Workspace>,
+        monitors: Vec<crate::core::hyprland::Monitor>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -362,6 +365,7 @@ mod tests {
         let event_clone = event.clone();
         match event_clone {
             Event::Timer => {}
+            Event::HyprlandUpdate { .. } => {}
         }
     }
 

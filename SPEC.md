@@ -60,54 +60,11 @@ Each module must implement a `CrankyModule` trait:
 
 ## Next Steps
 
-[ ] Gradient support to borders
-[ ] Optional border color for unfocused workspace to match window
-[ ] Hot-Reload for config
+[X] Gradient support to borders
+[X] Optional border color for unfocused workspace to match window
+[X] Hot-Reload for config
 [ ] Get modules more modular by allowing runtime dynamic libraries (needs more analysis)
 [x] Fix font family not switching
 [ ] Allow the border matching the hyprland config
-[ ] Change event waiting mode to allow events happening before the 100ms sleep
+[X] Change event waiting mode to allow events happening before the 100ms sleep
 [x] When a new monitor is connected, the bar is appearing
-
-## Configuration Schema (`~/.config/cranky/config.toml`)
-
-```toml
-[bar]
-background = "#1a1b26"
-text_color = "#c0caf5"
-font_family = "JetBrainsMono Nerd Font"
-font_size = 14.0
-scale = 1.0
-border_size = 1
-border_color = "#7aa2f7"
-border_radius = 8
-height = 30
-margin = { top = 5, bottom = 0, left = 10, right = 10 }
-
-[[modules.left]]
-name = "workspace"
-enable = true
-
-[[modules.center]]
-name = "hour"
-format = "%H:%M:%S"
-enable = true
-
-[[modules.right]]
-name = "media"
-enable = true
-
-[[modules.right]]
-name = "audio"
-enable = true
-
-[[modules.right]]
-name = "network"
-enable = true
-
-[[modules.right]]
-name = "system"
-enable = true
-show_cpu = true
-show_mem = true
-```

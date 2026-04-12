@@ -189,7 +189,8 @@ impl Bar {
 
     pub fn render(
         &mut self,
-        config: &Config,
+        _config: &Config,
+        bar_config: &crate::config::BarConfig,
         registry: &crate::modules::ModuleRegistry,
         context: &mut RenderContext,
         error_message: &Option<String>,
@@ -218,7 +219,7 @@ impl Bar {
         // Clear pixmap for transparency
         pixmap.fill(tiny_skia::Color::TRANSPARENT);
 
-        let border = config.bar().border();
+        let border = bar_config.border();
         let border_size = border.size() * self.scale as f32;
         let border_radius = border.radius() * self.scale as f32;
 
@@ -233,13 +234,13 @@ impl Bar {
         draw_rounded_rect(
             &mut pixmap,
             rect,
-            config.bar().background(),
+            bar_config.background(),
             border_size,
             border.color(),
             border_radius,
         );
 
-        context.set_vertical_alignment(config.bar().vertical_alignment());
+        context.set_vertical_alignment(bar_config.vertical_alignment());
         context.set_scale(self.scale as f32);
 
         if let Some(error) = error_message {
@@ -321,8 +322,13 @@ impl Bar {
         }
     }
 
-    pub fn update_config(&mut self, shm: &WlShm, config: &Config, qh: &QueueHandle<CrankyState>) {
-        let bar_config = config.bar();
+    pub fn update_config(
+        &mut self,
+        shm: &WlShm,
+        _config: &Config,
+        bar_config: &crate::config::BarConfig,
+        qh: &QueueHandle<CrankyState>,
+    ) {
         let height = bar_config.height();
         let margin = bar_config.margin();
 

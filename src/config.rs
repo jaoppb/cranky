@@ -68,6 +68,32 @@ pub struct BarConfig {
     border: BorderConfig,
     #[serde(default)]
     margin: MarginConfig,
+    #[serde(default)]
+    unfocused: Option<PartialBarConfig>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct PartialMarginConfig {
+    pub top: Option<i32>,
+    pub bottom: Option<i32>,
+    pub left: Option<i32>,
+    pub right: Option<i32>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct PartialBorderConfig {
+    pub size: Option<f32>,
+    pub color: Option<ParsedColor>,
+    pub radius: Option<f32>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct PartialBarConfig {
+    pub background: Option<ParsedColor>,
+    pub height: Option<u32>,
+    pub vertical_alignment: Option<VerticalAlignment>,
+    pub border: Option<PartialBorderConfig>,
+    pub margin: Option<PartialMarginConfig>,
 }
 
 impl Default for BarConfig {
@@ -78,6 +104,7 @@ impl Default for BarConfig {
             vertical_alignment: VerticalAlignment::default(),
             border: BorderConfig::default(),
             margin: MarginConfig::default(),
+            unfocused: None,
         }
     }
 }
@@ -109,6 +136,47 @@ impl BarConfig {
 
     pub fn margin(&self) -> &MarginConfig {
         &self.margin
+    }
+
+    pub fn as_unfocused(&self) -> BarConfig {
+        let mut base = self.clone();
+        if let Some(unfocused) = &self.unfocused {
+            if let Some(bg) = &unfocused.background {
+                base.background = bg.clone();
+            }
+            if let Some(h) = unfocused.height {
+                base.height = h;
+            }
+            if let Some(va) = unfocused.vertical_alignment {
+                base.vertical_alignment = va;
+            }
+            if let Some(pb) = &unfocused.border {
+                if let Some(s) = pb.size {
+                    base.border.size = s;
+                }
+                if let Some(c) = &pb.color {
+                    base.border.color = c.clone();
+                }
+                if let Some(r) = pb.radius {
+                    base.border.radius = r;
+                }
+            }
+            if let Some(pm) = &unfocused.margin {
+                if let Some(t) = pm.top {
+                    base.margin.top = t;
+                }
+                if let Some(b) = pm.bottom {
+                    base.margin.bottom = b;
+                }
+                if let Some(l) = pm.left {
+                    base.margin.left = l;
+                }
+                if let Some(r) = pm.right {
+                    base.margin.right = r;
+                }
+            }
+        }
+        base
     }
 }
 
@@ -346,5 +414,33 @@ mod tests {
         assert_eq!(mc.name(), "test");
         assert!(mc.is_enabled());
         assert_eq!(mc.options().get("key").unwrap(), "value");
+    }
+
+    #[test]
+    fn test_bar_config_as_unfocused() {
+        let toml_str = r##"
+            [bar]
+            background = "#000000"
+            height = 30
+            [bar.unfocused]
+            background = "#ffffff"
+            height = 20
+            [bar.unfocused.border]
+            size = 2.0
+            [modules]
+        "##;
+        let config = Config::from_str(toml_str).unwrap();
+        let bar = config.bar();
+        let unfocused = bar.as_unfocused();
+
+        assert_eq!(bar.background(), &ParsedColor::try_from("#000000").unwrap());
+        assert_eq!(bar.height(), 30);
+
+        assert_eq!(
+            unfocused.background(),
+            &ParsedColor::try_from("#ffffff").unwrap()
+        );
+        assert_eq!(unfocused.height(), 20);
+        assert_eq!(unfocused.border().size(), 2.0);
     }
 }
