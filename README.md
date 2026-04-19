@@ -45,30 +45,32 @@ Cranky looks for its configuration file at `~/.config/cranky/config.toml`.
 ```toml
 [bar]
 background = "#1a1b26"
-text_color = "#c0caf5"
-font_family = "JetBrainsMono Nerd Font"
-font_size = 14.0
-height = 30
-margin = { top = 5, bottom = 0, left = 10, right = 10 }
-border_size = 1
-border_color = "#7aa2f7"
-border_radius = 8
+height = 40
+
+[bar.margin]
+top = 8
+bottom = -8
+left = 8
+right = 8
+
+[bar.border]
+size = 2
+color = "#7aa2f7"
+radius = 8.0
+
+[rendering]
+mode = "timebased"
+duration_ms = 100
+# mode = "immediate"
+# fps_limit = 60
+# Omit fps_limit for unlimited FPS in immediate mode.
 
 [[modules.left]]
 name = "workspace"
 enable = true
 
-[[modules.center]]
+[[modules.right]]
 name = "hour"
-format = "%H:%M:%S"
-enable = true
-
-[[modules.right]]
-name = "audio"
-enable = true
-
-[[modules.right]]
-name = "network"
 enable = true
 ```
 

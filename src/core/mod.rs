@@ -48,6 +48,26 @@ pub struct WaylandManager {
     state: CrankyState,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TickCadence {
+    Sleep(std::time::Duration),
+    Yield,
+}
+
+fn tick_cadence(mode: &crate::config::RenderingMode) -> TickCadence {
+    match mode {
+        crate::config::RenderingMode::Immediate { fps_limit } => match fps_limit {
+            Some(fps) if *fps > 0 => {
+                TickCadence::Sleep(std::time::Duration::from_secs_f64(1.0 / (*fps as f64)))
+            }
+            _ => TickCadence::Yield,
+        },
+        crate::config::RenderingMode::Timebased { duration_ms } => {
+            TickCadence::Sleep(std::time::Duration::from_millis((*duration_ms).max(1)))
+        }
+    }
+}
+
 pub struct OutputInfo {
     output: WlOutput,
     id: u32,
@@ -125,7 +145,9 @@ impl CrankyState {
 
     fn globals(&self) -> Option<WaylandGlobals> {
         match (&self.compositor, &self.shm, &self.layer_shell) {
-            (Some(c), Some(s), Some(l)) => Some(WaylandGlobals::new(c.clone(), s.clone(), l.clone())),
+            (Some(c), Some(s), Some(l)) => {
+                Some(WaylandGlobals::new(c.clone(), s.clone(), l.clone()))
+            }
             _ => None,
         }
     }
@@ -148,7 +170,8 @@ impl CrankyState {
         if let Some(globals) = self.globals() {
             log::info!(
                 "Creating bar for output: {} (scale: {})",
-                info_name, info_scale
+                info_name,
+                info_scale
             );
 
             let bar_res = {
@@ -187,6 +210,63 @@ pub struct CrankyState {
 }
 
 impl WaylandManager {
+    fn handle_periodic_update(&mut self) {
+        let mut redraw = self.state.registry.update(Event::Timer) == UpdateAction::Redraw;
+
+        // Centralized Hyprland polling
+        let workspaces = self
+            .state
+            .hyprland_provider
+            .get_workspaces()
+            .unwrap_or_default();
+        let monitors = self
+            .state
+            .hyprland_provider
+            .get_monitors()
+            .unwrap_or_default();
+
+        let new_focused = monitors
+            .iter()
+            .find(|m| m.focused())
+            .map(|m| m.name().to_string());
+
+        if new_focused != self.state.focused_monitor {
+            self.state.focused_monitor = new_focused;
+            redraw = true;
+        }
+
+        if self.state.registry.update(Event::HyprlandUpdate {
+            workspaces,
+            monitors,
+        }) == UpdateAction::Redraw
+        {
+            redraw = true;
+        }
+
+        if redraw {
+            let qh = self.event_queue.handle();
+            let shm = self.state.shm.as_ref().unwrap().clone();
+            for bar in &mut self.state.bars {
+                let bar_config =
+                    if Some(bar.monitor_name()) == self.state.focused_monitor.as_deref() {
+                        self.state.config.bar().clone()
+                    } else {
+                        self.state.config.bar().as_unfocused()
+                    };
+
+                bar.update_config(&shm, &self.state.config, &bar_config, &qh);
+                bar.render(
+                    &self.state.config,
+                    &bar_config,
+                    &self.state.registry,
+                    &mut self.state.render_context,
+                    &self.state.error_message,
+                    &qh,
+                );
+            }
+        }
+    }
+
     pub fn new(config: Config) -> Result<Self> {
         let connection =
             Connection::connect_to_env().map_err(|e| CoreError::Connection(e.to_string()))?;
@@ -248,6 +328,11 @@ impl WaylandManager {
                 .map_err(|e| CoreError::Dispatch(e.to_string()))?;
 
             let mut read_guard = self.event_queue.prepare_read();
+            let tick_cadence = tick_cadence(self.state.config.rendering());
+            let tick_sleep = match tick_cadence {
+                TickCadence::Sleep(duration) => duration,
+                TickCadence::Yield => std::time::Duration::from_millis(0),
+            };
 
             tokio::select! {
                 // Wayland events
@@ -275,53 +360,16 @@ impl WaylandManager {
                     // Re-looping immediately calls dispatch_pending
                 }
 
-                // Periodic update check (100ms)
-                _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
+                // Periodic update check (timebased or fps-limited immediate mode)
+                _ = tokio::time::sleep(tick_sleep), if matches!(tick_cadence, TickCadence::Sleep(_)) => {
                     drop(read_guard);
-                    let mut redraw = self.state.registry.update(Event::Timer) == UpdateAction::Redraw;
+                    self.handle_periodic_update();
+                }
 
-                    // Centralized Hyprland polling
-                    let workspaces = self.state.hyprland_provider.get_workspaces().unwrap_or_default();
-                    let monitors = self.state.hyprland_provider.get_monitors().unwrap_or_default();
-
-                    let new_focused = monitors
-                        .iter()
-                        .find(|m| m.focused())
-                        .map(|m| m.name().to_string());
-
-                    if new_focused != self.state.focused_monitor {
-                        self.state.focused_monitor = new_focused;
-                        redraw = true;
-                    }
-
-                    if self.state.registry.update(Event::HyprlandUpdate {
-                        workspaces,
-                        monitors,
-                    }) == UpdateAction::Redraw {
-                        redraw = true;
-                    }
-
-                    if redraw {
-                        let qh = self.event_queue.handle();
-                        let shm = self.state.shm.as_ref().unwrap().clone();
-                        for bar in &mut self.state.bars {
-                            let bar_config = if Some(bar.monitor_name()) == self.state.focused_monitor.as_deref() {
-                                self.state.config.bar().clone()
-                            } else {
-                                self.state.config.bar().as_unfocused()
-                            };
-
-                            bar.update_config(&shm, &self.state.config, &bar_config, &qh);
-                            bar.render(
-                                &self.state.config,
-                                &bar_config,
-                                &self.state.registry,
-                                &mut self.state.render_context,
-                                &self.state.error_message,
-                                &qh,
-                            );
-                        }
-                    }
+                // Periodic update check (immediate mode with unlimited fps)
+                _ = tokio::task::yield_now(), if matches!(tick_cadence, TickCadence::Yield) => {
+                    drop(read_guard);
+                    self.handle_periodic_update();
                 }
 
                 // Config updates
@@ -388,7 +436,8 @@ impl Dispatch<WlRegistry, ()> for CrankyState {
                 version,
             } => match &interface[..] {
                 "wl_compositor" => {
-                    state.compositor = Some(proxy.bind::<WlCompositor, _, _>(name, version, qh, ()));
+                    state.compositor =
+                        Some(proxy.bind::<WlCompositor, _, _>(name, version, qh, ()));
                 }
                 "wl_shm" => {
                     state.shm = Some(proxy.bind::<WlShm, _, _>(name, version, qh, ()));
@@ -617,5 +666,46 @@ mod tests {
         let globals = unsafe { std::mem::MaybeUninit::<WaylandGlobals>::uninit().assume_init() };
         // We can't safely test the getters because they return references to uninitialized proxies
         std::mem::forget(globals);
+    }
+
+    #[test]
+    fn test_tick_cadence_timebased() {
+        let cadence = tick_cadence(&crate::config::RenderingMode::Timebased { duration_ms: 100 });
+        assert_eq!(
+            cadence,
+            TickCadence::Sleep(std::time::Duration::from_millis(100))
+        );
+    }
+
+    #[test]
+    fn test_tick_cadence_timebased_zero_is_clamped() {
+        let cadence = tick_cadence(&crate::config::RenderingMode::Timebased { duration_ms: 0 });
+        assert_eq!(
+            cadence,
+            TickCadence::Sleep(std::time::Duration::from_millis(1))
+        );
+    }
+
+    #[test]
+    fn test_tick_cadence_immediate_with_limit() {
+        let cadence = tick_cadence(&crate::config::RenderingMode::Immediate {
+            fps_limit: Some(60),
+        });
+        assert_eq!(
+            cadence,
+            TickCadence::Sleep(std::time::Duration::from_secs_f64(1.0 / 60.0))
+        );
+    }
+
+    #[test]
+    fn test_tick_cadence_immediate_unlimited() {
+        let cadence = tick_cadence(&crate::config::RenderingMode::Immediate { fps_limit: None });
+        assert_eq!(cadence, TickCadence::Yield);
+    }
+
+    #[test]
+    fn test_tick_cadence_immediate_zero_is_unlimited() {
+        let cadence = tick_cadence(&crate::config::RenderingMode::Immediate { fps_limit: Some(0) });
+        assert_eq!(cadence, TickCadence::Yield);
     }
 }

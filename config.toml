@@ -17,6 +17,13 @@ size = 2
 color = "#7aa2f7"
 radius = 8.0
 
+[rendering]
+mode = "timebased"
+duration_ms = 100
+# mode = "immediate"
+# fps_limit = 60
+# fps_limit omitted means unlimited FPS.
+
 [[modules.left]]
 name = "workspace"
 enable = true

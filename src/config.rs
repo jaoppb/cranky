@@ -26,6 +26,8 @@ pub type Result<T> = std::result::Result<T, ConfigError>;
 pub struct Config {
     bar: BarConfig,
     modules: ModulesConfig,
+    #[serde(default)]
+    rendering: RenderingMode,
 }
 
 impl Config {
@@ -45,6 +47,51 @@ impl Config {
     pub fn modules(&self) -> &ModulesConfig {
         &self.modules
     }
+
+    pub fn rendering(&self) -> &RenderingMode {
+        &self.rendering
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+#[serde(tag = "mode", rename_all = "lowercase")]
+pub enum RenderingMode {
+    Immediate {
+        #[serde(default)]
+        fps_limit: Option<u32>,
+    },
+    Timebased {
+        #[serde(default = "default_timebased_duration_ms")]
+        duration_ms: u64,
+    },
+}
+
+impl Default for RenderingMode {
+    fn default() -> Self {
+        Self::Timebased {
+            duration_ms: default_timebased_duration_ms(),
+        }
+    }
+}
+
+impl RenderingMode {
+    pub fn fps_limit(&self) -> Option<u32> {
+        match self {
+            Self::Immediate { fps_limit } => *fps_limit,
+            Self::Timebased { .. } => None,
+        }
+    }
+
+    pub fn duration_ms(&self) -> Option<u64> {
+        match self {
+            Self::Immediate { .. } => None,
+            Self::Timebased { duration_ms } => Some(*duration_ms),
+        }
+    }
+}
+
+fn default_timebased_duration_ms() -> u64 {
+    100
 }
 
 #[derive(Debug, Default, Deserialize, Clone, Copy, PartialEq)]
@@ -327,6 +374,10 @@ mod tests {
             left = [{ name = "workspace", enable = true }]
             center = [{ name = "hour", enable = true }]
             right = [{ name = "network", enable = true }]
+
+            [rendering]
+            mode = "immediate"
+            fps_limit = 60
         "##;
 
         let config = Config::from_str(toml_str).unwrap();
@@ -339,10 +390,7 @@ mod tests {
 
         let border = config.bar().border();
         assert_eq!(border.radius(), 8.0);
-        assert_eq!(
-            border.color(),
-            &ParsedColor::try_from("#7aa2f7").unwrap()
-        );
+        assert_eq!(border.color(), &ParsedColor::try_from("#7aa2f7").unwrap());
 
         let margin = config.bar().margin();
         assert_eq!(margin.top(), 5);
@@ -356,6 +404,12 @@ mod tests {
 
         assert_eq!(config.modules().center().len(), 1);
         assert_eq!(config.modules().right().len(), 1);
+        assert_eq!(
+            config.rendering(),
+            &RenderingMode::Immediate {
+                fps_limit: Some(60),
+            }
+        );
     }
 
     #[test]
@@ -381,6 +435,11 @@ mod tests {
         assert_eq!(margin.left(), 0);
         assert_eq!(margin.right(), 0);
         assert_eq!(margin.bottom(), 0);
+
+        assert_eq!(
+            config.rendering(),
+            &RenderingMode::Timebased { duration_ms: 100 }
+        );
     }
 
     #[test]
@@ -442,5 +501,34 @@ mod tests {
         );
         assert_eq!(unfocused.height(), 20);
         assert_eq!(unfocused.border().size(), 2.0);
+    }
+
+    #[test]
+    fn test_rendering_mode_immediate_without_limit() {
+        let toml_str = r##"
+            [bar]
+            [modules]
+            [rendering]
+            mode = "immediate"
+        "##;
+        let config = Config::from_str(toml_str).unwrap();
+
+        assert_eq!(config.rendering().fps_limit(), None);
+        assert_eq!(config.rendering().duration_ms(), None);
+    }
+
+    #[test]
+    fn test_rendering_mode_timebased_custom_duration() {
+        let toml_str = r##"
+            [bar]
+            [modules]
+            [rendering]
+            mode = "timebased"
+            duration_ms = 250
+        "##;
+        let config = Config::from_str(toml_str).unwrap();
+
+        assert_eq!(config.rendering().fps_limit(), None);
+        assert_eq!(config.rendering().duration_ms(), Some(250));
     }
 }
