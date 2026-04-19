@@ -68,3 +68,5 @@ Each module must implement a `CrankyModule` trait:
 [ ] Allow the border matching the hyprland config
 [X] Change event waiting mode to allow events happening before the 100ms sleep
 [x] When a new monitor is connected, the bar is appearing
+[X] Add another main loop mode that is FPS based
+[X] Create Applet module

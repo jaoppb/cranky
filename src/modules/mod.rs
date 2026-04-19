@@ -5,6 +5,7 @@ use std::error::Error;
 use thiserror::Error;
 use tiny_skia::PixmapMut;
 
+pub mod applet;
 pub mod hour;
 pub mod workspace;
 
@@ -218,10 +219,24 @@ impl ModuleRegistry {
     }
 
     pub fn load(&mut self, config: &crate::config::Config) -> RegistryResult<()> {
+        if !Self::has_enabled_applet(config) {
+            applet::drop_global_watcher();
+        }
+
         self.left_modules = self.create_modules(config.modules().left(), config.bar())?;
         self.center_modules = self.create_modules(config.modules().center(), config.bar())?;
         self.right_modules = self.create_modules(config.modules().right(), config.bar())?;
         Ok(())
+    }
+
+    fn has_enabled_applet(config: &crate::config::Config) -> bool {
+        config
+            .modules()
+            .left()
+            .iter()
+            .chain(config.modules().center().iter())
+            .chain(config.modules().right().iter())
+            .any(|module| module.is_enabled() && module.name() == "applet")
     }
 
     fn create_modules(
@@ -237,6 +252,7 @@ impl ModuleRegistry {
 
             let mut module: Box<dyn AnyModule> = match config.name() {
                 "hour" => Box::new(hour::HourModule::new()),
+                "applet" => Box::new(applet::AppletModule::new()),
                 "workspace" => Box::new(workspace::WorkspaceModule::new()),
                 name => return Err(RegistryError::NotFound(name.to_string())),
             };
@@ -269,12 +285,17 @@ mod tests {
             name = "hour"
             enable = true
             format = "%H:%M"
+
+            [[modules.right]]
+            name = "applet"
+            enable = true
         "##;
         let config = Config::from_str(full_toml).unwrap();
 
         registry.load(&config).unwrap();
 
         assert_eq!(registry.left_modules.len(), 1);
+        assert_eq!(registry.right_modules.len(), 1);
     }
 
     #[test]

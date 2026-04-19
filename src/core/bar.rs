@@ -251,14 +251,15 @@ impl Bar {
                 "monospace".to_string(),
             );
             let y_offset = context.calculate_vertical_offset(
-                tiny_skia::Rect::from_xywh(0.0, 0.0, self.width as f32, self.height as f32).unwrap(),
+                tiny_skia::Rect::from_xywh(0.0, 0.0, self.width as f32, self.height as f32)
+                    .unwrap(),
                 14.0,
             );
             context.render_text(&mut pixmap, error, styling, 10.0, y_offset);
         } else {
             // Render modules
-            let area =
-                tiny_skia::Rect::from_xywh(0.0, 0.0, self.width as f32, self.height as f32).unwrap();
+            let area = tiny_skia::Rect::from_xywh(0.0, 0.0, self.width as f32, self.height as f32)
+                .unwrap();
 
             registry.view(&mut pixmap, area, context, &self.monitor_name);
         }
@@ -348,12 +349,8 @@ impl Bar {
             self.buffer = None;
         }
 
-        self.layer_surface.set_margin(
-            margin.top(),
-            margin.right(),
-            margin.bottom(),
-            margin.left(),
-        );
+        self.layer_surface
+            .set_margin(margin.top(), margin.right(), margin.bottom(), margin.left());
         self.layer_surface
             .set_exclusive_zone(height as i32 + margin.top() + margin.bottom());
 
@@ -527,5 +524,32 @@ mod tests {
         );
 
         assert_pixmap_has_color!(pixmap, bg_color);
+    }
+
+    #[test]
+    fn test_draw_rounded_rect_with_gradient_background() {
+        let mut pixmap_data = vec![0; 120 * 40 * 4];
+        let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 120, 40).unwrap();
+        pixmap.fill(Color::TRANSPARENT);
+
+        let rect = Rect::from_xywh(10.0, 5.0, 100.0, 30.0).unwrap();
+        let gradient = ParsedColor::Gradient(
+            vec![
+                Color::from_rgba8(255, 0, 0, 255),
+                Color::from_rgba8(0, 0, 255, 255),
+            ],
+            0.0,
+        );
+
+        draw_rounded_rect(
+            &mut pixmap,
+            rect,
+            &gradient,
+            1.0,
+            &ParsedColor::Solid(Color::from_rgba8(255, 255, 255, 255)),
+            8.0,
+        );
+
+        assert!(pixmap.data_mut().iter().any(|v| *v != 0));
     }
 }

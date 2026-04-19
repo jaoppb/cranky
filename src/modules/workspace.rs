@@ -1,4 +1,4 @@
-use crate::core::hyprland::{Workspace};
+use crate::core::hyprland::Workspace;
 use crate::modules::{CrankyModule, Event, UpdateAction};
 use crate::render::{RenderContext, TextStyling};
 use crate::utils::ParsedColor;
@@ -118,7 +118,13 @@ impl WorkspaceModule {
         }
     }
 
-    fn fill_rounded_rect(&self, pixmap: &mut PixmapMut, rect: Rect, radius: f32, color: &ParsedColor) {
+    fn fill_rounded_rect(
+        &self,
+        pixmap: &mut PixmapMut,
+        rect: Rect,
+        radius: f32,
+        color: &ParsedColor,
+    ) {
         let x = rect.left();
         let y = rect.top();
         let w = rect.width();

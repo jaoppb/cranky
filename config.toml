@@ -30,5 +30,13 @@ enable = true
 border_radius = 4.0
 
 [[modules.right]]
+name = "applet"
+enable = true
+show_icons = true
+show_titles = false
+icon_size = 16
+# icon_theme = "Papirus-Dark"
+
+[[modules.right]]
 name = "hour"
 enable = true

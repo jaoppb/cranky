@@ -120,4 +120,32 @@ mod tests {
 
         let _ = std::fs::remove_file(config_path);
     }
+
+    #[test]
+    fn test_get_config_path_without_home() {
+        let old_home = std::env::var_os("HOME");
+        unsafe {
+            std::env::remove_var("HOME");
+        }
+        let path = get_config_path();
+        assert!(
+            path.to_string_lossy()
+                .ends_with(".config/cranky/config.toml")
+        );
+        if let Some(home) = old_home {
+            unsafe {
+                std::env::set_var("HOME", home);
+            }
+        }
+    }
+
+    #[test]
+    fn test_load_config_exists_invalid() {
+        let temp_dir = std::env::temp_dir();
+        let config_path = temp_dir.join("cranky-test-invalid-config.toml");
+        std::fs::write(&config_path, "[bar]\nheight = \"bad\"\n").unwrap();
+        let config = load_config(&config_path);
+        let _ = std::fs::remove_file(config_path);
+        assert!(config.is_err());
+    }
 }

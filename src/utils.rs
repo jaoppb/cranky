@@ -1,6 +1,8 @@
-use tiny_skia::{Color, Paint, Rect, LinearGradient, GradientStop, Point, SpreadMode, Transform};
-use thiserror::Error;
+use resvg::usvg;
 use serde::{Deserialize, Deserializer};
+use std::path::Path;
+use thiserror::Error;
+use tiny_skia::{Color, GradientStop, LinearGradient, Paint, Point, Rect, SpreadMode, Transform};
 
 #[derive(Debug, Error, PartialEq)]
 pub enum ColorParseError {
@@ -68,8 +70,8 @@ impl ParsedColor {
                 let center_x = rect.left() + rect.width() / 2.0;
                 let center_y = rect.top() + rect.height() / 2.0;
 
-                let distance = (rect.width() / 2.0 * angle_rad.cos()).abs() 
-                             + (rect.height() / 2.0 * angle_rad.sin()).abs();
+                let distance = (rect.width() / 2.0 * angle_rad.cos()).abs()
+                    + (rect.height() / 2.0 * angle_rad.sin()).abs();
 
                 let x_offset = angle_rad.cos() * distance;
                 let y_offset = angle_rad.sin() * distance;
@@ -77,13 +79,9 @@ impl ParsedColor {
                 let start = Point::from_xy(center_x - x_offset, center_y - y_offset);
                 let end = Point::from_xy(center_x + x_offset, center_y + y_offset);
 
-                if let Some(shader) = LinearGradient::new(
-                    start,
-                    end,
-                    stops,
-                    SpreadMode::Pad,
-                    Transform::identity(),
-                ) {
+                if let Some(shader) =
+                    LinearGradient::new(start, end, stops, SpreadMode::Pad, Transform::identity())
+                {
                     paint.shader = shader;
                 } else if let Some(&c) = colors.first() {
                     paint.set_color(c);
@@ -143,6 +141,46 @@ impl TryFrom<String> for ParsedColor {
     fn try_from(s: String) -> Result<Self, Self::Error> {
         Self::try_from(s.as_str())
     }
+}
+
+pub fn rasterize_svg_icon_rgba(
+    path: &Path,
+    icon_size: u16,
+    scale: f32,
+) -> Option<image::RgbaImage> {
+    let svg_data = std::fs::read(path).ok()?;
+    let tree = usvg::Tree::from_data(&svg_data, &usvg::Options::default()).ok()?;
+    let icon_px = ((icon_size as f32) * scale.max(1.0))
+        .ceil()
+        .max(icon_size as f32) as u32;
+    let target = icon_px.max(1);
+    let tree_size = tree.size();
+    let sx = target as f32 / tree_size.width();
+    let sy = target as f32 / tree_size.height();
+    let fit_scale = sx.min(sy).max(0.001);
+    let width = (tree_size.width() * fit_scale).ceil().max(1.0) as u32;
+    let height = (tree_size.height() * fit_scale).ceil().max(1.0) as u32;
+    let mut pixmap = tiny_skia::Pixmap::new(width, height)?;
+    let transform = Transform::from_scale(fit_scale, fit_scale);
+    let mut pixmap_mut = pixmap.as_mut();
+    resvg::render(&tree, transform, &mut pixmap_mut);
+
+    let mut rgba = image::RgbaImage::new(width, height);
+    for (idx, pixel) in pixmap.data().chunks_exact(4).enumerate() {
+        let a = pixel[3];
+        let (r, g, b) = if a == 0 {
+            (0, 0, 0)
+        } else {
+            let unpremul =
+                |c: u8| -> u8 { (((c as u16 * 255) + (a as u16 / 2)) / a as u16).min(255) as u8 };
+            (unpremul(pixel[0]), unpremul(pixel[1]), unpremul(pixel[2]))
+        };
+        let x = (idx as u32) % width;
+        let y = (idx as u32) / width;
+        rgba.put_pixel(x, y, image::Rgba([r, g, b, a]));
+    }
+
+    Some(rgba)
 }
 
 fn tokenize(input: &str) -> Vec<String> {
@@ -226,11 +264,28 @@ fn parse_hex(s: &str) -> Option<Color> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_svg_path() -> std::path::PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "cranky-utils-test-{}-{}.svg",
+            std::process::id(),
+            nanos
+        ))
+    }
 
     #[test]
     fn test_parse_color_solid() {
         let white = ParsedColor::try_from("#ffffff").unwrap();
-        assert_eq!(white, ParsedColor::Solid(Color::from_rgba8(255, 255, 255, 255)));
+        assert_eq!(
+            white,
+            ParsedColor::Solid(Color::from_rgba8(255, 255, 255, 255))
+        );
 
         let black = ParsedColor::try_from("rgb(000000)").unwrap();
         assert_eq!(black, ParsedColor::Solid(Color::from_rgba8(0, 0, 0, 255)));
@@ -262,7 +317,81 @@ mod tests {
 
     #[test]
     fn test_parse_color_invalid() {
-        assert!(matches!(ParsedColor::try_from("invalid"), Err(ColorParseError::InvalidColor(_))));
+        assert!(matches!(
+            ParsedColor::try_from("invalid"),
+            Err(ColorParseError::InvalidColor(_))
+        ));
         assert_eq!(ParsedColor::try_from(""), Err(ColorParseError::Empty));
+        assert!(matches!(
+            ParsedColor::try_from("rgb(zzzzzz)"),
+            Err(ColorParseError::InvalidColor(_))
+        ));
+        assert!(matches!(
+            ParsedColor::try_from("#12345"),
+            Err(ColorParseError::InvalidColor(_))
+        ));
+        assert!(matches!(
+            ParsedColor::try_from("rgb(ff0000) 45xx"),
+            Err(ColorParseError::InvalidAngle(_))
+        ));
+    }
+
+    #[test]
+    fn test_parse_color_deserialize() {
+        #[derive(Deserialize)]
+        struct Wrapper {
+            color: ParsedColor,
+        }
+        let wrapped: Wrapper = serde_json::from_str(r##"{"color":"#00ff00"}"##).unwrap();
+        assert_eq!(
+            wrapped.color,
+            ParsedColor::Solid(Color::from_rgba8(0, 255, 0, 255))
+        );
+    }
+
+    #[test]
+    fn test_gradient_to_paint_builds_shader() {
+        let color = ParsedColor::Gradient(
+            vec![
+                Color::from_rgba8(255, 0, 0, 255),
+                Color::from_rgba8(0, 0, 255, 255),
+            ],
+            90.0,
+        );
+        let rect = Rect::from_xywh(0.0, 0.0, 20.0, 10.0).unwrap();
+        let paint = color.to_paint(rect);
+        assert!(paint.anti_alias);
+    }
+
+    #[test]
+    fn test_rasterize_svg_icon_rgba_missing_file() {
+        let missing = std::env::temp_dir().join("definitely-missing-cranky.svg");
+        assert!(rasterize_svg_icon_rgba(&missing, 16, 1.0).is_none());
+    }
+
+    #[test]
+    fn test_rasterize_svg_icon_rgba_success() {
+        let path = temp_svg_path();
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="10" fill="#ff00ff"/></svg>"##;
+        fs::write(&path, svg).unwrap();
+
+        let rasterized = rasterize_svg_icon_rgba(&path, 16, 1.0);
+        let _ = fs::remove_file(&path);
+
+        assert!(rasterized.is_some());
+        let image = rasterized.unwrap();
+        assert!(image.width() > 0);
+        assert!(image.height() > 0);
+    }
+
+    #[test]
+    fn test_rasterize_svg_icon_rgba_invalid_svg() {
+        let path = temp_svg_path();
+        fs::write(&path, "this is not svg").unwrap();
+
+        let rasterized = rasterize_svg_icon_rgba(&path, 16, 1.0);
+        let _ = fs::remove_file(&path);
+
+        assert!(rasterized.is_none());
     }
 }

@@ -35,6 +35,9 @@ serde_json = "1.0"
 chrono = "0.4"
 uuid = { version = "1.23", features = ["v4"] }
 notify = "8.2"
+freedesktop-icons = "0.4"
+image = "0.25"
+resvg = "0.47"
 
 [dev-dependencies]
 mockall = "0.14"

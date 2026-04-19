@@ -114,4 +114,57 @@ mod tests {
         let res = create_shm_file(usize::MAX); // Should fail to allocate or similar
         assert!(res.is_err());
     }
+
+    #[test]
+    fn test_create_shm_file_without_runtime_dir() {
+        let old = env::var_os("XDG_RUNTIME_DIR");
+        unsafe {
+            env::remove_var("XDG_RUNTIME_DIR");
+        }
+        let res = create_shm_file(64);
+        if let Some(val) = old {
+            unsafe {
+                env::set_var("XDG_RUNTIME_DIR", val);
+            }
+        }
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().kind(), ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn test_shm_buffer_new_propagates_create_file_error() {
+        let old = env::var_os("XDG_RUNTIME_DIR");
+        unsafe {
+            env::remove_var("XDG_RUNTIME_DIR");
+        }
+
+        let shm = unsafe { std::mem::MaybeUninit::<WlShm>::uninit().assume_init() };
+        let qh =
+            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
+        let res = ShmBuffer::new(&shm, 4, 4, &qh);
+
+        if let Some(val) = old {
+            unsafe {
+                env::set_var("XDG_RUNTIME_DIR", val);
+            }
+        }
+        assert!(res.is_err());
+        std::mem::forget(shm);
+        std::mem::forget(qh);
+    }
+
+    #[test]
+    fn test_shm_buffer_test_new_constructor() {
+        if env::var_os("XDG_RUNTIME_DIR").is_none() {
+            unsafe {
+                env::set_var("XDG_RUNTIME_DIR", "/tmp");
+            }
+        }
+        let file = create_shm_file(256).unwrap();
+        let mmap = unsafe { MmapMut::map_mut(&file).unwrap() };
+        let pool = unsafe { std::mem::MaybeUninit::<WlShmPool>::uninit().assume_init() };
+        let buffer = ShmBuffer::test_new(mmap, pool);
+        assert_eq!(buffer.size(), 256);
+        std::mem::forget(buffer);
+    }
 }
