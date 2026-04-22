@@ -880,11 +880,10 @@ impl AppletModule {
                 }
                 continue;
             }
-            if let Some(value) = line.strip_prefix("StartupWMClass=") {
-                if startup_wm_class.is_empty() {
+            if let Some(value) = line.strip_prefix("StartupWMClass=")
+                && startup_wm_class.is_empty() {
                     startup_wm_class = value.trim().to_string();
                 }
-            }
         }
         if icon.is_empty() {
             return None;
@@ -1893,7 +1892,9 @@ mod tests {
             .unwrap();
         module.icon_cache.insert("x".to_string(), None);
         module.icon_cache_scale = 2.0;
-        module.render_scale_bits.store(1.0f32.to_bits(), Ordering::Relaxed);
+        module
+            .render_scale_bits
+            .store(1.0f32.to_bits(), Ordering::Relaxed);
 
         assert_eq!(module.update(Event::Timer), UpdateAction::Redraw);
         assert_eq!(module.icon_cache_scale, 1.0);

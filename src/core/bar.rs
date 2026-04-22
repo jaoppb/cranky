@@ -45,8 +45,10 @@ fn create_rounded_rect_path(rect: tiny_skia::Rect, radius: f32) -> Option<tiny_s
 }
 
 fn create_paint<'a>(color: &ParsedColor, rect: tiny_skia::Rect) -> tiny_skia::Paint<'a> {
-    let mut paint = tiny_skia::Paint::default();
-    paint.anti_alias = true;
+    let mut paint = tiny_skia::Paint {
+        anti_alias: true,
+        ..tiny_skia::Paint::default()
+    };
 
     match color {
         ParsedColor::Solid(c) => {
@@ -341,10 +343,10 @@ impl Bar {
             let scaled_height = self.scaled_height();
             let required_size = (scaled_width * scaled_height * 4) as usize;
 
-            if required_size > self.shm_buffer.size() {
-                if let Ok(new_shm) = ShmBuffer::new(shm, scaled_width, scaled_height, qh) {
-                    self.shm_buffer = new_shm;
-                }
+            if required_size > self.shm_buffer.size()
+                && let Ok(new_shm) = ShmBuffer::new(shm, scaled_width, scaled_height, qh)
+            {
+                self.shm_buffer = new_shm;
             }
             self.buffer = None;
         }

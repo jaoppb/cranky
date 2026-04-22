@@ -584,11 +584,10 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for CrankyState {
 
             if let Some(bar) = state.bars.iter_mut().find(|b| b.layer_surface() == proxy) {
                 bar.set_configured();
-                if width > 0 {
-                    if let Some(shm) = &state.shm {
+                if width > 0
+                    && let Some(shm) = &state.shm {
                         bar.set_width(shm, width, qh);
                     }
-                }
 
                 let bar_config = if Some(bar.monitor_name()) == state.focused_monitor.as_deref() {
                     state.config.bar().clone()
@@ -873,7 +872,8 @@ mod tests {
         };
 
         let output = unsafe { std::mem::MaybeUninit::<WlOutput>::uninit().assume_init() };
-        let qh = unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
+        let qh =
+            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
         state.create_bar_for_output(&output, &qh);
         assert!(state.bars.is_empty());
         std::mem::forget(state);
@@ -899,7 +899,8 @@ mod tests {
 
         let output = unsafe { std::mem::MaybeUninit::<WlOutput>::uninit().assume_init() };
         state.add_output(42, output);
-        let qh = unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
+        let qh =
+            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
         let output_ptr: *const WlOutput = &state.outputs[0].output;
         unsafe {
             state.create_bar_for_output(&*output_ptr, &qh);
@@ -929,7 +930,8 @@ mod tests {
 
         let output_ptr: *const WlOutput = &state.outputs[0].output;
         let conn = unsafe { std::mem::MaybeUninit::<Connection>::uninit().assume_init() };
-        let qh = unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
+        let qh =
+            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
 
         unsafe {
             <CrankyState as Dispatch<WlOutput, ()>>::event(
@@ -970,7 +972,8 @@ mod tests {
 
         let output_ptr: *const WlOutput = &state.outputs[0].output;
         let conn = unsafe { std::mem::MaybeUninit::<Connection>::uninit().assume_init() };
-        let qh = unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
+        let qh =
+            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
 
         unsafe {
             <CrankyState as Dispatch<WlOutput, ()>>::event(
@@ -1008,7 +1011,8 @@ mod tests {
         state.add_output(1, output);
         let output_ptr: *const WlOutput = &state.outputs[0].output;
         let conn = unsafe { std::mem::MaybeUninit::<Connection>::uninit().assume_init() };
-        let qh = unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
+        let qh =
+            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
 
         unsafe {
             <CrankyState as Dispatch<WlOutput, ()>>::event(
@@ -1055,7 +1059,8 @@ mod tests {
 
         let registry = unsafe { std::mem::MaybeUninit::<WlRegistry>::uninit().assume_init() };
         let conn = unsafe { std::mem::MaybeUninit::<Connection>::uninit().assume_init() };
-        let qh = unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
+        let qh =
+            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
         <CrankyState as Dispatch<WlRegistry, ()>>::event(
             &mut state,
             &registry,

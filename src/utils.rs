@@ -34,8 +34,11 @@ impl<'de> Deserialize<'de> for ParsedColor {
 
 impl From<&ParsedColor> for Paint<'static> {
     fn from(color: &ParsedColor) -> Self {
-        let mut paint = Paint::default();
-        paint.anti_alias = true;
+        let mut paint = Paint {
+            anti_alias: true,
+            ..Paint::default()
+        };
+
         match color {
             ParsedColor::Solid(c) => paint.set_color(*c),
             ParsedColor::Gradient(colors, _) => {
@@ -50,8 +53,10 @@ impl From<&ParsedColor> for Paint<'static> {
 
 impl ParsedColor {
     pub fn to_paint(&self, rect: Rect) -> Paint<'static> {
-        let mut paint = Paint::default();
-        paint.anti_alias = true;
+        let mut paint = Paint {
+            anti_alias: true,
+            ..Paint::default()
+        };
 
         match self {
             ParsedColor::Solid(c) => {

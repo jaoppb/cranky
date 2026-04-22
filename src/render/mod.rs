@@ -132,11 +132,11 @@ impl RenderContext {
                 }
 
                 match image.content {
-                    SwashContent::Mask => render_mask_glyph(pixmap, &image, x, y, styling.color()),
+                    SwashContent::Mask => render_mask_glyph(pixmap, image, x, y, styling.color()),
                     SwashContent::SubpixelMask => {
-                        render_subpixel_glyph(pixmap, &image, x, y, styling.color())
+                        render_subpixel_glyph(pixmap, image, x, y, styling.color())
                     }
-                    SwashContent::Color => render_color_glyph(pixmap, &image, x, y),
+                    SwashContent::Color => render_color_glyph(pixmap, image, x, y),
                 }
             }
         }

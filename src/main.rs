@@ -58,11 +58,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => error!("watch error: {:?}", e),
     })?;
 
-    if let Some(parent) = config_path.parent() {
-        if parent.exists() {
+    if let Some(parent) = config_path.parent()
+        && parent.exists() {
             watcher.watch(parent, RecursiveMode::NonRecursive)?;
         }
-    }
 
     let wayland_manager = core::WaylandManager::new(config)?;
     wayland_manager.run(rx).await?;

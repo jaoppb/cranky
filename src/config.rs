@@ -74,22 +74,6 @@ impl Default for RenderingMode {
     }
 }
 
-impl RenderingMode {
-    pub fn fps_limit(&self) -> Option<u32> {
-        match self {
-            Self::Immediate { fps_limit } => *fps_limit,
-            Self::Timebased { .. } => None,
-        }
-    }
-
-    pub fn duration_ms(&self) -> Option<u64> {
-        match self {
-            Self::Immediate { .. } => None,
-            Self::Timebased { duration_ms } => Some(*duration_ms),
-        }
-    }
-}
-
 fn default_timebased_duration_ms() -> u64 {
     100
 }
