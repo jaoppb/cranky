@@ -440,6 +440,10 @@ impl RealAppletProvider {
             || name.starts_with("org.ayatana.StatusNotifierItem-")
     }
 
+    fn should_display_item(item: &AppletItem) -> bool {
+        item.status != "Passive"
+    }
+
     fn parse_registered_item(entry: &str) -> Option<(String, String)> {
         normalize_registered_item(entry, None)
     }
@@ -486,17 +490,14 @@ impl RealAppletProvider {
         proxy: &zbus::blocking::Proxy<'_>,
         property: &str,
         service_name: &str,
-    ) -> String {
-        match proxy.get_property::<String>(property) {
-            Ok(value) => value,
-            Err(error) => {
-                debug!(
-                    "Missing or unreadable property '{}' for {}: {}",
-                    property, service_name, error
-                );
-                String::new()
-            }
-        }
+    ) -> Result<String, zbus::Error> {
+        proxy.get_property::<String>(property).map_err(|error| {
+            debug!(
+                "Missing or unreadable property '{}' for {}: {}",
+                property, service_name, error
+            );
+            error
+        })
     }
 
     fn fetch_item(
@@ -512,28 +513,44 @@ impl RealAppletProvider {
         ] {
             match zbus::blocking::Proxy::new(connection, service_name, object_path, iface) {
                 Ok(proxy) => {
-                    let mut title = Self::read_string_property(&proxy, "Title", service_name);
-                    let app_id = Self::read_string_property(&proxy, "Id", service_name);
-                    let status = Self::read_string_property(&proxy, "Status", service_name);
-                    let icon_name = Self::read_string_property(&proxy, "IconName", service_name);
-                    if title.is_empty()
-                        && let Ok((_, _, tooltip_title, _)) =
-                            proxy
-                                .get_property::<(String, Vec<(i32, i32, Vec<u8>)>, String, String)>(
-                                    "ToolTip",
-                                )
-                    {
-                        title = tooltip_title;
-                    }
+                    // Try to read the essential Status property to verify the service is responsive
+                    match Self::read_string_property(&proxy, "Status", service_name) {
+                        Ok(status) => {
+                            // Service is responsive, now read other properties
+                            let title = Self::read_string_property(&proxy, "Title", service_name)
+                                .unwrap_or_default();
+                            let app_id = Self::read_string_property(&proxy, "Id", service_name)
+                                .unwrap_or_default();
+                            let icon_name =
+                                Self::read_string_property(&proxy, "IconName", service_name)
+                                    .unwrap_or_default();
 
-                    return Ok(AppletItem {
-                        service_name: service_name.to_string(),
-                        object_path: object_path.to_string(),
-                        title,
-                        app_id,
-                        status,
-                        icon_name,
-                    });
+                            let resolved_title = if title.is_empty() {
+                                match proxy
+                                    .get_property::<(String, Vec<(i32, i32, Vec<u8>)>, String, String)>(
+                                        "ToolTip",
+                                    )
+                                {
+                                    Ok((_, _, tooltip_title, _)) => tooltip_title,
+                                    Err(_) => title,
+                                }
+                            } else {
+                                title
+                            };
+
+                            return Ok(AppletItem {
+                                service_name: service_name.to_string(),
+                                object_path: object_path.to_string(),
+                                title: resolved_title,
+                                app_id,
+                                status,
+                                icon_name,
+                            });
+                        }
+                        Err(error) => {
+                            last_err = Some(error);
+                        }
+                    }
                 }
                 Err(error) => {
                     last_err = Some(error);
@@ -570,7 +587,11 @@ impl AppletProvider for RealAppletProvider {
             }
 
             match Self::fetch_item(&connection, &service_name, &object_path) {
-                Ok(item) => items.push(item),
+                Ok(item) => {
+                    if Self::should_display_item(&item) {
+                        items.push(item);
+                    }
+                }
                 Err(error) => {
                     warn!(
                         "Failed to read status notifier item '{}{}': {}",
@@ -2072,5 +2093,131 @@ mod tests {
     fn test_normalize_registered_item_path_only_without_sender() {
         let endpoint = normalize_registered_item("/org/ayatana/NotificationItem/discord", None);
         assert_eq!(endpoint, None);
+    }
+
+    #[test]
+    fn test_passive_status_filtered_from_list() {
+        let mut module = module_with_responses(vec![
+            Ok(vec![
+                applet_item("org.kde.StatusNotifierItem-1-1", "active app", "Active", "icon1"),
+                applet_item("org.kde.StatusNotifierItem-2-1", "passive app", "Passive", "icon2"),
+                applet_item(
+                    "org.kde.StatusNotifierItem-3-1",
+                    "attention app",
+                    "NeedsAttention",
+                    "icon3",
+                ),
+            ]),
+        ]);
+        module
+            .init(
+                AppletConfig {
+                    refresh_ms: 0,
+                    ..AppletConfig::default()
+                },
+                &BarConfig::default(),
+            )
+            .unwrap();
+
+        module.update(Event::Timer);
+
+        assert_eq!(module.items.len(), 2);
+        assert!(module.items.iter().all(|item| item.status != "Passive"));
+    }
+
+    #[test]
+    fn test_disconnected_app_removed_on_next_refresh() {
+        let mut module = module_with_responses(vec![
+            Ok(vec![
+                applet_item("org.kde.StatusNotifierItem-1-1", "app1", "Active", "icon1"),
+                applet_item("org.kde.StatusNotifierItem-2-1", "app2", "Active", "icon2"),
+            ]),
+            Ok(vec![applet_item(
+                "org.kde.StatusNotifierItem-1-1",
+                "app1",
+                "Active",
+                "icon1",
+            )]),
+        ]);
+        module
+            .init(
+                AppletConfig {
+                    refresh_ms: 0,
+                    ..AppletConfig::default()
+                },
+                &BarConfig::default(),
+            )
+            .unwrap();
+
+        module.update(Event::Timer);
+        assert_eq!(module.items.len(), 2);
+
+        module.update(Event::Timer);
+        assert_eq!(module.items.len(), 1);
+        assert_eq!(module.items[0].app_id, "app1");
+    }
+
+    #[test]
+    fn test_no_overflow_indicator_when_all_items_fit() {
+        let mut module = module_with_responses(vec![Ok(vec![
+            applet_item("org.kde.StatusNotifierItem-1-1", "app1", "Active", "icon1"),
+            applet_item("org.kde.StatusNotifierItem-2-1", "app2", "Active", "icon2"),
+        ])]);
+        module.max_items = 5;
+        module
+            .init(
+                AppletConfig {
+                    refresh_ms: 0,
+                    ..AppletConfig::default()
+                },
+                &BarConfig::default(),
+            )
+            .unwrap();
+
+        module.update(Event::Timer);
+
+        let mut pixmap_data = vec![0; 400 * 30 * 4];
+        let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 400, 30).unwrap();
+        let mut context = RenderContext::new();
+        let area = Rect::from_xywh(0.0, 0.0, 400.0, 30.0).unwrap();
+
+        module.view(&mut pixmap, area, &mut context, "eDP-1");
+        let width = module.measure(&mut context, "eDP-1");
+        assert!(width > 0.0);
+        assert_eq!(module.visible_count(), 2);
+    }
+
+    #[test]
+    fn test_overflow_indicator_when_items_exceed_max() {
+        let mut module = module_with_responses(vec![Ok(vec![
+            applet_item("org.kde.StatusNotifierItem-1-1", "app1", "Active", "icon1"),
+            applet_item("org.kde.StatusNotifierItem-2-1", "app2", "Active", "icon2"),
+            applet_item("org.kde.StatusNotifierItem-3-1", "app3", "Active", "icon3"),
+        ])]);
+        module.max_items = 2;
+        module
+            .init(
+                AppletConfig {
+                    refresh_ms: 0,
+                    ..AppletConfig::default()
+                },
+                &BarConfig::default(),
+            )
+            .unwrap();
+
+        module.update(Event::Timer);
+
+        assert_eq!(module.visible_count(), 2);
+        assert_eq!(module.items.len(), 3);
+    }
+
+    #[test]
+    fn test_should_display_item_passive_filtering() {
+        let active_item = applet_item("org.kde.StatusNotifierItem-1-1", "active", "Active", "icon");
+        let passive_item =
+            applet_item("org.kde.StatusNotifierItem-2-1", "passive", "Passive", "icon");
+
+        assert!(RealAppletProvider::should_display_item(&active_item));
+        assert!(!RealAppletProvider::should_display_item(&passive_item));
     }
 }
