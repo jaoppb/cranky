@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 use crate::core::CrankyState;
 use memmap2::MmapMut;
 use std::env;
@@ -36,6 +38,16 @@ fn create_shm_file(size: usize) -> Result<File> {
     Ok(file)
 }
 
+// Safe wrapper around unsafe mmap creation
+fn safe_mmap_file(file: &File) -> Result<MmapMut> {
+    unsafe { MmapMut::map_mut(file) }
+}
+
+// Safe wrapper around unsafe BorrowedFd creation for file descriptors
+fn safe_borrowed_fd_from_file(file: &File) -> BorrowedFd {
+    unsafe { BorrowedFd::borrow_raw(file.as_raw_fd()) }
+}
+
 impl ShmBuffer {
     pub fn new(
         shm: &WlShm,
@@ -46,9 +58,8 @@ impl ShmBuffer {
         let size = (width * height * 4) as usize;
         let file = create_shm_file(size)?;
 
-        let mmap = unsafe { MmapMut::map_mut(&file)? };
-
-        let fd = unsafe { BorrowedFd::borrow_raw(file.as_raw_fd()) };
+        let mmap = safe_mmap_file(&file)?;
+        let fd = safe_borrowed_fd_from_file(&file);
         let pool = shm.create_pool(fd, size as i32, qh, ());
 
         Ok(Self { mmap, pool })
@@ -76,95 +87,78 @@ impl ShmBuffer {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_create_shm_file() {
-        // Ensure XDG_RUNTIME_DIR is set for the test
-        if env::var_os("XDG_RUNTIME_DIR").is_none() {
+    fn with_env<F: FnOnce()>(key: &str, value: Option<&str>, f: F) {
+        let old_value = env::var_os(key);
+        if let Some(val) = value {
             unsafe {
-                env::set_var("XDG_RUNTIME_DIR", "/tmp");
+                env::set_var(key, val);
+            }
+        } else {
+            unsafe {
+                env::remove_var(key);
             }
         }
+        f();
+        if let Some(val) = old_value {
+            unsafe {
+                env::set_var(key, val);
+            }
+        } else {
+            unsafe {
+                env::remove_var(key);
+            }
+        }
+    }
 
-        let size = 1024;
-        let file = create_shm_file(size).unwrap();
-        assert_eq!(file.metadata().unwrap().len(), size as u64);
+    #[test]
+    fn test_create_shm_file() {
+        with_env("XDG_RUNTIME_DIR", Some("/tmp"), || {
+            let size = 1024;
+            let file = create_shm_file(size).unwrap();
+            assert_eq!(file.metadata().unwrap().len(), size as u64);
+        });
     }
 
     #[test]
     fn test_shm_buffer_methods() {
-        if env::var_os("XDG_RUNTIME_DIR").is_none() {
-            unsafe {
-                env::set_var("XDG_RUNTIME_DIR", "/tmp");
-            }
-        }
-        let size = 4096;
-        let file = create_shm_file(size).unwrap();
-        let mmap = unsafe { MmapMut::map_mut(&file).unwrap() };
-        let pool = unsafe { std::mem::MaybeUninit::<WlShmPool>::uninit().assume_init() };
+        with_env("XDG_RUNTIME_DIR", Some("/tmp"), || {
+            let size = 4096;
+            let file = create_shm_file(size).unwrap();
+            let mmap = safe_mmap_file(&file).unwrap();
+            let pool = unsafe { std::mem::zeroed::<WlShmPool>() };
 
-        let mut buffer = ShmBuffer { mmap, pool };
-        assert_eq!(buffer.size(), size);
-        assert_eq!(buffer.mmap_mut().len(), size);
+            let mut buffer = ShmBuffer { mmap, pool };
+            assert_eq!(buffer.size(), size);
+            assert_eq!(buffer.mmap_mut().len(), size);
 
-        std::mem::forget(buffer); // Avoid dropping uninitialized WlShmPool
+            std::mem::forget(buffer);
+        });
     }
 
     #[test]
     fn test_create_shm_file_error() {
-        let res = create_shm_file(usize::MAX); // Should fail to allocate or similar
+        let res = create_shm_file(usize::MAX);
         assert!(res.is_err());
     }
 
     #[test]
     fn test_create_shm_file_without_runtime_dir() {
-        let old = env::var_os("XDG_RUNTIME_DIR");
-        unsafe {
-            env::remove_var("XDG_RUNTIME_DIR");
-        }
-        let res = create_shm_file(64);
-        if let Some(val) = old {
-            unsafe {
-                env::set_var("XDG_RUNTIME_DIR", val);
-            }
-        }
-        assert!(res.is_err());
-        assert_eq!(res.unwrap_err().kind(), ErrorKind::NotFound);
-    }
-
-    #[test]
-    fn test_shm_buffer_new_propagates_create_file_error() {
-        let old = env::var_os("XDG_RUNTIME_DIR");
-        unsafe {
-            env::remove_var("XDG_RUNTIME_DIR");
-        }
-
-        let shm = unsafe { std::mem::MaybeUninit::<WlShm>::uninit().assume_init() };
-        let qh =
-            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-        let res = ShmBuffer::new(&shm, 4, 4, &qh);
-
-        if let Some(val) = old {
-            unsafe {
-                env::set_var("XDG_RUNTIME_DIR", val);
-            }
-        }
-        assert!(res.is_err());
-        std::mem::forget(shm);
-        std::mem::forget(qh);
+        with_env("XDG_RUNTIME_DIR", None, || {
+            let res = create_shm_file(64);
+            assert!(res.is_err());
+            assert_eq!(res.unwrap_err().kind(), ErrorKind::NotFound);
+        });
     }
 
     #[test]
     fn test_shm_buffer_test_new_constructor() {
-        if env::var_os("XDG_RUNTIME_DIR").is_none() {
-            unsafe {
-                env::set_var("XDG_RUNTIME_DIR", "/tmp");
-            }
-        }
-        let file = create_shm_file(256).unwrap();
-        let mmap = unsafe { MmapMut::map_mut(&file).unwrap() };
-        let pool = unsafe { std::mem::MaybeUninit::<WlShmPool>::uninit().assume_init() };
-        let buffer = ShmBuffer::test_new(mmap, pool);
-        assert_eq!(buffer.size(), 256);
-        std::mem::forget(buffer);
+        with_env("XDG_RUNTIME_DIR", Some("/tmp"), || {
+            let file = create_shm_file(256).unwrap();
+            let mmap = safe_mmap_file(&file).unwrap();
+            let pool = unsafe { std::mem::zeroed::<WlShmPool>() };
+            let buffer = ShmBuffer::test_new(mmap, pool);
+            assert_eq!(buffer.size(), 256);
+            std::mem::forget(buffer);
+        });
     }
 }

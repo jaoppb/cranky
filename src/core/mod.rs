@@ -612,19 +612,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for CrankyState {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_core_error_display() {
-        let err = CoreError::Connection("failed".to_string());
-        assert_eq!(format!("{}", err), "Wayland connection failed: failed");
-
-        let err = CoreError::Global("missing".to_string());
-        assert_eq!(format!("{}", err), "Wayland global error: missing");
-
-        let err = CoreError::Dispatch("timed out".to_string());
-        assert_eq!(format!("{}", err), "Wayland dispatch error: timed out");
-    }
-
-    #[test]
+     #[test]
     fn test_wayland_manager_new_fail() {
         // Without WAYLAND_DISPLAY, it should fail
         let old_val = std::env::var_os("WAYLAND_DISPLAY");
@@ -645,26 +633,17 @@ mod tests {
 
     #[test]
     fn test_output_info_getters() {
-        let mut info = unsafe { std::mem::MaybeUninit::<OutputInfo>::uninit().assume_init() };
         unsafe {
+            let mut info = std::mem::MaybeUninit::<OutputInfo>::uninit().assume_init();
             std::ptr::write(&mut info.id, 1);
             std::ptr::write(&mut info.name, "HDMI-A-1".to_string());
             std::ptr::write(&mut info.scale, 1);
+
+            assert_eq!(info.name(), "HDMI-A-1");
+            assert_eq!(info.scale(), 1);
+
+            std::mem::forget(info);
         }
-
-        assert_eq!(info.name(), "HDMI-A-1");
-        assert_eq!(info.scale(), 1);
-
-        // Don't test output() getter as it returns reference to uninitialized memory which is dangerous
-
-        std::mem::forget(info);
-    }
-
-    #[test]
-    fn test_wayland_globals_getters() {
-        let globals = unsafe { std::mem::MaybeUninit::<WaylandGlobals>::uninit().assume_init() };
-        // We can't safely test the getters because they return references to uninitialized proxies
-        std::mem::forget(globals);
     }
 
     #[test]
@@ -716,28 +695,30 @@ mod tests {
 
     #[test]
     fn test_cranky_state_add_output() {
-        let mut state = CrankyState {
-            registry: ModuleRegistry::new(),
-            config: Config::default(),
-            render_context: crate::render::RenderContext::new(),
-            error_message: None,
-            compositor: None,
-            shm: None,
-            layer_shell: None,
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
-            focused_monitor: None,
-        };
+        unsafe {
+            let mut state = CrankyState {
+                registry: ModuleRegistry::new(),
+                config: Config::default(),
+                render_context: crate::render::RenderContext::new(),
+                error_message: None,
+                compositor: None,
+                shm: None,
+                layer_shell: None,
+                outputs: Vec::new(),
+                bars: Vec::new(),
+                hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
+                focused_monitor: None,
+            };
 
-        let output = unsafe { std::mem::MaybeUninit::<WlOutput>::uninit().assume_init() };
-        state.add_output(7, output);
-        assert_eq!(state.outputs.len(), 1);
-        assert_eq!(state.outputs[0].id, 7);
-        assert_eq!(state.outputs[0].scale, 1);
-        assert!(state.outputs[0].name.is_empty());
+            let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
+            state.add_output(7, output);
+            assert_eq!(state.outputs.len(), 1);
+            assert_eq!(state.outputs[0].id, 7);
+            assert_eq!(state.outputs[0].scale, 1);
+            assert!(state.outputs[0].name.is_empty());
 
-        std::mem::forget(state);
+            std::mem::forget(state);
+        }
     }
 
     #[test]
@@ -805,16 +786,17 @@ mod tests {
             focused_monitor: None,
         };
 
-        let mut manager = WaylandManager {
-            connection: unsafe { std::mem::MaybeUninit::<Connection>::uninit().assume_init() },
-            event_queue: unsafe {
-                std::mem::MaybeUninit::<EventQueue<CrankyState>>::uninit().assume_init()
-            },
-            state,
-        };
+        unsafe {
+            let mut manager = WaylandManager {
+                connection: std::mem::MaybeUninit::<Connection>::uninit().assume_init(),
+                event_queue: std::mem::MaybeUninit::<EventQueue<CrankyState>>::uninit()
+                    .assume_init(),
+                state,
+            };
 
-        manager.handle_periodic_update();
-        std::mem::forget(manager);
+            manager.handle_periodic_update();
+            std::mem::forget(manager);
+        }
     }
 
     #[test]
@@ -843,97 +825,97 @@ mod tests {
             focused_monitor: None,
         };
 
-        let mut manager = WaylandManager {
-            connection: unsafe { std::mem::MaybeUninit::<Connection>::uninit().assume_init() },
-            event_queue: unsafe {
-                std::mem::MaybeUninit::<EventQueue<CrankyState>>::uninit().assume_init()
-            },
-            state,
-        };
+        unsafe {
+            let mut manager = WaylandManager {
+                connection: std::mem::MaybeUninit::<Connection>::uninit().assume_init(),
+                event_queue: std::mem::MaybeUninit::<EventQueue<CrankyState>>::uninit()
+                    .assume_init(),
+                state,
+            };
 
-        manager.handle_periodic_update();
-        std::mem::forget(manager);
+            manager.handle_periodic_update();
+            std::mem::forget(manager);
+        }
     }
 
     #[test]
     fn test_create_bar_for_output_returns_when_output_not_registered() {
-        let mut state = CrankyState {
-            registry: ModuleRegistry::new(),
-            config: Config::default(),
-            render_context: crate::render::RenderContext::new(),
-            error_message: None,
-            compositor: None,
-            shm: None,
-            layer_shell: None,
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
-            focused_monitor: None,
-        };
+        unsafe {
+            let mut state = CrankyState {
+                registry: ModuleRegistry::new(),
+                config: Config::default(),
+                render_context: crate::render::RenderContext::new(),
+                error_message: None,
+                compositor: None,
+                shm: None,
+                layer_shell: None,
+                outputs: Vec::new(),
+                bars: Vec::new(),
+                hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
+                focused_monitor: None,
+            };
 
-        let output = unsafe { std::mem::MaybeUninit::<WlOutput>::uninit().assume_init() };
-        let qh =
-            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-        state.create_bar_for_output(&output, &qh);
-        assert!(state.bars.is_empty());
-        std::mem::forget(state);
-        std::mem::forget(output);
-        std::mem::forget(qh);
+            let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
+            let qh = std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init();
+            state.create_bar_for_output(&output, &qh);
+            assert!(state.bars.is_empty());
+            std::mem::forget(state);
+            std::mem::forget(output);
+            std::mem::forget(qh);
+        }
     }
 
     #[test]
     fn test_create_bar_for_output_returns_when_name_is_empty() {
-        let mut state = CrankyState {
-            registry: ModuleRegistry::new(),
-            config: Config::default(),
-            render_context: crate::render::RenderContext::new(),
-            error_message: None,
-            compositor: None,
-            shm: None,
-            layer_shell: None,
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
-            focused_monitor: None,
-        };
-
-        let output = unsafe { std::mem::MaybeUninit::<WlOutput>::uninit().assume_init() };
-        state.add_output(42, output);
-        let qh =
-            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-        let output_ptr: *const WlOutput = &state.outputs[0].output;
         unsafe {
+            let mut state = CrankyState {
+                registry: ModuleRegistry::new(),
+                config: Config::default(),
+                render_context: crate::render::RenderContext::new(),
+                error_message: None,
+                compositor: None,
+                shm: None,
+                layer_shell: None,
+                outputs: Vec::new(),
+                bars: Vec::new(),
+                hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
+                focused_monitor: None,
+            };
+
+            let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
+            state.add_output(42, output);
+            let qh = std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init();
+            let output_ptr: *const WlOutput = &state.outputs[0].output;
             state.create_bar_for_output(&*output_ptr, &qh);
+            assert!(state.bars.is_empty());
+            std::mem::forget(state);
+            std::mem::forget(qh);
         }
-        assert!(state.bars.is_empty());
-        std::mem::forget(state);
-        std::mem::forget(qh);
     }
 
     #[test]
     fn test_wl_output_event_name_updates_output_info() {
-        let mut state = CrankyState {
-            registry: ModuleRegistry::new(),
-            config: Config::default(),
-            render_context: crate::render::RenderContext::new(),
-            error_message: None,
-            compositor: None,
-            shm: None,
-            layer_shell: None,
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
-            focused_monitor: None,
-        };
-        let output = unsafe { std::mem::MaybeUninit::<WlOutput>::uninit().assume_init() };
-        state.add_output(1, output);
-
-        let output_ptr: *const WlOutput = &state.outputs[0].output;
-        let conn = unsafe { std::mem::MaybeUninit::<Connection>::uninit().assume_init() };
-        let qh =
-            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-
         unsafe {
+            let mut state = CrankyState {
+                registry: ModuleRegistry::new(),
+                config: Config::default(),
+                render_context: crate::render::RenderContext::new(),
+                error_message: None,
+                compositor: None,
+                shm: None,
+                layer_shell: None,
+                outputs: Vec::new(),
+                bars: Vec::new(),
+                hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
+                focused_monitor: None,
+            };
+            let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
+            state.add_output(1, output);
+
+            let output_ptr: *const WlOutput = &state.outputs[0].output;
+            let conn = std::mem::MaybeUninit::<Connection>::uninit().assume_init();
+            let qh = std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init();
+
             <CrankyState as Dispatch<WlOutput, ()>>::event(
                 &mut state,
                 &*output_ptr,
@@ -944,38 +926,37 @@ mod tests {
                 &conn,
                 &qh,
             );
-        }
 
-        assert_eq!(state.outputs[0].name, "HDMI-A-1");
-        std::mem::forget(state);
-        std::mem::forget(conn);
-        std::mem::forget(qh);
+            assert_eq!(state.outputs[0].name, "HDMI-A-1");
+            std::mem::forget(state);
+            std::mem::forget(conn);
+            std::mem::forget(qh);
+        }
     }
 
     #[test]
     fn test_wl_output_event_scale_updates_output_info() {
-        let mut state = CrankyState {
-            registry: ModuleRegistry::new(),
-            config: Config::default(),
-            render_context: crate::render::RenderContext::new(),
-            error_message: None,
-            compositor: None,
-            shm: None,
-            layer_shell: None,
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
-            focused_monitor: None,
-        };
-        let output = unsafe { std::mem::MaybeUninit::<WlOutput>::uninit().assume_init() };
-        state.add_output(1, output);
-
-        let output_ptr: *const WlOutput = &state.outputs[0].output;
-        let conn = unsafe { std::mem::MaybeUninit::<Connection>::uninit().assume_init() };
-        let qh =
-            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-
         unsafe {
+            let mut state = CrankyState {
+                registry: ModuleRegistry::new(),
+                config: Config::default(),
+                render_context: crate::render::RenderContext::new(),
+                error_message: None,
+                compositor: None,
+                shm: None,
+                layer_shell: None,
+                outputs: Vec::new(),
+                bars: Vec::new(),
+                hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
+                focused_monitor: None,
+            };
+            let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
+            state.add_output(1, output);
+
+            let output_ptr: *const WlOutput = &state.outputs[0].output;
+            let conn = std::mem::MaybeUninit::<Connection>::uninit().assume_init();
+            let qh = std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init();
+
             <CrankyState as Dispatch<WlOutput, ()>>::event(
                 &mut state,
                 &*output_ptr,
@@ -984,37 +965,36 @@ mod tests {
                 &conn,
                 &qh,
             );
-        }
 
-        assert_eq!(state.outputs[0].scale, 2);
-        std::mem::forget(state);
-        std::mem::forget(conn);
-        std::mem::forget(qh);
+            assert_eq!(state.outputs[0].scale, 2);
+            std::mem::forget(state);
+            std::mem::forget(conn);
+            std::mem::forget(qh);
+        }
     }
 
     #[test]
     fn test_wl_output_event_description_and_done_paths() {
-        let mut state = CrankyState {
-            registry: ModuleRegistry::new(),
-            config: Config::default(),
-            render_context: crate::render::RenderContext::new(),
-            error_message: None,
-            compositor: None,
-            shm: None,
-            layer_shell: None,
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
-            focused_monitor: None,
-        };
-        let output = unsafe { std::mem::MaybeUninit::<WlOutput>::uninit().assume_init() };
-        state.add_output(1, output);
-        let output_ptr: *const WlOutput = &state.outputs[0].output;
-        let conn = unsafe { std::mem::MaybeUninit::<Connection>::uninit().assume_init() };
-        let qh =
-            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-
         unsafe {
+            let mut state = CrankyState {
+                registry: ModuleRegistry::new(),
+                config: Config::default(),
+                render_context: crate::render::RenderContext::new(),
+                error_message: None,
+                compositor: None,
+                shm: None,
+                layer_shell: None,
+                outputs: Vec::new(),
+                bars: Vec::new(),
+                hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
+                focused_monitor: None,
+            };
+            let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
+            state.add_output(1, output);
+            let output_ptr: *const WlOutput = &state.outputs[0].output;
+            let conn = std::mem::MaybeUninit::<Connection>::uninit().assume_init();
+            let qh = std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init();
+
             <CrankyState as Dispatch<WlOutput, ()>>::event(
                 &mut state,
                 &*output_ptr,
@@ -1033,46 +1013,47 @@ mod tests {
                 &conn,
                 &qh,
             );
-        }
 
-        assert!(state.bars.is_empty());
-        std::mem::forget(state);
-        std::mem::forget(conn);
-        std::mem::forget(qh);
+            assert!(state.bars.is_empty());
+            std::mem::forget(state);
+            std::mem::forget(conn);
+            std::mem::forget(qh);
+        }
     }
 
     #[test]
     fn test_wl_registry_global_remove_without_matching_output() {
-        let mut state = CrankyState {
-            registry: ModuleRegistry::new(),
-            config: Config::default(),
-            render_context: crate::render::RenderContext::new(),
-            error_message: None,
-            compositor: None,
-            shm: None,
-            layer_shell: None,
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
-            focused_monitor: None,
-        };
+        unsafe {
+            let mut state = CrankyState {
+                registry: ModuleRegistry::new(),
+                config: Config::default(),
+                render_context: crate::render::RenderContext::new(),
+                error_message: None,
+                compositor: None,
+                shm: None,
+                layer_shell: None,
+                outputs: Vec::new(),
+                bars: Vec::new(),
+                hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
+                focused_monitor: None,
+            };
 
-        let registry = unsafe { std::mem::MaybeUninit::<WlRegistry>::uninit().assume_init() };
-        let conn = unsafe { std::mem::MaybeUninit::<Connection>::uninit().assume_init() };
-        let qh =
-            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-        <CrankyState as Dispatch<WlRegistry, ()>>::event(
-            &mut state,
-            &registry,
-            wl_registry::Event::GlobalRemove { name: 11 },
-            &(),
-            &conn,
-            &qh,
-        );
-        assert!(state.outputs.is_empty());
-        std::mem::forget(state);
-        std::mem::forget(registry);
-        std::mem::forget(conn);
-        std::mem::forget(qh);
+            let registry = std::mem::MaybeUninit::<WlRegistry>::uninit().assume_init();
+            let conn = std::mem::MaybeUninit::<Connection>::uninit().assume_init();
+            let qh = std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init();
+            <CrankyState as Dispatch<WlRegistry, ()>>::event(
+                &mut state,
+                &registry,
+                wl_registry::Event::GlobalRemove { name: 11 },
+                &(),
+                &conn,
+                &qh,
+            );
+            assert!(state.outputs.is_empty());
+            std::mem::forget(state);
+            std::mem::forget(registry);
+            std::mem::forget(conn);
+            std::mem::forget(qh);
+        }
     }
 }

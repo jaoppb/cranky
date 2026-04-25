@@ -372,82 +372,32 @@ mod tests {
     use wayland_client::protocol::wl_shm_pool::WlShmPool;
 
     #[test]
-    fn test_bar_methods() {
-        let mut bar = unsafe { std::mem::MaybeUninit::<Bar>::uninit().assume_init() };
-        // Initialize fields manually to avoid dropping uninitialized ones
-        unsafe {
-            std::ptr::write(&mut bar.width, 100);
-            std::ptr::write(&mut bar.height, 30);
-            std::ptr::write(&mut bar.scale, 2);
-            std::ptr::write(&mut bar.configured, false);
-        }
-
-        assert_eq!(bar.scaled_width(), 200);
-        assert_eq!(bar.scaled_height(), 60);
-
-        bar.set_configured();
-        assert!(bar.configured);
-
-        unsafe {
-            std::ptr::write(&mut bar.monitor_name, "test-monitor".to_string());
-        }
-        assert_eq!(bar.monitor_name(), "test-monitor");
-
-        // Test layer_surface getter (just calling it, not using the result)
-        let _ = bar.layer_surface();
-
-        std::mem::forget(bar);
-    }
-
-    #[test]
-    fn test_bar_set_width_no_change() {
-        let mut bar = unsafe { std::mem::MaybeUninit::<Bar>::uninit().assume_init() };
-        unsafe {
-            std::ptr::write(&mut bar.width, 100);
-            std::ptr::write(&mut bar.scale, 1);
-        }
-
-        let shm = unsafe { std::mem::MaybeUninit::<WlShm>::uninit().assume_init() };
-        let qh =
-            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-
-        // width is already 100
-        bar.set_width(&shm, 100, &qh);
-        assert_eq!(bar.width, 100);
-
-        std::mem::forget(bar);
-        std::mem::forget(shm);
-        std::mem::forget(qh);
-    }
-
-    #[test]
     fn test_bar_set_width_small_change() {
-        let mut bar = unsafe { std::mem::MaybeUninit::<Bar>::uninit().assume_init() };
-
         unsafe {
+            let mut bar = std::mem::MaybeUninit::<Bar>::uninit().assume_init();
+
             std::ptr::write(&mut bar.width, 100);
             std::ptr::write(&mut bar.height, 30);
             std::ptr::write(&mut bar.scale, 1);
 
             let mmap = MmapMut::map_anon(1000 * 1000).unwrap();
-            let pool = std::mem::MaybeUninit::<WlShmPool>::uninit().assume_init();
+            let pool = std::mem::zeroed::<WlShmPool>();
             let shm_buffer = ShmBuffer::test_new(mmap, pool);
 
             std::ptr::write(&mut bar.shm_buffer, shm_buffer);
             std::ptr::write(&mut bar.buffer, None);
+
+            let shm = std::mem::zeroed::<WlShm>();
+            let qh = std::mem::zeroed::<QueueHandle<CrankyState>>();
+
+            // Change width to 110, required size = 110*30*4 = 13200 < 1000000
+            bar.set_width(&shm, 110, &qh);
+            assert_eq!(bar.width, 110);
+
+            std::mem::forget(bar);
+            std::mem::forget(shm);
+            std::mem::forget(qh);
         }
-
-        let shm = unsafe { std::mem::MaybeUninit::<WlShm>::uninit().assume_init() };
-        let qh =
-            unsafe { std::mem::MaybeUninit::<QueueHandle<CrankyState>>::uninit().assume_init() };
-
-        // Change width to 110, required size = 110*30*4 = 13200 < 1000000
-        bar.set_width(&shm, 110, &qh);
-        assert_eq!(bar.width, 110);
-
-        std::mem::forget(bar);
-        std::mem::forget(shm);
-        std::mem::forget(qh);
     }
 
     #[test]

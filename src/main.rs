@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+
 use log::{error, info};
 mod config;
 mod core;
@@ -73,21 +75,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_get_config_path() {
-        let old_home = std::env::var_os("HOME");
-        unsafe {
-            std::env::set_var("HOME", "/tmp/test-home");
-        }
-
-        let path = get_config_path();
-        assert!(path.to_string_lossy().contains("/tmp/test-home"));
-
-        if let Some(home) = old_home {
+    fn with_env<F: FnOnce()>(key: &str, value: Option<&str>, f: F) {
+        let old_value = std::env::var_os(key);
+        if let Some(val) = value {
             unsafe {
-                std::env::set_var("HOME", home);
+                std::env::set_var(key, val);
+            }
+        } else {
+            unsafe {
+                std::env::remove_var(key);
             }
         }
+        f();
+        if let Some(val) = old_value {
+            unsafe {
+                std::env::set_var(key, val);
+            }
+        } else {
+            unsafe {
+                std::env::remove_var(key);
+            }
+        }
+    }
+
+    #[test]
+    fn test_get_config_path() {
+        with_env("HOME", Some("/tmp/test-home"), || {
+            let path = get_config_path();
+            assert!(path.to_string_lossy().contains("/tmp/test-home"));
+        });
     }
 
     #[test]
@@ -122,20 +138,13 @@ mod tests {
 
     #[test]
     fn test_get_config_path_without_home() {
-        let old_home = std::env::var_os("HOME");
-        unsafe {
-            std::env::remove_var("HOME");
-        }
-        let path = get_config_path();
-        assert!(
-            path.to_string_lossy()
-                .ends_with(".config/cranky/config.toml")
-        );
-        if let Some(home) = old_home {
-            unsafe {
-                std::env::set_var("HOME", home);
-            }
-        }
+        with_env("HOME", None, || {
+            let path = get_config_path();
+            assert!(
+                path.to_string_lossy()
+                    .ends_with(".config/cranky/config.toml")
+            );
+        });
     }
 
     #[test]
