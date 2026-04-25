@@ -609,6 +609,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for CrankyState {
 }
 
 #[cfg(test)]
+#[allow(unsafe_code)]
 mod tests {
     use super::*;
 

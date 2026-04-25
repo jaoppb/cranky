@@ -361,6 +361,7 @@ impl Bar {
 }
 
 #[cfg(test)]
+#[allow(unsafe_code)]
 mod tests {
     use super::*;
     use crate::assert_pixmap_has_color;
