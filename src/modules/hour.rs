@@ -159,7 +159,9 @@ mod tests {
             format: Some("%H:%M:%S".to_string()),
             ..HourConfig::default()
         };
-        module.init(config, &crate::config::BarConfig::default()).unwrap();
+        module
+            .init(config, &crate::config::BarConfig::default())
+            .unwrap();
         module.update(crate::modules::Event::Timer);
         assert!(module.current_time.contains(':'));
     }

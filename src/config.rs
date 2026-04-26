@@ -549,18 +549,18 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(partial_margin.top, Some(5));
-        
+
         let def_margin = PartialMarginConfig::default();
         assert!(def_margin.top.is_none());
         assert_eq!(def_margin, PartialMarginConfig::default());
-        
+
         let partial_bar = PartialBarConfig {
             height: Some(40),
             ..Default::default()
         };
         assert_eq!(partial_bar.height, Some(40));
         assert_eq!(partial_bar, partial_bar.clone());
-        
+
         let partial_border = PartialBorderConfig {
             size: Some(1.0),
             ..Default::default()

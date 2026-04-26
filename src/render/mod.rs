@@ -390,19 +390,14 @@ mod tests {
         );
 
         context.render_text(&mut pixmap, "🦀", styling, 0.0, 0.0);
-        // Note: Emojis might not render if no emoji font is installed, 
+        // Note: Emojis might not render if no emoji font is installed,
         // but we just check it doesn't panic and potentially draws something.
     }
 
     #[test]
     fn test_measure_text_empty() {
         let mut context = RenderContext::new();
-        let styling = TextStyling::new(
-            14.0,
-            20.0,
-            Color::BLACK,
-            "monospace".to_string(),
-        );
+        let styling = TextStyling::new(14.0, 20.0, Color::BLACK, "monospace".to_string());
         let width = context.measure_text("", styling);
         assert_eq!(width, 0.0);
     }
@@ -411,30 +406,25 @@ mod tests {
     fn test_calculate_vertical_offset_edge_cases() {
         let mut context = RenderContext::new();
         let area = Rect::from_xywh(0.0, 0.0, 100.0, 100.0).unwrap();
-        
+
         context.set_vertical_alignment(VerticalAlignment::Top);
         assert_eq!(context.calculate_vertical_offset(area, 20.0), 0.0);
-        
+
         context.set_vertical_alignment(VerticalAlignment::Center);
         assert_eq!(context.calculate_vertical_offset(area, 20.0), 40.0);
-        
+
         context.set_vertical_alignment(VerticalAlignment::Bottom);
         assert_eq!(context.calculate_vertical_offset(area, 20.0), 80.0);
     }
 
     #[test]
     fn test_styling_getters() {
-        let styling = TextStyling::new(
-            12.0,
-            16.0,
-            Color::BLACK,
-            "Arial".to_string(),
-        );
+        let styling = TextStyling::new(12.0, 16.0, Color::BLACK, "Arial".to_string());
         assert_eq!(styling.font_size(), 12.0);
         assert_eq!(styling.line_height(), 16.0);
         assert_eq!(styling.color(), Color::BLACK);
         assert_eq!(styling.font_family(), "Arial");
-        
+
         let cloned = styling.clone();
         assert_eq!(cloned.font_size(), 12.0);
     }
@@ -444,7 +434,7 @@ mod tests {
         let mut context = RenderContext::new();
         context.set_scale(2.5);
         assert_eq!(context.scale(), 2.5);
-        
+
         context.set_vertical_alignment(VerticalAlignment::Bottom);
         let area = Rect::from_xywh(0.0, 0.0, 100.0, 100.0).unwrap();
         assert_eq!(context.calculate_vertical_offset(area, 10.0), 90.0);

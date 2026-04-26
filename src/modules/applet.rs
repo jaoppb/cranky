@@ -802,12 +802,8 @@ impl AppletModule {
         let dst_h = ((self.icon_size as f32) * scale).round().max(1.0) as u32;
 
         if rgba.width() != dst_w || rgba.height() != dst_h {
-            rgba = image::imageops::resize(
-                &rgba,
-                dst_w,
-                dst_h,
-                image::imageops::FilterType::Triangle,
-            );
+            rgba =
+                image::imageops::resize(&rgba, dst_w, dst_h, image::imageops::FilterType::Triangle);
         }
 
         Some(IconBitmap {
@@ -914,9 +910,10 @@ impl AppletModule {
                 continue;
             }
             if let Some(value) = line.strip_prefix("StartupWMClass=")
-                && startup_wm_class.is_empty() {
-                    startup_wm_class = value.trim().to_string();
-                }
+                && startup_wm_class.is_empty()
+            {
+                startup_wm_class = value.trim().to_string();
+            }
         }
         if icon.is_empty() {
             return None;
@@ -2065,17 +2062,20 @@ mod tests {
 
     #[test]
     fn test_passive_status_filtered_from_list() {
-        let mut module = module_with_responses(vec![
-            Ok(vec![
-                applet_item("org.kde.StatusNotifierItem-1-1", "active app", "Active", "icon1"),
-                applet_item(
-                    "org.kde.StatusNotifierItem-3-1",
-                    "attention app",
-                    "NeedsAttention",
-                    "icon3",
-                ),
-            ]),
-        ]);
+        let mut module = module_with_responses(vec![Ok(vec![
+            applet_item(
+                "org.kde.StatusNotifierItem-1-1",
+                "active app",
+                "Active",
+                "icon1",
+            ),
+            applet_item(
+                "org.kde.StatusNotifierItem-3-1",
+                "attention app",
+                "NeedsAttention",
+                "icon3",
+            ),
+        ])]);
         module
             .init(
                 AppletConfig {

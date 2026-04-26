@@ -163,7 +163,12 @@ impl CrankyState {
         };
 
         // Check if bar already exists
-        if self.bars.iter().any(|b| b.monitor_name() == info_name) {
+        if let Some(bar) = self.bars.iter_mut().find(|b| b.monitor_name() == info_name) {
+            if bar.scale() != info_scale {
+                if let Some(shm) = &self.shm {
+                    bar.set_scale(shm, info_scale, qh);
+                }
+            }
             return;
         }
 
@@ -240,6 +245,10 @@ impl WaylandManager {
             monitors,
         }) == UpdateAction::Redraw
         {
+            redraw = true;
+        }
+
+        if !redraw && self.state.bars.iter().any(|b| b.needs_redraw()) {
             redraw = true;
         }
 
@@ -585,9 +594,10 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for CrankyState {
             if let Some(bar) = state.bars.iter_mut().find(|b| b.layer_surface() == proxy) {
                 bar.set_configured();
                 if width > 0
-                    && let Some(shm) = &state.shm {
-                        bar.set_width(shm, width, qh);
-                    }
+                    && let Some(shm) = &state.shm
+                {
+                    bar.set_width(shm, width, qh);
+                }
 
                 let bar_config = if Some(bar.monitor_name()) == state.focused_monitor.as_deref() {
                     state.config.bar().clone()
@@ -613,7 +623,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for CrankyState {
 mod tests {
     use super::*;
 
-     #[test]
+    #[test]
     fn test_wayland_manager_new_fail() {
         // Without WAYLAND_DISPLAY, it should fail
         let old_val = std::env::var_os("WAYLAND_DISPLAY");

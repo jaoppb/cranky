@@ -260,15 +260,25 @@ impl Bar {
                 "monospace".to_string(),
             );
             let y_offset = context.calculate_vertical_offset(
-                tiny_skia::Rect::from_xywh(0.0, 0.0, self.state.width as f32, self.state.height as f32)
-                    .unwrap(),
+                tiny_skia::Rect::from_xywh(
+                    0.0,
+                    0.0,
+                    self.state.width as f32,
+                    self.state.height as f32,
+                )
+                .unwrap(),
                 14.0,
             );
             context.render_text(&mut pixmap, error, styling, 10.0, y_offset);
         } else {
             // Render modules
-            let area = tiny_skia::Rect::from_xywh(0.0, 0.0, self.state.width as f32, self.state.height as f32)
-                .unwrap();
+            let area = tiny_skia::Rect::from_xywh(
+                0.0,
+                0.0,
+                self.state.width as f32,
+                self.state.height as f32,
+            )
+            .unwrap();
 
             registry.view(&mut pixmap, area, context, &self.monitor_name);
         }
@@ -303,6 +313,14 @@ impl Bar {
         &self.monitor_name
     }
 
+    pub fn scale(&self) -> i32 {
+        self.state.scale
+    }
+
+    pub fn needs_redraw(&self) -> bool {
+        self.buffer.is_none()
+    }
+
     pub fn set_configured(&mut self) {
         self.configured = true;
     }
@@ -329,6 +347,32 @@ impl Bar {
                 }
             }
             self.buffer = None; // Invalidate buffer on resize
+        }
+    }
+
+    pub fn set_scale(&mut self, shm: &WlShm, scale: i32, qh: &QueueHandle<CrankyState>) {
+        if self.state.scale != scale {
+            log::info!(
+                "Bar scale for '{}' changed from {} to {}",
+                self.monitor_name,
+                self.state.scale,
+                scale
+            );
+            self.state.scale = scale;
+            self.surface.set_buffer_scale(scale);
+
+            let scaled_width = self.scaled_width();
+            let scaled_height = self.scaled_height();
+            let required_size = (scaled_width * scaled_height * 4) as usize;
+
+            if required_size > self.shm_buffer.size() {
+                // Recreate ShmBuffer with the new larger size
+                if let Ok(new_shm) = ShmBuffer::new(shm, scaled_width, scaled_height, qh) {
+                    self.shm_buffer = new_shm;
+                }
+            }
+            self.buffer = None; // Invalidate buffer on scale change
+            self.surface.commit();
         }
     }
 

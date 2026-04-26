@@ -61,9 +61,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     if let Some(parent) = config_path.parent()
-        && parent.exists() {
-            watcher.watch(parent, RecursiveMode::NonRecursive)?;
-        }
+        && parent.exists()
+    {
+        watcher.watch(parent, RecursiveMode::NonRecursive)?;
+    }
 
     let wayland_manager = core::WaylandManager::new(config)?;
     wayland_manager.run(rx).await?;
@@ -174,7 +175,7 @@ mod tests {
         let cfg_err = ConfigError::Io(io_err);
         assert!(format!("{}", cfg_err).contains("IO error"));
         assert!(format!("{:?}", cfg_err).contains("Io"));
-        
+
         let reload_err = ReloadError::Config(cfg_err);
         assert!(format!("{}", reload_err).contains("config"));
         assert!(format!("{:?}", reload_err).contains("Config"));
