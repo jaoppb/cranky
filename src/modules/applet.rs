@@ -5,7 +5,6 @@ use log::{debug, warn};
 use serde::Deserialize;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -606,10 +605,16 @@ impl AppletProvider for RealAppletProvider {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct IconCacheKey {
+    name: String,
+    scale_bits: u32,
+}
+
 pub struct AppletModule {
     provider: Box<dyn AppletProvider>,
     items: Vec<AppletItem>,
-    icon_cache: HashMap<String, Option<IconBitmap>>,
+    icon_cache: HashMap<IconCacheKey, Option<IconBitmap>>,
     resolved_icon_by_item: HashMap<String, String>,
     desktop_icon_cache: HashMap<String, Option<String>>,
     desktop_entries: Option<Vec<DesktopEntryMeta>>,
@@ -623,8 +628,7 @@ pub struct AppletModule {
     empty_label: String,
     font_family: String,
     error_message: Option<String>,
-    render_scale_bits: AtomicU32,
-    icon_cache_scale: f32,
+    seen_scales: Mutex<HashSet<u32>>,
 }
 
 impl AppletModule {
@@ -633,6 +637,9 @@ impl AppletModule {
     }
 
     fn with_provider(provider: Box<dyn AppletProvider>) -> Self {
+        let mut seen_scales = HashSet::new();
+        seen_scales.insert(1.0f32.to_bits());
+
         Self {
             provider,
             items: Vec::new(),
@@ -650,8 +657,7 @@ impl AppletModule {
             empty_label: default_empty_label(),
             font_family: String::new(),
             error_message: None,
-            render_scale_bits: AtomicU32::new(1.0f32.to_bits()),
-            icon_cache_scale: 1.0,
+            seen_scales: Mutex::new(seen_scales),
         }
     }
 
@@ -1038,23 +1044,32 @@ impl AppletModule {
         }
     }
 
-    fn ensure_icon_cached(&mut self, icon_key: &str, scale: f32) {
-        if self.icon_cache.contains_key(icon_key) {
-            return;
+    fn ensure_icon_cached(&mut self, icon_key: &str, scale: f32) -> bool {
+        let key = IconCacheKey {
+            name: icon_key.to_string(),
+            scale_bits: scale.to_bits(),
+        };
+        if self.icon_cache.contains_key(&key) {
+            return false;
         }
         self.icon_cache
-            .insert(icon_key.to_string(), self.load_icon_bitmap(icon_key, scale));
+            .insert(key, self.load_icon_bitmap(icon_key, scale));
+        true
     }
 
-    fn ensure_visible_icons_cached(&mut self, scale: f32) {
+    fn ensure_visible_icons_cached(&mut self, scale: f32) -> bool {
         if !self.show_icons {
-            return;
+            return false;
         }
+        let mut changed = false;
         for i in 0..self.visible_count() {
             for icon_key in self.icon_candidates(&self.items[i]) {
-                self.ensure_icon_cached(&icon_key, scale);
+                if self.ensure_icon_cached(&icon_key, scale) {
+                    changed = true;
+                }
             }
         }
+        changed
     }
 
     fn draw_icon(
@@ -1132,19 +1147,28 @@ impl CrankyModule for AppletModule {
         match self.provider.list_items() {
             Ok(new_items) => {
                 let mut redraw = false;
-                let render_scale =
-                    f32::from_bits(self.render_scale_bits.load(Ordering::Relaxed)).max(1.0);
-                if (self.icon_cache_scale - render_scale).abs() > f32::EPSILON {
-                    self.icon_cache.clear();
-                    self.icon_cache_scale = render_scale;
-                    redraw = true;
-                }
+
                 if self.items != new_items {
                     self.items = new_items;
                     self.refresh_resolved_icons();
+                    self.icon_cache.clear();
                     redraw = true;
                 }
-                self.ensure_visible_icons_cached(render_scale);
+
+                let scales: Vec<f32> = self
+                    .seen_scales
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .map(|&bits| f32::from_bits(bits))
+                    .collect();
+
+                for scale in scales {
+                    if self.ensure_visible_icons_cached(scale) {
+                        redraw = true;
+                    }
+                }
+
                 if self.error_message.take().is_some() {
                     redraw = true;
                 }
@@ -1173,8 +1197,15 @@ impl CrankyModule for AppletModule {
         context: &mut RenderContext,
         _monitor: &str,
     ) {
-        self.render_scale_bits
-            .store(context.scale().max(1.0).to_bits(), Ordering::Relaxed);
+        let scale = context.scale().max(1.0);
+        let scale_bits = scale.to_bits();
+        {
+            let mut guard = self.seen_scales.lock().unwrap();
+            if guard.insert(scale_bits) {
+                debug!("New monitor scale encountered: {}", scale);
+            }
+        }
+
         let styling = self.text_styling();
         let y_offset = context.calculate_vertical_offset(area, styling.line_height());
         if let Some(label) = self.render_empty_or_error_label() {
@@ -1193,10 +1224,13 @@ impl CrankyModule for AppletModule {
             let item = &self.items[i];
 
             if self.show_icons {
-                let icon = self
-                    .icon_candidates(item)
-                    .into_iter()
-                    .find_map(|icon_key| self.icon_cache.get(&icon_key).and_then(|v| v.as_ref()));
+                let icon = self.icon_candidates(item).into_iter().find_map(|icon_key| {
+                    let key = IconCacheKey {
+                        name: icon_key,
+                        scale_bits,
+                    };
+                    self.icon_cache.get(&key).and_then(|v| v.as_ref())
+                });
                 if let Some(icon) = icon {
                     self.draw_icon(pixmap, context, icon, x, icon_y);
                 } else if let Some(letter) = Self::item_fallback_letter(item) {
@@ -1863,8 +1897,13 @@ mod tests {
     }
 
     #[test]
-    fn test_update_redraws_when_icon_cache_scale_changes() {
-        let mut module = module_with_responses(vec![Ok(Vec::new())]);
+    fn test_update_redraws_when_new_scale_is_added() {
+        let items = vec![applet_item("s", "t", "Active", "icon")];
+        let mut module = module_with_responses(vec![
+            Ok(items.clone()),
+            Ok(items.clone()),
+            Ok(items),
+        ]);
         module
             .init(
                 AppletConfig {
@@ -1874,15 +1913,18 @@ mod tests {
                 &BarConfig::default(),
             )
             .unwrap();
-        module.icon_cache.insert("x".to_string(), None);
-        module.icon_cache_scale = 2.0;
-        module
-            .render_scale_bits
-            .store(1.0f32.to_bits(), Ordering::Relaxed);
-
+        
+        // Initial update caches icons for the default 1.0 scale
         assert_eq!(module.update(Event::Timer), UpdateAction::Redraw);
-        assert_eq!(module.icon_cache_scale, 1.0);
-        assert!(module.icon_cache.is_empty());
+        
+        // No redraw when updating again with same scales
+        assert_eq!(module.update(Event::Timer), UpdateAction::None);
+        
+        // Adding a new scale bits to seen_scales
+        module.seen_scales.lock().unwrap().insert(2.0f32.to_bits());
+        
+        // Now update should redraw because it needs to cache icons for the new scale
+        assert_eq!(module.update(Event::Timer), UpdateAction::Redraw);
     }
 
     #[test]
@@ -2012,7 +2054,11 @@ mod tests {
         let _ = fs::remove_file(&icon_path);
 
         assert_eq!(module.icon_cache.len(), 1);
-        assert!(module.icon_cache.contains_key(&icon_string));
+        let key = IconCacheKey {
+            name: icon_string,
+            scale_bits: 1.0f32.to_bits(),
+        };
+        assert!(module.icon_cache.contains_key(&key));
     }
 
     #[test]
@@ -2180,14 +2226,14 @@ mod tests {
 
     #[test]
     fn test_load_icon_bitmap_non_existent() {
-        let mut module = AppletModule::new();
+        let module = AppletModule::new();
         let bitmap = module.load_icon_bitmap("/tmp/non-existent-icon-path-12345.png", 1.0);
         assert!(bitmap.is_none());
     }
 
     #[test]
     fn test_load_icon_bitmap_invalid_extension() {
-        let mut module = AppletModule::new();
+        let module = AppletModule::new();
         let path = temp_path("txt");
         std::fs::write(&path, "not an image").unwrap();
         let bitmap = module.load_icon_bitmap(path.to_str().unwrap(), 1.0);
