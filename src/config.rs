@@ -75,6 +75,7 @@ impl Default for RenderingMode {
 }
 
 impl RenderingMode {
+    #[cfg(test)]
     pub fn fps_limit(&self) -> Option<u32> {
         match self {
             RenderingMode::Immediate { fps_limit } => *fps_limit,
@@ -82,6 +83,7 @@ impl RenderingMode {
         }
     }
 
+    #[cfg(test)]
     pub fn duration_ms(&self) -> Option<u64> {
         match self {
             RenderingMode::Immediate { .. } => None,

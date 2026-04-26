@@ -17,6 +17,7 @@ pub struct MmappedShm {
 }
 
 impl MmappedShm {
+    #[cfg(test)]
     pub fn new(size: usize) -> Result<Self> {
         let file = create_shm_file(size)?;
         let mmap = safe_mmap_file(&file)?;

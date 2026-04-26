@@ -17,7 +17,8 @@ This skill automates the release process for the repository. When triggered, str
    ```
    *(Replace NEW_VERSION with the user's input).*
 2. Run `cargo check` to automatically update `Cargo.lock`.
-3. Verify the changes using `git diff`.
+3. Run `cargo build --release` to ensure the release build succeeds locally and catch any warnings/errors that might fail in CI.
+4. Verify the changes using `git diff`.
 
 ## Step 3: Commit, Tag, and Push
 1. Run `git add Cargo.toml Cargo.lock`.
