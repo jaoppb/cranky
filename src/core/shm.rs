@@ -12,8 +12,28 @@ use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 
-pub struct ShmBuffer {
+pub struct MmappedShm {
     mmap: MmapMut,
+}
+
+impl MmappedShm {
+    pub fn new(size: usize) -> Result<Self> {
+        let file = create_shm_file(size)?;
+        let mmap = safe_mmap_file(&file)?;
+        Ok(Self { mmap })
+    }
+
+    pub fn mmap_mut(&mut self) -> &mut MmapMut {
+        &mut self.mmap
+    }
+
+    pub fn size(&self) -> usize {
+        self.mmap.len()
+    }
+}
+
+pub struct ShmBuffer {
+    shm: MmappedShm,
     pool: WlShmPool,
 }
 
@@ -44,13 +64,13 @@ fn safe_mmap_file(file: &File) -> Result<MmapMut> {
 }
 
 // Safe wrapper around unsafe BorrowedFd creation for file descriptors
-fn safe_borrowed_fd_from_file(file: &File) -> BorrowedFd {
+fn safe_borrowed_fd_from_file(file: &File) -> BorrowedFd<'_> {
     unsafe { BorrowedFd::borrow_raw(file.as_raw_fd()) }
 }
 
 impl ShmBuffer {
     pub fn new(
-        shm: &WlShm,
+        shm_proxy: &WlShm,
         width: u32,
         height: u32,
         qh: &QueueHandle<CrankyState>,
@@ -60,13 +80,16 @@ impl ShmBuffer {
 
         let mmap = safe_mmap_file(&file)?;
         let fd = safe_borrowed_fd_from_file(&file);
-        let pool = shm.create_pool(fd, size as i32, qh, ());
+        let pool = shm_proxy.create_pool(fd, size as i32, qh, ());
 
-        Ok(Self { mmap, pool })
+        Ok(Self {
+            shm: MmappedShm { mmap },
+            pool,
+        })
     }
 
     pub fn mmap_mut(&mut self) -> &mut MmapMut {
-        &mut self.mmap
+        self.shm.mmap_mut()
     }
 
     pub fn pool(&self) -> &WlShmPool {
@@ -74,12 +97,7 @@ impl ShmBuffer {
     }
 
     pub fn size(&self) -> usize {
-        self.mmap.len()
-    }
-
-    #[cfg(test)]
-    pub fn test_new(mmap: MmapMut, pool: WlShmPool) -> Self {
-        Self { mmap, pool }
+        self.shm.size()
     }
 }
 
@@ -111,27 +129,36 @@ mod tests {
     }
 
     #[test]
-    fn test_create_shm_file() {
+    fn test_shm_env_dependent_logic() {
+        // Combined test to avoid race conditions with env var manipulation in parallel tests
         with_env("XDG_RUNTIME_DIR", Some("/tmp"), || {
+            // Test create_shm_file success
             let size = 1024;
             let file = create_shm_file(size).unwrap();
             assert_eq!(file.metadata().unwrap().len(), size as u64);
-        });
-    }
 
-    #[test]
-    fn test_shm_buffer_methods() {
-        with_env("XDG_RUNTIME_DIR", Some("/tmp"), || {
+            // Test mmapped_shm_methods
             let size = 4096;
-            let file = create_shm_file(size).unwrap();
-            let mmap = safe_mmap_file(&file).unwrap();
-            let pool = unsafe { std::mem::zeroed::<WlShmPool>() };
+            let mut shm = MmappedShm::new(size).unwrap();
+            assert_eq!(shm.size(), size);
+            assert_eq!(shm.mmap_mut().len(), size);
 
-            let mut buffer = ShmBuffer { mmap, pool };
-            assert_eq!(buffer.size(), size);
-            assert_eq!(buffer.mmap_mut().len(), size);
+            // Test mmapped_shm_mut_access
+            let mut shm = MmappedShm::new(100).unwrap();
+            let data = shm.mmap_mut();
+            data[0] = 42;
+            assert_eq!(data[0], 42);
+        });
 
-            std::mem::forget(buffer);
+        with_env("XDG_RUNTIME_DIR", None, || {
+            // Test create_shm_file failure
+            let res = create_shm_file(64);
+            assert!(res.is_err());
+            assert_eq!(res.unwrap_err().kind(), ErrorKind::NotFound);
+
+            // Test mmapped_shm_new_failure
+            let res = MmappedShm::new(1024);
+            assert!(res.is_err());
         });
     }
 
@@ -139,26 +166,5 @@ mod tests {
     fn test_create_shm_file_error() {
         let res = create_shm_file(usize::MAX);
         assert!(res.is_err());
-    }
-
-    #[test]
-    fn test_create_shm_file_without_runtime_dir() {
-        with_env("XDG_RUNTIME_DIR", None, || {
-            let res = create_shm_file(64);
-            assert!(res.is_err());
-            assert_eq!(res.unwrap_err().kind(), ErrorKind::NotFound);
-        });
-    }
-
-    #[test]
-    fn test_shm_buffer_test_new_constructor() {
-        with_env("XDG_RUNTIME_DIR", Some("/tmp"), || {
-            let file = create_shm_file(256).unwrap();
-            let mmap = safe_mmap_file(&file).unwrap();
-            let pool = unsafe { std::mem::zeroed::<WlShmPool>() };
-            let buffer = ShmBuffer::test_new(mmap, pool);
-            assert_eq!(buffer.size(), 256);
-            std::mem::forget(buffer);
-        });
     }
 }

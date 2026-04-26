@@ -119,7 +119,7 @@ pub struct BarConfig {
     unfocused: Option<PartialBarConfig>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
 pub struct PartialMarginConfig {
     pub top: Option<i32>,
     pub bottom: Option<i32>,
@@ -127,14 +127,14 @@ pub struct PartialMarginConfig {
     pub right: Option<i32>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
 pub struct PartialBorderConfig {
     pub size: Option<f32>,
     pub color: Option<ParsedColor>,
     pub radius: Option<f32>,
 }
 
-#[derive(Debug, Deserialize, Clone, Default)]
+#[derive(Debug, Deserialize, Clone, Default, PartialEq)]
 pub struct PartialBarConfig {
     pub background: Option<ParsedColor>,
     pub height: Option<u32>,
@@ -530,5 +530,53 @@ mod tests {
 
         assert_eq!(config.rendering().fps_limit(), None);
         assert_eq!(config.rendering().duration_ms(), Some(250));
+    }
+
+    #[test]
+    fn test_bar_config_defaults() {
+        let bar = BarConfig::default();
+        assert_eq!(bar.height(), 30);
+        assert_eq!(bar.vertical_alignment(), VerticalAlignment::Center);
+    }
+
+    #[test]
+    fn test_partial_configs() {
+        let partial_margin = PartialMarginConfig {
+            top: Some(5),
+            bottom: Some(10),
+            ..Default::default()
+        };
+        assert_eq!(partial_margin.top, Some(5));
+        
+        let def_margin = PartialMarginConfig::default();
+        assert!(def_margin.top.is_none());
+        assert_eq!(def_margin, PartialMarginConfig::default());
+        
+        let partial_bar = PartialBarConfig {
+            height: Some(40),
+            ..Default::default()
+        };
+        assert_eq!(partial_bar.height, Some(40));
+        assert_eq!(partial_bar, partial_bar.clone());
+        
+        let partial_border = PartialBorderConfig {
+            size: Some(1.0),
+            ..Default::default()
+        };
+        assert_eq!(partial_border.size, Some(1.0));
+        assert_eq!(partial_border, partial_border.clone());
+    }
+
+    #[test]
+    fn test_config_error_parse() {
+        let err = Config::from_str("invalid = ").unwrap_err();
+        assert!(format!("{}", err).contains("parse"));
+    }
+
+    #[test]
+    fn test_config_error_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "test");
+        let err = ConfigError::Io(io_err);
+        assert!(format!("{}", err).contains("IO error"));
     }
 }

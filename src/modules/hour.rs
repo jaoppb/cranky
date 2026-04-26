@@ -146,5 +146,21 @@ mod tests {
         module.view(&mut pixmap, area, &mut context, "eDP-1");
         let width = module.measure(&mut context, "eDP-1");
         assert!(width > 0.0);
+
+        context.set_scale(2.0);
+        let scaled_width = module.measure(&mut context, "eDP-1");
+        assert_eq!(scaled_width, width);
+    }
+
+    #[test]
+    fn test_hour_custom_format() {
+        let mut module = HourModule::new();
+        let config = HourConfig {
+            format: Some("%H:%M:%S".to_string()),
+            ..HourConfig::default()
+        };
+        module.init(config, &crate::config::BarConfig::default()).unwrap();
+        module.update(crate::modules::Event::Timer);
+        assert!(module.current_time.contains(':'));
     }
 }

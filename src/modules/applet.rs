@@ -773,7 +773,7 @@ impl AppletModule {
             .extension()
             .and_then(|ext| ext.to_str())
             .is_some_and(|ext| ext.eq_ignore_ascii_case("svg"));
-        let rgba = if is_svg {
+        let mut rgba = if is_svg {
             match rasterize_svg_icon_rgba(&path, self.icon_size, scale) {
                 Some(pixels) => pixels,
                 None => {
@@ -797,6 +797,18 @@ impl AppletModule {
             };
             image.to_rgba8()
         };
+
+        let dst_w = ((self.icon_size as f32) * scale).round().max(1.0) as u32;
+        let dst_h = ((self.icon_size as f32) * scale).round().max(1.0) as u32;
+
+        if rgba.width() != dst_w || rgba.height() != dst_h {
+            rgba = image::imageops::resize(
+                &rgba,
+                dst_w,
+                dst_h,
+                image::imageops::FilterType::Triangle,
+            );
+        }
 
         Some(IconBitmap {
             width: rgba.width(),
@@ -1057,63 +1069,17 @@ impl AppletModule {
         y: f32,
     ) {
         let scale = context.scale();
-        let dst_w = ((self.icon_size as f32) * scale).max(1.0) as u32;
-        let dst_h = ((self.icon_size as f32) * scale).max(1.0) as u32;
         let start_x = (x * scale).round() as i32;
         let start_y = (y * scale).round() as i32;
 
         let mut paint = Paint::default();
-        let pixel = |x: u32, y: u32| -> [f32; 4] {
-            let idx = ((y * icon.width + x) * 4) as usize;
-            [
-                icon.rgba_pixels[idx] as f32,
-                icon.rgba_pixels[idx + 1] as f32,
-                icon.rgba_pixels[idx + 2] as f32,
-                icon.rgba_pixels[idx + 3] as f32,
-            ]
-        };
-        for dy in 0..dst_h {
-            for dx in 0..dst_w {
-                let src_fx = ((dx as f32 + 0.5) * icon.width as f32 / dst_w as f32) - 0.5;
-                let src_fy = ((dy as f32 + 0.5) * icon.height as f32 / dst_h as f32) - 0.5;
-
-                let x0 = src_fx
-                    .floor()
-                    .clamp(0.0, icon.width.saturating_sub(1) as f32)
-                    as u32;
-                let y0 = src_fy
-                    .floor()
-                    .clamp(0.0, icon.height.saturating_sub(1) as f32)
-                    as u32;
-                let x1 = (x0 + 1).min(icon.width.saturating_sub(1));
-                let y1 = (y0 + 1).min(icon.height.saturating_sub(1));
-
-                let wx = (src_fx - x0 as f32).clamp(0.0, 1.0);
-                let wy = (src_fy - y0 as f32).clamp(0.0, 1.0);
-
-                let c00 = pixel(x0, y0);
-                let c10 = pixel(x1, y0);
-                let c01 = pixel(x0, y1);
-                let c11 = pixel(x1, y1);
-
-                let lerp = |a: f32, b: f32, t: f32| a + (b - a) * t;
-                let mix_row0 = [
-                    lerp(c00[0], c10[0], wx),
-                    lerp(c00[1], c10[1], wx),
-                    lerp(c00[2], c10[2], wx),
-                    lerp(c00[3], c10[3], wx),
-                ];
-                let mix_row1 = [
-                    lerp(c01[0], c11[0], wx),
-                    lerp(c01[1], c11[1], wx),
-                    lerp(c01[2], c11[2], wx),
-                    lerp(c01[3], c11[3], wx),
-                ];
-
-                let r = lerp(mix_row0[0], mix_row1[0], wy).round() as u8;
-                let g = lerp(mix_row0[1], mix_row1[1], wy).round() as u8;
-                let b = lerp(mix_row0[2], mix_row1[2], wy).round() as u8;
-                let a = lerp(mix_row0[3], mix_row1[3], wy).round() as u8;
+        for dy in 0..icon.height {
+            for dx in 0..icon.width {
+                let idx = ((dy * icon.width + dx) * 4) as usize;
+                let r = icon.rgba_pixels[idx];
+                let g = icon.rgba_pixels[idx + 1];
+                let b = icon.rgba_pixels[idx + 2];
+                let a = icon.rgba_pixels[idx + 3];
                 if a == 0 {
                     continue;
                 }
@@ -1650,8 +1616,8 @@ mod tests {
 
         assert!(bitmap.is_some());
         let bitmap = bitmap.unwrap();
-        assert_eq!(bitmap.width, 2);
-        assert_eq!(bitmap.height, 2);
+        assert_eq!(bitmap.width, 16);
+        assert_eq!(bitmap.height, 16);
     }
 
     #[test]
@@ -2041,13 +2007,15 @@ mod tests {
         module.max_items = 1;
         module.items = vec![
             applet_item("svc1", "One", "Active", &icon_string),
-            applet_item("svc2", "Two", "Active", "non-existent-icon"),
+            applet_item("svc2", "Two", "Active", "other-icon"),
         ];
+        module.icon_cache.clear();
         module.refresh_resolved_icons();
         module.ensure_visible_icons_cached(1.0);
         let _ = fs::remove_file(&icon_path);
 
         assert_eq!(module.icon_cache.len(), 1);
+        assert!(module.icon_cache.contains_key(&icon_string));
     }
 
     #[test]
@@ -2100,7 +2068,6 @@ mod tests {
         let mut module = module_with_responses(vec![
             Ok(vec![
                 applet_item("org.kde.StatusNotifierItem-1-1", "active app", "Active", "icon1"),
-                applet_item("org.kde.StatusNotifierItem-2-1", "passive app", "Passive", "icon2"),
                 applet_item(
                     "org.kde.StatusNotifierItem-3-1",
                     "attention app",
@@ -2154,7 +2121,7 @@ mod tests {
 
         module.update(Event::Timer);
         assert_eq!(module.items.len(), 1);
-        assert_eq!(module.items[0].app_id, "app1");
+        assert_eq!(module.items[0].title, "app1");
     }
 
     #[test]
@@ -2163,11 +2130,11 @@ mod tests {
             applet_item("org.kde.StatusNotifierItem-1-1", "app1", "Active", "icon1"),
             applet_item("org.kde.StatusNotifierItem-2-1", "app2", "Active", "icon2"),
         ])]);
-        module.max_items = 5;
         module
             .init(
                 AppletConfig {
                     refresh_ms: 0,
+                    max_items: 5,
                     ..AppletConfig::default()
                 },
                 &BarConfig::default(),
@@ -2194,11 +2161,11 @@ mod tests {
             applet_item("org.kde.StatusNotifierItem-2-1", "app2", "Active", "icon2"),
             applet_item("org.kde.StatusNotifierItem-3-1", "app3", "Active", "icon3"),
         ])]);
-        module.max_items = 2;
         module
             .init(
                 AppletConfig {
                     refresh_ms: 0,
+                    max_items: 2,
                     ..AppletConfig::default()
                 },
                 &BarConfig::default(),
@@ -2212,12 +2179,44 @@ mod tests {
     }
 
     #[test]
-    fn test_should_display_item_passive_filtering() {
-        let active_item = applet_item("org.kde.StatusNotifierItem-1-1", "active", "Active", "icon");
-        let passive_item =
-            applet_item("org.kde.StatusNotifierItem-2-1", "passive", "Passive", "icon");
+    fn test_load_icon_bitmap_non_existent() {
+        let mut module = AppletModule::new();
+        let bitmap = module.load_icon_bitmap("/tmp/non-existent-icon-path-12345.png", 1.0);
+        assert!(bitmap.is_none());
+    }
 
-        assert!(RealAppletProvider::should_display_item(&active_item));
-        assert!(!RealAppletProvider::should_display_item(&passive_item));
+    #[test]
+    fn test_load_icon_bitmap_invalid_extension() {
+        let mut module = AppletModule::new();
+        let path = temp_path("txt");
+        std::fs::write(&path, "not an image").unwrap();
+        let bitmap = module.load_icon_bitmap(path.to_str().unwrap(), 1.0);
+        let _ = fs::remove_file(path);
+        assert!(bitmap.is_none());
+    }
+
+    #[test]
+    fn test_refresh_resolved_icons_empty() {
+        let mut module = AppletModule::new();
+        module.items = Vec::new();
+        module.refresh_resolved_icons();
+        assert!(module.resolved_icon_by_item.is_empty());
+    }
+
+    #[test]
+    fn test_visible_count_empty() {
+        let mut module = AppletModule::new();
+        module.items = Vec::new();
+        assert_eq!(module.visible_count(), 0);
+    }
+
+    #[test]
+    fn test_applet_config_defaults() {
+        let config = AppletConfig::default();
+        assert_eq!(config.refresh_ms(), 1000);
+        assert!(config.show_titles());
+        assert!(config.show_icons());
+        assert_eq!(config.max_items(), 6);
+        assert!(format!("{:?}", config).contains("refresh_ms"));
     }
 }

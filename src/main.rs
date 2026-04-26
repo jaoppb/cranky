@@ -157,4 +157,26 @@ mod tests {
         let _ = std::fs::remove_file(config_path);
         assert!(config.is_err());
     }
+
+    #[test]
+    fn test_load_config_non_existent() {
+        let path = std::path::PathBuf::from("/tmp/should-not-exist-cranky-config.toml");
+        if path.exists() {
+            let _ = std::fs::remove_file(&path);
+        }
+        let config = load_config(&path);
+        assert!(config.is_ok());
+    }
+
+    #[test]
+    fn test_error_displays() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "test");
+        let cfg_err = ConfigError::Io(io_err);
+        assert!(format!("{}", cfg_err).contains("IO error"));
+        assert!(format!("{:?}", cfg_err).contains("Io"));
+        
+        let reload_err = ReloadError::Config(cfg_err);
+        assert!(format!("{}", reload_err).contains("config"));
+        assert!(format!("{:?}", reload_err).contains("Config"));
+    }
 }

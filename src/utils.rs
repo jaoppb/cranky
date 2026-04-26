@@ -399,4 +399,23 @@ mod tests {
 
         assert!(rasterized.is_none());
     }
+
+    #[test]
+    fn test_rasterize_svg_icon_rgba_no_extension() {
+        let path = std::env::temp_dir().join("cranky-test-no-ext"); // No extension
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="10" fill="#ff00ff"/></svg>"##;
+        fs::write(&path, svg).unwrap();
+
+        let rasterized = rasterize_svg_icon_rgba(&path, 16, 1.0);
+        let _ = fs::remove_file(&path);
+
+        assert!(rasterized.is_some());
+    }
+
+    #[test]
+    fn test_rasterize_svg_icon_rgba_directory() {
+        let path = std::env::temp_dir();
+        let rasterized = rasterize_svg_icon_rgba(&path, 16, 1.0);
+        assert!(rasterized.is_none());
+    }
 }
