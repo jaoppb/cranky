@@ -235,7 +235,7 @@ impl CrankyModule for WorkspaceModule {
         }
     }
 
-    fn view(&self, pixmap: &mut PixmapMut, area: Rect, context: &mut RenderContext, monitor: &str) {
+    fn view(&self, pixmap: &mut PixmapMut, context: &mut RenderContext, monitor: &str) {
         let monitor_workspaces: Vec<&Workspace> = self
             .workspaces
             .iter()
@@ -245,6 +245,14 @@ impl CrankyModule for WorkspaceModule {
         let active_id = self.active_workspaces.get(monitor).cloned().unwrap_or(-1);
         let is_monitor_focused = self.focused_monitor == monitor;
         let scale = context.scale();
+
+        let area = Rect::from_xywh(
+            0.0,
+            0.0,
+            pixmap.width() as f32 / scale,
+            pixmap.height() as f32 / scale,
+        )
+        .unwrap();
 
         let styling = TextStyling::new(
             14.0,
@@ -266,7 +274,7 @@ impl CrankyModule for WorkspaceModule {
         let item_size = 24.0;
         let item_spacing = 30.0;
 
-        let mut x_offset = area.left();
+        let mut x_offset = 0.0;
         for ws in monitor_workspaces {
             let label = ws.id().to_string();
             let is_visible = ws.id() == active_id;
@@ -418,9 +426,8 @@ mod tests {
         let mut pixmap_data = vec![0; 100 * 30 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 100, 30).unwrap();
         let mut context = RenderContext::new();
-        let area = Rect::from_xywh(0.0, 0.0, 100.0, 30.0).unwrap();
 
-        module.view(&mut pixmap, area, &mut context, "eDP-1");
+        module.view(&mut pixmap, &mut context, "eDP-1");
 
         // monitor "eDP-1" IS focused (from init), so it should have active_background
         // default active_background: #565f89 -> RGB(86, 95, 137)
@@ -449,10 +456,9 @@ mod tests {
         let mut pixmap_data = vec![0; 100 * 30 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 100, 30).unwrap();
         let mut context = RenderContext::new();
-        let area = Rect::from_xywh(0.0, 0.0, 100.0, 30.0).unwrap();
 
         // View HDMI-A-1 (which is NOT focused)
-        module.view(&mut pixmap, area, &mut context, "HDMI-A-1");
+        module.view(&mut pixmap, &mut context, "HDMI-A-1");
 
         // monitor "HDMI-A-1" IS NOT focused, so it should have focused_background
         // default focused_background: #3b4261 -> RGB(59, 66, 97)
@@ -500,9 +506,8 @@ mod tests {
         let mut pixmap_data = vec![0; 100 * 30 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 100, 30).unwrap();
         let mut context = RenderContext::new();
-        let area = Rect::from_xywh(0.0, 0.0, 100.0, 30.0).unwrap();
 
-        module.view(&mut pixmap, area, &mut context, "eDP-1");
+        module.view(&mut pixmap, &mut context, "eDP-1");
 
         // monitor "eDP-1" IS focused (from init), so it should have active_background
         // default active_background: #565f89 -> RGB(86, 95, 137)

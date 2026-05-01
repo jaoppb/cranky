@@ -1190,13 +1190,7 @@ impl CrankyModule for AppletModule {
         }
     }
 
-    fn view(
-        &self,
-        pixmap: &mut PixmapMut,
-        area: Rect,
-        context: &mut RenderContext,
-        _monitor: &str,
-    ) {
+    fn view(&self, pixmap: &mut PixmapMut, context: &mut RenderContext, _monitor: &str) {
         let scale = context.scale().max(1.0);
         let scale_bits = scale.to_bits();
         {
@@ -1207,15 +1201,24 @@ impl CrankyModule for AppletModule {
         }
 
         let styling = self.text_styling();
+
+        let area = Rect::from_xywh(
+            0.0,
+            0.0,
+            pixmap.width() as f32 / scale,
+            pixmap.height() as f32 / scale,
+        )
+        .unwrap();
+
         let y_offset = context.calculate_vertical_offset(area, styling.line_height());
         if let Some(label) = self.render_empty_or_error_label() {
-            context.render_text(pixmap, &label, styling, area.left(), y_offset);
+            context.render_text(pixmap, &label, styling, 0.0, y_offset);
             return;
         }
 
         let icon_size = self.icon_size as f32;
-        let icon_y = area.top() + (area.height() - icon_size) / 2.0;
-        let mut x = area.left();
+        let icon_y = (area.height() - icon_size) / 2.0;
+        let mut x = 0.0;
 
         for i in 0..self.visible_count() {
             if i > 0 {
@@ -1498,9 +1501,8 @@ mod tests {
         let mut pixmap_data = vec![0; 220 * 30 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 220, 30).unwrap();
         let mut context = RenderContext::new();
-        let area = Rect::from_xywh(0.0, 0.0, 220.0, 30.0).unwrap();
 
-        module.view(&mut pixmap, area, &mut context, "eDP-1");
+        module.view(&mut pixmap, &mut context, "eDP-1");
         let width = module.measure(&mut context, "eDP-1");
         assert!(width > 0.0);
     }
@@ -1993,8 +1995,7 @@ mod tests {
         let mut pixmap_data = vec![0; 260 * 30 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 260, 30).unwrap();
         let mut context = RenderContext::new();
-        let area = Rect::from_xywh(0.0, 0.0, 260.0, 30.0).unwrap();
-        module.view(&mut pixmap, area, &mut context, "eDP-1");
+        module.view(&mut pixmap, &mut context, "eDP-1");
         assert!(module.measure(&mut context, "eDP-1") > 0.0);
     }
 
@@ -2192,9 +2193,8 @@ mod tests {
         let mut pixmap_data = vec![0; 400 * 30 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 400, 30).unwrap();
         let mut context = RenderContext::new();
-        let area = Rect::from_xywh(0.0, 0.0, 400.0, 30.0).unwrap();
 
-        module.view(&mut pixmap, area, &mut context, "eDP-1");
+        module.view(&mut pixmap, &mut context, "eDP-1");
         let width = module.measure(&mut context, "eDP-1");
         assert!(width > 0.0);
         assert_eq!(module.visible_count(), 2);

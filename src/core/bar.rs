@@ -5,7 +5,41 @@ use crate::render::RenderContext;
 use crate::utils::ParsedColor;
 use tiny_skia::PixmapMut;
 use wayland_client::QueueHandle;
-use wayland_client::protocol::{wl_buffer::WlBuffer, wl_shm::WlShm, wl_surface::WlSurface};
+use wayland_client::protocol::{
+    wl_buffer::WlBuffer, wl_shm::WlShm, wl_subsurface::WlSubsurface, wl_surface::WlSurface,
+};
+
+pub struct ModuleSurface {
+    surface: WlSurface,
+    subsurface: WlSubsurface,
+    shm_buffer: ShmBuffer,
+    buffer: Option<WlBuffer>,
+}
+
+impl ModuleSurface {
+    pub fn new(
+        parent: &WlSurface,
+        globals: &WaylandGlobals,
+        qh: &QueueHandle<CrankyState>,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let surface = globals.compositor().create_surface(qh, ());
+        let subsurface = globals.subcompositor().get_subsurface(&surface, parent, qh, ());
+
+        // Initial small buffer, will be resized on first render
+        let shm_buffer = ShmBuffer::new(globals.shm(), 1, 1, qh)?;
+
+        Ok(Self {
+            surface,
+            subsurface,
+            shm_buffer,
+            buffer: None,
+        })
+    }
+
+    pub fn subsurface(&self) -> &WlSubsurface {
+        &self.subsurface
+    }
+}
 use wayland_protocols_wlr::layer_shell::v1::client::{
     zwlr_layer_shell_v1::Layer,
     zwlr_layer_surface_v1::{Anchor, ZwlrLayerSurfaceV1},
@@ -26,6 +60,10 @@ pub struct Bar {
     state: BarState,
     monitor_name: String,
     configured: bool,
+
+    left_surfaces: Vec<ModuleSurface>,
+    center_surfaces: Vec<ModuleSurface>,
+    right_surfaces: Vec<ModuleSurface>,
 }
 
 fn create_rounded_rect_path(rect: tiny_skia::Rect, radius: f32) -> Option<tiny_skia::Path> {
@@ -193,7 +231,39 @@ impl Bar {
             },
             monitor_name: info.name().to_string(),
             configured: false,
+            left_surfaces: Vec::new(),
+            center_surfaces: Vec::new(),
+            right_surfaces: Vec::new(),
         })
+    }
+
+    pub fn sync_surfaces(
+        &mut self,
+        registry: &crate::modules::ModuleRegistry,
+        globals: &WaylandGlobals,
+        qh: &QueueHandle<CrankyState>,
+    ) {
+        let left_count = registry.left_modules().len();
+        let center_count = registry.center_modules().len();
+        let right_count = registry.right_modules().len();
+
+        if self.left_surfaces.len() != left_count {
+            self.left_surfaces = (0..left_count)
+                .filter_map(|_| ModuleSurface::new(&self.surface, globals, qh).ok())
+                .collect();
+        }
+
+        if self.center_surfaces.len() != center_count {
+            self.center_surfaces = (0..center_count)
+                .filter_map(|_| ModuleSurface::new(&self.surface, globals, qh).ok())
+                .collect();
+        }
+
+        if self.right_surfaces.len() != right_count {
+            self.right_surfaces = (0..right_count)
+                .filter_map(|_| ModuleSurface::new(&self.surface, globals, qh).ok())
+                .collect();
+        }
     }
 
     pub fn render(
@@ -203,11 +273,14 @@ impl Bar {
         registry: &crate::modules::ModuleRegistry,
         context: &mut RenderContext,
         error_message: &Option<String>,
+        globals: &WaylandGlobals,
         qh: &QueueHandle<CrankyState>,
     ) {
         if !self.configured {
             return;
         }
+
+        self.sync_surfaces(registry, globals, qh);
 
         let scaled_width = self.scaled_width();
         let scaled_height = self.scaled_height();
@@ -271,8 +344,8 @@ impl Bar {
             );
             context.render_text(&mut pixmap, error, styling, 10.0, y_offset);
         } else {
-            // Render modules
-            let area = tiny_skia::Rect::from_xywh(
+            let spacing = 10.0;
+            let bar_area = tiny_skia::Rect::from_xywh(
                 0.0,
                 0.0,
                 self.state.width as f32,
@@ -280,7 +353,81 @@ impl Bar {
             )
             .unwrap();
 
-            registry.view(&mut pixmap, area, context, &self.monitor_name);
+            // Render left modules
+            let mut left_offset = bar_area.left() + spacing;
+            for (i, module) in registry.left_modules().iter().enumerate() {
+                let width = module.measure(context, &self.monitor_name);
+                Self::render_module_static(
+                    module,
+                    &mut self.left_surfaces[i],
+                    left_offset as i32,
+                    0,
+                    width,
+                    self.state.scale,
+                    self.state.height,
+                    &self.monitor_name,
+                    globals,
+                    qh,
+                );
+                left_offset += width + spacing;
+            }
+
+            // Render right modules
+            let mut right_widths = Vec::new();
+            let mut total_right_width = 0.0;
+            for module in registry.right_modules() {
+                let width = module.measure(context, &self.monitor_name);
+                right_widths.push(width);
+                total_right_width += width + spacing;
+            }
+
+            let mut right_offset = bar_area.right() - total_right_width;
+            for (i, module) in registry.right_modules().iter().enumerate() {
+                let width = right_widths[i];
+                Self::render_module_static(
+                    module,
+                    &mut self.right_surfaces[i],
+                    right_offset as i32,
+                    0,
+                    width,
+                    self.state.scale,
+                    self.state.height,
+                    &self.monitor_name,
+                    globals,
+                    qh,
+                );
+                right_offset += width + spacing;
+            }
+
+            // Render center modules
+            let mut center_widths = Vec::new();
+            let mut total_center_width = 0.0;
+            for module in registry.center_modules() {
+                let width = module.measure(context, &self.monitor_name);
+                center_widths.push(width);
+                total_center_width += width + spacing;
+            }
+            if !center_widths.is_empty() {
+                total_center_width -= spacing;
+            }
+
+            let mut center_offset = bar_area.left() + (bar_area.width() - total_center_width) / 2.0;
+            for (i, module) in registry.center_modules().iter().enumerate() {
+                let width = center_widths[i];
+                Self::render_module_static(
+                    module,
+                    &mut self.center_surfaces[i],
+                    center_offset as i32,
+                    0,
+                    width,
+                    self.state.scale,
+                    self.state.height,
+                    &self.monitor_name,
+                    globals,
+                    qh,
+                );
+                center_offset += width + spacing;
+            }
         }
 
         // Recreate buffer only if needed
@@ -302,6 +449,77 @@ impl Bar {
             self.surface
                 .damage(0, 0, self.state.width as i32, self.state.height as i32);
             self.surface.commit();
+        }
+    }
+
+    fn render_module_static(
+        module: &Box<dyn crate::modules::AnyModule>,
+        module_surface: &mut ModuleSurface,
+        x: i32,
+        y: i32,
+        width: f32,
+        scale: i32,
+        bar_height: u32,
+        monitor_name: &str,
+        globals: &WaylandGlobals,
+        qh: &QueueHandle<CrankyState>,
+    ) {
+        let scaled_width = (width * scale as f32).ceil() as u32;
+        let scaled_height = bar_height * scale as u32;
+
+        if scaled_width == 0 {
+            module_surface.subsurface().set_position(0, 0);
+            return;
+        }
+
+        // Resize buffer if needed
+        let required_size = (scaled_width * scaled_height * 4) as usize;
+        if required_size > module_surface.shm_buffer.size() {
+            if let Ok(new_shm) = ShmBuffer::new(globals.shm(), scaled_width, scaled_height, qh) {
+                module_surface.shm_buffer = new_shm;
+                module_surface.buffer = None;
+            }
+        } else if module_surface.shm_buffer.width() != scaled_width
+            || module_surface.shm_buffer.height() != scaled_height
+        {
+            module_surface.buffer = None;
+        }
+
+        module_surface.subsurface().set_position(x, y);
+
+        let mut pixmap = PixmapMut::from_bytes(
+            module_surface.shm_buffer.mmap_mut(),
+            scaled_width,
+            scaled_height,
+        )
+        .unwrap();
+        pixmap.fill(tiny_skia::Color::TRANSPARENT);
+
+        let mut context = RenderContext::new();
+        context.set_scale(scale as f32);
+
+        module.view(&mut pixmap, &mut context, monitor_name);
+
+        if module_surface.buffer.is_none() {
+            let buffer = module_surface.shm_buffer.pool().create_buffer(
+                0,
+                scaled_width as i32,
+                scaled_height as i32,
+                (scaled_width * 4) as i32,
+                wayland_client::protocol::wl_shm::Format::Abgr8888,
+                qh,
+                (),
+            );
+            module_surface.buffer = Some(buffer);
+        }
+
+        if let Some(buffer) = &module_surface.buffer {
+            module_surface.surface.set_buffer_scale(scale);
+            module_surface.surface.attach(Some(buffer), 0, 0);
+            module_surface
+                .surface
+                .damage(0, 0, width as i32, bar_height as i32);
+            module_surface.surface.commit();
         }
     }
 
@@ -473,7 +691,7 @@ mod tests {
         assert!(paint_solid.shader.is_opaque());
 
         let grad = ParsedColor::Gradient(vec![Color::BLACK, Color::WHITE], 90.0);
-        let paint_grad = create_paint(&grad, rect);
+        let _paint_grad = create_paint(&grad, rect);
         // Shader is private, but we can check if it exists implicitly by not being solid or something if it was public.
         // For now just ensure it doesn't panic.
     }

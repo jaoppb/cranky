@@ -1,6 +1,5 @@
 use crate::config::ModuleConfig;
 use crate::render::RenderContext;
-use log::info;
 use std::error::Error;
 use thiserror::Error;
 use tiny_skia::PixmapMut;
@@ -46,13 +45,7 @@ pub trait AnyModule: Send + Sync {
     fn update(&mut self, event: Event) -> UpdateAction;
 
     /// View: A pure function that renders the current state (Model).
-    fn view(
-        &self,
-        pixmap: &mut PixmapMut,
-        area: tiny_skia::Rect,
-        context: &mut RenderContext,
-        monitor: &str,
-    );
+    fn view(&self, pixmap: &mut PixmapMut, context: &mut RenderContext, monitor: &str);
 
     /// Measure: Returns the width of the module.
     fn measure(&self, context: &mut RenderContext, monitor: &str) -> f32;
@@ -68,13 +61,7 @@ pub trait CrankyModule: Send + Sync {
         bar_config: &crate::config::BarConfig,
     ) -> std::result::Result<(), Self::Error>;
     fn update(&mut self, event: Event) -> UpdateAction;
-    fn view(
-        &self,
-        pixmap: &mut PixmapMut,
-        area: tiny_skia::Rect,
-        context: &mut RenderContext,
-        monitor: &str,
-    );
+    fn view(&self, pixmap: &mut PixmapMut, context: &mut RenderContext, monitor: &str);
     fn measure(&self, context: &mut RenderContext, monitor: &str) -> f32;
 }
 
@@ -103,14 +90,8 @@ where
         self.update(event)
     }
 
-    fn view(
-        &self,
-        pixmap: &mut PixmapMut,
-        area: tiny_skia::Rect,
-        context: &mut RenderContext,
-        monitor: &str,
-    ) {
-        self.view(pixmap, area, context, monitor)
+    fn view(&self, pixmap: &mut PixmapMut, context: &mut RenderContext, monitor: &str) {
+        self.view(pixmap, context, monitor)
     }
 
     fn measure(&self, context: &mut RenderContext, monitor: &str) -> f32 {
@@ -152,70 +133,16 @@ impl ModuleRegistry {
         redraw
     }
 
-    pub fn view(
-        &self,
-        pixmap: &mut PixmapMut,
-        area: tiny_skia::Rect,
-        context: &mut RenderContext,
-        monitor: &str,
-    ) {
-        let spacing = 10.0;
-        info!(
-            "ModuleRegistry::view: area={:?}, scale={}",
-            area,
-            context.scale()
-        );
+    pub fn left_modules(&self) -> &[Box<dyn AnyModule>] {
+        &self.left_modules
+    }
 
-        // Render left modules
-        let mut left_offset = area.left() + spacing;
-        for module in &self.left_modules {
-            let width = module.measure(context, monitor);
-            let module_area =
-                tiny_skia::Rect::from_xywh(left_offset, area.top(), width, area.height()).unwrap();
-            module.view(pixmap, module_area, context, monitor);
-            left_offset += width + spacing;
-        }
+    pub fn center_modules(&self) -> &[Box<dyn AnyModule>] {
+        &self.center_modules
+    }
 
-        // Render right modules
-        let mut right_widths = Vec::new();
-        let mut total_right_width = 0.0;
-        for module in &self.right_modules {
-            let width = module.measure(context, monitor);
-            right_widths.push(width);
-            total_right_width += width + spacing;
-        }
-
-        let mut right_offset = area.right() - total_right_width;
-        for (i, module) in self.right_modules.iter().enumerate() {
-            let width = right_widths[i];
-            let module_area =
-                tiny_skia::Rect::from_xywh(right_offset, area.top(), width, area.height()).unwrap();
-            module.view(pixmap, module_area, context, monitor);
-            right_offset += width + spacing;
-        }
-
-        // Render center modules
-        let mut center_widths = Vec::new();
-        let mut total_center_width = 0.0;
-        for module in &self.center_modules {
-            let width = module.measure(context, monitor);
-            center_widths.push(width);
-            total_center_width += width + spacing;
-        }
-        // Remove the last spacing from total width for centering calculation
-        if !center_widths.is_empty() {
-            total_center_width -= spacing;
-        }
-
-        let mut center_offset = area.left() + (area.width() - total_center_width) / 2.0;
-        for (i, module) in self.center_modules.iter().enumerate() {
-            let width = center_widths[i];
-            let module_area =
-                tiny_skia::Rect::from_xywh(center_offset, area.top(), width, area.height())
-                    .unwrap();
-            module.view(pixmap, module_area, context, monitor);
-            center_offset += width + spacing;
-        }
+    pub fn right_modules(&self) -> &[Box<dyn AnyModule>] {
+        &self.right_modules
     }
 
     pub fn load(&mut self, config: &crate::config::Config) -> RegistryResult<()> {
@@ -337,11 +264,8 @@ mod tests {
         assert!(action == UpdateAction::Redraw || action == UpdateAction::None);
     }
 
-    use std::sync::{Arc, Mutex};
-
     struct MockModule {
         width: f32,
-        areas: Arc<Mutex<Vec<tiny_skia::Rect>>>,
         update_action: UpdateAction,
     }
 
@@ -365,11 +289,9 @@ mod tests {
         fn view(
             &self,
             _pixmap: &mut PixmapMut,
-            area: tiny_skia::Rect,
             _context: &mut RenderContext,
             _monitor: &str,
         ) {
-            self.areas.lock().unwrap().push(area);
         }
         fn measure(&self, _context: &mut RenderContext, _monitor: &str) -> f32 {
             self.width
@@ -404,7 +326,6 @@ mod tests {
     fn test_any_module_trait() {
         let mut mock = MockModule {
             width: 100.0,
-            areas: Arc::new(Mutex::new(Vec::new())),
             update_action: UpdateAction::None,
         };
 
@@ -422,7 +343,6 @@ mod tests {
         let mut registry = ModuleRegistry::new();
         let mock = MockModule {
             width: 100.0,
-            areas: Arc::new(Mutex::new(Vec::new())),
             update_action: UpdateAction::Redraw,
         };
         registry.left_modules.push(Box::new(mock));
@@ -443,59 +363,5 @@ mod tests {
 
         let modules = registry.create_modules(&configs, &bar_config).unwrap();
         assert_eq!(modules.len(), 1); // Only the enabled one
-    }
-
-    #[test]
-    fn test_registry_view_layout() {
-        let mut registry = ModuleRegistry::new();
-        let areas = Arc::new(Mutex::new(Vec::new()));
-
-        let m1 = Box::new(MockModule {
-            width: 40.0,
-            areas: areas.clone(),
-            update_action: UpdateAction::None,
-        });
-        let m2 = Box::new(MockModule {
-            width: 60.0,
-            areas: areas.clone(),
-            update_action: UpdateAction::None,
-        });
-        let m3 = Box::new(MockModule {
-            width: 50.0,
-            areas: areas.clone(),
-            update_action: UpdateAction::None,
-        });
-
-        registry.left_modules.push(m1);
-        registry.center_modules.push(m2);
-        registry.right_modules.push(m3);
-
-        let mut pixmap_data = vec![0; 1000 * 30 * 4];
-        let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 1000, 30).unwrap();
-        let area = tiny_skia::Rect::from_xywh(0.0, 0.0, 1000.0, 30.0).unwrap();
-        let mut context = RenderContext::new();
-
-        registry.view(&mut pixmap, area, &mut context, "eDP-1");
-
-        let rendered_areas = areas.lock().unwrap();
-        assert_eq!(rendered_areas.len(), 3);
-
-        // Left module (m1)
-        // Offset: area.left() + 10.0 = 10.0
-        // Width: 40.0
-        assert_eq!(rendered_areas[0].left(), 10.0);
-        assert_eq!(rendered_areas[0].width(), 40.0);
-
-        // Right module (m3)
-        // Total right width: 50.0 + 10.0 = 60.0
-        // Offset: 1000.0 - 60.0 = 940.0
-        assert_eq!(rendered_areas[1].left(), 940.0);
-        assert_eq!(rendered_areas[1].width(), 50.0);
-
-        // Center module (m2)
-        // Total center width: 60.0
-        // Offset: 0.0 + (1000.0 - 60.0) / 2.0 = 470.0
-        assert_eq!(rendered_areas[2].left(), 470.0);
-        assert_eq!(rendered_areas[2].width(), 60.0);
     }
 }

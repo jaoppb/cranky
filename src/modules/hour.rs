@@ -61,13 +61,7 @@ impl CrankyModule for HourModule {
         }
     }
 
-    fn view(
-        &self,
-        pixmap: &mut PixmapMut,
-        area: Rect,
-        context: &mut RenderContext,
-        _monitor: &str,
-    ) {
+    fn view(&self, pixmap: &mut PixmapMut, context: &mut RenderContext, _monitor: &str) {
         use crate::render::TextStyling;
         let styling = TextStyling::new(
             14.0,
@@ -76,9 +70,17 @@ impl CrankyModule for HourModule {
             self.font_family.clone(),
         );
 
+        let area = Rect::from_xywh(
+            0.0,
+            0.0,
+            pixmap.width() as f32 / context.scale(),
+            pixmap.height() as f32 / context.scale(),
+        )
+        .unwrap();
+
         let y_offset = context.calculate_vertical_offset(area, styling.line_height());
 
-        context.render_text(pixmap, &self.current_time, styling, area.left(), y_offset);
+        context.render_text(pixmap, &self.current_time, styling, 0.0, y_offset);
     }
 
     fn measure(&self, context: &mut RenderContext, _monitor: &str) -> f32 {
@@ -141,9 +143,8 @@ mod tests {
         let mut pixmap_data = vec![0; 100 * 30 * 4];
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 100, 30).unwrap();
         let mut context = RenderContext::new();
-        let area = Rect::from_xywh(0.0, 0.0, 100.0, 30.0).unwrap();
 
-        module.view(&mut pixmap, area, &mut context, "eDP-1");
+        module.view(&mut pixmap, &mut context, "eDP-1");
         let width = module.measure(&mut context, "eDP-1");
         assert!(width > 0.0);
 

@@ -36,6 +36,8 @@ impl MmappedShm {
 pub struct ShmBuffer {
     shm: MmappedShm,
     pool: WlShmPool,
+    width: u32,
+    height: u32,
 }
 
 fn create_shm_file(size: usize) -> Result<File> {
@@ -86,6 +88,8 @@ impl ShmBuffer {
         Ok(Self {
             shm: MmappedShm { mmap },
             pool,
+            width,
+            height,
         })
     }
 
@@ -99,6 +103,14 @@ impl ShmBuffer {
 
     pub fn size(&self) -> usize {
         self.shm.size()
+    }
+
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
     }
 }
 

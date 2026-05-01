@@ -12,6 +12,7 @@ use wayland_client::{
         wl_output::{self, WlOutput},
         wl_registry::{self, WlRegistry},
         wl_shm::WlShm,
+        wl_subcompositor::WlSubcompositor,
     },
 };
 
@@ -93,14 +94,21 @@ pub struct WaylandGlobals {
     compositor: WlCompositor,
     shm: WlShm,
     layer_shell: ZwlrLayerShellV1,
+    subcompositor: WlSubcompositor,
 }
 
 impl WaylandGlobals {
-    pub fn new(compositor: WlCompositor, shm: WlShm, layer_shell: ZwlrLayerShellV1) -> Self {
+    pub fn new(
+        compositor: WlCompositor,
+        shm: WlShm,
+        layer_shell: ZwlrLayerShellV1,
+        subcompositor: WlSubcompositor,
+    ) -> Self {
         Self {
             compositor,
             shm,
             layer_shell,
+            subcompositor,
         }
     }
 
@@ -114,6 +122,10 @@ impl WaylandGlobals {
 
     pub fn layer_shell(&self) -> &ZwlrLayerShellV1 {
         &self.layer_shell
+    }
+
+    pub fn subcompositor(&self) -> &WlSubcompositor {
+        &self.subcompositor
     }
 }
 
@@ -144,10 +156,18 @@ impl CrankyState {
     }
 
     fn globals(&self) -> Option<WaylandGlobals> {
-        match (&self.compositor, &self.shm, &self.layer_shell) {
-            (Some(c), Some(s), Some(l)) => {
-                Some(WaylandGlobals::new(c.clone(), s.clone(), l.clone()))
-            }
+        match (
+            &self.compositor,
+            &self.shm,
+            &self.layer_shell,
+            &self.subcompositor,
+        ) {
+            (Some(c), Some(s), Some(l), Some(sc)) => Some(WaylandGlobals::new(
+                c.clone(),
+                s.clone(),
+                l.clone(),
+                sc.clone(),
+            )),
             _ => None,
         }
     }
@@ -202,6 +222,7 @@ pub struct CrankyState {
     compositor: Option<WlCompositor>,
     shm: Option<WlShm>,
     layer_shell: Option<ZwlrLayerShellV1>,
+    subcompositor: Option<WlSubcompositor>,
 
     // Monitors
     outputs: Vec<OutputInfo>,
@@ -255,6 +276,7 @@ impl WaylandManager {
         if redraw {
             let qh = self.event_queue.handle();
             let shm = self.state.shm.as_ref().unwrap().clone();
+            let globals = self.state.globals().unwrap();
             for bar in &mut self.state.bars {
                 let bar_config =
                     if Some(bar.monitor_name()) == self.state.focused_monitor.as_deref() {
@@ -270,6 +292,7 @@ impl WaylandManager {
                     &self.state.registry,
                     &mut self.state.render_context,
                     &self.state.error_message,
+                    &globals,
                     &qh,
                 );
             }
@@ -298,6 +321,7 @@ impl WaylandManager {
             compositor: None,
             shm: None,
             layer_shell: None,
+            subcompositor: None,
             outputs: Vec::new(),
             bars: Vec::new(),
             hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
@@ -405,6 +429,7 @@ impl WaylandManager {
                         // Re-render all bars
                         let qh = self.event_queue.handle();
                         let shm = self.state.shm.as_ref().unwrap().clone();
+                        let globals = self.state.globals().unwrap();
                         for bar in &mut self.state.bars {
                             let bar_config = if Some(bar.monitor_name()) == self.state.focused_monitor.as_deref() {
                                 self.state.config.bar().clone()
@@ -419,6 +444,7 @@ impl WaylandManager {
                                 &self.state.registry,
                                 &mut self.state.render_context,
                                 &self.state.error_message,
+                                &globals,
                                 &qh,
                             );
                         }
@@ -458,6 +484,10 @@ impl Dispatch<WlRegistry, ()> for CrankyState {
                 "zwlr_layer_shell_v1" => {
                     state.layer_shell =
                         Some(proxy.bind::<ZwlrLayerShellV1, _, _>(name, version, qh, ()));
+                }
+                "wl_subcompositor" => {
+                    state.subcompositor =
+                        Some(proxy.bind::<WlSubcompositor, _, _>(name, version, qh, ()));
                 }
                 _ => {}
             },
@@ -538,6 +568,30 @@ impl Dispatch<ZwlrLayerShellV1, ()> for CrankyState {
     }
 }
 
+impl Dispatch<WlSubcompositor, ()> for CrankyState {
+    fn event(
+        _: &mut Self,
+        _: &WlSubcompositor,
+        _: wayland_client::protocol::wl_subcompositor::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<wayland_client::protocol::wl_subsurface::WlSubsurface, ()> for CrankyState {
+    fn event(
+        _: &mut Self,
+        _: &wayland_client::protocol::wl_subsurface::WlSubsurface,
+        _: wayland_client::protocol::wl_subsurface::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
 impl Dispatch<wayland_client::protocol::wl_surface::WlSurface, ()> for CrankyState {
     fn event(
         _state: &mut Self,
@@ -591,6 +645,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for CrankyState {
         {
             proxy.ack_configure(serial);
 
+            let globals = state.globals().unwrap();
             if let Some(bar) = state.bars.iter_mut().find(|b| b.layer_surface() == proxy) {
                 bar.set_configured();
                 if width > 0
@@ -611,6 +666,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for CrankyState {
                     &state.registry,
                     &mut state.render_context,
                     &state.error_message,
+                    &globals,
                     qh,
                 );
             }
@@ -715,6 +771,7 @@ mod tests {
                 compositor: None,
                 shm: None,
                 layer_shell: None,
+                subcompositor: None,
                 outputs: Vec::new(),
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
@@ -742,12 +799,12 @@ mod tests {
             compositor: None,
             shm: None,
             layer_shell: None,
+            subcompositor: None,
             outputs: Vec::new(),
             bars: Vec::new(),
             hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
             focused_monitor: None,
         };
-
         state.remove_output(999);
         assert!(state.outputs.is_empty());
     }
@@ -762,6 +819,7 @@ mod tests {
             compositor: None,
             shm: None,
             layer_shell: None,
+            subcompositor: None,
             outputs: Vec::new(),
             bars: Vec::new(),
             hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
@@ -791,6 +849,7 @@ mod tests {
             compositor: None,
             shm: None,
             layer_shell: None,
+            subcompositor: None,
             outputs: Vec::new(),
             bars: Vec::new(),
             hyprland_provider: Box::new(provider),
@@ -830,6 +889,7 @@ mod tests {
             compositor: None,
             shm: None,
             layer_shell: None,
+            subcompositor: None,
             outputs: Vec::new(),
             bars: Vec::new(),
             hyprland_provider: Box::new(provider),
@@ -860,6 +920,7 @@ mod tests {
                 compositor: None,
                 shm: None,
                 layer_shell: None,
+                subcompositor: None,
                 outputs: Vec::new(),
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
@@ -887,6 +948,7 @@ mod tests {
                 compositor: None,
                 shm: None,
                 layer_shell: None,
+                subcompositor: None,
                 outputs: Vec::new(),
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
@@ -915,6 +977,7 @@ mod tests {
                 compositor: None,
                 shm: None,
                 layer_shell: None,
+                subcompositor: None,
                 outputs: Vec::new(),
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
@@ -956,6 +1019,7 @@ mod tests {
                 compositor: None,
                 shm: None,
                 layer_shell: None,
+                subcompositor: None,
                 outputs: Vec::new(),
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
@@ -995,6 +1059,7 @@ mod tests {
                 compositor: None,
                 shm: None,
                 layer_shell: None,
+                subcompositor: None,
                 outputs: Vec::new(),
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
@@ -1043,6 +1108,7 @@ mod tests {
                 compositor: None,
                 shm: None,
                 layer_shell: None,
+                subcompositor: None,
                 outputs: Vec::new(),
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
