@@ -25,6 +25,17 @@ pub enum Event {
         workspaces: Vec<crate::core::hyprland::Workspace>,
         monitors: Vec<crate::core::hyprland::Monitor>,
     },
+    PointerEnter,
+    PointerLeave,
+    Click {
+        x: f64,
+        y: f64,
+        button: u32,
+    },
+    Scroll {
+        axis: u32,
+        value: f64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -99,6 +110,13 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Position {
+    Left,
+    Center,
+    Right,
+}
+
 pub struct ModuleRegistry {
     left_modules: Vec<Box<dyn AnyModule>>,
     center_modules: Vec<Box<dyn AnyModule>>,
@@ -131,6 +149,20 @@ impl ModuleRegistry {
         }
 
         redraw
+    }
+
+    pub fn update_at(&mut self, pos: Position, index: usize, event: Event) -> UpdateAction {
+        let modules = match pos {
+            Position::Left => &mut self.left_modules,
+            Position::Center => &mut self.center_modules,
+            Position::Right => &mut self.right_modules,
+        };
+
+        if let Some(module) = modules.get_mut(index) {
+            module.update(event)
+        } else {
+            UpdateAction::None
+        }
     }
 
     pub fn left_modules(&self) -> &[Box<dyn AnyModule>] {
@@ -309,6 +341,7 @@ mod tests {
         match event_clone {
             Event::Timer => {}
             Event::HyprlandUpdate { .. } => {}
+            _ => {}
         }
     }
 
@@ -320,6 +353,52 @@ mod tests {
         let sub_err = std::io::Error::new(std::io::ErrorKind::Other, "io error");
         let err = RegistryError::InitFailed("test".to_string(), Box::new(sub_err));
         assert!(format!("{}", err).contains("Module initialization failed for 'test'"));
+    }
+
+    #[test]
+    fn test_registry_update_at() {
+        let mut registry = ModuleRegistry::new();
+        let mock = MockModule {
+            width: 100.0,
+            update_action: UpdateAction::Redraw,
+        };
+        registry.left_modules.push(Box::new(mock));
+
+        let action = registry.update_at(Position::Left, 0, Event::Timer);
+        assert_eq!(action, UpdateAction::Redraw);
+
+        let action = registry.update_at(Position::Left, 1, Event::Timer); // Out of bounds
+        assert_eq!(action, UpdateAction::None);
+    }
+
+    #[test]
+    fn test_registry_update_at_positions() {
+        let mut registry = ModuleRegistry::new();
+        registry.left_modules.push(Box::new(MockModule {
+            width: 10.0,
+            update_action: UpdateAction::Redraw,
+        }));
+        registry.center_modules.push(Box::new(MockModule {
+            width: 20.0,
+            update_action: UpdateAction::None,
+        }));
+        registry.right_modules.push(Box::new(MockModule {
+            width: 30.0,
+            update_action: UpdateAction::Redraw,
+        }));
+
+        assert_eq!(
+            registry.update_at(Position::Left, 0, Event::Timer),
+            UpdateAction::Redraw
+        );
+        assert_eq!(
+            registry.update_at(Position::Center, 0, Event::Timer),
+            UpdateAction::None
+        );
+        assert_eq!(
+            registry.update_at(Position::Right, 0, Event::Timer),
+            UpdateAction::Redraw
+        );
     }
 
     #[test]

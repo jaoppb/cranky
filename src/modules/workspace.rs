@@ -231,7 +231,7 @@ impl CrankyModule for WorkspaceModule {
                     UpdateAction::None
                 }
             }
-            Event::Timer => UpdateAction::None,
+            _ => UpdateAction::None,
         }
     }
 
@@ -389,10 +389,37 @@ mod tests {
 
         assert_eq!(action, UpdateAction::Redraw);
         assert_eq!(module.active_workspaces.get("eDP-1"), Some(&2));
+        }
+
+        #[test]
+        fn test_workspace_ignore_input_events() {
+        let mut module = WorkspaceModule::new();
+        module
+            .init(WorkspaceConfig::default(), &BarConfig::default())
+            .unwrap();
+
+        let action = module.update(Event::Click {
+            x: 10.0,
+            y: 10.0,
+            button: 1,
+        });
+        assert_eq!(action, UpdateAction::None);
+
+        let action = module.update(Event::Scroll {
+            axis: 0,
+            value: 1.0,
+        });
+        assert_eq!(action, UpdateAction::None);
+
+        let action = module.update(Event::PointerEnter);
+        assert_eq!(action, UpdateAction::None);
+
+        let action = module.update(Event::PointerLeave);
+        assert_eq!(action, UpdateAction::None);
     }
 
     #[test]
-    fn test_workspace_measure() {
+    fn test_workspace_measure_simple() {
         let mut module = WorkspaceModule::new();
         module
             .init(WorkspaceConfig::default(), &BarConfig::default())

@@ -23,7 +23,9 @@ impl ModuleSurface {
         qh: &QueueHandle<CrankyState>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let surface = globals.compositor().create_surface(qh, ());
-        let subsurface = globals.subcompositor().get_subsurface(&surface, parent, qh, ());
+        let subsurface = globals
+            .subcompositor()
+            .get_subsurface(&surface, parent, qh, ());
 
         // Initial small buffer, will be resized on first render
         let shm_buffer = ShmBuffer::new(globals.shm(), 1, 1, qh)?;
@@ -38,6 +40,10 @@ impl ModuleSurface {
 
     pub fn subsurface(&self) -> &WlSubsurface {
         &self.subsurface
+    }
+
+    pub fn surface(&self) -> &WlSurface {
+        &self.surface
     }
 }
 use wayland_protocols_wlr::layer_shell::v1::client::{
@@ -189,6 +195,26 @@ fn draw_rounded_rect(
 }
 
 impl Bar {
+    pub fn find_module_by_surface(
+        &self,
+        surface: &WlSurface,
+    ) -> Option<(crate::modules::Position, usize)> {
+        if let Some(pos) = self.left_surfaces.iter().position(|s| s.surface() == surface) {
+            return Some((crate::modules::Position::Left, pos));
+        }
+        if let Some(pos) = self
+            .center_surfaces
+            .iter()
+            .position(|s| s.surface() == surface)
+        {
+            return Some((crate::modules::Position::Center, pos));
+        }
+        if let Some(pos) = self.right_surfaces.iter().position(|s| s.surface() == surface) {
+            return Some((crate::modules::Position::Right, pos));
+        }
+        None
+    }
+
     pub fn new(
         info: &OutputInfo,
         globals: &WaylandGlobals,

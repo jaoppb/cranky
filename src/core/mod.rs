@@ -10,7 +10,9 @@ use wayland_client::{
     protocol::{
         wl_compositor::WlCompositor,
         wl_output::{self, WlOutput},
+        wl_pointer::WlPointer,
         wl_registry::{self, WlRegistry},
+        wl_seat::WlSeat,
         wl_shm::WlShm,
         wl_subcompositor::WlSubcompositor,
     },
@@ -29,6 +31,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::{
 
 pub mod bar;
 pub mod hyprland;
+pub mod input;
 pub mod shm;
 
 #[derive(Error, Debug)]
@@ -210,6 +213,25 @@ impl CrankyState {
             }
         }
     }
+
+    pub fn dispatch_to_surface(&mut self, event: Event) {
+        let surface = match &self.pointer_surface {
+            Some(s) => s,
+            None => return,
+        };
+
+        let mut module_pos_index = None;
+        for bar in &self.bars {
+            if let Some((pos, index)) = bar.find_module_by_surface(surface) {
+                module_pos_index = Some((pos, index));
+                break;
+            }
+        }
+
+        if let Some((pos, index)) = module_pos_index {
+            self.input_queue.push((pos, index, event));
+        }
+    }
 }
 
 pub struct CrankyState {
@@ -233,11 +255,26 @@ pub struct CrankyState {
     // Hyprland
     hyprland_provider: Box<dyn crate::core::hyprland::HyprlandProvider>,
     focused_monitor: Option<String>,
+
+    // Input
+    seat: Option<WlSeat>,
+    pointer: Option<WlPointer>,
+    pointer_pos: (f64, f64),
+    pointer_surface: Option<wayland_client::protocol::wl_surface::WlSurface>,
+    input_queue: Vec<(crate::modules::Position, usize, Event)>,
 }
 
 impl WaylandManager {
     fn handle_periodic_update(&mut self) {
         let mut redraw = self.state.registry.update(Event::Timer) == UpdateAction::Redraw;
+
+        // Process queued input events
+        let input_events: Vec<_> = self.state.input_queue.drain(..).collect();
+        for (pos, index, event) in input_events {
+            if self.state.registry.update_at(pos, index, event) == UpdateAction::Redraw {
+                redraw = true;
+            }
+        }
 
         // Centralized Hyprland polling
         let workspaces = self
@@ -326,6 +363,11 @@ impl WaylandManager {
             bars: Vec::new(),
             hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
             focused_monitor: None,
+            seat: None,
+            pointer: None,
+            pointer_pos: (0.0, 0.0),
+            pointer_surface: None,
+            input_queue: Vec::new(),
         };
 
         Ok(Self {
@@ -489,6 +531,9 @@ impl Dispatch<WlRegistry, ()> for CrankyState {
                     state.subcompositor =
                         Some(proxy.bind::<WlSubcompositor, _, _>(name, version, qh, ()));
                 }
+                "wl_seat" => {
+                    state.seat = Some(proxy.bind::<WlSeat, _, _>(name, version, qh, ()));
+                }
                 _ => {}
             },
             wl_registry::Event::GlobalRemove { name } => {
@@ -552,6 +597,30 @@ impl Dispatch<WlOutput, ()> for CrankyState {
                 state.create_bar_for_output(proxy, qh);
             }
             _ => {}
+        }
+    }
+}
+
+impl Dispatch<WlSeat, ()> for CrankyState {
+    fn event(
+        state: &mut Self,
+        proxy: &WlSeat,
+        event: wayland_client::protocol::wl_seat::Event,
+        _data: &(),
+        _conn: &Connection,
+        qh: &QueueHandle<Self>,
+    ) {
+        if let wayland_client::protocol::wl_seat::Event::Capabilities { capabilities } = event {
+            let capabilities = wayland_client::protocol::wl_seat::Capability::from_bits(capabilities.into())
+                .unwrap_or(wayland_client::protocol::wl_seat::Capability::empty());
+
+            if capabilities.contains(wayland_client::protocol::wl_seat::Capability::Pointer) {
+                if state.pointer.is_none() {
+                    state.pointer = Some(proxy.get_pointer(qh, ()));
+                }
+            } else {
+                state.pointer = None;
+            }
         }
     }
 }
@@ -776,6 +845,11 @@ mod tests {
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
                 focused_monitor: None,
+                seat: None,
+                pointer: None,
+                pointer_pos: (0.0, 0.0),
+                pointer_surface: None,
+                input_queue: Vec::new(),
             };
 
             let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
@@ -804,6 +878,11 @@ mod tests {
             bars: Vec::new(),
             hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
             focused_monitor: None,
+            seat: None,
+            pointer: None,
+            pointer_pos: (0.0, 0.0),
+            pointer_surface: None,
+            input_queue: Vec::new(),
         };
         state.remove_output(999);
         assert!(state.outputs.is_empty());
@@ -824,6 +903,11 @@ mod tests {
             bars: Vec::new(),
             hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
             focused_monitor: None,
+            seat: None,
+            pointer: None,
+            pointer_pos: (0.0, 0.0),
+            pointer_surface: None,
+            input_queue: Vec::new(),
         };
 
         assert!(state.globals().is_none());
@@ -854,6 +938,11 @@ mod tests {
             bars: Vec::new(),
             hyprland_provider: Box::new(provider),
             focused_monitor: None,
+            seat: None,
+            pointer: None,
+            pointer_pos: (0.0, 0.0),
+            pointer_surface: None,
+            input_queue: Vec::new(),
         };
 
         unsafe {
@@ -894,6 +983,11 @@ mod tests {
             bars: Vec::new(),
             hyprland_provider: Box::new(provider),
             focused_monitor: None,
+            seat: None,
+            pointer: None,
+            pointer_pos: (0.0, 0.0),
+            pointer_surface: None,
+            input_queue: Vec::new(),
         };
 
         unsafe {
@@ -925,6 +1019,11 @@ mod tests {
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
                 focused_monitor: None,
+                seat: None,
+                pointer: None,
+                pointer_pos: (0.0, 0.0),
+                pointer_surface: None,
+                input_queue: Vec::new(),
             };
 
             let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
@@ -953,6 +1052,11 @@ mod tests {
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
                 focused_monitor: None,
+                seat: None,
+                pointer: None,
+                pointer_pos: (0.0, 0.0),
+                pointer_surface: None,
+                input_queue: Vec::new(),
             };
 
             let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
@@ -982,6 +1086,11 @@ mod tests {
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
                 focused_monitor: None,
+                seat: None,
+                pointer: None,
+                pointer_pos: (0.0, 0.0),
+                pointer_surface: None,
+                input_queue: Vec::new(),
             };
             let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
             state.add_output(1, output);
@@ -1024,6 +1133,11 @@ mod tests {
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
                 focused_monitor: None,
+                seat: None,
+                pointer: None,
+                pointer_pos: (0.0, 0.0),
+                pointer_surface: None,
+                input_queue: Vec::new(),
             };
             let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
             state.add_output(1, output);
@@ -1064,6 +1178,11 @@ mod tests {
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
                 focused_monitor: None,
+                seat: None,
+                pointer: None,
+                pointer_pos: (0.0, 0.0),
+                pointer_surface: None,
+                input_queue: Vec::new(),
             };
             let output = std::mem::MaybeUninit::<WlOutput>::uninit().assume_init();
             state.add_output(1, output);
@@ -1113,6 +1232,11 @@ mod tests {
                 bars: Vec::new(),
                 hyprland_provider: Box::new(crate::core::hyprland::RealHyprlandProvider),
                 focused_monitor: None,
+                seat: None,
+                pointer: None,
+                pointer_pos: (0.0, 0.0),
+                pointer_surface: None,
+                input_queue: Vec::new(),
             };
 
             let registry = std::mem::MaybeUninit::<WlRegistry>::uninit().assume_init();
