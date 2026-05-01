@@ -10,6 +10,11 @@
 ## Implementation Notes
 
 - **Positioning Logic:** Implemented left, center, and right positioning in `ModuleRegistry`. Modules must implement `measure` to provide their width. `RenderContext` provides `measure_text` for this purpose.
+- **Multi-Surface Rendering Subsystem:**
+    - Transitioned to a multi-surface architecture using `wl_subsurface`.
+    - Each module now manages its own `ModuleSurface`, which includes a `WlSurface`, `WlSubsurface`, and its own `ShmBuffer`.
+    - This allows for independent rendering and targeted input handling per module.
+    - Modules render into a dedicated `PixmapMut` sized exactly to their measured dimensions.
 - **Bar Refactoring:** Simplified `Bar::new` arguments by grouping them into `OutputInfo` and `WaylandGlobals` structures.
 - **Bar Aesthetics:** Implemented nested `border` and `margin` configuration. Borders support size, color, and radius. Margins support top, bottom, left, and right offsets.
 - **Test Infrastructure:**
@@ -20,5 +25,11 @@
     - Achieved 100% coverage on `config.rs`, `hyprland.rs`, `workspace.rs`, `test_utils.rs`, and `utils.rs`.
     - Integrated `cargo-llvm-cov` for coverage reporting.
 - **Workspace Focus Logic:** Implemented distinguishing between `active` (visible on the globally focused monitor) and `focused` (visible on a non-focused monitor) workspaces. Added `focused` boolean to `Monitor` struct and updated `WorkspaceModule` to track the globally focused monitor and render with different styling accordingly.
+- **Input Handling Subsystem:**
+    - Implemented a decoupled input handling system using an event queue in `CrankyState`.
+    - Leverages `wl_seat` and `wl_pointer` for capturing raw Wayland events.
+    - Added `Bar::find_module_by_surface` to map Wayland surfaces to their corresponding module position and index.
+    - Extended `Event` enum with `PointerEnter`, `PointerLeave`, `Click`, and `Scroll` variants.
+    - Introduced `ModuleRegistry::update_at` for targeted event dispatching to specific modules, avoiding global broadcasts for pointer-specific interactions.
 - **Documentation:** Created comprehensive `README.md` file covering project vision, features, technical stack, installation, configuration, and architecture.
 
