@@ -3,7 +3,9 @@
 use log::{error, info};
 mod config;
 mod core;
+mod domain;
 mod modules;
+mod ports;
 mod render;
 mod utils;
 #[cfg(test)]
