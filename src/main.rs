@@ -8,6 +8,7 @@ mod modules;
 mod ports;
 mod render;
 mod utils;
+mod adapters;
 #[cfg(test)]
 #[macro_use]
 pub mod test_utils;

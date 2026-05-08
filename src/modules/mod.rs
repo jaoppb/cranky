@@ -112,16 +112,38 @@ impl<C: Canvas + 'static> ModuleRegistry<C> {
     }
 
     pub fn load(&mut self, config: &crate::config::Config) -> Result<(), DomainError> {
-        self.left_modules = self.create_modules(config.modules().left(), config.bar())?;
-        self.center_modules = self.create_modules(config.modules().center(), config.bar())?;
-        self.right_modules = self.create_modules(config.modules().right(), config.bar())?;
+        let mut next_id = 0;
+        self.left_modules = self.create_modules(config.modules().left(), config.bar(), &mut next_id)?;
+        self.center_modules = self.create_modules(config.modules().center(), config.bar(), &mut next_id)?;
+        self.right_modules = self.create_modules(config.modules().right(), config.bar(), &mut next_id)?;
         Ok(())
+    }
+
+    pub fn attach_all(&mut self, hub: &SignalHub) {
+        let mut next_id = 0;
+        for module in self.left_modules.iter_mut()
+            .chain(self.center_modules.iter_mut())
+            .chain(self.right_modules.iter_mut()) 
+        {
+            module.attach(hub, next_id);
+            next_id += 1;
+        }
+    }
+
+    pub fn refresh_all(&mut self, hub: &SignalHub) {
+        for module in self.left_modules.iter_mut()
+            .chain(self.center_modules.iter_mut())
+            .chain(self.right_modules.iter_mut()) 
+        {
+            module.refresh(hub);
+        }
     }
 
     fn create_modules(
         &self,
         configs: &[ModuleConfig],
         bar_config: &crate::config::BarConfig,
+        _next_id: &mut u32,
     ) -> Result<Vec<Box<dyn AnyModule<C>>>, DomainError> {
         let mut modules = Vec::new();
         for config in configs {
