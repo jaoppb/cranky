@@ -2,24 +2,12 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DomainError {
-    #[error("Configuration error: missing required field '{field}'")]
-    ConfigMissingField { field: String },
-    
-    #[error("Configuration error: invalid value '{value}' for field '{field}'")]
-    ConfigInvalidValue { field: String, value: String },
-    
     #[error("Failed to parse configuration: {reason}")]
     ConfigParseError { reason: String },
-    
-    #[error("Module '{module_name}' initialization failed: {reason}")]
-    ModuleInitFailed { module_name: String, reason: String },
     
     #[error("Module '{module_name}' not found in registry")]
     ModuleNotFound { module_name: String },
     
-    #[error("Layout error: {reason}")]
-    LayoutError { reason: String },
-
     #[error("Internal domain error: {message}")]
     Internal { message: String },
 
@@ -32,14 +20,8 @@ pub enum PortError {
     #[error("Display server connection failed: {reason}")]
     DisplayConnectionFailed { reason: String },
     
-    #[error("Display server error on output '{output_name}' (id: {output_id}): {reason}")]
-    OutputError { output_id: u32, output_name: String, reason: String },
-    
     #[error("Surface error for target {target_id}: {reason}")]
     SurfaceError { target_id: u32, reason: String },
-    
-    #[error("Window manager connection failed: {reason}")]
-    WindowManagerConnectionFailed { reason: String },
     
     #[error("Window manager IPC error: {reason}")]
     WindowManagerIpcError { reason: String },

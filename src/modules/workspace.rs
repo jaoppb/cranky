@@ -85,7 +85,7 @@ impl WorkspaceModule {
     }
 }
 
-impl<C: Canvas> CrankyModule<C> for WorkspaceModule {
+impl CrankyModule for WorkspaceModule {
     type Config = WorkspaceConfig;
 
     fn init(
@@ -127,7 +127,7 @@ impl<C: Canvas> CrankyModule<C> for WorkspaceModule {
         }
     }
 
-    fn view(&self, canvas: &mut C, monitor: &str) {
+    fn view(&self, canvas: &mut dyn Canvas, monitor: &str) {
         let monitor_workspaces: Vec<&Workspace> = self
             .workspaces
             .iter()
@@ -188,8 +188,54 @@ impl<C: Canvas> CrankyModule<C> for WorkspaceModule {
         }
     }
 
-    fn measure(&self, _canvas: &mut C, monitor: &str) -> (f32, f32) {
+    fn measure(&self, _canvas: &mut dyn Canvas, monitor: &str) -> (f32, f32) {
         let count = self.workspaces.iter().filter(|w| w.monitor() == monitor).count();
         (count as f32 * 30.0, 30.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ports::canvas::MockCanvas;
+    use crate::config::Config;
+    use crate::core::hyprland::{Workspace, Monitor};
+    use crate::domain::signals::HyprlandState;
+
+    #[test]
+    fn test_workspace_module_refresh() {
+        let mut module = WorkspaceModule::new();
+        let (hub, _) = SignalHub::new(Config::default());
+        
+        let ws = vec![Workspace::new(1, "eDP-1".to_string())];
+        let mon = vec![Monitor::new("eDP-1".to_string(), 1, true)];
+        hub.hyprland_tx().send(HyprlandState::new(ws, mon)).unwrap();
+
+        module.refresh(&hub);
+        assert_eq!(module.workspaces.len(), 1);
+        assert_eq!(module.focused_monitor, "eDP-1");
+    }
+
+    #[test]
+    fn test_workspace_module_view() {
+        let mut module = WorkspaceModule::new();
+        module.workspaces = vec![Workspace::new(1, "eDP-1".to_string())];
+        module.active_workspaces.insert("eDP-1".to_string(), 1);
+        module.focused_monitor = "eDP-1".to_string();
+
+        let mut mock = MockCanvas::new();
+        // Expect background rect for active workspace
+        mock.expect_draw_rect()
+            .times(1)
+            .returning(|_, _, _, _, _, _| ());
+        
+        // Expect text measurement and drawing
+        mock.expect_measure_text()
+            .returning(|_, _, _| (10.0, 14.0));
+        mock.expect_draw_text()
+            .times(1)
+            .returning(|_, _, _, _, _, _| ());
+
+        CrankyModule::view(&module, &mut mock, "eDP-1");
     }
 }

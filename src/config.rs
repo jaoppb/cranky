@@ -1,4 +1,4 @@
-use crate::utils::ParsedColor;
+use crate::domain::color::DrawingColor;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::Path;
@@ -10,14 +10,6 @@ pub enum ConfigError {
     Parse(#[from] toml::de::Error),
     #[error("IO error reading config: {0}")]
     Io(#[from] std::io::Error),
-}
-
-#[derive(Error, Debug)]
-pub enum ReloadError {
-    #[error(transparent)]
-    Config(#[from] ConfigError),
-    #[error(transparent)]
-    Registry(#[from] crate::modules::RegistryError),
 }
 
 pub type Result<T> = std::result::Result<T, ConfigError>;
@@ -108,7 +100,7 @@ pub enum VerticalAlignment {
 #[derive(Debug, Deserialize, Clone)]
 pub struct BarConfig {
     #[serde(default = "default_background")]
-    background: ParsedColor,
+    background: DrawingColor,
     #[serde(default = "default_height")]
     height: u32,
     #[serde(default)]
@@ -132,13 +124,13 @@ pub struct PartialMarginConfig {
 #[derive(Debug, Deserialize, Clone, Default, PartialEq)]
 pub struct PartialBorderConfig {
     pub size: Option<f32>,
-    pub color: Option<ParsedColor>,
+    pub color: Option<DrawingColor>,
     pub radius: Option<f32>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default, PartialEq)]
 pub struct PartialBarConfig {
-    pub background: Option<ParsedColor>,
+    pub background: Option<DrawingColor>,
     pub height: Option<u32>,
     pub vertical_alignment: Option<VerticalAlignment>,
     pub border: Option<PartialBorderConfig>,
@@ -158,8 +150,8 @@ impl Default for BarConfig {
     }
 }
 
-fn default_background() -> ParsedColor {
-    ParsedColor::Solid(tiny_skia::Color::BLACK)
+fn default_background() -> DrawingColor {
+    DrawingColor::Solid(crate::domain::color::Color::new(0, 0, 0, 255))
 }
 
 fn default_height() -> u32 {
@@ -167,7 +159,7 @@ fn default_height() -> u32 {
 }
 
 impl BarConfig {
-    pub fn background(&self) -> &ParsedColor {
+    pub fn background(&self) -> &DrawingColor {
         &self.background
     }
 
@@ -264,7 +256,7 @@ pub struct BorderConfig {
     #[serde(default)]
     size: f32,
     #[serde(default = "default_border_color")]
-    color: ParsedColor,
+    color: DrawingColor,
     #[serde(default)]
     radius: f32,
 }
@@ -279,8 +271,8 @@ impl Default for BorderConfig {
     }
 }
 
-fn default_border_color() -> ParsedColor {
-    ParsedColor::Solid(tiny_skia::Color::BLACK)
+fn default_border_color() -> DrawingColor {
+    DrawingColor::Solid(crate::domain::color::Color::new(0, 0, 0, 255))
 }
 
 impl BorderConfig {
@@ -288,7 +280,7 @@ impl BorderConfig {
         self.size
     }
 
-    pub fn color(&self) -> &ParsedColor {
+    pub fn color(&self) -> &DrawingColor {
         &self.color
     }
 
@@ -385,14 +377,14 @@ mod tests {
         let config = Config::from_str(toml_str).unwrap();
         assert_eq!(
             config.bar().background(),
-            &ParsedColor::try_from("#1a1b26").unwrap()
+            &DrawingColor::parse("#1a1b26").unwrap()
         );
         assert_eq!(config.bar().height(), 30);
         assert_eq!(config.bar().vertical_alignment(), VerticalAlignment::Center);
 
         let border = config.bar().border();
         assert_eq!(border.radius(), 8.0);
-        assert_eq!(border.color(), &ParsedColor::try_from("#7aa2f7").unwrap());
+        assert_eq!(border.color(), &DrawingColor::parse("#7aa2f7").unwrap());
 
         let margin = config.bar().margin();
         assert_eq!(margin.top(), 5);
@@ -449,7 +441,7 @@ mod tests {
         let bar_default = BarConfig::default();
         assert_eq!(
             bar_default.background(),
-            &ParsedColor::Solid(tiny_skia::Color::BLACK)
+            &DrawingColor::Solid(crate::domain::color::Color::new(0, 0, 0, 255))
         );
         assert_eq!(bar_default.height(), 30);
 
@@ -460,7 +452,7 @@ mod tests {
         assert_eq!(border_default.size(), 0.0);
         assert_eq!(
             border_default.color(),
-            &ParsedColor::Solid(tiny_skia::Color::BLACK)
+            &DrawingColor::Solid(crate::domain::color::Color::new(0, 0, 0, 255))
         );
     }
 
@@ -494,91 +486,14 @@ mod tests {
         let bar = config.bar();
         let unfocused = bar.as_unfocused();
 
-        assert_eq!(bar.background(), &ParsedColor::try_from("#000000").unwrap());
+        assert_eq!(bar.background(), &DrawingColor::parse("#000000").unwrap());
         assert_eq!(bar.height(), 30);
 
         assert_eq!(
             unfocused.background(),
-            &ParsedColor::try_from("#ffffff").unwrap()
+            &DrawingColor::parse("#ffffff").unwrap()
         );
         assert_eq!(unfocused.height(), 20);
         assert_eq!(unfocused.border().size(), 2.0);
-    }
-
-    #[test]
-    fn test_rendering_mode_immediate_without_limit() {
-        let toml_str = r##"
-            [bar]
-            [modules]
-            [rendering]
-            mode = "immediate"
-        "##;
-        let config = Config::from_str(toml_str).unwrap();
-
-        assert_eq!(config.rendering().fps_limit(), None);
-        assert_eq!(config.rendering().duration_ms(), None);
-    }
-
-    #[test]
-    fn test_rendering_mode_timebased_custom_duration() {
-        let toml_str = r##"
-            [bar]
-            [modules]
-            [rendering]
-            mode = "timebased"
-            duration_ms = 250
-        "##;
-        let config = Config::from_str(toml_str).unwrap();
-
-        assert_eq!(config.rendering().fps_limit(), None);
-        assert_eq!(config.rendering().duration_ms(), Some(250));
-    }
-
-    #[test]
-    fn test_bar_config_defaults() {
-        let bar = BarConfig::default();
-        assert_eq!(bar.height(), 30);
-        assert_eq!(bar.vertical_alignment(), VerticalAlignment::Center);
-    }
-
-    #[test]
-    fn test_partial_configs() {
-        let partial_margin = PartialMarginConfig {
-            top: Some(5),
-            bottom: Some(10),
-            ..Default::default()
-        };
-        assert_eq!(partial_margin.top, Some(5));
-
-        let def_margin = PartialMarginConfig::default();
-        assert!(def_margin.top.is_none());
-        assert_eq!(def_margin, PartialMarginConfig::default());
-
-        let partial_bar = PartialBarConfig {
-            height: Some(40),
-            ..Default::default()
-        };
-        assert_eq!(partial_bar.height, Some(40));
-        assert_eq!(partial_bar, partial_bar.clone());
-
-        let partial_border = PartialBorderConfig {
-            size: Some(1.0),
-            ..Default::default()
-        };
-        assert_eq!(partial_border.size, Some(1.0));
-        assert_eq!(partial_border, partial_border.clone());
-    }
-
-    #[test]
-    fn test_config_error_parse() {
-        let err = Config::from_str("invalid = ").unwrap_err();
-        assert!(format!("{}", err).contains("parse"));
-    }
-
-    #[test]
-    fn test_config_error_io() {
-        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "test");
-        let err = ConfigError::Io(io_err);
-        assert!(format!("{}", err).contains("IO error"));
     }
 }

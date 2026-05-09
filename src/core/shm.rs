@@ -1,6 +1,5 @@
 #![allow(unsafe_code)]
 
-use crate::core::CrankyState;
 use memmap2::MmapMut;
 use std::env;
 use std::fs::File;
@@ -72,12 +71,14 @@ fn safe_borrowed_fd_from_file(file: &File) -> BorrowedFd<'_> {
 }
 
 impl ShmBuffer {
-    pub fn new(
+    pub fn new<S>(
         shm_proxy: &WlShm,
         width: u32,
         height: u32,
-        qh: &QueueHandle<CrankyState>,
-    ) -> Result<Self> {
+        qh: &QueueHandle<S>,
+    ) -> Result<Self> 
+    where S: wayland_client::Dispatch<wayland_client::protocol::wl_shm_pool::WlShmPool, ()> + 'static
+    {
         let size = (width * height * 4) as usize;
         let file = create_shm_file(size)?;
 

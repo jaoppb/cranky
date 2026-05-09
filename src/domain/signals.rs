@@ -95,3 +95,77 @@ impl SignalHub {
         self.dirty_tx.clone()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    #[tokio::test]
+    async fn test_signal_hub_config_propagation() {
+        let (hub, _dirty_rx) = SignalHub::new(Config::default());
+        let config_rx = hub.config_rx();
+        let config_tx = hub.config_tx();
+
+        let new_config = Config::default();
+        config_tx.send(new_config).unwrap();
+        
+        assert!(config_rx.has_changed().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_signal_hub_hyprland_propagation() {
+        let (hub, _dirty_rx) = SignalHub::new(Config::default());
+        let hypr_rx = hub.hyprland_rx();
+        let hypr_tx = hub.hyprland_tx();
+
+        let new_state = HyprlandState::new(Vec::new(), Vec::new());
+        hypr_tx.send(new_state).unwrap();
+
+        assert!(hypr_rx.has_changed().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_signal_hub_time_propagation() {
+        let (hub, _dirty_rx) = SignalHub::new(Config::default());
+        let time_rx = hub.time_rx();
+        let time_tx = hub.time_tx();
+
+        let now = chrono::Local::now();
+        time_tx.send(now).unwrap();
+
+        assert!(time_rx.has_changed().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_signal_hub_pointer_broadcast() {
+        let (hub, _dirty_rx) = SignalHub::new(Config::default());
+        let mut rx1 = hub.subscribe_pointer();
+        let mut rx2 = hub.subscribe_pointer();
+        let tx = hub.pointer_tx();
+
+        let event = PointerEvent::Click { target_id: 1, x: 10.0, y: 10.0, button: 272 };
+        tx.send(event.clone()).unwrap();
+
+        let e1 = rx1.recv().await.unwrap();
+        let e2 = rx2.recv().await.unwrap();
+
+        match (e1, e2) {
+            (PointerEvent::Click { target_id: t1, .. }, PointerEvent::Click { target_id: t2, .. }) => {
+                assert_eq!(t1, 1);
+                assert_eq!(t2, 1);
+            }
+            _ => panic!("Incorrect event type received"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_signal_hub_dirty_mpsc() {
+        let (hub, mut dirty_rx) = SignalHub::new(Config::default());
+        let dirty_tx = hub.dirty_tx();
+
+        dirty_tx.send(42).await.unwrap();
+        let id = dirty_rx.recv().await.unwrap();
+        assert_eq!(id, 42);
+    }
+}

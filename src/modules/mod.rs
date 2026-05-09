@@ -2,35 +2,29 @@ use crate::config::ModuleConfig;
 use crate::ports::canvas::Canvas;
 use crate::domain::signals::SignalHub;
 use crate::domain::errors::DomainError;
-use std::error::Error;
 
 pub mod applet;
 pub mod hour;
 pub mod workspace;
 
-/// A type-erased version of CrankyModule that is specialized for a specific Canvas implementation.
-/// This allows for static dispatch performance while maintaining a heterogeneous registry.
-pub trait AnyModule<C: Canvas>: Send + Sync {
+/// A type-erased version of CrankyModule.
+pub trait AnyModule: Send + Sync {
     fn init(
         &mut self,
         config: &ModuleConfig,
         bar_config: &crate::config::BarConfig,
     ) -> Result<(), DomainError>;
 
-    /// Attach the module to the signal hub and assign it a target ID for events.
     fn attach(&mut self, hub: &SignalHub, target_id: u32);
 
-    /// Refresh: Synchronizes internal state from the signal hub.
     fn refresh(&mut self, hub: &SignalHub);
 
-    /// View: Renders the current state of the module.
-    fn view(&self, canvas: &mut C, monitor: &str);
+    fn view(&self, canvas: &mut dyn Canvas, monitor: &str);
 
-    /// Measure: Returns the logical dimensions of the module.
-    fn measure(&self, canvas: &mut C, monitor: &str) -> (f32, f32);
+    fn measure(&self, canvas: &mut dyn Canvas, monitor: &str) -> (f32, f32);
 }
 
-pub trait CrankyModule<C: Canvas>: Send + Sync {
+pub trait CrankyModule: Send + Sync {
     type Config: for<'de> serde::Deserialize<'de> + Default + Send + Sync;
 
     fn init(
@@ -43,15 +37,14 @@ pub trait CrankyModule<C: Canvas>: Send + Sync {
 
     fn refresh(&mut self, hub: &SignalHub);
 
-    fn view(&self, canvas: &mut C, monitor: &str);
+    fn view(&self, canvas: &mut dyn Canvas, monitor: &str);
 
-    fn measure(&self, canvas: &mut C, monitor: &str) -> (f32, f32);
+    fn measure(&self, canvas: &mut dyn Canvas, monitor: &str) -> (f32, f32);
 }
 
-impl<T, C> AnyModule<C> for T
+impl<T> AnyModule for T
 where
-    T: CrankyModule<C>,
-    C: Canvas + 'static,
+    T: CrankyModule,
 {
     fn init(
         &mut self,
@@ -75,22 +68,22 @@ where
         self.refresh(hub);
     }
 
-    fn view(&self, canvas: &mut C, monitor: &str) {
+    fn view(&self, canvas: &mut dyn Canvas, monitor: &str) {
         self.view(canvas, monitor);
     }
 
-    fn measure(&self, canvas: &mut C, monitor: &str) -> (f32, f32) {
+    fn measure(&self, canvas: &mut dyn Canvas, monitor: &str) -> (f32, f32) {
         self.measure(canvas, monitor)
     }
 }
 
-pub struct ModuleRegistry<C: Canvas> {
-    left_modules: Vec<Box<dyn AnyModule<C>>>,
-    center_modules: Vec<Box<dyn AnyModule<C>>>,
-    right_modules: Vec<Box<dyn AnyModule<C>>>,
+pub struct ModuleRegistry {
+    left_modules: Vec<Box<dyn AnyModule>>,
+    center_modules: Vec<Box<dyn AnyModule>>,
+    right_modules: Vec<Box<dyn AnyModule>>,
 }
 
-impl<C: Canvas + 'static> ModuleRegistry<C> {
+impl ModuleRegistry {
     pub fn new() -> Self {
         Self {
             left_modules: Vec::new(),
@@ -99,15 +92,15 @@ impl<C: Canvas + 'static> ModuleRegistry<C> {
         }
     }
 
-    pub fn left_modules(&self) -> &[Box<dyn AnyModule<C>>] {
+    pub fn left_modules(&self) -> &[Box<dyn AnyModule>] {
         &self.left_modules
     }
 
-    pub fn center_modules(&self) -> &[Box<dyn AnyModule<C>>] {
+    pub fn center_modules(&self) -> &[Box<dyn AnyModule>] {
         &self.center_modules
     }
 
-    pub fn right_modules(&self) -> &[Box<dyn AnyModule<C>>] {
+    pub fn right_modules(&self) -> &[Box<dyn AnyModule>] {
         &self.right_modules
     }
 
@@ -144,14 +137,14 @@ impl<C: Canvas + 'static> ModuleRegistry<C> {
         configs: &[ModuleConfig],
         bar_config: &crate::config::BarConfig,
         _next_id: &mut u32,
-    ) -> Result<Vec<Box<dyn AnyModule<C>>>, DomainError> {
+    ) -> Result<Vec<Box<dyn AnyModule>>, DomainError> {
         let mut modules = Vec::new();
         for config in configs {
             if !config.is_enabled() {
                 continue;
             }
 
-            let mut module: Box<dyn AnyModule<C>> = match config.name() {
+            let mut module: Box<dyn AnyModule> = match config.name() {
                 "hour" => Box::new(hour::HourModule::new()),
                 "applet" => Box::new(applet::AppletModule::new()),
                 "workspace" => Box::new(workspace::WorkspaceModule::new()),
@@ -162,5 +155,45 @@ impl<C: Canvas + 'static> ModuleRegistry<C> {
             modules.push(module);
         }
         Ok(modules)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    #[test]
+    fn test_module_registry_load() {
+        let mut registry = ModuleRegistry::new();
+        let toml_str = r##"
+            [bar]
+            [modules]
+            left = [{ name = "hour", enable = true }]
+            center = []
+            right = []
+        "##;
+        let config = Config::from_str(toml_str).unwrap();
+
+        registry.load(&config).unwrap();
+        assert_eq!(registry.left_modules().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_module_registry_attach_all() {
+        let mut registry = ModuleRegistry::new();
+        let toml_str = r##"
+            [bar]
+            [modules]
+            left = [{ name = "hour", enable = true }]
+            center = [{ name = "hour", enable = true }]
+            right = []
+        "##;
+        let config = Config::from_str(toml_str).unwrap();
+        registry.load(&config).unwrap();
+
+        let (hub, _) = SignalHub::new(config);
+        // This should not panic and should assign IDs 0 and 1
+        registry.attach_all(&hub);
     }
 }

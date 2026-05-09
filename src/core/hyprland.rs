@@ -15,7 +15,7 @@ pub enum HyprError {
     Json(#[from] serde_json::Error),
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct Workspace {
     id: i32,
     monitor: String,
@@ -36,7 +36,7 @@ impl Workspace {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct Monitor {
     name: String,
     #[serde(rename = "activeWorkspace")]
@@ -44,7 +44,7 @@ pub struct Monitor {
     focused: bool,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct ActiveWorkspace {
     id: i32,
 }
