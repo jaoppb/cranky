@@ -1,14 +1,11 @@
 use crate::modules::CrankyModule;
-use crate::ports::canvas::{Canvas, Color as CanvasColor};
+use crate::ports::canvas::{Canvas};
 use crate::domain::signals::{SignalHub, PointerEvent};
 use crate::domain::errors::DomainError;
 use crate::domain::color::DrawingColor;
-use crate::utils::rasterize_svg_icon_rgba;
-use log::{debug, warn};
+use tracing::{debug};
 use serde::Deserialize;
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::collections::{HashMap};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
@@ -87,10 +84,6 @@ trait AppletProvider: Send + Sync {
     fn list_items(&self) -> AppletResult<Vec<AppletItem>>;
 }
 
-// ... DBus Watcher Implementation (kept from original for infrastructure) ...
-// (I will omit the full DBus implementation here for brevity, assuming it remains in src/modules/applet.rs or moved to an adapter in Phase 4)
-// For Phase 2, we focus on the Module trait and Reactive interface.
-
 pub struct AppletModule {
     provider: Box<dyn AppletProvider>,
     items: Vec<AppletItem>,
@@ -110,7 +103,6 @@ pub struct AppletModule {
 
 impl AppletModule {
     pub fn new() -> Self {
-        // Placeholder provider, Phase 4 will move the real provider to an adapter
         struct DummyProvider;
         impl AppletProvider for DummyProvider {
             fn list_items(&self) -> AppletResult<Vec<AppletItem>> { Ok(Vec::new()) }
@@ -151,7 +143,7 @@ impl AppletModule {
     }
 }
 
-impl<C: Canvas> CrankyModule<C> for AppletModule {
+impl CrankyModule for AppletModule {
     type Config = AppletConfig;
 
     fn init(
@@ -175,20 +167,17 @@ impl<C: Canvas> CrankyModule<C> for AppletModule {
         let dirty_tx = hub.dirty_tx();
         let mut pointer_rx = hub.subscribe_pointer();
         
-        // Timer-based refresh
         tokio::spawn(async move {
             while time_rx.changed().await.is_ok() {
                 let _ = dirty_tx.send(target_id).await;
             }
         });
 
-        // Pointer event handling
         tokio::spawn(async move {
             while let Ok(event) = pointer_rx.recv().await {
                 match event {
                     PointerEvent::Click { target_id: tid, .. } if tid == target_id => {
                         debug!("Applet module clicked!");
-                        // Handle click (e.g., toggle a menu - logic to be added)
                     }
                     _ => {}
                 }
@@ -212,7 +201,7 @@ impl<C: Canvas> CrankyModule<C> for AppletModule {
         }
     }
 
-    fn view(&self, canvas: &mut C, _monitor: &str) {
+    fn view(&self, canvas: &mut dyn Canvas, _monitor: &str) {
         let text_color = DrawingColor::parse("#c0caf5").unwrap();
         let mut x = 0.0;
         
@@ -229,7 +218,6 @@ impl<C: Canvas> CrankyModule<C> for AppletModule {
         for (i, item) in self.items.iter().take(self.max_items).enumerate() {
             if i > 0 { x += ITEM_SPACING; }
             
-            // Icon rendering placeholder (Phase 3/4 will restore full icon lookup via Canvas)
             if self.show_icons {
                 canvas.draw_rect(x, 7.0, 16.0, 16.0, text_color.clone(), 2.0);
                 x += 16.0 + ICON_TEXT_GAP;
@@ -244,7 +232,7 @@ impl<C: Canvas> CrankyModule<C> for AppletModule {
         }
     }
 
-    fn measure(&self, canvas: &mut C, _monitor: &str) -> (f32, f32) {
+    fn measure(&self, canvas: &mut dyn Canvas, _monitor: &str) -> (f32, f32) {
         let mut total_w = 0.0;
         if self.items.is_empty() {
             return canvas.measure_text(&self.empty_label, "", 14.0);
@@ -259,5 +247,53 @@ impl<C: Canvas> CrankyModule<C> for AppletModule {
             }
         }
         (total_w, 30.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ports::canvas::MockCanvas;
+    use crate::config::Config;
+
+    #[test]
+    fn test_applet_module_init() {
+        let mut module = AppletModule::new();
+        let config = AppletConfig {
+            refresh_ms: 500,
+            show_titles: false,
+            ..Default::default()
+        };
+        CrankyModule::init(&mut module, config, &crate::config::BarConfig::default()).unwrap();
+        assert_eq!(module.refresh_interval, Duration::from_millis(500));
+        assert!(!module.show_titles);
+    }
+
+    #[test]
+    fn test_applet_module_view_empty() {
+        let mut module = AppletModule::new();
+        module.empty_label = "none".to_string();
+        
+        let mut mock = MockCanvas::new();
+        mock.expect_draw_text()
+            .withf(|text, _, _, _, _, _| text == "none")
+            .times(1)
+            .returning(|_, _, _, _, _, _| ());
+
+        CrankyModule::view(&module, &mut mock, "eDP-1");
+    }
+
+    #[tokio::test]
+    async fn test_applet_module_reactive_pointer() {
+        let (hub, _dirty_rx) = SignalHub::new(Config::default());
+        let mut module = AppletModule::new();
+        
+        CrankyModule::attach(&mut module, &hub, 7);
+        assert_eq!(module.target_id, 7);
+
+        hub.pointer_tx().send(PointerEvent::Click { target_id: 99, x: 0.0, y: 0.0, button: 0 }).unwrap();
+        hub.pointer_tx().send(PointerEvent::Click { target_id: 7, x: 10.0, y: 10.0, button: 272 }).unwrap();
+
+        tokio::task::yield_now().await;
     }
 }

@@ -6,16 +6,17 @@ use crate::modules::ModuleRegistry;
 use crate::config::Config;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tracing::{info, debug, info_span, debug_span};
 
-pub struct CrankyApp<C: Canvas> {
+pub struct CrankyApp {
     hub: Arc<SignalHub>,
-    registry: ModuleRegistry<C>,
+    registry: ModuleRegistry,
     config: Config,
     command_tx: mpsc::Sender<AppCommand>,
     dirty_rx: mpsc::Receiver<u32>,
 }
 
-impl<C: Canvas + 'static> CrankyApp<C> {
+impl CrankyApp {
     pub fn new(
         hub: Arc<SignalHub>,
         dirty_rx: mpsc::Receiver<u32>,
@@ -23,7 +24,6 @@ impl<C: Canvas + 'static> CrankyApp<C> {
         command_tx: mpsc::Sender<AppCommand>
     ) -> Self {
         let mut registry = ModuleRegistry::new();
-        // Error handling for registry load will be refined as we move forward
         let _ = registry.load(&config); 
         registry.attach_all(&hub);
 
@@ -36,11 +36,21 @@ impl<C: Canvas + 'static> CrankyApp<C> {
         }
     }
 
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
     /// The main core loop that awaits reactive signals and issues adapter commands.
     pub async fn run(&mut self) -> Result<(), DomainError> {
         let mut config_rx = self.hub.config_rx();
 
+        info!("Core app loop started, issuing initial render request.");
+        let _ = self.command_tx.send(AppCommand::RequestRender(0)).await;
+
         loop {
+            let core_loop_span = info_span!("core_loop_iteration");
+            let _enter = core_loop_span.enter();
+
             tokio::select! {
                 Some(target_id) = self.dirty_rx.recv() => {
                     self.handle_dirty(target_id).await?;
@@ -53,13 +63,19 @@ impl<C: Canvas + 'static> CrankyApp<C> {
         }
     }
 
-    async fn handle_dirty(&mut self, _target_id: u32) -> Result<(), DomainError> {
+    async fn handle_dirty(&mut self, target_id: u32) -> Result<(), DomainError> {
+        let span = debug_span!("handle_dirty", target_id);
+        let _enter = span.enter();
+        debug!("Module {} signaled dirty, requesting render.", target_id);
         // Broad render request for now. Phase 4 will refine this to specific outputs.
         let _ = self.command_tx.send(AppCommand::RequestRender(0)).await;
         Ok(())
     }
 
     async fn handle_config_change(&mut self, config: Config) -> Result<(), DomainError> {
+        let span = info_span!("handle_config_change");
+        let _enter = span.enter();
+        info!("Config change detected in core app.");
         self.config = config;
         self.registry.load(&self.config)?;
         self.registry.attach_all(&self.hub);
@@ -69,7 +85,7 @@ impl<C: Canvas + 'static> CrankyApp<C> {
 
     /// Renders the current state of modules for a specific monitor onto the provided canvas.
     /// This is called by the adapter in response to a RequestRender command.
-    pub fn render(&mut self, _output_id: u32, canvas: &mut C, monitor: &str) -> Result<(), DomainError> {
+    pub fn render(&mut self, _output_id: u32, canvas: &mut dyn Canvas, monitor: &str) -> Result<(), DomainError> {
         // Synchronize all modules with the latest signal data before viewing
         self.registry.refresh_all(&self.hub);
 
@@ -89,5 +105,39 @@ impl<C: Canvas + 'static> CrankyApp<C> {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ports::canvas::MockCanvas;
+
+    #[tokio::test]
+    async fn test_app_handle_dirty() {
+        let (hub, dirty_rx) = SignalHub::new(Config::default());
+        let (command_tx, mut command_rx) = mpsc::channel(10);
+        
+        let mut app = CrankyApp::new(Arc::new(hub), dirty_rx, Config::default(), command_tx);
+
+        app.handle_dirty(0).await.unwrap();
+        
+        let cmd = command_rx.recv().await.unwrap();
+        match cmd {
+            AppCommand::RequestRender(id) => assert_eq!(id, 0),
+            _ => panic!("Expected RequestRender command"),
+        }
+    }
+
+    #[test]
+    fn test_app_render_calls_modules() {
+        let (hub, dirty_rx) = SignalHub::new(Config::default());
+        let (command_tx, _) = mpsc::channel(10);
+        let mut app = CrankyApp::new(Arc::new(hub), dirty_rx, Config::default(), command_tx);
+        
+        let mut mock = MockCanvas::new();
+        // Since we have no modules in default config, no calls expected yet.
+        // But the method should execute.
+        app.render(0, &mut mock, "eDP-1").unwrap();
     }
 }

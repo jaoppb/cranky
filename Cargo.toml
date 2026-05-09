@@ -13,10 +13,6 @@ tokio = { version = "1.40", features = ["full"] }
 wayland-client = "0.31"
 wayland-protocols = { version = "0.32", features = ["client"] }
 wayland-protocols-wlr = { version = "0.3", features = ["client"] }
-
-# Logging & Error Handling
-log = "0.4"
-pretty_env_logger = "0.5"
 thiserror = "2.0"
 
 # Configuration
@@ -38,6 +34,8 @@ notify = "8.2"
 freedesktop-icons = "0.4"
 image = "0.25"
 resvg = "0.47"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 mockall = "0.14"
