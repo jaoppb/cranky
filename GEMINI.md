@@ -6,6 +6,12 @@
 - **Dead Code:** Never use `#[allow(dead_code)]`. All code must be used or removed.
 - **Testing:** Maintain 80% unit test coverage.
 - **Modularity:** Adhere to the addon-like structure defined in `SPEC.md`.
+- **Architecture (Clean Architecture & DDD):** 
+    - **Domain Layer (`src/domain`):** Contains core business logic, entities (e.g., `HyprlandState`), and application services (`CrankyApp`). It must remain independent of external frameworks.
+    - **Ports Layer (`src/ports`):** Defines traits that act as gateways for the domain to interact with the outside world (e.g., `DisplayServerPort`, `WindowManagerPort`, `Canvas`).
+    - **Adapters Layer (`src/adapters`):** Implements the ports using specific technologies (e.g., `WaylandAdapter`, `HyprlandAdapter`, `SkiaCanvas`).
+    - **Infrastructure Layer (`src/core`):** Contains low-level technical primitives (e.g., SHM management).
+    - **Module System (`src/modules`):** Implements bar features as decoupled 'mini-use-cases' that interact with the domain via signals.
 
 ## Implementation Notes
 
