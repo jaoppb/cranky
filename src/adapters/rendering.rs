@@ -3,7 +3,7 @@ use crate::domain::color::{DrawingColor, Color as DomainColor};
 use crate::domain::errors::PortError;
 use tiny_skia::{
     Color as SkiaColor, Paint, PixmapMut, Rect, Transform, PathBuilder, FillRule, 
-    GradientStop, LinearGradient, Point, SpreadMode, Stroke, LineCap, LineJoin, Mask
+    GradientStop, LinearGradient, Point, SpreadMode, Stroke, LineCap, LineJoin
 };
 use cosmic_text::{
     Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache, SwashContent,
@@ -248,10 +248,33 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
                                 }
                             }
 
-                            let mut mask = Mask::new(image.placement.width, image.placement.height).unwrap();
-                            mask.data_mut().copy_from_slice(&image.data);
-                            
-                            self.pixmap.fill_rect(physical_rect, &paint, Transform::identity(), Some(&mask));
+                            if image.placement.width > 0 && image.placement.height > 0 {
+                                if let Some(mut glyph_pixmap) = tiny_skia::Pixmap::new(image.placement.width, image.placement.height) {
+                                    let glyph_rect = Rect::from_xywh(0.0, 0.0, image.placement.width as f32, image.placement.height as f32).unwrap();
+                                    glyph_pixmap.fill_rect(glyph_rect, &paint, Transform::identity(), None);
+                                    
+                                    for (pixel, &mask_alpha) in glyph_pixmap.pixels_mut().iter_mut().zip(image.data.iter()) {
+                                        let a = (pixel.alpha() as u32 * mask_alpha as u32) / 255;
+                                        let r = (pixel.red() as u32 * mask_alpha as u32) / 255;
+                                        let g = (pixel.green() as u32 * mask_alpha as u32) / 255;
+                                        let b = (pixel.blue() as u32 * mask_alpha as u32) / 255;
+                                        if let Some(c) = tiny_skia::PremultipliedColorU8::from_rgba(r as u8, g as u8, b as u8, a as u8) {
+                                            *pixel = c;
+                                        } else {
+                                            *pixel = tiny_skia::PremultipliedColorU8::TRANSPARENT;
+                                        }
+                                    }
+                                    
+                                    self.pixmap.draw_pixmap(
+                                        physical_glyph.x + image.placement.left,
+                                        physical_glyph.y - image.placement.top,
+                                        glyph_pixmap.as_ref(),
+                                        &tiny_skia::PixmapPaint::default(),
+                                        Transform::identity(),
+                                        None
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -315,5 +338,38 @@ mod tests {
         let (w, h) = canvas.measure_text("test", "", 14.0);
         assert!(w > 0.0);
         assert!(h > 0.0);
+    }
+
+    #[test]
+    fn test_canvas_draw_text() {
+        let mut pixmap = Pixmap::new(100, 100).unwrap();
+        let mut font_system = FontSystem::new();
+        let mut swash_cache = SwashCache::new();
+        
+        let mut canvas = TinySkiaCosmicCanvas::new(
+            pixmap.as_mut(),
+            &mut font_system,
+            &mut swash_cache,
+            1.0
+        );
+
+        // This should not panic
+        canvas.draw_text(
+            "test ", 
+            "", 
+            14.0, 
+            DrawingColor::Solid(Color::new(255, 255, 255, 255)), 
+            10.0, 10.0
+        );
+
+        // Verify that at least some pixels were drawn (text is white)
+        let mut drawn = false;
+        for pixel in pixmap.pixels() {
+            if pixel.alpha() > 0 {
+                drawn = true;
+                break;
+            }
+        }
+        assert!(drawn, "Text should have drawn some pixels");
     }
 }

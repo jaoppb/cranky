@@ -7,7 +7,7 @@ Cranky is a minimalist, performant, and modular bar for Hyprland, written in Rus
 - **Low Footprint:** Efficient use of CPU and memory. Use software rendering (`tiny-skia`) to shared memory buffers for maximum performance without the overhead of complex GPU pipelines.
 - **100% Modularity:** Every visual element (except the bar frame) should be a module.
 - **Reliability:** 80% unit test coverage for all core logic and module state management.
-- **Transparency:** Comprehensive logging using `log` and `pretty_env_logger`.
+- **Transparency:** Comprehensive logging using `tracing`.
 
 ## Tech Stack & Crates
 
@@ -15,7 +15,7 @@ Cranky is a minimalist, performant, and modular bar for Hyprland, written in Rus
 
 - **Runtime:** `tokio` for asynchronous task management (DBus, Wayland events, timers).
 - **Wayland:** `wayland-client` and `wayland-protocols` for compositor communication and `layer-shell` support.
-- **Logging:** `log` with `pretty_env_logger`.
+- **Logging:** `tracing` with `tracing-subscriber` for structured logging and diagnostics.
 - **Error Handling:** `thiserror` for defining structured error enums.
 - **Configuration:** `serde` with `toml` for parsing `~/.config/cranky/config.toml`.
 

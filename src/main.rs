@@ -46,8 +46,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hub = Arc::new(hub);
 
     // 4. Initialize Core Orchestrator
-    let (command_tx, command_rx) = mpsc::channel::<AppCommand>(100);
-    let app = CrankyApp::new(
+    let (command_tx, _command_rx) = mpsc::channel::<AppCommand>(100);
+    let mut app = CrankyApp::new(
         hub.clone(),
         dirty_rx,
         initial_config,
@@ -66,9 +66,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hub_for_config = hub.clone();
     let _config_watcher = config_adapter.watch(hub_for_config)?;
 
-    // 7. Start Wayland Event Loop (which drives the core app)
+    // 7. Start the Core App Orchestrator
     info!("Cranky started successfully.");
-    wayland_adapter.run(app, command_rx).await?;
+    app.run(&mut wayland_adapter).await?;
 
     Ok(())
 }

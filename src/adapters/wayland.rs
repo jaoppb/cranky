@@ -2,14 +2,13 @@ use crate::ports::DisplayServerPort;
 use crate::ports::canvas::Canvas;
 use crate::domain::errors::PortError;
 use crate::domain::signals::{SignalHub, PointerEvent};
-use crate::domain::commands::AppCommand;
 use crate::domain::app::CrankyApp;
 use crate::adapters::rendering::TinySkiaCosmicCanvas;
 use crate::core::shm::ShmBuffer;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use async_trait::async_trait;
 use tokio::io::unix::AsyncFd;
-use tracing::{info, error, debug, info_span, debug_span, trace_span};
+use tracing::{info, debug, info_span};
 use wayland_client::{
     Connection, Dispatch, EventQueue, QueueHandle,
     backend::WaylandError,
@@ -27,7 +26,7 @@ use wayland_client::{
     },
 };
 use wayland_protocols_wlr::layer_shell::v1::client::{
-    zwlr_layer_shell_v1::{self, ZwlrLayerShellV1, Layer},
+    zwlr_layer_shell_v1::{ZwlrLayerShellV1, Layer},
     zwlr_layer_surface_v1::{self, ZwlrLayerSurfaceV1, Anchor},
 };
 use cosmic_text::{FontSystem, SwashCache};
@@ -46,6 +45,7 @@ pub struct WaylandAdapter {
     connection: Connection,
     event_queue: EventQueue<WaylandState>,
     state: WaylandState,
+    async_fd: AsyncFd<WaylandFd>,
 }
 
 pub struct WaylandState {
@@ -95,6 +95,10 @@ impl WaylandAdapter {
 
         connection.display().get_registry(&qh, ());
 
+        let raw_fd = connection.as_fd().as_raw_fd();
+        let async_fd = AsyncFd::new(WaylandFd(raw_fd))
+            .map_err(|e| PortError::DisplayConnectionFailed { reason: e.to_string() })?;
+
         let state = WaylandState {
             hub,
             compositor: None,
@@ -116,94 +120,52 @@ impl WaylandAdapter {
             connection,
             event_queue,
             state,
+            async_fd,
         })
     }
+}
 
-    pub async fn run(
-        &mut self, 
-        mut app: CrankyApp,
-        mut command_rx: mpsc::Receiver<AppCommand>
-    ) -> Result<(), PortError> {
-        info!("Wayland adapter starting main loop...");
+#[async_trait]
+impl DisplayServerPort for WaylandAdapter {
+    fn create_bar(&self, _output_id: u32, _name: &str) -> Result<(), PortError> { Ok(()) }
+    fn destroy_bar(&self, _output_id: u32) -> Result<(), PortError> { Ok(()) }
 
-        let raw_fd = self.connection.as_fd().as_raw_fd();
-        let async_fd = AsyncFd::new(WaylandFd(raw_fd))
-            .map_err(|e| PortError::DisplayConnectionFailed { reason: e.to_string() })?;
-
-        loop {
-            let wayland_loop_span = info_span!("wayland_loop_iteration");
-            let _enter = wayland_loop_span.enter();
-
-            let _ = self.connection.flush();
-            
-            self.event_queue.dispatch_pending(&mut self.state)
-                .map_err(|e| PortError::DisplayConnectionFailed { reason: e.to_string() })?;
-
-            let mut read_guard = self.event_queue.prepare_read();
-
-            tokio::select! {
-                read_ready = async_fd.readable(), if read_guard.is_some() => {
-                    let span = trace_span!("dispatch_events");
-                    let _enter = span.enter();
-                    if let Ok(mut guard) = read_ready {
-                        let r_guard = read_guard.take().unwrap();
-                        match r_guard.read() {
-                            Ok(_) => { 
-                                guard.retain_ready(); 
-                                self.event_queue.dispatch_pending(&mut self.state)
-                                    .map_err(|e| PortError::DisplayConnectionFailed { reason: e.to_string() })?;
-                            }
-                            Err(WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => { guard.clear_ready(); }
-                            Err(e) => { error!("Wayland read error: {:?}", e); }
-                        }
-                    } else {
-                        drop(read_guard);
+    async fn wait_for_events(&mut self) -> Result<(), PortError> {
+        let mut read_guard = self.event_queue.prepare_read();
+        if let Some(r_guard) = read_guard.take() {
+            if let Ok(mut guard) = self.async_fd.readable().await {
+                match r_guard.read() {
+                    Ok(_) => {
+                        guard.retain_ready();
                     }
-                }
-                _ = tokio::task::yield_now(), if read_guard.is_none() => {}
-                Some(command) = command_rx.recv() => {
-                    drop(read_guard);
-                    self.handle_command(command, &mut app)?;
-                }
-                _ = tokio::time::sleep(std::time::Duration::from_millis(50)) => {
-                    drop(read_guard);
-                }
-            }
-        }
-    }
-
-    fn handle_command(
-        &mut self, 
-        command: AppCommand, 
-        app: &mut CrankyApp
-    ) -> Result<(), PortError> {
-        let span = debug_span!("handle_command", ?command);
-        let _enter = span.enter();
-        let qh = self.event_queue.handle();
-        match command {
-            AppCommand::RequestRender(output_id) => {
-                debug!("Received RequestRender command for output {}", output_id);
-                self.render_all_outputs(app, &qh)?;
-            }
-            AppCommand::CreateBar(id, name) => {
-                info!("Command: Create bar {} for output {}", name, id);
-            }
-            AppCommand::DestroyBar(id) => {
-                info!("Command: Destroy bar for output {}", id);
-            }
-            AppCommand::Log(level, msg) => {
-                match level {
-                    tracing::Level::ERROR => tracing::error!("{}", msg),
-                    tracing::Level::WARN => tracing::warn!("{}", msg),
-                    tracing::Level::INFO => tracing::info!("{}", msg),
-                    tracing::Level::DEBUG => tracing::debug!("{}", msg),
-                    tracing::Level::TRACE => tracing::trace!("{}", msg),
+                    Err(WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        guard.clear_ready();
+                    }
+                    Err(e) => return Err(PortError::DisplayConnectionFailed { reason: e.to_string() }),
                 }
             }
         }
         Ok(())
     }
 
+    fn dispatch_pending(&mut self) -> Result<(), PortError> {
+        self.event_queue.dispatch_pending(&mut self.state)
+            .map_err(|e| PortError::DisplayConnectionFailed { reason: e.to_string() })?;
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), PortError> {
+        let _ = self.connection.flush();
+        Ok(())
+    }
+
+    fn render_all(&mut self, app: &mut CrankyApp) -> Result<(), PortError> {
+        let qh = self.event_queue.handle();
+        self.render_all_outputs(app, &qh)
+    }
+}
+
+impl WaylandAdapter {
     fn render_all_outputs(&mut self, app: &mut CrankyApp, qh: &QueueHandle<WaylandState>) -> Result<(), PortError> {
         let span = info_span!("render_all_outputs");
         let _enter = span.enter();
@@ -222,8 +184,11 @@ impl WaylandAdapter {
         for bar in bars {
             debug!("Rendering bar for output: {} (size: {}x{}, scale: {})", bar.output_name, bar.width, bar.height, bar.scale);
             let (width, height, scale) = (bar.width, bar.height, bar.scale);
+            let physical_width = width * scale as u32;
+            let physical_height = height * scale as u32;
+
             let pixmap_data = bar.shm_buffer.mmap_mut();
-            let mut pixmap = PixmapMut::from_bytes(pixmap_data, width, height).unwrap();
+            let pixmap = PixmapMut::from_bytes(pixmap_data, physical_width, physical_height).unwrap();
             
             // Clear and draw background
             let config_bg = app.config().bar().background().clone();
@@ -233,7 +198,7 @@ impl WaylandAdapter {
                 swash_cache,
                 scale as f32
             );
-            canvas.draw_rect(0.0, 0.0, width as f32 / scale as f32, height as f32 / scale as f32, config_bg, 0.0);
+            canvas.draw_rect(0.0, 0.0, width as f32, height as f32, config_bg, 0.0);
 
             app.render(0, &mut canvas, &bar.output_name).map_err(|e| PortError::SurfaceError { 
                 target_id: 0, 
@@ -242,14 +207,15 @@ impl WaylandAdapter {
 
             let buffer = bar.shm_buffer.pool().create_buffer(
                 0,
-                width as i32,
-                height as i32,
-                (width * 4) as i32,
+                physical_width as i32,
+                physical_height as i32,
+                (physical_width * 4) as i32,
                 wayland_client::protocol::wl_shm::Format::Argb8888,
                 qh,
                 ()
             );
 
+            bar.surface.set_buffer_scale(scale);
             bar.surface.attach(Some(&buffer), 0, 0);
             bar.surface.damage(0, 0, width as i32, height as i32);
             bar.surface.commit();
@@ -271,7 +237,7 @@ impl WaylandState {
         if self.bars.iter().any(|b| b.output_name == output_name) { return Ok(()); }
 
         let bar_height = self.hub.config_rx().borrow().bar().height();
-        info!("Creating bar for output: {} (height: {})", output_name, bar_height);
+        info!("Creating bar for output: {} (height: {}, scale: {})", output_name, bar_height, output_scale);
 
         let compositor = self.compositor.as_ref().ok_or(PortError::DisplayConnectionFailed { reason: "Compositor not bound".to_string() })?;
         let layer_shell = self.layer_shell.as_ref().ok_or(PortError::DisplayConnectionFailed { reason: "Layer shell not bound".to_string() })?;
@@ -283,9 +249,10 @@ impl WaylandState {
         layer_surface.set_anchor(Anchor::Top | Anchor::Left | Anchor::Right);
         layer_surface.set_size(0, bar_height);
         layer_surface.set_exclusive_zone(bar_height as i32);
+        surface.set_buffer_scale(output_scale);
         surface.commit();
 
-        let shm_buffer = ShmBuffer::new(shm, 1920, bar_height, qh).map_err(|e| PortError::Io(e))?;
+        let shm_buffer = ShmBuffer::new(shm, 1920 * output_scale as u32, bar_height * output_scale as u32, qh).map_err(|e| PortError::Io(e))?;
 
         self.bars.push(WaylandBar {
             output_name,
@@ -303,11 +270,6 @@ impl WaylandState {
 
         Ok(())
     }
-}
-
-impl DisplayServerPort for WaylandAdapter {
-    fn create_bar(&self, _output_id: u32, _name: &str) -> Result<(), PortError> { Ok(()) }
-    fn destroy_bar(&self, _output_id: u32) -> Result<(), PortError> { Ok(()) }
 }
 
 impl Dispatch<WlRegistry, ()> for WaylandState {
@@ -414,15 +376,25 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
             proxy.ack_configure(serial);
             if let Some(bar) = state.bars.iter_mut().find(|b| &b.layer_surface == proxy) {
                 if width > 0 && height > 0 {
+                    let old_width = bar.width;
+                    let old_height = bar.height;
+                    
                     bar.width = width;
                     bar.height = height;
-                    if let Ok(new_shm) = ShmBuffer::new(state.shm.as_ref().unwrap(), width, height, qh) {
-                        bar.shm_buffer = new_shm;
-                        // Request a render immediately after configuration
-                        let tx = state.hub.dirty_tx();
-                        tokio::spawn(async move {
-                            let _ = tx.send(0).await;
-                        });
+
+                    if old_width != width || old_height != height {
+                        debug!("Bar resized to {}x{} (scale: {})", width, height, bar.scale);
+                        let physical_width = width * bar.scale as u32;
+                        let physical_height = height * bar.scale as u32;
+                        
+                        if let Ok(new_shm) = ShmBuffer::new(state.shm.as_ref().unwrap(), physical_width, physical_height, qh) {
+                            bar.shm_buffer = new_shm;
+                            // Request a render immediately after configuration
+                            let tx = state.hub.dirty_tx();
+                            tokio::spawn(async move {
+                                let _ = tx.send(0).await;
+                            });
+                        }
                     }
                 }
             }
