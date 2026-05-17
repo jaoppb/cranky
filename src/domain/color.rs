@@ -38,6 +38,12 @@ pub enum DrawingColor {
     Gradient(Vec<Color>, f32),
 }
 
+impl Default for DrawingColor {
+    fn default() -> Self {
+        DrawingColor::Solid(Color::new(0, 0, 0, 255))
+    }
+}
+
 impl<'de> Deserialize<'de> for DrawingColor {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

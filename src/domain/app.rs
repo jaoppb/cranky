@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::domain::config::Config;
 use crate::domain::commands::AppCommand;
 use crate::domain::errors::DomainError;
 use crate::domain::signals::SignalHub;

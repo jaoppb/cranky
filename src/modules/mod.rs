@@ -1,4 +1,4 @@
-use crate::config::ModuleConfig;
+use crate::domain::config::ModuleConfig;
 use crate::ports::canvas::Canvas;
 use crate::domain::signals::SignalHub;
 use crate::domain::errors::DomainError;
@@ -14,7 +14,7 @@ pub trait AnyModule: Send + Sync {
     fn init(
         &mut self,
         config: &ModuleConfig,
-        bar_config: &crate::config::BarConfig,
+        bar_config: &crate::domain::config::BarConfig,
     ) -> Result<(), DomainError>;
 
     fn attach(&mut self, hub: &SignalHub, target_id: ModuleId);
@@ -32,7 +32,7 @@ pub trait CrankyModule: Send + Sync {
     fn init(
         &mut self,
         config: Self::Config,
-        bar_config: &crate::config::BarConfig,
+        bar_config: &crate::domain::config::BarConfig,
     ) -> Result<(), DomainError>;
 
     fn attach(&mut self, hub: &SignalHub, target_id: ModuleId);
@@ -51,7 +51,7 @@ where
     fn init(
         &mut self,
         config: &ModuleConfig,
-        bar_config: &crate::config::BarConfig,
+        bar_config: &crate::domain::config::BarConfig,
     ) -> Result<(), DomainError> {
         let json_value = serde_json::to_value(config.options())
             .map_err(|e| DomainError::ConfigParseError { reason: e.to_string() })?;
@@ -112,7 +112,7 @@ impl ModuleRegistry {
         self.modules.get(&id).map(|m| m.as_ref())
     }
 
-    pub fn load(&mut self, config: &crate::config::Config) -> Result<(), DomainError> {
+    pub fn load(&mut self, config: &crate::domain::config::Config) -> Result<(), DomainError> {
         self.modules.clear();
         let mut next_id = 0;
         
@@ -126,7 +126,7 @@ impl ModuleRegistry {
     fn load_section(
         &mut self,
         configs: &[ModuleConfig],
-        bar_config: &crate::config::BarConfig,
+        bar_config: &crate::domain::config::BarConfig,
         next_id: &mut u32,
     ) -> Result<Vec<ModuleId>, DomainError> {
         let mut ids = Vec::new();
@@ -168,7 +168,13 @@ impl ModuleRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
+    use crate::adapters::config::dto::ConfigDto;
+    use crate::ports::font::FontValidatorPort;
+
+    struct MockValidator;
+    impl FontValidatorPort for MockValidator {
+        fn is_valid_family(&self, _family: &str) -> bool { true }
+    }
 
     #[test]
     fn test_module_registry_load() {
@@ -180,7 +186,8 @@ mod tests {
             center = []
             right = []
         "##;
-        let config = Config::from_str(toml_str).unwrap();
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.to_domain(&MockValidator);
 
         registry.load(&config).unwrap();
         assert_eq!(registry.left_modules().len(), 1);
@@ -196,7 +203,8 @@ mod tests {
             center = [{ name = "hour", enable = true }]
             right = []
         "##;
-        let config = Config::from_str(toml_str).unwrap();
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.to_domain(&MockValidator);
         registry.load(&config).unwrap();
 
         let (hub, _) = SignalHub::new(config);

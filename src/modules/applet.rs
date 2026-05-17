@@ -100,6 +100,8 @@ pub struct AppletModule {
     empty_label: String,
     error_message: Option<String>,
     target_id: ModuleId,
+    font_family: String,
+    font_size: f32,
 }
 
 impl AppletModule {
@@ -124,6 +126,8 @@ impl AppletModule {
             empty_label: default_empty_label(),
             error_message: None,
             target_id: ModuleId::new(0),
+            font_family: String::new(),
+            font_size: 14.0,
         }
     }
 
@@ -150,7 +154,7 @@ impl CrankyModule for AppletModule {
     fn init(
         &mut self,
         config: Self::Config,
-        _bar_config: &crate::config::BarConfig,
+        bar_config: &crate::domain::config::BarConfig,
     ) -> Result<(), DomainError> {
         self.refresh_interval = Duration::from_millis(config.refresh_ms);
         self.show_titles = config.show_titles;
@@ -159,6 +163,8 @@ impl CrankyModule for AppletModule {
         self.icon_theme = config.icon_theme;
         self.max_items = config.max_items;
         self.empty_label = config.empty_label;
+        self.font_family = bar_config.font_family().as_str().to_string();
+        self.font_size = bar_config.font_size().value();
         Ok(())
     }
 
@@ -207,12 +213,12 @@ impl CrankyModule for AppletModule {
         let mut x = 0.0;
         
         if let Some(err) = &self.error_message {
-            canvas.draw_text(&format!("error: {}", err), "", 14.0, text_color, 0.0, 0.0);
+            canvas.draw_text(&format!("error: {}", err), &self.font_family, self.font_size, text_color, 0.0, 0.0);
             return;
         }
 
         if self.items.is_empty() {
-            canvas.draw_text(&self.empty_label, "", 14.0, text_color, 0.0, 0.0);
+            canvas.draw_text(&self.empty_label, &self.font_family, self.font_size, text_color, 0.0, 0.0);
             return;
         }
 
@@ -226,8 +232,8 @@ impl CrankyModule for AppletModule {
 
             if self.show_titles {
                 let title = self.item_title(item);
-                let (w, h) = canvas.measure_text(&title, "", 14.0);
-                canvas.draw_text(&title, "", 14.0, text_color.clone(), x, 0.0);
+                let (w, _h) = canvas.measure_text(&title, &self.font_family, self.font_size);
+                canvas.draw_text(&title, &self.font_family, self.font_size, text_color.clone(), x, 0.0);
                 x += w;
             }
         }
@@ -236,7 +242,7 @@ impl CrankyModule for AppletModule {
     fn measure(&self, canvas: &mut dyn Canvas, _monitor: &MonitorId) -> Size {
         let mut total_w = 0.0;
         if self.items.is_empty() {
-            let (w, h) = canvas.measure_text(&self.empty_label, "", 14.0);
+            let (w, h) = canvas.measure_text(&self.empty_label, &self.font_family, self.font_size);
             return Size::new(w.ceil() as u32, h.ceil() as u32);
         }
 
@@ -244,7 +250,7 @@ impl CrankyModule for AppletModule {
             if i > 0 { total_w += ITEM_SPACING; }
             if self.show_icons { total_w += 16.0 + ICON_TEXT_GAP; }
             if self.show_titles {
-                let (w, _) = canvas.measure_text(&self.item_title(item), "", 14.0);
+                let (w, _) = canvas.measure_text(&self.item_title(item), &self.font_family, self.font_size);
                 total_w += w;
             }
         }
@@ -256,7 +262,7 @@ impl CrankyModule for AppletModule {
 mod tests {
     use super::*;
     use crate::ports::canvas::MockCanvas;
-    use crate::config::Config;
+    use crate::domain::config::{Config, BarConfig};
     use crate::domain::geometry::Point64;
 
     #[test]
@@ -267,7 +273,7 @@ mod tests {
             show_titles: false,
             ..Default::default()
         };
-        CrankyModule::init(&mut module, config, &crate::config::BarConfig::default()).unwrap();
+        CrankyModule::init(&mut module, config, &BarConfig::default()).unwrap();
         assert_eq!(module.refresh_interval, Duration::from_millis(500));
         assert!(!module.show_titles);
     }

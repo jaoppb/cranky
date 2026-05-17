@@ -4,6 +4,7 @@ pub mod app;
 pub mod commands;
 pub mod color;
 pub mod geometry;
+pub mod config;
 
 use std::fmt;
 

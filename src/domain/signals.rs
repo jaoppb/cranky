@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::domain::config::Config;
 use crate::core::hyprland::{Workspace, Monitor};
 use crate::domain::{ModuleId, geometry::Point64};
 use tokio::sync::{watch, broadcast, mpsc};
@@ -100,7 +100,7 @@ impl SignalHub {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
+    use crate::domain::config::Config;
 
     #[tokio::test]
     async fn test_signal_hub_config_propagation() {

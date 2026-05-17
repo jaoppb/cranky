@@ -71,6 +71,8 @@ pub struct WorkspaceModule {
     active_background: DrawingColor,
     focused_background: DrawingColor,
     border_radius: f32,
+    font_family: String,
+    font_size: f32,
 }
 
 impl WorkspaceModule {
@@ -82,6 +84,8 @@ impl WorkspaceModule {
             active_background: default_active_bg(),
             focused_background: default_focused_bg(),
             border_radius: 0.0,
+            font_family: String::new(),
+            font_size: 14.0,
         }
     }
 }
@@ -92,11 +96,13 @@ impl CrankyModule for WorkspaceModule {
     fn init(
         &mut self,
         config: Self::Config,
-        _bar_config: &crate::config::BarConfig,
+        bar_config: &crate::domain::config::BarConfig,
     ) -> Result<(), DomainError> {
         self.active_background = config.active.background_color.clone();
         self.focused_background = config.focused.background_color.clone();
         self.border_radius = config.border_radius;
+        self.font_family = bar_config.font_family().as_str().to_string();
+        self.font_size = bar_config.font_size().value();
         Ok(())
     }
 
@@ -166,21 +172,21 @@ impl CrankyModule for WorkspaceModule {
                     self.border_radius,
                 );
 
-                let (label_width, label_height) = canvas.measure_text(&label, "", 14.0);
+                let (label_width, label_height) = canvas.measure_text(&label, &self.font_family, self.font_size);
                 canvas.draw_text(
                     &label,
-                    "",
-                    14.0,
+                    &self.font_family,
+                    self.font_size,
                     active_text_color.clone(),
                     x_offset + (item_size - label_width) / 2.0,
                     (item_size - label_height) / 2.0,
                 );
             } else {
-                let (label_width, label_height) = canvas.measure_text(&label, "", 14.0);
+                let (label_width, label_height) = canvas.measure_text(&label, &self.font_family, self.font_size);
                 canvas.draw_text(
                     &label,
-                    "",
-                    14.0,
+                    &self.font_family,
+                    self.font_size,
                     inactive_color.clone(),
                     x_offset + (item_size - label_width) / 2.0,
                     (item_size - label_height) / 2.0,
@@ -206,7 +212,7 @@ impl CrankyModule for WorkspaceModule {
 mod tests {
     use super::*;
     use crate::ports::canvas::MockCanvas;
-    use crate::config::Config;
+    use crate::domain::config::Config;
     use crate::core::hyprland::{Workspace, Monitor};
     use crate::domain::signals::HyprlandState;
 

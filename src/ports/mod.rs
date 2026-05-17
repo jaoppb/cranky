@@ -1,4 +1,5 @@
 pub mod canvas;
+pub mod font;
 
 use crate::domain::errors::PortError;
 use async_trait::async_trait;

@@ -1,7 +1,6 @@
 #![deny(unsafe_code)]
 
 use tracing::{info, info_span};
-mod config;
 mod core;
 mod domain;
 mod modules;
@@ -18,6 +17,7 @@ use crate::domain::app::CrankyApp;
 use crate::adapters::wayland::WaylandAdapter;
 use crate::adapters::hyprland::HyprlandAdapter;
 use crate::adapters::config::ConfigAdapter;
+use crate::adapters::font::CosmicFontValidatorAdapter;
 use crate::domain::commands::AppCommand;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -35,7 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting Cranky bar (Hexagonal + Reactive)...");
 
     // 1. Initialize Infrastructure Adapters
-    let config_adapter = ConfigAdapter::new();
+    let font_validator = CosmicFontValidatorAdapter::new();
+    let config_adapter = ConfigAdapter::new(font_validator);
     let hyprland_adapter = HyprlandAdapter::new();
     
     // 2. Load Initial Configuration
