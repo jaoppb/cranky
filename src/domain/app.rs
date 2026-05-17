@@ -119,15 +119,17 @@ impl CrankyApp {
 
     pub fn calculate_layout(&self, monitor: &MonitorId, bar_width: u32, canvas: &mut dyn Canvas) -> Vec<ModuleLayout> {
         let mut layouts = Vec::new();
+        let bar_height = self.config.bar().height();
 
         // Calculate left modules
         let mut left_x = 0.0;
         for id in self.registry.left_modules() {
             if let Some(module) = self.registry.get(id) {
                 let size = module.measure(canvas, monitor);
+                let y = (bar_height.saturating_sub(size.height())) / 2;
                 layouts.push(ModuleLayout {
                     id,
-                    bounds: Rect::new(Position::new(left_x as i32, 0), size),
+                    bounds: Rect::new(Position::new(left_x as i32, y as i32), size),
                 });
                 left_x += size.width() as f32;
             }
@@ -140,9 +142,10 @@ impl CrankyApp {
             if let Some(module) = self.registry.get(*id) {
                 let size = module.measure(canvas, monitor);
                 right_x -= size.width() as f32;
+                let y = (bar_height.saturating_sub(size.height())) / 2;
                 right_layouts.push(ModuleLayout {
                     id: *id,
-                    bounds: Rect::new(Position::new(right_x as i32, 0), size),
+                    bounds: Rect::new(Position::new(right_x as i32, y as i32), size),
                 });
             }
         }
@@ -161,9 +164,10 @@ impl CrankyApp {
 
         let mut center_x = (bar_width as f32 - center_width) / 2.0;
         for (id, size) in center_sizes {
+            let y = (bar_height.saturating_sub(size.height())) / 2;
             layouts.push(ModuleLayout {
                 id,
-                bounds: Rect::new(Position::new(center_x as i32, 0), size),
+                bounds: Rect::new(Position::new(center_x as i32, y as i32), size),
             });
             center_x += size.width() as f32;
         }

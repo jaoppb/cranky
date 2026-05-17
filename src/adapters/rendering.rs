@@ -32,7 +32,7 @@ impl<'a> TinySkiaCosmicCanvas<'a> {
     }
 
     fn to_skia_color(color: DomainColor) -> SkiaColor {
-        SkiaColor::from_rgba8(color.r(), color.g(), color.b(), color.a())
+        SkiaColor::from_rgba8(color.b(), color.g(), color.r(), color.a())
     }
 
     fn get_paint(&self, color: DrawingColor, rect: Rect) -> Paint<'static> {
@@ -316,9 +316,9 @@ mod tests {
 
         // Check a pixel inside the rect
         let pixel = pixmap.pixel(50, 50).unwrap();
-        assert_eq!(pixel.red(), 255);
+        assert_eq!(pixel.red(), 0);
         assert_eq!(pixel.green(), 0);
-        assert_eq!(pixel.blue(), 0);
+        assert_eq!(pixel.blue(), 255);
         assert_eq!(pixel.alpha(), 255);
     }
 

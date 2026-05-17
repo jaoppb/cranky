@@ -207,12 +207,12 @@ impl CrankyModule for AppletModule {
         let mut x = 0.0;
         
         if let Some(err) = &self.error_message {
-            canvas.draw_text(&format!("error: {}", err), "", 14.0, text_color, 0.0, 15.0);
+            canvas.draw_text(&format!("error: {}", err), "", 14.0, text_color, 0.0, 0.0);
             return;
         }
 
         if self.items.is_empty() {
-            canvas.draw_text(&self.empty_label, "", 14.0, text_color, 0.0, 15.0);
+            canvas.draw_text(&self.empty_label, "", 14.0, text_color, 0.0, 0.0);
             return;
         }
 
@@ -220,14 +220,14 @@ impl CrankyModule for AppletModule {
             if i > 0 { x += ITEM_SPACING; }
             
             if self.show_icons {
-                canvas.draw_rect(x, 7.0, 16.0, 16.0, text_color.clone(), 2.0);
+                canvas.draw_rect(x, 0.0, 16.0, 16.0, text_color.clone(), 2.0);
                 x += 16.0 + ICON_TEXT_GAP;
             }
 
             if self.show_titles {
                 let title = self.item_title(item);
-                canvas.draw_text(&title, "", 14.0, text_color.clone(), x, 15.0);
-                let (w, _) = canvas.measure_text(&title, "", 14.0);
+                let (w, h) = canvas.measure_text(&title, "", 14.0);
+                canvas.draw_text(&title, "", 14.0, text_color.clone(), x, 0.0);
                 x += w;
             }
         }

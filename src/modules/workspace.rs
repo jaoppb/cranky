@@ -159,31 +159,31 @@ impl CrankyModule for WorkspaceModule {
 
                 canvas.draw_rect(
                     x_offset,
-                    (30.0 - item_size) / 2.0, // Hardcoded bar height for now, Phase 3 will fix
+                    0.0,
                     item_size,
                     item_size,
                     background_color.clone(),
                     self.border_radius,
                 );
 
-                let (label_width, _) = canvas.measure_text(&label, "", 14.0);
+                let (label_width, label_height) = canvas.measure_text(&label, "", 14.0);
                 canvas.draw_text(
                     &label,
                     "",
                     14.0,
                     active_text_color.clone(),
                     x_offset + (item_size - label_width) / 2.0,
-                    15.0,
+                    (item_size - label_height) / 2.0,
                 );
             } else {
-                let (label_width, _) = canvas.measure_text(&label, "", 14.0);
+                let (label_width, label_height) = canvas.measure_text(&label, "", 14.0);
                 canvas.draw_text(
                     &label,
                     "",
                     14.0,
                     inactive_color.clone(),
                     x_offset + (item_size - label_width) / 2.0,
-                    15.0,
+                    (item_size - label_height) / 2.0,
                 );
             }
             x_offset += item_spacing;
@@ -192,7 +192,13 @@ impl CrankyModule for WorkspaceModule {
 
     fn measure(&self, _canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size {
         let count = self.workspaces.iter().filter(|w| w.monitor() == monitor.as_str()).count();
-        Size::new((count as f32 * 30.0) as u32, 30)
+        if count == 0 {
+            return Size::new(0, 0);
+        }
+        let item_size = 24.0;
+        let item_spacing = 30.0;
+        let width = ((count as f32).max(1.0) - 1.0) * item_spacing + item_size;
+        Size::new(width.ceil() as u32, item_size as u32)
     }
 }
 

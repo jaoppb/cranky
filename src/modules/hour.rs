@@ -59,7 +59,7 @@ impl CrankyModule for HourModule {
 
     fn view(&self, canvas: &mut dyn Canvas, _monitor: &MonitorId) {
         let color: DrawingColor = DrawingColor::parse("#c0caf5").unwrap();
-        canvas.draw_text(&self.current_time, "", 14.0, color, 0.0, 15.0);
+        canvas.draw_text(&self.current_time, "", 14.0, color, 0.0, 0.0);
     }
 
     fn measure(&self, canvas: &mut dyn Canvas, _monitor: &MonitorId) -> Size {
@@ -92,7 +92,7 @@ mod tests {
         let mut mock = MockCanvas::new();
         mock.expect_draw_text()
             .withf(|text, font, size, _color, x, y| {
-                text == "12:34:56" && font == "" && *size == 14.0 && *x == 0.0 && *y == 15.0
+                text == "12:34:56" && font == "" && *size == 14.0 && *x == 0.0 && *y == 0.0
             })
             .times(1)
             .returning(|_, _, _, _, _, _| ());
