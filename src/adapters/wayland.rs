@@ -3,6 +3,7 @@ use crate::ports::canvas::Canvas;
 use crate::domain::errors::PortError;
 use crate::domain::signals::{SignalHub, PointerEvent};
 use crate::domain::app::CrankyApp;
+use crate::domain::{ModuleId, MonitorId, geometry::{Size, Point64}};
 use crate::adapters::rendering::TinySkiaCosmicCanvas;
 use crate::core::shm::ShmBuffer;
 use std::sync::Arc;
@@ -23,6 +24,7 @@ use wayland_client::{
         wl_surface::WlSurface,
         wl_buffer::WlBuffer,
         wl_shm_pool::WlShmPool,
+        wl_subsurface::WlSubsurface,
     },
 };
 use wayland_protocols_wlr::layer_shell::v1::client::{
@@ -59,9 +61,9 @@ pub struct WaylandState {
     seat: Option<WlSeat>,
     pointer: Option<WlPointer>,
     
-    surface_to_id: HashMap<WlSurface, u32>,
+    surface_to_id: HashMap<WlSurface, ModuleId>,
     pointer_surface: Option<WlSurface>,
-    pointer_pos: (f64, f64),
+    pointer_pos: Point64,
     
     font_system: FontSystem,
     swash_cache: SwashCache,
@@ -83,6 +85,15 @@ struct WaylandBar {
     width: u32,
     height: u32,
     scale: i32,
+    module_surfaces: HashMap<ModuleId, ModuleSurface>,
+}
+
+struct ModuleSurface {
+    surface: WlSurface,
+    subsurface: WlSubsurface,
+    shm_buffer: ShmBuffer,
+    buffer: Option<WlBuffer>,
+    size: Size,
 }
 
 impl WaylandAdapter {
@@ -111,7 +122,7 @@ impl WaylandAdapter {
             pointer: None,
             surface_to_id: HashMap::new(),
             pointer_surface: None,
-            pointer_pos: (0.0, 0.0),
+            pointer_pos: Point64::new(0.0, 0.0),
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
         };
@@ -169,10 +180,18 @@ impl WaylandAdapter {
     fn render_all_outputs(&mut self, app: &mut CrankyApp, qh: &QueueHandle<WaylandState>) -> Result<(), PortError> {
         let span = info_span!("render_all_outputs");
         let _enter = span.enter();
+        
+        // Prepare app state once per render pass
+        app.prepare_render();
+
         let WaylandState {
             ref mut bars,
             ref mut font_system,
             ref mut swash_cache,
+            ref compositor,
+            ref subcompositor,
+            ref shm,
+            ref mut surface_to_id,
             ..
         } = self.state;
 
@@ -180,6 +199,10 @@ impl WaylandAdapter {
             debug!("No bars available for rendering.");
             return Ok(());
         }
+
+        let compositor = compositor.as_ref().unwrap();
+        let subcompositor = subcompositor.as_ref().unwrap();
+        let shm = shm.as_ref().unwrap();
 
         for bar in bars {
             debug!("Rendering bar for output: {} (size: {}x{}, scale: {})", bar.output_name, bar.width, bar.height, bar.scale);
@@ -190,20 +213,83 @@ impl WaylandAdapter {
             let pixmap_data = bar.shm_buffer.mmap_mut();
             let pixmap = PixmapMut::from_bytes(pixmap_data, physical_width, physical_height).unwrap();
             
-            // Clear and draw background
+            // Clear and draw background on the main bar surface
             let config_bg = app.config().bar().background().clone();
-            let mut canvas = TinySkiaCosmicCanvas::new(
+            let mut bar_canvas = TinySkiaCosmicCanvas::new(
                 pixmap,
                 font_system,
                 swash_cache,
                 scale as f32
             );
-            canvas.draw_rect(0.0, 0.0, width as f32, height as f32, config_bg, 0.0);
+            bar_canvas.draw_rect(0.0, 0.0, width as f32, height as f32, config_bg, 0.0);
 
-            app.render(0, &mut canvas, &bar.output_name).map_err(|e| PortError::SurfaceError { 
-                target_id: 0, 
-                reason: e.to_string() 
-            })?;
+            // Calculate layout
+            let monitor_id = MonitorId::new(&bar.output_name);
+            let layouts = app.calculate_layout(&monitor_id, width, &mut bar_canvas);
+
+            for layout in layouts {
+                let module_id = layout.id();
+                let bounds = layout.bounds();
+                
+                let ms = bar.module_surfaces.entry(module_id).or_insert_with(|| {
+                    let surface = compositor.create_surface(qh, ());
+                    let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, qh, ());
+                    subsurface.set_desync();
+                    
+                    let shm_buffer = ShmBuffer::new(shm, bounds.width() * scale as u32, bounds.height() * scale as u32, qh).unwrap();
+                    
+                    surface_to_id.insert(surface.clone(), module_id);
+
+                    ModuleSurface {
+                        surface,
+                        subsurface,
+                        shm_buffer,
+                        buffer: None,
+                        size: *bounds.size(),
+                    }
+                });
+
+                // Update position
+                ms.subsurface.set_position(bounds.x(), bounds.y());
+
+                // Recreate buffer if size changed
+                if ms.size != *bounds.size() {
+                    ms.size = *bounds.size();
+                    ms.shm_buffer = ShmBuffer::new(shm, bounds.width() * scale as u32, bounds.height() * scale as u32, qh).unwrap();
+                }
+
+                // Render module into its own buffer
+                let module_pixmap_data = ms.shm_buffer.mmap_mut();
+                let module_pixmap = PixmapMut::from_bytes(module_pixmap_data, bounds.width() * scale as u32, bounds.height() * scale as u32).unwrap();
+                
+                let mut module_canvas = TinySkiaCosmicCanvas::new(
+                    module_pixmap,
+                    font_system,
+                    swash_cache,
+                    scale as f32
+                );
+                
+                // Clear module surface (transparent)
+                module_canvas.draw_rect(0.0, 0.0, bounds.width() as f32, bounds.height() as f32, crate::domain::color::DrawingColor::Solid(crate::domain::color::Color::new(0,0,0,0)), 0.0);
+                
+                app.render_module(module_id, &mut module_canvas, &monitor_id);
+
+                let buffer = ms.shm_buffer.pool().create_buffer(
+                    0,
+                    (bounds.width() * scale as u32) as i32,
+                    (bounds.height() * scale as u32) as i32,
+                    (bounds.width() * scale as u32 * 4) as i32,
+                    wayland_client::protocol::wl_shm::Format::Argb8888,
+                    qh,
+                    ()
+                );
+
+                ms.surface.set_buffer_scale(scale);
+                ms.surface.attach(Some(&buffer), 0, 0);
+                ms.surface.damage(0, 0, bounds.width() as i32, bounds.height() as i32);
+                ms.surface.commit();
+                ms.buffer = Some(buffer);
+            }
 
             let buffer = bar.shm_buffer.pool().create_buffer(
                 0,
@@ -263,10 +349,11 @@ impl WaylandState {
             width: 1920,
             height: bar_height,
             scale: output_scale,
+            module_surfaces: HashMap::new(),
         });
 
         // Request an initial render now that a bar is created
-        let _ = self.hub.dirty_tx().send(0);
+        let _ = self.hub.dirty_tx().send(ModuleId::new(0));
 
         Ok(())
     }
@@ -325,9 +412,9 @@ impl Dispatch<WlPointer, ()> for WaylandState {
         match event {
             wl_pointer::Event::Enter { surface, surface_x, surface_y, .. } => {
                 state.pointer_surface = Some(surface.clone());
-                state.pointer_pos = (surface_x, surface_y);
+                state.pointer_pos = Point64::new(surface_x, surface_y);
                 if let Some(&id) = state.surface_to_id.get(&surface) {
-                    let _ = state.hub.pointer_tx().send(PointerEvent::Enter { target_id: id, x: surface_x, y: surface_y });
+                    let _ = state.hub.pointer_tx().send(PointerEvent::Enter { target_id: id, pos: state.pointer_pos });
                 }
             }
             wl_pointer::Event::Leave { surface, .. } => {
@@ -337,10 +424,10 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 state.pointer_surface = None;
             }
             wl_pointer::Event::Motion { surface_x, surface_y, .. } => {
-                state.pointer_pos = (surface_x, surface_y);
+                state.pointer_pos = Point64::new(surface_x, surface_y);
                 if let Some(surface) = &state.pointer_surface {
                     if let Some(&id) = state.surface_to_id.get(surface) {
-                        let _ = state.hub.pointer_tx().send(PointerEvent::Motion { target_id: id, x: surface_x, y: surface_y });
+                        let _ = state.hub.pointer_tx().send(PointerEvent::Motion { target_id: id, pos: state.pointer_pos });
                     }
                 }
             }
@@ -348,8 +435,7 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 if button_state == wayland_client::WEnum::Value(wl_pointer::ButtonState::Pressed) {
                     if let Some(surface) = &state.pointer_surface {
                         if let Some(&id) = state.surface_to_id.get(surface) {
-                            let (x, y) = state.pointer_pos;
-                            let _ = state.hub.pointer_tx().send(PointerEvent::Click { target_id: id, x, y, button });
+                            let _ = state.hub.pointer_tx().send(PointerEvent::Click { target_id: id, pos: state.pointer_pos, button });
                         }
                     }
                 }
@@ -392,7 +478,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
                             // Request a render immediately after configuration
                             let tx = state.hub.dirty_tx();
                             tokio::spawn(async move {
-                                let _ = tx.send(0).await;
+                                let _ = tx.send(ModuleId::new(0)).await;
                             });
                         }
                     }
@@ -405,3 +491,4 @@ impl Dispatch<WlBuffer, ()> for WaylandState { fn event(_: &mut Self, _: &WlBuff
 impl Dispatch<WlShmPool, ()> for WaylandState { 
     fn event(_: &mut Self, _: &WlShmPool, _: wayland_client::protocol::wl_shm_pool::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} 
 }
+impl Dispatch<WlSubsurface, ()> for WaylandState { fn event(_: &mut Self, _: &WlSubsurface, _: wayland_client::protocol::wl_subsurface::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }

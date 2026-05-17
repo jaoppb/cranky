@@ -3,6 +3,7 @@ use crate::ports::canvas::{Canvas};
 use crate::domain::signals::{SignalHub, PointerEvent};
 use crate::domain::errors::DomainError;
 use crate::domain::color::DrawingColor;
+use crate::domain::{ModuleId, MonitorId, geometry::Size};
 use tracing::{debug};
 use serde::Deserialize;
 use std::collections::{HashMap};
@@ -98,7 +99,7 @@ pub struct AppletModule {
     max_items: usize,
     empty_label: String,
     error_message: Option<String>,
-    target_id: u32,
+    target_id: ModuleId,
 }
 
 impl AppletModule {
@@ -122,7 +123,7 @@ impl AppletModule {
             max_items: default_max_items(),
             empty_label: default_empty_label(),
             error_message: None,
-            target_id: 0,
+            target_id: ModuleId::new(0),
         }
     }
 
@@ -161,7 +162,7 @@ impl CrankyModule for AppletModule {
         Ok(())
     }
 
-    fn attach(&mut self, hub: &SignalHub, target_id: u32) {
+    fn attach(&mut self, hub: &SignalHub, target_id: ModuleId) {
         self.target_id = target_id;
         let mut time_rx = hub.time_rx();
         let dirty_tx = hub.dirty_tx();
@@ -201,7 +202,7 @@ impl CrankyModule for AppletModule {
         }
     }
 
-    fn view(&self, canvas: &mut dyn Canvas, _monitor: &str) {
+    fn view(&self, canvas: &mut dyn Canvas, _monitor: &MonitorId) {
         let text_color = DrawingColor::parse("#c0caf5").unwrap();
         let mut x = 0.0;
         
@@ -232,10 +233,11 @@ impl CrankyModule for AppletModule {
         }
     }
 
-    fn measure(&self, canvas: &mut dyn Canvas, _monitor: &str) -> (f32, f32) {
+    fn measure(&self, canvas: &mut dyn Canvas, _monitor: &MonitorId) -> Size {
         let mut total_w = 0.0;
         if self.items.is_empty() {
-            return canvas.measure_text(&self.empty_label, "", 14.0);
+            let (w, h) = canvas.measure_text(&self.empty_label, "", 14.0);
+            return Size::new(w.ceil() as u32, h.ceil() as u32);
         }
 
         for (i, item) in self.items.iter().take(self.max_items).enumerate() {
@@ -246,7 +248,7 @@ impl CrankyModule for AppletModule {
                 total_w += w;
             }
         }
-        (total_w, 30.0)
+        Size::new(total_w.ceil() as u32, 30)
     }
 }
 
@@ -255,6 +257,7 @@ mod tests {
     use super::*;
     use crate::ports::canvas::MockCanvas;
     use crate::config::Config;
+    use crate::domain::geometry::Point64;
 
     #[test]
     fn test_applet_module_init() {
@@ -280,7 +283,7 @@ mod tests {
             .times(1)
             .returning(|_, _, _, _, _, _| ());
 
-        CrankyModule::view(&module, &mut mock, "eDP-1");
+        CrankyModule::view(&module, &mut mock, &MonitorId::new("eDP-1"));
     }
 
     #[tokio::test]
@@ -288,11 +291,11 @@ mod tests {
         let (hub, _dirty_rx) = SignalHub::new(Config::default());
         let mut module = AppletModule::new();
         
-        CrankyModule::attach(&mut module, &hub, 7);
-        assert_eq!(module.target_id, 7);
+        CrankyModule::attach(&mut module, &hub, ModuleId::new(7));
+        assert_eq!(module.target_id, ModuleId::new(7));
 
-        hub.pointer_tx().send(PointerEvent::Click { target_id: 99, x: 0.0, y: 0.0, button: 0 }).unwrap();
-        hub.pointer_tx().send(PointerEvent::Click { target_id: 7, x: 10.0, y: 10.0, button: 272 }).unwrap();
+        hub.pointer_tx().send(PointerEvent::Click { target_id: ModuleId::new(99), pos: Point64::new(0.0, 0.0), button: 0 }).unwrap();
+        hub.pointer_tx().send(PointerEvent::Click { target_id: ModuleId::new(7), pos: Point64::new(10.0, 10.0), button: 272 }).unwrap();
 
         tokio::task::yield_now().await;
     }

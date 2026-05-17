@@ -2,23 +2,39 @@ use crate::config::Config;
 use crate::domain::commands::AppCommand;
 use crate::domain::errors::DomainError;
 use crate::domain::signals::SignalHub;
+use crate::domain::{ModuleId, MonitorId, geometry::{Rect, Position}};
 use crate::modules::ModuleRegistry;
 use crate::ports::canvas::Canvas;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, debug_span, info, info_span};
 
+pub struct ModuleLayout {
+    id: ModuleId,
+    bounds: Rect,
+}
+
+impl ModuleLayout {
+    pub fn id(&self) -> ModuleId {
+        self.id
+    }
+
+    pub fn bounds(&self) -> &Rect {
+        &self.bounds
+    }
+}
+
 pub struct CrankyApp {
     hub: Arc<SignalHub>,
     registry: ModuleRegistry,
     config: Config,
-    dirty_rx: mpsc::Receiver<u32>,
+    dirty_rx: mpsc::Receiver<ModuleId>,
 }
 
 impl CrankyApp {
     pub fn new(
         hub: Arc<SignalHub>,
-        dirty_rx: mpsc::Receiver<u32>,
+        dirty_rx: mpsc::Receiver<ModuleId>,
         config: Config,
         _command_tx: mpsc::Sender<AppCommand>,
     ) -> Self {
@@ -38,7 +54,7 @@ impl CrankyApp {
         &self.config
     }
 
-    pub fn dirty_rx(&mut self) -> &mut mpsc::Receiver<u32> {
+    pub fn dirty_rx(&mut self) -> &mut mpsc::Receiver<ModuleId> {
         &mut self.dirty_rx
     }
 
@@ -80,8 +96,8 @@ impl CrankyApp {
         }
     }
 
-    pub async fn handle_dirty(&mut self, target_id: u32) -> Result<(), DomainError> {
-        let span = debug_span!("handle_dirty", target_id);
+    pub async fn handle_dirty(&mut self, target_id: ModuleId) -> Result<(), DomainError> {
+        let span = debug_span!("handle_dirty", target_id = %target_id);
         let _enter = span.enter();
         debug!("Module {} signaled dirty.", target_id);
         Ok(())
@@ -97,6 +113,70 @@ impl CrankyApp {
         Ok(())
     }
 
+    pub fn prepare_render(&mut self) {
+        self.registry.refresh_all(&self.hub);
+    }
+
+    pub fn calculate_layout(&self, monitor: &MonitorId, bar_width: u32, canvas: &mut dyn Canvas) -> Vec<ModuleLayout> {
+        let mut layouts = Vec::new();
+
+        // Calculate left modules
+        let mut left_x = 0.0;
+        for id in self.registry.left_modules() {
+            if let Some(module) = self.registry.get(id) {
+                let size = module.measure(canvas, monitor);
+                layouts.push(ModuleLayout {
+                    id,
+                    bounds: Rect::new(Position::new(left_x as i32, 0), size),
+                });
+                left_x += size.width() as f32;
+            }
+        }
+
+        // Calculate right modules
+        let mut right_x = bar_width as f32;
+        let mut right_layouts = Vec::new();
+        for id in self.registry.right_modules().iter().rev() {
+            if let Some(module) = self.registry.get(*id) {
+                let size = module.measure(canvas, monitor);
+                right_x -= size.width() as f32;
+                right_layouts.push(ModuleLayout {
+                    id: *id,
+                    bounds: Rect::new(Position::new(right_x as i32, 0), size),
+                });
+            }
+        }
+        layouts.extend(right_layouts.into_iter().rev());
+
+        // Calculate center modules
+        let mut center_width = 0.0;
+        let mut center_sizes = Vec::new();
+        for id in self.registry.center_modules() {
+            if let Some(module) = self.registry.get(id) {
+                let size = module.measure(canvas, monitor);
+                center_width += size.width() as f32;
+                center_sizes.push((id, size));
+            }
+        }
+
+        let mut center_x = (bar_width as f32 - center_width) / 2.0;
+        for (id, size) in center_sizes {
+            layouts.push(ModuleLayout {
+                id,
+                bounds: Rect::new(Position::new(center_x as i32, 0), size),
+            });
+            center_x += size.width() as f32;
+        }
+
+        layouts
+    }
+
+    pub fn render_module(&self, id: ModuleId, canvas: &mut dyn Canvas, monitor: &MonitorId) {
+        if let Some(module) = self.registry.get(id) {
+            module.view(canvas, monitor);
+        }
+    }
+
     /// Renders the current state of modules for a specific monitor onto the provided canvas.
     /// This is called by the adapter in response to a RequestRender command.
     pub fn render(
@@ -105,27 +185,18 @@ impl CrankyApp {
         canvas: &mut dyn Canvas,
         monitor: &str,
     ) -> Result<(), DomainError> {
-        // Synchronize all modules with the latest signal data before viewing
-        self.registry.refresh_all(&self.hub);
-
-        // Render left modules
-        for module in self.registry.left_modules() {
-            module.view(canvas, monitor);
-        }
-
-        // Render center modules
-        for module in self.registry.center_modules() {
-            module.view(canvas, monitor);
-        }
-
-        // Render right modules
-        for module in self.registry.right_modules() {
-            module.view(canvas, monitor);
+        let monitor_id = MonitorId::new(monitor);
+        self.prepare_render();
+        
+        let layout = self.calculate_layout(&monitor_id, 1920, canvas); 
+        for l in layout {
+            self.render_module(l.id(), canvas, &monitor_id);
         }
 
         Ok(())
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -212,7 +283,7 @@ mod tests {
         assert_eq!(render_count.load(Ordering::SeqCst), 1);
 
         // Signal dirty
-        dirty_tx.send(0).await.unwrap();
+        dirty_tx.send(ModuleId::new(0)).await.unwrap();
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
 
         // Should have rendered again (initial + dirty)

@@ -1,0 +1,95 @@
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Position {
+    x: i32,
+    y: i32,
+}
+
+impl Position {
+    pub fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
+
+    pub fn x(&self) -> i32 {
+        self.x
+    }
+
+    pub fn y(&self) -> i32 {
+        self.y
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Size {
+    width: u32,
+    height: u32,
+}
+
+impl Size {
+    pub fn new(width: u32, height: u32) -> Self {
+        Self { width, height }
+    }
+
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rect {
+    position: Position,
+    size: Size,
+}
+
+impl Rect {
+    pub fn new(position: Position, size: Size) -> Self {
+        Self { position, size }
+    }
+
+    pub fn position(&self) -> &Position {
+        &self.position
+    }
+
+    pub fn size(&self) -> &Size {
+        &self.size
+    }
+
+    pub fn x(&self) -> i32 {
+        self.position.x()
+    }
+
+    pub fn y(&self) -> i32 {
+        self.position.y()
+    }
+
+    pub fn width(&self) -> u32 {
+        self.size.width()
+    }
+
+    pub fn height(&self) -> u32 {
+        self.size.height()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Point64 {
+    x: f64,
+    y: f64,
+}
+
+impl Point64 {
+    pub fn new(x: f64, y: f64) -> Self {
+        Self { x, y }
+    }
+
+    pub fn x(&self) -> f64 {
+        self.x
+    }
+
+    pub fn y(&self) -> f64 {
+        self.y
+    }
+}

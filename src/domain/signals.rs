@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::core::hyprland::{Workspace, Monitor};
+use crate::domain::{ModuleId, geometry::Point64};
 use tokio::sync::{watch, broadcast, mpsc};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -24,11 +25,11 @@ impl HyprlandState {
 
 #[derive(Clone, Debug)]
 pub enum PointerEvent {
-    Enter { target_id: u32, x: f64, y: f64 },
-    Leave { target_id: u32 },
-    Motion { target_id: u32, x: f64, y: f64 },
-    Click { target_id: u32, x: f64, y: f64, button: u32 },
-    Scroll { target_id: u32, axis: u32, value: f64 },
+    Enter { target_id: ModuleId, pos: Point64 },
+    Leave { target_id: ModuleId },
+    Motion { target_id: ModuleId, pos: Point64 },
+    Click { target_id: ModuleId, pos: Point64, button: u32 },
+    Scroll { target_id: ModuleId, axis: u32, value: f64 },
 }
 
 pub struct SignalHub {
@@ -36,11 +37,11 @@ pub struct SignalHub {
     hyprland: (watch::Sender<HyprlandState>, watch::Receiver<HyprlandState>),
     time: (watch::Sender<chrono::DateTime<chrono::Local>>, watch::Receiver<chrono::DateTime<chrono::Local>>),
     pointer_events: broadcast::Sender<PointerEvent>,
-    dirty_tx: mpsc::Sender<u32>,
+    dirty_tx: mpsc::Sender<ModuleId>,
 }
 
 impl SignalHub {
-    pub fn new(initial_config: Config) -> (Self, mpsc::Receiver<u32>) {
+    pub fn new(initial_config: Config) -> (Self, mpsc::Receiver<ModuleId>) {
         let config = watch::channel(initial_config);
         let hyprland = watch::channel(HyprlandState::new(Vec::new(), Vec::new()));
         let time = watch::channel(chrono::Local::now());
@@ -91,7 +92,7 @@ impl SignalHub {
         self.pointer_events.subscribe()
     }
 
-    pub fn dirty_tx(&self) -> mpsc::Sender<u32> {
+    pub fn dirty_tx(&self) -> mpsc::Sender<ModuleId> {
         self.dirty_tx.clone()
     }
 }
@@ -144,7 +145,7 @@ mod tests {
         let mut rx2 = hub.subscribe_pointer();
         let tx = hub.pointer_tx();
 
-        let event = PointerEvent::Click { target_id: 1, x: 10.0, y: 10.0, button: 272 };
+        let event = PointerEvent::Click { target_id: ModuleId::new(1), pos: Point64::new(10.0, 10.0), button: 272 };
         tx.send(event.clone()).unwrap();
 
         let e1 = rx1.recv().await.unwrap();
@@ -152,8 +153,8 @@ mod tests {
 
         match (e1, e2) {
             (PointerEvent::Click { target_id: t1, .. }, PointerEvent::Click { target_id: t2, .. }) => {
-                assert_eq!(t1, 1);
-                assert_eq!(t2, 1);
+                assert_eq!(t1, ModuleId::new(1));
+                assert_eq!(t2, ModuleId::new(1));
             }
             _ => panic!("Incorrect event type received"),
         }
@@ -164,8 +165,8 @@ mod tests {
         let (hub, mut dirty_rx) = SignalHub::new(Config::default());
         let dirty_tx = hub.dirty_tx();
 
-        dirty_tx.send(42).await.unwrap();
+        dirty_tx.send(ModuleId::new(42)).await.unwrap();
         let id = dirty_rx.recv().await.unwrap();
-        assert_eq!(id, 42);
+        assert_eq!(id, ModuleId::new(42));
     }
 }

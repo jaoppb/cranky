@@ -4,6 +4,7 @@ use crate::ports::canvas::Canvas;
 use crate::domain::signals::SignalHub;
 use crate::domain::errors::DomainError;
 use crate::domain::color::DrawingColor;
+use crate::domain::{ModuleId, MonitorId, geometry::Size};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -99,7 +100,7 @@ impl CrankyModule for WorkspaceModule {
         Ok(())
     }
 
-    fn attach(&mut self, hub: &SignalHub, target_id: u32) {
+    fn attach(&mut self, hub: &SignalHub, target_id: ModuleId) {
         let mut hypr_rx = hub.hyprland_rx();
         let dirty_tx = hub.dirty_tx();
         
@@ -127,15 +128,16 @@ impl CrankyModule for WorkspaceModule {
         }
     }
 
-    fn view(&self, canvas: &mut dyn Canvas, monitor: &str) {
+    fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) {
+        let monitor_name = monitor.as_str();
         let monitor_workspaces: Vec<&Workspace> = self
             .workspaces
             .iter()
-            .filter(|w| w.monitor() == monitor)
+            .filter(|w| w.monitor() == monitor_name)
             .collect();
 
-        let active_id = self.active_workspaces.get(monitor).cloned().unwrap_or(-1);
-        let is_monitor_focused = self.focused_monitor == monitor;
+        let active_id = self.active_workspaces.get(monitor_name).cloned().unwrap_or(-1);
+        let is_monitor_focused = self.focused_monitor == monitor_name;
 
         let item_size = 24.0;
         let item_spacing = 30.0;
@@ -188,9 +190,9 @@ impl CrankyModule for WorkspaceModule {
         }
     }
 
-    fn measure(&self, _canvas: &mut dyn Canvas, monitor: &str) -> (f32, f32) {
-        let count = self.workspaces.iter().filter(|w| w.monitor() == monitor).count();
-        (count as f32 * 30.0, 30.0)
+    fn measure(&self, _canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size {
+        let count = self.workspaces.iter().filter(|w| w.monitor() == monitor.as_str()).count();
+        Size::new((count as f32 * 30.0) as u32, 30)
     }
 }
 
@@ -236,6 +238,6 @@ mod tests {
             .times(1)
             .returning(|_, _, _, _, _, _| ());
 
-        CrankyModule::view(&module, &mut mock, "eDP-1");
+        CrankyModule::view(&module, &mut mock, &MonitorId::new("eDP-1"));
     }
 }

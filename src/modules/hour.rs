@@ -3,6 +3,7 @@ use crate::ports::canvas::{Canvas};
 use crate::domain::signals::SignalHub;
 use crate::domain::errors::DomainError;
 use crate::domain::color::DrawingColor;
+use crate::domain::{ModuleId, MonitorId, geometry::Size};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -40,7 +41,7 @@ impl CrankyModule for HourModule {
         Ok(())
     }
 
-    fn attach(&mut self, hub: &SignalHub, target_id: u32) {
+    fn attach(&mut self, hub: &SignalHub, target_id: ModuleId) {
         let mut time_rx = hub.time_rx();
         let dirty_tx = hub.dirty_tx();
         
@@ -56,13 +57,14 @@ impl CrankyModule for HourModule {
         self.current_time = time.format(&self.format).to_string();
     }
 
-    fn view(&self, canvas: &mut dyn Canvas, _monitor: &str) {
+    fn view(&self, canvas: &mut dyn Canvas, _monitor: &MonitorId) {
         let color: DrawingColor = DrawingColor::parse("#c0caf5").unwrap();
         canvas.draw_text(&self.current_time, "", 14.0, color, 0.0, 15.0);
     }
 
-    fn measure(&self, canvas: &mut dyn Canvas, _monitor: &str) -> (f32, f32) {
-        canvas.measure_text(&self.current_time, "", 14.0)
+    fn measure(&self, canvas: &mut dyn Canvas, _monitor: &MonitorId) -> Size {
+        let (w, h) = canvas.measure_text(&self.current_time, "", 14.0);
+        Size::new(w.ceil() as u32, h.ceil() as u32)
     }
 }
 
@@ -95,7 +97,7 @@ mod tests {
             .times(1)
             .returning(|_, _, _, _, _, _| ());
 
-        CrankyModule::view(&module, &mut mock, "eDP-1");
+        CrankyModule::view(&module, &mut mock, &MonitorId::new("eDP-1"));
     }
 
     #[tokio::test]
@@ -103,13 +105,13 @@ mod tests {
         let (hub, mut dirty_rx) = SignalHub::new(Config::default());
         let mut module = HourModule::new();
         
-        // target_id = 42
-        CrankyModule::attach(&mut module, &hub, 42);
+        let target_id = ModuleId::new(42);
+        CrankyModule::attach(&mut module, &hub, target_id);
 
         // Simulate time change
         hub.time_tx().send(chrono::Local::now()).unwrap();
 
         let id = dirty_rx.recv().await.unwrap();
-        assert_eq!(id, 42);
+        assert_eq!(id, target_id);
     }
 }

@@ -2,6 +2,8 @@ use crate::config::ModuleConfig;
 use crate::ports::canvas::Canvas;
 use crate::domain::signals::SignalHub;
 use crate::domain::errors::DomainError;
+use crate::domain::{ModuleId, MonitorId, geometry::Size};
+use std::collections::HashMap;
 
 pub mod applet;
 pub mod hour;
@@ -15,13 +17,13 @@ pub trait AnyModule: Send + Sync {
         bar_config: &crate::config::BarConfig,
     ) -> Result<(), DomainError>;
 
-    fn attach(&mut self, hub: &SignalHub, target_id: u32);
+    fn attach(&mut self, hub: &SignalHub, target_id: ModuleId);
 
     fn refresh(&mut self, hub: &SignalHub);
 
-    fn view(&self, canvas: &mut dyn Canvas, monitor: &str);
+    fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId);
 
-    fn measure(&self, canvas: &mut dyn Canvas, monitor: &str) -> (f32, f32);
+    fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
 }
 
 pub trait CrankyModule: Send + Sync {
@@ -33,13 +35,13 @@ pub trait CrankyModule: Send + Sync {
         bar_config: &crate::config::BarConfig,
     ) -> Result<(), DomainError>;
 
-    fn attach(&mut self, hub: &SignalHub, target_id: u32);
+    fn attach(&mut self, hub: &SignalHub, target_id: ModuleId);
 
     fn refresh(&mut self, hub: &SignalHub);
 
-    fn view(&self, canvas: &mut dyn Canvas, monitor: &str);
+    fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId);
 
-    fn measure(&self, canvas: &mut dyn Canvas, monitor: &str) -> (f32, f32);
+    fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
 }
 
 impl<T> AnyModule for T
@@ -60,7 +62,7 @@ where
         self.init(typed_config, bar_config)
     }
 
-    fn attach(&mut self, hub: &SignalHub, target_id: u32) {
+    fn attach(&mut self, hub: &SignalHub, target_id: ModuleId) {
         self.attach(hub, target_id);
     }
 
@@ -68,81 +70,73 @@ where
         self.refresh(hub);
     }
 
-    fn view(&self, canvas: &mut dyn Canvas, monitor: &str) {
+    fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) {
         self.view(canvas, monitor);
     }
 
-    fn measure(&self, canvas: &mut dyn Canvas, monitor: &str) -> (f32, f32) {
+    fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size {
         self.measure(canvas, monitor)
     }
 }
 
 pub struct ModuleRegistry {
-    left_modules: Vec<Box<dyn AnyModule>>,
-    center_modules: Vec<Box<dyn AnyModule>>,
-    right_modules: Vec<Box<dyn AnyModule>>,
+    modules: HashMap<ModuleId, Box<dyn AnyModule>>,
+    left_modules: Vec<ModuleId>,
+    center_modules: Vec<ModuleId>,
+    right_modules: Vec<ModuleId>,
 }
 
 impl ModuleRegistry {
     pub fn new() -> Self {
         Self {
+            modules: HashMap::new(),
             left_modules: Vec::new(),
             center_modules: Vec::new(),
             right_modules: Vec::new(),
         }
     }
 
-    pub fn left_modules(&self) -> &[Box<dyn AnyModule>] {
-        &self.left_modules
+    pub fn left_modules(&self) -> Vec<ModuleId> {
+        self.left_modules.clone()
     }
 
-    pub fn center_modules(&self) -> &[Box<dyn AnyModule>] {
-        &self.center_modules
+    pub fn center_modules(&self) -> Vec<ModuleId> {
+        self.center_modules.clone()
     }
 
-    pub fn right_modules(&self) -> &[Box<dyn AnyModule>] {
-        &self.right_modules
+    pub fn right_modules(&self) -> Vec<ModuleId> {
+        self.right_modules.clone()
+    }
+
+    pub fn get(&self, id: ModuleId) -> Option<&dyn AnyModule> {
+        self.modules.get(&id).map(|m| m.as_ref())
     }
 
     pub fn load(&mut self, config: &crate::config::Config) -> Result<(), DomainError> {
+        self.modules.clear();
         let mut next_id = 0;
-        self.left_modules = self.create_modules(config.modules().left(), config.bar(), &mut next_id)?;
-        self.center_modules = self.create_modules(config.modules().center(), config.bar(), &mut next_id)?;
-        self.right_modules = self.create_modules(config.modules().right(), config.bar(), &mut next_id)?;
+        
+        self.left_modules = self.load_section(config.modules().left(), config.bar(), &mut next_id)?;
+        self.center_modules = self.load_section(config.modules().center(), config.bar(), &mut next_id)?;
+        self.right_modules = self.load_section(config.modules().right(), config.bar(), &mut next_id)?;
+        
         Ok(())
     }
 
-    pub fn attach_all(&mut self, hub: &SignalHub) {
-        let mut next_id = 0;
-        for module in self.left_modules.iter_mut()
-            .chain(self.center_modules.iter_mut())
-            .chain(self.right_modules.iter_mut()) 
-        {
-            module.attach(hub, next_id);
-            next_id += 1;
-        }
-    }
-
-    pub fn refresh_all(&mut self, hub: &SignalHub) {
-        for module in self.left_modules.iter_mut()
-            .chain(self.center_modules.iter_mut())
-            .chain(self.right_modules.iter_mut()) 
-        {
-            module.refresh(hub);
-        }
-    }
-
-    fn create_modules(
-        &self,
+    fn load_section(
+        &mut self,
         configs: &[ModuleConfig],
         bar_config: &crate::config::BarConfig,
-        _next_id: &mut u32,
-    ) -> Result<Vec<Box<dyn AnyModule>>, DomainError> {
-        let mut modules = Vec::new();
+        next_id: &mut u32,
+    ) -> Result<Vec<ModuleId>, DomainError> {
+        let mut ids = Vec::new();
         for config in configs {
             if !config.is_enabled() {
                 continue;
             }
+
+            let id = ModuleId::new(*next_id);
+            *next_id += 1;
 
             let mut module: Box<dyn AnyModule> = match config.name() {
                 "hour" => Box::new(hour::HourModule::new()),
@@ -152,9 +146,22 @@ impl ModuleRegistry {
             };
 
             module.init(config, bar_config)?;
-            modules.push(module);
+            self.modules.insert(id, module);
+            ids.push(id);
         }
-        Ok(modules)
+        Ok(ids)
+    }
+
+    pub fn attach_all(&mut self, hub: &SignalHub) {
+        for (id, module) in self.modules.iter_mut() {
+            module.attach(hub, *id);
+        }
+    }
+
+    pub fn refresh_all(&mut self, hub: &SignalHub) {
+        for module in self.modules.values_mut() {
+            module.refresh(hub);
+        }
     }
 }
 
