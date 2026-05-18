@@ -35,7 +35,6 @@ impl ConfigDto {
         domain::Config::new(bar, modules, rendering)
     }
 }
-
 #[derive(Debug, Deserialize)]
 pub struct BarConfigDto {
     #[serde(default = "default_background")]
@@ -112,7 +111,12 @@ pub struct MarginConfigDto {
 
 impl MarginConfigDto {
     pub fn to_domain(self) -> domain::MarginConfig {
-        domain::MarginConfig::new(self.top, self.bottom, self.left, self.right)
+        domain::MarginConfig::new(
+            domain::MarginOffset::new(self.top),
+            domain::MarginOffset::new(self.bottom),
+            domain::MarginOffset::new(self.left),
+            domain::MarginOffset::new(self.right),
+        )
     }
 }
 
@@ -128,7 +132,11 @@ pub struct BorderConfigDto {
 
 impl BorderConfigDto {
     pub fn to_domain(self) -> domain::BorderConfig {
-        domain::BorderConfig::new(self.size, self.color, self.radius)
+        domain::BorderConfig::new(
+            domain::BorderSize::new(self.size),
+            self.color,
+            domain::BorderRadius::new(self.radius),
+        )
     }
 }
 
@@ -215,10 +223,10 @@ pub struct PartialMarginConfigDto {
 impl PartialMarginConfigDto {
     pub fn to_domain(self) -> domain::PartialMarginConfig {
         domain::PartialMarginConfig {
-            top: self.top,
-            bottom: self.bottom,
-            left: self.left,
-            right: self.right,
+            top: self.top.map(domain::MarginOffset::new),
+            bottom: self.bottom.map(domain::MarginOffset::new),
+            left: self.left.map(domain::MarginOffset::new),
+            right: self.right.map(domain::MarginOffset::new),
         }
     }
 }
@@ -233,9 +241,9 @@ pub struct PartialBorderConfigDto {
 impl PartialBorderConfigDto {
     pub fn to_domain(self) -> domain::PartialBorderConfig {
         domain::PartialBorderConfig {
-            size: self.size,
+            size: self.size.map(domain::BorderSize::new),
             color: self.color,
-            radius: self.radius,
+            radius: self.radius.map(domain::BorderRadius::new),
         }
     }
 }

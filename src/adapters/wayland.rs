@@ -214,14 +214,29 @@ impl WaylandAdapter {
             let pixmap = PixmapMut::from_bytes(pixmap_data, physical_width, physical_height).unwrap();
             
             // Clear and draw background on the main bar surface
-            let config_bg = app.config().bar().background().clone();
+            let bar_config = app.config().bar().clone();
+            let config_bg = bar_config.background().clone();
+            let border_config = bar_config.border();
+
             let mut bar_canvas = TinySkiaCosmicCanvas::new(
                 pixmap,
                 font_system,
                 swash_cache,
                 scale as f32
             );
-            bar_canvas.draw_rect(0.0, 0.0, width as f32, height as f32, config_bg, 0.0);
+            let border_size = border_config.size().value();
+            let half_border = border_size / 2.0;
+            
+            bar_canvas.draw_rect(0.0, 0.0, width as f32, height as f32, config_bg, border_config.radius().value());
+            bar_canvas.draw_border(
+                half_border,
+                half_border,
+                width as f32 - border_size,
+                height as f32 - border_size,
+                border_config.color().clone(),
+                border_config.radius().value(),
+                border_size,
+            );
 
             // Calculate layout
             let monitor_id = MonitorId::new(&bar.output_name);
@@ -322,7 +337,9 @@ impl WaylandState {
 
         if self.bars.iter().any(|b| b.output_name == output_name) { return Ok(()); }
 
-        let bar_height = self.hub.config_rx().borrow().bar().height();
+        let bar_config = self.hub.config_rx().borrow().bar().clone();
+        let bar_height = bar_config.height();
+        let margin = bar_config.margin();
         info!("Creating bar for output: {} (height: {}, scale: {})", output_name, bar_height, output_scale);
 
         let compositor = self.compositor.as_ref().ok_or(PortError::DisplayConnectionFailed { reason: "Compositor not bound".to_string() })?;
@@ -334,7 +351,13 @@ impl WaylandState {
 
         layer_surface.set_anchor(Anchor::Top | Anchor::Left | Anchor::Right);
         layer_surface.set_size(0, bar_height);
-        layer_surface.set_exclusive_zone(bar_height as i32);
+        layer_surface.set_margin(
+            margin.top().value(),
+            margin.right().value(),
+            margin.bottom().value(),
+            margin.left().value(),
+        );
+        layer_surface.set_exclusive_zone(bar_height as i32 + margin.top().value() + margin.bottom().value());
         surface.set_buffer_scale(output_scale);
         surface.commit();
 

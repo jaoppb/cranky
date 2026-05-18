@@ -27,6 +27,45 @@ impl FontSize {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BorderSize(f32);
+
+impl BorderSize {
+    pub fn new(size: f32) -> Self {
+        Self(size)
+    }
+
+    pub fn value(&self) -> f32 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BorderRadius(f32);
+
+impl BorderRadius {
+    pub fn new(radius: f32) -> Self {
+        Self(radius)
+    }
+
+    pub fn value(&self) -> f32 {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct MarginOffset(i32);
+
+impl MarginOffset {
+    pub fn new(offset: i32) -> Self {
+        Self(offset)
+    }
+
+    pub fn value(&self) -> i32 {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     bar: BarConfig,
@@ -92,9 +131,9 @@ impl Default for BarConfig {
 impl Default for BorderConfig {
     fn default() -> Self {
         Self {
-            size: 0.0,
+            size: BorderSize::new(0.0),
             color: DrawingColor::Solid(crate::domain::color::Color::new(0, 0, 0, 255)),
-            radius: 0.0,
+            radius: BorderRadius::new(0.0),
         }
     }
 }
@@ -245,14 +284,14 @@ impl BarConfig {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct MarginConfig {
-    top: i32,
-    bottom: i32,
-    left: i32,
-    right: i32,
+    top: MarginOffset,
+    bottom: MarginOffset,
+    left: MarginOffset,
+    right: MarginOffset,
 }
 
 impl MarginConfig {
-    pub fn new(top: i32, bottom: i32, left: i32, right: i32) -> Self {
+    pub fn new(top: MarginOffset, bottom: MarginOffset, left: MarginOffset, right: MarginOffset) -> Self {
         Self {
             top,
             bottom,
@@ -261,32 +300,32 @@ impl MarginConfig {
         }
     }
 
-    pub fn top(&self) -> i32 {
+    pub fn top(&self) -> MarginOffset {
         self.top
     }
 
-    pub fn bottom(&self) -> i32 {
+    pub fn bottom(&self) -> MarginOffset {
         self.bottom
     }
 
-    pub fn left(&self) -> i32 {
+    pub fn left(&self) -> MarginOffset {
         self.left
     }
 
-    pub fn right(&self) -> i32 {
+    pub fn right(&self) -> MarginOffset {
         self.right
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BorderConfig {
-    size: f32,
+    size: BorderSize,
     color: DrawingColor,
-    radius: f32,
+    radius: BorderRadius,
 }
 
 impl BorderConfig {
-    pub fn new(size: f32, color: DrawingColor, radius: f32) -> Self {
+    pub fn new(size: BorderSize, color: DrawingColor, radius: BorderRadius) -> Self {
         Self {
             size,
             color,
@@ -294,7 +333,7 @@ impl BorderConfig {
         }
     }
 
-    pub fn size(&self) -> f32 {
+    pub fn size(&self) -> BorderSize {
         self.size
     }
 
@@ -302,7 +341,7 @@ impl BorderConfig {
         &self.color
     }
 
-    pub fn radius(&self) -> f32 {
+    pub fn radius(&self) -> BorderRadius {
         self.radius
     }
 }
@@ -371,17 +410,17 @@ impl ModuleConfig {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PartialMarginConfig {
-    pub top: Option<i32>,
-    pub bottom: Option<i32>,
-    pub left: Option<i32>,
-    pub right: Option<i32>,
+    pub top: Option<MarginOffset>,
+    pub bottom: Option<MarginOffset>,
+    pub left: Option<MarginOffset>,
+    pub right: Option<MarginOffset>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PartialBorderConfig {
-    pub size: Option<f32>,
+    pub size: Option<BorderSize>,
     pub color: Option<DrawingColor>,
-    pub radius: Option<f32>,
+    pub radius: Option<BorderRadius>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

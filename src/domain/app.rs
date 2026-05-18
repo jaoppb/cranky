@@ -119,10 +119,14 @@ impl CrankyApp {
 
     pub fn calculate_layout(&self, monitor: &MonitorId, bar_width: u32, canvas: &mut dyn Canvas) -> Vec<ModuleLayout> {
         let mut layouts = Vec::new();
-        let bar_height = self.config.bar().height();
+        let bar_config = self.config.bar();
+        let bar_height = bar_config.height();
+        let border_size = bar_config.border().size().value();
+        
+        let inner_offset = border_size;
 
         // Calculate left modules
-        let mut left_x = 0.0;
+        let mut left_x = inner_offset;
         for id in self.registry.left_modules() {
             if let Some(module) = self.registry.get(id) {
                 let size = module.measure(canvas, monitor);
@@ -136,7 +140,7 @@ impl CrankyApp {
         }
 
         // Calculate right modules
-        let mut right_x = bar_width as f32;
+        let mut right_x = bar_width as f32 - inner_offset;
         let mut right_layouts = Vec::new();
         for id in self.registry.right_modules().iter().rev() {
             if let Some(module) = self.registry.get(*id) {
