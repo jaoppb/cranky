@@ -1,0 +1,16 @@
+# lefthook.yml
+# Git hooks configuration for Cranky
+
+pre-commit:
+  parallel: true
+  commands:
+    clippy:
+      run: cargo clippy --all-targets --all-features
+
+pre-push:
+  parallel: false
+  commands:
+    build-release:
+      run: cargo build --release
+    test:
+      run: cargo test
