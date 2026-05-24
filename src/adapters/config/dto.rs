@@ -6,10 +6,6 @@ use crate::ports::font::FontValidatorPort;
 
 #[derive(Debug, Deserialize)]
 pub struct ConfigDto {
-    #[serde(default)]
-    font_family: Option<String>,
-    #[serde(default)]
-    font_size: Option<f32>,
     bar: BarConfigDto,
     #[serde(default)]
     modules: ModulesConfigDto,
@@ -19,16 +15,7 @@ pub struct ConfigDto {
 
 impl ConfigDto {
     pub fn to_domain<V: FontValidatorPort>(self, validator: &V) -> domain::Config {
-        let font_family = self.font_family
-            .filter(|f| validator.is_valid_family(f))
-            .unwrap_or_else(|| "".to_string()); // Fallback to empty string for rendering defaults if invalid
-            
-        let font_size = self.font_size.unwrap_or(14.0);
-
-        let bar = self.bar.to_domain(
-            domain::FontFamily::new(font_family),
-            domain::FontSize::new(font_size),
-        );
+        let bar = self.bar.to_domain(validator);
         let modules = self.modules.to_domain();
         let rendering = self.rendering.to_domain();
 
@@ -37,6 +24,10 @@ impl ConfigDto {
 }
 #[derive(Debug, Deserialize)]
 pub struct BarConfigDto {
+    #[serde(default)]
+    font_family: Option<String>,
+    #[serde(default)]
+    font_size: Option<f32>,
     #[serde(default = "default_background")]
     background: DrawingColor,
     #[serde(default = "default_height")]
@@ -52,19 +43,24 @@ pub struct BarConfigDto {
 }
 
 impl BarConfigDto {
-    pub fn to_domain(
+    pub fn to_domain<V: FontValidatorPort>(
         self,
-        font_family: domain::FontFamily,
-        font_size: domain::FontSize,
+        validator: &V,
     ) -> domain::BarConfig {
+        let font_family = self.font_family
+            .filter(|f| validator.is_valid_family(f))
+            .unwrap_or_else(|| "".to_string());
+            
+        let font_size = self.font_size.unwrap_or(14.0);
+
         domain::BarConfig::new(
             self.background,
             self.height,
             self.vertical_alignment.to_domain(),
             self.border.to_domain(),
             self.margin.to_domain(),
-            font_family,
-            font_size,
+            domain::FontFamily::new(font_family),
+            domain::FontSize::new(font_size),
             self.unfocused.map(|u| u.to_domain()),
         )
     }
@@ -250,6 +246,8 @@ impl PartialBorderConfigDto {
 
 #[derive(Debug, Deserialize, Default)]
 pub struct PartialBarConfigDto {
+    pub font_family: Option<String>,
+    pub font_size: Option<f32>,
     pub background: Option<DrawingColor>,
     pub height: Option<u32>,
     pub vertical_alignment: Option<VerticalAlignmentDto>,
@@ -262,9 +260,11 @@ impl PartialBarConfigDto {
         domain::PartialBarConfig {
             background: self.background,
             height: self.height,
-            vertical_alignment: self.vertical_alignment.map(|v| v.to_domain()),
+            vertical_alignment: self.vertical_alignment.map(|va| va.to_domain()),
             border: self.border.map(|b| b.to_domain()),
             margin: self.margin.map(|m| m.to_domain()),
+            font_family: self.font_family.map(domain::FontFamily::new),
+            font_size: self.font_size.map(domain::FontSize::new),
         }
     }
 }

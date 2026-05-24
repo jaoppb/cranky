@@ -251,7 +251,9 @@ impl WaylandAdapter {
                     let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, qh, ());
                     subsurface.set_desync();
                     
-                    let shm_buffer = ShmBuffer::new(shm, bounds.width() * scale as u32, bounds.height() * scale as u32, qh).unwrap();
+                    let width = (bounds.width() * scale as u32).max(1);
+                    let height = (bounds.height() * scale as u32).max(1);
+                    let shm_buffer = ShmBuffer::new(shm, width, height, qh).unwrap();
                     
                     surface_to_id.insert(surface.clone(), module_id);
 
@@ -270,12 +272,16 @@ impl WaylandAdapter {
                 // Recreate buffer if size changed
                 if ms.size != *bounds.size() {
                     ms.size = *bounds.size();
-                    ms.shm_buffer = ShmBuffer::new(shm, bounds.width() * scale as u32, bounds.height() * scale as u32, qh).unwrap();
+                    let width = (bounds.width() * scale as u32).max(1);
+                    let height = (bounds.height() * scale as u32).max(1);
+                    ms.shm_buffer = ShmBuffer::new(shm, width, height, qh).unwrap();
                 }
 
                 // Render module into its own buffer
                 let module_pixmap_data = ms.shm_buffer.mmap_mut();
-                let module_pixmap = PixmapMut::from_bytes(module_pixmap_data, bounds.width() * scale as u32, bounds.height() * scale as u32).unwrap();
+                let width = (bounds.width() * scale as u32).max(1);
+                let height = (bounds.height() * scale as u32).max(1);
+                let module_pixmap = PixmapMut::from_bytes(module_pixmap_data, width, height).unwrap();
                 
                 let mut module_canvas = TinySkiaCosmicCanvas::new(
                     module_pixmap,

@@ -5,9 +5,7 @@ use crate::domain::errors::DomainError;
 use crate::domain::{ModuleId, MonitorId, geometry::Size};
 use std::collections::HashMap;
 
-pub mod applet;
-pub mod hour;
-pub mod workspace;
+pub mod lua;
 
 /// A type-erased version of CrankyModule.
 pub trait AnyModule: Send + Sync {
@@ -24,59 +22,6 @@ pub trait AnyModule: Send + Sync {
     fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId);
 
     fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
-}
-
-pub trait CrankyModule: Send + Sync {
-    type Config: for<'de> serde::Deserialize<'de> + Default + Send + Sync;
-
-    fn init(
-        &mut self,
-        config: Self::Config,
-        bar_config: &crate::domain::config::BarConfig,
-    ) -> Result<(), DomainError>;
-
-    fn attach(&mut self, hub: &SignalHub, target_id: ModuleId);
-
-    fn refresh(&mut self, hub: &SignalHub);
-
-    fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId);
-
-    fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
-}
-
-impl<T> AnyModule for T
-where
-    T: CrankyModule,
-{
-    fn init(
-        &mut self,
-        config: &ModuleConfig,
-        bar_config: &crate::domain::config::BarConfig,
-    ) -> Result<(), DomainError> {
-        let json_value = serde_json::to_value(config.options())
-            .map_err(|e| DomainError::ConfigParseError { reason: e.to_string() })?;
-
-        let typed_config: T::Config = serde_json::from_value(json_value)
-            .map_err(|e| DomainError::ConfigParseError { reason: e.to_string() })?;
-
-        self.init(typed_config, bar_config)
-    }
-
-    fn attach(&mut self, hub: &SignalHub, target_id: ModuleId) {
-        self.attach(hub, target_id);
-    }
-
-    fn refresh(&mut self, hub: &SignalHub) {
-        self.refresh(hub);
-    }
-
-    fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) {
-        self.view(canvas, monitor);
-    }
-
-    fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size {
-        self.measure(canvas, monitor)
-    }
 }
 
 pub struct ModuleRegistry {
@@ -139,10 +84,16 @@ impl ModuleRegistry {
             *next_id += 1;
 
             let mut module: Box<dyn AnyModule> = match config.name() {
-                "hour" => Box::new(hour::HourModule::new()),
-                "applet" => Box::new(applet::AppletModule::new()),
-                "workspace" => Box::new(workspace::WorkspaceModule::new()),
-                name => return Err(DomainError::ModuleNotFound { module_name: name.to_string() }),
+                "hour" => Box::new(lua::LuaModule::built_in("hour").unwrap()),
+                "workspace" => Box::new(lua::LuaModule::built_in("workspace").unwrap()),
+                "applet" => Box::new(lua::LuaModule::built_in("applet").unwrap()),
+                name => {
+                    if let Some(m) = lua::LuaModule::external(name) {
+                        Box::new(m)
+                    } else {
+                        return Err(DomainError::ModuleNotFound { module_name: name.to_string() });
+                    }
+                }
             };
 
             module.init(config, bar_config)?;

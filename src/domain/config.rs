@@ -277,6 +277,12 @@ impl BarConfig {
                     base.margin.right = r;
                 }
             }
+            if let Some(ff) = &unfocused.font_family {
+                base.font_family = ff.clone();
+            }
+            if let Some(fs) = unfocused.font_size {
+                base.font_size = fs;
+            }
         }
         base
     }
@@ -430,4 +436,6 @@ pub struct PartialBarConfig {
     pub vertical_alignment: Option<VerticalAlignment>,
     pub border: Option<PartialBorderConfig>,
     pub margin: Option<PartialMarginConfig>,
+    pub font_family: Option<FontFamily>,
+    pub font_size: Option<FontSize>,
 }

@@ -1,9 +1,10 @@
+use serde::{Serialize, Deserialize};
 use crate::domain::config::Config;
 use crate::core::hyprland::{Workspace, Monitor};
 use crate::domain::{ModuleId, geometry::Point64};
 use tokio::sync::{watch, broadcast, mpsc};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct HyprlandState {
     workspaces: Vec<Workspace>,
     monitors: Vec<Monitor>,
