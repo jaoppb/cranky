@@ -1,6 +1,7 @@
 use mlua::{Lua, UserData, UserDataMethods, LuaSerdeExt, Function, Value};
 use crate::ports::canvas::Canvas;
 use crate::domain::signals::{SignalHub, SignalKind};
+use crate::domain::dbus::{BusType, DBusSubscription};
 use crate::domain::config::{ModuleConfig, BarConfig};
 use crate::domain::{ModuleId, MonitorId, geometry::Size};
 use crate::domain::errors::DomainError;
@@ -100,13 +101,34 @@ impl AnyModule for LuaModule {
         
         let mut subs = Vec::new();
         if let Ok(subs_fn) = globals.get::<Function>("subscriptions") {
-            if let Ok(result) = subs_fn.call::<mlua::Table>(()) {
-                for pair in result.pairs::<mlua::Value, String>() {
-                    if let Ok((_, val)) = pair {
-                        match val.as_str() {
-                            "time" => subs.push(SignalKind::Time),
-                            "hyprland" => subs.push(SignalKind::Hyprland),
-                            _ => {}
+            if let Ok(result) = subs_fn.call::<mlua::Value>(()) {
+                if let mlua::Value::Table(t) = result {
+                    for pair in t.pairs::<mlua::Value, mlua::Value>() {
+                        if let Ok((_, val)) = pair {
+                            if let mlua::Value::String(s) = &val {
+                                if let Ok(s_str) = s.to_str() {
+                                    match s_str.as_ref() {
+                                        "time" => subs.push(SignalKind::Time),
+                                        "hyprland" => subs.push(SignalKind::Hyprland),
+                                        "applets" => subs.push(SignalKind::Applets),
+                                        _ => {}
+                                    }
+                                }
+                            } else if let mlua::Value::Table(dbus_sub) = &val {
+                                if let Ok(typ) = dbus_sub.get::<String>("type") {
+                                    if typ == "dbus" {
+                                        let bus_str = dbus_sub.get::<String>("bus").unwrap_or_else(|_| "session".to_string());
+                                        let bus = if bus_str == "system" { BusType::System } else { BusType::Session };
+                                        subs.push(SignalKind::DBus(DBusSubscription {
+                                            bus,
+                                            destination: dbus_sub.get::<String>("destination").ok(),
+                                            path: dbus_sub.get::<String>("path").ok(),
+                                            interface: dbus_sub.get::<String>("interface").ok(),
+                                            member: dbus_sub.get::<String>("member").ok(),
+                                        }));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -131,6 +153,16 @@ impl AnyModule for LuaModule {
         let hypr = hub.hyprland_rx().borrow().clone();
         if let Ok(hypr_lua) = lua.to_value(&hypr) {
             let _ = globals.set("hyprland", hypr_lua);
+        }
+        
+        let dbus_state = hub.dbus_rx().borrow().clone();
+        if let Ok(dbus_lua) = lua.to_value(&dbus_state.properties) {
+            let _ = globals.set("dbus", dbus_lua);
+        }
+        
+        let applets_state = hub.applets_rx().borrow().clone();
+        if let Ok(applets_lua) = lua.to_value(&applets_state.items) {
+            let _ = globals.set("applets", applets_lua);
         }
         
         if let Ok(refresh_fn) = globals.get::<Function>("refresh") {
@@ -173,6 +205,12 @@ impl AnyModule for LuaModule {
                 Ok(())
             }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());
             let _ = lua_canvas.set("draw_text", draw_text);
+
+            let draw_image = scope.create_function(|_, (_self, image_data, width, height, x, y): (mlua::Value, Vec<u8>, u32, u32, f32, f32)| {
+                with_canvas(&mut |c| c.draw_image(&image_data, width, height, x, y));
+                Ok(())
+            }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());
+            let _ = lua_canvas.set("draw_image", draw_image);
 
             let measure_text = scope.create_function(|_, (_self, text, font, size): (mlua::Value, String, String, f32)| {
                 let mut res = (0.0, 0.0);
@@ -228,14 +266,16 @@ impl AnyModule for LuaModule {
         res.unwrap_or(Size::new(0, 0))
     }
 
-    fn on_event(&mut self, event: crate::domain::events::InputEvent) {
+    fn on_event(&mut self, event: crate::domain::events::InputEvent) -> Vec<crate::domain::commands::AppCommand> {
+        use crate::domain::commands::AppCommand;
+        let mut commands = Vec::new();
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
         
         if let Ok(on_event_fn) = globals.get::<Function>("on_event") {
             let event_table = match lua.create_table() {
                 Ok(t) => t,
-                Err(e) => { tracing::error!("Failed to create event table: {}", e); return; }
+                Err(e) => { tracing::error!("Failed to create event table: {}", e); return commands; }
             };
             use crate::domain::events::InputEvent;
             match event {
@@ -253,9 +293,23 @@ impl AnyModule for LuaModule {
                     let _ = event_table.set("amount", amount);
                 }
             }
-            let _ = on_event_fn.call::<()>(event_table).unwrap_or_else(|e| {
-                eprintln!("Lua on_event error in {}: {}", self.name, e);
+            let commands_cell = RefCell::new(&mut commands);
+            
+            let _ = lua.scope(|scope| {
+                let cranky_table = lua.create_table().unwrap();
+                let applet_action = scope.create_function(|_, (id, action): (String, String)| {
+                    commands_cell.borrow_mut().push(AppCommand::AppletAction { id, action });
+                    Ok(())
+                }).unwrap();
+                let _ = cranky_table.set("applet_action", applet_action);
+                let _ = globals.set("cranky", cranky_table);
+
+                let _ = on_event_fn.call::<()>(event_table).unwrap_or_else(|e| {
+                    eprintln!("Lua on_event error in {}: {}", self.name, e);
+                });
+                Ok::<(), mlua::Error>(())
             });
         }
+        commands
     }
 }

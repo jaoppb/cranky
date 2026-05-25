@@ -4,10 +4,15 @@ use crate::domain::workspace::{Workspace, Monitor};
 use crate::domain::ModuleId;
 use tokio::sync::{watch, mpsc};
 
+use crate::domain::dbus::{DBusState, DBusSubscription};
+use crate::domain::applets::AppletsState;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SignalKind {
     Time,
     Hyprland,
+    DBus(DBusSubscription),
+    Applets,
 }
 
 
@@ -35,6 +40,8 @@ pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
     hyprland: (watch::Sender<HyprlandState>, watch::Receiver<HyprlandState>),
     time: (watch::Sender<chrono::DateTime<chrono::Local>>, watch::Receiver<chrono::DateTime<chrono::Local>>),
+    dbus: (watch::Sender<DBusState>, watch::Receiver<DBusState>),
+    applets: (watch::Sender<AppletsState>, watch::Receiver<AppletsState>),
     dirty_tx: mpsc::Sender<ModuleId>,
 }
 
@@ -43,6 +50,8 @@ impl SignalHub {
         let config = watch::channel(initial_config);
         let hyprland = watch::channel(HyprlandState::new(Vec::new(), Vec::new()));
         let time = watch::channel(chrono::Local::now());
+        let dbus = watch::channel(DBusState::default());
+        let applets = watch::channel(AppletsState::default());
         let (dirty_tx, dirty_rx) = mpsc::channel(100);
 
         (
@@ -50,6 +59,8 @@ impl SignalHub {
                 config,
                 hyprland,
                 time,
+                dbus,
+                applets,
                 dirty_tx,
             },
             dirty_rx
@@ -78,6 +89,22 @@ impl SignalHub {
 
     pub fn time_rx(&self) -> watch::Receiver<chrono::DateTime<chrono::Local>> {
         self.time.1.clone()
+    }
+
+    pub fn dbus_tx(&self) -> watch::Sender<DBusState> {
+        self.dbus.0.clone()
+    }
+
+    pub fn dbus_rx(&self) -> watch::Receiver<DBusState> {
+        self.dbus.1.clone()
+    }
+
+    pub fn applets_tx(&self) -> watch::Sender<AppletsState> {
+        self.applets.0.clone()
+    }
+
+    pub fn applets_rx(&self) -> watch::Receiver<AppletsState> {
+        self.applets.1.clone()
     }
 
 

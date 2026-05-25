@@ -31,4 +31,13 @@ pub enum PortError {
     
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("DBus error: {reason}")]
+    DBusError { reason: String },
+
+    #[error("Port initialization failed: {0}")]
+    InitFailed(String),
+
+    #[error("Internal port error: {0}")]
+    Internal(String),
 }

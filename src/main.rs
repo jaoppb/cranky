@@ -1,6 +1,6 @@
 #![deny(unsafe_code)]
 
-use tracing::{info, info_span};
+use tracing::{info, info_span, error};
 mod core;
 mod domain;
 mod modules;
@@ -17,6 +17,10 @@ use crate::domain::app::CrankyApp;
 use crate::adapters::wayland::WaylandAdapter;
 use crate::adapters::hyprland::HyprlandAdapter;
 use crate::adapters::config::ConfigAdapter;
+use crate::adapters::zbus::ZbusAdapter;
+use crate::adapters::sni::SniAdapter;
+use crate::ports::DBusPort;
+use crate::ports::sni::SniPort;
 use crate::adapters::font::CosmicFontValidatorAdapter;
 use crate::domain::commands::AppCommand;
 use std::sync::Arc;
@@ -58,6 +62,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4. Initialize display server port
     let mut wayland_adapter = WaylandAdapter::new(hub.clone(), command_tx.clone())?;
 
+    // 5. Initialize DBus port
+    let mut zbus_adapter = ZbusAdapter::new(&hub);
+    if let Err(e) = zbus_adapter.connect().await {
+        error!("Failed to connect to DBus: {}", e);
+    }
+
+    // 5.5 Initialize SNI port
+    let mut sni_adapter = SniAdapter::new(hub.clone());
+    if let Err(e) = sni_adapter.start().await {
+        error!("Failed to start SNI Watcher: {:?}", e);
+    }
+
     // 6. Spawn Background Adapters
     let hub_for_hypr = hub.clone();
     tokio::spawn(async move {
@@ -79,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 7. Start the Core App Orchestrator
     info!("Cranky started successfully.");
-    app.run(&mut wayland_adapter).await?;
+    app.run(wayland_adapter, zbus_adapter, sni_adapter).await?;
 
     Ok(())
 }

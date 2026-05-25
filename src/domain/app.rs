@@ -5,6 +5,7 @@ use crate::domain::signals::SignalHub;
 use crate::domain::{ModuleId, MonitorId, geometry::{Rect, Position}};
 use crate::modules::ModuleRegistry;
 use crate::ports::canvas::Canvas;
+use crate::ports::DisplayServerPort;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, debug_span, info, info_span};
@@ -64,11 +65,16 @@ impl CrankyApp {
         &self.hub
     }
 
-    pub async fn run<D: crate::ports::DisplayServerPort>(
+    pub async fn run(
         &mut self,
-        display: &mut D,
+        mut display: impl DisplayServerPort,
+        mut dbus: impl crate::ports::DBusPort,
+        mut sni: impl crate::ports::sni::SniPort,
     ) -> Result<(), DomainError> {
         let mut config_rx = self.hub.config_rx();
+
+        // Register DBus subscriptions
+        self.registry.register_dbus_subscriptions(&mut dbus).await;
 
         // Initial render passes are typically requested by the display server via AppCommand::RequestRender
         // once outputs are discovered.
@@ -93,12 +99,40 @@ impl CrankyApp {
                             let _ = display.render_all(self);
                         }
                         AppCommand::Input(module_id, event) => {
-                            self.handle_input(module_id, event).await?;
+                            let mut returned_commands: Vec<AppCommand> = Vec::new();
+                            if let Some(module) = self.registry.get_mut(module_id) {
+                                returned_commands = module.on_event(event);
+                            }
+                            for cmd in returned_commands {
+                                match cmd {
+                                    AppCommand::AppletAction { id, action } => {
+                                        if let Err(e) = sni.trigger_action(&id, &action).await {
+                                            tracing::error!("Applet action failed: {}", e);
+                                        }
+                                    }
+                                    AppCommand::DBusCall(bus, dest, path, iface, member, args) => {
+                                        if let Err(e) = dbus.call_method(bus, &dest, &path, &iface, &member, args).await {
+                                            tracing::error!("DBus call failed: {}", e);
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
                         }
                         AppCommand::CreateBar(_, _) => {}
                         AppCommand::DestroyBar(_) => {}
                         AppCommand::Log(level, msg) => {
                             // log it
+                        }
+                        AppCommand::DBusCall(bus, dest, path, iface, member, args) => {
+                            if let Err(e) = dbus.call_method(bus, &dest, &path, &iface, &member, args).await {
+                                tracing::error!("DBus call failed: {}", e);
+                            }
+                        }
+                        AppCommand::AppletAction { id, action } => {
+                            if let Err(e) = sni.trigger_action(&id, &action).await {
+                                tracing::error!("Applet action failed: {}", e);
+                            }
                         }
                     }
                 }
@@ -275,11 +309,14 @@ mod tests {
         let (hub, dirty_rx) = SignalHub::new(Config::default());
         let (command_tx, command_rx) = mpsc::channel(10);
         let mut app = CrankyApp::new(Arc::new(hub), dirty_rx, Config::default(), command_rx);
-        let (mut display, _event_trigger) = MockDisplayServer::new();
+        let (display, _event_trigger) = MockDisplayServer::new();
         let render_count = display.render_count.clone();
+        
+        let dbus = crate::ports::dbus::MockDBusPort::new();
+        let sni = crate::ports::sni::MockSniPort::new();
 
         // Run in a task so we can stop it
-        let handle = tokio::spawn(async move { app.run(&mut display).await });
+        let handle = tokio::spawn(async move { app.run(display, dbus, sni).await });
 
         // Trigger initial render like the adapter does
         command_tx.send(AppCommand::RequestRender(0)).await.unwrap();
@@ -296,11 +333,14 @@ mod tests {
         let (command_tx, command_rx) = mpsc::channel(10);
         let hub = Arc::new(hub);
         let mut app = CrankyApp::new(hub.clone(), dirty_rx, Config::default(), command_rx);
-        let (mut display, _event_trigger) = MockDisplayServer::new();
+        let (display, _event_trigger) = MockDisplayServer::new();
         let render_count = display.render_count.clone();
         let dirty_tx = hub.dirty_tx();
+        
+        let dbus = crate::ports::dbus::MockDBusPort::new();
+        let sni = crate::ports::sni::MockSniPort::new();
 
-        let handle = tokio::spawn(async move { app.run(&mut display).await });
+        let handle = tokio::spawn(async move { app.run(display, dbus, sni).await });
 
         // Initial render
         command_tx.send(AppCommand::RequestRender(0)).await.unwrap();
@@ -314,6 +354,7 @@ mod tests {
 
         // Should have rendered again (initial + dirty)
         assert_eq!(render_count.load(Ordering::SeqCst), 2);
+        
         handle.abort();
     }
 

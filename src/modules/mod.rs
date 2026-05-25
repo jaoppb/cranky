@@ -24,7 +24,7 @@ pub trait AnyModule: Send + Sync {
 
     fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
 
-    fn on_event(&mut self, event: crate::domain::events::InputEvent);
+    fn on_event(&mut self, event: crate::domain::events::InputEvent) -> Vec<crate::domain::commands::AppCommand>;
 }
 
 pub struct ModuleRegistry {
@@ -140,6 +140,31 @@ impl ModuleRegistry {
                                 let _ = tx.send(id).await;
                             }
                         });
+                    }
+                    SignalKind::DBus(_) => {
+                        // Handled centrally in run via register_dbus_subscriptions
+                    }
+                    SignalKind::Applets => {
+                        let mut rx = hub.applets_rx();
+                        let tx = hub.dirty_tx();
+                        let id = *id;
+                        tokio::spawn(async move {
+                            while rx.changed().await.is_ok() {
+                                let _ = tx.send(id).await;
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    pub async fn register_dbus_subscriptions(&self, dbus: &mut impl crate::ports::DBusPort) {
+        for module in self.modules.values() {
+            for kind in module.subscriptions() {
+                if let crate::domain::signals::SignalKind::DBus(sub) = kind {
+                    if let Err(e) = dbus.subscribe(sub).await {
+                        tracing::error!("Failed to subscribe to DBus: {}", e);
                     }
                 }
             }

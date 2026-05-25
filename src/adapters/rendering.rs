@@ -287,6 +287,26 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         }
     }
 
+    fn draw_image(&mut self, image_data: &[u8], width: u32, height: u32, x: f32, y: f32) {
+        if let Some(image_pixmap) = tiny_skia::PixmapRef::from_bytes(image_data, width, height) {
+            let paint = tiny_skia::PixmapPaint::default();
+            let transform = Transform::from_translate(x * self.scale, y * self.scale);
+            
+            // If the scale is not 1.0, we actually need to scale the image!
+            // But Transform handles it. We just need to add scaling to transform.
+            let transform = transform.post_scale(self.scale, self.scale);
+            
+            self.pixmap.draw_pixmap(
+                (x * self.scale) as i32, 
+                (y * self.scale) as i32, 
+                image_pixmap, 
+                &paint, 
+                transform, 
+                None
+            );
+        }
+    }
+
     fn flush(&mut self) -> Result<(), PortError> {
         Ok(())
     }

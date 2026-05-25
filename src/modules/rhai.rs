@@ -208,7 +208,8 @@ impl AnyModule for RhaiModule {
         size
     }
 
-    fn on_event(&mut self, event: crate::domain::events::InputEvent) {
+    fn on_event(&mut self, event: crate::domain::events::InputEvent) -> Vec<crate::domain::commands::AppCommand> {
+        let mut commands = Vec::new();
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         
@@ -235,5 +236,6 @@ impl AnyModule for RhaiModule {
         }
         
         let _ = engine.call_fn::<()>(&mut scope, &self.ast, "on_event", (event_map,));
+        commands
     }
 }

@@ -39,6 +39,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
 mlua = { version = "0.11", features = ["lua54", "vendored", "serialize", "send"] }
 rhai = { version = "1.25", features = ["sync", "serde"] }
+tokio-stream = "0.1.18"
 
 [dev-dependencies]
 mockall = "0.14"

@@ -1,5 +1,9 @@
 pub mod canvas;
 pub mod font;
+pub mod dbus;
+pub mod sni;
+
+pub use dbus::DBusPort;
 
 use crate::domain::errors::PortError;
 use async_trait::async_trait;

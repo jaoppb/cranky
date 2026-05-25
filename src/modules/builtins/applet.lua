@@ -19,9 +19,17 @@ function init()
     font_size = bar_config.font_size
 end
 
+function subscriptions()
+    return { "applets" }
+end
+
 function refresh()
-    -- For now, applet list is empty in Lua too until we expose DBus
     items = {}
+    if _G.applets then
+        for _, item in ipairs(_G.applets) do
+            table.insert(items, item)
+        end
+    end
 end
 
 function measure(canvas, monitor)
@@ -70,15 +78,50 @@ function view(canvas, monitor)
         if i > 1 then x = x + ITEM_SPACING end
         
         if show_icons then
-            canvas:draw_rect(x, 0, icon_size, icon_size, text_color, 2)
+            if item.icon_data and item.icon_width and item.icon_height then
+                canvas:draw_image(item.icon_data, item.icon_width, item.icon_height, x, (30 - icon_size) / 2)
+            else
+                canvas:draw_rect(x, (30 - icon_size) / 2, icon_size, icon_size, text_color, 2)
+            end
             x = x + icon_size + ICON_TEXT_GAP
         end
 
         if show_titles then
             local label = item.title or item.app_id or "app"
             local lw, lh = canvas:measure_text(label, font_family, font_size)
-            canvas:draw_text(label, font_family, font_size, text_color, x, 0)
+            canvas:draw_text(label, font_family, font_size, text_color, x, (30 - lh) / 2)
             x = x + lw
+        end
+    end
+end
+
+function on_event(event)
+    if event.type == "click" and event.button == 272 then -- Left click
+        local ITEM_SPACING = 8
+        local ICON_TEXT_GAP = 6
+        local x = 0
+        
+        for i, item in ipairs(items) do
+            if i > max_items then break end
+            if i > 1 then x = x + ITEM_SPACING end
+            
+            local item_width = 0
+            if show_icons then item_width = item_width + icon_size + ICON_TEXT_GAP end
+            if show_titles then
+                local label = item.title or item.app_id or "app"
+                -- we can't measure text here easily without canvas, let's just approximate
+                -- or just assume clicking anywhere near it triggers it
+                -- For simplicity, since applets often don't show titles in bars:
+                item_width = item_width + (#label * (font_size / 2)) 
+            end
+            
+            if event.x >= x and event.x <= x + item_width then
+                if _G.cranky and _G.cranky.applet_action then
+                    _G.cranky.applet_action(item.id, "Activate")
+                end
+                return
+            end
+            x = x + item_width
         end
     end
 end

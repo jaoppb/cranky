@@ -5,4 +5,6 @@ pub enum AppCommand {
     RequestRender(u32),
     Input(crate::domain::ModuleId, crate::domain::events::InputEvent),
     Log(tracing::Level, String),
+    DBusCall(crate::domain::dbus::BusType, String, String, String, String, Vec<crate::domain::dbus::DBusValue>),
+    AppletAction { id: String, action: String },
 }
