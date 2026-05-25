@@ -66,7 +66,7 @@ impl AnyModule for LuaModule {
         config: &ModuleConfig,
         bar_config: &BarConfig,
     ) -> Result<(), DomainError> {
-        let lua = self.lua.lock().unwrap();
+        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
         
         // Expose bar config
@@ -95,7 +95,7 @@ impl AnyModule for LuaModule {
     }
 
     fn subscriptions(&self) -> Vec<SignalKind> {
-        let lua = self.lua.lock().unwrap();
+        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
         
         let mut subs = Vec::new();
@@ -122,7 +122,7 @@ impl AnyModule for LuaModule {
     }
 
     fn refresh(&mut self, hub: &SignalHub) {
-        let lua = self.lua.lock().unwrap();
+        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
         
         let time = *hub.time_rx().borrow();
@@ -139,39 +139,47 @@ impl AnyModule for LuaModule {
     }
 
     fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) {
-        let lua = self.lua.lock().unwrap();
+        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let canvas_cell = RefCell::new(canvas);
+        let mut with_canvas = |f: &mut dyn FnMut(&mut dyn Canvas)| f(*canvas_cell.borrow_mut());
         
         let _ = lua.scope(|scope| {
             let globals = lua.globals();
-            let lua_canvas = lua.create_table().unwrap();
+            let lua_canvas = match lua.create_table() {
+                Ok(t) => t,
+                Err(e) => { tracing::error!("Failed to create lua canvas table: {}", e); return Ok(()); }
+            };
             
-            let draw_rect = scope.create_function(|_, (_self, x, y, w, h, color_str, radius): (Value, f32, f32, f32, f32, String, f32)| {
-                let color = DrawingColor::parse(&color_str).map_err(mlua::Error::external)?;
-                canvas_cell.borrow_mut().draw_rect(x, y, w, h, color, radius);
+            let draw_rect = scope.create_function(|_, (_self, x, y, w, h, color_str, radius): (mlua::Value, f32, f32, f32, f32, String, f32)| {
+                if let Ok(color) = DrawingColor::parse(&color_str) {
+                    with_canvas(&mut |c| c.draw_rect(x, y, w, h, color.clone(), radius));
+                }
                 Ok(())
-            }).unwrap();
-            lua_canvas.set("draw_rect", draw_rect).unwrap();
+            }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());
+            let _ = lua_canvas.set("draw_rect", draw_rect);
 
-            let draw_border = scope.create_function(|_, (_self, x, y, w, h, color_str, radius, size): (Value, f32, f32, f32, f32, String, f32, f32)| {
-                let color = DrawingColor::parse(&color_str).map_err(mlua::Error::external)?;
-                canvas_cell.borrow_mut().draw_border(x, y, w, h, color, radius, size);
+            let draw_border = scope.create_function(|_, (_self, x, y, w, h, color_str, radius, size): (mlua::Value, f32, f32, f32, f32, String, f32, f32)| {
+                if let Ok(color) = DrawingColor::parse(&color_str) {
+                    with_canvas(&mut |c| c.draw_border(x, y, w, h, color.clone(), radius, size));
+                }
                 Ok(())
-            }).unwrap();
-            lua_canvas.set("draw_border", draw_border).unwrap();
+            }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());
+            let _ = lua_canvas.set("draw_border", draw_border);
 
-            let draw_text = scope.create_function(|_, (_self, text, font, size, color_str, x, y): (Value, String, String, f32, String, f32, f32)| {
-                let color = DrawingColor::parse(&color_str).map_err(mlua::Error::external)?;
-                canvas_cell.borrow_mut().draw_text(&text, &font, size, color, x, y);
+            let draw_text = scope.create_function(|_, (_self, text, font, size, color_str, x, y): (mlua::Value, String, String, f32, String, f32, f32)| {
+                if let Ok(color) = DrawingColor::parse(&color_str) {
+                    with_canvas(&mut |c| c.draw_text(&text, &font, size, color.clone(), x, y));
+                }
                 Ok(())
-            }).unwrap();
-            lua_canvas.set("draw_text", draw_text).unwrap();
+            }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());
+            let _ = lua_canvas.set("draw_text", draw_text);
 
-            let measure_text = scope.create_function(|_, (_self, text, font, size): (Value, String, String, f32)| {
-                let (w, h) = canvas_cell.borrow_mut().measure_text(&text, &font, size);
-                Ok((w, h))
-            }).unwrap();
-            lua_canvas.set("measure_text", measure_text).unwrap();
+            let measure_text = scope.create_function(|_, (_self, text, font, size): (mlua::Value, String, String, f32)| {
+                let mut res = (0.0, 0.0);
+                with_canvas(&mut |c| res = c.measure_text(&text, &font, size));
+                Ok(res)
+            }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok((0.0, 0.0))).unwrap());
+            let _ = lua_canvas.set("measure_text", measure_text);
 
             let lua_monitor = LuaMonitor(monitor.clone());
             
@@ -185,18 +193,23 @@ impl AnyModule for LuaModule {
     }
 
     fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size {
-        let lua = self.lua.lock().unwrap();
+        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let canvas_cell = RefCell::new(canvas);
+        let mut with_canvas = |f: &mut dyn FnMut(&mut dyn Canvas)| f(*canvas_cell.borrow_mut());
         
         let res = lua.scope(|scope| {
             let globals = lua.globals();
-            let lua_canvas = lua.create_table().unwrap();
+            let lua_canvas = match lua.create_table() {
+                Ok(t) => t,
+                Err(e) => { tracing::error!("Failed to create lua canvas table: {}", e); return Ok(Size::new(0, 0)); }
+            };
             
-            let measure_text = scope.create_function(|_, (_self, text, font, size): (Value, String, String, f32)| {
-                let (w, h) = canvas_cell.borrow_mut().measure_text(&text, &font, size);
-                Ok((w, h))
-            }).unwrap();
-            lua_canvas.set("measure_text", measure_text).unwrap();
+            let measure_text = scope.create_function(|_, (_self, text, font, size): (mlua::Value, String, String, f32)| {
+                let mut res = (0.0, 0.0);
+                with_canvas(&mut |c| res = c.measure_text(&text, &font, size));
+                Ok(res)
+            }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok((0.0, 0.0))).unwrap());
+            let _ = lua_canvas.set("measure_text", measure_text);
 
             let lua_monitor = LuaMonitor(monitor.clone());
             
@@ -216,25 +229,28 @@ impl AnyModule for LuaModule {
     }
 
     fn on_event(&mut self, event: crate::domain::events::InputEvent) {
-        let lua = self.lua.lock().unwrap();
+        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
         
         if let Ok(on_event_fn) = globals.get::<Function>("on_event") {
-            let event_table = lua.create_table().unwrap();
+            let event_table = match lua.create_table() {
+                Ok(t) => t,
+                Err(e) => { tracing::error!("Failed to create event table: {}", e); return; }
+            };
             use crate::domain::events::InputEvent;
             match event {
-                InputEvent::PointerEnter => event_table.set("type", "pointer_enter").unwrap(),
-                InputEvent::PointerLeave => event_table.set("type", "pointer_leave").unwrap(),
+                InputEvent::PointerEnter => { let _ = event_table.set("type", "pointer_enter"); },
+                InputEvent::PointerLeave => { let _ = event_table.set("type", "pointer_leave"); },
                 InputEvent::Click { button, x, y } => {
-                    event_table.set("type", "click").unwrap();
-                    event_table.set("button", button).unwrap();
-                    event_table.set("x", x).unwrap();
-                    event_table.set("y", y).unwrap();
+                    let _ = event_table.set("type", "click");
+                    let _ = event_table.set("button", button);
+                    let _ = event_table.set("x", x);
+                    let _ = event_table.set("y", y);
                 }
                 InputEvent::Scroll { axis, amount } => {
-                    event_table.set("type", "scroll").unwrap();
-                    event_table.set("axis", axis).unwrap();
-                    event_table.set("amount", amount).unwrap();
+                    let _ = event_table.set("type", "scroll");
+                    let _ = event_table.set("axis", axis);
+                    let _ = event_table.set("amount", amount);
                 }
             }
             let _ = on_event_fn.call::<()>(event_table).unwrap_or_else(|e| {

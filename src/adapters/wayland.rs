@@ -202,9 +202,18 @@ impl WaylandAdapter {
             return Ok(());
         }
 
-        let compositor = compositor.as_ref().unwrap();
-        let subcompositor = subcompositor.as_ref().unwrap();
-        let shm = shm.as_ref().unwrap();
+        let Some(compositor) = compositor.as_ref() else {
+            tracing::error!("Compositor not bound");
+            return Ok(());
+        };
+        let Some(subcompositor) = subcompositor.as_ref() else {
+            tracing::error!("Subcompositor not bound");
+            return Ok(());
+        };
+        let Some(shm) = shm.as_ref() else {
+            tracing::error!("SHM not bound");
+            return Ok(());
+        };
 
         for bar in bars {
             debug!("Rendering bar for output: {} (size: {}x{}, scale: {})", bar.output_name, bar.width, bar.height, bar.scale);
@@ -213,7 +222,10 @@ impl WaylandAdapter {
             let physical_height = height * scale as u32;
 
             let pixmap_data = bar.shm_buffer.mmap_mut();
-            let pixmap = PixmapMut::from_bytes(pixmap_data, physical_width, physical_height).unwrap();
+            let Some(pixmap) = PixmapMut::from_bytes(pixmap_data, physical_width, physical_height) else {
+                tracing::error!("Failed to create pixmap for bar {}", bar.output_name);
+                continue;
+            };
             
             let bar_config = app.config().bar().clone();
             let config_bg = bar_config.background().clone();
@@ -269,24 +281,33 @@ impl WaylandAdapter {
                 let module_id = layout.id();
                 let bounds = layout.bounds();
                 
-                let ms = bar.module_surfaces.entry(module_id).or_insert_with(|| {
-                    let surface = compositor.create_surface(qh, ());
-                    let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, qh, ());
-                    subsurface.set_desync();
-                    
-                    let width = (bounds.width() * scale as u32).max(1);
-                    let height = (bounds.height() * scale as u32).max(1);
-                    let shm_buffer = ShmBuffer::new(shm, width, height, qh).unwrap();
-                    
-                    surface_to_id.insert(surface.clone(), module_id);
+                let ms = match bar.module_surfaces.entry(module_id) {
+                    std::collections::hash_map::Entry::Occupied(o) => o.into_mut(),
+                    std::collections::hash_map::Entry::Vacant(v) => {
+                        let surface = compositor.create_surface(qh, ());
+                        let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, qh, ());
+                        subsurface.set_desync();
+                        
+                        let width = (bounds.width() * scale as u32).max(1);
+                        let height = (bounds.height() * scale as u32).max(1);
+                        let shm_buffer = match ShmBuffer::new(shm, width, height, qh) {
+                            Ok(b) => b,
+                            Err(e) => {
+                                tracing::error!("Failed to create shm buffer: {}", e);
+                                continue;
+                            }
+                        };
+                        
+                        surface_to_id.insert(surface.clone(), module_id);
 
-                    ModuleSurface {
-                        surface,
-                        subsurface,
-                        shm_buffer,
-                        size: *bounds.size(),
+                        v.insert(ModuleSurface {
+                            surface,
+                            subsurface,
+                            shm_buffer,
+                            size: *bounds.size(),
+                        })
                     }
-                });
+                };
 
                 // Update position
                 ms.subsurface.set_position(bounds.x(), bounds.y());
@@ -296,14 +317,23 @@ impl WaylandAdapter {
                     ms.size = *bounds.size();
                     let width = (bounds.width() * scale as u32).max(1);
                     let height = (bounds.height() * scale as u32).max(1);
-                    ms.shm_buffer = ShmBuffer::new(shm, width, height, qh).unwrap();
+                    match ShmBuffer::new(shm, width, height, qh) {
+                        Ok(new_shm) => ms.shm_buffer = new_shm,
+                        Err(e) => {
+                            tracing::error!("Failed to resize module shm buffer: {}", e);
+                            continue;
+                        }
+                    }
                 }
 
                 // Render module into its own buffer
                 let module_pixmap_data = ms.shm_buffer.mmap_mut();
                 let width = (bounds.width() * scale as u32).max(1);
                 let height = (bounds.height() * scale as u32).max(1);
-                let module_pixmap = PixmapMut::from_bytes(module_pixmap_data, width, height).unwrap();
+                let Some(module_pixmap) = PixmapMut::from_bytes(module_pixmap_data, width, height) else {
+                    tracing::error!("Failed to create module pixmap");
+                    continue;
+                };
                 
                 let mut module_canvas = TinySkiaCosmicCanvas::new(
                     module_pixmap,
@@ -390,8 +420,6 @@ impl WaylandState {
             module_surfaces: HashMap::new(),
         });
 
-        // Request an initial render now that a bar is created
-        let _ = self.hub.dirty_tx().send(crate::domain::ModuleId::new(0));
 
         Ok(())
     }
@@ -525,15 +553,16 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
                         let physical_width = width * bar.scale as u32;
                         let physical_height = height * bar.scale as u32;
                         
-                        if let Ok(new_shm) = ShmBuffer::new(state.shm.as_ref().unwrap(), physical_width, physical_height, qh) {
+                        if let Ok(new_shm) = ShmBuffer::new(state.shm.as_ref().expect("SHM bound"), physical_width, physical_height, qh) {
                             bar.shm_buffer = new_shm;
-                            // Request a render immediately after configuration
-                            let tx = state.hub.dirty_tx();
-                            tokio::spawn(async move {
-                                let _ = tx.send(crate::domain::ModuleId::new(0)).await;
-                            });
                         }
                     }
+                    
+                    // Always request a render after a configure event, even if size didn't change
+                    let tx = state.hub.dirty_tx();
+                    tokio::spawn(async move {
+                        let _ = tx.send(crate::domain::ModuleId::new(0)).await;
+                    });
                 }
             }
         }

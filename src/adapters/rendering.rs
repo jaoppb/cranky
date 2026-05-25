@@ -254,29 +254,30 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
 
                             if image.placement.width > 0 && image.placement.height > 0 {
                                 if let Some(mut glyph_pixmap) = tiny_skia::Pixmap::new(image.placement.width, image.placement.height) {
-                                    let glyph_rect = Rect::from_xywh(0.0, 0.0, image.placement.width as f32, image.placement.height as f32).unwrap();
-                                    glyph_pixmap.fill_rect(glyph_rect, &paint, Transform::identity(), None);
-                                    
-                                    for (pixel, &mask_alpha) in glyph_pixmap.pixels_mut().iter_mut().zip(image.data.iter()) {
-                                        let a = (pixel.alpha() as u32 * mask_alpha as u32) / 255;
-                                        let r = (pixel.red() as u32 * mask_alpha as u32) / 255;
-                                        let g = (pixel.green() as u32 * mask_alpha as u32) / 255;
-                                        let b = (pixel.blue() as u32 * mask_alpha as u32) / 255;
-                                        if let Some(c) = tiny_skia::PremultipliedColorU8::from_rgba(r as u8, g as u8, b as u8, a as u8) {
-                                            *pixel = c;
-                                        } else {
-                                            *pixel = tiny_skia::PremultipliedColorU8::TRANSPARENT;
+                                    if let Some(glyph_rect) = Rect::from_xywh(0.0, 0.0, image.placement.width as f32, image.placement.height as f32) {
+                                        glyph_pixmap.fill_rect(glyph_rect, &paint, Transform::identity(), None);
+                                        
+                                        for (pixel, &mask_alpha) in glyph_pixmap.pixels_mut().iter_mut().zip(image.data.iter()) {
+                                            let a = (pixel.alpha() as u32 * mask_alpha as u32) / 255;
+                                            let r = (pixel.red() as u32 * mask_alpha as u32) / 255;
+                                            let g = (pixel.green() as u32 * mask_alpha as u32) / 255;
+                                            let b = (pixel.blue() as u32 * mask_alpha as u32) / 255;
+                                            if let Some(c) = tiny_skia::PremultipliedColorU8::from_rgba(r as u8, g as u8, b as u8, a as u8) {
+                                                *pixel = c;
+                                            } else {
+                                                *pixel = tiny_skia::PremultipliedColorU8::TRANSPARENT;
+                                            }
                                         }
+                                        
+                                        self.pixmap.draw_pixmap(
+                                            physical_glyph.x + image.placement.left,
+                                            physical_glyph.y - image.placement.top,
+                                            glyph_pixmap.as_ref(),
+                                            &tiny_skia::PixmapPaint::default(),
+                                            Transform::identity(),
+                                            None
+                                        );
                                     }
-                                    
-                                    self.pixmap.draw_pixmap(
-                                        physical_glyph.x + image.placement.left,
-                                        physical_glyph.y - image.placement.top,
-                                        glyph_pixmap.as_ref(),
-                                        &tiny_skia::PixmapPaint::default(),
-                                        Transform::identity(),
-                                        None
-                                    );
                                 }
                             }
                         }

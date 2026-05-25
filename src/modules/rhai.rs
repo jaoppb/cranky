@@ -114,8 +114,8 @@ impl AnyModule for RhaiModule {
         config: &ModuleConfig,
         bar_config: &BarConfig,
     ) -> Result<(), DomainError> {
-        let mut scope = self.scope.lock().unwrap();
-        let engine = self.engine.lock().unwrap();
+        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
+        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         
         // Expose bar config
         let mut bar_map = rhai::Map::new();
@@ -136,8 +136,8 @@ impl AnyModule for RhaiModule {
     }
 
     fn subscriptions(&self) -> Vec<SignalKind> {
-        let mut scope = self.scope.lock().unwrap();
-        let engine = self.engine.lock().unwrap();
+        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
+        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         
         let mut subs = Vec::new();
         if let Ok(result) = engine.call_fn::<Array>(&mut scope, &self.ast, "subscriptions", ()) {
@@ -155,8 +155,8 @@ impl AnyModule for RhaiModule {
     }
 
     fn refresh(&mut self, hub: &SignalHub) {
-        let mut scope = self.scope.lock().unwrap();
-        let engine = self.engine.lock().unwrap();
+        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
+        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         
         let time = *hub.time_rx().borrow();
         scope.set_or_push("current_time", time.to_rfc3339());
@@ -172,8 +172,8 @@ impl AnyModule for RhaiModule {
     }
 
     fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) {
-        let mut scope = self.scope.lock().unwrap();
-        let engine = self.engine.lock().unwrap();
+        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
+        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         
         let ptr = unsafe { std::mem::transmute::<*mut dyn Canvas, *mut (dyn Canvas + 'static)>(canvas as *mut dyn Canvas) };
         CURRENT_CANVAS.with(|c| c.set(Some(CanvasPtr(ptr))));
@@ -185,8 +185,8 @@ impl AnyModule for RhaiModule {
     }
 
     fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size {
-        let mut scope = self.scope.lock().unwrap();
-        let engine = self.engine.lock().unwrap();
+        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
+        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         
         let ptr = unsafe { std::mem::transmute::<*mut dyn Canvas, *mut (dyn Canvas + 'static)>(canvas as *mut dyn Canvas) };
         CURRENT_CANVAS.with(|c| c.set(Some(CanvasPtr(ptr))));
@@ -209,8 +209,8 @@ impl AnyModule for RhaiModule {
     }
 
     fn on_event(&mut self, event: crate::domain::events::InputEvent) {
-        let mut scope = self.scope.lock().unwrap();
-        let engine = self.engine.lock().unwrap();
+        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
+        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         
         let mut event_map = rhai::Map::new();
         use crate::domain::events::InputEvent;

@@ -151,6 +151,14 @@ impl ShmBuffer {
     }
 }
 
+impl Drop for ShmBuffer {
+    fn drop(&mut self) {
+        self.buffers[0].destroy();
+        self.buffers[1].destroy();
+        self.pool.destroy();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

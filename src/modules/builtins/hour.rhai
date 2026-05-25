@@ -24,7 +24,7 @@ fn refresh() {
             if format == "%H:%M:%S" {
                 time_str = t.sub_string(11, 8); // Extracts HH:MM:SS
             } else {
-                let h = t.sub_string(11, 2).parse_int().unwrap();
+                let h = t.sub_string(11, 2).parse_int();
                 let m = t.sub_string(14, 2);
                 let s = t.sub_string(17, 2);
                 let p = "AM";

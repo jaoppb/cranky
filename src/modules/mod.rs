@@ -91,9 +91,12 @@ impl ModuleRegistry {
             *next_id += 1;
 
             let mut module: Box<dyn AnyModule> = match config.name() {
-                "hour" => Box::new(lua::LuaModule::built_in("hour").unwrap()),
-                "workspace" => Box::new(lua::LuaModule::built_in("workspace").unwrap()),
-                "applet" => Box::new(lua::LuaModule::built_in("applet").unwrap()),
+                "hour" => Box::new(lua::LuaModule::built_in("hour")
+                    .ok_or_else(|| DomainError::ModuleNotFound { module_name: "hour".to_string() })?),
+                "workspace" => Box::new(lua::LuaModule::built_in("workspace")
+                    .ok_or_else(|| DomainError::ModuleNotFound { module_name: "workspace".to_string() })?),
+                "applet" => Box::new(lua::LuaModule::built_in("applet")
+                    .ok_or_else(|| DomainError::ModuleNotFound { module_name: "applet".to_string() })?),
                 name => {
                     // Try to load as lua first, then rhai
                     if let Some(m) = lua::LuaModule::external(name) {
