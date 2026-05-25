@@ -1,9 +1,8 @@
 use crate::ports::DisplayServerPort;
 use crate::ports::canvas::Canvas;
 use crate::domain::errors::PortError;
-use crate::domain::signals::{SignalHub, PointerEvent};
+use crate::domain::signals::SignalHub;
 use crate::domain::app::CrankyApp;
-use crate::domain::{ModuleId, MonitorId, geometry::{Size, Point64}};
 use crate::adapters::rendering::TinySkiaCosmicCanvas;
 use crate::core::shm::ShmBuffer;
 use std::sync::Arc;
@@ -61,9 +60,11 @@ pub struct WaylandState {
     seat: Option<WlSeat>,
     pointer: Option<WlPointer>,
     
-    surface_to_id: HashMap<WlSurface, ModuleId>,
+    command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>,
+    
+    surface_to_id: HashMap<WlSurface, crate::domain::ModuleId>,
     pointer_surface: Option<WlSurface>,
-    pointer_pos: Point64,
+    pointer_pos: (f64, f64),
     
     font_system: FontSystem,
     swash_cache: SwashCache,
@@ -81,23 +82,23 @@ struct WaylandBar {
     surface: WlSurface,
     layer_surface: ZwlrLayerSurfaceV1,
     shm_buffer: ShmBuffer,
-    buffer: Option<WlBuffer>,
     width: u32,
     height: u32,
+    config_height: u32,
+    config_margin: crate::domain::config::MarginConfig,
     scale: i32,
-    module_surfaces: HashMap<ModuleId, ModuleSurface>,
+    module_surfaces: HashMap<crate::domain::ModuleId, ModuleSurface>,
 }
 
 struct ModuleSurface {
     surface: WlSurface,
     subsurface: WlSubsurface,
     shm_buffer: ShmBuffer,
-    buffer: Option<WlBuffer>,
-    size: Size,
+    size: crate::domain::geometry::Size,
 }
 
 impl WaylandAdapter {
-    pub fn new(hub: Arc<SignalHub>) -> Result<Self, PortError> {
+    pub fn new(hub: Arc<SignalHub>, command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>) -> Result<Self, PortError> {
         let connection = Connection::connect_to_env().map_err(|e| PortError::DisplayConnectionFailed { 
             reason: e.to_string() 
         })?;
@@ -120,9 +121,10 @@ impl WaylandAdapter {
             bars: Vec::new(),
             seat: None,
             pointer: None,
+            command_tx,
             surface_to_id: HashMap::new(),
             pointer_surface: None,
-            pointer_pos: Point64::new(0.0, 0.0),
+            pointer_pos: (0.0, 0.0),
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
         };
@@ -213,10 +215,30 @@ impl WaylandAdapter {
             let pixmap_data = bar.shm_buffer.mmap_mut();
             let pixmap = PixmapMut::from_bytes(pixmap_data, physical_width, physical_height).unwrap();
             
-            // Clear and draw background on the main bar surface
             let bar_config = app.config().bar().clone();
             let config_bg = bar_config.background().clone();
             let border_config = bar_config.border();
+            
+            // Check if hot-reload of height or margin is needed
+            if bar.config_height != bar_config.height() || bar.config_margin != *bar_config.margin() {
+                debug!("Hot-reloading bar height/margin for output: {}", bar.output_name);
+                bar.config_height = bar_config.height();
+                bar.config_margin = bar_config.margin().clone();
+                
+                let margin = bar_config.margin();
+                bar.layer_surface.set_size(0, bar.config_height);
+                bar.layer_surface.set_margin(
+                    margin.top().value(),
+                    margin.right().value(),
+                    margin.bottom().value(),
+                    margin.left().value(),
+                );
+                bar.layer_surface.set_exclusive_zone(bar.config_height as i32 + margin.top().value() + margin.bottom().value());
+                bar.surface.commit();
+                
+                // Note: The actual resize will happen asynchronously via the Configure event.
+                // We proceed with the current size for this frame to avoid visual glitches.
+            }
 
             let mut bar_canvas = TinySkiaCosmicCanvas::new(
                 pixmap,
@@ -224,6 +246,7 @@ impl WaylandAdapter {
                 swash_cache,
                 scale as f32
             );
+            bar_canvas.clear();
             let border_size = border_config.size().value();
             let half_border = border_size / 2.0;
             
@@ -239,7 +262,7 @@ impl WaylandAdapter {
             );
 
             // Calculate layout
-            let monitor_id = MonitorId::new(&bar.output_name);
+            let monitor_id = crate::domain::MonitorId::new(&bar.output_name);
             let layouts = app.calculate_layout(&monitor_id, width, &mut bar_canvas);
 
             for layout in layouts {
@@ -261,7 +284,6 @@ impl WaylandAdapter {
                         surface,
                         subsurface,
                         shm_buffer,
-                        buffer: None,
                         size: *bounds.size(),
                     }
                 });
@@ -291,47 +313,33 @@ impl WaylandAdapter {
                 );
                 
                 // Clear module surface (transparent)
-                module_canvas.draw_rect(0.0, 0.0, bounds.width() as f32, bounds.height() as f32, crate::domain::color::DrawingColor::Solid(crate::domain::color::Color::new(0,0,0,0)), 0.0);
+                module_canvas.clear();
                 
                 app.render_module(module_id, &mut module_canvas, &monitor_id);
 
-                let buffer = ms.shm_buffer.pool().create_buffer(
-                    0,
-                    (bounds.width() * scale as u32) as i32,
-                    (bounds.height() * scale as u32) as i32,
-                    (bounds.width() * scale as u32 * 4) as i32,
-                    wayland_client::protocol::wl_shm::Format::Argb8888,
-                    qh,
-                    ()
-                );
+                let buffer = ms.shm_buffer.current_buffer();
 
                 ms.surface.set_buffer_scale(scale);
-                ms.surface.attach(Some(&buffer), 0, 0);
+                ms.surface.attach(Some(buffer), 0, 0);
                 ms.surface.damage(0, 0, bounds.width() as i32, bounds.height() as i32);
                 ms.surface.commit();
-                ms.buffer = Some(buffer);
+                ms.shm_buffer.swap_buffers();
             }
 
-            let buffer = bar.shm_buffer.pool().create_buffer(
-                0,
-                physical_width as i32,
-                physical_height as i32,
-                (physical_width * 4) as i32,
-                wayland_client::protocol::wl_shm::Format::Argb8888,
-                qh,
-                ()
-            );
+            let buffer = bar.shm_buffer.current_buffer();
 
             bar.surface.set_buffer_scale(scale);
-            bar.surface.attach(Some(&buffer), 0, 0);
+            bar.surface.attach(Some(buffer), 0, 0);
             bar.surface.damage(0, 0, width as i32, height as i32);
             bar.surface.commit();
-            bar.buffer = Some(buffer);
+            bar.shm_buffer.swap_buffers();
         }
         let _ = self.connection.flush();
         Ok(())
     }
 }
+
+
 
 impl WaylandState {
     fn create_bar(&mut self, output: &WlOutput, qh: &QueueHandle<Self>) -> Result<(), PortError> {
@@ -374,15 +382,16 @@ impl WaylandState {
             surface,
             layer_surface,
             shm_buffer,
-            buffer: None,
             width: 1920,
             height: bar_height,
+            config_height: bar_height,
+            config_margin: margin.clone(),
             scale: output_scale,
             module_surfaces: HashMap::new(),
         });
 
         // Request an initial render now that a bar is created
-        let _ = self.hub.dirty_tx().send(ModuleId::new(0));
+        let _ = self.hub.dirty_tx().send(crate::domain::ModuleId::new(0));
 
         Ok(())
     }
@@ -437,46 +446,60 @@ impl Dispatch<WlSeat, ()> for WaylandState {
     }
 }
 impl Dispatch<WlPointer, ()> for WaylandState {
-    fn event(state: &mut Self, _proxy: &WlPointer, event: wl_pointer::Event, _data: &(), _conn: &Connection, _qh: &QueueHandle<Self>) {
+    fn event(state: &mut Self, proxy: &WlPointer, event: wl_pointer::Event, _data: &(), _conn: &Connection, qh: &QueueHandle<Self>) {
+        use crate::domain::events::InputEvent;
+        use crate::domain::commands::AppCommand;
+
         match event {
             wl_pointer::Event::Enter { surface, surface_x, surface_y, .. } => {
                 state.pointer_surface = Some(surface.clone());
-                state.pointer_pos = Point64::new(surface_x, surface_y);
-                if let Some(&id) = state.surface_to_id.get(&surface) {
-                    let _ = state.hub.pointer_tx().send(PointerEvent::Enter { target_id: id, pos: state.pointer_pos });
+                state.pointer_pos = (surface_x, surface_y);
+                if let Some(id) = state.surface_to_id.get(&surface) {
+                    let _ = state.command_tx.try_send(AppCommand::Input(*id, InputEvent::PointerEnter));
                 }
             }
             wl_pointer::Event::Leave { surface, .. } => {
-                if let Some(&id) = state.surface_to_id.get(&surface) {
-                    let _ = state.hub.pointer_tx().send(PointerEvent::Leave { target_id: id });
-                }
-                state.pointer_surface = None;
-            }
-            wl_pointer::Event::Motion { surface_x, surface_y, .. } => {
-                state.pointer_pos = Point64::new(surface_x, surface_y);
-                if let Some(surface) = &state.pointer_surface {
-                    if let Some(&id) = state.surface_to_id.get(surface) {
-                        let _ = state.hub.pointer_tx().send(PointerEvent::Motion { target_id: id, pos: state.pointer_pos });
+                if let Some(surface) = state.pointer_surface.take() {
+                    if let Some(id) = state.surface_to_id.get(&surface) {
+                        let _ = state.command_tx.try_send(AppCommand::Input(*id, InputEvent::PointerLeave));
                     }
                 }
             }
+            wl_pointer::Event::Motion { surface_x, surface_y, .. } => {
+                state.pointer_pos = (surface_x, surface_y);
+            }
             wl_pointer::Event::Button { button, state: button_state, .. } => {
-                if button_state == wayland_client::WEnum::Value(wl_pointer::ButtonState::Pressed) {
+                // Send click event on button release (0 is release, 1 is press in wl_pointer::ButtonState)
+                if button_state == wayland_client::WEnum::Value(wayland_client::protocol::wl_pointer::ButtonState::Released) {
                     if let Some(surface) = &state.pointer_surface {
-                        if let Some(&id) = state.surface_to_id.get(surface) {
-                            let _ = state.hub.pointer_tx().send(PointerEvent::Click { target_id: id, pos: state.pointer_pos, button });
+                        if let Some(id) = state.surface_to_id.get(surface) {
+                            let _ = state.command_tx.try_send(AppCommand::Input(
+                                *id,
+                                InputEvent::Click { 
+                                    button,
+                                    x: state.pointer_pos.0,
+                                    y: state.pointer_pos.1,
+                                }
+                            ));
                         }
                     }
                 }
             }
             wl_pointer::Event::Axis { axis, value, .. } => {
                 if let Some(surface) = &state.pointer_surface {
-                    if let Some(&id) = state.surface_to_id.get(surface) {
+                    if let Some(id) = state.surface_to_id.get(surface) {
                         let axis_val = match axis {
-                            wayland_client::WEnum::Value(v) => v as u32,
-                            wayland_client::WEnum::Unknown(v) => v,
+                            wayland_client::WEnum::Value(wayland_client::protocol::wl_pointer::Axis::VerticalScroll) => 0,
+                            wayland_client::WEnum::Value(wayland_client::protocol::wl_pointer::Axis::HorizontalScroll) => 1,
+                            _ => 0,
                         };
-                        let _ = state.hub.pointer_tx().send(PointerEvent::Scroll { target_id: id, axis: axis_val, value });
+                        let _ = state.command_tx.try_send(AppCommand::Input(
+                            *id,
+                            InputEvent::Scroll {
+                                axis: axis_val,
+                                amount: value,
+                            }
+                        ));
                     }
                 }
             }
@@ -507,7 +530,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
                             // Request a render immediately after configuration
                             let tx = state.hub.dirty_tx();
                             tokio::spawn(async move {
-                                let _ = tx.send(ModuleId::new(0)).await;
+                                let _ = tx.send(crate::domain::ModuleId::new(0)).await;
                             });
                         }
                     }

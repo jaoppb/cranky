@@ -23,5 +23,5 @@ pub trait DisplayServerPort: Send + Sync {
 }
 
 pub trait WindowManagerPort: Send + Sync {
-    fn get_state(&self) -> Result<(Vec<crate::core::hyprland::Workspace>, Vec<crate::core::hyprland::Monitor>), PortError>;
+    fn get_state(&self) -> Result<(Vec<crate::domain::workspace::Workspace>, Vec<crate::domain::workspace::Monitor>), PortError>;
 }

@@ -39,6 +39,8 @@ pub struct BarConfigDto {
     #[serde(default)]
     margin: MarginConfigDto,
     #[serde(default)]
+    padding: PaddingConfigDto,
+    #[serde(default)]
     unfocused: Option<PartialBarConfigDto>,
 }
 
@@ -59,6 +61,7 @@ impl BarConfigDto {
             self.vertical_alignment.to_domain(),
             self.border.to_domain(),
             self.margin.to_domain(),
+            self.padding.to_domain(),
             domain::FontFamily::new(font_family),
             domain::FontSize::new(font_size),
             self.unfocused.map(|u| u.to_domain()),
@@ -93,26 +96,93 @@ impl VerticalAlignmentDto {
     }
 }
 
-#[derive(Debug, Deserialize, Default)]
-pub struct MarginConfigDto {
-    #[serde(default)]
-    top: i32,
-    #[serde(default)]
-    bottom: i32,
-    #[serde(default)]
-    left: i32,
-    #[serde(default)]
-    right: i32,
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum MarginConfigDto {
+    All(i32),
+    Fields {
+        top: Option<i32>,
+        bottom: Option<i32>,
+        left: Option<i32>,
+        right: Option<i32>,
+        horizontal: Option<i32>,
+        vertical: Option<i32>,
+    }
+}
+
+impl Default for MarginConfigDto {
+    fn default() -> Self {
+        Self::All(0)
+    }
 }
 
 impl MarginConfigDto {
     pub fn to_domain(self) -> domain::MarginConfig {
-        domain::MarginConfig::new(
-            domain::MarginOffset::new(self.top),
-            domain::MarginOffset::new(self.bottom),
-            domain::MarginOffset::new(self.left),
-            domain::MarginOffset::new(self.right),
-        )
+        match self {
+            Self::All(val) => domain::MarginConfig::new(
+                domain::MarginOffset::new(val),
+                domain::MarginOffset::new(val),
+                domain::MarginOffset::new(val),
+                domain::MarginOffset::new(val),
+            ),
+            Self::Fields { top, bottom, left, right, horizontal, vertical } => {
+                let t = top.or(vertical).unwrap_or(0);
+                let b = bottom.or(vertical).unwrap_or(0);
+                let l = left.or(horizontal).unwrap_or(0);
+                let r = right.or(horizontal).unwrap_or(0);
+                domain::MarginConfig::new(
+                    domain::MarginOffset::new(t),
+                    domain::MarginOffset::new(b),
+                    domain::MarginOffset::new(l),
+                    domain::MarginOffset::new(r),
+                )
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum PaddingConfigDto {
+    All(u32),
+    Fields {
+        top: Option<u32>,
+        bottom: Option<u32>,
+        left: Option<u32>,
+        right: Option<u32>,
+        horizontal: Option<u32>,
+        vertical: Option<u32>,
+    }
+}
+
+impl Default for PaddingConfigDto {
+    fn default() -> Self {
+        Self::All(0)
+    }
+}
+
+impl PaddingConfigDto {
+    pub fn to_domain(self) -> domain::PaddingConfig {
+        match self {
+            Self::All(val) => domain::PaddingConfig::new(
+                domain::PaddingOffset::new(val),
+                domain::PaddingOffset::new(val),
+                domain::PaddingOffset::new(val),
+                domain::PaddingOffset::new(val),
+            ),
+            Self::Fields { top, bottom, left, right, horizontal, vertical } => {
+                let t = top.or(vertical).unwrap_or(0);
+                let b = bottom.or(vertical).unwrap_or(0);
+                let l = left.or(horizontal).unwrap_or(0);
+                let r = right.or(horizontal).unwrap_or(0);
+                domain::PaddingConfig::new(
+                    domain::PaddingOffset::new(t),
+                    domain::PaddingOffset::new(b),
+                    domain::PaddingOffset::new(l),
+                    domain::PaddingOffset::new(r),
+                )
+            }
+        }
     }
 }
 
@@ -208,63 +278,130 @@ fn default_timebased_duration_ms() -> u64 {
     100
 }
 
-#[derive(Debug, Deserialize, Default)]
-pub struct PartialMarginConfigDto {
-    pub top: Option<i32>,
-    pub bottom: Option<i32>,
-    pub left: Option<i32>,
-    pub right: Option<i32>,
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum PartialMarginConfigDto {
+    All(i32),
+    Fields {
+        top: Option<i32>,
+        bottom: Option<i32>,
+        left: Option<i32>,
+        right: Option<i32>,
+        horizontal: Option<i32>,
+        vertical: Option<i32>,
+    }
+}
+
+impl Default for PartialMarginConfigDto {
+    fn default() -> Self {
+        Self::Fields {
+            top: None, bottom: None, left: None, right: None, horizontal: None, vertical: None
+        }
+    }
 }
 
 impl PartialMarginConfigDto {
     pub fn to_domain(self) -> domain::PartialMarginConfig {
-        domain::PartialMarginConfig {
-            top: self.top.map(domain::MarginOffset::new),
-            bottom: self.bottom.map(domain::MarginOffset::new),
-            left: self.left.map(domain::MarginOffset::new),
-            right: self.right.map(domain::MarginOffset::new),
+        match self {
+            Self::All(val) => domain::PartialMarginConfig::new(
+                Some(domain::MarginOffset::new(val)),
+                Some(domain::MarginOffset::new(val)),
+                Some(domain::MarginOffset::new(val)),
+                Some(domain::MarginOffset::new(val)),
+            ),
+            Self::Fields { top, bottom, left, right, horizontal, vertical } => {
+                let t = top.or(vertical).map(domain::MarginOffset::new);
+                let b = bottom.or(vertical).map(domain::MarginOffset::new);
+                let l = left.or(horizontal).map(domain::MarginOffset::new);
+                let r = right.or(horizontal).map(domain::MarginOffset::new);
+                domain::PartialMarginConfig::new(t, b, l, r)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum PartialPaddingConfigDto {
+    All(u32),
+    Fields {
+        top: Option<u32>,
+        bottom: Option<u32>,
+        left: Option<u32>,
+        right: Option<u32>,
+        horizontal: Option<u32>,
+        vertical: Option<u32>,
+    }
+}
+
+impl Default for PartialPaddingConfigDto {
+    fn default() -> Self {
+        Self::Fields {
+            top: None, bottom: None, left: None, right: None, horizontal: None, vertical: None
+        }
+    }
+}
+
+impl PartialPaddingConfigDto {
+    pub fn to_domain(self) -> domain::PartialPaddingConfig {
+        match self {
+            Self::All(val) => domain::PartialPaddingConfig::new(
+                Some(domain::PaddingOffset::new(val)),
+                Some(domain::PaddingOffset::new(val)),
+                Some(domain::PaddingOffset::new(val)),
+                Some(domain::PaddingOffset::new(val)),
+            ),
+            Self::Fields { top, bottom, left, right, horizontal, vertical } => {
+                let t = top.or(vertical).map(domain::PaddingOffset::new);
+                let b = bottom.or(vertical).map(domain::PaddingOffset::new);
+                let l = left.or(horizontal).map(domain::PaddingOffset::new);
+                let r = right.or(horizontal).map(domain::PaddingOffset::new);
+                domain::PartialPaddingConfig::new(t, b, l, r)
+            }
         }
     }
 }
 
 #[derive(Debug, Deserialize, Default)]
 pub struct PartialBorderConfigDto {
-    pub size: Option<f32>,
-    pub color: Option<DrawingColor>,
-    pub radius: Option<f32>,
+    size: Option<f32>,
+    color: Option<DrawingColor>,
+    radius: Option<f32>,
 }
 
 impl PartialBorderConfigDto {
     pub fn to_domain(self) -> domain::PartialBorderConfig {
-        domain::PartialBorderConfig {
-            size: self.size.map(domain::BorderSize::new),
-            color: self.color,
-            radius: self.radius.map(domain::BorderRadius::new),
-        }
+        domain::PartialBorderConfig::new(
+            self.size.map(domain::BorderSize::new),
+            self.color,
+            self.radius.map(domain::BorderRadius::new),
+        )
     }
 }
 
 #[derive(Debug, Deserialize, Default)]
 pub struct PartialBarConfigDto {
-    pub font_family: Option<String>,
-    pub font_size: Option<f32>,
-    pub background: Option<DrawingColor>,
-    pub height: Option<u32>,
-    pub vertical_alignment: Option<VerticalAlignmentDto>,
-    pub border: Option<PartialBorderConfigDto>,
-    pub margin: Option<PartialMarginConfigDto>,
+    font_family: Option<String>,
+    font_size: Option<f32>,
+    background: Option<DrawingColor>,
+    height: Option<u32>,
+    vertical_alignment: Option<VerticalAlignmentDto>,
+    border: Option<PartialBorderConfigDto>,
+    margin: Option<PartialMarginConfigDto>,
+    padding: Option<PartialPaddingConfigDto>,
 }
 
 impl PartialBarConfigDto {
     pub fn to_domain(self) -> domain::PartialBarConfig {
-        domain::PartialBarConfig {
-            background: self.background,
-            height: self.height,
-            vertical_alignment: self.vertical_alignment.map(|va| va.to_domain()),
-            border: self.border.map(|b| b.to_domain()),
-            margin: self.margin.map(|m| m.to_domain()),
-            font_family: self.font_family.map(domain::FontFamily::new),
-            font_size: self.font_size.map(domain::FontSize::new),
-        }
+        domain::PartialBarConfig::new(
+            self.background,
+            self.height,
+            self.vertical_alignment.map(|va| va.to_domain()),
+            self.border.map(|b| b.to_domain()),
+            self.margin.map(|m| m.to_domain()),
+            self.padding.map(|p| p.to_domain()),
+            self.font_family.map(domain::FontFamily::new),
+            self.font_size.map(domain::FontSize::new),
+        )
     }
 }

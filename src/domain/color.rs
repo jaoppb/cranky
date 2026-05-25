@@ -124,7 +124,9 @@ fn tokenize(input: &str) -> Vec<String> {
 }
 
 fn parse_single_color(s: &str) -> Option<Color> {
-    parse_rgba_hex(s)
+    parse_css_rgba(s)
+        .or_else(|| parse_css_rgb(s))
+        .or_else(|| parse_rgba_hex(s))
         .or_else(|| parse_rgb_hex(s))
         .or_else(|| parse_hex(s))
 }
@@ -174,6 +176,36 @@ fn parse_hex(s: &str) -> Option<Color> {
     None
 }
 
+fn parse_css_rgb(s: &str) -> Option<Color> {
+    if s.starts_with("rgb(") && s.ends_with(')') {
+        let content = &s[4..s.len() - 1];
+        let parts: Vec<&str> = content.split(',').map(str::trim).collect();
+        if parts.len() == 3 {
+            let r = parts[0].parse::<u8>().ok()?;
+            let g = parts[1].parse::<u8>().ok()?;
+            let b = parts[2].parse::<u8>().ok()?;
+            return Some(Color::new(r, g, b, 255));
+        }
+    }
+    None
+}
+
+fn parse_css_rgba(s: &str) -> Option<Color> {
+    if s.starts_with("rgba(") && s.ends_with(')') {
+        let content = &s[5..s.len() - 1];
+        let parts: Vec<&str> = content.split(',').map(str::trim).collect();
+        if parts.len() == 4 {
+            let r = parts[0].parse::<u8>().ok()?;
+            let g = parts[1].parse::<u8>().ok()?;
+            let b = parts[2].parse::<u8>().ok()?;
+            let a_f = parts[3].parse::<f32>().ok()?;
+            let a = (a_f * 255.0).round() as u8;
+            return Some(Color::new(r, g, b, a));
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,6 +235,15 @@ mod tests {
 
         let c = DrawingColor::parse("rgba(00000080)").unwrap();
         assert_eq!(c, DrawingColor::Solid(Color::new(0, 0, 0, 128)));
+    }
+
+    #[test]
+    fn test_parse_css_rgb_rgba() {
+        let c = DrawingColor::parse("rgb(255, 128, 0)").unwrap();
+        assert_eq!(c, DrawingColor::Solid(Color::new(255, 128, 0, 255)));
+
+        let c = DrawingColor::parse("rgba(255, 128, 0, 0.5)").unwrap();
+        assert_eq!(c, DrawingColor::Solid(Color::new(255, 128, 0, 128)));
     }
 
     #[test]

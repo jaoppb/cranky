@@ -37,6 +37,8 @@ pub struct ShmBuffer {
     pool: WlShmPool,
     width: u32,
     height: u32,
+    buffer_index: usize,
+    buffers: [wayland_client::protocol::wl_buffer::WlBuffer; 2],
 }
 
 fn create_shm_file(size: usize) -> Result<File> {
@@ -77,25 +79,59 @@ impl ShmBuffer {
         height: u32,
         qh: &QueueHandle<S>,
     ) -> Result<Self> 
-    where S: wayland_client::Dispatch<wayland_client::protocol::wl_shm_pool::WlShmPool, ()> + 'static
+    where S: wayland_client::Dispatch<wayland_client::protocol::wl_shm_pool::WlShmPool, ()>
+           + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, ()> + 'static
     {
-        let size = (width * height * 4) as usize;
+        let frame_size = (width * height * 4) as usize;
+        let size = frame_size * 2; // Double buffering
         let file = create_shm_file(size)?;
 
         let mmap = safe_mmap_file(&file)?;
         let fd = safe_borrowed_fd_from_file(&file);
         let pool = shm_proxy.create_pool(fd, size as i32, qh, ());
 
+        let buffer_0 = pool.create_buffer(
+            0,
+            width as i32,
+            height as i32,
+            (width * 4) as i32,
+            wayland_client::protocol::wl_shm::Format::Argb8888,
+            qh,
+            ()
+        );
+
+        let buffer_1 = pool.create_buffer(
+            frame_size as i32,
+            width as i32,
+            height as i32,
+            (width * 4) as i32,
+            wayland_client::protocol::wl_shm::Format::Argb8888,
+            qh,
+            ()
+        );
+
         Ok(Self {
             shm: MmappedShm { mmap },
             pool,
             width,
             height,
+            buffer_index: 0,
+            buffers: [buffer_0, buffer_1],
         })
     }
 
-    pub fn mmap_mut(&mut self) -> &mut MmapMut {
-        self.shm.mmap_mut()
+    pub fn mmap_mut(&mut self) -> &mut [u8] {
+        let frame_size = (self.width * self.height * 4) as usize;
+        let offset = self.buffer_index * frame_size;
+        &mut self.shm.mmap_mut()[offset..offset + frame_size]
+    }
+
+    pub fn current_buffer(&self) -> &wayland_client::protocol::wl_buffer::WlBuffer {
+        &self.buffers[self.buffer_index]
+    }
+
+    pub fn swap_buffers(&mut self) {
+        self.buffer_index = 1 - self.buffer_index;
     }
 
     pub fn pool(&self) -> &WlShmPool {

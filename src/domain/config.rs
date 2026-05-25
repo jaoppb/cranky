@@ -66,6 +66,19 @@ impl MarginOffset {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct PaddingOffset(u32);
+
+impl PaddingOffset {
+    pub fn new(offset: u32) -> Self {
+        Self(offset)
+    }
+
+    pub fn value(&self) -> u32 {
+        self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
     bar: BarConfig,
@@ -121,6 +134,7 @@ impl Default for BarConfig {
             vertical_alignment: VerticalAlignment::default(),
             border: BorderConfig::default(),
             margin: MarginConfig::default(),
+            padding: PaddingConfig::default(),
             font_family: FontFamily::new("".to_string()),
             font_size: FontSize::new(14.0),
             unfocused: None,
@@ -183,6 +197,7 @@ pub struct BarConfig {
     vertical_alignment: VerticalAlignment,
     border: BorderConfig,
     margin: MarginConfig,
+    padding: PaddingConfig,
     font_family: FontFamily,
     font_size: FontSize,
     unfocused: Option<PartialBarConfig>,
@@ -196,6 +211,7 @@ impl BarConfig {
         vertical_alignment: VerticalAlignment,
         border: BorderConfig,
         margin: MarginConfig,
+        padding: PaddingConfig,
         font_family: FontFamily,
         font_size: FontSize,
         unfocused: Option<PartialBarConfig>,
@@ -206,6 +222,7 @@ impl BarConfig {
             vertical_alignment,
             border,
             margin,
+            padding,
             font_family,
             font_size,
             unfocused,
@@ -232,6 +249,10 @@ impl BarConfig {
         &self.margin
     }
 
+    pub fn padding(&self) -> &PaddingConfig {
+        &self.padding
+    }
+
     pub fn font_family(&self) -> &FontFamily {
         &self.font_family
     }
@@ -243,44 +264,58 @@ impl BarConfig {
     pub fn as_unfocused(&self) -> BarConfig {
         let mut base = self.clone();
         if let Some(unfocused) = &self.unfocused {
-            if let Some(bg) = &unfocused.background {
+            if let Some(bg) = unfocused.background() {
                 base.background = bg.clone();
             }
-            if let Some(h) = unfocused.height {
+            if let Some(h) = unfocused.height() {
                 base.height = h;
             }
-            if let Some(va) = unfocused.vertical_alignment {
+            if let Some(va) = unfocused.vertical_alignment() {
                 base.vertical_alignment = va;
             }
-            if let Some(pb) = &unfocused.border {
-                if let Some(s) = pb.size {
+            if let Some(pb) = unfocused.border() {
+                if let Some(s) = pb.size() {
                     base.border.size = s;
                 }
-                if let Some(c) = &pb.color {
+                if let Some(c) = pb.color() {
                     base.border.color = c.clone();
                 }
-                if let Some(r) = pb.radius {
+                if let Some(r) = pb.radius() {
                     base.border.radius = r;
                 }
             }
-            if let Some(pm) = &unfocused.margin {
-                if let Some(t) = pm.top {
+            if let Some(pm) = unfocused.margin() {
+                if let Some(t) = pm.top() {
                     base.margin.top = t;
                 }
-                if let Some(b) = pm.bottom {
+                if let Some(b) = pm.bottom() {
                     base.margin.bottom = b;
                 }
-                if let Some(l) = pm.left {
+                if let Some(l) = pm.left() {
                     base.margin.left = l;
                 }
-                if let Some(r) = pm.right {
+                if let Some(r) = pm.right() {
                     base.margin.right = r;
                 }
             }
-            if let Some(ff) = &unfocused.font_family {
+            if let Some(pp) = unfocused.padding() {
+                if let Some(t) = pp.top() {
+                    base.padding.top = t;
+                }
+                if let Some(b) = pp.bottom() {
+                    base.padding.bottom = b;
+                }
+                if let Some(l) = pp.left() {
+                    base.padding.left = l;
+                }
+                if let Some(r) = pp.right() {
+                    base.padding.right = r;
+                }
+            }
+            if let Some(ff) = unfocused.font_family() {
                 base.font_family = ff.clone();
             }
-            if let Some(fs) = unfocused.font_size {
+            if let Some(fs) = unfocused.font_size() {
                 base.font_size = fs;
             }
         }
@@ -319,6 +354,41 @@ impl MarginConfig {
     }
 
     pub fn right(&self) -> MarginOffset {
+        self.right
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PaddingConfig {
+    top: PaddingOffset,
+    bottom: PaddingOffset,
+    left: PaddingOffset,
+    right: PaddingOffset,
+}
+
+impl PaddingConfig {
+    pub fn new(top: PaddingOffset, bottom: PaddingOffset, left: PaddingOffset, right: PaddingOffset) -> Self {
+        Self {
+            top,
+            bottom,
+            left,
+            right,
+        }
+    }
+
+    pub fn top(&self) -> PaddingOffset {
+        self.top
+    }
+
+    pub fn bottom(&self) -> PaddingOffset {
+        self.bottom
+    }
+
+    pub fn left(&self) -> PaddingOffset {
+        self.left
+    }
+
+    pub fn right(&self) -> PaddingOffset {
         self.right
     }
 }
@@ -416,26 +486,167 @@ impl ModuleConfig {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PartialMarginConfig {
-    pub top: Option<MarginOffset>,
-    pub bottom: Option<MarginOffset>,
-    pub left: Option<MarginOffset>,
-    pub right: Option<MarginOffset>,
+    top: Option<MarginOffset>,
+    bottom: Option<MarginOffset>,
+    left: Option<MarginOffset>,
+    right: Option<MarginOffset>,
+}
+
+impl PartialMarginConfig {
+    pub fn new(
+        top: Option<MarginOffset>,
+        bottom: Option<MarginOffset>,
+        left: Option<MarginOffset>,
+        right: Option<MarginOffset>,
+    ) -> Self {
+        Self {
+            top,
+            bottom,
+            left,
+            right,
+        }
+    }
+
+    pub fn top(&self) -> Option<MarginOffset> {
+        self.top
+    }
+    pub fn bottom(&self) -> Option<MarginOffset> {
+        self.bottom
+    }
+    pub fn left(&self) -> Option<MarginOffset> {
+        self.left
+    }
+    pub fn right(&self) -> Option<MarginOffset> {
+        self.right
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PartialPaddingConfig {
+    top: Option<PaddingOffset>,
+    bottom: Option<PaddingOffset>,
+    left: Option<PaddingOffset>,
+    right: Option<PaddingOffset>,
+}
+
+impl PartialPaddingConfig {
+    pub fn new(
+        top: Option<PaddingOffset>,
+        bottom: Option<PaddingOffset>,
+        left: Option<PaddingOffset>,
+        right: Option<PaddingOffset>,
+    ) -> Self {
+        Self {
+            top,
+            bottom,
+            left,
+            right,
+        }
+    }
+
+    pub fn top(&self) -> Option<PaddingOffset> {
+        self.top
+    }
+    pub fn bottom(&self) -> Option<PaddingOffset> {
+        self.bottom
+    }
+    pub fn left(&self) -> Option<PaddingOffset> {
+        self.left
+    }
+    pub fn right(&self) -> Option<PaddingOffset> {
+        self.right
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PartialBorderConfig {
-    pub size: Option<BorderSize>,
-    pub color: Option<DrawingColor>,
-    pub radius: Option<BorderRadius>,
+    size: Option<BorderSize>,
+    color: Option<DrawingColor>,
+    radius: Option<BorderRadius>,
+}
+
+impl PartialBorderConfig {
+    pub fn new(
+        size: Option<BorderSize>,
+        color: Option<DrawingColor>,
+        radius: Option<BorderRadius>,
+    ) -> Self {
+        Self {
+            size,
+            color,
+            radius,
+        }
+    }
+
+    pub fn size(&self) -> Option<BorderSize> {
+        self.size
+    }
+    pub fn color(&self) -> Option<&DrawingColor> {
+        self.color.as_ref()
+    }
+    pub fn radius(&self) -> Option<BorderRadius> {
+        self.radius
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PartialBarConfig {
-    pub background: Option<DrawingColor>,
-    pub height: Option<u32>,
-    pub vertical_alignment: Option<VerticalAlignment>,
-    pub border: Option<PartialBorderConfig>,
-    pub margin: Option<PartialMarginConfig>,
-    pub font_family: Option<FontFamily>,
-    pub font_size: Option<FontSize>,
+    background: Option<DrawingColor>,
+    height: Option<u32>,
+    vertical_alignment: Option<VerticalAlignment>,
+    border: Option<PartialBorderConfig>,
+    margin: Option<PartialMarginConfig>,
+    padding: Option<PartialPaddingConfig>,
+    font_family: Option<FontFamily>,
+    font_size: Option<FontSize>,
 }
+
+impl PartialBarConfig {
+    pub fn new(
+        background: Option<DrawingColor>,
+        height: Option<u32>,
+        vertical_alignment: Option<VerticalAlignment>,
+        border: Option<PartialBorderConfig>,
+        margin: Option<PartialMarginConfig>,
+        padding: Option<PartialPaddingConfig>,
+        font_family: Option<FontFamily>,
+        font_size: Option<FontSize>,
+    ) -> Self {
+        Self {
+            background,
+            height,
+            vertical_alignment,
+            border,
+            margin,
+            padding,
+            font_family,
+            font_size,
+        }
+    }
+
+    pub fn background(&self) -> Option<&DrawingColor> {
+        self.background.as_ref()
+    }
+    pub fn height(&self) -> Option<u32> {
+        self.height
+    }
+    pub fn vertical_alignment(&self) -> Option<VerticalAlignment> {
+        self.vertical_alignment
+    }
+    pub fn border(&self) -> Option<&PartialBorderConfig> {
+        self.border.as_ref()
+    }
+    pub fn margin(&self) -> Option<&PartialMarginConfig> {
+        self.margin.as_ref()
+    }
+    pub fn padding(&self) -> Option<&PartialPaddingConfig> {
+        self.padding.as_ref()
+    }
+    pub fn font_family(&self) -> Option<&FontFamily> {
+        self.font_family.as_ref()
+    }
+    pub fn font_size(&self) -> Option<FontSize> {
+        self.font_size
+    }
+}
+

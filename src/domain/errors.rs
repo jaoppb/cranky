@@ -11,6 +11,9 @@ pub enum DomainError {
     #[error("Internal domain error: {message}")]
     Internal { message: String },
 
+    #[error("Script error in module '{module_name}': {message}")]
+    ScriptError { module_name: String, message: String },
+
     #[error("Color error: {0}")]
     Color(#[from] crate::domain::color::ColorError),
 }

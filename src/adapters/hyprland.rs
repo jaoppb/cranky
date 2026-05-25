@@ -1,11 +1,43 @@
 use crate::ports::WindowManagerPort;
 use crate::domain::errors::PortError;
 use crate::domain::signals::{SignalHub, HyprlandState};
-use crate::core::hyprland::{Workspace, Monitor, RealHyprlandProvider, HyprlandProvider};
+use crate::domain::workspace::{Workspace, Monitor};
+use crate::core::hyprland::{RealHyprlandProvider, HyprlandProvider};
 use std::sync::Arc;
-use tokio::sync::watch;
+use serde::Deserialize;
 use tracing::{error, debug_span};
 use std::time::Duration;
+
+#[derive(Deserialize)]
+struct HyprWorkspaceDto {
+    id: i32,
+    monitor: String,
+}
+
+impl HyprWorkspaceDto {
+    fn to_domain(self) -> Workspace {
+        Workspace::new(self.id, self.monitor)
+    }
+}
+
+#[derive(Deserialize)]
+struct HyprMonitorDto {
+    name: String,
+    #[serde(rename = "activeWorkspace")]
+    active_workspace: HyprActiveWorkspaceDto,
+    focused: bool,
+}
+
+#[derive(Deserialize)]
+struct HyprActiveWorkspaceDto {
+    id: i32,
+}
+
+impl HyprMonitorDto {
+    fn to_domain(self) -> Monitor {
+        Monitor::new(self.name, self.active_workspace.id, self.focused)
+    }
+}
 
 pub struct HyprlandAdapter {
     provider: Box<dyn HyprlandProvider>,
@@ -44,12 +76,25 @@ impl HyprlandAdapter {
 
 impl WindowManagerPort for HyprlandAdapter {
     fn get_state(&self) -> Result<(Vec<Workspace>, Vec<Monitor>), PortError> {
-        let workspaces = self.provider.get_workspaces().map_err(|e| PortError::WindowManagerIpcError { 
+        let ws_json = self.provider.query_workspaces().map_err(|e| PortError::WindowManagerIpcError { 
             reason: format!("Failed to get workspaces: {}", e) 
         })?;
-        let monitors = self.provider.get_monitors().map_err(|e| PortError::WindowManagerIpcError { 
+        let mon_json = self.provider.query_monitors().map_err(|e| PortError::WindowManagerIpcError { 
             reason: format!("Failed to get monitors: {}", e) 
         })?;
+        
+        let workspaces: Vec<Workspace> = serde_json::from_str::<Vec<HyprWorkspaceDto>>(&ws_json)
+            .map_err(|e| PortError::WindowManagerIpcError { reason: e.to_string() })?
+            .into_iter()
+            .map(HyprWorkspaceDto::to_domain)
+            .collect();
+
+        let monitors: Vec<Monitor> = serde_json::from_str::<Vec<HyprMonitorDto>>(&mon_json)
+            .map_err(|e| PortError::WindowManagerIpcError { reason: e.to_string() })?
+            .into_iter()
+            .map(HyprMonitorDto::to_domain)
+            .collect();
+
         Ok((workspaces, monitors))
     }
 }
@@ -62,12 +107,12 @@ mod tests {
     #[tokio::test]
     async fn test_hyprland_adapter_get_state() {
         let mut mock_provider = MockHyprlandProvider::new();
-        mock_provider.expect_get_workspaces()
+        mock_provider.expect_query_workspaces()
             .times(1)
-            .returning(|| Ok(Vec::new()));
-        mock_provider.expect_get_monitors()
+            .returning(|| Ok("[]".to_string()));
+        mock_provider.expect_query_monitors()
             .times(1)
-            .returning(|| Ok(Vec::new()));
+            .returning(|| Ok("[]".to_string()));
 
         let adapter = HyprlandAdapter {
             provider: Box::new(mock_provider),

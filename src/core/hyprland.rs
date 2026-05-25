@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::env;
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
@@ -11,88 +10,27 @@ pub enum HyprError {
     NoInstance,
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("JSON error: {0}")]
-    Json(#[from] serde_json::Error),
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct Workspace {
-    id: i32,
-    monitor: String,
-}
-
-impl Workspace {
-    #[cfg(test)]
-    pub fn new(id: i32, monitor: String) -> Self {
-        Self { id, monitor }
-    }
-
-    pub fn id(&self) -> i32 {
-        self.id
-    }
-
-    pub fn monitor(&self) -> &str {
-        &self.monitor
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct Monitor {
-    name: String,
-    #[serde(rename = "activeWorkspace")]
-    active_workspace: ActiveWorkspace,
-    focused: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct ActiveWorkspace {
-    id: i32,
-}
-
-impl Monitor {
-    #[cfg(test)]
-    pub fn new(name: String, active_workspace_id: i32, focused: bool) -> Self {
-        Self {
-            name,
-            active_workspace: ActiveWorkspace {
-                id: active_workspace_id,
-            },
-            focused,
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn active_workspace_id(&self) -> i32 {
-        self.active_workspace.id
-    }
-
-    pub fn focused(&self) -> bool {
-        self.focused
-    }
 }
 
 #[cfg_attr(test, mockall::automock)]
 pub trait HyprlandProvider: Send + Sync {
-    fn get_monitors(&self) -> Result<Vec<Monitor>, HyprError>;
-    fn get_workspaces(&self) -> Result<Vec<Workspace>, HyprError>;
+    fn query_monitors(&self) -> Result<String, HyprError>;
+    fn query_workspaces(&self) -> Result<String, HyprError>;
 }
 
 pub struct RealHyprlandProvider;
 
 impl HyprlandProvider for RealHyprlandProvider {
-    fn get_monitors(&self) -> Result<Vec<Monitor>, HyprError> {
-        get_monitors()
+    fn query_monitors(&self) -> Result<String, HyprError> {
+        query_socket("j/monitors")
     }
 
-    fn get_workspaces(&self) -> Result<Vec<Workspace>, HyprError> {
-        get_workspaces()
+    fn query_workspaces(&self) -> Result<String, HyprError> {
+        query_socket("j/workspaces")
     }
 }
 
-pub fn get_monitors() -> Result<Vec<Monitor>, HyprError> {
+fn query_socket(command: &str) -> Result<String, HyprError> {
     let signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|_| HyprError::NoInstance)?;
     let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|_| HyprError::NoInstance)?;
 
@@ -102,52 +40,17 @@ pub fn get_monitors() -> Result<Vec<Monitor>, HyprError> {
         .join(".socket.sock");
 
     let mut stream = UnixStream::connect(socket_path)?;
-    stream.write_all(b"j/monitors")?;
+    stream.write_all(command.as_bytes())?;
 
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
 
-    let monitors: Vec<Monitor> = serde_json::from_str(&response)?;
-    Ok(monitors)
-}
-
-pub fn get_workspaces() -> Result<Vec<Workspace>, HyprError> {
-    let signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|_| HyprError::NoInstance)?;
-    let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|_| HyprError::NoInstance)?;
-
-    let socket_path = PathBuf::from(xdg_runtime_dir)
-        .join("hypr")
-        .join(signature)
-        .join(".socket.sock");
-
-    let mut stream = UnixStream::connect(socket_path)?;
-    stream.write_all(b"j/workspaces")?;
-
-    let mut response = String::new();
-    stream.read_to_string(&mut response)?;
-
-    let workspaces: Vec<Workspace> = serde_json::from_str(&response)?;
-    Ok(workspaces)
+    Ok(response)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_workspace_getters() {
-        let ws = Workspace::new(1, "eDP-1".to_string());
-        assert_eq!(ws.id(), 1);
-        assert_eq!(ws.monitor(), "eDP-1");
-    }
-
-    #[test]
-    fn test_monitor_getters() {
-        let m = Monitor::new("eDP-1".to_string(), 1, true);
-        assert_eq!(m.name(), "eDP-1");
-        assert_eq!(m.active_workspace_id(), 1);
-        assert!(m.focused());
-    }
 
     #[test]
     fn test_hypr_error_display() {
@@ -165,15 +68,7 @@ mod tests {
     fn test_real_provider_paths() {
         let provider = RealHyprlandProvider;
         // These will likely fail in test env, but we want to exercise the wrapper logic
-        let _ = provider.get_monitors();
-        let _ = provider.get_workspaces();
-    }
-
-    #[test]
-    fn test_hypr_error_from_serde() {
-        let json = "{ invalid";
-        let res: std::result::Result<Workspace, serde_json::Error> = serde_json::from_str(json);
-        let err: HyprError = res.unwrap_err().into();
-        assert!(format!("{}", err).contains("JSON error"));
+        let _ = provider.query_monitors();
+        let _ = provider.query_workspaces();
     }
 }

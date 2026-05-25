@@ -3,6 +3,9 @@ use crate::domain::color::DrawingColor;
 
 #[cfg_attr(test, mockall::automock)]
 pub trait Canvas: Send + Sync {
+    /// Clear the canvas with transparent pixels
+    fn clear(&mut self);
+
     /// Draw a filled rectangle with optional radius
     fn draw_rect(&mut self, x: f32, y: f32, width: f32, height: f32, color: DrawingColor, radius: f32);
 

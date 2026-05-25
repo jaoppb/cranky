@@ -1,11 +1,12 @@
 use crate::domain::config::ModuleConfig;
 use crate::ports::canvas::Canvas;
-use crate::domain::signals::SignalHub;
+use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::errors::DomainError;
 use crate::domain::{ModuleId, MonitorId, geometry::Size};
 use std::collections::HashMap;
 
 pub mod lua;
+pub mod rhai;
 
 /// A type-erased version of CrankyModule.
 pub trait AnyModule: Send + Sync {
@@ -15,13 +16,15 @@ pub trait AnyModule: Send + Sync {
         bar_config: &crate::domain::config::BarConfig,
     ) -> Result<(), DomainError>;
 
-    fn attach(&mut self, hub: &SignalHub, target_id: ModuleId);
+    fn subscriptions(&self) -> Vec<SignalKind>;
 
     fn refresh(&mut self, hub: &SignalHub);
 
     fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId);
 
     fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
+
+    fn on_event(&mut self, event: crate::domain::events::InputEvent);
 }
 
 pub struct ModuleRegistry {
@@ -57,6 +60,10 @@ impl ModuleRegistry {
         self.modules.get(&id).map(|m| m.as_ref())
     }
 
+    pub fn get_mut(&mut self, id: ModuleId) -> Option<&mut dyn AnyModule> {
+        self.modules.get_mut(&id).map(|m| &mut **m as &mut dyn AnyModule)
+    }
+
     pub fn load(&mut self, config: &crate::domain::config::Config) -> Result<(), DomainError> {
         self.modules.clear();
         let mut next_id = 0;
@@ -88,7 +95,10 @@ impl ModuleRegistry {
                 "workspace" => Box::new(lua::LuaModule::built_in("workspace").unwrap()),
                 "applet" => Box::new(lua::LuaModule::built_in("applet").unwrap()),
                 name => {
+                    // Try to load as lua first, then rhai
                     if let Some(m) = lua::LuaModule::external(name) {
+                        Box::new(m)
+                    } else if let Some(m) = rhai::RhaiModule::external(name) {
                         Box::new(m)
                     } else {
                         return Err(DomainError::ModuleNotFound { module_name: name.to_string() });
@@ -104,8 +114,32 @@ impl ModuleRegistry {
     }
 
     pub fn attach_all(&mut self, hub: &SignalHub) {
-        for (id, module) in self.modules.iter_mut() {
-            module.attach(hub, *id);
+        for (id, module) in self.modules.iter() {
+            let subs = module.subscriptions();
+            for kind in subs {
+                match kind {
+                    SignalKind::Time => {
+                        let mut rx = hub.time_rx();
+                        let tx = hub.dirty_tx();
+                        let id = *id;
+                        tokio::spawn(async move {
+                            while rx.changed().await.is_ok() {
+                                let _ = tx.send(id).await;
+                            }
+                        });
+                    }
+                    SignalKind::Hyprland => {
+                        let mut rx = hub.hyprland_rx();
+                        let tx = hub.dirty_tx();
+                        let id = *id;
+                        tokio::spawn(async move {
+                            while rx.changed().await.is_ok() {
+                                let _ = tx.send(id).await;
+                            }
+                        });
+                    }
+                }
+            }
         }
     }
 

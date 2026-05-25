@@ -29,6 +29,7 @@ pub struct CrankyApp {
     registry: ModuleRegistry,
     config: Config,
     dirty_rx: mpsc::Receiver<ModuleId>,
+    command_rx: mpsc::Receiver<AppCommand>,
 }
 
 impl CrankyApp {
@@ -36,7 +37,7 @@ impl CrankyApp {
         hub: Arc<SignalHub>,
         dirty_rx: mpsc::Receiver<ModuleId>,
         config: Config,
-        _command_tx: mpsc::Sender<AppCommand>,
+        command_rx: mpsc::Receiver<AppCommand>,
     ) -> Self {
         let mut registry = ModuleRegistry::new();
         let _ = registry.load(&config);
@@ -47,6 +48,7 @@ impl CrankyApp {
             registry,
             config,
             dirty_rx,
+            command_rx,
         }
     }
 
@@ -68,13 +70,9 @@ impl CrankyApp {
     ) -> Result<(), DomainError> {
         let mut config_rx = self.hub.config_rx();
 
-        info!("Core app loop started, issuing initial render pass.");
-        display
-            .render_all(self)
-            .map_err(|e| DomainError::Internal {
-                message: e.to_string(),
-            })?;
-
+        // Initial render passes are typically requested by the display server via AppCommand::RequestRender
+        // once outputs are discovered.
+        
         loop {
             let _ = display.flush();
 
@@ -85,12 +83,28 @@ impl CrankyApp {
                 }
                 Some(target_id) = self.dirty_rx.recv() => {
                     self.handle_dirty(target_id).await?;
-                    display.render_all(self).map_err(|e| DomainError::Internal { message: e.to_string() })?;
+                    let _ = display.render_all(self);
+                }
+                Some(command) = self.command_rx.recv() => {
+                    match command {
+                        AppCommand::RequestRender(_output_id) => {
+                            // Let the adapter handle its own rendering via display.render_all(self)
+                            // We shouldn't call render directly since the adapter needs to manage its own surfaces
+                            let _ = display.render_all(self);
+                        }
+                        AppCommand::Input(module_id, event) => {
+                            self.handle_input(module_id, event).await?;
+                        }
+                        AppCommand::CreateBar(_, _) => {}
+                        AppCommand::DestroyBar(_) => {}
+                        AppCommand::Log(level, msg) => {
+                            // log it
+                        }
+                    }
                 }
                 Ok(_) = config_rx.changed() => {
                     let new_config = config_rx.borrow().clone();
                     self.handle_config_change(new_config).await?;
-                    display.render_all(self).map_err(|e| DomainError::Internal { message: e.to_string() })?;
                 }
             }
         }
@@ -113,6 +127,15 @@ impl CrankyApp {
         Ok(())
     }
 
+    pub async fn handle_input(&mut self, target_id: ModuleId, event: crate::domain::events::InputEvent) -> Result<(), DomainError> {
+        let span = debug_span!("handle_input", target_id = %target_id);
+        let _enter = span.enter();
+        if let Some(module) = self.registry.get_mut(target_id) {
+            module.on_event(event);
+        }
+        Ok(())
+    }
+
     pub fn prepare_render(&mut self) {
         self.registry.refresh_all(&self.hub);
     }
@@ -122,15 +145,21 @@ impl CrankyApp {
         let bar_config = self.config.bar();
         let bar_height = bar_config.height();
         let border_size = bar_config.border().size().value();
+        let padding = bar_config.padding();
         
-        let inner_offset = border_size;
+        let inner_left = border_size + padding.left().value() as f32;
+        let inner_right = border_size + padding.right().value() as f32;
+        let inner_top = border_size + padding.top().value() as f32;
+        let inner_bottom = border_size + padding.bottom().value() as f32;
+
+        let available_height = bar_height as f32 - inner_top - inner_bottom;
 
         // Calculate left modules
-        let mut left_x = inner_offset;
+        let mut left_x = inner_left;
         for id in self.registry.left_modules() {
             if let Some(module) = self.registry.get(id) {
                 let size = module.measure(canvas, monitor);
-                let y = (bar_height.saturating_sub(size.height())) / 2;
+                let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
                 layouts.push(ModuleLayout {
                     id,
                     bounds: Rect::new(Position::new(left_x as i32, y as i32), size),
@@ -140,13 +169,13 @@ impl CrankyApp {
         }
 
         // Calculate right modules
-        let mut right_x = bar_width as f32 - inner_offset;
+        let mut right_x = bar_width as f32 - inner_right;
         let mut right_layouts = Vec::new();
         for id in self.registry.right_modules().iter().rev() {
             if let Some(module) = self.registry.get(*id) {
                 let size = module.measure(canvas, monitor);
                 right_x -= size.width() as f32;
-                let y = (bar_height.saturating_sub(size.height())) / 2;
+                let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
                 right_layouts.push(ModuleLayout {
                     id: *id,
                     bounds: Rect::new(Position::new(right_x as i32, y as i32), size),
@@ -168,7 +197,7 @@ impl CrankyApp {
 
         let mut center_x = (bar_width as f32 - center_width) / 2.0;
         for (id, size) in center_sizes {
-            let y = (bar_height.saturating_sub(size.height())) / 2;
+            let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
             layouts.push(ModuleLayout {
                 id,
                 bounds: Rect::new(Position::new(center_x as i32, y as i32), size),
@@ -185,24 +214,7 @@ impl CrankyApp {
         }
     }
 
-    /// Renders the current state of modules for a specific monitor onto the provided canvas.
-    /// This is called by the adapter in response to a RequestRender command.
-    pub fn render(
-        &mut self,
-        _output_id: u32,
-        canvas: &mut dyn Canvas,
-        monitor: &str,
-    ) -> Result<(), DomainError> {
-        let monitor_id = MonitorId::new(monitor);
-        self.prepare_render();
-        
-        let layout = self.calculate_layout(&monitor_id, 1920, canvas); 
-        for l in layout {
-            self.render_module(l.id(), canvas, &monitor_id);
-        }
 
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -261,13 +273,16 @@ mod tests {
     #[tokio::test]
     async fn test_app_run_initial_render() {
         let (hub, dirty_rx) = SignalHub::new(Config::default());
-        let (command_tx, _) = mpsc::channel(10);
-        let mut app = CrankyApp::new(Arc::new(hub), dirty_rx, Config::default(), command_tx);
+        let (command_tx, command_rx) = mpsc::channel(10);
+        let mut app = CrankyApp::new(Arc::new(hub), dirty_rx, Config::default(), command_rx);
         let (mut display, _event_trigger) = MockDisplayServer::new();
         let render_count = display.render_count.clone();
 
         // Run in a task so we can stop it
         let handle = tokio::spawn(async move { app.run(&mut display).await });
+
+        // Trigger initial render like the adapter does
+        command_tx.send(AppCommand::RequestRender(0)).await.unwrap();
 
         // Give it a moment to perform initial render
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -278,14 +293,17 @@ mod tests {
     #[tokio::test]
     async fn test_app_run_reacts_to_dirty() {
         let (hub, dirty_rx) = SignalHub::new(Config::default());
-        let (command_tx, _) = mpsc::channel(10);
+        let (command_tx, command_rx) = mpsc::channel(10);
         let hub = Arc::new(hub);
-        let mut app = CrankyApp::new(hub.clone(), dirty_rx, Config::default(), command_tx);
+        let mut app = CrankyApp::new(hub.clone(), dirty_rx, Config::default(), command_rx);
         let (mut display, _event_trigger) = MockDisplayServer::new();
         let render_count = display.render_count.clone();
         let dirty_tx = hub.dirty_tx();
 
         let handle = tokio::spawn(async move { app.run(&mut display).await });
+
+        // Initial render
+        command_tx.send(AppCommand::RequestRender(0)).await.unwrap();
 
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         assert_eq!(render_count.load(Ordering::SeqCst), 1);
@@ -299,15 +317,5 @@ mod tests {
         handle.abort();
     }
 
-    #[test]
-    fn test_app_render_calls_modules() {
-        let (hub, dirty_rx) = SignalHub::new(Config::default());
-        let (command_tx, _) = mpsc::channel(10);
-        let mut app = CrankyApp::new(Arc::new(hub), dirty_rx, Config::default(), command_tx);
 
-        let mut mock = MockCanvas::new();
-        // Since we have no modules in default config, no calls expected yet.
-        // But the method should execute.
-        app.render(0, &mut mock, "eDP-1").unwrap();
-    }
 }

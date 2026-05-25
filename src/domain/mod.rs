@@ -5,6 +5,8 @@ pub mod commands;
 pub mod color;
 pub mod geometry;
 pub mod config;
+pub mod workspace;
+pub mod events;
 
 use std::fmt;
 

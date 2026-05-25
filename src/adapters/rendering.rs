@@ -95,6 +95,10 @@ impl<'a> TinySkiaCosmicCanvas<'a> {
 }
 
 impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
+    fn clear(&mut self) {
+        self.pixmap.fill(tiny_skia::Color::TRANSPARENT);
+    }
+
     fn draw_rect(&mut self, x: f32, y: f32, width: f32, height: f32, color: DrawingColor, radius: f32) {
         if let Some(physical_rect) = Rect::from_xywh(x * self.scale, y * self.scale, width * self.scale, height * self.scale) {
             let paint = self.get_paint(color, physical_rect);
@@ -164,7 +168,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
     }
 
     fn measure_text(&mut self, text: &str, font_family: &str, font_size: f32) -> (f32, f32) {
-        let metrics = Metrics::new(font_size * self.scale, font_size * 1.4 * self.scale);
+        let metrics = Metrics::new(font_size * self.scale, font_size * 1.0 * self.scale);
         let mut buffer = Buffer::new(self.font_system, metrics);
         let attrs = Attrs::new().family(Self::get_family(font_family));
 
@@ -182,7 +186,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
     }
 
     fn draw_text(&mut self, text: &str, font_family: &str, font_size: f32, color: DrawingColor, x: f32, y: f32) {
-        let metrics = Metrics::new(font_size * self.scale, font_size * 1.4 * self.scale);
+        let metrics = Metrics::new(font_size * self.scale, font_size * 1.0 * self.scale);
         let mut buffer = Buffer::new(self.font_system, metrics);
         let attrs = Attrs::new().family(Self::get_family(font_family));
 

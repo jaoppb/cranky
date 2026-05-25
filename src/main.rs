@@ -47,22 +47,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hub = Arc::new(hub);
 
     // 4. Initialize Core Orchestrator
-    let (command_tx, _command_rx) = mpsc::channel::<AppCommand>(100);
+    let (command_tx, command_rx) = mpsc::channel::<AppCommand>(100);
     let mut app = CrankyApp::new(
         hub.clone(),
         dirty_rx,
         initial_config,
-        command_tx.clone()
+        command_rx
     );
 
-    // 5. Initialize Wayland Adapter
-    let mut wayland_adapter = WaylandAdapter::new(hub.clone())?;
+    // 4. Initialize display server port
+    let mut wayland_adapter = WaylandAdapter::new(hub.clone(), command_tx.clone())?;
 
     // 6. Spawn Background Adapters
     let hub_for_hypr = hub.clone();
     tokio::spawn(async move {
         hyprland_adapter.run(hub_for_hypr).await;
     }.instrument(info_span!("hyprland_adapter")));
+
+    let hub_for_time = hub.clone();
+    tokio::spawn(async move {
+        loop {
+            let now = chrono::Local::now();
+            let ms_until_next_sec = 1000 - now.timestamp_subsec_millis() as u64;
+            tokio::time::sleep(std::time::Duration::from_millis(ms_until_next_sec)).await;
+            let _ = hub_for_time.time_tx().send(chrono::Local::now());
+        }
+    }.instrument(info_span!("time_adapter")));
 
     let hub_for_config = hub.clone();
     let _config_watcher = config_adapter.watch(hub_for_config)?;

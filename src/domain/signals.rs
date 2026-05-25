@@ -1,8 +1,15 @@
 use serde::{Serialize, Deserialize};
 use crate::domain::config::Config;
-use crate::core::hyprland::{Workspace, Monitor};
-use crate::domain::{ModuleId, geometry::Point64};
-use tokio::sync::{watch, broadcast, mpsc};
+use crate::domain::workspace::{Workspace, Monitor};
+use crate::domain::ModuleId;
+use tokio::sync::{watch, mpsc};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SignalKind {
+    Time,
+    Hyprland,
+}
+
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct HyprlandState {
@@ -24,20 +31,10 @@ impl HyprlandState {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum PointerEvent {
-    Enter { target_id: ModuleId, pos: Point64 },
-    Leave { target_id: ModuleId },
-    Motion { target_id: ModuleId, pos: Point64 },
-    Click { target_id: ModuleId, pos: Point64, button: u32 },
-    Scroll { target_id: ModuleId, axis: u32, value: f64 },
-}
-
 pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
     hyprland: (watch::Sender<HyprlandState>, watch::Receiver<HyprlandState>),
     time: (watch::Sender<chrono::DateTime<chrono::Local>>, watch::Receiver<chrono::DateTime<chrono::Local>>),
-    pointer_events: broadcast::Sender<PointerEvent>,
     dirty_tx: mpsc::Sender<ModuleId>,
 }
 
@@ -46,7 +43,6 @@ impl SignalHub {
         let config = watch::channel(initial_config);
         let hyprland = watch::channel(HyprlandState::new(Vec::new(), Vec::new()));
         let time = watch::channel(chrono::Local::now());
-        let (pointer_events, _) = broadcast::channel(100);
         let (dirty_tx, dirty_rx) = mpsc::channel(100);
 
         (
@@ -54,7 +50,6 @@ impl SignalHub {
                 config,
                 hyprland,
                 time,
-                pointer_events,
                 dirty_tx,
             },
             dirty_rx
@@ -85,13 +80,6 @@ impl SignalHub {
         self.time.1.clone()
     }
 
-    pub fn pointer_tx(&self) -> broadcast::Sender<PointerEvent> {
-        self.pointer_events.clone()
-    }
-
-    pub fn subscribe_pointer(&self) -> broadcast::Receiver<PointerEvent> {
-        self.pointer_events.subscribe()
-    }
 
     pub fn dirty_tx(&self) -> mpsc::Sender<ModuleId> {
         self.dirty_tx.clone()
@@ -139,27 +127,6 @@ mod tests {
         assert!(time_rx.has_changed().unwrap());
     }
 
-    #[tokio::test]
-    async fn test_signal_hub_pointer_broadcast() {
-        let (hub, _dirty_rx) = SignalHub::new(Config::default());
-        let mut rx1 = hub.subscribe_pointer();
-        let mut rx2 = hub.subscribe_pointer();
-        let tx = hub.pointer_tx();
-
-        let event = PointerEvent::Click { target_id: ModuleId::new(1), pos: Point64::new(10.0, 10.0), button: 272 };
-        tx.send(event.clone()).unwrap();
-
-        let e1 = rx1.recv().await.unwrap();
-        let e2 = rx2.recv().await.unwrap();
-
-        match (e1, e2) {
-            (PointerEvent::Click { target_id: t1, .. }, PointerEvent::Click { target_id: t2, .. }) => {
-                assert_eq!(t1, ModuleId::new(1));
-                assert_eq!(t2, ModuleId::new(1));
-            }
-            _ => panic!("Incorrect event type received"),
-        }
-    }
 
     #[tokio::test]
     async fn test_signal_hub_dirty_mpsc() {

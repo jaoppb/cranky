@@ -1,6 +1,6 @@
 use mlua::{Lua, UserData, UserDataMethods, LuaSerdeExt, Function, Value};
 use crate::ports::canvas::Canvas;
-use crate::domain::signals::{SignalHub};
+use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::config::{ModuleConfig, BarConfig};
 use crate::domain::{ModuleId, MonitorId, geometry::Size};
 use crate::domain::errors::DomainError;
@@ -94,26 +94,31 @@ impl AnyModule for LuaModule {
         Ok(())
     }
 
-    fn attach(&mut self, hub: &SignalHub, target_id: ModuleId) {
-        let dirty_tx = hub.dirty_tx();
+    fn subscriptions(&self) -> Vec<SignalKind> {
+        let lua = self.lua.lock().unwrap();
+        let globals = lua.globals();
         
-        if self.name == "hour" {
-            let mut time_rx = hub.time_rx();
-            let tx = dirty_tx.clone();
-            tokio::spawn(async move {
-                while time_rx.changed().await.is_ok() {
-                    let _ = tx.send(target_id).await;
+        let mut subs = Vec::new();
+        if let Ok(subs_fn) = globals.get::<Function>("subscriptions") {
+            if let Ok(result) = subs_fn.call::<mlua::Table>(()) {
+                for pair in result.pairs::<mlua::Value, String>() {
+                    if let Ok((_, val)) = pair {
+                        match val.as_str() {
+                            "time" => subs.push(SignalKind::Time),
+                            "hyprland" => subs.push(SignalKind::Hyprland),
+                            _ => {}
+                        }
+                    }
                 }
-            });
-        } else if self.name == "workspace" {
-            let mut hypr_rx = hub.hyprland_rx();
-            let tx = dirty_tx.clone();
-            tokio::spawn(async move {
-                while hypr_rx.changed().await.is_ok() {
-                    let _ = tx.send(target_id).await;
-                }
-            });
+            }
+        } else {
+            if self.name == "hour" {
+                subs.push(SignalKind::Time);
+            } else if self.name == "workspace" {
+                subs.push(SignalKind::Hyprland);
+            }
         }
+        subs
     }
 
     fn refresh(&mut self, hub: &SignalHub) {
@@ -208,5 +213,33 @@ impl AnyModule for LuaModule {
             }
         });
         res.unwrap_or(Size::new(0, 0))
+    }
+
+    fn on_event(&mut self, event: crate::domain::events::InputEvent) {
+        let lua = self.lua.lock().unwrap();
+        let globals = lua.globals();
+        
+        if let Ok(on_event_fn) = globals.get::<Function>("on_event") {
+            let event_table = lua.create_table().unwrap();
+            use crate::domain::events::InputEvent;
+            match event {
+                InputEvent::PointerEnter => event_table.set("type", "pointer_enter").unwrap(),
+                InputEvent::PointerLeave => event_table.set("type", "pointer_leave").unwrap(),
+                InputEvent::Click { button, x, y } => {
+                    event_table.set("type", "click").unwrap();
+                    event_table.set("button", button).unwrap();
+                    event_table.set("x", x).unwrap();
+                    event_table.set("y", y).unwrap();
+                }
+                InputEvent::Scroll { axis, amount } => {
+                    event_table.set("type", "scroll").unwrap();
+                    event_table.set("axis", axis).unwrap();
+                    event_table.set("amount", amount).unwrap();
+                }
+            }
+            let _ = on_event_fn.call::<()>(event_table).unwrap_or_else(|e| {
+                eprintln!("Lua on_event error in {}: {}", self.name, e);
+            });
+        }
     }
 }
