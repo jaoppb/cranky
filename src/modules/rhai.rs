@@ -233,8 +233,15 @@ impl AnyModule for RhaiModule {
                 event_map.insert("axis".into(), Dynamic::from(axis as i64));
                 event_map.insert("amount".into(), Dynamic::from(amount));
             }
+            InputEvent::MetricsState(_) => {
+                event_map.insert("type".into(), Dynamic::from("metrics".to_string()));
+                // Serialization of full MetricsState not implemented for Rhai yet
+            }
+            InputEvent::AppletsState(_) => {
+                event_map.insert("type".into(), Dynamic::from("applets".to_string()));
+            }
+            _ => {}
         }
-        
         let _ = engine.call_fn::<()>(&mut scope, &self.ast, "on_event", (event_map,));
         commands
     }

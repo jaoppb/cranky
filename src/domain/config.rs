@@ -84,14 +84,16 @@ pub struct Config {
     bar: BarConfig,
     modules: ModulesConfig,
     rendering: RenderingMode,
+    metrics: crate::domain::metrics::MetricsConfig,
 }
 
 impl Config {
-    pub fn new(bar: BarConfig, modules: ModulesConfig, rendering: RenderingMode) -> Self {
+    pub fn new(bar: BarConfig, modules: ModulesConfig, rendering: RenderingMode, metrics: crate::domain::metrics::MetricsConfig) -> Self {
         Self {
             bar,
             modules,
             rendering,
+            metrics,
         }
     }
 
@@ -106,6 +108,10 @@ impl Config {
     pub fn rendering(&self) -> &RenderingMode {
         &self.rendering
     }
+
+    pub fn metrics(&self) -> &crate::domain::metrics::MetricsConfig {
+        &self.metrics
+    }
 }
 
 impl Default for Config {
@@ -114,6 +120,7 @@ impl Default for Config {
             bar: BarConfig::default(),
             modules: ModulesConfig::default(),
             rendering: RenderingMode::default(),
+            metrics: crate::domain::metrics::MetricsConfig::default(),
         }
     }
 }

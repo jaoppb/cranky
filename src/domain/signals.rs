@@ -13,6 +13,7 @@ pub enum SignalKind {
     Hyprland,
     DBus(DBusSubscription),
     Applets,
+    Metrics,
 }
 
 
@@ -42,6 +43,7 @@ pub struct SignalHub {
     time: (watch::Sender<chrono::DateTime<chrono::Local>>, watch::Receiver<chrono::DateTime<chrono::Local>>),
     dbus: (watch::Sender<DBusState>, watch::Receiver<DBusState>),
     applets: (watch::Sender<AppletsState>, watch::Receiver<AppletsState>),
+    metrics: (watch::Sender<crate::domain::metrics::MetricsState>, watch::Receiver<crate::domain::metrics::MetricsState>),
     dirty_tx: mpsc::Sender<ModuleId>,
 }
 
@@ -52,6 +54,7 @@ impl SignalHub {
         let time = watch::channel(chrono::Local::now());
         let dbus = watch::channel(DBusState::default());
         let applets = watch::channel(AppletsState::default());
+        let metrics = watch::channel(crate::domain::metrics::MetricsState::default());
         let (dirty_tx, dirty_rx) = mpsc::channel(100);
 
         (
@@ -61,6 +64,7 @@ impl SignalHub {
                 time,
                 dbus,
                 applets,
+                metrics,
                 dirty_tx,
             },
             dirty_rx
@@ -105,6 +109,14 @@ impl SignalHub {
 
     pub fn applets_rx(&self) -> watch::Receiver<AppletsState> {
         self.applets.1.clone()
+    }
+
+    pub fn metrics_tx(&self) -> watch::Sender<crate::domain::metrics::MetricsState> {
+        self.metrics.0.clone()
+    }
+
+    pub fn metrics_rx(&self) -> watch::Receiver<crate::domain::metrics::MetricsState> {
+        self.metrics.1.clone()
     }
 
 

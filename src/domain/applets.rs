@@ -8,7 +8,7 @@ pub enum AppletStatus {
     Unknown,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AppletItem {
     pub id: String,
     pub destination: String,
@@ -26,7 +26,7 @@ pub struct AppletItem {
     pub menu_path: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct AppletsState {
     pub items: Vec<AppletItem>,
 }

@@ -154,6 +154,16 @@ impl ModuleRegistry {
                             }
                         });
                     }
+                    SignalKind::Metrics => {
+                        let mut rx = hub.metrics_rx();
+                        let tx = hub.dirty_tx();
+                        let id = *id;
+                        tokio::spawn(async move {
+                            while rx.changed().await.is_ok() {
+                                let _ = tx.send(id).await;
+                            }
+                        });
+                    }
                 }
             }
         }

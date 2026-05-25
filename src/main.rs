@@ -19,6 +19,7 @@ use crate::adapters::hyprland::HyprlandAdapter;
 use crate::adapters::config::ConfigAdapter;
 use crate::adapters::zbus::ZbusAdapter;
 use crate::adapters::sni::SniAdapter;
+use crate::adapters::metrics::SysinfoAdapter;
 use crate::ports::DBusPort;
 use crate::ports::sni::SniPort;
 use crate::adapters::font::CosmicFontValidatorAdapter;
@@ -55,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut app = CrankyApp::new(
         hub.clone(),
         dirty_rx,
-        initial_config,
+        initial_config.clone(),
         command_rx
     );
 
@@ -73,6 +74,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Err(e) = sni_adapter.start().await {
         error!("Failed to start SNI Watcher: {:?}", e);
     }
+
+    // 5.6 Initialize Metrics Adapter
+    let metrics_adapter = SysinfoAdapter::new(initial_config.metrics().clone(), hub.clone());
+    metrics_adapter.start().await;
 
     // 6. Spawn Background Adapters
     let hub_for_hypr = hub.clone();

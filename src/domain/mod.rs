@@ -9,6 +9,7 @@ pub mod workspace;
 pub mod dbus;
 pub mod events;
 pub mod applets;
+pub mod metrics;
 
 use std::fmt;
 

@@ -41,6 +41,7 @@ impl LuaModule {
             "hour" => include_str!("builtins/hour.lua"),
             "workspace" => include_str!("builtins/workspace.lua"),
             "applet" => include_str!("builtins/applet.lua"),
+            "metrics" => include_str!("builtins/metrics.lua"),
             _ => return None,
         };
         Some(Self::new(name.to_string(), source.to_string()))
@@ -291,6 +292,21 @@ impl AnyModule for LuaModule {
                     let _ = event_table.set("type", "scroll");
                     let _ = event_table.set("axis", axis);
                     let _ = event_table.set("amount", amount);
+                }
+                InputEvent::MetricsState(state) => {
+                    let _ = event_table.set("type", "metrics");
+                    if let Ok(val) = lua.to_value(&state) {
+                        let _ = event_table.set("metrics", val);
+                    }
+                }
+                InputEvent::AppletsState(state) => {
+                    let _ = event_table.set("type", "applets");
+                    if let Ok(val) = lua.to_value(&state) {
+                        let _ = event_table.set("applets", val);
+                    }
+                }
+                _ => {
+                    // Ignore other events for now
                 }
             }
             let commands_cell = RefCell::new(&mut commands);

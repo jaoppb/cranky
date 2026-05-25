@@ -5,3 +5,4 @@ pub mod rendering;
 pub mod zbus;
 pub mod font;
 pub mod sni;
+pub mod metrics;

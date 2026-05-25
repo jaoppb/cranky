@@ -11,6 +11,8 @@ pub struct ConfigDto {
     modules: ModulesConfigDto,
     #[serde(default)]
     rendering: RenderingModeDto,
+    #[serde(default)]
+    metrics: crate::domain::metrics::MetricsConfig,
 }
 
 impl ConfigDto {
@@ -19,7 +21,7 @@ impl ConfigDto {
         let modules = self.modules.to_domain();
         let rendering = self.rendering.to_domain();
 
-        domain::Config::new(bar, modules, rendering)
+        domain::Config::new(bar, modules, rendering, self.metrics)
     }
 }
 #[derive(Debug, Deserialize)]
