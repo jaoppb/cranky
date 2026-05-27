@@ -25,11 +25,12 @@ struct Watcher {
     items: Arc<RwLock<HashMap<String, AppletItem>>>,
     hub: Arc<SignalHub>,
     conn: Connection,
+    runtime: tokio::runtime::Handle,
 }
 
 #[interface(name = "org.kde.StatusNotifierWatcher")]
 impl Watcher {
-    async fn register_status_notifier_item(&self, service: String) {
+    async fn register_status_notifier_item(&self, service: String, #[zbus(header)] header: zbus::message::Header<'_>) {
         debug!("Registered SNI item: {}", service);
         
         let mut full_path = service.clone();
@@ -38,10 +39,7 @@ impl Watcher {
         }
 
         let dbus_dest = if service.starts_with('/') {
-            // It's a path, but we need the unique name. Usually the caller's unique name.
-            // zbus doesn't easily give caller here without `zbus::MessageHeader`, 
-            // but many items pass their bus name.
-            service.clone()
+            header.sender().map(|s| s.as_str().to_string()).unwrap_or_else(|| service.clone())
         } else {
             service.clone()
         };
@@ -50,7 +48,7 @@ impl Watcher {
         let items = self.items.clone();
         let hub = self.hub.clone();
 
-        tokio::spawn(async move {
+        self.runtime.spawn(async move {
             if let Err(e) = Self::track_item(conn, items, hub, dbus_dest, full_path).await {
                 error!("Failed to track SNI item: {}", e);
             }
@@ -177,6 +175,7 @@ impl SniPort for SniAdapter {
                     items: self.items.clone(),
                     hub: self.hub.clone(),
                     conn: conn.clone(),
+                    runtime: tokio::runtime::Handle::current(),
                 };
                 let _res: bool = conn.object_server().at::<&str, Watcher>("/StatusNotifierWatcher", watcher).await
                     .map_err(|e: zbus::Error| PortError::InitFailed(e.to_string()))?;
