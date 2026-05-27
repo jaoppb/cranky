@@ -88,6 +88,7 @@ struct WaylandBar {
     config_margin: crate::domain::config::MarginConfig,
     scale: i32,
     module_surfaces: HashMap<crate::domain::ModuleId, ModuleSurface>,
+    configured: bool,
 }
 
 struct ModuleSurface {
@@ -216,6 +217,10 @@ impl WaylandAdapter {
         };
 
         for bar in bars {
+            if !bar.configured {
+                debug!("Skipping render for unconfigured bar: {}", bar.output_name);
+                continue;
+            }
             debug!("Rendering bar for output: {} (size: {}x{}, scale: {})", bar.output_name, bar.width, bar.height, bar.scale);
             let (width, height, scale) = (bar.width, bar.height, bar.scale);
             let physical_width = width * scale as u32;
@@ -418,6 +423,7 @@ impl WaylandState {
             config_margin: margin.clone(),
             scale: output_scale,
             module_surfaces: HashMap::new(),
+            configured: false,
         });
 
 
@@ -541,6 +547,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
         if let zwlr_layer_surface_v1::Event::Configure { serial, width, height } = event {
             proxy.ack_configure(serial);
             if let Some(bar) = state.bars.iter_mut().find(|b| &b.layer_surface == proxy) {
+                bar.configured = true;
                 if width > 0 && height > 0 {
                     let old_width = bar.width;
                     let old_height = bar.height;
