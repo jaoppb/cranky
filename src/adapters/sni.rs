@@ -122,13 +122,58 @@ impl Watcher {
             menu_path: None,
         };
 
-        // Resolve Icon
-        if let Some(name) = &icon_name {
-            if let Some(icon_path) = lookup(name).find() {
-                if let Some(rgba) = crate::utils::rasterize_svg_icon_rgba(&icon_path, 24, 1.0) {
-                    applet.icon_data = Some(rgba.into_raw());
-                    applet.icon_width = 24; // We asked for 24, but it might be different. Let's simplify.
-                    applet.icon_height = 24;
+        let max_scale = 3.0f32; // Default to 3.0 for sharp scaling on any screen
+        let mut icon_loaded = false;
+
+        // 1. Try to load from IconPixmap first, as many apps (like Slack/Discord) only supply this
+        let icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>> = props.get(iface.clone(), "IconPixmap").await.ok().and_then(|v| v.try_into().ok());
+        if let Some(pixmaps) = &icon_pixmap {
+            if !pixmaps.is_empty() {
+                let target_size = (24.0 * max_scale) as i32;
+                let mut best_diff = i32::MAX;
+                let mut best_pixmap: Option<&(i32, i32, Vec<u8>)> = None;
+                for pixmap in pixmaps {
+                    let diff = (pixmap.0 - target_size).abs();
+                    if diff < best_diff {
+                        best_diff = diff;
+                        best_pixmap = Some(pixmap);
+                    }
+                }
+                
+                if let Some(pixmap) = best_pixmap {
+                    let w = pixmap.0 as u32;
+                    let h = pixmap.1 as u32;
+                    let data = &pixmap.2;
+                    if data.len() == (w * h * 4) as usize {
+                        let mut rgba_data = Vec::with_capacity(data.len());
+                        for chunk in data.chunks_exact(4) {
+                            let a = chunk[0];
+                            let r = chunk[1];
+                            let g = chunk[2];
+                            let b = chunk[3];
+                            rgba_data.push(r);
+                            rgba_data.push(g);
+                            rgba_data.push(b);
+                            rgba_data.push(a);
+                        }
+                        applet.icon_data = Some(rgba_data);
+                        applet.icon_width = w;
+                        applet.icon_height = h;
+                        icon_loaded = true;
+                    }
+                }
+            }
+        }
+
+        // 2. Fall back to IconName if not loaded or if IconPixmap was empty
+        if !icon_loaded {
+            if let Some(name) = &icon_name {
+                if let Some(icon_path) = lookup(name).find() {
+                    if let Some(rgba) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale) {
+                        applet.icon_width = rgba.width();
+                        applet.icon_height = rgba.height();
+                        applet.icon_data = Some(rgba.into_raw());
+                    }
                 }
             }
         }

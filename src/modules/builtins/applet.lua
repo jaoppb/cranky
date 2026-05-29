@@ -79,7 +79,7 @@ function view(canvas, monitor)
         
         if show_icons then
             if type(item.icon_data) == "table" and item.icon_width and item.icon_height then
-                canvas:draw_image(item.icon_data, item.icon_width, item.icon_height, x, (30 - icon_size) / 2)
+                canvas:draw_image(item.icon_data, item.icon_width, item.icon_height, icon_size, icon_size, x, (30 - icon_size) / 2)
             else
                 canvas:draw_rect(x, (30 - icon_size) / 2, icon_size, icon_size, text_color, 2)
             end

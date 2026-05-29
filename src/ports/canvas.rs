@@ -19,7 +19,16 @@ pub trait Canvas: Send + Sync {
     fn draw_text(&mut self, text: &str, font_family: &str, font_size: f32, color: DrawingColor, x: f32, y: f32);
 
     /// Draw an RGBA image
-    fn draw_image(&mut self, image_data: &[u8], width: u32, height: u32, x: f32, y: f32);
+    fn draw_image(
+        &mut self,
+        image_data: &[u8],
+        width: u32,
+        height: u32,
+        logical_width: f32,
+        logical_height: f32,
+        x: f32,
+        y: f32,
+    );
 
     /// Finalize rendering
     fn flush(&mut self) -> Result<(), PortError>;

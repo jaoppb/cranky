@@ -207,8 +207,8 @@ impl AnyModule for LuaModule {
             }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());
             let _ = lua_canvas.set("draw_text", draw_text);
 
-            let draw_image = scope.create_function(|_, (_self, image_data, width, height, x, y): (mlua::Value, Vec<u8>, u32, u32, f32, f32)| {
-                with_canvas(&mut |c| c.draw_image(&image_data, width, height, x, y));
+            let draw_image = scope.create_function(|_, (_self, image_data, width, height, logical_width, logical_height, x, y): (mlua::Value, Vec<u8>, u32, u32, f32, f32, f32, f32)| {
+                with_canvas(&mut |c| c.draw_image(&image_data, width, height, logical_width, logical_height, x, y));
                 Ok(())
             }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());
             let _ = lua_canvas.set("draw_image", draw_image);
