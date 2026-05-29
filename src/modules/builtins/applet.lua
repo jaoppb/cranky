@@ -78,7 +78,7 @@ function view(canvas, monitor)
         if i > 1 then x = x + ITEM_SPACING end
         
         if show_icons then
-            if item.icon_data and item.icon_width and item.icon_height then
+            if type(item.icon_data) == "table" and item.icon_width and item.icon_height then
                 canvas:draw_image(item.icon_data, item.icon_width, item.icon_height, x, (30 - icon_size) / 2)
             else
                 canvas:draw_rect(x, (30 - icon_size) / 2, icon_size, icon_size, text_color, 2)
