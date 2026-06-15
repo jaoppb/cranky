@@ -1,6 +1,6 @@
 use crate::ports::canvas::{Canvas};
 use crate::domain::color::{DrawingColor, Color as DomainColor};
-use crate::domain::errors::PortError;
+use crate::ports::DisplayServerError;
 use tiny_skia::{
     Color as SkiaColor, Paint, PixmapMut, Rect, Transform, PathBuilder, FillRule, 
     GradientStop, LinearGradient, Point, SpreadMode, Stroke, LineCap, LineJoin
@@ -319,10 +319,11 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         }
     }
 
-    fn flush(&mut self) -> Result<(), PortError> {
+    fn flush(&mut self) -> Result<(), DisplayServerError> {
         Ok(())
     }
 }
+
 
 #[cfg(test)]
 mod tests {

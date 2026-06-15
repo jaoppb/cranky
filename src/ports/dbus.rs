@@ -1,15 +1,15 @@
 use async_trait::async_trait;
-use crate::domain::errors::PortError;
+use crate::adapters::zbus::DBusPortError;
 use crate::domain::dbus::{BusType, DBusSubscription, DBusValue};
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait DBusPort: Send + Sync {
     /// Initialize the connection to the DBus buses (session and system)
-    async fn connect(&mut self) -> Result<(), PortError>;
+    async fn connect(&mut self) -> Result<(), DBusPortError>;
     
     /// Register a subscription dynamically from a module
-    async fn subscribe(&mut self, sub: DBusSubscription) -> Result<(), PortError>;
+    async fn subscribe(&mut self, sub: DBusSubscription) -> Result<(), DBusPortError>;
     
     /// Send an asynchronous command to the bus (e.g., Play/Pause for MPRIS)
     async fn call_method(
@@ -20,5 +20,5 @@ pub trait DBusPort: Send + Sync {
         interface: &str,
         method: &str,
         args: Vec<DBusValue>,
-    ) -> Result<(), PortError>;
+    ) -> Result<(), DBusPortError>;
 }

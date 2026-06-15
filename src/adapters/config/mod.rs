@@ -2,7 +2,16 @@ pub mod dto;
 
 use crate::domain::config::Config;
 use crate::domain::signals::SignalHub;
-use crate::domain::errors::DomainError;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ConfigAdapterError {
+    #[error("Failed to parse configuration: {reason}")]
+    ConfigParseError { reason: String },
+    #[error("Internal error: {message}")]
+    Internal { message: String },
+}
+
 use crate::ports::font::FontValidatorPort;
 use crate::adapters::config::dto::ConfigDto;
 use notify::{Event, RecursiveMode, Watcher};
@@ -33,7 +42,7 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
         }
     }
 
-    pub fn load_initial(&self) -> Result<Config, DomainError> {
+    pub fn load_initial(&self) -> Result<Config, ConfigAdapterError> {
         if self.config_path.exists() {
             self.load_from_path(&self.config_path)
         } else {
@@ -42,21 +51,21 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
         }
     }
 
-    fn load_from_path(&self, path: &Path) -> Result<Config, DomainError> {
-        let content = std::fs::read_to_string(path).map_err(|e| DomainError::ConfigParseError {
+    fn load_from_path(&self, path: &Path) -> Result<Config, ConfigAdapterError> {
+        let content = std::fs::read_to_string(path).map_err(|e| ConfigAdapterError::ConfigParseError {
             reason: format!("IO error: {}", e)
         })?;
         self.load_from_str(&content)
     }
 
-    fn load_from_str(&self, content: &str) -> Result<Config, DomainError> {
-        let dto: ConfigDto = toml::from_str(content).map_err(|e| DomainError::ConfigParseError {
+    fn load_from_str(&self, content: &str) -> Result<Config, ConfigAdapterError> {
+        let dto: ConfigDto = toml::from_str(content).map_err(|e| ConfigAdapterError::ConfigParseError {
             reason: e.to_string()
         })?;
         Ok(dto.to_domain(self.validator.as_ref()))
     }
 
-    pub fn watch(&self, hub: Arc<SignalHub>) -> Result<Box<dyn Watcher>, DomainError> {
+    pub fn watch(&self, hub: Arc<SignalHub>) -> Result<Box<dyn Watcher>, ConfigAdapterError> {
         let config_tx = hub.config_tx();
         let path = self.config_path.clone();
         let validator = self.validator.clone();
@@ -86,12 +95,12 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
                 }
                 Err(e) => error!("Config watcher error: {:?}", e),
             }
-        }).map_err(|e| DomainError::Internal { message: format!("Failed to create watcher: {}", e) })?;
+        }).map_err(|e| ConfigAdapterError::Internal { message: format!("Failed to create watcher: {}", e) })?;
 
         if let Some(parent) = self.config_path.parent() {
             if parent.exists() {
                 watcher.watch(parent, RecursiveMode::NonRecursive).map_err(|e| {
-                    DomainError::Internal { message: format!("Failed to start watching config dir: {}", e) }
+                    ConfigAdapterError::Internal { message: format!("Failed to start watching config dir: {}", e) }
                 })?;
             }
         }

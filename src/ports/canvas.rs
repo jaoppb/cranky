@@ -1,4 +1,4 @@
-use crate::domain::errors::PortError;
+use crate::ports::DisplayServerError;
 use crate::domain::color::DrawingColor;
 
 #[cfg_attr(test, mockall::automock)]
@@ -31,5 +31,5 @@ pub trait Canvas: Send + Sync {
     );
 
     /// Finalize rendering
-    fn flush(&mut self) -> Result<(), PortError>;
+    fn flush(&mut self) -> Result<(), DisplayServerError>;
 }

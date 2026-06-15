@@ -1,6 +1,6 @@
 use crate::ports::DisplayServerPort;
 use crate::ports::canvas::Canvas;
-use crate::domain::errors::PortError;
+use crate::ports::DisplayServerError;
 use crate::domain::signals::SignalHub;
 use crate::domain::app::CrankyApp;
 use crate::adapters::rendering::TinySkiaCosmicCanvas;
@@ -99,8 +99,8 @@ struct ModuleSurface {
 }
 
 impl WaylandAdapter {
-    pub fn new(hub: Arc<SignalHub>, command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>) -> Result<Self, PortError> {
-        let connection = Connection::connect_to_env().map_err(|e| PortError::DisplayConnectionFailed { 
+    pub fn new(hub: Arc<SignalHub>, command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>) -> Result<Self, DisplayServerError> {
+        let connection = Connection::connect_to_env().map_err(|e| DisplayServerError::ConnectionFailed { 
             reason: e.to_string() 
         })?;
         let event_queue = connection.new_event_queue();
@@ -110,7 +110,7 @@ impl WaylandAdapter {
 
         let raw_fd = connection.as_fd().as_raw_fd();
         let async_fd = AsyncFd::new(WaylandFd(raw_fd))
-            .map_err(|e| PortError::DisplayConnectionFailed { reason: e.to_string() })?;
+            .map_err(|e| DisplayServerError::ConnectionFailed { reason: e.to_string() })?;
 
         let state = WaylandState {
             hub,
@@ -141,10 +141,10 @@ impl WaylandAdapter {
 
 #[async_trait]
 impl DisplayServerPort for WaylandAdapter {
-    fn create_bar(&self, _output_id: u32, _name: &str) -> Result<(), PortError> { Ok(()) }
-    fn destroy_bar(&self, _output_id: u32) -> Result<(), PortError> { Ok(()) }
+    fn create_bar(&self, _output_id: u32, _name: &str) -> Result<(), DisplayServerError> { Ok(()) }
+    fn destroy_bar(&self, _output_id: u32) -> Result<(), DisplayServerError> { Ok(()) }
 
-    async fn wait_for_events(&mut self) -> Result<(), PortError> {
+    async fn wait_for_events(&mut self) -> Result<(), DisplayServerError> {
         let mut read_guard = self.event_queue.prepare_read();
         if let Some(r_guard) = read_guard.take() {
             if let Ok(mut guard) = self.async_fd.readable().await {
@@ -155,32 +155,32 @@ impl DisplayServerPort for WaylandAdapter {
                     Err(WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
                         guard.clear_ready();
                     }
-                    Err(e) => return Err(PortError::DisplayConnectionFailed { reason: e.to_string() }),
+                    Err(e) => return Err(DisplayServerError::ConnectionFailed { reason: e.to_string() }),
                 }
             }
         }
         Ok(())
     }
 
-    fn dispatch_pending(&mut self) -> Result<(), PortError> {
+    fn dispatch_pending(&mut self) -> Result<(), DisplayServerError> {
         self.event_queue.dispatch_pending(&mut self.state)
-            .map_err(|e| PortError::DisplayConnectionFailed { reason: e.to_string() })?;
+            .map_err(|e| DisplayServerError::ConnectionFailed { reason: e.to_string() })?;
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<(), PortError> {
+    fn flush(&mut self) -> Result<(), DisplayServerError> {
         let _ = self.connection.flush();
         Ok(())
     }
 
-    fn render_all(&mut self, app: &mut CrankyApp) -> Result<(), PortError> {
+    fn render_all<R: crate::ports::registry::ModuleRegistryPort>(&mut self, app: &mut CrankyApp<R>) -> Result<(), DisplayServerError> {
         let qh = self.event_queue.handle();
         self.render_all_outputs(app, &qh)
     }
 }
 
 impl WaylandAdapter {
-    fn render_all_outputs(&mut self, app: &mut CrankyApp, qh: &QueueHandle<WaylandState>) -> Result<(), PortError> {
+    fn render_all_outputs<R: crate::ports::registry::ModuleRegistryPort>(&mut self, app: &mut CrankyApp<R>, qh: &QueueHandle<WaylandState>) -> Result<(), DisplayServerError> {
         let span = info_span!("render_all_outputs");
         let _enter = span.enter();
         
@@ -377,9 +377,9 @@ impl WaylandAdapter {
 
 
 impl WaylandState {
-    fn create_bar(&mut self, output: &WlOutput, qh: &QueueHandle<Self>) -> Result<(), PortError> {
+    fn create_bar(&mut self, output: &WlOutput, qh: &QueueHandle<Self>) -> Result<(), DisplayServerError> {
         let (output_name, output_scale) = {
-            let info = self.outputs.iter().find(|i| &i.output == output).ok_or_else(|| PortError::DisplayConnectionFailed { reason: "Output not found".to_string() })?;
+            let info = self.outputs.iter().find(|i| &i.output == output).ok_or_else(|| DisplayServerError::ConnectionFailed { reason: "Output not found".to_string() })?;
             if info.name.is_empty() { return Ok(()); }
             (info.name.clone(), info.scale)
         };
@@ -391,9 +391,9 @@ impl WaylandState {
         let margin = bar_config.margin();
         info!("Creating bar for output: {} (height: {}, scale: {})", output_name, bar_height, output_scale);
 
-        let compositor = self.compositor.as_ref().ok_or(PortError::DisplayConnectionFailed { reason: "Compositor not bound".to_string() })?;
-        let layer_shell = self.layer_shell.as_ref().ok_or(PortError::DisplayConnectionFailed { reason: "Layer shell not bound".to_string() })?;
-        let shm = self.shm.as_ref().ok_or(PortError::DisplayConnectionFailed { reason: "SHM not bound".to_string() })?;
+        let compositor = self.compositor.as_ref().ok_or(DisplayServerError::ConnectionFailed { reason: "Compositor not bound".to_string() })?;
+        let layer_shell = self.layer_shell.as_ref().ok_or(DisplayServerError::ConnectionFailed { reason: "Layer shell not bound".to_string() })?;
+        let shm = self.shm.as_ref().ok_or(DisplayServerError::ConnectionFailed { reason: "SHM not bound".to_string() })?;
 
         let surface = compositor.create_surface(qh, ());
         let layer_surface = layer_shell.get_layer_surface(&surface, Some(output), Layer::Top, "cranky".to_string(), qh, ());
@@ -410,7 +410,7 @@ impl WaylandState {
         surface.set_buffer_scale(output_scale);
         surface.commit();
 
-        let shm_buffer = ShmBuffer::new(shm, 1920 * output_scale as u32, bar_height * output_scale as u32, qh).map_err(|e| PortError::Io(e))?;
+        let shm_buffer = ShmBuffer::new(shm, 1920 * output_scale as u32, bar_height * output_scale as u32, qh).map_err(|e| DisplayServerError::Io(e))?;
 
         self.bars.push(WaylandBar {
             output_name,

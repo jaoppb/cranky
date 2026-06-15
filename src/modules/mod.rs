@@ -1,34 +1,27 @@
 use crate::domain::config::ModuleConfig;
 use crate::ports::canvas::Canvas;
+use crate::ports::registry::{AnyModulePort, ModuleRegistryPort};
 use crate::domain::signals::{SignalHub, SignalKind};
-use crate::domain::errors::DomainError;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ModuleError {
+    #[error("Module '{module_name}' not found")]
+    ModuleNotFound { module_name: String },
+    #[error("Script error in module '{module_name}': {message}")]
+    ScriptError { module_name: String, message: String },
+    #[error("Internal module error: {message}")]
+    Internal { message: String },
+}
+
 use crate::domain::{ModuleId, MonitorId, geometry::Size};
 use std::collections::HashMap;
 
 pub mod lua;
 pub mod rhai;
 
-/// A type-erased version of CrankyModule.
-pub trait AnyModule: Send + Sync {
-    fn init(
-        &mut self,
-        config: &ModuleConfig,
-        bar_config: &crate::domain::config::BarConfig,
-    ) -> Result<(), DomainError>;
-
-    fn subscriptions(&self) -> Vec<SignalKind>;
-
-    fn refresh(&mut self, hub: &SignalHub);
-
-    fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId);
-
-    fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
-
-    fn on_event(&mut self, event: crate::domain::events::InputEvent) -> Vec<crate::domain::commands::AppCommand>;
-}
-
 pub struct ModuleRegistry {
-    modules: HashMap<ModuleId, Box<dyn AnyModule>>,
+    modules: HashMap<ModuleId, Box<dyn AnyModulePort>>,
     left_modules: Vec<ModuleId>,
     center_modules: Vec<ModuleId>,
     right_modules: Vec<ModuleId>,
@@ -44,43 +37,12 @@ impl ModuleRegistry {
         }
     }
 
-    pub fn left_modules(&self) -> Vec<ModuleId> {
-        self.left_modules.clone()
-    }
-
-    pub fn center_modules(&self) -> Vec<ModuleId> {
-        self.center_modules.clone()
-    }
-
-    pub fn right_modules(&self) -> Vec<ModuleId> {
-        self.right_modules.clone()
-    }
-
-    pub fn get(&self, id: ModuleId) -> Option<&dyn AnyModule> {
-        self.modules.get(&id).map(|m| m.as_ref())
-    }
-
-    pub fn get_mut(&mut self, id: ModuleId) -> Option<&mut dyn AnyModule> {
-        self.modules.get_mut(&id).map(|m| &mut **m as &mut dyn AnyModule)
-    }
-
-    pub fn load(&mut self, config: &crate::domain::config::Config) -> Result<(), DomainError> {
-        self.modules.clear();
-        let mut next_id = 0;
-        
-        self.left_modules = self.load_section(config.modules().left(), config.bar(), &mut next_id)?;
-        self.center_modules = self.load_section(config.modules().center(), config.bar(), &mut next_id)?;
-        self.right_modules = self.load_section(config.modules().right(), config.bar(), &mut next_id)?;
-        
-        Ok(())
-    }
-
     fn load_section(
         &mut self,
         configs: &[ModuleConfig],
         bar_config: &crate::domain::config::BarConfig,
         next_id: &mut u32,
-    ) -> Result<Vec<ModuleId>, DomainError> {
+    ) -> Result<Vec<ModuleId>, String> {
         let mut ids = Vec::new();
         for config in configs {
             if !config.is_enabled() {
@@ -90,13 +52,13 @@ impl ModuleRegistry {
             let id = ModuleId::new(*next_id);
             *next_id += 1;
 
-            let mut module: Box<dyn AnyModule> = match config.name() {
+            let mut module: Box<dyn AnyModulePort> = match config.name() {
                 "hour" => Box::new(lua::LuaModule::built_in("hour")
-                    .ok_or_else(|| DomainError::ModuleNotFound { module_name: "hour".to_string() })?),
+                    .ok_or_else(|| "Module hour not found".to_string())?),
                 "workspace" => Box::new(lua::LuaModule::built_in("workspace")
-                    .ok_or_else(|| DomainError::ModuleNotFound { module_name: "workspace".to_string() })?),
+                    .ok_or_else(|| "Module workspace not found".to_string())?),
                 "applet" => Box::new(lua::LuaModule::built_in("applet")
-                    .ok_or_else(|| DomainError::ModuleNotFound { module_name: "applet".to_string() })?),
+                    .ok_or_else(|| "Module applet not found".to_string())?),
                 name => {
                     // Try to load as lua first, then rhai
                     if let Some(m) = lua::LuaModule::external(name) {
@@ -104,19 +66,53 @@ impl ModuleRegistry {
                     } else if let Some(m) = rhai::RhaiModule::external(name) {
                         Box::new(m)
                     } else {
-                        return Err(DomainError::ModuleNotFound { module_name: name.to_string() });
+                        return Err(ModuleError::ModuleNotFound { module_name: name.to_string() }.to_string());
                     }
                 }
             };
 
-            module.init(config, bar_config)?;
+            module.init(config, bar_config).map_err(|e| e.to_string())?;
             self.modules.insert(id, module);
             ids.push(id);
         }
         Ok(ids)
     }
+}
 
-    pub fn attach_all(&mut self, hub: &SignalHub) {
+#[async_trait::async_trait]
+impl ModuleRegistryPort for ModuleRegistry {
+    fn left_modules(&self) -> Vec<ModuleId> {
+        self.left_modules.clone()
+    }
+
+    fn center_modules(&self) -> Vec<ModuleId> {
+        self.center_modules.clone()
+    }
+
+    fn right_modules(&self) -> Vec<ModuleId> {
+        self.right_modules.clone()
+    }
+
+    fn get(&self, id: ModuleId) -> Option<&dyn AnyModulePort> {
+        self.modules.get(&id).map(|m| m.as_ref())
+    }
+
+    fn get_mut(&mut self, id: ModuleId) -> Option<&mut dyn AnyModulePort> {
+        self.modules.get_mut(&id).map(|m| &mut **m as &mut dyn AnyModulePort)
+    }
+
+    fn load(&mut self, config: &crate::domain::config::Config) -> Result<(), String> {
+        self.modules.clear();
+        let mut next_id = 0;
+        
+        self.left_modules = self.load_section(config.modules().left(), config.bar(), &mut next_id).map_err(|e| e.to_string())?;
+        self.center_modules = self.load_section(config.modules().center(), config.bar(), &mut next_id).map_err(|e| e.to_string())?;
+        self.right_modules = self.load_section(config.modules().right(), config.bar(), &mut next_id).map_err(|e| e.to_string())?;
+        
+        Ok(())
+    }
+
+    fn attach_all(&mut self, hub: &SignalHub) {
         for (id, module) in self.modules.iter() {
             let subs = module.subscriptions();
             for kind in subs {
@@ -169,7 +165,7 @@ impl ModuleRegistry {
         }
     }
 
-    pub async fn register_dbus_subscriptions(&self, dbus: &mut impl crate::ports::DBusPort) {
+    async fn register_dbus_subscriptions(&self, dbus: &mut dyn crate::ports::DBusPort) {
         for module in self.modules.values() {
             for kind in module.subscriptions() {
                 if let crate::domain::signals::SignalKind::DBus(sub) = kind {
@@ -181,7 +177,7 @@ impl ModuleRegistry {
         }
     }
 
-    pub fn refresh_all(&mut self, hub: &SignalHub) {
+    fn refresh_all(&mut self, hub: &SignalHub) {
         for module in self.modules.values_mut() {
             module.refresh(hub);
         }

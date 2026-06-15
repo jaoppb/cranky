@@ -5,8 +5,8 @@ use crate::ports::canvas::Canvas;
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::config::{ModuleConfig, BarConfig};
 use crate::domain::{ModuleId, MonitorId, geometry::Size};
-use crate::domain::errors::DomainError;
-use crate::modules::AnyModule;
+use crate::modules::ModuleError;
+use crate::ports::registry::AnyModulePort;
 use crate::domain::color::DrawingColor;
 use std::sync::Mutex;
 
@@ -36,7 +36,7 @@ pub struct RhaiModule {
 }
 
 impl RhaiModule {
-    pub fn new(name: String, source: &str) -> Result<Self, DomainError> {
+    pub fn new(name: String, source: &str) -> Result<Self, ModuleError> {
         let mut engine = Engine::new();
         
         // Register API functions once
@@ -76,7 +76,7 @@ impl RhaiModule {
                 .spawn();
         });
 
-        let ast = engine.compile(source).map_err(|e| DomainError::Internal { 
+        let ast = engine.compile(source).map_err(|e| ModuleError::Internal { 
             message: format!("Failed to compile Rhai script {}: {}", name, e) 
         })?;
         
@@ -112,12 +112,12 @@ impl RhaiModule {
     }
 }
 
-impl AnyModule for RhaiModule {
+impl AnyModulePort for RhaiModule {
     fn init(
         &mut self,
         config: &ModuleConfig,
         bar_config: &BarConfig,
-    ) -> Result<(), DomainError> {
+    ) -> Result<(), String> {
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         
@@ -129,9 +129,9 @@ impl AnyModule for RhaiModule {
 
         // Expose module config options
         let options_json = serde_json::to_string(config.options())
-            .map_err(|e| DomainError::Internal { message: e.to_string() })?;
+            .map_err(|e| e.to_string())?;
         let options_rhai: rhai::Map = engine.parse_json(&options_json, true)
-            .map_err(|e| DomainError::Internal { message: e.to_string() })?;
+            .map_err(|e| e.to_string())?;
         scope.push_constant("config", options_rhai);
 
         // Call init if it exists

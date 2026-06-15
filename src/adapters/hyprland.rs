@@ -1,5 +1,5 @@
 use crate::ports::WindowManagerPort;
-use crate::domain::errors::PortError;
+use crate::ports::WindowManagerError;
 use crate::domain::signals::{SignalHub, HyprlandState};
 use crate::domain::workspace::{Workspace, Monitor};
 use crate::core::hyprland::{RealHyprlandProvider, HyprlandProvider};
@@ -75,22 +75,22 @@ impl HyprlandAdapter {
 }
 
 impl WindowManagerPort for HyprlandAdapter {
-    fn get_state(&self) -> Result<(Vec<Workspace>, Vec<Monitor>), PortError> {
-        let ws_json = self.provider.query_workspaces().map_err(|e| PortError::WindowManagerIpcError { 
+    fn get_state(&self) -> Result<(Vec<Workspace>, Vec<Monitor>), WindowManagerError> {
+        let ws_json = self.provider.query_workspaces().map_err(|e| WindowManagerError::IpcError { 
             reason: format!("Failed to get workspaces: {}", e) 
         })?;
-        let mon_json = self.provider.query_monitors().map_err(|e| PortError::WindowManagerIpcError { 
+        let mon_json = self.provider.query_monitors().map_err(|e| WindowManagerError::IpcError { 
             reason: format!("Failed to get monitors: {}", e) 
         })?;
         
         let workspaces: Vec<Workspace> = serde_json::from_str::<Vec<HyprWorkspaceDto>>(&ws_json)
-            .map_err(|e| PortError::WindowManagerIpcError { reason: e.to_string() })?
+            .map_err(|e| WindowManagerError::IpcError { reason: e.to_string() })?
             .into_iter()
             .map(HyprWorkspaceDto::to_domain)
             .collect();
 
         let monitors: Vec<Monitor> = serde_json::from_str::<Vec<HyprMonitorDto>>(&mon_json)
-            .map_err(|e| PortError::WindowManagerIpcError { reason: e.to_string() })?
+            .map_err(|e| WindowManagerError::IpcError { reason: e.to_string() })?
             .into_iter()
             .map(HyprMonitorDto::to_domain)
             .collect();

@@ -7,7 +7,14 @@ use tokio_stream::StreamExt;
 use tracing::{debug, error, info};
 
 use crate::domain::dbus::{BusType, DBusState, DBusSubscription, DBusValue};
-use crate::domain::errors::PortError;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum DBusPortError {
+    #[error("DBus error: {reason}")]
+    DBusError { reason: String },
+}
+
 use crate::ports::DBusPort;
 use crate::domain::signals::SignalHub;
 
@@ -103,7 +110,7 @@ impl ZbusAdapter {
 
 #[async_trait]
 impl DBusPort for ZbusAdapter {
-    async fn connect(&mut self) -> Result<(), PortError> {
+    async fn connect(&mut self) -> Result<(), DBusPortError> {
         info!("Connecting to DBus Session Bus...");
         match Connection::session().await {
             Ok(conn) => self.session_conn = Some(conn),
@@ -119,36 +126,36 @@ impl DBusPort for ZbusAdapter {
         Ok(())
     }
 
-    async fn subscribe(&mut self, sub: DBusSubscription) -> Result<(), PortError> {
+    async fn subscribe(&mut self, sub: DBusSubscription) -> Result<(), DBusPortError> {
         let conn = match sub.bus {
             BusType::Session => self.session_conn.clone(),
             BusType::System => self.system_conn.clone(),
         };
         
         let Some(conn) = conn else {
-            return Err(PortError::DBusError { reason: "DBus connection not initialized".into() });
+            return Err(DBusPortError::DBusError { reason: "DBus connection not initialized".into() });
         };
 
         let mut rule_builder = MatchRule::builder().msg_type(zbus::message::Type::Signal);
         
         if let Some(ref dest) = sub.destination {
             // Using sender instead of destination for signals
-            rule_builder = rule_builder.sender(dest.clone()).map_err(|e| PortError::DBusError { reason: e.to_string() })?;
+            rule_builder = rule_builder.sender(dest.clone()).map_err(|e| DBusPortError::DBusError { reason: e.to_string() })?;
         }
         if let Some(ref path) = sub.path {
-            rule_builder = rule_builder.path(path.clone()).map_err(|e| PortError::DBusError { reason: e.to_string() })?;
+            rule_builder = rule_builder.path(path.clone()).map_err(|e| DBusPortError::DBusError { reason: e.to_string() })?;
         }
         if let Some(ref iface) = sub.interface {
-            rule_builder = rule_builder.interface(iface.clone()).map_err(|e| PortError::DBusError { reason: e.to_string() })?;
+            rule_builder = rule_builder.interface(iface.clone()).map_err(|e| DBusPortError::DBusError { reason: e.to_string() })?;
         }
         if let Some(ref member) = sub.member {
-            rule_builder = rule_builder.member(member.clone()).map_err(|e| PortError::DBusError { reason: e.to_string() })?;
+            rule_builder = rule_builder.member(member.clone()).map_err(|e| DBusPortError::DBusError { reason: e.to_string() })?;
         }
 
         let rule = rule_builder.build();
         let mut stream = MessageStream::for_match_rule(rule, &conn, None)
             .await
-            .map_err(|e| PortError::DBusError { reason: format!("Failed to create MessageStream: {}", e) })?;
+            .map_err(|e| DBusPortError::DBusError { reason: format!("Failed to create MessageStream: {}", e) })?;
 
         info!("Subscribed to DBus match rule");
 
@@ -207,7 +214,7 @@ impl DBusPort for ZbusAdapter {
         interface: &str,
         method: &str,
         args: Vec<DBusValue>,
-    ) -> Result<(), PortError> {
+    ) -> Result<(), DBusPortError> {
         // Method calling will be implemented in a future iteration
         Ok(())
     }

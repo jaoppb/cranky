@@ -2,7 +2,16 @@ use async_trait::async_trait;
 use crate::domain::signals::SignalHub;
 use crate::domain::applets::{AppletItem, AppletStatus, AppletsState};
 use crate::ports::sni::SniPort;
-use crate::domain::errors::PortError;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum SniAdapterError {
+    #[error("SNI initialization failed: {0}")]
+    InitFailed(String),
+    #[error("Internal SNI error: {0}")]
+    Internal(String),
+}
+
 use zbus::{Connection, interface, MessageStream};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -208,9 +217,9 @@ impl SniAdapter {
 
 #[async_trait]
 impl SniPort for SniAdapter {
-    async fn start(&mut self) -> Result<(), PortError> {
+    async fn start(&mut self) -> Result<(), SniAdapterError> {
         let conn = Connection::session().await
-            .map_err(|e| PortError::InitFailed(e.to_string()))?;
+            .map_err(|e| SniAdapterError::InitFailed(e.to_string()))?;
         
         // Attempt to request the Watcher name
         match conn.request_name("org.kde.StatusNotifierWatcher").await {
@@ -223,7 +232,7 @@ impl SniPort for SniAdapter {
                     runtime: tokio::runtime::Handle::current(),
                 };
                 let _res: bool = conn.object_server().at::<&str, Watcher>("/StatusNotifierWatcher", watcher).await
-                    .map_err(|e: zbus::Error| PortError::InitFailed(e.to_string()))?;
+                    .map_err(|e: zbus::Error| SniAdapterError::InitFailed(e.to_string()))?;
             },
             Err(_) => {
                 info!("Could not claim org.kde.StatusNotifierWatcher. Will attempt to run as host only.");
@@ -234,7 +243,7 @@ impl SniPort for SniAdapter {
         Ok(())
     }
 
-    async fn trigger_action(&self, id: &str, action: &str) -> Result<(), PortError> {
+    async fn trigger_action(&self, id: &str, action: &str) -> Result<(), SniAdapterError> {
         let lock = self.conn.lock().await;
         let items_lock = self.items.read().await;
         
@@ -246,7 +255,7 @@ impl SniPort for SniAdapter {
                 "org.kde.StatusNotifierItem",
             )
             .await
-            .map_err(|e: zbus::Error| PortError::Internal(e.to_string()))?;
+            .map_err(|e: zbus::Error| SniAdapterError::Internal(e.to_string()))?;
 
             let x: i32 = 0;
             let y: i32 = 0;

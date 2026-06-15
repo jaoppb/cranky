@@ -1,9 +1,18 @@
 use crate::domain::config::Config;
 use crate::domain::commands::AppCommand;
-use crate::domain::errors::DomainError;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum AppError {
+    #[error("Internal domain error: {message}")]
+    Internal { message: String },
+    #[error("Module error: {0}")]
+    Module(String),
+}
+
 use crate::domain::signals::SignalHub;
 use crate::domain::{ModuleId, MonitorId, geometry::{Rect, Position}};
-use crate::modules::ModuleRegistry;
+use crate::ports::registry::ModuleRegistryPort;
 use crate::ports::canvas::Canvas;
 use crate::ports::DisplayServerPort;
 use std::sync::Arc;
@@ -25,32 +34,32 @@ impl ModuleLayout {
     }
 }
 
-pub struct CrankyApp {
+pub struct CrankyApp<R: ModuleRegistryPort> {
     hub: Arc<SignalHub>,
-    registry: ModuleRegistry,
+    registry: R,
     config: Config,
     dirty_rx: mpsc::Receiver<ModuleId>,
     command_rx: mpsc::Receiver<AppCommand>,
 }
 
-impl CrankyApp {
+impl<R: ModuleRegistryPort> CrankyApp<R> {
     pub fn new(
         hub: Arc<SignalHub>,
         dirty_rx: mpsc::Receiver<ModuleId>,
         config: Config,
         command_rx: mpsc::Receiver<AppCommand>,
-    ) -> Self {
-        let mut registry = ModuleRegistry::new();
-        let _ = registry.load(&config);
+        mut registry: R,
+    ) -> Result<Self, AppError> {
+        registry.load(&config).map_err(|e| AppError::Module(e))?;
         registry.attach_all(&hub);
 
-        Self {
+        Ok(Self {
             hub,
             registry,
             config,
             dirty_rx,
             command_rx,
-        }
+        })
     }
 
     pub fn config(&self) -> &Config {
@@ -69,8 +78,8 @@ impl CrankyApp {
         &mut self,
         mut display: impl DisplayServerPort,
         mut dbus: impl crate::ports::DBusPort,
-        mut sni: impl crate::ports::sni::SniPort,
-    ) -> Result<(), DomainError> {
+        sni: impl crate::ports::sni::SniPort,
+    ) -> Result<(), AppError> {
         let mut config_rx = self.hub.config_rx();
 
         // Register DBus subscriptions
@@ -84,8 +93,8 @@ impl CrankyApp {
 
             tokio::select! {
                 res = display.wait_for_events() => {
-                    res.map_err(|e| DomainError::Internal { message: e.to_string() })?;
-                    display.dispatch_pending().map_err(|e| DomainError::Internal { message: e.to_string() })?;
+                    res.map_err(|e| AppError::Internal { message: e.to_string() })?;
+                    display.dispatch_pending().map_err(|e| AppError::Internal { message: e.to_string() })?;
                 }
                 Some(target_id) = self.dirty_rx.recv() => {
                     self.handle_dirty(target_id).await?;
@@ -144,24 +153,24 @@ impl CrankyApp {
         }
     }
 
-    pub async fn handle_dirty(&mut self, target_id: ModuleId) -> Result<(), DomainError> {
+    pub async fn handle_dirty(&mut self, target_id: ModuleId) -> Result<(), AppError> {
         let span = debug_span!("handle_dirty", target_id = %target_id);
         let _enter = span.enter();
         debug!("Module {} signaled dirty.", target_id);
         Ok(())
     }
 
-    pub async fn handle_config_change(&mut self, config: Config) -> Result<(), DomainError> {
+    pub async fn handle_config_change(&mut self, config: Config) -> Result<(), AppError> {
         let span = info_span!("handle_config_change");
         let _enter = span.enter();
         info!("Config change detected in core app.");
         self.config = config;
-        self.registry.load(&self.config)?;
+        self.registry.load(&self.config).map_err(|e| AppError::Module(e.to_string()))?;
         self.registry.attach_all(&self.hub);
         Ok(())
     }
 
-    pub async fn handle_input(&mut self, target_id: ModuleId, event: crate::domain::events::InputEvent) -> Result<(), DomainError> {
+    pub async fn handle_input(&mut self, target_id: ModuleId, event: crate::domain::events::InputEvent) -> Result<(), AppError> {
         let span = debug_span!("handle_input", target_id = %target_id);
         let _enter = span.enter();
         if let Some(module) = self.registry.get_mut(target_id) {
@@ -254,11 +263,26 @@ impl CrankyApp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::errors::PortError;
+    use crate::ports::DisplayServerError;
     use crate::ports::DisplayServerPort;
     use crate::ports::canvas::MockCanvas;
     use async_trait::async_trait;
     use std::sync::atomic::{AtomicU32, Ordering};
+
+
+    struct MockModuleRegistry;
+    #[async_trait::async_trait]
+    impl ModuleRegistryPort for MockModuleRegistry {
+        fn load(&mut self, _config: &Config) -> Result<(), String> { Ok(()) }
+        fn attach_all(&mut self, _hub: &SignalHub) {}
+        async fn register_dbus_subscriptions(&self, _dbus: &mut dyn crate::ports::DBusPort) {}
+        fn refresh_all(&mut self, _hub: &SignalHub) {}
+        fn left_modules(&self) -> Vec<ModuleId> { vec![] }
+        fn center_modules(&self) -> Vec<ModuleId> { vec![] }
+        fn right_modules(&self) -> Vec<ModuleId> { vec![] }
+        fn get(&self, _id: ModuleId) -> Option<&dyn crate::ports::registry::AnyModulePort> { None }
+        fn get_mut(&mut self, _id: ModuleId) -> Option<&mut dyn crate::ports::registry::AnyModulePort> { None }
+    }
 
     struct MockDisplayServer {
         render_count: Arc<AtomicU32>,
@@ -282,23 +306,23 @@ mod tests {
 
     #[async_trait]
     impl DisplayServerPort for MockDisplayServer {
-        fn create_bar(&self, _id: u32, _name: &str) -> Result<(), PortError> {
+        fn create_bar(&self, _id: u32, _name: &str) -> Result<(), DisplayServerError> {
             Ok(())
         }
-        fn destroy_bar(&self, _id: u32) -> Result<(), PortError> {
+        fn destroy_bar(&self, _id: u32) -> Result<(), DisplayServerError> {
             Ok(())
         }
-        async fn wait_for_events(&mut self) -> Result<(), PortError> {
+        async fn wait_for_events(&mut self) -> Result<(), DisplayServerError> {
             self.event_rx.recv().await;
             Ok(())
         }
-        fn dispatch_pending(&mut self) -> Result<(), PortError> {
+        fn dispatch_pending(&mut self) -> Result<(), DisplayServerError> {
             Ok(())
         }
-        fn flush(&mut self) -> Result<(), PortError> {
+        fn flush(&mut self) -> Result<(), DisplayServerError> {
             Ok(())
         }
-        fn render_all(&mut self, _app: &mut CrankyApp) -> Result<(), PortError> {
+        fn render_all<R: ModuleRegistryPort>(&mut self, _app: &mut CrankyApp<R>) -> Result<(), DisplayServerError> {
             self.render_count.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
@@ -308,7 +332,7 @@ mod tests {
     async fn test_app_run_initial_render() {
         let (hub, dirty_rx) = SignalHub::new(Config::default());
         let (command_tx, command_rx) = mpsc::channel(10);
-        let mut app = CrankyApp::new(Arc::new(hub), dirty_rx, Config::default(), command_rx);
+        let mut app = CrankyApp::new(Arc::new(hub), dirty_rx, Config::default(), command_rx, MockModuleRegistry).unwrap();
         let (display, _event_trigger) = MockDisplayServer::new();
         let render_count = display.render_count.clone();
         
@@ -316,7 +340,7 @@ mod tests {
         let sni = crate::ports::sni::MockSniPort::new();
 
         // Run in a task so we can stop it
-        let handle = tokio::spawn(async move { app.run(display, dbus, sni).await });
+        let handle = tokio::spawn(async move { app.run(display, dbus, sni).await.unwrap() });
 
         // Trigger initial render like the adapter does
         command_tx.send(AppCommand::RequestRender(0)).await.unwrap();
@@ -332,7 +356,7 @@ mod tests {
         let (hub, dirty_rx) = SignalHub::new(Config::default());
         let (command_tx, command_rx) = mpsc::channel(10);
         let hub = Arc::new(hub);
-        let mut app = CrankyApp::new(hub.clone(), dirty_rx, Config::default(), command_rx);
+        let mut app = CrankyApp::new(hub.clone(), dirty_rx, Config::default(), command_rx, MockModuleRegistry).unwrap();
         let (display, _event_trigger) = MockDisplayServer::new();
         let render_count = display.render_count.clone();
         let dirty_tx = hub.dirty_tx();
@@ -340,7 +364,7 @@ mod tests {
         let dbus = crate::ports::dbus::MockDBusPort::new();
         let sni = crate::ports::sni::MockSniPort::new();
 
-        let handle = tokio::spawn(async move { app.run(display, dbus, sni).await });
+        let handle = tokio::spawn(async move { app.run(display, dbus, sni).await.unwrap() });
 
         // Initial render
         command_tx.send(AppCommand::RequestRender(0)).await.unwrap();

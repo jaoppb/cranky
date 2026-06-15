@@ -53,15 +53,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. Initialize Core Orchestrator
     let (command_tx, command_rx) = mpsc::channel::<AppCommand>(100);
+    let registry = crate::modules::ModuleRegistry::new();
     let mut app = CrankyApp::new(
         hub.clone(),
         dirty_rx,
         initial_config.clone(),
-        command_rx
-    );
+        command_rx,
+        registry
+    )?;
 
     // 4. Initialize display server port
-    let mut wayland_adapter = WaylandAdapter::new(hub.clone(), command_tx.clone())?;
+    let wayland_adapter = WaylandAdapter::new(hub.clone(), command_tx.clone())?;
 
     // 5. Initialize DBus port
     let mut zbus_adapter = ZbusAdapter::new(&hub);
