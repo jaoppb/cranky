@@ -93,3 +93,44 @@ impl Point64 {
         self.y
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct LogicalPx(f32);
+
+impl LogicalPx {
+    pub fn new(value: f32) -> Self { Self(value) }
+    pub fn value(&self) -> f32 { self.0 }
+    
+    pub fn apply_scale(&self, scale: &Scale) -> PhysicalPx {
+        PhysicalPx::new(self.0 * scale.value())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct PhysicalPx(f32);
+
+impl PhysicalPx {
+    pub fn new(value: f32) -> Self { Self(value) }
+    pub fn value(&self) -> f32 { self.0 }
+    
+    pub fn apply_inverse_scale(&self, scale: &Scale) -> LogicalPx {
+        if scale.value() == 0.0 {
+            LogicalPx::new(0.0)
+        } else {
+            LogicalPx::new(self.0 / scale.value())
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Scale(f32);
+
+impl Scale {
+    pub fn new(value: f32) -> Self {
+        Self(value)
+    }
+
+    pub fn value(&self) -> f32 {
+        self.0
+    }
+}

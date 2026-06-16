@@ -2,7 +2,7 @@ use crate::ports::DisplayServerError;
 use crate::domain::color::DrawingColor;
 
 use crate::domain::config::{FontFamily, FontSize};
-use crate::domain::geometry::Position;
+use crate::domain::geometry::{Position, LogicalPx};
 
 #[cfg_attr(test, mockall::automock)]
 pub trait Canvas: Send + Sync {
@@ -10,13 +10,13 @@ pub trait Canvas: Send + Sync {
     fn clear(&mut self);
 
     /// Draw a filled rectangle with optional radius
-    fn draw_rect(&mut self, x: f32, y: f32, width: f32, height: f32, color: DrawingColor, radius: f32);
+    fn draw_rect(&mut self, x: LogicalPx, y: LogicalPx, width: LogicalPx, height: LogicalPx, color: DrawingColor, radius: LogicalPx);
 
     /// Draw a border around a rectangle
-    fn draw_border(&mut self, x: f32, y: f32, width: f32, height: f32, color: DrawingColor, radius: f32, size: f32);
+    fn draw_border(&mut self, x: LogicalPx, y: LogicalPx, width: LogicalPx, height: LogicalPx, color: DrawingColor, radius: LogicalPx, size: LogicalPx);
 
     /// Measure text dimensions (width, height)
-    fn measure_text<'a>(&mut self, text: &str, font_family: Option<&'a FontFamily>, font_size: Option<FontSize>) -> (f32, f32);
+    fn measure_text<'a>(&mut self, text: &str, font_family: Option<&'a FontFamily>, font_size: Option<FontSize>) -> (LogicalPx, LogicalPx);
 
     /// Draw text at a position
     fn draw_text<'a>(&mut self, text: &str, font_family: Option<&'a FontFamily>, font_size: Option<FontSize>, color: DrawingColor, position: Position);
@@ -27,10 +27,10 @@ pub trait Canvas: Send + Sync {
         image_data: &[crate::domain::color::Color],
         width: u32,
         height: u32,
-        logical_width: f32,
-        logical_height: f32,
-        x: f32,
-        y: f32,
+        logical_width: LogicalPx,
+        logical_height: LogicalPx,
+        x: LogicalPx,
+        y: LogicalPx,
     );
 
     /// Finalize rendering

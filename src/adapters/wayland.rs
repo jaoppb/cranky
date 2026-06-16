@@ -5,6 +5,7 @@ use crate::domain::signals::SignalHub;
 use crate::domain::app::CrankyApp;
 use crate::adapters::rendering::TinySkiaCosmicCanvas;
 use crate::core::shm::ShmBuffer;
+use crate::domain::geometry::{Scale, LogicalPx};
 use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::io::unix::AsyncFd;
@@ -348,7 +349,7 @@ impl WaylandAdapter {
                 pixmap,
                 font_system,
                 swash_cache,
-                scale as f32,
+                Scale::new(scale as f32),
                 bar_config.font_family().clone(),
                 bar_config.font_size()
             );
@@ -356,15 +357,22 @@ impl WaylandAdapter {
             let border_size = border_config.size().value();
             let half_border = border_size / 2.0;
             
-            bar_canvas.draw_rect(0.0, 0.0, width as f32, height as f32, config_bg, border_config.radius().value());
+            bar_canvas.draw_rect(
+                LogicalPx::new(0.0), 
+                LogicalPx::new(0.0), 
+                LogicalPx::new(width as f32), 
+                LogicalPx::new(height as f32), 
+                config_bg, 
+                LogicalPx::new(border_config.radius().value())
+            );
             bar_canvas.draw_border(
-                half_border,
-                half_border,
-                width as f32 - border_size,
-                height as f32 - border_size,
+                LogicalPx::new(half_border),
+                LogicalPx::new(half_border),
+                LogicalPx::new(width as f32 - border_size),
+                LogicalPx::new(height as f32 - border_size),
                 border_config.color().clone(),
-                border_config.radius().value(),
-                border_size,
+                LogicalPx::new(border_config.radius().value()),
+                LogicalPx::new(border_size),
             );
 
             // Calculate layout

@@ -10,13 +10,13 @@ use cosmic_text::{
 };
 
 use crate::domain::config::{FontFamily, FontSize};
-use crate::domain::geometry::Position;
+use crate::domain::geometry::{Position, Scale, LogicalPx};
 
 pub struct TinySkiaCosmicCanvas<'a> {
     pixmap: PixmapMut<'a>,
     font_system: &'a mut FontSystem,
     swash_cache: &'a mut SwashCache,
-    scale: f32,
+    scale: Scale,
     default_font_family: FontFamily,
     default_font_size: FontSize,
 }
@@ -26,7 +26,7 @@ impl<'a> TinySkiaCosmicCanvas<'a> {
         pixmap: PixmapMut<'a>,
         font_system: &'a mut FontSystem,
         swash_cache: &'a mut SwashCache,
-        scale: f32,
+        scale: Scale,
         default_font_family: FontFamily,
         default_font_size: FontSize,
     ) -> Self {
@@ -108,10 +108,15 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         self.pixmap.fill(tiny_skia::Color::TRANSPARENT);
     }
 
-    fn draw_rect(&mut self, x: f32, y: f32, width: f32, height: f32, color: DrawingColor, radius: f32) {
-        if let Some(physical_rect) = Rect::from_xywh(x * self.scale, y * self.scale, width * self.scale, height * self.scale) {
+    fn draw_rect(&mut self, x: LogicalPx, y: LogicalPx, width: LogicalPx, height: LogicalPx, color: DrawingColor, radius: LogicalPx) {
+        let physical_x = x.apply_scale(&self.scale).value();
+        let physical_y = y.apply_scale(&self.scale).value();
+        let physical_w = width.apply_scale(&self.scale).value();
+        let physical_h = height.apply_scale(&self.scale).value();
+        
+        if let Some(physical_rect) = Rect::from_xywh(physical_x, physical_y, physical_w, physical_h) {
             let paint = self.get_paint(color, physical_rect);
-            let r = (radius * self.scale).min(physical_rect.width() / 2.0).min(physical_rect.height() / 2.0);
+            let r = radius.apply_scale(&self.scale).value().min(physical_rect.width() / 2.0).min(physical_rect.height() / 2.0);
 
             if r <= 0.0 {
                 self.pixmap.fill_rect(physical_rect, &paint, Transform::identity(), None);
@@ -136,18 +141,23 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         }
     }
 
-    fn draw_border(&mut self, x: f32, y: f32, width: f32, height: f32, color: DrawingColor, radius: f32, size: f32) {
-        if let Some(physical_rect) = Rect::from_xywh(x * self.scale, y * self.scale, width * self.scale, height * self.scale) {
+    fn draw_border(&mut self, x: LogicalPx, y: LogicalPx, width: LogicalPx, height: LogicalPx, color: DrawingColor, radius: LogicalPx, size: LogicalPx) {
+        let physical_x = x.apply_scale(&self.scale).value();
+        let physical_y = y.apply_scale(&self.scale).value();
+        let physical_w = width.apply_scale(&self.scale).value();
+        let physical_h = height.apply_scale(&self.scale).value();
+        
+        if let Some(physical_rect) = Rect::from_xywh(physical_x, physical_y, physical_w, physical_h) {
             let paint = self.get_paint(color, physical_rect);
             let stroke = Stroke {
-                width: size * self.scale,
+                width: size.apply_scale(&self.scale).value(),
                 miter_limit: 4.0,
                 line_cap: LineCap::Butt,
                 line_join: LineJoin::Miter,
                 dash: None,
             };
 
-            let r = (radius * self.scale).min(physical_rect.width() / 2.0).min(physical_rect.height() / 2.0);
+            let r = radius.apply_scale(&self.scale).value().min(physical_rect.width() / 2.0).min(physical_rect.height() / 2.0);
             let mut pb = PathBuilder::new();
             let (x, y, w, h) = (physical_rect.left(), physical_rect.top(), physical_rect.width(), physical_rect.height());
             
@@ -176,34 +186,37 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         }
     }
 
-    fn measure_text<'b>(&mut self, text: &str, font_family: Option<&'b FontFamily>, font_size: Option<FontSize>) -> (f32, f32) {
+    fn measure_text<'b>(&mut self, text: &str, font_family: Option<&'b FontFamily>, font_size: Option<FontSize>) -> (LogicalPx, LogicalPx) {
         let size = font_size.unwrap_or(self.default_font_size).value();
         let family = font_family.unwrap_or(&self.default_font_family).as_str();
         
-        let metrics = Metrics::new(size * self.scale, size * 1.0 * self.scale);
+        let physical_size = LogicalPx::new(size).apply_scale(&self.scale).value();
+        let metrics = Metrics::new(physical_size, physical_size * 1.0);
         let mut buffer = Buffer::new(self.font_system, metrics);
         let attrs = Attrs::new().family(Self::get_family(family));
 
         buffer.set_text(self.font_system, text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(self.font_system, false);
 
-        let mut width: f32 = 0.0;
-        let mut height: f32 = 0.0;
+        let mut physical_width: f32 = 0.0;
+        let mut physical_height: f32 = 0.0;
         for run in buffer.layout_runs() {
-            width = width.max(run.line_w);
-            height += metrics.line_height;
+            physical_width = physical_width.max(run.line_w);
+            physical_height += metrics.line_height;
         }
 
-        (width / self.scale, height / self.scale)
+        use crate::domain::geometry::PhysicalPx;
+        (PhysicalPx::new(physical_width).apply_inverse_scale(&self.scale), PhysicalPx::new(physical_height).apply_inverse_scale(&self.scale))
     }
 
     fn draw_text<'b>(&mut self, text: &str, font_family: Option<&'b FontFamily>, font_size: Option<FontSize>, color: DrawingColor, position: Position) {
         let size = font_size.unwrap_or(self.default_font_size).value();
         let family = font_family.unwrap_or(&self.default_font_family).as_str();
-        let x = position.x() as f32;
-        let y = position.y() as f32;
+        let physical_x = LogicalPx::new(position.x() as f32).apply_scale(&self.scale).value();
+        let physical_y = LogicalPx::new(position.y() as f32).apply_scale(&self.scale).value();
         
-        let metrics = Metrics::new(size * self.scale, size * 1.0 * self.scale);
+        let physical_size = LogicalPx::new(size).apply_scale(&self.scale).value();
+        let metrics = Metrics::new(physical_size, physical_size * 1.0);
         let mut buffer = Buffer::new(self.font_system, metrics);
         let attrs = Attrs::new().family(Self::get_family(family));
 
@@ -213,7 +226,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         for run in buffer.layout_runs() {
             for glyph in run.glyphs {
                 let physical_glyph = glyph.physical(
-                    (x * self.scale, y * self.scale + run.line_y),
+                    (physical_x, physical_y + run.line_y),
                     1.0,
                 );
                 
@@ -309,10 +322,10 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         image_data: &[crate::domain::color::Color],
         width: u32,
         height: u32,
-        logical_width: f32,
-        logical_height: f32,
-        x: f32,
-        y: f32,
+        logical_width: LogicalPx,
+        logical_height: LogicalPx,
+        x: LogicalPx,
+        y: LogicalPx,
     ) {
         
         let mut bgra_premul = Vec::with_capacity(image_data.len() * 4);
@@ -337,11 +350,18 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
                 quality: tiny_skia::FilterQuality::Bilinear,
                 ..tiny_skia::PixmapPaint::default()
             };
-            let scale_x = (logical_width * self.scale) / (width as f32);
-            let scale_y = (logical_height * self.scale) / (height as f32);
+            
+            let physical_w = logical_width.apply_scale(&self.scale).value();
+            let physical_h = logical_height.apply_scale(&self.scale).value();
+            
+            let scale_x = physical_w / (width as f32);
+            let scale_y = physical_h / (height as f32);
+            
+            let physical_x = x.apply_scale(&self.scale).value();
+            let physical_y = y.apply_scale(&self.scale).value();
             
             let transform = Transform::from_scale(scale_x, scale_y)
-                .post_translate(x * self.scale, y * self.scale);
+                .post_translate(physical_x, physical_y);
             
             self.pixmap.draw_pixmap(
                 0,
@@ -377,15 +397,15 @@ mod tests {
                 pixmap.as_mut(),
                 &mut font_system,
                 &mut swash_cache,
-                1.0,
+                Scale::new(1.0),
                 FontFamily::new("sans-serif".to_string()),
                 FontSize::new(14.0)
             );
 
             canvas.draw_rect(
-                10.0, 10.0, 80.0, 80.0, 
+                LogicalPx::new(10.0), LogicalPx::new(10.0), LogicalPx::new(80.0), LogicalPx::new(80.0), 
                 DrawingColor::Solid(Color::new(255, 0, 0, 255)), 
-                0.0
+                LogicalPx::new(0.0)
             );
         }
 
@@ -407,14 +427,14 @@ mod tests {
             pixmap.as_mut(),
             &mut font_system,
             &mut swash_cache,
-            1.0,
+            Scale::new(1.0),
             FontFamily::new("sans-serif".to_string()),
             FontSize::new(14.0)
         );
 
         let (w, h) = canvas.measure_text("test", None, None);
-        assert!(w > 0.0);
-        assert!(h > 0.0);
+        assert!(w.value() > 0.0);
+        assert!(h.value() > 0.0);
     }
 
     #[test]
@@ -427,7 +447,7 @@ mod tests {
             pixmap.as_mut(),
             &mut font_system,
             &mut swash_cache,
-            1.0,
+            Scale::new(1.0),
             FontFamily::new("sans-serif".to_string()),
             FontSize::new(14.0)
         );

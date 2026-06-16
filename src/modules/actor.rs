@@ -1,5 +1,5 @@
 use crate::ports::registry::{AnyModulePort, ModuleContext};
-use crate::domain::{MonitorId, geometry::{Size, Rect}};
+use crate::domain::{MonitorId, geometry::{Size, Rect, Scale}};
 use crate::domain::commands::AppCommand;
 use crate::domain::render::RenderBuffer;
 use crate::adapters::rendering::TinySkiaCosmicCanvas;
@@ -89,7 +89,7 @@ impl ModuleActor {
                 dummy_pixmap, 
                 font_system, 
                 swash_cache, 
-                1.0,
+                Scale::new(1.0),
                 default_font_family.clone(),
                 default_font_size
             );
@@ -121,7 +121,7 @@ impl ModuleActor {
                             pixmap, 
                             font_system, 
                             swash_cache, 
-                            1.0,
+                            Scale::new(1.0),
                             default_font_family,
                             default_font_size
                         );

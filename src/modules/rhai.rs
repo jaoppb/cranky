@@ -1,13 +1,13 @@
 #![allow(unsafe_code)]
 
-use rhai::{Engine, Scope, AST, Dynamic, Array};
+use rhai::{Engine, Scope, AST, Dynamic, Array, EvalAltResult};
 use crate::ports::canvas::Canvas;
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::config::{ModuleConfig, BarConfig, FontFamily, FontSize};
-use crate::domain::{ModuleId, MonitorId, geometry::{Size, Position}};
+use crate::domain::{ModuleId, MonitorId, geometry::{Size, Position, LogicalPx}};
 use crate::modules::ModuleError;
 use crate::ports::registry::AnyModulePort;
-use crate::domain::color::DrawingColor;
+use crate::domain::color::{DrawingColor, Color};
 use std::sync::Mutex;
 
 #[derive(Copy, Clone)]
@@ -40,25 +40,25 @@ impl RhaiModule {
         let mut engine = Engine::new();
         
         // Register API functions once
-        engine.register_fn("draw_rect", |x: f32, y: f32, w: f32, h: f32, color_str: String, radius: f32| {
+        engine.register_fn("draw_rect", |x: f32, y: f32, width: f32, height: f32, color_str: String, radius: Dynamic| {
+            let color = DrawingColor::parse(&color_str).unwrap_or(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
+            let r = radius.as_float().unwrap_or(0.0);
+            with_canvas(|c| c.draw_rect(LogicalPx::new(x), LogicalPx::new(y), LogicalPx::new(width), LogicalPx::new(height), color.clone(), LogicalPx::new(r as f32)));
+        });
+
+        engine.register_fn("draw_border", |x: f32, y: f32, width: f32, height: f32, color_str: String, radius: f32, size: f32| {
             if let Ok(color) = DrawingColor::parse(&color_str) {
-                with_canvas(|c| c.draw_rect(x, y, w, h, color, radius));
+                with_canvas(|c| c.draw_border(LogicalPx::new(x), LogicalPx::new(y), LogicalPx::new(width), LogicalPx::new(height), color, LogicalPx::new(radius), LogicalPx::new(size)));
             }
         });
 
-        engine.register_fn("draw_border", |x: f32, y: f32, w: f32, h: f32, color_str: String, radius: f32, size: f32| {
-            if let Ok(color) = DrawingColor::parse(&color_str) {
-                with_canvas(|c| c.draw_border(x, y, w, h, color, radius, size));
-            }
-        });
-
-        engine.register_fn("draw_text", |text: String, font: String, size: f32, color_str: String, x: f32, y: f32| {
-            if let Ok(color) = DrawingColor::parse(&color_str) {
-                let position = Position::new(x as i32, y as i32);
-                let font_family = FontFamily::new(font);
-                let font_size = FontSize::new(size);
-                with_canvas(|c| c.draw_text(&text, Some(&font_family), Some(font_size), color, position));
-            }
+        engine.register_fn("draw_text", move |text: String, color_str: String, x: f64, y: f64, font_family: String, font_size: f64| -> Result<(), Box<EvalAltResult>> {
+            let color = DrawingColor::parse(&color_str).unwrap_or(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
+            let family = FontFamily::new(font_family);
+            let size = FontSize::new(font_size as f32);
+            let position = Position::new(x as i32, y as i32);
+            with_canvas(|c| c.draw_text(&text, Some(&family), Some(size), color.clone(), position));
+            Ok(())
         });
 
         engine.register_fn("draw_text", |text: String, color_str: String, x: f32, y: f32| {
@@ -68,25 +68,39 @@ impl RhaiModule {
             }
         });
 
-        engine.register_fn("measure_text", |text: String, font: String, size: f32| -> Array {
+        engine.register_fn("measure_text_with_font", move |text: String, font_family: String, font_size: f64| -> Result<rhai::Array, Box<EvalAltResult>> {
+            let mut w = 0.0;
+            let mut h = 0.0;
+            let family = FontFamily::new(font_family);
+            let size = FontSize::new(font_size as f32);
             with_canvas(|c| {
-                let font_family = FontFamily::new(font);
-                let font_size = FontSize::new(size);
-                let (w, h) = c.measure_text(&text, Some(&font_family), Some(font_size));
-                vec![Dynamic::from(w), Dynamic::from(h)]
-            }).unwrap_or_else(|| vec![Dynamic::from(0.0), Dynamic::from(0.0)])
+                let (width, height) = c.measure_text(&text, Some(&family), Some(size));
+                w = width.value();
+                h = height.value();
+            });
+            let mut arr = rhai::Array::new();
+            arr.push(rhai::Dynamic::from(w as f64));
+            arr.push(rhai::Dynamic::from(h as f64));
+            Ok(arr)
         });
 
-        engine.register_fn("measure_text", |text: String| -> Array {
+        engine.register_fn("measure_text", move |text: String| -> Result<rhai::Array, Box<EvalAltResult>> {
+            let mut w = 0.0;
+            let mut h = 0.0;
             with_canvas(|c| {
-                let (w, h) = c.measure_text(&text, None, None);
-                vec![Dynamic::from(w), Dynamic::from(h)]
-            }).unwrap_or_else(|| vec![Dynamic::from(0.0), Dynamic::from(0.0)])
+                let (width, height) = c.measure_text(&text, None, None);
+                w = width.value();
+                h = height.value();
+            });
+            let mut arr = rhai::Array::new();
+            arr.push(rhai::Dynamic::from(w as f64));
+            arr.push(rhai::Dynamic::from(h as f64));
+            Ok(arr)
         });
 
         engine.register_fn("draw_image", |image_data_val: rhai::Dynamic, width: i64, height: i64, logical_width: f32, logical_height: f32, x: f32, y: f32| {
             if let Ok(image_data) = rhai::serde::from_dynamic::<Vec<crate::domain::color::Color>>(&image_data_val) {
-                with_canvas(|c| c.draw_image(&image_data, width as u32, height as u32, logical_width, logical_height, x, y));
+                with_canvas(|c| c.draw_image(&image_data, width as u32, height as u32, LogicalPx::new(logical_width), LogicalPx::new(logical_height), LogicalPx::new(x), LogicalPx::new(y)));
             }
         });
 
