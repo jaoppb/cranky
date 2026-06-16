@@ -48,22 +48,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let initial_config = config_adapter.load_initial()?;
     
     // 3. Initialize Reactive Signal Hub
-    let (hub, dirty_rx) = SignalHub::new(initial_config.clone());
+    let hub = SignalHub::new(initial_config.clone());
     let hub = Arc::new(hub);
 
-    // 4. Initialize Core Orchestrator
+    // 4. Initialize Core Orchestrator & Display server port
     let (command_tx, command_rx) = mpsc::channel::<AppCommand>(100);
-    let registry = crate::modules::ModuleRegistry::new();
+    
+    // Initialize display server port first to get surface_manager
+    let (wayland_adapter, surface_manager) = WaylandAdapter::new(hub.clone(), command_tx.clone())?;
+    let surface_manager: crate::ports::surface::DynSurfaceManager = std::sync::Arc::new(surface_manager);
+
+    let registry = Box::new(crate::modules::ModuleRegistry::new());
     let mut app = CrankyApp::new(
         hub.clone(),
-        dirty_rx,
         initial_config.clone(),
         command_rx,
+        command_tx.clone(),
+        surface_manager,
         registry
     )?;
-
-    // 4. Initialize display server port
-    let wayland_adapter = WaylandAdapter::new(hub.clone(), command_tx.clone())?;
 
     // 5. Initialize DBus port
     let mut zbus_adapter = ZbusAdapter::new(&hub);

@@ -19,6 +19,7 @@ use std::collections::HashMap;
 
 pub mod lua;
 pub mod rhai;
+pub mod actor;
 
 pub struct ModuleRegistry {
     modules: HashMap<ModuleId, Box<dyn AnyModulePort>>,
@@ -93,14 +94,6 @@ impl ModuleRegistryPort for ModuleRegistry {
         self.right_modules.clone()
     }
 
-    fn get(&self, id: ModuleId) -> Option<&dyn AnyModulePort> {
-        self.modules.get(&id).map(|m| m.as_ref())
-    }
-
-    fn get_mut(&mut self, id: ModuleId) -> Option<&mut dyn AnyModulePort> {
-        self.modules.get_mut(&id).map(|m| &mut **m as &mut dyn AnyModulePort)
-    }
-
     fn load(&mut self, config: &crate::domain::config::Config) -> Result<(), String> {
         self.modules.clear();
         let mut next_id = 0;
@@ -112,57 +105,30 @@ impl ModuleRegistryPort for ModuleRegistry {
         Ok(())
     }
 
-    fn attach_all(&mut self, hub: &SignalHub) {
-        for (id, module) in self.modules.iter() {
-            let subs = module.subscriptions();
-            for kind in subs {
-                match kind {
-                    SignalKind::Time => {
-                        let mut rx = hub.time_rx();
-                        let tx = hub.dirty_tx();
-                        let id = *id;
-                        tokio::spawn(async move {
-                            while rx.changed().await.is_ok() {
-                                let _ = tx.send(id).await;
-                            }
-                        });
-                    }
-                    SignalKind::Hyprland => {
-                        let mut rx = hub.hyprland_rx();
-                        let tx = hub.dirty_tx();
-                        let id = *id;
-                        tokio::spawn(async move {
-                            while rx.changed().await.is_ok() {
-                                let _ = tx.send(id).await;
-                            }
-                        });
-                    }
-                    SignalKind::DBus(_) => {
-                        // Handled centrally in run via register_dbus_subscriptions
-                    }
-                    SignalKind::Applets => {
-                        let mut rx = hub.applets_rx();
-                        let tx = hub.dirty_tx();
-                        let id = *id;
-                        tokio::spawn(async move {
-                            while rx.changed().await.is_ok() {
-                                let _ = tx.send(id).await;
-                            }
-                        });
-                    }
-                    SignalKind::Metrics => {
-                        let mut rx = hub.metrics_rx();
-                        let tx = hub.dirty_tx();
-                        let id = *id;
-                        tokio::spawn(async move {
-                            while rx.changed().await.is_ok() {
-                                let _ = tx.send(id).await;
-                            }
-                        });
-                    }
-                }
-            }
+    fn spawn_all(
+        mut self: Box<Self>,
+        hub: std::sync::Arc<SignalHub>,
+        surface_manager: crate::ports::surface::DynSurfaceManager,
+        command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>
+    ) -> std::collections::HashMap<ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<MonitorId, crate::domain::geometry::Rect>>> {
+        let mut layout_senders = std::collections::HashMap::new();
+
+        for (id, module) in self.modules.into_iter() {
+            let (layout_tx, layout_rx) = tokio::sync::watch::channel(std::collections::HashMap::new());
+            layout_senders.insert(id, layout_tx);
+
+            let ctx = crate::ports::registry::ModuleContext {
+                id,
+                hub: hub.clone(),
+                surface_manager: surface_manager.clone(),
+                command_tx: command_tx.clone(),
+                layout_rx,
+            };
+
+            actor::ModuleActor::new(module, ctx).spawn();
         }
+
+        layout_senders
     }
 
     async fn register_dbus_subscriptions(&self, dbus: &mut dyn crate::ports::DBusPort) {
@@ -174,12 +140,6 @@ impl ModuleRegistryPort for ModuleRegistry {
                     }
                 }
             }
-        }
-    }
-
-    fn refresh_all(&mut self, hub: &SignalHub) {
-        for module in self.modules.values_mut() {
-            module.refresh(hub);
         }
     }
 }
@@ -212,22 +172,4 @@ mod tests {
         assert_eq!(registry.left_modules().len(), 1);
     }
 
-    #[tokio::test]
-    async fn test_module_registry_attach_all() {
-        let mut registry = ModuleRegistry::new();
-        let toml_str = r##"
-            [bar]
-            [modules]
-            left = [{ name = "hour", enable = true }]
-            center = [{ name = "hour", enable = true }]
-            right = []
-        "##;
-        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
-        let config = dto.to_domain(&MockValidator);
-        registry.load(&config).unwrap();
-
-        let (hub, _) = SignalHub::new(config);
-        // This should not panic and should assign IDs 0 and 1
-        registry.attach_all(&hub);
-    }
 }

@@ -21,7 +21,7 @@ pub trait Canvas: Send + Sync {
     /// Draw an RGBA image
     fn draw_image(
         &mut self,
-        image_data: &[u8],
+        image_data: &[crate::domain::color::Color],
         width: u32,
         height: u32,
         logical_width: f32,

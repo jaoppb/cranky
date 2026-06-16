@@ -17,8 +17,8 @@ pub struct AppletItem {
     pub status: AppletStatus,
     /// Identifier for the icon theme, if provided by the applet
     pub icon_name: Option<String>,
-    /// Rasterized RGBA data from either `icon_name` resolution or raw `icon_pixmap`
-    pub icon_data: Option<Vec<u8>>,
+    /// Rasterized RGBA data represented as domain Colors
+    pub icon_data: Option<Vec<crate::domain::color::Color>>,
     /// Width of the `icon_data` image
     pub icon_width: u32,
     /// Height of the `icon_data` image

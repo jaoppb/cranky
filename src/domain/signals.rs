@@ -44,31 +44,25 @@ pub struct SignalHub {
     dbus: (watch::Sender<DBusState>, watch::Receiver<DBusState>),
     applets: (watch::Sender<AppletsState>, watch::Receiver<AppletsState>),
     metrics: (watch::Sender<crate::domain::metrics::MetricsState>, watch::Receiver<crate::domain::metrics::MetricsState>),
-    dirty_tx: mpsc::Sender<ModuleId>,
 }
 
 impl SignalHub {
-    pub fn new(initial_config: Config) -> (Self, mpsc::Receiver<ModuleId>) {
+    pub fn new(initial_config: Config) -> Self {
         let config = watch::channel(initial_config);
         let hyprland = watch::channel(HyprlandState::new(Vec::new(), Vec::new()));
         let time = watch::channel(chrono::Local::now());
         let dbus = watch::channel(DBusState::default());
         let applets = watch::channel(AppletsState::default());
         let metrics = watch::channel(crate::domain::metrics::MetricsState::default());
-        let (dirty_tx, dirty_rx) = mpsc::channel(100);
 
-        (
-            Self {
-                config,
-                hyprland,
-                time,
-                dbus,
-                applets,
-                metrics,
-                dirty_tx,
-            },
-            dirty_rx
-        )
+        Self {
+            config,
+            hyprland,
+            time,
+            dbus,
+            applets,
+            metrics,
+        }
     }
 
     pub fn config_tx(&self) -> watch::Sender<Config> {
@@ -118,11 +112,6 @@ impl SignalHub {
     pub fn metrics_rx(&self) -> watch::Receiver<crate::domain::metrics::MetricsState> {
         self.metrics.1.clone()
     }
-
-
-    pub fn dirty_tx(&self) -> mpsc::Sender<ModuleId> {
-        self.dirty_tx.clone()
-    }
 }
 
 #[cfg(test)]
@@ -132,7 +121,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_signal_hub_config_propagation() {
-        let (hub, _dirty_rx) = SignalHub::new(Config::default());
+        let hub = SignalHub::new(Config::default());
         let config_rx = hub.config_rx();
         let config_tx = hub.config_tx();
 
@@ -144,7 +133,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_signal_hub_hyprland_propagation() {
-        let (hub, _dirty_rx) = SignalHub::new(Config::default());
+        let hub = SignalHub::new(Config::default());
         let hypr_rx = hub.hyprland_rx();
         let hypr_tx = hub.hyprland_tx();
 
@@ -156,7 +145,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_signal_hub_time_propagation() {
-        let (hub, _dirty_rx) = SignalHub::new(Config::default());
+        let hub = SignalHub::new(Config::default());
         let time_rx = hub.time_rx();
         let time_tx = hub.time_tx();
 
@@ -164,16 +153,5 @@ mod tests {
         time_tx.send(now).unwrap();
 
         assert!(time_rx.has_changed().unwrap());
-    }
-
-
-    #[tokio::test]
-    async fn test_signal_hub_dirty_mpsc() {
-        let (hub, mut dirty_rx) = SignalHub::new(Config::default());
-        let dirty_tx = hub.dirty_tx();
-
-        dirty_tx.send(ModuleId::new(42)).await.unwrap();
-        let id = dirty_rx.recv().await.unwrap();
-        assert_eq!(id, ModuleId::new(42));
     }
 }

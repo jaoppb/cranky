@@ -154,16 +154,13 @@ impl Watcher {
                     let h = pixmap.1 as u32;
                     let data = &pixmap.2;
                     if data.len() == (w * h * 4) as usize {
-                        let mut rgba_data = Vec::with_capacity(data.len());
+                        let mut rgba_data = Vec::with_capacity(data.len() / 4);
                         for chunk in data.chunks_exact(4) {
                             let a = chunk[0];
                             let r = chunk[1];
                             let g = chunk[2];
                             let b = chunk[3];
-                            rgba_data.push(r);
-                            rgba_data.push(g);
-                            rgba_data.push(b);
-                            rgba_data.push(a);
+                            rgba_data.push(crate::domain::color::Color::new(r, g, b, a));
                         }
                         applet.icon_data = Some(rgba_data);
                         applet.icon_width = w;
@@ -178,10 +175,10 @@ impl Watcher {
         if !icon_loaded {
             if let Some(name) = &icon_name {
                 if let Some(icon_path) = lookup(name).find() {
-                    if let Some(rgba) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale) {
-                        applet.icon_width = rgba.width();
-                        applet.icon_height = rgba.height();
-                        applet.icon_data = Some(rgba.into_raw());
+                    if let Some((w, h, colors)) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale) {
+                        applet.icon_width = w;
+                        applet.icon_height = h;
+                        applet.icon_data = Some(colors);
                     }
                 }
             }

@@ -5,6 +5,7 @@ pub mod sni;
 
 pub use dbus::DBusPort;
 pub mod registry;
+pub mod surface;
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -34,7 +35,7 @@ pub trait DisplayServerPort: Send + Sync {
     async fn wait_for_events(&mut self) -> Result<(), DisplayServerError>;
     fn dispatch_pending(&mut self) -> Result<(), DisplayServerError>;
     fn flush(&mut self) -> Result<(), DisplayServerError>;
-    fn render_all<R: crate::ports::registry::ModuleRegistryPort>(&mut self, app: &mut crate::domain::app::CrankyApp<R>) -> Result<(), DisplayServerError>;
+    fn render_all(&mut self, app: &mut crate::domain::app::CrankyApp) -> Result<(), DisplayServerError>;
 }
 
 pub trait WindowManagerPort: Send + Sync {

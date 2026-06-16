@@ -1,0 +1,113 @@
+use crate::ports::registry::{AnyModulePort, ModuleContext};
+use crate::domain::{MonitorId, geometry::{Size, Rect}};
+use crate::domain::commands::AppCommand;
+use crate::domain::render::RenderBuffer;
+use crate::adapters::rendering::TinySkiaCosmicCanvas;
+use std::collections::HashMap;
+
+pub struct ModuleActor {
+    port: Box<dyn AnyModulePort>,
+    ctx: ModuleContext,
+    sizes: HashMap<MonitorId, Size>,
+}
+
+impl ModuleActor {
+    pub fn new(port: Box<dyn AnyModulePort>, ctx: ModuleContext) -> Self {
+        Self {
+            port,
+            ctx,
+            sizes: HashMap::new(),
+        }
+    }
+
+    pub fn spawn(mut self) {
+        tokio::task::spawn_blocking(move || {
+            let rt = tokio::runtime::Handle::current();
+            let mut font_system = cosmic_text::FontSystem::new();
+            let mut swash_cache = cosmic_text::SwashCache::new();
+
+            let mut time_rx = self.ctx.hub.time_rx();
+            let mut hypr_rx = self.ctx.hub.hyprland_rx();
+            let mut applets_rx = self.ctx.hub.applets_rx();
+            let mut metrics_rx = self.ctx.hub.metrics_rx();
+            
+            // Initial refresh
+            self.port.refresh(&self.ctx.hub);
+            self.measure_and_render_all(&mut font_system, &mut swash_cache);
+
+            loop {
+                // Determine what woke us up
+                let mut changed = false;
+
+                rt.block_on(async {
+                    tokio::select! {
+                        Ok(_) = time_rx.changed() => changed = true,
+                        Ok(_) = hypr_rx.changed() => changed = true,
+                        Ok(_) = applets_rx.changed() => changed = true,
+                        Ok(_) = metrics_rx.changed() => changed = true,
+                        Ok(_) = self.ctx.layout_rx.changed() => {
+                            // Only layout changed, we don't need to refresh state, just render
+                        }
+                    }
+                });
+
+                if changed {
+                    self.port.refresh(&self.ctx.hub);
+                }
+
+                self.measure_and_render_all(&mut font_system, &mut swash_cache);
+            }
+        });
+    }
+
+    fn measure_and_render_all(
+        &mut self,
+        font_system: &mut cosmic_text::FontSystem,
+        swash_cache: &mut cosmic_text::SwashCache,
+    ) {
+        let monitors: Vec<MonitorId> = self.ctx.hub.hyprland_rx().borrow().monitors().iter().map(|m| MonitorId::new(m.name())).collect();
+        let layouts = self.ctx.layout_rx.borrow().clone();
+
+        for monitor_id in monitors {
+            // Measure
+            let mut dummy_data = vec![0u8; 4];
+            let mut dummy_pixmap = tiny_skia::PixmapMut::from_bytes(&mut dummy_data, 1, 1).unwrap();
+            let mut dummy_canvas = TinySkiaCosmicCanvas::new(dummy_pixmap, font_system, swash_cache, 1.0);
+            
+            let size = self.port.measure(&mut dummy_canvas, &monitor_id);
+
+            let old_size = self.sizes.get(&monitor_id).copied().unwrap_or(Size::new(0, 0));
+            if size != old_size {
+                self.sizes.insert(monitor_id.clone(), size.clone());
+                let _ = self.ctx.command_tx.blocking_send(AppCommand::ModuleSizeChanged(
+                    monitor_id.clone(),
+                    self.ctx.id,
+                    size,
+                ));
+            }
+
+            // Render if we have bounds
+            if let Some(bounds) = layouts.get(&monitor_id) {
+                if bounds.width() > 0 && bounds.height() > 0 {
+                    let w = bounds.width() as u32;
+                    let h = bounds.height() as u32;
+                    let mut data = vec![0u8; (w * h * 4) as usize];
+                    if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(&mut data, w, h) {
+                        let mut canvas = TinySkiaCosmicCanvas::new(pixmap, font_system, swash_cache, 1.0);
+                        self.port.view(&mut canvas, &monitor_id);
+                        
+                        // Send buffer to surface manager
+                        let buffer = RenderBuffer::new(data, bounds.size().clone());
+                        let rt = tokio::runtime::Handle::current();
+                        let sm = self.ctx.surface_manager.clone();
+                        let mod_id = self.ctx.id;
+                        let mon_id = monitor_id.clone();
+                        rt.block_on(async move {
+                            sm.submit_buffer(mod_id, mon_id, buffer).await;
+                        });
+                    }
+                }
+            }
+        }
+    }
+}

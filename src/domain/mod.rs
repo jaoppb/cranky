@@ -9,6 +9,7 @@ pub mod dbus;
 pub mod events;
 pub mod applets;
 pub mod metrics;
+pub mod render;
 
 use std::fmt;
 

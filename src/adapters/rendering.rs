@@ -289,7 +289,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
 
     fn draw_image(
         &mut self,
-        image_data: &[u8],
+        image_data: &[crate::domain::color::Color],
         width: u32,
         height: u32,
         logical_width: f32,
@@ -297,7 +297,25 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         x: f32,
         y: f32,
     ) {
-        if let Some(image_pixmap) = tiny_skia::PixmapRef::from_bytes(image_data, width, height) {
+        
+        let mut bgra_premul = Vec::with_capacity(image_data.len() * 4);
+        for color in image_data {
+            let r = color.r();
+            let g = color.g();
+            let b = color.b();
+            let a = color.a();
+            
+            let r_p = (r as u16 * a as u16 / 255) as u8;
+            let g_p = (g as u16 * a as u16 / 255) as u8;
+            let b_p = (b as u16 * a as u16 / 255) as u8;
+            
+            bgra_premul.push(b_p);
+            bgra_premul.push(g_p);
+            bgra_premul.push(r_p);
+            bgra_premul.push(a);
+        }
+
+        if let Some(image_pixmap) = tiny_skia::PixmapRef::from_bytes(&bgra_premul, width, height) {
             let paint = tiny_skia::PixmapPaint {
                 quality: tiny_skia::FilterQuality::Bilinear,
                 ..tiny_skia::PixmapPaint::default()

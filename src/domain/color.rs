@@ -13,7 +13,7 @@ pub enum ColorError {
     InvalidAngle(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Color {
     r: u8,
     g: u8,

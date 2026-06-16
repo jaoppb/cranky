@@ -6,7 +6,7 @@ pub fn load_icon_rgba(
     path: &Path,
     icon_size: u16,
     scale: f32,
-) -> Option<image::RgbaImage> {
+) -> Option<(u32, u32, Vec<crate::domain::color::Color>)> {
     if path.extension().and_then(|s| s.to_str()).map(|s| s.eq_ignore_ascii_case("svg")).unwrap_or(false) {
         let svg_data = std::fs::read(path).ok()?;
         let tree = usvg::Tree::from_data(&svg_data, &usvg::Options::default()).ok()?;
@@ -25,8 +25,8 @@ pub fn load_icon_rgba(
         let mut pixmap_mut = pixmap.as_mut();
         resvg::render(&tree, transform, &mut pixmap_mut);
 
-        let mut rgba = image::RgbaImage::new(width, height);
-        for (idx, pixel) in pixmap.data().chunks_exact(4).enumerate() {
+        let mut colors = Vec::with_capacity((width * height) as usize);
+        for pixel in pixmap.data().chunks_exact(4) {
             let a = pixel[3];
             let (r, g, b) = if a == 0 {
                 (0, 0, 0)
@@ -35,19 +35,25 @@ pub fn load_icon_rgba(
                     |c: u8| -> u8 { (((c as u16 * 255) + (a as u16 / 2)) / a as u16).min(255) as u8 };
                 (unpremul(pixel[0]), unpremul(pixel[1]), unpremul(pixel[2]))
             };
-            let x = (idx as u32) % width;
-            let y = (idx as u32) / width;
-            rgba.put_pixel(x, y, image::Rgba([r, g, b, a]));
+            colors.push(crate::domain::color::Color::new(r, g, b, a));
         }
 
-        Some(rgba)
+        Some((width, height, colors))
     } else {
         let img = image::open(path).ok()?;
         let icon_px = ((icon_size as f32) * scale.max(1.0))
             .ceil()
             .max(icon_size as f32) as u32;
         let target = icon_px.max(1);
-        Some(image::imageops::resize(&img, target, target, image::imageops::FilterType::Lanczos3))
+        let resized = image::imageops::resize(&img, target, target, image::imageops::FilterType::Lanczos3);
+        
+        let mut colors = Vec::with_capacity((resized.width() * resized.height()) as usize);
+        for pixel in resized.pixels() {
+            let [r, g, b, a] = pixel.0;
+            colors.push(crate::domain::color::Color::new(r, g, b, a));
+        }
+        
+        Some((resized.width(), resized.height(), colors))
     }
 }
 
@@ -90,41 +96,37 @@ mod tests {
     #[test]
     fn test_rasterize_svg_icon_rgba_success() {
         let path = temp_svg_path();
-        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><circle cx="12" cy="12" r="10" fill="#ff00ff"/></svg>"##;
+        let svg = r#"<svg width="10" height="10"><rect width="10" height="10" fill="red"/></svg>"#;
         fs::write(&path, svg).unwrap();
 
         let rasterized = load_icon_rgba(&path, 16, 1.0);
-        let _ = fs::remove_file(&path);
-
         assert!(rasterized.is_some());
-        let image = rasterized.unwrap();
-        assert!(image.width() > 0);
-        assert!(image.height() > 0);
+        let (w, h, data) = rasterized.unwrap();
+        assert_eq!(w, 16);
+        assert_eq!(h, 16);
+        assert!(!data.is_empty());
     }
 
     #[test]
     fn test_rasterize_svg_icon_rgba_invalid_svg() {
         let path = temp_svg_path();
-        fs::write(&path, "this is not svg").unwrap();
+        fs::write(&path, "<svg><invalid></svg>").unwrap();
 
         let rasterized = load_icon_rgba(&path, 16, 1.0);
-        let _ = fs::remove_file(&path);
-
         assert!(rasterized.is_none());
     }
 
     #[test]
     fn test_load_icon_rgba_png_success() {
-        let path = temp_png_path();
+        let path = temp_svg_path().with_extension("png");
         let img = image::RgbaImage::new(8, 8);
         img.save(&path).unwrap();
 
         let loaded = load_icon_rgba(&path, 16, 2.0);
-        let _ = fs::remove_file(&path);
-
         assert!(loaded.is_some());
-        let loaded_img = loaded.unwrap();
-        assert_eq!(loaded_img.width(), 32);
-        assert_eq!(loaded_img.height(), 32);
+        let (w, h, data) = loaded.unwrap();
+        assert_eq!(w, 32);
+        assert_eq!(h, 32);
+        assert!(!data.is_empty());
     }
 }

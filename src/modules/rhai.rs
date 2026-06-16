@@ -65,8 +65,10 @@ impl RhaiModule {
             }).unwrap_or_else(|| vec![Dynamic::from(0.0), Dynamic::from(0.0)])
         });
 
-        engine.register_fn("draw_image", |image_data: Vec<u8>, width: i64, height: i64, logical_width: f32, logical_height: f32, x: f32, y: f32| {
-            with_canvas(|c| c.draw_image(&image_data, width as u32, height as u32, logical_width, logical_height, x, y));
+        engine.register_fn("draw_image", |image_data_val: rhai::Dynamic, width: i64, height: i64, logical_width: f32, logical_height: f32, x: f32, y: f32| {
+            if let Ok(image_data) = rhai::serde::from_dynamic::<Vec<crate::domain::color::Color>>(&image_data_val) {
+                with_canvas(|c| c.draw_image(&image_data, width as u32, height as u32, logical_width, logical_height, x, y));
+            }
         });
 
         engine.register_fn("exec", |cmd: String| {
