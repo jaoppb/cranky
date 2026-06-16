@@ -37,8 +37,7 @@ pub struct ShmBuffer {
     pool: WlShmPool,
     width: u32,
     height: u32,
-    buffer_index: usize,
-    buffers: [wayland_client::protocol::wl_buffer::WlBuffer; 2],
+    buffer: wayland_client::protocol::wl_buffer::WlBuffer,
 }
 
 fn create_shm_file(size: usize) -> Result<File> {
@@ -83,25 +82,14 @@ impl ShmBuffer {
            + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, ()> + 'static
     {
         let frame_size = (width * height * 4) as usize;
-        let size = frame_size * 2; // Double buffering
-        let file = create_shm_file(size)?;
+        let file = create_shm_file(frame_size)?;
 
         let mmap = safe_mmap_file(&file)?;
         let fd = safe_borrowed_fd_from_file(&file);
-        let pool = shm_proxy.create_pool(fd, size as i32, qh, ());
+        let pool = shm_proxy.create_pool(fd, frame_size as i32, qh, ());
 
-        let buffer_0 = pool.create_buffer(
+        let buffer = pool.create_buffer(
             0,
-            width as i32,
-            height as i32,
-            (width * 4) as i32,
-            wayland_client::protocol::wl_shm::Format::Argb8888,
-            qh,
-            ()
-        );
-
-        let buffer_1 = pool.create_buffer(
-            frame_size as i32,
             width as i32,
             height as i32,
             (width * 4) as i32,
@@ -115,23 +103,21 @@ impl ShmBuffer {
             pool,
             width,
             height,
-            buffer_index: 0,
-            buffers: [buffer_0, buffer_1],
+            buffer,
         })
     }
 
     pub fn mmap_mut(&mut self) -> &mut [u8] {
         let frame_size = (self.width * self.height * 4) as usize;
-        let offset = self.buffer_index * frame_size;
-        &mut self.shm.mmap_mut()[offset..offset + frame_size]
+        &mut self.shm.mmap_mut()[..frame_size]
     }
 
     pub fn current_buffer(&self) -> &wayland_client::protocol::wl_buffer::WlBuffer {
-        &self.buffers[self.buffer_index]
+        &self.buffer
     }
 
     pub fn swap_buffers(&mut self) {
-        self.buffer_index = 1 - self.buffer_index;
+        // No-op for single buffering
     }
 
     pub fn pool(&self) -> &WlShmPool {
@@ -153,8 +139,7 @@ impl ShmBuffer {
 
 impl Drop for ShmBuffer {
     fn drop(&mut self) {
-        self.buffers[0].destroy();
-        self.buffers[1].destroy();
+        self.buffer.destroy();
         self.pool.destroy();
     }
 }
