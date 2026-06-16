@@ -30,16 +30,30 @@ function refresh()
     if not hyprland then return end
     
     workspaces = hyprland.workspaces
-    -- sort workspaces by id
-    table.sort(workspaces, function(a, b) return a.id < b.id end)
-    
     active_workspaces = {}
     for _, m in ipairs(hyprland.monitors) do
         active_workspaces[m.name] = m.active_workspace_id
         if m.focused then
             focused_monitor = m.name
         end
+        
+        local found = false
+        for _, ws in ipairs(workspaces) do
+            if ws.id == m.active_workspace_id then
+                found = true
+                break
+            end
+        end
+        if not found then
+            table.insert(workspaces, {
+                id = m.active_workspace_id,
+                monitor = m.name
+            })
+        end
     end
+    
+    -- sort workspaces by id after adding potentially empty active workspaces
+    table.sort(workspaces, function(a, b) return a.id < b.id end)
 end
 
 function measure(canvas, monitor)

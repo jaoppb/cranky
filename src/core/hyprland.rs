@@ -16,6 +16,7 @@ pub enum HyprError {
 pub trait HyprlandProvider: Send + Sync {
     fn query_monitors(&self) -> Result<String, HyprError>;
     fn query_workspaces(&self) -> Result<String, HyprError>;
+    fn listen_events(&self) -> Result<UnixStream, HyprError>;
 }
 
 pub struct RealHyprlandProvider;
@@ -27,6 +28,18 @@ impl HyprlandProvider for RealHyprlandProvider {
 
     fn query_workspaces(&self) -> Result<String, HyprError> {
         query_socket("j/workspaces")
+    }
+
+    fn listen_events(&self) -> Result<UnixStream, HyprError> {
+        let signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|_| HyprError::NoInstance)?;
+        let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|_| HyprError::NoInstance)?;
+
+        let socket_path = PathBuf::from(xdg_runtime_dir)
+            .join("hypr")
+            .join(signature)
+            .join(".socket2.sock");
+
+        UnixStream::connect(socket_path).map_err(HyprError::Io)
     }
 }
 

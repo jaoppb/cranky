@@ -45,10 +45,17 @@ impl ModuleActor {
                         Ok(_) = hypr_rx.changed() => changed = true,
                         Ok(_) = applets_rx.changed() => changed = true,
                         Ok(_) = metrics_rx.changed() => changed = true,
-                        Ok(_) = self.ctx.layout_rx.changed() => {
-                            // Only layout changed, we don't need to refresh state, just render
-                        }
+                        Ok(_) = self.ctx.layout_rx.changed() => {}
                     }
+
+                    // Debounce rapid changes (e.g. layout bounds updates following size changes)
+                    tokio::time::sleep(std::time::Duration::from_millis(16)).await;
+
+                    if time_rx.has_changed().unwrap_or(false) { let _ = time_rx.changed().await; changed = true; }
+                    if hypr_rx.has_changed().unwrap_or(false) { let _ = hypr_rx.changed().await; changed = true; }
+                    if applets_rx.has_changed().unwrap_or(false) { let _ = applets_rx.changed().await; changed = true; }
+                    if metrics_rx.has_changed().unwrap_or(false) { let _ = metrics_rx.changed().await; changed = true; }
+                    if self.ctx.layout_rx.has_changed().unwrap_or(false) { let _ = self.ctx.layout_rx.changed().await; }
                 });
 
                 if changed {
@@ -60,11 +67,13 @@ impl ModuleActor {
         });
     }
 
+    #[tracing::instrument(skip(self, font_system, swash_cache), fields(module = %self.ctx.id))]
     fn measure_and_render_all(
         &mut self,
         font_system: &mut cosmic_text::FontSystem,
         swash_cache: &mut cosmic_text::SwashCache,
     ) {
+        let t0 = std::time::Instant::now();
         let monitors: Vec<MonitorId> = self.ctx.hub.hyprland_rx().borrow().monitors().iter().map(|m| MonitorId::new(m.name())).collect();
         let layouts = self.ctx.layout_rx.borrow().clone();
 
@@ -109,5 +118,12 @@ impl ModuleActor {
                 }
             }
         }
+        
+        tracing::info!(
+            module = %self.ctx.id,
+            duration_ms = t0.elapsed().as_millis(),
+            duration_micros = t0.elapsed().as_micros(),
+            "Module UI updated"
+        );
     }
 }

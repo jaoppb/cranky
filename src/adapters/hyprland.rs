@@ -50,31 +50,78 @@ impl HyprlandAdapter {
         }
     }
 
-    /// Runs a background loop that polls Hyprland state and pushes updates to the SignalHub.
-    pub async fn run(&self, hub: Arc<SignalHub>) {
-        let hypr_tx = hub.hyprland_tx();
-        let mut interval = tokio::time::interval(Duration::from_millis(100));
+    /// Runs a background loop that listens to Hyprland event socket and pushes updates to the SignalHub.
+    pub async fn run(self, hub: Arc<SignalHub>) {
+        tokio::task::spawn_blocking(move || {
+            let hypr_tx = hub.hyprland_tx();
 
-        loop {
-            interval.tick().await;
-            let poll_span = debug_span!("hyprland_poll");
-            let _enter = poll_span.enter();
-            match self.get_state() {
-                Ok((workspaces, monitors)) => {
-                    let new_state = HyprlandState::new(workspaces, monitors);
-                    if *hypr_tx.borrow() != new_state {
-                        let _ = hypr_tx.send(new_state);
+            loop {
+                let stream = match self.provider.listen_events() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        tracing::error!("Failed to connect to Hyprland event socket: {}", e);
+                        std::thread::sleep(std::time::Duration::from_secs(1));
+                        continue;
+                    }
+                };
+                
+                use std::io::BufRead;
+                let mut reader = std::io::BufReader::new(stream);
+
+                // Initial fetch before blocking on events
+                let poll_span = tracing::debug_span!("hyprland_poll");
+                let _enter = poll_span.enter();
+                match self.get_state() {
+                    Ok((workspaces, monitors)) => {
+                        let new_state = HyprlandState::new(workspaces, monitors);
+                        if *hypr_tx.borrow() != new_state {
+                            let _ = hypr_tx.send(new_state);
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Hyprland adapter error on initial fetch: {}", e);
                     }
                 }
-                Err(e) => {
-                    error!("Hyprland adapter error: {}", e);
+                drop(_enter);
+                
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => {
+                            tracing::info!("Hyprland event socket closed, reconnecting...");
+                            break;
+                        }
+                        Ok(_) => {
+                            let poll_span = tracing::debug_span!("hyprland_poll");
+                            let _enter = poll_span.enter();
+                            match self.get_state() {
+                                Ok((workspaces, monitors)) => {
+                                    let new_state = HyprlandState::new(workspaces, monitors);
+                                    if *hypr_tx.borrow() != new_state {
+                                        let _ = hypr_tx.send(new_state);
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Hyprland adapter error during event update: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Hyprland event socket read error: {}", e);
+                            break;
+                        }
+                    }
                 }
+                
+                std::thread::sleep(std::time::Duration::from_secs(1));
             }
-        }
+        });
     }
 }
 
 impl WindowManagerPort for HyprlandAdapter {
+    #[tracing::instrument(skip(self), err)]
     fn get_state(&self) -> Result<(Vec<Workspace>, Vec<Monitor>), WindowManagerError> {
         let ws_json = self.provider.query_workspaces().map_err(|e| WindowManagerError::IpcError { 
             reason: format!("Failed to get workspaces: {}", e) 

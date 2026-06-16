@@ -86,6 +86,7 @@ impl Watcher {
 }
 
 impl Watcher {
+    #[tracing::instrument(skip(conn, items, hub))]
     async fn track_item(
         conn: Connection,
         items: Arc<RwLock<HashMap<String, AppletItem>>>,
@@ -240,6 +241,7 @@ impl SniPort for SniAdapter {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     async fn trigger_action(&self, id: &str, action: &str) -> Result<(), SniAdapterError> {
         let lock = self.conn.lock().await;
         let items_lock = self.items.read().await;

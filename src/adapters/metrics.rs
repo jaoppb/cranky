@@ -18,17 +18,13 @@ impl SysinfoAdapter {
         let config = self.config.clone();
         let hub = self.hub.clone();
 
-        tokio::spawn(async move {
+        tokio::task::spawn_blocking(move || {
             let mut sys = System::new_all();
             let mut networks = Networks::new_with_refreshed_list();
             let mut disks = Disks::new_with_refreshed_list();
             let mut components = Components::new_with_refreshed_list();
 
-            let mut interval = tokio::time::interval(std::time::Duration::from_millis(config.update_interval_ms));
-
             loop {
-                interval.tick().await;
-
                 sys.refresh_cpu_usage();
                 sys.refresh_memory();
                 networks.refresh(true);
@@ -100,6 +96,8 @@ impl SysinfoAdapter {
                 };
 
                 let _ = hub.metrics_tx().send(state);
+                
+                std::thread::sleep(std::time::Duration::from_millis(config.update_interval_ms));
             }
         });
     }

@@ -60,6 +60,8 @@ impl ModuleRegistry {
                     .ok_or_else(|| "Module workspace not found".to_string())?),
                 "applet" => Box::new(lua::LuaModule::built_in("applet")
                     .ok_or_else(|| "Module applet not found".to_string())?),
+                "metrics" => Box::new(lua::LuaModule::built_in("metrics")
+                    .ok_or_else(|| "Module metrics not found".to_string())?),
                 name => {
                     // Try to load as lua first, then rhai
                     if let Some(m) = lua::LuaModule::external(name) {

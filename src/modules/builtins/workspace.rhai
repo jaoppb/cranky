@@ -31,18 +31,30 @@ fn refresh() {
     
     workspaces = hyprland.workspaces;
     
-    // Sort workspaces by id using a simple bubble sort since Rhai's sort requires a function pointer which is tricky
-    // but Rhai arrays have a .sort() method if we provide a simple comparison or if elements are comparable!
-    // We can extract a list of objects and sort them.
-    workspaces.sort(|a, b| if a.id < b.id { -1 } else if a.id > b.id { 1 } else { 0 });
-    
     active_workspaces.clear();
     for m in hyprland.monitors {
         active_workspaces[m.name] = m.active_workspace_id;
         if m.focused {
             focused_monitor = m.name;
         }
+        
+        let found = false;
+        for ws in workspaces {
+            if ws.id == m.active_workspace_id {
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            let empty_ws = #{};
+            empty_ws.id = m.active_workspace_id;
+            empty_ws.monitor = m.name;
+            workspaces.push(empty_ws);
+        }
     }
+    
+    // Sort workspaces by id after adding potentially missing active workspaces
+    workspaces.sort(|a, b| if a.id < b.id { -1 } else if a.id > b.id { 1 } else { 0 });
 }
 
 fn measure(monitor_id) {

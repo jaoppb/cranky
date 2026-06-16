@@ -229,9 +229,8 @@ impl WaylandAdapter {
             None => return Ok(()),
         };
 
-        let scale = bar.scale;
-        let width = (cmd.buffer.width() * scale as u32).max(1);
-        let height = (cmd.buffer.height() * scale as u32).max(1);
+        let width = cmd.buffer.width().max(1);
+        let height = cmd.buffer.height().max(1);
 
         let ms = bar.module_surfaces.entry(cmd.module_id).or_insert_with(|| {
             let surface = compositor.create_surface(&qh, ());
@@ -385,8 +384,8 @@ impl WaylandAdapter {
                         let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, &qh, ());
                         subsurface.set_desync();
                         
-                        let width = (bounds.width() * scale as u32).max(1);
-                        let height = (bounds.height() * scale as u32).max(1);
+                        let width = bounds.width().max(1);
+                        let height = bounds.height().max(1);
                         let shm_buffer = match crate::core::shm::ShmBuffer::new(shm, width, height, &qh) {
                             Ok(b) => b,
                             Err(e) => {

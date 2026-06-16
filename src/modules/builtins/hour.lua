@@ -12,9 +12,6 @@ function subscriptions()
 end
 
 function refresh()
-    -- current_time is passed from Rust as RFC3339, but we can also just use os.date
-    -- if we want to follow the format exactly.
-    -- However, os.date uses C format strings which are mostly compatible with chrono.
     time_str = os.date(format)
 end
 

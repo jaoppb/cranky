@@ -107,34 +107,50 @@ impl CrankyApp {
                     res.map_err(|e| AppError::Internal { message: e.to_string() })?;
                     display.dispatch_pending().map_err(|e| AppError::Internal { message: e.to_string() })?;
                 }
-                Some(command) = self.command_rx.recv() => {
-                    match command {
-                        AppCommand::RequestRender(_output_id) => {
-                            // Adapter still does basic drawing of the background, etc.
-                            // but shouldn't ask modules to render since they render themselves.
-                            let _ = display.render_all(self);
-                        }
-                        AppCommand::Input(_module_id, _event) => {
-                            // Input handling will be routed to module tasks
-                        }
-                        AppCommand::Log(level, msg) => {
-                            match level {
-                                tracing::Level::ERROR => tracing::error!("{}", msg),
-                                tracing::Level::WARN => tracing::warn!("{}", msg),
-                                tracing::Level::INFO => tracing::info!("{}", msg),
-                                tracing::Level::DEBUG => tracing::debug!("{}", msg),
-                                tracing::Level::TRACE => tracing::trace!("{}", msg),
+                Some(mut command) = self.command_rx.recv() => {
+                    let mut needs_render = false;
+                    let mut process_count = 0;
+                    loop {
+                        process_count += 1;
+                        match command {
+                            AppCommand::RequestRender(_output_id) => {
+                                needs_render = true;
+                            }
+                            AppCommand::Input(_module_id, _event) => {
+                                // Input handling routed to module tasks
+                            }
+                            AppCommand::Log(level, msg) => {
+                                match level {
+                                    tracing::Level::ERROR => tracing::error!("{}", msg),
+                                    tracing::Level::WARN => tracing::warn!("{}", msg),
+                                    tracing::Level::INFO => tracing::info!("{}", msg),
+                                    tracing::Level::DEBUG => tracing::debug!("{}", msg),
+                                    tracing::Level::TRACE => tracing::trace!("{}", msg),
+                                }
+                            }
+                            AppCommand::DBusCall(_, _, _, _, _, _) => {}
+                            AppCommand::CreateBar(_, _) => {}
+                            AppCommand::DestroyBar(_) => {}
+                            AppCommand::AppletAction { .. } => {}
+                            AppCommand::ModuleSizeChanged(monitor_id, module_id, size) => {
+                                self.handle_size_changed(monitor_id, module_id, size);
+                                needs_render = true;
                             }
                         }
-                        AppCommand::DBusCall(_, _, _, _, _, _) => {}
-                        AppCommand::CreateBar(_, _) => {}
-                        AppCommand::DestroyBar(_) => {}
-                        AppCommand::AppletAction { .. } => {}
-                        AppCommand::ModuleSizeChanged(monitor_id, module_id, size) => {
-                            self.handle_size_changed(monitor_id, module_id, size);
-                            // Then tell adapter to render_all to update positions
-                            let _ = display.render_all(self);
+
+                        if process_count > 50 {
+                            break;
                         }
+
+                        if let Ok(next_cmd) = self.command_rx.try_recv() {
+                            command = next_cmd;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    if needs_render {
+                        let _ = display.render_all(self);
                     }
                 }
                 Ok(_) = config_rx.changed() => {
