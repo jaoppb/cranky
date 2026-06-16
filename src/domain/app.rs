@@ -8,7 +8,7 @@ use crate::ports::surface::DynSurfaceManager;
 use tokio::sync::{watch, mpsc};
 use std::sync::Arc;
 use std::collections::HashMap;
-use tracing::{debug, debug_span, info, info_span};
+use tracing::{debug, debug_span, info, info_span, error};
 
 #[derive(Debug)]
 pub enum AppError {
@@ -52,6 +52,9 @@ pub struct CrankyApp {
     right_modules: Vec<ModuleId>,
     layout_senders: HashMap<ModuleId, watch::Sender<HashMap<MonitorId, Rect>>>,
     module_sizes: HashMap<MonitorId, HashMap<ModuleId, Size>>,
+    surface_manager: DynSurfaceManager,
+    command_tx_clone: mpsc::Sender<AppCommand>,
+    registry: Box<dyn crate::ports::registry::ModuleRegistryPort>,
 }
 
 impl CrankyApp {
@@ -69,7 +72,7 @@ impl CrankyApp {
         let center_modules = registry.center_modules();
         let right_modules = registry.right_modules();
 
-        let layout_senders = registry.spawn_all(hub.clone(), surface_manager, command_tx);
+        let layout_senders = registry.spawn_all(hub.clone(), surface_manager.clone(), command_tx.clone());
 
         Ok(Self {
             hub,
@@ -80,6 +83,9 @@ impl CrankyApp {
             right_modules,
             layout_senders,
             module_sizes: HashMap::new(),
+            surface_manager: surface_manager.clone(),
+            command_tx_clone: command_tx,
+            registry,
         })
     }
 
@@ -154,7 +160,26 @@ impl CrankyApp {
                     }
                 }
                 Ok(_) = config_rx.changed() => {
-                    // TODO: Hot reload module spawning
+                    info!("Config hot-reload triggered in App");
+                    let new_config = config_rx.borrow().clone();
+                    self.config = new_config;
+                    self.module_sizes.clear();
+                    
+                    self.registry.clear();
+                    if let Err(e) = self.registry.load(&self.config) {
+                        error!("Failed to reload registry on config change: {}", e);
+                    } else {
+                        self.left_modules = self.registry.left_modules();
+                        self.center_modules = self.registry.center_modules();
+                        self.right_modules = self.registry.right_modules();
+                        self.layout_senders = self.registry.spawn_all(
+                            self.hub.clone(),
+                            self.surface_manager.clone(),
+                            self.command_tx_clone.clone()
+                        );
+                    }
+                    
+                    // The WaylandAdapter will independently detect config change and recreate bars.
                 }
             }
         }

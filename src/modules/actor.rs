@@ -39,13 +39,17 @@ impl ModuleActor {
                 // Determine what woke us up
                 let mut changed = false;
 
-                rt.block_on(async {
+                let should_continue = rt.block_on(async {
                     tokio::select! {
                         Ok(_) = time_rx.changed() => changed = true,
                         Ok(_) = hypr_rx.changed() => changed = true,
                         Ok(_) = applets_rx.changed() => changed = true,
                         Ok(_) = metrics_rx.changed() => changed = true,
-                        Ok(_) = self.ctx.layout_rx.changed() => {}
+                        res = self.ctx.layout_rx.changed() => {
+                            if res.is_err() {
+                                return false; // layout_rx dropped, we should exit
+                            }
+                        }
                     }
 
                     // Debounce rapid changes (e.g. layout bounds updates following size changes)
@@ -56,7 +60,12 @@ impl ModuleActor {
                     if applets_rx.has_changed().unwrap_or(false) { let _ = applets_rx.changed().await; changed = true; }
                     if metrics_rx.has_changed().unwrap_or(false) { let _ = metrics_rx.changed().await; changed = true; }
                     if self.ctx.layout_rx.has_changed().unwrap_or(false) { let _ = self.ctx.layout_rx.changed().await; }
+                    true
                 });
+
+                if !should_continue {
+                    break;
+                }
 
                 if changed {
                     self.port.refresh(&self.ctx.hub);

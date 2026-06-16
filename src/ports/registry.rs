@@ -32,7 +32,7 @@ pub trait AnyModulePort: Send + Sync {
 pub trait ModuleRegistryPort: Send + Sync {
     fn load(&mut self, config: &Config) -> Result<(), String>;
     fn spawn_all(
-        self: Box<Self>,
+        &mut self,
         hub: Arc<SignalHub>,
         surface_manager: DynSurfaceManager,
         command_tx: mpsc::Sender<AppCommand>
@@ -41,6 +41,8 @@ pub trait ModuleRegistryPort: Send + Sync {
     fn left_modules(&self) -> Vec<ModuleId>;
     fn center_modules(&self) -> Vec<ModuleId>;
     fn right_modules(&self) -> Vec<ModuleId>;
+    
+    fn clear(&mut self);
     
     async fn register_dbus_subscriptions(&self, dbus: &mut dyn crate::ports::DBusPort);
 }

@@ -108,14 +108,14 @@ impl ModuleRegistryPort for ModuleRegistry {
     }
 
     fn spawn_all(
-        mut self: Box<Self>,
+        &mut self,
         hub: std::sync::Arc<SignalHub>,
         surface_manager: crate::ports::surface::DynSurfaceManager,
         command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>
     ) -> std::collections::HashMap<ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<MonitorId, crate::domain::geometry::Rect>>> {
         let mut layout_senders = std::collections::HashMap::new();
 
-        for (id, module) in self.modules.into_iter() {
+        for (id, module) in self.modules.drain().collect::<Vec<_>>() {
             let (layout_tx, layout_rx) = tokio::sync::watch::channel(std::collections::HashMap::new());
             layout_senders.insert(id, layout_tx);
 
@@ -131,6 +131,13 @@ impl ModuleRegistryPort for ModuleRegistry {
         }
 
         layout_senders
+    }
+
+    fn clear(&mut self) {
+        self.modules.clear();
+        self.left_modules.clear();
+        self.center_modules.clear();
+        self.right_modules.clear();
     }
 
     async fn register_dbus_subscriptions(&self, dbus: &mut dyn crate::ports::DBusPort) {

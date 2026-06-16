@@ -68,6 +68,7 @@ pub struct WaylandAdapter {
     state: WaylandState,
     async_fd: AsyncFd<WaylandFd>,
     surface_rx: tokio::sync::mpsc::Receiver<SurfaceCommand>,
+    config_rx: tokio::sync::watch::Receiver<crate::domain::config::Config>,
 }
 
 pub struct WaylandState {
@@ -133,6 +134,7 @@ impl WaylandAdapter {
         let async_fd = AsyncFd::new(WaylandFd(raw_fd))
             .map_err(|e| DisplayServerError::ConnectionFailed { reason: e.to_string() })?;
 
+        let config_rx = hub.config_rx();
         let state = WaylandState {
             hub,
             compositor: None,
@@ -159,6 +161,7 @@ impl WaylandAdapter {
             state,
             async_fd,
             surface_rx,
+            config_rx,
         };
 
         let manager = WaylandSurfaceManager { tx: surface_tx };
@@ -201,6 +204,19 @@ impl DisplayServerPort for WaylandAdapter {
     }
 
     fn dispatch_pending(&mut self) -> Result<(), DisplayServerError> {
+        if self.config_rx.has_changed().unwrap_or(false) {
+            let _ = self.config_rx.borrow_and_update();
+            tracing::info!("WaylandAdapter detected config change, recreating bars...");
+            self.state.bars.clear(); // Drop existing bars
+            self.state.surface_to_id.clear();
+            
+            // Recreate bars for all currently known outputs
+            let outputs: Vec<_> = self.state.outputs.iter().map(|o| o.output.clone()).collect();
+            for output in outputs {
+                let _ = self.state.create_bar(&output, &self.event_queue.handle());
+            }
+        }
+        
         self.event_queue.dispatch_pending(&mut self.state)
             .map_err(|e| DisplayServerError::ConnectionFailed { reason: e.to_string() })?;
         Ok(())
