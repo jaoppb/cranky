@@ -16,12 +16,12 @@ function refresh()
 end
 
 function measure(canvas, monitor)
-    return canvas:measure_text(time_str, bar_config.font_family, bar_config.font_size)
+    return canvas:measure_text(time_str)
 end
 
 function view(canvas, monitor)
     local color = "#c0caf5"
-    canvas:draw_text(time_str, bar_config.font_family, bar_config.font_size, color, 0, 0)
+    canvas:draw_text(time_str, color, 0, 0)
 end
 
 function on_event(event)

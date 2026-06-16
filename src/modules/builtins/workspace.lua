@@ -1,8 +1,6 @@
 local active_bg = "#565f89"
 local focused_bg = "#3b4261"
 local border_radius = 0
-local font_family = ""
-local font_size = 14
 
 local workspaces = {}
 local active_workspaces = {}
@@ -18,8 +16,6 @@ function init()
     if config.border_radius then
         border_radius = config.border_radius
     end
-    font_family = bar_config.font_family
-    font_size = bar_config.font_size
 end
 
 function subscriptions()
@@ -67,7 +63,7 @@ function measure(canvas, monitor)
     
     if count == 0 then return 0, 0 end
     
-    local _, lh = canvas:measure_text("0", font_family, font_size)
+    local _, lh = canvas:measure_text("0")
     local padding_y = 4
     local item_size = lh + padding_y * 2
     local item_spacing = 6
@@ -80,7 +76,7 @@ function view(canvas, monitor)
     local active_id = active_workspaces[monitor_id] or -1
     local is_monitor_focused = focused_monitor == monitor_id
     
-    local _, lh = canvas:measure_text("0", font_family, font_size)
+    local _, lh = canvas:measure_text("0")
     local padding_y = 4
     local padding_x = 6
     local item_size = lh + padding_y * 2
@@ -94,18 +90,18 @@ function view(canvas, monitor)
         if ws.monitor == monitor_id then
             local label = tostring(ws.id)
             local is_visible = ws.id == active_id
-            local lw, _ = canvas:measure_text(label, font_family, font_size)
+            local lw, _ = canvas:measure_text(label)
             
             if is_visible then
                 local bg = is_monitor_focused and active_bg or focused_bg
                 local rect_w = math.max(lw + padding_x * 2, item_size)
                 canvas:draw_rect(x_offset, 0, rect_w, item_size, bg, border_radius)
                 
-                canvas:draw_text(label, font_family, font_size, active_text_color, x_offset + (rect_w - lw) / 2, padding_y)
+                canvas:draw_text(label, active_text_color, x_offset + (rect_w - lw) / 2, padding_y)
                 x_offset = x_offset + rect_w + item_spacing
             else
                 local rect_w = math.max(lw + padding_x * 2, item_size)
-                canvas:draw_text(label, font_family, font_size, inactive_color, x_offset + (rect_w - lw) / 2, padding_y)
+                canvas:draw_text(label, inactive_color, x_offset + (rect_w - lw) / 2, padding_y)
                 x_offset = x_offset + rect_w + item_spacing
             end
         end
@@ -116,7 +112,7 @@ function on_event(event)
     if event.type == "click" and event.button == 272 then -- 272 is BTN_LEFT in wayland
         -- Find which workspace was clicked
         -- Note: with dynamic width this is an approximation
-        local _, lh = canvas:measure_text("0", font_family, font_size)
+        local _, lh = canvas:measure_text("0")
         local padding_x = 6
         local rect_w = math.max(16 + padding_x * 2, lh + 8)
         local item_spacing = 6

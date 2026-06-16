@@ -11,16 +11,7 @@ local state = {
     config = nil
 }
 
-local font_family = ""
-local font_size = 14
-
 function init()
-    if bar_config and bar_config.font_family then
-        font_family = bar_config.font_family
-    end
-    if bar_config and bar_config.font_size then
-        font_size = bar_config.font_size
-    end
 end
 
 function subscriptions()
@@ -106,15 +97,15 @@ end
 
 function measure(canvas, monitor)
     local text = get_metrics_text()
-    local w, h = canvas:measure_text(text, font_family, font_size)
+    local w, h = canvas:measure_text(text)
     -- Add 10px padding on left/right
     return math.ceil(w + 20), h
 end
 
 function view(canvas, monitor)
     local text = get_metrics_text()
-    local w, h = canvas:measure_text(text, font_family, font_size)
+    local w, h = canvas:measure_text(text)
     
     local text_color = "#cccccc"
-    canvas:draw_text(text, font_family, font_size, text_color, 10, 4)
+    canvas:draw_text(text, text_color, 10, 4)
 end

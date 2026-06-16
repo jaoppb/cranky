@@ -3,8 +3,8 @@
 use rhai::{Engine, Scope, AST, Dynamic, Array};
 use crate::ports::canvas::Canvas;
 use crate::domain::signals::{SignalHub, SignalKind};
-use crate::domain::config::{ModuleConfig, BarConfig};
-use crate::domain::{ModuleId, MonitorId, geometry::Size};
+use crate::domain::config::{ModuleConfig, BarConfig, FontFamily, FontSize};
+use crate::domain::{ModuleId, MonitorId, geometry::{Size, Position}};
 use crate::modules::ModuleError;
 use crate::ports::registry::AnyModulePort;
 use crate::domain::color::DrawingColor;
@@ -54,13 +54,32 @@ impl RhaiModule {
 
         engine.register_fn("draw_text", |text: String, font: String, size: f32, color_str: String, x: f32, y: f32| {
             if let Ok(color) = DrawingColor::parse(&color_str) {
-                with_canvas(|c| c.draw_text(&text, &font, size, color, x, y));
+                let position = Position::new(x as i32, y as i32);
+                let font_family = FontFamily::new(font);
+                let font_size = FontSize::new(size);
+                with_canvas(|c| c.draw_text(&text, Some(&font_family), Some(font_size), color, position));
+            }
+        });
+
+        engine.register_fn("draw_text", |text: String, color_str: String, x: f32, y: f32| {
+            if let Ok(color) = DrawingColor::parse(&color_str) {
+                let position = Position::new(x as i32, y as i32);
+                with_canvas(|c| c.draw_text(&text, None, None, color, position));
             }
         });
 
         engine.register_fn("measure_text", |text: String, font: String, size: f32| -> Array {
             with_canvas(|c| {
-                let (w, h) = c.measure_text(&text, &font, size);
+                let font_family = FontFamily::new(font);
+                let font_size = FontSize::new(size);
+                let (w, h) = c.measure_text(&text, Some(&font_family), Some(font_size));
+                vec![Dynamic::from(w), Dynamic::from(h)]
+            }).unwrap_or_else(|| vec![Dynamic::from(0.0), Dynamic::from(0.0)])
+        });
+
+        engine.register_fn("measure_text", |text: String| -> Array {
+            with_canvas(|c| {
+                let (w, h) = c.measure_text(&text, None, None);
                 vec![Dynamic::from(w), Dynamic::from(h)]
             }).unwrap_or_else(|| vec![Dynamic::from(0.0), Dynamic::from(0.0)])
         });

@@ -348,7 +348,9 @@ impl WaylandAdapter {
                 pixmap,
                 font_system,
                 swash_cache,
-                scale as f32
+                scale as f32,
+                bar_config.font_family().clone(),
+                bar_config.font_size()
             );
             bar_canvas.clear();
             let border_size = border_config.size().value();

@@ -42,12 +42,12 @@ fn refresh() {
 }
 
 fn measure(monitor) {
-    measure_text(time_str, bar_config.font_family, bar_config.font_size)
+    measure_text(time_str)
 }
 
 fn view(monitor) {
     let color = "#c0caf5";
-    draw_text(time_str, bar_config.font_family, bar_config.font_size, color, 0.0, 0.0);
+    draw_text(time_str, color, 0.0, 0.0);
 }
 
 fn on_event(event) {

@@ -3,8 +3,6 @@ local show_icons = true
 local icon_size = 16
 local max_items = 6
 local empty_label = "applet: none"
-local font_family = ""
-local font_size = 14
 
 local items = {}
 local error_message = nil
@@ -15,8 +13,6 @@ function init()
     if config.icon_size ~= nil then icon_size = config.icon_size end
     if config.max_items ~= nil then max_items = config.max_items end
     if config.empty_label ~= nil then empty_label = config.empty_label end
-    font_family = bar_config.font_family
-    font_size = bar_config.font_size
 end
 
 function subscriptions()
@@ -35,7 +31,7 @@ end
 function measure(canvas, monitor)
     local text_color = "#c0caf5"
     if #items == 0 then
-        local w, h = canvas:measure_text(empty_label, font_family, font_size)
+        local w, h = canvas:measure_text(empty_label)
         return math.ceil(w), math.ceil(h)
     end
 
@@ -49,7 +45,7 @@ function measure(canvas, monitor)
         if show_icons then total_w = total_w + icon_size + ICON_TEXT_GAP end
         if show_titles then
             local label = item.title or item.app_id or "app"
-            local w, _ = canvas:measure_text(label, font_family, font_size)
+            local w, _ = canvas:measure_text(label)
             total_w = total_w + w
         end
     end
@@ -61,12 +57,12 @@ function view(canvas, monitor)
     local x = 0
     
     if error_message then
-        canvas:draw_text("error: " .. error_message, font_family, font_size, text_color, 0, 0)
+        canvas:draw_text("error: " .. error_message, text_color, 0, 0)
         return
     end
 
     if #items == 0 then
-        canvas:draw_text(empty_label, font_family, font_size, text_color, 0, 0)
+        canvas:draw_text(empty_label, text_color, 0, 0)
         return
     end
 
@@ -88,8 +84,8 @@ function view(canvas, monitor)
 
         if show_titles then
             local label = item.title or item.app_id or "app"
-            local lw, lh = canvas:measure_text(label, font_family, font_size)
-            canvas:draw_text(label, font_family, font_size, text_color, x, (30 - lh) / 2)
+            local lw, lh = canvas:measure_text(label)
+            canvas:draw_text(label, text_color, x, (30 - lh) / 2)
             x = x + lw
         end
     end
@@ -112,7 +108,7 @@ function on_event(event)
                 -- we can't measure text here easily without canvas, let's just approximate
                 -- or just assume clicking anywhere near it triggers it
                 -- For simplicity, since applets often don't show titles in bars:
-                item_width = item_width + (#label * (font_size / 2)) 
+                item_width = item_width + (#label * 7) 
             end
             
             if event.x >= x and event.x <= x + item_width then

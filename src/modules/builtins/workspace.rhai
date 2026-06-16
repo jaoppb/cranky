@@ -1,8 +1,6 @@
 let active_bg = "#565f89";
 let focused_bg = "#3b4261";
 let border_radius = 0.0;
-let font_family = "";
-let font_size = 14.0;
 
 let workspaces = [];
 let active_workspaces = #{};
@@ -18,8 +16,6 @@ fn init() {
     if "border_radius" in config {
         border_radius = config.border_radius;
     }
-    font_family = bar_config.font_family;
-    font_size = bar_config.font_size;
 }
 
 fn subscriptions() {
@@ -67,7 +63,7 @@ fn measure(monitor_id) {
     
     if count == 0 { return [0, 0]; }
     
-    let text_size = measure_text("0", font_family, font_size);
+    let text_size = measure_text("0");
     let padding_y = 4.0;
     let item_size = text_size[1].to_float() + padding_y * 2.0;
     let item_spacing = 6.0;
@@ -87,7 +83,7 @@ fn view(monitor_id) {
     
     let is_monitor_focused = (focused_monitor == monitor_id);
     
-    let text_size = measure_text("0", font_family, font_size);
+    let text_size = measure_text("0");
     let padding_y = 4.0;
     let padding_x = 6.0;
     let item_size = text_size[1].to_float() + padding_y * 2.0;
@@ -101,7 +97,7 @@ fn view(monitor_id) {
         if ws.monitor == monitor_id {
             let label = ws.id.to_string();
             let is_visible = (ws.id == active_id);
-            let ws_text_size = measure_text(label, font_family, font_size);
+            let ws_text_size = measure_text(label);
             let lw = ws_text_size[0].to_float();
             
             if is_visible {
@@ -113,12 +109,12 @@ fn view(monitor_id) {
                 if rect_w < item_size { rect_w = item_size; }
                 draw_rect(x_offset, 0.0, rect_w, item_size, bg, border_radius);
                 
-                draw_text(label, font_family, font_size, active_text_color, x_offset + (rect_w - lw) / 2.0, padding_y);
+                draw_text(label, active_text_color, x_offset + (rect_w - lw) / 2.0, padding_y);
                 x_offset += rect_w + item_spacing;
             } else {
                 let rect_w = lw + padding_x * 2.0;
                 if rect_w < item_size { rect_w = item_size; }
-                draw_text(label, font_family, font_size, inactive_color, x_offset + (rect_w - lw) / 2.0, padding_y);
+                draw_text(label, inactive_color, x_offset + (rect_w - lw) / 2.0, padding_y);
                 x_offset += rect_w + item_spacing;
             }
         }
@@ -127,7 +123,7 @@ fn view(monitor_id) {
 
 fn on_event(event) {
     if event.type == "click" && event.button == 272 {
-        let text_size = measure_text("0", font_family, font_size);
+        let text_size = measure_text("0");
         let lh = text_size[1].to_float();
         let padding_x = 6.0;
         let rect_w = 16.0 + padding_x * 2.0;

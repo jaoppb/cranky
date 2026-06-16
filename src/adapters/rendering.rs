@@ -9,11 +9,16 @@ use cosmic_text::{
     Attrs, Buffer, Family, FontSystem, Metrics, Shaping, SwashCache, SwashContent,
 };
 
+use crate::domain::config::{FontFamily, FontSize};
+use crate::domain::geometry::Position;
+
 pub struct TinySkiaCosmicCanvas<'a> {
     pixmap: PixmapMut<'a>,
     font_system: &'a mut FontSystem,
     swash_cache: &'a mut SwashCache,
     scale: f32,
+    default_font_family: FontFamily,
+    default_font_size: FontSize,
 }
 
 impl<'a> TinySkiaCosmicCanvas<'a> {
@@ -22,12 +27,16 @@ impl<'a> TinySkiaCosmicCanvas<'a> {
         font_system: &'a mut FontSystem,
         swash_cache: &'a mut SwashCache,
         scale: f32,
+        default_font_family: FontFamily,
+        default_font_size: FontSize,
     ) -> Self {
         Self {
             pixmap,
             font_system,
             swash_cache,
             scale,
+            default_font_family,
+            default_font_size,
         }
     }
 
@@ -167,10 +176,13 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         }
     }
 
-    fn measure_text(&mut self, text: &str, font_family: &str, font_size: f32) -> (f32, f32) {
-        let metrics = Metrics::new(font_size * self.scale, font_size * 1.0 * self.scale);
+    fn measure_text<'b>(&mut self, text: &str, font_family: Option<&'b FontFamily>, font_size: Option<FontSize>) -> (f32, f32) {
+        let size = font_size.unwrap_or(self.default_font_size).value();
+        let family = font_family.unwrap_or(&self.default_font_family).as_str();
+        
+        let metrics = Metrics::new(size * self.scale, size * 1.0 * self.scale);
         let mut buffer = Buffer::new(self.font_system, metrics);
-        let attrs = Attrs::new().family(Self::get_family(font_family));
+        let attrs = Attrs::new().family(Self::get_family(family));
 
         buffer.set_text(self.font_system, text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(self.font_system, false);
@@ -185,10 +197,15 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         (width / self.scale, height / self.scale)
     }
 
-    fn draw_text(&mut self, text: &str, font_family: &str, font_size: f32, color: DrawingColor, x: f32, y: f32) {
-        let metrics = Metrics::new(font_size * self.scale, font_size * 1.0 * self.scale);
+    fn draw_text<'b>(&mut self, text: &str, font_family: Option<&'b FontFamily>, font_size: Option<FontSize>, color: DrawingColor, position: Position) {
+        let size = font_size.unwrap_or(self.default_font_size).value();
+        let family = font_family.unwrap_or(&self.default_font_family).as_str();
+        let x = position.x() as f32;
+        let y = position.y() as f32;
+        
+        let metrics = Metrics::new(size * self.scale, size * 1.0 * self.scale);
         let mut buffer = Buffer::new(self.font_system, metrics);
-        let attrs = Attrs::new().family(Self::get_family(font_family));
+        let attrs = Attrs::new().family(Self::get_family(family));
 
         buffer.set_text(self.font_system, text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(self.font_system, false);
@@ -360,7 +377,9 @@ mod tests {
                 pixmap.as_mut(),
                 &mut font_system,
                 &mut swash_cache,
-                1.0
+                1.0,
+                FontFamily::new("sans-serif".to_string()),
+                FontSize::new(14.0)
             );
 
             canvas.draw_rect(
@@ -388,10 +407,12 @@ mod tests {
             pixmap.as_mut(),
             &mut font_system,
             &mut swash_cache,
-            1.0
+            1.0,
+            FontFamily::new("sans-serif".to_string()),
+            FontSize::new(14.0)
         );
 
-        let (w, h) = canvas.measure_text("test", "", 14.0);
+        let (w, h) = canvas.measure_text("test", None, None);
         assert!(w > 0.0);
         assert!(h > 0.0);
     }
@@ -406,16 +427,18 @@ mod tests {
             pixmap.as_mut(),
             &mut font_system,
             &mut swash_cache,
-            1.0
+            1.0,
+            FontFamily::new("sans-serif".to_string()),
+            FontSize::new(14.0)
         );
 
         // This should not panic
         canvas.draw_text(
             "test ", 
-            "", 
-            14.0, 
+            None, 
+            None, 
             DrawingColor::Solid(Color::new(255, 255, 255, 255)), 
-            10.0, 10.0
+            Position::new(10, 10)
         );
 
         // Verify that at least some pixels were drawn (text is white)

@@ -2,8 +2,8 @@ use mlua::{Lua, UserData, UserDataMethods, LuaSerdeExt, Function, Value};
 use crate::ports::canvas::Canvas;
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::dbus::{BusType, DBusSubscription};
-use crate::domain::config::{ModuleConfig, BarConfig};
-use crate::domain::{ModuleId, MonitorId, geometry::Size};
+use crate::domain::config::{ModuleConfig, BarConfig, FontFamily, FontSize};
+use crate::domain::{ModuleId, MonitorId, geometry::{Size, Position}};
 use crate::modules::ModuleError;
 use crate::ports::registry::AnyModulePort;
 use crate::domain::color::DrawingColor;
@@ -199,9 +199,12 @@ impl AnyModulePort for LuaModule {
             }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());
             let _ = lua_canvas.set("draw_border", draw_border);
 
-            let draw_text = scope.create_function(|_, (_self, text, font, size, color_str, x, y): (mlua::Value, String, String, f32, String, f32, f32)| {
+            let draw_text = scope.create_function(|_, (_self, text, color_str, x, y, font, size): (mlua::Value, String, String, f32, f32, Option<String>, Option<f32>)| {
                 if let Ok(color) = DrawingColor::parse(&color_str) {
-                    with_canvas(&mut |c| c.draw_text(&text, &font, size, color.clone(), x, y));
+                    let font_family = font.map(FontFamily::new);
+                    let font_size = size.map(FontSize::new);
+                    let position = Position::new(x as i32, y as i32);
+                    with_canvas(&mut |c| c.draw_text(&text, font_family.as_ref(), font_size, color.clone(), position.clone()));
                 }
                 Ok(())
             }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());
@@ -214,9 +217,11 @@ impl AnyModulePort for LuaModule {
             }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());
             let _ = lua_canvas.set("draw_image", draw_image);
 
-            let measure_text = scope.create_function(|_, (_self, text, font, size): (mlua::Value, String, String, f32)| {
+            let measure_text = scope.create_function(|_, (_self, text, font, size): (mlua::Value, String, Option<String>, Option<f32>)| {
                 let mut res = (0.0, 0.0);
-                with_canvas(&mut |c| res = c.measure_text(&text, &font, size));
+                let font_family = font.map(FontFamily::new);
+                let font_size = size.map(FontSize::new);
+                with_canvas(&mut |c| res = c.measure_text(&text, font_family.as_ref(), font_size));
                 Ok(res)
             }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok((0.0, 0.0))).unwrap());
             let _ = lua_canvas.set("measure_text", measure_text);
@@ -244,9 +249,11 @@ impl AnyModulePort for LuaModule {
                 Err(e) => { tracing::error!("Failed to create lua canvas table: {}", e); return Ok(Size::new(0, 0)); }
             };
             
-            let measure_text = scope.create_function(|_, (_self, text, font, size): (mlua::Value, String, String, f32)| {
+            let measure_text = scope.create_function(|_, (_self, text, font, size): (mlua::Value, String, Option<String>, Option<f32>)| {
                 let mut res = (0.0, 0.0);
-                with_canvas(&mut |c| res = c.measure_text(&text, &font, size));
+                let font_family = font.map(FontFamily::new);
+                let font_size = size.map(FontSize::new);
+                with_canvas(&mut |c| res = c.measure_text(&text, font_family.as_ref(), font_size));
                 Ok(res)
             }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok((0.0, 0.0))).unwrap());
             let _ = lua_canvas.set("measure_text", measure_text);

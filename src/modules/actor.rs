@@ -81,7 +81,18 @@ impl ModuleActor {
             // Measure
             let mut dummy_data = vec![0u8; 4];
             let mut dummy_pixmap = tiny_skia::PixmapMut::from_bytes(&mut dummy_data, 1, 1).unwrap();
-            let mut dummy_canvas = TinySkiaCosmicCanvas::new(dummy_pixmap, font_system, swash_cache, 1.0);
+            let config = self.ctx.hub.config_rx().borrow().clone();
+            let default_font_family = config.bar().font_family().clone();
+            let default_font_size = config.bar().font_size();
+            
+            let mut dummy_canvas = TinySkiaCosmicCanvas::new(
+                dummy_pixmap, 
+                font_system, 
+                swash_cache, 
+                1.0,
+                default_font_family.clone(),
+                default_font_size
+            );
             
             let size = self.port.measure(&mut dummy_canvas, &monitor_id);
 
@@ -102,7 +113,18 @@ impl ModuleActor {
                     let h = bounds.height() as u32;
                     let mut data = vec![0u8; (w * h * 4) as usize];
                     if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(&mut data, w, h) {
-                        let mut canvas = TinySkiaCosmicCanvas::new(pixmap, font_system, swash_cache, 1.0);
+                        let config = self.ctx.hub.config_rx().borrow().clone();
+                        let default_font_family = config.bar().font_family().clone();
+                        let default_font_size = config.bar().font_size();
+                        
+                        let mut canvas = TinySkiaCosmicCanvas::new(
+                            pixmap, 
+                            font_system, 
+                            swash_cache, 
+                            1.0,
+                            default_font_family,
+                            default_font_size
+                        );
                         self.port.view(&mut canvas, &monitor_id);
                         
                         // Send buffer to surface manager
