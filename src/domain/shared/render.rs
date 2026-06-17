@@ -1,4 +1,4 @@
-use crate::domain::geometry::Size;
+use crate::domain::shared::geometry::Size;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderBuffer {

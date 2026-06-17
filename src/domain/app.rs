@@ -1,6 +1,6 @@
 use crate::domain::config::Config;
 use crate::domain::signals::SignalHub;
-use crate::domain::{ModuleId, MonitorId, geometry::{Size, Rect, Position}};
+use crate::domain::{ModuleId, MonitorId, shared::geometry::{Size, Rect, Position}};
 use crate::ports::registry::ModuleRegistryPort;
 use crate::ports::DisplayServerPort;
 use crate::domain::commands::AppCommand;

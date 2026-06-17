@@ -1,8 +1,8 @@
 use crate::ports::DisplayServerError;
-use crate::domain::color::DrawingColor;
+use crate::domain::shared::color::DrawingColor;
 
 use crate::domain::config::{FontFamily, FontSize};
-use crate::domain::geometry::{Position, LogicalPx};
+use crate::domain::shared::geometry::{Position, LogicalPx};
 
 #[cfg_attr(test, mockall::automock)]
 pub trait Canvas: Send + Sync {
@@ -24,7 +24,7 @@ pub trait Canvas: Send + Sync {
     /// Draw an RGBA image
     fn draw_image(
         &mut self,
-        image_data: &[crate::domain::color::Color],
+        image_data: &[crate::domain::shared::color::Color],
         width: u32,
         height: u32,
         logical_width: LogicalPx,

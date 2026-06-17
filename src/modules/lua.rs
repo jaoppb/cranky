@@ -3,9 +3,9 @@ use crate::ports::canvas::Canvas;
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::dbus::{BusType, DBusSubscription};
 use crate::domain::config::{ModuleConfig, BarConfig, FontFamily, FontSize};
-use crate::domain::{MonitorId, geometry::{Size, Position, LogicalPx}};
+use crate::domain::{MonitorId, shared::geometry::{Size, Position, LogicalPx}};
 use crate::ports::registry::AnyModulePort;
-use crate::domain::color::DrawingColor;
+use crate::domain::shared::color::DrawingColor;
 use std::sync::Mutex;
 use std::cell::RefCell;
 
@@ -161,7 +161,7 @@ impl AnyModulePort for LuaModule {
         }
         
         let applets_state = hub.applets_rx().borrow().clone();
-        if let Ok(applets_lua) = lua.to_value(&applets_state.items) {
+        if let Ok(applets_lua) = lua.to_value(&applets_state.items()) {
             let _ = globals.set("applets", applets_lua);
         }
         
@@ -213,7 +213,7 @@ impl AnyModulePort for LuaModule {
             let _ = lua_canvas.set("draw_text", draw_text);
 
             let draw_image = scope.create_function(|lua, (_self, image_data_val, width, height, logical_width, logical_height, x, y): (mlua::Value, mlua::Value, u32, u32, f64, f64, f64, f64)| {
-                let image_data: Vec<crate::domain::color::Color> = lua.from_value(image_data_val).unwrap_or_default();
+                let image_data: Vec<crate::domain::shared::color::Color> = lua.from_value(image_data_val).unwrap_or_default();
                 with_canvas(&mut |c| c.draw_image(&image_data, width, height, LogicalPx::new(logical_width as f32), LogicalPx::new(logical_height as f32), LogicalPx::new(x as f32), LogicalPx::new(y as f32)));
                 Ok(())
             }).unwrap_or_else(|_| scope.create_function(|_, ()| Ok(())).unwrap());

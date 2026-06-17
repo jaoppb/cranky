@@ -1,5 +1,5 @@
 use crate::domain::{ModuleId, MonitorId};
-use crate::domain::render::RenderBuffer;
+use crate::domain::shared::render::RenderBuffer;
 use std::sync::Arc;
 use async_trait::async_trait;
 

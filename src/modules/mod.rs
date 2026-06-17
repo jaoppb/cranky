@@ -113,7 +113,7 @@ impl ModuleRegistryPort for ModuleRegistry {
         surface_manager: crate::ports::surface::DynSurfaceManager,
         command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>,
         input_tx: tokio::sync::broadcast::Sender<(ModuleId, crate::domain::events::InputEvent)>
-    ) -> std::collections::HashMap<ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<MonitorId, crate::domain::geometry::Rect>>> {
+    ) -> std::collections::HashMap<ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<MonitorId, crate::domain::shared::geometry::Rect>>> {
         let mut layout_senders = std::collections::HashMap::new();
 
         for (id, module) in self.modules.drain().collect::<Vec<_>>() {

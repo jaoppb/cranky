@@ -21,12 +21,12 @@ toml = "1.0"
 
 # Rendering
 tiny-skia = "0.12"
-cosmic-text = "0.18"
+cosmic-text = "0.19"
 memmap2 = "0.9"
 
 # System Integration
 zbus = { version = "5.14", features = ["tokio"] }
-sysinfo = "0.38"
+sysinfo = "0.39"
 serde_json = "1.0"
 chrono = "0.4"
 uuid = { version = "1.23", features = ["v4"] }

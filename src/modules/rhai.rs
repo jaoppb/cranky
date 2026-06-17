@@ -4,10 +4,10 @@ use rhai::{Engine, Scope, AST, Dynamic, Array, EvalAltResult};
 use crate::ports::canvas::Canvas;
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::config::{ModuleConfig, BarConfig, FontFamily, FontSize};
-use crate::domain::{MonitorId, geometry::{Size, Position, LogicalPx}};
+use crate::domain::{MonitorId, shared::geometry::{Size, Position, LogicalPx}};
 use crate::modules::ModuleError;
 use crate::ports::registry::AnyModulePort;
-use crate::domain::color::{DrawingColor, Color};
+use crate::domain::shared::color::{DrawingColor, Color};
 use std::sync::Mutex;
 
 #[derive(Copy, Clone)]
@@ -99,7 +99,7 @@ impl RhaiModule {
         });
 
         engine.register_fn("draw_image", |image_data_val: rhai::Dynamic, width: i64, height: i64, logical_width: f32, logical_height: f32, x: f32, y: f32| {
-            if let Ok(image_data) = rhai::serde::from_dynamic::<Vec<crate::domain::color::Color>>(&image_data_val) {
+            if let Ok(image_data) = rhai::serde::from_dynamic::<Vec<crate::domain::shared::color::Color>>(&image_data_val) {
                 with_canvas(|c| c.draw_image(&image_data, width as u32, height as u32, LogicalPx::new(logical_width), LogicalPx::new(logical_height), LogicalPx::new(x), LogicalPx::new(y)));
             }
         });

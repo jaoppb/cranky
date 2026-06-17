@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use crate::domain::config as domain;
-use crate::domain::color::DrawingColor;
+use crate::domain::shared::color::DrawingColor;
 use crate::ports::font::FontValidatorPort;
 
 #[derive(Debug, Deserialize)]
@@ -72,7 +72,7 @@ impl BarConfigDto {
 }
 
 fn default_background() -> DrawingColor {
-    DrawingColor::Solid(crate::domain::color::Color::new(0, 0, 0, 255))
+    DrawingColor::Solid(crate::domain::shared::color::Color::new(0, 0, 0, 255))
 }
 
 fn default_height() -> u32 {
@@ -209,7 +209,7 @@ impl BorderConfigDto {
 }
 
 fn default_border_color() -> DrawingColor {
-    DrawingColor::Solid(crate::domain::color::Color::new(0, 0, 0, 255))
+    DrawingColor::Solid(crate::domain::shared::color::Color::new(0, 0, 0, 255))
 }
 
 #[derive(Debug, Deserialize, Default)]

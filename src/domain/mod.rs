@@ -1,15 +1,14 @@
+pub mod shared;
+
 pub mod signals;
 pub mod app;
 pub mod commands;
-pub mod color;
-pub mod geometry;
 pub mod config;
 pub mod workspace;
 pub mod dbus;
 pub mod events;
 pub mod applets;
 pub mod metrics;
-pub mod render;
 
 use std::fmt;
 

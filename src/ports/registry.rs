@@ -1,6 +1,6 @@
 use crate::domain::config::{Config, ModuleConfig, BarConfig};
 use crate::domain::signals::{SignalHub, SignalKind};
-use crate::domain::{ModuleId, MonitorId, geometry::{Size, Rect}};
+use crate::domain::{ModuleId, MonitorId, shared::geometry::{Size, Rect}};
 use crate::ports::surface::DynSurfaceManager;
 use crate::domain::commands::AppCommand;
 use crate::domain::events::InputEvent;

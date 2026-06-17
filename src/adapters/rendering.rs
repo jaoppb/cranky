@@ -1,5 +1,5 @@
 use crate::ports::canvas::{Canvas};
-use crate::domain::color::{DrawingColor, Color as DomainColor};
+use crate::domain::shared::color::{DrawingColor, Color as DomainColor};
 use crate::ports::DisplayServerError;
 use tiny_skia::{
     Color as SkiaColor, Paint, PixmapMut, Rect, Transform, PathBuilder, FillRule, 
@@ -10,7 +10,7 @@ use cosmic_text::{
 };
 
 use crate::domain::config::{FontFamily, FontSize};
-use crate::domain::geometry::{Position, Scale, LogicalPx};
+use crate::domain::shared::geometry::{Position, Scale, LogicalPx};
 
 pub struct TinySkiaCosmicCanvas<'a> {
     pixmap: PixmapMut<'a>,
@@ -195,7 +195,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         let mut buffer = Buffer::new(self.font_system, metrics);
         let attrs = Attrs::new().family(Self::get_family(family));
 
-        buffer.set_text(self.font_system, text, &attrs, Shaping::Advanced, None);
+        buffer.set_text(text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(self.font_system, false);
 
         let mut physical_width: f32 = 0.0;
@@ -205,7 +205,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
             physical_height += metrics.line_height;
         }
 
-        use crate::domain::geometry::PhysicalPx;
+        use crate::domain::shared::geometry::PhysicalPx;
         (PhysicalPx::new(physical_width).apply_inverse_scale(&self.scale), PhysicalPx::new(physical_height).apply_inverse_scale(&self.scale))
     }
 
@@ -220,7 +220,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         let mut buffer = Buffer::new(self.font_system, metrics);
         let attrs = Attrs::new().family(Self::get_family(family));
 
-        buffer.set_text(self.font_system, text, &attrs, Shaping::Advanced, None);
+        buffer.set_text(text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(self.font_system, false);
 
         for run in buffer.layout_runs() {
@@ -319,7 +319,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
 
     fn draw_image(
         &mut self,
-        image_data: &[crate::domain::color::Color],
+        image_data: &[crate::domain::shared::color::Color],
         width: u32,
         height: u32,
         logical_width: LogicalPx,
@@ -384,7 +384,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
 mod tests {
     use super::*;
     use tiny_skia::Pixmap;
-    use crate::domain::color::Color;
+    use crate::domain::shared::color::Color;
 
     #[test]
     fn test_canvas_draw_rect() {

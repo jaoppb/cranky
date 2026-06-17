@@ -1,4 +1,4 @@
-use crate::domain::color::DrawingColor;
+use crate::domain::shared::color::DrawingColor;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -136,7 +136,7 @@ impl Default for RenderingMode {
 impl Default for BarConfig {
     fn default() -> Self {
         Self {
-            background: DrawingColor::Solid(crate::domain::color::Color::new(0, 0, 0, 255)),
+            background: DrawingColor::Solid(crate::domain::shared::color::Color::new(0, 0, 0, 255)),
             height: 30,
             vertical_alignment: VerticalAlignment::default(),
             border: BorderConfig::default(),
@@ -153,7 +153,7 @@ impl Default for BorderConfig {
     fn default() -> Self {
         Self {
             size: BorderSize::new(0.0),
-            color: DrawingColor::Solid(crate::domain::color::Color::new(0, 0, 0, 255)),
+            color: DrawingColor::Solid(crate::domain::shared::color::Color::new(0, 0, 0, 255)),
             radius: BorderRadius::new(0.0),
         }
     }

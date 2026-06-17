@@ -116,24 +116,9 @@ impl Watcher {
             _ => AppletStatus::Unknown,
         };
 
-        // Try to load icon pixmap if icon_name doesn't exist or as fallback
-        // IconPixmap is a(iiay)
-        
-        let mut applet = AppletItem {
-            id: id.clone(),
-            destination: dest.clone(),
-            path: path_str.clone(),
-            title,
-            status,
-            icon_name: icon_name.clone(),
-            icon_data: None,
-            icon_width: 0,
-            icon_height: 0,
-            menu_path: None,
-        };
-
         let max_scale = 3.0f32; // Default to 3.0 for sharp scaling on any screen
         let mut icon_loaded = false;
+        let mut icon_image = None;
 
         // 1. Try to load from IconPixmap first, as many apps (like Slack/Discord) only supply this
         let icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>> = props.get(iface.clone(), "IconPixmap").await.ok().and_then(|v| v.try_into().ok());
@@ -155,17 +140,18 @@ impl Watcher {
                     let h = pixmap.1 as u32;
                     let data = &pixmap.2;
                     if data.len() == (w * h * 4) as usize {
-                        let mut rgba_data = Vec::with_capacity(data.len() / 4);
+                        let mut rgba_data = Vec::with_capacity(data.len());
                         for chunk in data.chunks_exact(4) {
                             let a = chunk[0];
                             let r = chunk[1];
                             let g = chunk[2];
                             let b = chunk[3];
-                            rgba_data.push(crate::domain::color::Color::new(r, g, b, a));
+                            rgba_data.push(r);
+                            rgba_data.push(g);
+                            rgba_data.push(b);
+                            rgba_data.push(a);
                         }
-                        applet.icon_data = Some(rgba_data);
-                        applet.icon_width = w;
-                        applet.icon_height = h;
+                        icon_image = Some(crate::domain::applets::IconImage::new(rgba_data, crate::domain::shared::geometry::Size::new(w, h)));
                         icon_loaded = true;
                     }
                 }
@@ -176,14 +162,23 @@ impl Watcher {
         if !icon_loaded {
             if let Some(name) = &icon_name {
                 if let Some(icon_path) = lookup(name).find() {
-                    if let Some((w, h, colors)) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale) {
-                        applet.icon_width = w;
-                        applet.icon_height = h;
-                        applet.icon_data = Some(colors);
+                    if let Some((w, h, bytes)) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale) {
+                        icon_image = Some(crate::domain::applets::IconImage::new(bytes, crate::domain::shared::geometry::Size::new(w, h)));
                     }
                 }
             }
         }
+
+        let applet = AppletItem::new(
+            crate::domain::applets::AppletId::new(id.clone()),
+            crate::domain::applets::Destination::new(dest.clone()),
+            crate::domain::applets::ObjectPath::new(path_str.clone()),
+            crate::domain::applets::Title::new(title),
+            status,
+            icon_name.map(crate::domain::applets::IconName::new),
+            icon_image,
+            None,
+        );
 
         {
             let mut lock = items.write().await;
@@ -196,9 +191,7 @@ impl Watcher {
 
     async fn publish_state(items: &Arc<RwLock<HashMap<String, AppletItem>>>, hub: &Arc<SignalHub>) {
         let lock = items.read().await;
-        let state = AppletsState {
-            items: lock.values().cloned().collect(),
-        };
+        let state = AppletsState::new(lock.values().cloned().collect());
         let _ = hub.applets_tx().send(state);
     }
 }
@@ -249,8 +242,8 @@ impl SniPort for SniAdapter {
         if let (Some(conn), Some(applet)) = (lock.as_ref(), items_lock.get(id)) {
             let proxy = zbus::Proxy::new(
                 conn,
-                applet.destination.clone(),
-                applet.path.clone(),
+                applet.destination().as_str().to_string(),
+                applet.path().as_str().to_string(),
                 "org.kde.StatusNotifierItem",
             )
             .await

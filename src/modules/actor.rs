@@ -1,7 +1,7 @@
 use crate::ports::registry::{AnyModulePort, ModuleContext};
-use crate::domain::{MonitorId, geometry::{Size, Rect, Scale}};
+use crate::domain::{MonitorId, shared::geometry::{Size, Rect, Scale}};
 use crate::domain::commands::AppCommand;
-use crate::domain::render::RenderBuffer;
+use crate::domain::shared::render::RenderBuffer;
 use crate::adapters::rendering::TinySkiaCosmicCanvas;
 use std::collections::HashMap;
 

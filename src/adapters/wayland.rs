@@ -5,7 +5,7 @@ use crate::domain::signals::SignalHub;
 use crate::domain::app::CrankyApp;
 use crate::adapters::rendering::TinySkiaCosmicCanvas;
 use crate::core::shm::ShmBuffer;
-use crate::domain::geometry::{Scale, LogicalPx};
+use crate::domain::shared::geometry::{Scale, LogicalPx};
 use std::sync::Arc;
 use async_trait::async_trait;
 use tokio::io::unix::AsyncFd;
@@ -48,7 +48,7 @@ impl AsRawFd for WaylandFd {
 pub struct SurfaceCommand {
     pub module_id: crate::domain::ModuleId,
     pub monitor_id: crate::domain::MonitorId,
-    pub buffer: crate::domain::render::RenderBuffer,
+    pub buffer: crate::domain::shared::render::RenderBuffer,
 }
 
 pub struct WaylandSurfaceManager {
@@ -57,7 +57,7 @@ pub struct WaylandSurfaceManager {
 
 #[async_trait]
 impl SurfaceManagerPort for WaylandSurfaceManager {
-    async fn submit_buffer(&self, module_id: crate::domain::ModuleId, monitor_id: crate::domain::MonitorId, buffer: crate::domain::render::RenderBuffer) {
+    async fn submit_buffer(&self, module_id: crate::domain::ModuleId, monitor_id: crate::domain::MonitorId, buffer: crate::domain::shared::render::RenderBuffer) {
         let _ = self.tx.send(SurfaceCommand { module_id, monitor_id, buffer }).await;
     }
 }
@@ -117,7 +117,7 @@ struct ModuleSurface {
     surface: WlSurface,
     subsurface: WlSubsurface,
     shm_buffer: ShmBuffer,
-    size: crate::domain::geometry::Size,
+    size: crate::domain::shared::geometry::Size,
 }
 
 impl WaylandAdapter {
@@ -720,7 +720,7 @@ mod tests {
         
         let module_id = crate::domain::ModuleId::new(1);
         let monitor_id = crate::domain::MonitorId::new("DP-1");
-        let buffer = crate::domain::render::RenderBuffer::new(vec![0; 400], crate::domain::geometry::Size::new(10, 10));
+        let buffer = crate::domain::shared::render::RenderBuffer::new(vec![0; 400], crate::domain::shared::geometry::Size::new(10, 10));
         
         manager.submit_buffer(module_id, monitor_id, buffer).await;
         
@@ -734,7 +734,7 @@ mod tests {
     fn test_surface_command_struct() {
         let module_id = crate::domain::ModuleId::new(2);
         let monitor_id = crate::domain::MonitorId::new("HDMI-1");
-        let buffer = crate::domain::render::RenderBuffer::new(vec![0; 1600], crate::domain::geometry::Size::new(20, 20));
+        let buffer = crate::domain::shared::render::RenderBuffer::new(vec![0; 1600], crate::domain::shared::geometry::Size::new(20, 20));
         let cmd = SurfaceCommand { module_id, monitor_id: monitor_id.clone(), buffer };
         
         assert_eq!(cmd.module_id, module_id);
@@ -822,7 +822,7 @@ mod tests {
         let cmd = SurfaceCommand {
             module_id: crate::domain::ModuleId::new(1),
             monitor_id: crate::domain::MonitorId::new("test"),
-            buffer: crate::domain::render::RenderBuffer::new(vec![0; 4], crate::domain::geometry::Size::new(1, 1)),
+            buffer: crate::domain::shared::render::RenderBuffer::new(vec![0; 4], crate::domain::shared::geometry::Size::new(1, 1)),
         };
         let _ = adapter.handle_surface_command(cmd);
         
