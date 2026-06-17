@@ -219,6 +219,20 @@ impl DisplayServerPort for WaylandAdapter {
         
         self.event_queue.dispatch_pending(&mut self.state)
             .map_err(|e| DisplayServerError::ConnectionFailed { reason: e.to_string() })?;
+
+        // Ensure all known outputs have bars created once their names are known
+        let outputs_missing_bars: Vec<_> = self.state.outputs.iter()
+            .filter(|o| !o.name.is_empty())
+            .filter(|o| !self.state.bars.iter().any(|b| b.output_name == o.name))
+            .map(|o| o.output.clone())
+            .collect();
+
+        for output in outputs_missing_bars {
+            if let Err(e) = self.state.create_bar(&output, &self.event_queue.handle()) {
+                tracing::debug!("Deferred bar creation: {}", e);
+            }
+        }
+
         Ok(())
     }
 
