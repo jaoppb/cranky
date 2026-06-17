@@ -12,7 +12,7 @@ pub enum SniAdapterError {
     Internal(String),
 }
 
-use zbus::{Connection, interface, MessageStream};
+use zbus::{Connection, interface};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, error, debug};

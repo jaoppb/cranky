@@ -4,6 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 #[async_trait]
+#[cfg_attr(test, mockall::automock)]
 pub trait SurfaceManagerPort: Send + Sync {
     /// Submit a rendered buffer for a specific module on a specific monitor.
     async fn submit_buffer(&self, module_id: ModuleId, monitor_id: MonitorId, buffer: RenderBuffer);

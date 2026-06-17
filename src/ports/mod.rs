@@ -29,6 +29,7 @@ pub enum WindowManagerError {
 }
 
 #[async_trait]
+#[cfg_attr(test, mockall::automock)]
 pub trait DisplayServerPort: Send + Sync {
     fn create_bar(&self, output_id: u32, name: &str) -> Result<(), DisplayServerError>;
     fn destroy_bar(&self, output_id: u32) -> Result<(), DisplayServerError>;

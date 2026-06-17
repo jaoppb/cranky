@@ -1,7 +1,7 @@
 use crate::domain::config::ModuleConfig;
 use crate::ports::canvas::Canvas;
 use crate::ports::registry::{AnyModulePort, ModuleRegistryPort};
-use crate::domain::signals::{SignalHub, SignalKind};
+use crate::domain::signals::SignalHub;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -14,7 +14,7 @@ pub enum ModuleError {
     Internal { message: String },
 }
 
-use crate::domain::{ModuleId, MonitorId, geometry::Size};
+use crate::domain::{ModuleId, MonitorId};
 use std::collections::HashMap;
 
 pub mod lua;
@@ -111,7 +111,8 @@ impl ModuleRegistryPort for ModuleRegistry {
         &mut self,
         hub: std::sync::Arc<SignalHub>,
         surface_manager: crate::ports::surface::DynSurfaceManager,
-        command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>
+        command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>,
+        input_tx: tokio::sync::broadcast::Sender<(ModuleId, crate::domain::events::InputEvent)>
     ) -> std::collections::HashMap<ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<MonitorId, crate::domain::geometry::Rect>>> {
         let mut layout_senders = std::collections::HashMap::new();
 
@@ -119,13 +120,14 @@ impl ModuleRegistryPort for ModuleRegistry {
             let (layout_tx, layout_rx) = tokio::sync::watch::channel(std::collections::HashMap::new());
             layout_senders.insert(id, layout_tx);
 
-            let ctx = crate::ports::registry::ModuleContext {
+            let ctx = crate::ports::registry::ModuleContext::new(
                 id,
-                hub: hub.clone(),
-                surface_manager: surface_manager.clone(),
-                command_tx: command_tx.clone(),
+                hub.clone(),
+                surface_manager.clone(),
+                command_tx.clone(),
                 layout_rx,
-            };
+                input_tx.subscribe(),
+            );
 
             actor::ModuleActor::new(module, ctx).spawn();
         }

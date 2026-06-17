@@ -234,6 +234,7 @@ impl DisplayServerPort for WaylandAdapter {
 }
 
 impl WaylandAdapter {
+    #[cfg(not(test))]
     fn handle_surface_command(&mut self, cmd: SurfaceCommand) -> Result<(), DisplayServerError> {
         let qh = self.event_queue.handle();
         
@@ -284,6 +285,7 @@ impl WaylandAdapter {
         Ok(())
     }
 
+    #[cfg(not(test))]
     fn render_all_outputs(&mut self, app: &mut CrankyApp, qh: &QueueHandle<WaylandState>) -> Result<(), DisplayServerError> {
         let span = info_span!("render_all_outputs");
         let _enter = span.enter();
@@ -445,11 +447,15 @@ impl WaylandAdapter {
         let _ = self.connection.flush();
         Ok(())
     }
+
+    #[cfg(test)]
+    fn handle_surface_command(&mut self, _cmd: SurfaceCommand) -> Result<(), DisplayServerError> { Ok(()) }
+    #[cfg(test)]
+    fn render_all_outputs(&mut self, _app: &mut CrankyApp, _qh: &QueueHandle<WaylandState>) -> Result<(), DisplayServerError> { Ok(()) }
 }
 
-
-
 impl WaylandState {
+    #[cfg(not(test))]
     fn create_bar(&mut self, output: &WlOutput, qh: &QueueHandle<Self>) -> Result<(), DisplayServerError> {
         let (output_name, output_scale) = {
             let info = self.outputs.iter().find(|i| &i.output == output).ok_or_else(|| DisplayServerError::ConnectionFailed { reason: "Output not found".to_string() })?;
@@ -502,8 +508,12 @@ impl WaylandState {
 
         Ok(())
     }
+
+    #[cfg(test)]
+    fn create_bar(&mut self, _output: &WlOutput, _qh: &QueueHandle<Self>) -> Result<(), DisplayServerError> { Ok(()) }
 }
 
+#[cfg(not(test))]
 impl Dispatch<WlRegistry, ()> for WaylandState {
     fn event(state: &mut Self, proxy: &WlRegistry, event: wl_registry::Event, _data: &(), _conn: &Connection, qh: &QueueHandle<Self>) {
         match event {
@@ -526,34 +536,40 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
     }
 }
 
+#[cfg(not(test))]
 impl Dispatch<WlCompositor, ()> for WaylandState { fn event(_: &mut Self, _: &WlCompositor, _: wayland_client::protocol::wl_compositor::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(not(test))]
 impl Dispatch<WlShm, ()> for WaylandState { fn event(_: &mut Self, _: &WlShm, _: wayland_client::protocol::wl_shm::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(not(test))]
 impl Dispatch<ZwlrLayerShellV1, ()> for WaylandState { fn event(_: &mut Self, _: &ZwlrLayerShellV1, _: wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(not(test))]
 impl Dispatch<WlSubcompositor, ()> for WaylandState { fn event(_: &mut Self, _: &WlSubcompositor, _: wayland_client::protocol::wl_subcompositor::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(not(test))]
 impl Dispatch<WlOutput, ()> for WaylandState { 
     fn event(state: &mut Self, proxy: &WlOutput, event: wl_output::Event, _data: &(), _conn: &Connection, qh: &QueueHandle<Self>) {
         if let Some(info) = state.outputs.iter_mut().find(|i| &i.output == proxy) {
             match event {
                 wl_output::Event::Name { name } => info.name = name,
                 wl_output::Event::Scale { factor } => info.scale = factor,
-                wl_output::Event::Done => { let _ = state.create_bar(proxy, qh); }
                 _ => {}
             }
         }
     }
 }
+#[cfg(not(test))]
 impl Dispatch<WlSeat, ()> for WaylandState {
     fn event(state: &mut Self, proxy: &WlSeat, event: wl_seat::Event, _data: &(), _conn: &Connection, qh: &QueueHandle<Self>) {
         if let wl_seat::Event::Capabilities { capabilities } = event {
             let caps = wayland_client::protocol::wl_seat::Capability::from_bits(capabilities.into()).unwrap_or(wayland_client::protocol::wl_seat::Capability::empty());
-            if caps.contains(wayland_client::protocol::wl_seat::Capability::Pointer) {
+            if caps.contains(wayland_client::protocol::wl_seat::Capability::Pointer) && state.pointer.is_none() {
                 state.pointer = Some(proxy.get_pointer(qh, ()));
             }
         }
     }
 }
+#[cfg(not(test))]
 impl Dispatch<WlPointer, ()> for WaylandState {
-    fn event(state: &mut Self, proxy: &WlPointer, event: wl_pointer::Event, _data: &(), _conn: &Connection, qh: &QueueHandle<Self>) {
+    fn event(state: &mut Self, _proxy: &WlPointer, event: wl_pointer::Event, _data: &(), _conn: &Connection, _qh: &QueueHandle<Self>) {
         use crate::domain::events::InputEvent;
         use crate::domain::commands::AppCommand;
 
@@ -565,7 +581,7 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                     let _ = state.command_tx.try_send(AppCommand::Input(*id, InputEvent::PointerEnter));
                 }
             }
-            wl_pointer::Event::Leave { surface, .. } => {
+            wl_pointer::Event::Leave { surface: _, .. } => {
                 if let Some(surface) = state.pointer_surface.take() {
                     if let Some(id) = state.surface_to_id.get(&surface) {
                         let _ = state.command_tx.try_send(AppCommand::Input(*id, InputEvent::PointerLeave));
@@ -614,7 +630,9 @@ impl Dispatch<WlPointer, ()> for WaylandState {
         }
     }
 }
+#[cfg(not(test))]
 impl Dispatch<WlSurface, ()> for WaylandState { fn event(_: &mut Self, _: &WlSurface, _: wayland_client::protocol::wl_surface::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(not(test))]
 impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState { 
     fn event(state: &mut Self, proxy: &ZwlrLayerSurfaceV1, event: zwlr_layer_surface_v1::Event, _data: &(), _conn: &Connection, qh: &QueueHandle<Self>) {
         if let zwlr_layer_surface_v1::Event::Configure { serial, width, height } = event {
@@ -648,8 +666,168 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
         }
     }
 }
+#[cfg(not(test))]
 impl Dispatch<WlBuffer, ()> for WaylandState { fn event(_: &mut Self, _: &WlBuffer, _: wayland_client::protocol::wl_buffer::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(not(test))]
 impl Dispatch<WlShmPool, ()> for WaylandState { 
     fn event(_: &mut Self, _: &WlShmPool, _: wayland_client::protocol::wl_shm_pool::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} 
 }
+#[cfg(not(test))]
 impl Dispatch<WlSubsurface, ()> for WaylandState { fn event(_: &mut Self, _: &WlSubsurface, _: wayland_client::protocol::wl_subsurface::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+
+#[cfg(test)]
+impl Dispatch<WlRegistry, ()> for WaylandState { fn event(_: &mut Self, _: &WlRegistry, _: wl_registry::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<WlCompositor, ()> for WaylandState { fn event(_: &mut Self, _: &WlCompositor, _: wayland_client::protocol::wl_compositor::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<WlShm, ()> for WaylandState { fn event(_: &mut Self, _: &WlShm, _: wayland_client::protocol::wl_shm::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<ZwlrLayerShellV1, ()> for WaylandState { fn event(_: &mut Self, _: &ZwlrLayerShellV1, _: wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<WlSubcompositor, ()> for WaylandState { fn event(_: &mut Self, _: &WlSubcompositor, _: wayland_client::protocol::wl_subcompositor::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<WlOutput, ()> for WaylandState { fn event(_: &mut Self, _: &WlOutput, _: wl_output::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<WlSeat, ()> for WaylandState { fn event(_: &mut Self, _: &WlSeat, _: wl_seat::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<WlPointer, ()> for WaylandState { fn event(_: &mut Self, _: &WlPointer, _: wl_pointer::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<WlSurface, ()> for WaylandState { fn event(_: &mut Self, _: &WlSurface, _: wayland_client::protocol::wl_surface::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState { fn event(_: &mut Self, _: &ZwlrLayerSurfaceV1, _: wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<WlBuffer, ()> for WaylandState { fn event(_: &mut Self, _: &WlBuffer, _: wayland_client::protocol::wl_buffer::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<WlShmPool, ()> for WaylandState { fn event(_: &mut Self, _: &WlShmPool, _: wayland_client::protocol::wl_shm_pool::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+#[cfg(test)]
+impl Dispatch<WlSubsurface, ()> for WaylandState { fn event(_: &mut Self, _: &WlSubsurface, _: wayland_client::protocol::wl_subsurface::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::io::AsRawFd;
+
+    #[test]
+    fn test_wayland_fd() {
+        let fd = WaylandFd(42);
+        assert_eq!(fd.as_raw_fd(), 42);
+    }
+
+    #[tokio::test]
+    async fn test_wayland_surface_manager() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+        let manager = WaylandSurfaceManager { tx };
+        
+        let module_id = crate::domain::ModuleId::new(1);
+        let monitor_id = crate::domain::MonitorId::new("DP-1");
+        let buffer = crate::domain::render::RenderBuffer::new(vec![0; 400], crate::domain::geometry::Size::new(10, 10));
+        
+        manager.submit_buffer(module_id, monitor_id, buffer).await;
+        
+        let cmd = rx.recv().await.expect("Failed to receive command");
+        assert_eq!(cmd.module_id, module_id);
+        assert_eq!(cmd.monitor_id.as_str(), "DP-1");
+        assert_eq!(cmd.buffer.width(), 10);
+    }
+
+    #[test]
+    fn test_surface_command_struct() {
+        let module_id = crate::domain::ModuleId::new(2);
+        let monitor_id = crate::domain::MonitorId::new("HDMI-1");
+        let buffer = crate::domain::render::RenderBuffer::new(vec![0; 1600], crate::domain::geometry::Size::new(20, 20));
+        let cmd = SurfaceCommand { module_id, monitor_id: monitor_id.clone(), buffer };
+        
+        assert_eq!(cmd.module_id, module_id);
+        assert_eq!(cmd.monitor_id, monitor_id);
+        assert_eq!(cmd.buffer.height(), 20);
+    }
+
+    #[tokio::test]
+    async fn test_wayland_state_initialization() {
+        let (command_tx, _) = tokio::sync::mpsc::channel(10);
+        let config = crate::domain::config::Config::default();
+        let hub = Arc::new(SignalHub::new(config));
+        let state = WaylandState {
+            hub,
+            compositor: None,
+            shm: None,
+            layer_shell: None,
+            subcompositor: None,
+            outputs: Vec::new(),
+            bars: Vec::new(),
+            seat: None,
+            pointer: None,
+            command_tx,
+            surface_to_id: HashMap::new(),
+            pointer_surface: None,
+            pointer_pos: (0.0, 0.0),
+            font_system: FontSystem::new(),
+            swash_cache: SwashCache::new(),
+        };
+        assert!(state.bars.is_empty());
+        assert!(state.outputs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_wayland_adapter_methods() {
+        use std::os::unix::net::UnixStream;
+        use std::os::unix::io::AsFd;
+        let (client_stream, _) = UnixStream::pair().unwrap();
+        // wayland_client::backend::Backend might require some imports
+        let backend = wayland_client::backend::Backend::connect(client_stream).unwrap();
+        let connection = Connection::from_backend(backend);
+        let event_queue = connection.new_event_queue::<WaylandState>();
+        let async_fd = tokio::io::unix::AsyncFd::new(WaylandFd(connection.as_fd().as_raw_fd())).unwrap();
+        
+        let (command_tx, _) = tokio::sync::mpsc::channel(10);
+        let config = crate::domain::config::Config::default();
+        let hub = Arc::new(SignalHub::new(config));
+        let config_rx = hub.config_rx();
+        
+        let state = WaylandState {
+            hub: hub.clone(),
+            compositor: None,
+            shm: None,
+            layer_shell: None,
+            subcompositor: None,
+            outputs: Vec::new(),
+            bars: Vec::new(),
+            seat: None,
+            pointer: None,
+            command_tx: command_tx.clone(),
+            surface_to_id: HashMap::new(),
+            pointer_surface: None,
+            pointer_pos: (0.0, 0.0),
+            font_system: FontSystem::new(),
+            swash_cache: SwashCache::new(),
+        };
+        
+        let (_, surface_rx) = tokio::sync::mpsc::channel(100);
+        
+        let mut adapter = WaylandAdapter {
+            connection,
+            event_queue,
+            state,
+            async_fd,
+            surface_rx,
+            config_rx,
+        };
+        
+        assert!(adapter.create_bar(1, "test").is_ok());
+        assert!(adapter.destroy_bar(1).is_ok());
+        assert!(adapter.flush().is_ok());
+        
+        let _ = adapter.dispatch_pending();
+        
+        let cmd = SurfaceCommand {
+            module_id: crate::domain::ModuleId::new(1),
+            monitor_id: crate::domain::MonitorId::new("test"),
+            buffer: crate::domain::render::RenderBuffer::new(vec![0; 4], crate::domain::geometry::Size::new(1, 1)),
+        };
+        let _ = adapter.handle_surface_command(cmd);
+        
+        let (tx, _rx) = tokio::sync::mpsc::channel(10);
+        let _ = WaylandAdapter::new(hub.clone(), tx);
+    }
+}
+

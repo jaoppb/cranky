@@ -1,10 +1,9 @@
-use mlua::{Lua, UserData, UserDataMethods, LuaSerdeExt, Function, Value};
+use mlua::{Lua, UserData, UserDataMethods, LuaSerdeExt, Function};
 use crate::ports::canvas::Canvas;
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::dbus::{BusType, DBusSubscription};
 use crate::domain::config::{ModuleConfig, BarConfig, FontFamily, FontSize};
-use crate::domain::{ModuleId, MonitorId, geometry::{Size, Position, LogicalPx}};
-use crate::modules::ModuleError;
+use crate::domain::{MonitorId, geometry::{Size, Position, LogicalPx}};
 use crate::ports::registry::AnyModulePort;
 use crate::domain::color::DrawingColor;
 use std::sync::Mutex;
@@ -174,7 +173,7 @@ impl AnyModulePort for LuaModule {
     fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) {
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let canvas_cell = RefCell::new(canvas);
-        let mut with_canvas = |f: &mut dyn FnMut(&mut dyn Canvas)| f(*canvas_cell.borrow_mut());
+        let with_canvas = |f: &mut dyn FnMut(&mut dyn Canvas)| f(*canvas_cell.borrow_mut());
         
         let _ = lua.scope(|scope| {
             let globals = lua.globals();
@@ -246,7 +245,7 @@ impl AnyModulePort for LuaModule {
     fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size {
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let canvas_cell = RefCell::new(canvas);
-        let mut with_canvas = |f: &mut dyn FnMut(&mut dyn Canvas)| f(*canvas_cell.borrow_mut());
+        let with_canvas = |f: &mut dyn FnMut(&mut dyn Canvas)| f(*canvas_cell.borrow_mut());
         
         let res = lua.scope(|scope| {
             let globals = lua.globals();

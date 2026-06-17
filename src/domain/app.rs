@@ -1,14 +1,14 @@
 use crate::domain::config::Config;
 use crate::domain::signals::SignalHub;
 use crate::domain::{ModuleId, MonitorId, geometry::{Size, Rect, Position}};
-use crate::ports::registry::{ModuleRegistryPort, ModuleContext};
+use crate::ports::registry::ModuleRegistryPort;
 use crate::ports::DisplayServerPort;
 use crate::domain::commands::AppCommand;
 use crate::ports::surface::DynSurfaceManager;
 use tokio::sync::{watch, mpsc};
 use std::sync::Arc;
 use std::collections::HashMap;
-use tracing::{debug, debug_span, info, info_span, error};
+use tracing::{info, error};
 
 #[derive(Debug)]
 pub enum AppError {
@@ -55,6 +55,7 @@ pub struct CrankyApp {
     surface_manager: DynSurfaceManager,
     command_tx_clone: mpsc::Sender<AppCommand>,
     registry: Box<dyn crate::ports::registry::ModuleRegistryPort>,
+    input_tx: tokio::sync::broadcast::Sender<(ModuleId, crate::domain::events::InputEvent)>,
 }
 
 impl CrankyApp {
@@ -72,7 +73,8 @@ impl CrankyApp {
         let center_modules = registry.center_modules();
         let right_modules = registry.right_modules();
 
-        let layout_senders = registry.spawn_all(hub.clone(), surface_manager.clone(), command_tx.clone());
+        let (input_tx, _) = tokio::sync::broadcast::channel(32);
+        let layout_senders = registry.spawn_all(hub.clone(), surface_manager.clone(), command_tx.clone(), input_tx.clone());
 
         Ok(Self {
             hub,
@@ -86,6 +88,7 @@ impl CrankyApp {
             surface_manager: surface_manager.clone(),
             command_tx_clone: command_tx,
             registry,
+            input_tx,
         })
     }
 
@@ -101,9 +104,11 @@ impl CrankyApp {
         &mut self,
         mut display: impl DisplayServerPort,
         mut dbus: impl crate::ports::DBusPort, // Left here for API compatibility but might need refactoring later
-        sni: impl crate::ports::sni::SniPort,
+        _sni: impl crate::ports::sni::SniPort,
     ) -> Result<(), AppError> {
         let mut config_rx = self.hub.config_rx();
+
+        self.registry.register_dbus_subscriptions(&mut dbus).await;
 
         loop {
             let _ = display.flush();
@@ -122,8 +127,8 @@ impl CrankyApp {
                             AppCommand::RequestRender(_output_id) => {
                                 needs_render = true;
                             }
-                            AppCommand::Input(_module_id, _event) => {
-                                // Input handling routed to module tasks
+                            AppCommand::Input(module_id, event) => {
+                                let _ = self.input_tx.send((module_id, event));
                             }
                             AppCommand::Log(level, msg) => {
                                 match level {
@@ -175,7 +180,8 @@ impl CrankyApp {
                         self.layout_senders = self.registry.spawn_all(
                             self.hub.clone(),
                             self.surface_manager.clone(),
-                            self.command_tx_clone.clone()
+                            self.command_tx_clone.clone(),
+                            self.input_tx.clone()
                         );
                     }
                     
@@ -276,5 +282,81 @@ impl CrankyApp {
         }
 
         layouts
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ports::{MockDisplayServerPort};
+    use crate::ports::registry::MockModuleRegistryPort;
+    use crate::ports::surface::MockSurfaceManagerPort;
+    use tokio::sync::mpsc;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn test_app_initialization() {
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let (_, command_rx) = mpsc::channel(32);
+        let (command_tx, _) = mpsc::channel(32);
+        
+        // We need a dummy SurfaceManager
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
+        
+        let mut mock_registry = MockModuleRegistryPort::new();
+        mock_registry.expect_load().returning(|_| Ok(()));
+        mock_registry.expect_left_modules().returning(|| vec![]);
+        mock_registry.expect_center_modules().returning(|| vec![]);
+        mock_registry.expect_right_modules().returning(|| vec![]);
+        mock_registry.expect_spawn_all().returning(|_, _, _, _| HashMap::new());
+        
+        let app_result = CrankyApp::new(
+            hub,
+            config,
+            command_rx,
+            command_tx,
+            surface_manager,
+            Box::new(mock_registry)
+        );
+        
+        assert!(app_result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_app_run_exit_on_display_error() {
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let (_, command_rx) = mpsc::channel(32);
+        let (command_tx, _) = mpsc::channel(32);
+        
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
+        
+        let mut mock_registry = MockModuleRegistryPort::new();
+        mock_registry.expect_load().returning(|_| Ok(()));
+        mock_registry.expect_left_modules().returning(|| vec![]);
+        mock_registry.expect_center_modules().returning(|| vec![]);
+        mock_registry.expect_right_modules().returning(|| vec![]);
+        mock_registry.expect_spawn_all().returning(|_, _, _, _| HashMap::new());
+        mock_registry.expect_register_dbus_subscriptions().returning(|_| Box::pin(std::future::ready(())));
+        
+        let mut app = CrankyApp::new(
+            hub,
+            config,
+            command_rx,
+            command_tx,
+            surface_manager,
+            Box::new(mock_registry)
+        ).unwrap();
+
+        let mut mock_display = MockDisplayServerPort::new();
+        mock_display.expect_flush().returning(|| Ok(()));
+        mock_display.expect_wait_for_events().returning(|| Box::pin(std::future::ready(Err(crate::ports::DisplayServerError::Internal("Test error".into())))));
+        
+        let mut mock_dbus = crate::ports::dbus::MockDBusPort::new();
+        let mock_sni = crate::ports::sni::MockSniPort::new();
+
+        let result = app.run(mock_display, mock_dbus, mock_sni).await;
+        assert!(result.is_err());
     }
 }

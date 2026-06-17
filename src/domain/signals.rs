@@ -1,8 +1,7 @@
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
 use crate::domain::config::Config;
 use crate::domain::workspace::{Workspace, Monitor};
-use crate::domain::ModuleId;
-use tokio::sync::{watch, mpsc};
+use tokio::sync::watch;
 
 use crate::domain::dbus::{DBusState, DBusSubscription};
 use crate::domain::applets::AppletsState;

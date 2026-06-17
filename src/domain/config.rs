@@ -657,3 +657,109 @@ impl PartialBarConfig {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_font_family() {
+        let f = FontFamily::new("Inter".into());
+        assert_eq!(f.as_str(), "Inter");
+    }
+
+    #[test]
+    fn test_font_size() {
+        let s = FontSize::new(12.5);
+        assert_eq!(s.value(), 12.5);
+    }
+
+    #[test]
+    fn test_border_size() {
+        let s = BorderSize::new(2.0);
+        assert_eq!(s.value(), 2.0);
+    }
+
+    #[test]
+    fn test_border_radius() {
+        let r = BorderRadius::new(5.0);
+        assert_eq!(r.value(), 5.0);
+    }
+
+    #[test]
+    fn test_padding_offset() {
+        let p = PaddingOffset::new(10);
+        assert_eq!(p.value(), 10);
+    }
+
+    #[test]
+    fn test_margin_offset() {
+        let m = MarginOffset::new(15);
+        assert_eq!(m.value(), 15);
+    }
+
+    #[test]
+    fn test_margin_config() {
+        let m = MarginConfig::new(
+            MarginOffset::new(1),
+            MarginOffset::new(2),
+            MarginOffset::new(3),
+            MarginOffset::new(4)
+        );
+        assert_eq!(m.top().value(), 1);
+        assert_eq!(m.bottom().value(), 2);
+        assert_eq!(m.left().value(), 3);
+        assert_eq!(m.right().value(), 4);
+    }
+
+    #[test]
+    fn test_padding_config() {
+        let p = PaddingConfig::new(
+            PaddingOffset::new(1),
+            PaddingOffset::new(2),
+            PaddingOffset::new(3),
+            PaddingOffset::new(4)
+        );
+        assert_eq!(p.top().value(), 1);
+        assert_eq!(p.bottom().value(), 2);
+        assert_eq!(p.left().value(), 3);
+        assert_eq!(p.right().value(), 4);
+    }
+
+    #[test]
+    fn test_border_config() {
+        let c = DrawingColor::parse("#ff0000").unwrap();
+        let b = BorderConfig::new(
+            BorderSize::new(2.0),
+            c.clone(),
+            BorderRadius::new(4.0)
+        );
+        assert_eq!(b.size().value(), 2.0);
+        assert_eq!(b.color(), &c);
+        assert_eq!(b.radius().value(), 4.0);
+    }
+
+    #[test]
+    fn test_bar_config_defaults() {
+        let bar = BarConfig::default();
+        assert_eq!(bar.height(), 30);
+        assert_eq!(bar.vertical_alignment(), VerticalAlignment::Center);
+        assert_eq!(bar.font_family().as_str(), "");
+        assert_eq!(bar.font_size().value(), 14.0);
+        
+        let unfocused = bar.as_unfocused();
+        assert_eq!(unfocused.height(), 30);
+    }
+
+    #[test]
+    fn test_module_position() {
+        let left = vec![ModuleConfig::new("time".to_string(), true, HashMap::new())];
+        let modules = ModulesConfig::new(left, vec![], vec![]);
+        
+        let config = Config::new(BarConfig::default(), modules, RenderingMode::default(), crate::domain::metrics::MetricsConfig::default());
+        assert_eq!(config.modules().left().len(), 1);
+        assert_eq!(config.modules().left()[0].name(), "time");
+        assert_eq!(config.modules().center().len(), 0);
+        assert_eq!(config.modules().right().len(), 0);
+    }
+}
+

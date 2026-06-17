@@ -1,7 +1,6 @@
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use sysinfo::{System, Networks, Components, Disks};
-use crate::domain::metrics::{MetricsConfig, MetricsState, CpuMode, DiskMetric};
+use crate::domain::metrics::{MetricsConfig, MetricsState, DiskMetric};
 use crate::domain::signals::SignalHub;
 
 pub struct SysinfoAdapter {

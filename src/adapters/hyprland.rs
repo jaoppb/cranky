@@ -5,8 +5,6 @@ use crate::domain::workspace::{Workspace, Monitor};
 use crate::core::hyprland::{RealHyprlandProvider, HyprlandProvider};
 use std::sync::Arc;
 use serde::Deserialize;
-use tracing::{error, debug_span};
-use std::time::Duration;
 
 #[derive(Deserialize)]
 struct HyprWorkspaceDto {

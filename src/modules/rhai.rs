@@ -4,7 +4,7 @@ use rhai::{Engine, Scope, AST, Dynamic, Array, EvalAltResult};
 use crate::ports::canvas::Canvas;
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::config::{ModuleConfig, BarConfig, FontFamily, FontSize};
-use crate::domain::{ModuleId, MonitorId, geometry::{Size, Position, LogicalPx}};
+use crate::domain::{MonitorId, geometry::{Size, Position, LogicalPx}};
 use crate::modules::ModuleError;
 use crate::ports::registry::AnyModulePort;
 use crate::domain::color::{DrawingColor, Color};
@@ -248,7 +248,7 @@ impl AnyModulePort for RhaiModule {
     }
 
     fn on_event(&mut self, event: crate::domain::events::InputEvent) -> Vec<crate::domain::commands::AppCommand> {
-        let mut commands = Vec::new();
+        let commands = Vec::new();
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         
