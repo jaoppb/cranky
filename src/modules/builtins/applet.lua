@@ -72,10 +72,15 @@ function view(canvas, monitor)
     for i, item in ipairs(items) do
         if i > max_items then break end
         if i > 1 then x = x + ITEM_SPACING end
+        if type(item) == "table" then
+            local mt = getmetatable(item)
+            if mt then error("ITEM HAS METATABLE: " .. type(mt.__index)) end
+        end
+        if type(item) == "userdata" then error("ITEM IS USERDATA") end
         
         if show_icons then
-            if type(item.icon_data) == "table" and item.icon_width and item.icon_height then
-                canvas:draw_image(item.icon_data, item.icon_width, item.icon_height, icon_size, icon_size, x, (30 - icon_size) / 2)
+            if type(item.icon_image) == "table" and type(item.icon_image.data) == "table" and item.icon_image.size then
+                canvas:draw_image(item.icon_image.data, item.icon_image.size.width, item.icon_image.size.height, icon_size, icon_size, x, (30 - icon_size) / 2)
             else
                 canvas:draw_rect(x, (30 - icon_size) / 2, icon_size, icon_size, text_color, 2)
             end

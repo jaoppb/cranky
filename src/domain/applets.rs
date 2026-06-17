@@ -125,3 +125,4 @@ impl AppletsState {
         &self.items
     }
 }
+

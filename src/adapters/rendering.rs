@@ -319,7 +319,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
 
     fn draw_image(
         &mut self,
-        image_data: &[crate::domain::shared::color::Color],
+        image_data: &[u8],
         width: u32,
         height: u32,
         logical_width: LogicalPx,
@@ -328,12 +328,12 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         y: LogicalPx,
     ) {
         
-        let mut bgra_premul = Vec::with_capacity(image_data.len() * 4);
-        for color in image_data {
-            let r = color.r();
-            let g = color.g();
-            let b = color.b();
-            let a = color.a();
+        let mut bgra_premul = Vec::with_capacity(image_data.len());
+        for chunk in image_data.chunks_exact(4) {
+            let r = chunk[0];
+            let g = chunk[1];
+            let b = chunk[2];
+            let a = chunk[3];
             
             let r_p = (r as u16 * a as u16 / 255) as u8;
             let g_p = (g as u16 * a as u16 / 255) as u8;
