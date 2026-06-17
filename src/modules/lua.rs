@@ -119,6 +119,7 @@ impl AnyModulePort for LuaModule {
                                         "time" => subs.push(SignalKind::Time),
                                         "hyprland" => subs.push(SignalKind::Hyprland),
                                         "applets" => subs.push(SignalKind::Applets),
+                                        "metrics" => subs.push(SignalKind::Metrics),
                                         _ => {}
                                     }
                                 }
@@ -177,6 +178,11 @@ impl AnyModulePort for LuaModule {
         let applets_state = hub.applets_rx().borrow().clone();
         if let Ok(applets_lua) = lua.to_value(&applets_state.items()) {
             let _ = globals.set("applets", applets_lua);
+        }
+
+        let metrics_state = hub.metrics_rx().borrow().clone();
+        if let Ok(metrics_lua) = lua.to_value(&metrics_state) {
+            let _ = globals.set("metrics", metrics_lua);
         }
 
         if let Ok(refresh_fn) = globals.get::<Function>("refresh") {

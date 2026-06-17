@@ -18,18 +18,16 @@ function subscriptions()
     return { "metrics" }
 end
 
-function on_event(event)
-    if event.type == "metrics" then
-        if event.metrics then
-            state.cpu = event.metrics.cpu_usage
-            state.ram_used = event.metrics.memory_used
-            state.ram_total = event.metrics.memory_total
-            state.net_tx = event.metrics.network_tx
-            state.net_rx = event.metrics.network_rx
-            state.temp = event.metrics.temperature
-            state.disks = event.metrics.disks
-            state.config = event.metrics.config
-        end
+function refresh()
+    if metrics then
+        state.cpu = metrics.cpu_usage
+        state.ram_used = metrics.memory_used
+        state.ram_total = metrics.memory_total
+        state.net_tx = metrics.network_tx
+        state.net_rx = metrics.network_rx
+        state.temp = metrics.temperature
+        state.disks = metrics.disks
+        state.config = metrics.config
     end
 end
 
@@ -107,5 +105,5 @@ function view(canvas, monitor)
     local w, h = canvas:measure_text(text)
     
     local text_color = "#cccccc"
-    canvas:draw_text(text, text_color, 10, 4)
+    canvas:draw_text(text, text_color, 10, 0)
 end

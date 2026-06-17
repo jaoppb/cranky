@@ -185,6 +185,7 @@ impl AnyModulePort for RhaiModule {
                     match s.as_str() {
                         "time" => subs.push(SignalKind::Time),
                         "hyprland" => subs.push(SignalKind::Hyprland),
+                        "metrics" => subs.push(SignalKind::Metrics),
                         _ => {}
                     }
                 }
@@ -204,6 +205,13 @@ impl AnyModulePort for RhaiModule {
         if let Ok(hypr_json) = serde_json::to_string(&hypr) {
             if let Ok(hypr_rhai) = engine.parse_json(&hypr_json, true) {
                 scope.set_or_push("hyprland", hypr_rhai);
+            }
+        }
+
+        let metrics = hub.metrics_rx().borrow().clone();
+        if let Ok(metrics_json) = serde_json::to_string(&metrics) {
+            if let Ok(metrics_rhai) = engine.parse_json(&metrics_json, true) {
+                scope.set_or_push("metrics", metrics_rhai);
             }
         }
         
