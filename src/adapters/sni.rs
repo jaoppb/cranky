@@ -253,6 +253,11 @@ impl SniPort for SniAdapter {
             let y: i32 = 0;
 
             match action {
+                "Primary" => {
+                    if proxy.call_method("ContextMenu", &(x, y)).await.is_err() {
+                        let _ = proxy.call_method("Activate", &(x, y)).await;
+                    }
+                }
                 "Activate" => {
                     let _ = proxy.call_method("Activate", &(x, y)).await;
                 }
@@ -261,6 +266,18 @@ impl SniPort for SniAdapter {
                 }
                 "ContextMenu" => {
                     let _ = proxy.call_method("ContextMenu", &(x, y)).await;
+                }
+                "ScrollUp" => {
+                    let _ = proxy.call_method("Scroll", &(-1, "vertical")).await;
+                }
+                "ScrollDown" => {
+                    let _ = proxy.call_method("Scroll", &(1, "vertical")).await;
+                }
+                "ScrollLeft" => {
+                    let _ = proxy.call_method("Scroll", &(-1, "horizontal")).await;
+                }
+                "ScrollRight" => {
+                    let _ = proxy.call_method("Scroll", &(1, "horizontal")).await;
                 }
                 _ => {}
             }

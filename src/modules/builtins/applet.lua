@@ -96,33 +96,74 @@ function view(canvas, monitor)
     end
 end
 
+local BUTTON_ACTIONS = {
+    [272] = "Primary",           -- Left Click: try ContextMenu, fallback to Activate
+    [273] = "ContextMenu",       -- Right Click
+    [274] = "SecondaryActivate"  -- Middle Click
+}
+
+local SCROLL_ACTIONS = {
+    ["up"] = "ScrollUp",
+    ["down"] = "ScrollDown",
+    ["left"] = "ScrollLeft",
+    ["right"] = "ScrollRight"
+}
+
 function on_event(event)
-    if event.type == "click" and event.button == 272 then -- Left click
-        local ITEM_SPACING = 8
-        local ICON_TEXT_GAP = 6
-        local x = 0
+    if event.type == "pointer_leave" then
+        if _G.cranky and _G.cranky.hide_tooltip then
+            _G.cranky.hide_tooltip()
+        end
+        return
+    end
+
+    local action = nil
+    local is_motion = false
+    
+    if event.type == "click" then
+        action = BUTTON_ACTIONS[event.button]
+    elseif event.type == "scroll" then
+        action = SCROLL_ACTIONS[event.direction]
+    elseif event.type == "motion" then
+        is_motion = true
+    end
+    
+    if not action and not is_motion then return end
+
+    local ITEM_SPACING = 8
+    local ICON_TEXT_GAP = 6
+    local x = 0
+    
+    for i, item in ipairs(items) do
+        if i > max_items then break end
+        if i > 1 then x = x + ITEM_SPACING end
         
-        for i, item in ipairs(items) do
-            if i > max_items then break end
-            if i > 1 then x = x + ITEM_SPACING end
-            
-            local item_width = 0
-            if show_icons then item_width = item_width + icon_size + ICON_TEXT_GAP end
-            if show_titles then
-                local label = item.title or item.app_id or "app"
-                -- we can't measure text here easily without canvas, let's just approximate
-                -- or just assume clicking anywhere near it triggers it
-                -- For simplicity, since applets often don't show titles in bars:
-                item_width = item_width + (#label * 7) 
-            end
-            
-            if event.x >= x and event.x <= x + item_width then
-                if _G.cranky and _G.cranky.applet_action then
-                    _G.cranky.applet_action(item.id, "Activate")
+        local item_width = 0
+        if show_icons then item_width = item_width + icon_size + ICON_TEXT_GAP end
+        if show_titles then
+            local label = item.title or item.app_id or "app"
+            item_width = item_width + (#label * 7) 
+        end
+        
+        if event.x >= x and event.x <= x + item_width then
+            if is_motion then
+                if _G.cranky and _G.cranky.show_tooltip then
+                    local title = item.title or item.app_id or "applet"
+                    _G.cranky.show_tooltip(title)
                 end
-                return
+            elseif action then
+                if _G.cranky and _G.cranky.applet_action then
+                    _G.cranky.applet_action(item.id, action)
+                end
             end
-            x = x + item_width
+            return
+        end
+        x = x + item_width
+    end
+
+    if is_motion then
+        if _G.cranky and _G.cranky.hide_tooltip then
+            _G.cranky.hide_tooltip()
         end
     end
 end

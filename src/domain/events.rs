@@ -5,6 +5,7 @@ use crate::domain::dbus::DBusValue;
 pub enum InputEvent {
     PointerEnter,
     PointerLeave,
+    PointerMotion { x: f64, y: f64 },
     Click { button: u32, x: f64, y: f64 },
     Scroll { axis: u32, amount: f64 },
     Time(chrono::DateTime<chrono::Local>),

@@ -457,6 +457,11 @@ impl AnyModulePort for LuaModule {
                 InputEvent::PointerLeave => {
                     let _ = event_table.set("type", "pointer_leave");
                 }
+                InputEvent::PointerMotion { x, y } => {
+                    let _ = event_table.set("type", "motion");
+                    let _ = event_table.set("x", x);
+                    let _ = event_table.set("y", y);
+                }
                 InputEvent::Click { button, x, y } => {
                     let _ = event_table.set("type", "click");
                     let _ = event_table.set("button", button);
@@ -497,6 +502,27 @@ impl AnyModulePort for LuaModule {
                     })
                     .unwrap();
                 let _ = cranky_table.set("applet_action", applet_action);
+
+                let show_tooltip = scope
+                    .create_function(|_, text: String| {
+                        commands_cell
+                            .borrow_mut()
+                            .push(AppCommand::ShowTooltip { text });
+                        Ok(())
+                    })
+                    .unwrap();
+                let _ = cranky_table.set("show_tooltip", show_tooltip);
+
+                let hide_tooltip = scope
+                    .create_function(|_, ()| {
+                        commands_cell
+                            .borrow_mut()
+                            .push(AppCommand::HideTooltip);
+                        Ok(())
+                    })
+                    .unwrap();
+                let _ = cranky_table.set("hide_tooltip", hide_tooltip);
+
                 let _ = globals.set("cranky", cranky_table);
 
                 let _ = on_event_fn.call::<()>(event_table).unwrap_or_else(|e| {

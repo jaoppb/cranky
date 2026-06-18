@@ -37,6 +37,8 @@ pub trait DisplayServerPort: Send + Sync {
     fn dispatch_pending(&mut self) -> Result<(), DisplayServerError>;
     fn flush(&mut self) -> Result<(), DisplayServerError>;
     fn render_all(&mut self, app: &mut crate::domain::app::CrankyApp) -> Result<(), DisplayServerError>;
+    fn show_tooltip(&mut self, text: &str) -> Result<(), DisplayServerError>;
+    fn hide_tooltip(&mut self) -> Result<(), DisplayServerError>;
 }
 
 pub trait WindowManagerPort: Send + Sync {

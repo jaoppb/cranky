@@ -104,7 +104,7 @@ impl CrankyApp {
         &mut self,
         mut display: impl DisplayServerPort,
         mut dbus: impl crate::ports::DBusPort, // Left here for API compatibility but might need refactoring later
-        _sni: impl crate::ports::sni::SniPort,
+        sni: impl crate::ports::sni::SniPort,
     ) -> Result<(), AppError> {
         let mut config_rx = self.hub.config_rx();
 
@@ -142,10 +142,18 @@ impl CrankyApp {
                             AppCommand::DBusCall(_, _, _, _, _, _) => {}
                             AppCommand::CreateBar(_, _) => {}
                             AppCommand::DestroyBar(_) => {}
-                            AppCommand::AppletAction { .. } => {}
+                            AppCommand::AppletAction { id, action } => {
+                                let _ = sni.trigger_action(&id, &action).await;
+                            }
                             AppCommand::ModuleSizeChanged(monitor_id, module_id, size) => {
                                 self.handle_size_changed(monitor_id, module_id, size);
                                 needs_render = true;
+                            }
+                            AppCommand::ShowTooltip { text } => {
+                                let _ = display.show_tooltip(&text);
+                            }
+                            AppCommand::HideTooltip => {
+                                let _ = display.hide_tooltip();
                             }
                         }
 
