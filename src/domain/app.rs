@@ -60,10 +60,10 @@ impl AppReadModel {
         &self, 
         monitor: &MonitorId, 
         bar_width: BarWidth, 
-        layout_senders: &HashMap<ModuleId, watch::Sender<HashMap<MonitorId, Rect>>>
+        layout_senders: &HashMap<ModuleId, watch::Sender<HashMap<MonitorId, Rect>>>,
+        bar_config: &crate::domain::config::BarConfig,
     ) -> Vec<ModuleLayout> {
         let mut layouts = Vec::new();
-        let bar_config = self.config.bar();
         let bar_height = bar_config.height();
         let border_size = bar_config.border().size().value();
         let padding = bar_config.padding();
@@ -202,8 +202,11 @@ impl CrankyApp {
         sni: impl crate::ports::sni::SniPort,
     ) -> Result<(), AppError> {
         let mut config_rx = self.hub.config_rx();
+        let mut hyprland_rx = self.hub.hyprland_rx();
 
         self.registry.register_dbus_subscriptions(&mut dbus).await;
+
+        let mut current_focused_monitor = String::new();
 
         loop {
             let _ = display.flush();
@@ -282,6 +285,18 @@ impl CrankyApp {
                             self.surface_manager.clone(),
                             self.command_tx_clone.clone()
                         );
+                    }
+                }
+                Ok(_) = hyprland_rx.changed() => {
+                    let state = hyprland_rx.borrow().clone();
+                    let new_focused = state.monitors().iter()
+                        .find(|m| m.focused())
+                        .map(|m| m.name().as_str().to_string())
+                        .unwrap_or_default();
+                        
+                    if new_focused != current_focused_monitor {
+                        current_focused_monitor = new_focused;
+                        let _ = display.render_all(&self.read_model, &self.layout_senders);
                     }
                 }
             }
@@ -369,5 +384,70 @@ mod tests {
 
         let result = app.run(mock_display, mock_dbus, mock_sni).await;
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_calculate_layout_unfocused() {
+        let mut unfocused = crate::domain::config::PartialBarConfig::default();
+        // Since we cannot easily set height to 20 because fields are private and default is what it is,
+        // Wait, PartialBarConfig::new takes all options! Let's just create one.
+        let unfocused = crate::domain::config::PartialBarConfig::new(
+            None, Some(20), None, None, None, None, None, None
+        );
+        
+        let mut bar_config = crate::domain::config::BarConfig::default();
+        // We need to inject the unfocused config. Since fields are private, we construct a full BarConfig:
+        let bar_config = crate::domain::config::BarConfig::new(
+            bar_config.background().clone(),
+            30,
+            bar_config.vertical_alignment().clone(),
+            bar_config.border().clone(),
+            bar_config.margin().clone(),
+            bar_config.padding().clone(),
+            bar_config.font_family().clone(),
+            bar_config.font_size().clone(),
+            Some(unfocused)
+        );
+
+        let config = Config::new(
+            bar_config.clone(),
+            crate::domain::config::ModulesConfig::default(),
+            crate::domain::config::RenderingMode::default(),
+            crate::domain::metrics::MetricsConfig::default(),
+        );
+
+        let read_model = AppReadModel {
+            config: config.clone(),
+            left_modules: vec![],
+            center_modules: vec![crate::domain::ModuleId::new(1)],
+            right_modules: vec![],
+            module_sizes: {
+                let mut m = HashMap::new();
+                let mut s = HashMap::new();
+                s.insert(crate::domain::ModuleId::new(1), crate::domain::shared::geometry::Size::new(50, 10));
+                m.insert(MonitorId::new("DP-1"), s);
+                m
+            },
+        };
+
+        let monitor = MonitorId::new("DP-1");
+        let layout_senders = HashMap::new();
+
+        // 1. Calculate with focused config
+        let layouts_focused = read_model.calculate_layout(&monitor, BarWidth::new(1920), &layout_senders, config.bar());
+        assert_eq!(layouts_focused.len(), 1);
+        let layout_focused = &layouts_focused[0];
+        
+        // height 30, available height = 30, module height = 10, y should be (30 - 10) / 2 = 10
+        assert_eq!(layout_focused.bounds().position().y(), 10);
+
+        // 2. Calculate with unfocused config
+        let unfocused_bar = config.bar().as_unfocused();
+        let layouts_unfocused = read_model.calculate_layout(&monitor, BarWidth::new(1920), &layout_senders, &unfocused_bar);
+        assert_eq!(layouts_unfocused.len(), 1);
+        let layout_unfocused = &layouts_unfocused[0];
+        
+        // height 20, available height = 20, module height = 10, y should be (20 - 10) / 2 = 5
+        assert_eq!(layout_unfocused.bounds().position().y(), 5);
     }
 }

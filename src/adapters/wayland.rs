@@ -539,7 +539,17 @@ impl WaylandAdapter {
                 continue;
             };
             
-            let bar_config = read_model.config().bar().clone();
+            let hypr_rx = self.state.hub.hyprland_rx();
+            let hyprland_state = hypr_rx.borrow();
+            let is_focused = hyprland_state.monitors().iter()
+                .find(|m| m.name().as_str() == bar.output_name)
+                .map_or(false, |m| m.focused());
+
+            let mut bar_config = read_model.config().bar().clone();
+            if !is_focused {
+                bar_config = bar_config.as_unfocused();
+            }
+
             let config_bg = bar_config.background().clone();
             let border_config = bar_config.border();
             
@@ -599,7 +609,7 @@ impl WaylandAdapter {
             // Note: We no longer iterate over layouts to render modules directly.
             // Layout is broadcasted via app.calculate_layout, and module actors render themselves 
             // asynchronously and submit their buffers to the Wayland adapter via the SurfaceManager.
-            let layouts = read_model.calculate_layout(&monitor_id, crate::domain::shared::geometry::BarWidth::new(width), layout_senders);
+            let layouts = read_model.calculate_layout(&monitor_id, crate::domain::shared::geometry::BarWidth::new(width), layout_senders, &bar_config);
 
             // However, the display server must still position the subsurfaces correctly on the screen!
             for layout in layouts {
