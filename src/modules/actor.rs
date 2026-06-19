@@ -57,7 +57,7 @@ impl ModuleActor {
                         }
                         Ok((target_id, event)) = input_rx.recv() => {
                             if target_id == ctx_id {
-                                let cmds = self.port.on_event(event);
+                                let cmds = self.port.on_pointer_event(event);
                                 for cmd in cmds {
                                     let _ = self.ctx.command_tx().try_send(cmd);
                                 }
@@ -118,7 +118,7 @@ impl ModuleActor {
             .borrow()
             .monitors()
             .iter()
-            .map(|m| MonitorId::new(m.name()))
+            .map(|m| MonitorId::new(m.name().as_str()))
             .collect();
         let layouts: std::collections::HashMap<MonitorId, Rect> =
             self.ctx.rxs_mut().0.borrow().clone();
@@ -148,7 +148,7 @@ impl ModuleActor {
                 .copied()
                 .unwrap_or(Size::new(0, 0));
             if size != old_size {
-                self.sizes.insert(monitor_id.clone(), size.clone());
+                self.sizes.insert(monitor_id.clone(), size);
                 let _ = self
                     .ctx
                     .command_tx()

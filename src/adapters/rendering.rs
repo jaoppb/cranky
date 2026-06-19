@@ -186,7 +186,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         }
     }
 
-    fn measure_text<'b>(&mut self, text: &str, font_family: Option<&'b FontFamily>, font_size: Option<FontSize>) -> (LogicalPx, LogicalPx) {
+    fn measure_text(&mut self, text: &str, font_family: Option<&FontFamily>, font_size: Option<FontSize>) -> (LogicalPx, LogicalPx) {
         let size = font_size.unwrap_or(self.default_font_size).value();
         let family = font_family.unwrap_or(&self.default_font_family).as_str();
         
@@ -209,7 +209,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         (PhysicalPx::new(physical_width).apply_inverse_scale(&self.scale), PhysicalPx::new(physical_height).apply_inverse_scale(&self.scale))
     }
 
-    fn draw_text<'b>(&mut self, text: &str, font_family: Option<&'b FontFamily>, font_size: Option<FontSize>, color: DrawingColor, position: Position) {
+    fn draw_text(&mut self, text: &str, font_family: Option<&FontFamily>, font_size: Option<FontSize>, color: DrawingColor, position: Position) {
         let size = font_size.unwrap_or(self.default_font_size).value();
         let family = font_family.unwrap_or(&self.default_font_family).as_str();
         let physical_x = LogicalPx::new(position.x() as f32).apply_scale(&self.scale).value();
@@ -230,9 +230,9 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
                     1.0,
                 );
                 
-                if let Some(image) = self.swash_cache.get_image(self.font_system, physical_glyph.cache_key) {
-                    if let SwashContent::Mask = image.content {
-                        if let Some(physical_rect) = Rect::from_xywh(
+                if let Some(image) = self.swash_cache.get_image(self.font_system, physical_glyph.cache_key)
+                    && let SwashContent::Mask = image.content
+                        && let Some(physical_rect) = Rect::from_xywh(
                             (physical_glyph.x + image.placement.left) as f32,
                             (physical_glyph.y - image.placement.top) as f32,
                             image.placement.width as f32,
@@ -282,9 +282,9 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
                                 }
                             }
 
-                            if image.placement.width > 0 && image.placement.height > 0 {
-                                if let Some(mut glyph_pixmap) = tiny_skia::Pixmap::new(image.placement.width, image.placement.height) {
-                                    if let Some(glyph_rect) = Rect::from_xywh(0.0, 0.0, image.placement.width as f32, image.placement.height as f32) {
+                            if image.placement.width > 0 && image.placement.height > 0
+                                && let Some(mut glyph_pixmap) = tiny_skia::Pixmap::new(image.placement.width, image.placement.height)
+                                    && let Some(glyph_rect) = Rect::from_xywh(0.0, 0.0, image.placement.width as f32, image.placement.height as f32) {
                                         glyph_pixmap.fill_rect(glyph_rect, &paint, Transform::identity(), None);
                                         
                                         for (pixel, &mask_alpha) in glyph_pixmap.pixels_mut().iter_mut().zip(image.data.iter()) {
@@ -308,11 +308,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
                                             None
                                         );
                                     }
-                                }
-                            }
                         }
-                    }
-                }
             }
         }
     }

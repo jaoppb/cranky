@@ -30,14 +30,8 @@ pub enum DBusValue {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct DBusState {
     pub properties: HashMap<String, DBusValue>,
 }
 
-impl Default for DBusState {
-    fn default() -> Self {
-        Self {
-            properties: HashMap::new(),
-        }
-    }
-}

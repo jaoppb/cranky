@@ -14,7 +14,7 @@ struct HyprWorkspaceDto {
 
 impl HyprWorkspaceDto {
     fn to_domain(self) -> Workspace {
-        Workspace::new(self.id, self.monitor)
+        Workspace::new(crate::domain::workspace::WorkspaceId::new(self.id), crate::domain::workspace::MonitorName::new(self.monitor))
     }
 }
 
@@ -33,7 +33,7 @@ struct HyprActiveWorkspaceDto {
 
 impl HyprMonitorDto {
     fn to_domain(self) -> Monitor {
-        Monitor::new(self.name, self.active_workspace.id, self.focused)
+        Monitor::new(crate::domain::workspace::MonitorName::new(self.name), crate::domain::workspace::WorkspaceId::new(self.active_workspace.id), self.focused)
     }
 }
 

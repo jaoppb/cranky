@@ -3,7 +3,7 @@ use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::{ModuleId, MonitorId, shared::geometry::{Size, Rect}};
 use crate::ports::surface::DynSurfaceManager;
 use crate::domain::commands::AppCommand;
-use crate::domain::events::InputEvent;
+use crate::domain::events::PointerEvent;
 use crate::ports::canvas::Canvas;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ pub struct ModuleContext {
     command_tx: mpsc::Sender<AppCommand>,
     // The registry/app will send layout bounds for each monitor
     layout_rx: watch::Receiver<std::collections::HashMap<MonitorId, Rect>>,
-    input_rx: tokio::sync::broadcast::Receiver<(ModuleId, InputEvent)>,
+    pointer_rx: tokio::sync::broadcast::Receiver<(ModuleId, PointerEvent)>,
 }
 
 impl ModuleContext {
@@ -26,15 +26,15 @@ impl ModuleContext {
         surface_manager: DynSurfaceManager,
         command_tx: mpsc::Sender<AppCommand>,
         layout_rx: watch::Receiver<std::collections::HashMap<MonitorId, Rect>>,
-        input_rx: tokio::sync::broadcast::Receiver<(ModuleId, InputEvent)>,
     ) -> Self {
+        let pointer_rx = hub.pointer_rx();
         Self {
             id,
             hub,
             surface_manager,
             command_tx,
             layout_rx,
-            input_rx,
+            pointer_rx,
         }
     }
 
@@ -56,9 +56,9 @@ impl ModuleContext {
 
     pub fn rxs_mut(&mut self) -> (
         &mut watch::Receiver<std::collections::HashMap<MonitorId, Rect>>,
-        &mut tokio::sync::broadcast::Receiver<(ModuleId, InputEvent)>
+        &mut tokio::sync::broadcast::Receiver<(ModuleId, PointerEvent)>
     ) {
-        (&mut self.layout_rx, &mut self.input_rx)
+        (&mut self.layout_rx, &mut self.pointer_rx)
     }
 }
 
@@ -69,7 +69,7 @@ pub trait AnyModulePort: Send + Sync {
     fn refresh(&mut self, hub: &SignalHub);
     fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId);
     fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
-    fn on_event(&mut self, event: InputEvent) -> Vec<AppCommand>;
+    fn on_pointer_event(&mut self, event: PointerEvent) -> Vec<AppCommand>;
 }
 
 #[async_trait]
@@ -80,8 +80,7 @@ pub trait ModuleRegistryPort: Send + Sync {
         &mut self,
         hub: Arc<SignalHub>,
         surface_manager: DynSurfaceManager,
-        command_tx: mpsc::Sender<AppCommand>,
-        input_tx: tokio::sync::broadcast::Sender<(ModuleId, InputEvent)>
+        command_tx: mpsc::Sender<AppCommand>
     ) -> std::collections::HashMap<ModuleId, watch::Sender<std::collections::HashMap<MonitorId, Rect>>>;
     
     fn left_modules(&self) -> Vec<ModuleId>;

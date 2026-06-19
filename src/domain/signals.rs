@@ -43,6 +43,7 @@ pub struct SignalHub {
     dbus: (watch::Sender<DBusState>, watch::Receiver<DBusState>),
     applets: (watch::Sender<AppletsState>, watch::Receiver<AppletsState>),
     metrics: (watch::Sender<crate::domain::metrics::MetricsState>, watch::Receiver<crate::domain::metrics::MetricsState>),
+    pointer: (tokio::sync::broadcast::Sender<(crate::domain::ModuleId, crate::domain::events::PointerEvent)>, tokio::sync::broadcast::Receiver<(crate::domain::ModuleId, crate::domain::events::PointerEvent)>),
 }
 
 impl SignalHub {
@@ -53,6 +54,7 @@ impl SignalHub {
         let dbus = watch::channel(DBusState::default());
         let applets = watch::channel(AppletsState::default());
         let metrics = watch::channel(crate::domain::metrics::MetricsState::default());
+        let pointer = tokio::sync::broadcast::channel(32);
 
         Self {
             config,
@@ -61,6 +63,7 @@ impl SignalHub {
             dbus,
             applets,
             metrics,
+            pointer,
         }
     }
 
@@ -110,6 +113,14 @@ impl SignalHub {
 
     pub fn metrics_rx(&self) -> watch::Receiver<crate::domain::metrics::MetricsState> {
         self.metrics.1.clone()
+    }
+
+    pub fn pointer_tx(&self) -> tokio::sync::broadcast::Sender<(crate::domain::ModuleId, crate::domain::events::PointerEvent)> {
+        self.pointer.0.clone()
+    }
+
+    pub fn pointer_rx(&self) -> tokio::sync::broadcast::Receiver<(crate::domain::ModuleId, crate::domain::events::PointerEvent)> {
+        self.pointer.0.subscribe()
     }
 }
 

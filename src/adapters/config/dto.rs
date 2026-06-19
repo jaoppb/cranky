@@ -53,7 +53,7 @@ impl BarConfigDto {
     ) -> domain::BarConfig {
         let font_family = self.font_family
             .filter(|f| validator.is_valid_family(f))
-            .unwrap_or_else(|| "".to_string());
+            .unwrap_or_default();
             
         let font_size = self.font_size.unwrap_or(14.0);
 

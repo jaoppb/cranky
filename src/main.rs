@@ -28,8 +28,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::Instrument;
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
     let file_appender = tracing_appender::rolling::daily(
         std::env::var("XDG_CACHE_HOME").unwrap_or_else(|_| {
             let mut path = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
@@ -38,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }) + "/cranky",
         "cranky.log",
     );
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     let env_filter = tracing_subscriber::EnvFilter::from_default_env()
         .add_directive(
@@ -62,57 +61,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE))
         .init();
 
-    let main_span = info_span!("cranky_main");
-    let _main_enter = main_span.enter();
+    guard
+}
 
-    info!("Starting Cranky bar (Hexagonal + Reactive)...");
-
-    // 1. Initialize Infrastructure Adapters
-    let font_validator = CosmicFontValidatorAdapter::new();
-    let config_adapter = ConfigAdapter::new(font_validator);
-    let hyprland_adapter = HyprlandAdapter::new();
-    
-    // 2. Load Initial Configuration
-    let initial_config = config_adapter.load_initial()?;
-    
-    // 3. Initialize Reactive Signal Hub
-    let hub = SignalHub::new(initial_config.clone());
-    let hub = Arc::new(hub);
-
-    // 4. Initialize Core Orchestrator & Display server port
-    let (command_tx, command_rx) = mpsc::channel::<AppCommand>(100);
-    
-    // Initialize display server port first to get surface_manager
-    let (wayland_adapter, surface_manager) = WaylandAdapter::new(hub.clone(), command_tx.clone())?;
-    let surface_manager: crate::ports::surface::DynSurfaceManager = std::sync::Arc::new(surface_manager);
-
-    let registry = Box::new(crate::modules::ModuleRegistry::new());
-    let mut app = CrankyApp::new(
-        hub.clone(),
-        initial_config.clone(),
-        command_rx,
-        command_tx.clone(),
-        surface_manager,
-        registry
-    )?;
-
-    // 5. Initialize DBus port
-    let mut zbus_adapter = ZbusAdapter::new(&hub);
+async fn init_secondary_adapters(
+    hub: &Arc<SignalHub>,
+    metrics_config: &crate::domain::metrics::MetricsConfig,
+) -> (ZbusAdapter, SniAdapter) {
+    let mut zbus_adapter = ZbusAdapter::new(hub);
     if let Err(e) = zbus_adapter.connect().await {
         error!("Failed to connect to DBus: {}", e);
     }
 
-    // 5.5 Initialize SNI port
     let mut sni_adapter = SniAdapter::new(hub.clone());
     if let Err(e) = sni_adapter.start().await {
         error!("Failed to start SNI Watcher: {:?}", e);
     }
 
-    // 5.6 Initialize Metrics Adapter
-    let metrics_adapter = SysinfoAdapter::new(initial_config.metrics().clone(), hub.clone());
+    let metrics_adapter = SysinfoAdapter::new(metrics_config.clone(), hub.clone());
     metrics_adapter.start().await;
 
-    // 6. Spawn Background Adapters
+    (zbus_adapter, sni_adapter)
+}
+
+fn spawn_background_tasks(hub: Arc<SignalHub>, hyprland_adapter: HyprlandAdapter) {
     let hub_for_hypr = hub.clone();
     tokio::spawn(async move {
         hyprland_adapter.run(hub_for_hypr).await;
@@ -127,11 +99,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = hub_for_time.time_tx().send(chrono::Local::now());
         }
     }.instrument(info_span!("time_adapter")));
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _guard = init_tracing();
+
+    let main_span = info_span!("cranky_main");
+    let _main_enter = main_span.enter();
+
+    info!("Starting Cranky bar (Hexagonal + Reactive)...");
+
+    // 1. Initial configuration and Core Hub
+    let font_validator = CosmicFontValidatorAdapter::new();
+    let config_adapter = ConfigAdapter::new(font_validator);
+    let initial_config = config_adapter.load_initial()?;
+    
+    let hub = Arc::new(SignalHub::new(initial_config.clone()));
+
+    // 2. Initialize Wayland and Core App
+    let (command_tx, command_rx) = mpsc::channel::<AppCommand>(100);
+    
+    let (wayland_adapter, surface_manager) = WaylandAdapter::new(hub.clone(), command_tx.clone())?;
+    let surface_manager: crate::ports::surface::DynSurfaceManager = std::sync::Arc::new(surface_manager);
+
+    let registry = Box::new(crate::modules::ModuleRegistry::new());
+    let mut app = CrankyApp::new(
+        hub.clone(),
+        initial_config.clone(),
+        command_rx,
+        command_tx.clone(),
+        surface_manager,
+        registry
+    )?;
+
+    // 3. Initialize secondary adapters
+    let (zbus_adapter, sni_adapter) = init_secondary_adapters(&hub, initial_config.metrics()).await;
+
+    // 4. Spawn background worker tasks
+    let hyprland_adapter = HyprlandAdapter::new();
+    spawn_background_tasks(hub.clone(), hyprland_adapter);
 
     let hub_for_config = hub.clone();
     let _config_watcher = config_adapter.watch(hub_for_config)?;
 
-    // 7. Start the Core App Orchestrator
+    // 5. Start the Core App Orchestrator
     info!("Cranky started successfully.");
     app.run(wayland_adapter, zbus_adapter, sni_adapter).await?;
 

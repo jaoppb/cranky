@@ -157,8 +157,8 @@ impl Watcher {
             let mut icon_image = None;
 
             // 1. Try to load from IconPixmap first, as many apps (like Slack/Discord) only supply this
-            if let Some(pixmaps) = &icon_pixmap {
-                if !pixmaps.is_empty() {
+            if let Some(pixmaps) = &icon_pixmap
+                && !pixmaps.is_empty() {
                     let target_size = (24.0 * max_scale) as i32;
                     let mut best_diff = i32::MAX;
                     let mut best_pixmap: Option<&(i32, i32, Vec<u8>)> = None;
@@ -191,11 +191,10 @@ impl Watcher {
                         }
                     }
                 }
-            }
 
             // 2. Fall back to IconName if not loaded or if IconPixmap was empty
-            if !icon_loaded {
-                if let Some(name) = &icon_name_clone {
+            if !icon_loaded
+                && let Some(name) = &icon_name_clone {
                     let mut found_path = None;
                     
                     if let Some(theme_path) = &icon_theme_path {
@@ -215,13 +214,11 @@ impl Watcher {
                         found_path = lookup(name).find();
                     }
 
-                    if let Some(icon_path) = found_path {
-                        if let Some((w, h, bytes)) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale) {
+                    if let Some(icon_path) = found_path
+                        && let Some((w, h, bytes)) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale) {
                             icon_image = Some(crate::domain::applets::IconImage::new(bytes, crate::domain::shared::geometry::Size::new(w, h)));
                         }
-                    }
                 }
-            }
             
             (icon_loaded, icon_image)
         }).await.unwrap_or((false, None));

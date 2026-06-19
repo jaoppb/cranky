@@ -97,13 +97,12 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
             }
         }).map_err(|e| ConfigAdapterError::Internal { message: format!("Failed to create watcher: {}", e) })?;
 
-        if let Some(parent) = self.config_path.parent() {
-            if parent.exists() {
+        if let Some(parent) = self.config_path.parent()
+            && parent.exists() {
                 watcher.watch(parent, RecursiveMode::NonRecursive).map_err(|e| {
                     ConfigAdapterError::Internal { message: format!("Failed to start watching config dir: {}", e) }
                 })?;
             }
-        }
 
         Ok(Box::new(watcher))
     }

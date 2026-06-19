@@ -1,50 +1,66 @@
 use serde::Serialize;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Hash)]
+pub struct WorkspaceId(i32);
+
+impl WorkspaceId {
+    pub fn new(id: i32) -> Self { Self(id) }
+    pub fn value(&self) -> i32 { self.0 }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Hash)]
+pub struct MonitorName(String);
+
+impl MonitorName {
+    pub fn new(name: impl Into<String>) -> Self { Self(name.into()) }
+    pub fn as_str(&self) -> &str { &self.0 }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Workspace {
-    id: i32,
-    monitor: String,
+    id: WorkspaceId,
+    monitor: MonitorName,
 }
 
 impl Workspace {
-    pub fn new(id: i32, monitor: impl Into<String>) -> Self {
+    pub fn new(id: WorkspaceId, monitor: MonitorName) -> Self {
         Self {
             id,
-            monitor: monitor.into(),
+            monitor,
         }
     }
 
-    pub fn id(&self) -> i32 {
-        self.id
+    pub fn id(&self) -> &WorkspaceId {
+        &self.id
     }
 
-    pub fn monitor(&self) -> &str {
+    pub fn monitor(&self) -> &MonitorName {
         &self.monitor
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Monitor {
-    name: String,
-    active_workspace_id: i32,
+    name: MonitorName,
+    active_workspace_id: WorkspaceId,
     focused: bool,
 }
 
 impl Monitor {
-    pub fn new(name: impl Into<String>, active_workspace_id: i32, focused: bool) -> Self {
+    pub fn new(name: MonitorName, active_workspace_id: WorkspaceId, focused: bool) -> Self {
         Self {
-            name: name.into(),
+            name,
             active_workspace_id,
             focused,
         }
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &MonitorName {
         &self.name
     }
 
-    pub fn active_workspace_id(&self) -> i32 {
-        self.active_workspace_id
+    pub fn active_workspace_id(&self) -> &WorkspaceId {
+        &self.active_workspace_id
     }
 
     pub fn focused(&self) -> bool {

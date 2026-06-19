@@ -35,12 +35,12 @@ impl SysinfoAdapter {
                 let global_cpu = sys.global_cpu_usage();
                 
                 let per_core_raw: Vec<f32> = sys.cpus().iter().map(|c| c.cpu_usage()).collect();
-                let (cpu_usage, per_core) = MetricsState::normalize_cpu_usage(&config.cpu, global_cpu, nproc, per_core_raw);
+                let (cpu_usage, per_core) = MetricsState::normalize_cpu_usage(config.cpu(), global_cpu, nproc, per_core_raw);
 
                 // Network
                 let mut network_tx: u64 = 0;
                 let mut network_rx: u64 = 0;
-                if config.network.is_some() {
+                if config.network().is_some() {
                     for (_interface_name, data) in &networks {
                         network_tx += data.transmitted();
                         network_rx += data.received();
@@ -49,21 +49,21 @@ impl SysinfoAdapter {
 
                 // Disks
                 let mut disk_metrics = Vec::new();
-                if config.disk.is_some() {
+                if config.disk().is_some() {
                     for disk in &disks {
-                        disk_metrics.push(DiskMetric {
-                            name: disk.name().to_string_lossy().to_string(),
-                            mount_point: disk.mount_point().to_string_lossy().to_string(),
-                            total_bytes: disk.total_space(),
-                            available_bytes: disk.available_space(),
-                            used_bytes: disk.total_space().saturating_sub(disk.available_space()),
-                        });
+                        disk_metrics.push(DiskMetric::new(
+                            crate::domain::metrics::DiskName::new(disk.name().to_string_lossy()),
+                            crate::domain::metrics::MountPoint::new(disk.mount_point().to_string_lossy()),
+                            crate::domain::metrics::MemoryBytes::new(disk.total_space()),
+                            crate::domain::metrics::MemoryBytes::new(disk.available_space()),
+                            crate::domain::metrics::MemoryBytes::new(disk.total_space().saturating_sub(disk.available_space())),
+                        ));
                     }
                 }
 
                 // Temperature
                 let mut temp = 0.0;
-                if config.temperature.is_some() {
+                if config.temperature().is_some() {
                     let mut count = 0;
                     for component in &components {
                         if let Some(t) = component.temperature() {
@@ -75,28 +75,28 @@ impl SysinfoAdapter {
                         temp /= count as f32;
                     }
                     
-                    if config.temperature == Some(crate::domain::metrics::TemperatureMode::Fahrenheit) {
+                    if config.temperature() == Some(&crate::domain::metrics::TemperatureMode::Fahrenheit) {
                         temp = (temp * 9.0 / 5.0) + 32.0;
                     }
                 }
 
-                let state = MetricsState {
+                let state = MetricsState::new(
                     cpu_usage,
                     per_core,
-                    memory_used: sys.used_memory(),
-                    memory_total: sys.total_memory(),
-                    swap_used: sys.used_swap(),
-                    swap_total: sys.total_swap(),
-                    disks: disk_metrics,
-                    network_tx,
-                    network_rx,
-                    temperature: temp,
-                    config: config.clone(),
-                };
+                    crate::domain::metrics::MemoryBytes::new(sys.used_memory()),
+                    crate::domain::metrics::MemoryBytes::new(sys.total_memory()),
+                    crate::domain::metrics::MemoryBytes::new(sys.used_swap()),
+                    crate::domain::metrics::MemoryBytes::new(sys.total_swap()),
+                    disk_metrics,
+                    crate::domain::metrics::NetworkSpeed::new(network_tx),
+                    crate::domain::metrics::NetworkSpeed::new(network_rx),
+                    crate::domain::metrics::Temperature::new(temp),
+                    config.clone(),
+                );
 
                 let _ = hub.metrics_tx().send(state);
                 
-                std::thread::sleep(std::time::Duration::from_millis(config.update_interval_ms));
+                std::thread::sleep(std::time::Duration::from_millis(config.update_interval_ms().value()));
             }
         });
     }

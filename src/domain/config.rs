@@ -80,6 +80,7 @@ impl PaddingOffset {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub struct Config {
     bar: BarConfig,
     modules: ModulesConfig,
@@ -114,16 +115,6 @@ impl Config {
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            bar: BarConfig::default(),
-            modules: ModulesConfig::default(),
-            rendering: RenderingMode::default(),
-            metrics: crate::domain::metrics::MetricsConfig::default(),
-        }
-    }
-}
 
 impl Default for RenderingMode {
     fn default() -> Self {

@@ -72,14 +72,14 @@ impl ZbusAdapter {
         
         let path = match header.path() {
             Some(p) => {
-                let p: &zbus::zvariant::ObjectPath<'_> = &*p;
+                let p: &zbus::zvariant::ObjectPath<'_> = p;
                 p.as_str().to_string()
             },
             None => String::new(),
         };
         let member = match header.member() {
             Some(m) => {
-                let m: &zbus::names::MemberName<'_> = &*m;
+                let m: &zbus::names::MemberName<'_> = m;
                 m.as_str().to_string()
             },
             None => String::new(),
@@ -171,14 +171,14 @@ impl DBusPort for ZbusAdapter {
                 
                 let path = match header.path() {
                     Some(p) => {
-                        let p: &zbus::zvariant::ObjectPath<'_> = &*p;
+                        let p: &zbus::zvariant::ObjectPath<'_> = p;
                         p.as_str().to_string()
                     },
                     None => String::new(),
                 };
                 let member = match header.member() {
                     Some(m) => {
-                        let m: &zbus::names::MemberName<'_> = &*m;
+                        let m: &zbus::names::MemberName<'_> = m;
                         m.as_str().to_string()
                     },
                     None => String::new(),

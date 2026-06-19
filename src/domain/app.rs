@@ -55,7 +55,6 @@ pub struct CrankyApp {
     surface_manager: DynSurfaceManager,
     command_tx_clone: mpsc::Sender<AppCommand>,
     registry: Box<dyn crate::ports::registry::ModuleRegistryPort>,
-    input_tx: tokio::sync::broadcast::Sender<(ModuleId, crate::domain::events::InputEvent)>,
 }
 
 impl CrankyApp {
@@ -67,14 +66,12 @@ impl CrankyApp {
         surface_manager: DynSurfaceManager,
         mut registry: Box<R>,
     ) -> Result<Self, AppError> {
-        registry.load(&config).map_err(|e| AppError::Module(e))?;
+        registry.load(&config).map_err(AppError::Module)?;
         
         let left_modules = registry.left_modules();
         let center_modules = registry.center_modules();
         let right_modules = registry.right_modules();
-
-        let (input_tx, _) = tokio::sync::broadcast::channel(32);
-        let layout_senders = registry.spawn_all(hub.clone(), surface_manager.clone(), command_tx.clone(), input_tx.clone());
+        let layout_senders = registry.spawn_all(hub.clone(), surface_manager.clone(), command_tx.clone());
 
         Ok(Self {
             hub,
@@ -88,7 +85,6 @@ impl CrankyApp {
             surface_manager: surface_manager.clone(),
             command_tx_clone: command_tx,
             registry,
-            input_tx,
         })
     }
 
@@ -126,9 +122,6 @@ impl CrankyApp {
                         match command {
                             AppCommand::RequestRender(_output_id) => {
                                 needs_render = true;
-                            }
-                            AppCommand::Input(module_id, event) => {
-                                let _ = self.input_tx.send((module_id, event));
                             }
                             AppCommand::Log(level, msg) => {
                                 match level {
@@ -188,8 +181,7 @@ impl CrankyApp {
                         self.layout_senders = self.registry.spawn_all(
                             self.hub.clone(),
                             self.surface_manager.clone(),
-                            self.command_tx_clone.clone(),
-                            self.input_tx.clone()
+                            self.command_tx_clone.clone()
                         );
                     }
                     
@@ -279,7 +271,7 @@ impl CrankyApp {
             if let Some(sender) = self.layout_senders.get(&layout.id) {
                 all_rects = sender.borrow().clone();
             }
-            all_rects.insert(monitor.clone(), layout.bounds.clone());
+            all_rects.insert(monitor.clone(), layout.bounds);
             updates_by_module.insert(layout.id, all_rects);
         }
         
@@ -317,7 +309,7 @@ mod tests {
         mock_registry.expect_left_modules().returning(|| vec![]);
         mock_registry.expect_center_modules().returning(|| vec![]);
         mock_registry.expect_right_modules().returning(|| vec![]);
-        mock_registry.expect_spawn_all().returning(|_, _, _, _| HashMap::new());
+        mock_registry.expect_spawn_all().returning(|_, _, _| HashMap::new());
         
         let app_result = CrankyApp::new(
             hub,
@@ -345,7 +337,7 @@ mod tests {
         mock_registry.expect_left_modules().returning(|| vec![]);
         mock_registry.expect_center_modules().returning(|| vec![]);
         mock_registry.expect_right_modules().returning(|| vec![]);
-        mock_registry.expect_spawn_all().returning(|_, _, _, _| HashMap::new());
+        mock_registry.expect_spawn_all().returning(|_, _, _| HashMap::new());
         mock_registry.expect_register_dbus_subscriptions().returning(|_| Box::pin(std::future::ready(())));
         
         let mut app = CrankyApp::new(

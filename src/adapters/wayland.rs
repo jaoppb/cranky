@@ -33,8 +33,8 @@ use wayland_protocols_wlr::layer_shell::v1::client::{
 };
 use wayland_protocols::xdg::shell::client::{
     xdg_wm_base::XdgWmBase,
-    xdg_surface::{self, XdgSurface},
-    xdg_popup::{self, XdgPopup},
+    xdg_surface::XdgSurface,
+    xdg_popup::XdgPopup,
     xdg_positioner::XdgPositioner,
 };
 use cosmic_text::{FontSystem, SwashCache};
@@ -268,11 +268,10 @@ impl DisplayServerPort for WaylandAdapter {
     }
 
     fn show_tooltip(&mut self, text: &str) -> Result<(), DisplayServerError> {
-        if let Some(tooltip) = &self.state.tooltip {
-            if tooltip.text == text {
+        if let Some(tooltip) = &self.state.tooltip
+            && tooltip.text == text {
                 return Ok(());
             }
-        }
 
         let _ = self.hide_tooltip();
         let state = &mut self.state;
@@ -282,7 +281,7 @@ impl DisplayServerPort for WaylandAdapter {
         };
         
         let Some(compositor) = state.compositor.as_ref() else { return Ok(()); };
-        let Some(layer_shell) = state.layer_shell.as_ref() else { return Ok(()); };
+        let Some(_layer_shell) = state.layer_shell.as_ref() else { return Ok(()); };
         let Some(shm) = state.shm.as_ref() else { return Ok(()); };
         
         let Some(xdg_wm_base) = state.xdg_wm_base.as_ref() else { return Ok(()); };
@@ -301,8 +300,8 @@ impl DisplayServerPort for WaylandAdapter {
                 bar_scale = bar.scale;
                 output_name = bar.output_name.clone();
                 bar_height = bar.height;
-                bar_margin_left = bar.config_margin.left().value() as i32;
-                bar_margin_top = bar.config_margin.top().value() as i32;
+                bar_margin_left = bar.config_margin.left().value();
+                bar_margin_top = bar.config_margin.top().value();
                 bar_layer_surface = Some(bar.layer_surface.clone());
                 break;
             }
@@ -310,8 +309,8 @@ impl DisplayServerPort for WaylandAdapter {
                 bar_scale = bar.scale;
                 output_name = bar.output_name.clone();
                 bar_height = bar.height;
-                bar_margin_left = bar.config_margin.left().value() as i32;
-                bar_margin_top = bar.config_margin.top().value() as i32;
+                bar_margin_left = bar.config_margin.left().value();
+                bar_margin_top = bar.config_margin.top().value();
                 bar_layer_surface = Some(bar.layer_surface.clone());
                 // pointer_pos is relative to the module, add module offset
                 pointer_x += ms.x as f64;
@@ -328,14 +327,14 @@ impl DisplayServerPort for WaylandAdapter {
             return Ok(());
         };
 
-        let output = state.outputs.iter().find(|o| o.name == output_name).map(|o| &o.output);
+        let _output = state.outputs.iter().find(|o| o.name == output_name).map(|o| &o.output);
 
         let font_family = crate::domain::config::FontFamily::new("Inter".to_string());
         let font_size = crate::domain::config::FontSize::new(12.0);
         let scale = Scale::new(bar_scale as f32);
 
         let mut dummy_data = vec![0; 4];
-        let mut dummy_pixmap = tiny_skia::PixmapMut::from_bytes(&mut dummy_data, 1, 1).unwrap();
+        let dummy_pixmap = tiny_skia::PixmapMut::from_bytes(&mut dummy_data, 1, 1).unwrap();
         
         let (text_w, text_h) = {
             let mut canvas = TinySkiaCosmicCanvas::new(
@@ -344,10 +343,10 @@ impl DisplayServerPort for WaylandAdapter {
                 &mut state.swash_cache,
                 scale,
                 font_family.clone(),
-                font_size.clone(),
+                font_size,
             );
             use crate::ports::canvas::Canvas;
-            canvas.measure_text(text, Some(&font_family), Some(font_size.clone()))
+            canvas.measure_text(text, Some(&font_family), Some(font_size))
         };
 
         let padding_x = 8.0;
@@ -365,14 +364,14 @@ impl DisplayServerPort for WaylandAdapter {
             
         {
             let data = shm_buffer.mmap_mut();
-            if let Some(mut pixmap) = tiny_skia::PixmapMut::from_bytes(data, width, height) {
+            if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(data, width, height) {
                 let mut actual_canvas = TinySkiaCosmicCanvas::new(
                     pixmap,
                     &mut state.font_system,
                     &mut state.swash_cache,
                     scale,
                     font_family.clone(),
-                    font_size.clone(),
+                    font_size,
                 );
                 use crate::ports::canvas::Canvas;
                 let bg_color = crate::domain::shared::color::DrawingColor::parse("#1e1e2e").unwrap();
@@ -455,7 +454,7 @@ impl WaylandAdapter {
                 surface,
                 subsurface,
                 shm_buffer,
-                size: cmd.buffer.size().clone(),
+                size: *cmd.buffer.size(),
                 x: 0,
                 y: 0,
             }
@@ -463,7 +462,7 @@ impl WaylandAdapter {
 
         if ms.size != *cmd.buffer.size() {
             ms.shm_buffer = ShmBuffer::new(shm, width, height, &qh).expect("Failed to recreate SHM buffer for resize");
-            ms.size = cmd.buffer.size().clone();
+            ms.size = *cmd.buffer.size();
         }
 
         let data = ms.shm_buffer.mmap_mut();
@@ -604,13 +603,13 @@ impl WaylandAdapter {
                 let ms = match bar.module_surfaces.entry(module_id) {
                     std::collections::hash_map::Entry::Occupied(o) => o.into_mut(),
                     std::collections::hash_map::Entry::Vacant(v) => {
-                        let surface = compositor.create_surface(&qh, ());
-                        let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, &qh, ());
+                        let surface = compositor.create_surface(qh, ());
+                        let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, qh, ());
                         subsurface.set_desync();
                         
                         let width = bounds.width().max(1);
                         let height = bounds.height().max(1);
-                        let shm_buffer = match crate::core::shm::ShmBuffer::new(shm, width, height, &qh) {
+                        let shm_buffer = match crate::core::shm::ShmBuffer::new(shm, width, height, qh) {
                             Ok(b) => b,
                             Err(e) => {
                                 tracing::error!("Failed to create shm buffer: {}", e);
@@ -689,7 +688,7 @@ impl WaylandState {
         surface.set_buffer_scale(output_scale);
         surface.commit();
 
-        let shm_buffer = ShmBuffer::new(shm, 1920 * output_scale as u32, bar_height * output_scale as u32, qh).map_err(|e| DisplayServerError::Io(e))?;
+        let shm_buffer = ShmBuffer::new(shm, 1920 * output_scale as u32, bar_height * output_scale as u32, qh).map_err(DisplayServerError::Io)?;
 
         self.bars.push(WaylandBar {
             output_name,
@@ -716,23 +715,20 @@ impl WaylandState {
 #[cfg(not(test))]
 impl Dispatch<WlRegistry, ()> for WaylandState {
     fn event(state: &mut Self, proxy: &WlRegistry, event: wl_registry::Event, _data: &(), _conn: &Connection, qh: &QueueHandle<Self>) {
-        match event {
-            wl_registry::Event::Global { name, interface, version } => {
-                match interface.as_str() {
-                    "wl_compositor" => state.compositor = Some(proxy.bind(name, version, qh, ())),
-                    "wl_shm" => state.shm = Some(proxy.bind(name, version, qh, ())),
-                    "zwlr_layer_shell_v1" => state.layer_shell = Some(proxy.bind(name, version, qh, ())),
-                    "xdg_wm_base" => state.xdg_wm_base = Some(proxy.bind(name, 1, qh, ())),
-                    "wl_subcompositor" => state.subcompositor = Some(proxy.bind(name, version, qh, ())),
-                    "wl_output" => {
-                        let output: WlOutput = proxy.bind(name, version, qh, ());
-                        state.outputs.push(WaylandOutputInfo { output, id: name, name: String::new(), scale: 1 });
-                    }
-                    "wl_seat" => state.seat = Some(proxy.bind(name, version, qh, ())),
-                    _ => {}
+        if let wl_registry::Event::Global { name, interface, version } = event {
+            match interface.as_str() {
+                "wl_compositor" => state.compositor = Some(proxy.bind(name, version, qh, ())),
+                "wl_shm" => state.shm = Some(proxy.bind(name, version, qh, ())),
+                "zwlr_layer_shell_v1" => state.layer_shell = Some(proxy.bind(name, version, qh, ())),
+                "xdg_wm_base" => state.xdg_wm_base = Some(proxy.bind(name, 1, qh, ())),
+                "wl_subcompositor" => state.subcompositor = Some(proxy.bind(name, version, qh, ())),
+                "wl_output" => {
+                    let output: WlOutput = proxy.bind(name, version, qh, ());
+                    state.outputs.push(WaylandOutputInfo { output, id: name, name: String::new(), scale: 1 });
                 }
+                "wl_seat" => state.seat = Some(proxy.bind(name, version, qh, ())),
+                _ => {}
             }
-            _ => {}
         }
     }
 }
@@ -747,7 +743,7 @@ impl Dispatch<ZwlrLayerShellV1, ()> for WaylandState { fn event(_: &mut Self, _:
 impl Dispatch<WlSubcompositor, ()> for WaylandState { fn event(_: &mut Self, _: &WlSubcompositor, _: wayland_client::protocol::wl_subcompositor::Event, _: &(), _: &Connection, _: &QueueHandle<Self>) {} }
 #[cfg(not(test))]
 impl Dispatch<WlOutput, ()> for WaylandState { 
-    fn event(state: &mut Self, proxy: &WlOutput, event: wl_output::Event, _data: &(), _conn: &Connection, qh: &QueueHandle<Self>) {
+    fn event(state: &mut Self, proxy: &WlOutput, event: wl_output::Event, _data: &(), _conn: &Connection, _qh: &QueueHandle<Self>) {
         if let Some(info) = state.outputs.iter_mut().find(|i| &i.output == proxy) {
             match event {
                 wl_output::Event::Name { name } => info.name = name,
@@ -771,69 +767,62 @@ impl Dispatch<WlSeat, ()> for WaylandState {
 #[cfg(not(test))]
 impl Dispatch<WlPointer, ()> for WaylandState {
     fn event(state: &mut Self, _proxy: &WlPointer, event: wl_pointer::Event, _data: &(), _conn: &Connection, _qh: &QueueHandle<Self>) {
-        use crate::domain::events::InputEvent;
-        use crate::domain::commands::AppCommand;
+        use crate::domain::events::PointerEvent;
 
         match event {
             wl_pointer::Event::Enter { surface, surface_x, surface_y, .. } => {
                 state.pointer_surface = Some(surface.clone());
                 state.pointer_pos = (surface_x, surface_y);
                 if let Some(id) = state.surface_to_id.get(&surface) {
-                    let _ = state.command_tx.try_send(AppCommand::Input(*id, InputEvent::PointerEnter));
+                    let _ = state.hub.pointer_tx().send((*id, PointerEvent::PointerEnter));
                 }
             }
             wl_pointer::Event::Leave { surface: _, .. } => {
-                if let Some(surface) = state.pointer_surface.take() {
-                    if let Some(id) = state.surface_to_id.get(&surface) {
-                        let _ = state.command_tx.try_send(AppCommand::Input(*id, InputEvent::PointerLeave));
+                if let Some(surface) = state.pointer_surface.take()
+                    && let Some(id) = state.surface_to_id.get(&surface) {
+                        let _ = state.hub.pointer_tx().send((*id, PointerEvent::PointerLeave));
                     }
-                }
             }
             wl_pointer::Event::Motion { surface_x, surface_y, .. } => {
                 state.pointer_pos = (surface_x, surface_y);
-                if let Some(surface) = &state.pointer_surface {
-                    if let Some(id) = state.surface_to_id.get(surface) {
-                        let _ = state.command_tx.try_send(AppCommand::Input(
+                if let Some(surface) = &state.pointer_surface
+                    && let Some(id) = state.surface_to_id.get(surface) {
+                        let _ = state.hub.pointer_tx().send((
                             *id,
-                            InputEvent::PointerMotion { x: surface_x, y: surface_y }
+                            PointerEvent::PointerMotion { x: surface_x, y: surface_y }
                         ));
                     }
-                }
             }
             wl_pointer::Event::Button { button, state: button_state, .. } => {
-                // Send click event on button release (0 is release, 1 is press in wl_pointer::ButtonState)
-                if button_state == wayland_client::WEnum::Value(wayland_client::protocol::wl_pointer::ButtonState::Released) {
-                    if let Some(surface) = &state.pointer_surface {
-                        if let Some(id) = state.surface_to_id.get(surface) {
-                            let _ = state.command_tx.try_send(AppCommand::Input(
+                if button_state == wayland_client::WEnum::Value(wayland_client::protocol::wl_pointer::ButtonState::Released)
+                    && let Some(surface) = &state.pointer_surface
+                        && let Some(id) = state.surface_to_id.get(surface) {
+                            let _ = state.hub.pointer_tx().send((
                                 *id,
-                                InputEvent::Click { 
+                                PointerEvent::Click { 
                                     button,
                                     x: state.pointer_pos.0,
                                     y: state.pointer_pos.1,
                                 }
                             ));
                         }
-                    }
-                }
             }
             wl_pointer::Event::Axis { axis, value, .. } => {
-                if let Some(surface) = &state.pointer_surface {
-                    if let Some(id) = state.surface_to_id.get(surface) {
+                if let Some(surface) = &state.pointer_surface
+                    && let Some(id) = state.surface_to_id.get(surface) {
                         let axis_val = match axis {
                             wayland_client::WEnum::Value(wayland_client::protocol::wl_pointer::Axis::VerticalScroll) => 0,
                             wayland_client::WEnum::Value(wayland_client::protocol::wl_pointer::Axis::HorizontalScroll) => 1,
                             _ => 0,
                         };
-                        let _ = state.command_tx.try_send(AppCommand::Input(
+                        let _ = state.hub.pointer_tx().send((
                             *id,
-                            InputEvent::Scroll {
+                            PointerEvent::Scroll {
                                 axis: axis_val,
                                 amount: value,
                             }
                         ));
                     }
-                }
             }
             _ => {}
         }
@@ -892,13 +881,12 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
     fn event(state: &mut Self, proxy: &XdgSurface, event: wayland_protocols::xdg::shell::client::xdg_surface::Event, _data: &(), _conn: &Connection, _qh: &QueueHandle<Self>) {
         if let wayland_protocols::xdg::shell::client::xdg_surface::Event::Configure { serial } = event {
             proxy.ack_configure(serial);
-            if let Some(tooltip) = &mut state.tooltip {
-                if &tooltip.xdg_surface == proxy {
+            if let Some(tooltip) = &mut state.tooltip
+                && &tooltip.xdg_surface == proxy {
                     tooltip.surface.attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
                     tooltip.surface.damage_buffer(0, 0, tooltip.size.width() as i32, tooltip.size.height() as i32);
                     tooltip.surface.commit();
                 }
-            }
         }
     }
 }

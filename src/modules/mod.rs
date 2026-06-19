@@ -111,8 +111,7 @@ impl ModuleRegistryPort for ModuleRegistry {
         &mut self,
         hub: std::sync::Arc<SignalHub>,
         surface_manager: crate::ports::surface::DynSurfaceManager,
-        command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>,
-        input_tx: tokio::sync::broadcast::Sender<(ModuleId, crate::domain::events::InputEvent)>
+        command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>
     ) -> std::collections::HashMap<ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<MonitorId, crate::domain::shared::geometry::Rect>>> {
         let mut layout_senders = std::collections::HashMap::new();
 
@@ -126,7 +125,6 @@ impl ModuleRegistryPort for ModuleRegistry {
                 surface_manager.clone(),
                 command_tx.clone(),
                 layout_rx,
-                input_tx.subscribe(),
             );
 
             actor::ModuleActor::new(module, ctx).spawn();
@@ -145,11 +143,10 @@ impl ModuleRegistryPort for ModuleRegistry {
     async fn register_dbus_subscriptions(&self, dbus: &mut dyn crate::ports::DBusPort) {
         for module in self.modules.values() {
             for kind in module.subscriptions() {
-                if let crate::domain::signals::SignalKind::DBus(sub) = kind {
-                    if let Err(e) = dbus.subscribe(sub).await {
+                if let crate::domain::signals::SignalKind::DBus(sub) = kind
+                    && let Err(e) = dbus.subscribe(sub).await {
                         tracing::error!("Failed to subscribe to DBus: {}", e);
                     }
-                }
             }
         }
     }

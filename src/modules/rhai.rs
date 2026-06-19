@@ -14,18 +14,14 @@ use std::sync::Mutex;
 struct CanvasPtr(*mut (dyn Canvas + 'static));
 
 thread_local! {
-    static CURRENT_CANVAS: std::cell::Cell<Option<CanvasPtr>> = std::cell::Cell::new(None);
+    static CURRENT_CANVAS: std::cell::Cell<Option<CanvasPtr>> = const { std::cell::Cell::new(None) };
 }
 
 fn with_canvas<F, R>(f: F) -> Option<R>
 where
     F: FnOnce(&mut dyn Canvas) -> R,
 {
-    if let Some(ptr) = CURRENT_CANVAS.with(|c| c.get()) {
-        Some(f(unsafe { &mut *ptr.0 }))
-    } else {
-        None
-    }
+    CURRENT_CANVAS.with(|c| c.get()).map(|ptr| f(unsafe { &mut *ptr.0 }))
 }
 
 pub struct RhaiModule {
@@ -202,18 +198,16 @@ impl AnyModulePort for RhaiModule {
         scope.set_or_push("current_time", time.to_rfc3339());
 
         let hypr = hub.hyprland_rx().borrow().clone();
-        if let Ok(hypr_json) = serde_json::to_string(&hypr) {
-            if let Ok(hypr_rhai) = engine.parse_json(&hypr_json, true) {
+        if let Ok(hypr_json) = serde_json::to_string(&hypr)
+            && let Ok(hypr_rhai) = engine.parse_json(&hypr_json, true) {
                 scope.set_or_push("hyprland", hypr_rhai);
             }
-        }
 
         let metrics = hub.metrics_rx().borrow().clone();
-        if let Ok(metrics_json) = serde_json::to_string(&metrics) {
-            if let Ok(metrics_rhai) = engine.parse_json(&metrics_json, true) {
+        if let Ok(metrics_json) = serde_json::to_string(&metrics)
+            && let Ok(metrics_rhai) = engine.parse_json(&metrics_json, true) {
                 scope.set_or_push("metrics", metrics_rhai);
             }
-        }
         
         let _ = engine.call_fn::<()>(&mut scope, &self.ast, "refresh", ());
     }
@@ -255,39 +249,36 @@ impl AnyModulePort for RhaiModule {
         size
     }
 
-    fn on_event(&mut self, event: crate::domain::events::InputEvent) -> Vec<crate::domain::commands::AppCommand> {
+    fn on_pointer_event(&mut self, event: crate::domain::events::PointerEvent) -> Vec<crate::domain::commands::AppCommand> {
         let commands = Vec::new();
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         
         let mut event_map = rhai::Map::new();
-        use crate::domain::events::InputEvent;
+        use crate::domain::events::PointerEvent;
         match event {
-            InputEvent::PointerEnter => {
+            PointerEvent::PointerEnter => {
                 event_map.insert("type".into(), Dynamic::from("pointer_enter".to_string()));
             }
-            InputEvent::PointerLeave => {
-                event_map.insert("type".into(), Dynamic::from("pointer_leave".to_string()));
+            PointerEvent::PointerLeave => {
+                event_map.insert("type".into(), Dynamic::from("leave".to_string()));
             }
-            InputEvent::Click { button, x, y } => {
+            PointerEvent::PointerMotion { x, y } => {
+                event_map.insert("type".into(), Dynamic::from("motion".to_string()));
+                event_map.insert("x".into(), Dynamic::from(x));
+                event_map.insert("y".into(), Dynamic::from(y));
+            }
+            PointerEvent::Click { button, x, y } => {
                 event_map.insert("type".into(), Dynamic::from("click".to_string()));
                 event_map.insert("button".into(), Dynamic::from(button as i64));
                 event_map.insert("x".into(), Dynamic::from(x));
                 event_map.insert("y".into(), Dynamic::from(y));
             }
-            InputEvent::Scroll { axis, amount } => {
+            PointerEvent::Scroll { axis, amount } => {
                 event_map.insert("type".into(), Dynamic::from("scroll".to_string()));
                 event_map.insert("axis".into(), Dynamic::from(axis as i64));
                 event_map.insert("amount".into(), Dynamic::from(amount));
             }
-            InputEvent::MetricsState(_) => {
-                event_map.insert("type".into(), Dynamic::from("metrics".to_string()));
-                // Serialization of full MetricsState not implemented for Rhai yet
-            }
-            InputEvent::AppletsState(_) => {
-                event_map.insert("type".into(), Dynamic::from("applets".to_string()));
-            }
-            _ => {}
         }
         let _ = engine.call_fn::<()>(&mut scope, &self.ast, "on_event", (event_map,));
         commands

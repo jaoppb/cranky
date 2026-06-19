@@ -109,45 +109,40 @@ impl AnyModulePort for LuaModule {
 
         let mut subs = Vec::new();
         if let Ok(subs_fn) = globals.get::<Function>("subscriptions") {
-            if let Ok(result) = subs_fn.call::<mlua::Value>(()) {
-                if let mlua::Value::Table(t) = result {
-                    for pair in t.pairs::<mlua::Value, mlua::Value>() {
-                        if let Ok((_, val)) = pair {
-                            if let mlua::Value::String(s) = &val {
-                                if let Ok(s_str) = s.to_str() {
-                                    match s_str.as_ref() {
-                                        "time" => subs.push(SignalKind::Time),
-                                        "hyprland" => subs.push(SignalKind::Hyprland),
-                                        "applets" => subs.push(SignalKind::Applets),
-                                        "metrics" => subs.push(SignalKind::Metrics),
-                                        _ => {}
-                                    }
-                                }
-                            } else if let mlua::Value::Table(dbus_sub) = &val {
-                                if let Ok(typ) = dbus_sub.get::<String>("type") {
-                                    if typ == "dbus" {
-                                        let bus_str = dbus_sub
-                                            .get::<String>("bus")
-                                            .unwrap_or_else(|_| "session".to_string());
-                                        let bus = if bus_str == "system" {
-                                            BusType::System
-                                        } else {
-                                            BusType::Session
-                                        };
-                                        subs.push(SignalKind::DBus(DBusSubscription {
-                                            bus,
-                                            destination: dbus_sub.get::<String>("destination").ok(),
-                                            path: dbus_sub.get::<String>("path").ok(),
-                                            interface: dbus_sub.get::<String>("interface").ok(),
-                                            member: dbus_sub.get::<String>("member").ok(),
-                                        }));
-                                    }
+            if let Ok(result) = subs_fn.call::<mlua::Value>(())
+                && let mlua::Value::Table(t) = result {
+                    for (_, val) in t.pairs::<mlua::Value, mlua::Value>().flatten() {
+                        if let mlua::Value::String(s) = &val {
+                            if let Ok(s_str) = s.to_str() {
+                                match s_str.as_ref() {
+                                    "time" => subs.push(SignalKind::Time),
+                                    "hyprland" => subs.push(SignalKind::Hyprland),
+                                    "applets" => subs.push(SignalKind::Applets),
+                                    "metrics" => subs.push(SignalKind::Metrics),
+                                    _ => {}
                                 }
                             }
-                        }
+                        } else if let mlua::Value::Table(dbus_sub) = &val
+                            && let Ok(typ) = dbus_sub.get::<String>("type")
+                                && typ == "dbus" {
+                                    let bus_str = dbus_sub
+                                        .get::<String>("bus")
+                                        .unwrap_or_else(|_| "session".to_string());
+                                    let bus = if bus_str == "system" {
+                                        BusType::System
+                                    } else {
+                                        BusType::Session
+                                    };
+                                    subs.push(SignalKind::DBus(DBusSubscription {
+                                        bus,
+                                        destination: dbus_sub.get::<String>("destination").ok(),
+                                        path: dbus_sub.get::<String>("path").ok(),
+                                        interface: dbus_sub.get::<String>("interface").ok(),
+                                        member: dbus_sub.get::<String>("member").ok(),
+                                    }));
+                                }
                     }
                 }
-            }
         } else {
             if self.name == "hour" {
                 subs.push(SignalKind::Time);
@@ -292,7 +287,7 @@ impl AnyModulePort for LuaModule {
                                     font_family.as_ref(),
                                     font_size,
                                     color.clone(),
-                                    position.clone(),
+                                    position,
                                 )
                             });
                         }
@@ -368,7 +363,7 @@ impl AnyModulePort for LuaModule {
             let lua_monitor = LuaMonitor(monitor.clone());
 
             if let Ok(view_fn) = globals.get::<Function>("view") {
-                let _ = view_fn
+                view_fn
                     .call::<()>((lua_canvas, lua_monitor))
                     .unwrap_or_else(|e| {
                         eprintln!("Lua view error in {}: {}", self.name, e);
@@ -432,9 +427,9 @@ impl AnyModulePort for LuaModule {
         res.unwrap_or(Size::new(0, 0))
     }
 
-    fn on_event(
+    fn on_pointer_event(
         &mut self,
-        event: crate::domain::events::InputEvent,
+        event: crate::domain::events::PointerEvent,
     ) -> Vec<crate::domain::commands::AppCommand> {
         use crate::domain::commands::AppCommand;
         let mut commands = Vec::new();
@@ -449,44 +444,29 @@ impl AnyModulePort for LuaModule {
                     return commands;
                 }
             };
-            use crate::domain::events::InputEvent;
+            use crate::domain::events::PointerEvent;
             match event {
-                InputEvent::PointerEnter => {
+                PointerEvent::PointerEnter => {
                     let _ = event_table.set("type", "pointer_enter");
                 }
-                InputEvent::PointerLeave => {
+                PointerEvent::PointerLeave => {
                     let _ = event_table.set("type", "pointer_leave");
                 }
-                InputEvent::PointerMotion { x, y } => {
+                PointerEvent::PointerMotion { x, y } => {
                     let _ = event_table.set("type", "motion");
                     let _ = event_table.set("x", x);
                     let _ = event_table.set("y", y);
                 }
-                InputEvent::Click { button, x, y } => {
+                PointerEvent::Click { button, x, y } => {
                     let _ = event_table.set("type", "click");
                     let _ = event_table.set("button", button);
                     let _ = event_table.set("x", x);
                     let _ = event_table.set("y", y);
                 }
-                InputEvent::Scroll { axis, amount } => {
+                PointerEvent::Scroll { axis, amount } => {
                     let _ = event_table.set("type", "scroll");
                     let _ = event_table.set("axis", axis);
                     let _ = event_table.set("amount", amount);
-                }
-                InputEvent::MetricsState(state) => {
-                    let _ = event_table.set("type", "metrics");
-                    if let Ok(val) = lua.to_value(&state) {
-                        let _ = event_table.set("metrics", val);
-                    }
-                }
-                InputEvent::AppletsState(state) => {
-                    let _ = event_table.set("type", "applets");
-                    if let Ok(val) = lua.to_value(&state) {
-                        let _ = event_table.set("applets", val);
-                    }
-                }
-                _ => {
-                    // Ignore other events for now
                 }
             }
             let commands_cell = RefCell::new(&mut commands);
@@ -525,7 +505,7 @@ impl AnyModulePort for LuaModule {
 
                 let _ = globals.set("cranky", cranky_table);
 
-                let _ = on_event_fn.call::<()>(event_table).unwrap_or_else(|e| {
+                on_event_fn.call::<()>(event_table).unwrap_or_else(|e| {
                     eprintln!("Lua on_event error in {}: {}", self.name, e);
                 });
                 Ok::<(), mlua::Error>(())
