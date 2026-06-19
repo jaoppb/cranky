@@ -262,9 +262,13 @@ impl DisplayServerPort for WaylandAdapter {
         Ok(())
     }
 
-    fn render_all(&mut self, app: &mut CrankyApp) -> Result<(), DisplayServerError> {
+    fn render_all(
+        &mut self, 
+        read_model: &crate::domain::app::AppReadModel,
+        layout_senders: &std::collections::HashMap<crate::domain::ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<crate::domain::MonitorId, crate::domain::shared::geometry::Rect>>>
+    ) -> Result<(), DisplayServerError> {
         let qh = self.event_queue.handle();
-        self.render_all_outputs(app, &qh)
+        self.render_all_outputs(read_model, layout_senders, &qh)
     }
 
     fn show_tooltip(&mut self, text: &str) -> Result<(), DisplayServerError> {
@@ -481,12 +485,14 @@ impl WaylandAdapter {
     }
 
     #[cfg(not(test))]
-    fn render_all_outputs(&mut self, app: &mut CrankyApp, qh: &QueueHandle<WaylandState>) -> Result<(), DisplayServerError> {
+    fn render_all_outputs(
+        &mut self, 
+        read_model: &crate::domain::app::AppReadModel,
+        layout_senders: &std::collections::HashMap<crate::domain::ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<crate::domain::MonitorId, crate::domain::shared::geometry::Rect>>>,
+        qh: &QueueHandle<WaylandState>
+    ) -> Result<(), DisplayServerError> {
         let span = info_span!("render_all_outputs");
         let _enter = span.enter();
-        
-        // Prepare app state once per render pass
-        app.prepare_render();
 
         let WaylandState {
             ref mut bars,
@@ -533,7 +539,7 @@ impl WaylandAdapter {
                 continue;
             };
             
-            let bar_config = app.config().bar().clone();
+            let bar_config = read_model.config().bar().clone();
             let config_bg = bar_config.background().clone();
             let border_config = bar_config.border();
             
@@ -593,7 +599,7 @@ impl WaylandAdapter {
             // Note: We no longer iterate over layouts to render modules directly.
             // Layout is broadcasted via app.calculate_layout, and module actors render themselves 
             // asynchronously and submit their buffers to the Wayland adapter via the SurfaceManager.
-            let layouts = app.calculate_layout(&monitor_id, width);
+            let layouts = read_model.calculate_layout(&monitor_id, crate::domain::shared::geometry::BarWidth::new(width), layout_senders);
 
             // However, the display server must still position the subsurfaces correctly on the screen!
             for layout in layouts {
@@ -650,7 +656,12 @@ impl WaylandAdapter {
     #[cfg(test)]
     fn handle_surface_command(&mut self, _cmd: SurfaceCommand) -> Result<(), DisplayServerError> { Ok(()) }
     #[cfg(test)]
-    fn render_all_outputs(&mut self, _app: &mut CrankyApp, _qh: &QueueHandle<WaylandState>) -> Result<(), DisplayServerError> { Ok(()) }
+    fn render_all_outputs(
+        &mut self, 
+        _read_model: &crate::domain::app::AppReadModel,
+        _layout_senders: &std::collections::HashMap<crate::domain::ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<crate::domain::MonitorId, crate::domain::shared::geometry::Rect>>>,
+        _qh: &QueueHandle<WaylandState>
+    ) -> Result<(), DisplayServerError> { Ok(()) }
 }
 
 impl WaylandState {

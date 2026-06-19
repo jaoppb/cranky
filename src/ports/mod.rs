@@ -36,7 +36,11 @@ pub trait DisplayServerPort: Send + Sync {
     async fn wait_for_events(&mut self) -> Result<(), DisplayServerError>;
     fn dispatch_pending(&mut self) -> Result<(), DisplayServerError>;
     fn flush(&mut self) -> Result<(), DisplayServerError>;
-    fn render_all(&mut self, app: &mut crate::domain::app::CrankyApp) -> Result<(), DisplayServerError>;
+    fn render_all(
+        &mut self, 
+        read_model: &crate::domain::app::AppReadModel,
+        layout_senders: &std::collections::HashMap<crate::domain::ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<crate::domain::MonitorId, crate::domain::shared::geometry::Rect>>>
+    ) -> Result<(), DisplayServerError>;
     fn show_tooltip(&mut self, text: &str) -> Result<(), DisplayServerError>;
     fn hide_tooltip(&mut self) -> Result<(), DisplayServerError>;
 }

@@ -1,6 +1,6 @@
 use crate::domain::config::Config;
 use crate::domain::signals::SignalHub;
-use crate::domain::{ModuleId, MonitorId, shared::geometry::{Size, Rect, Position}};
+use crate::domain::{ModuleId, MonitorId, shared::geometry::{Size, Rect, Position, BarWidth}};
 use crate::ports::registry::ModuleRegistryPort;
 use crate::ports::DisplayServerPort;
 use crate::domain::commands::AppCommand;
@@ -43,15 +43,114 @@ impl ModuleLayout {
     }
 }
 
-pub struct CrankyApp {
-    hub: Arc<SignalHub>,
+pub struct AppReadModel {
     config: Config,
-    command_rx: mpsc::Receiver<AppCommand>,
     left_modules: Vec<ModuleId>,
     center_modules: Vec<ModuleId>,
     right_modules: Vec<ModuleId>,
-    layout_senders: HashMap<ModuleId, watch::Sender<HashMap<MonitorId, Rect>>>,
     module_sizes: HashMap<MonitorId, HashMap<ModuleId, Size>>,
+}
+
+impl AppReadModel {
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
+    pub fn calculate_layout(
+        &self, 
+        monitor: &MonitorId, 
+        bar_width: BarWidth, 
+        layout_senders: &HashMap<ModuleId, watch::Sender<HashMap<MonitorId, Rect>>>
+    ) -> Vec<ModuleLayout> {
+        let mut layouts = Vec::new();
+        let bar_config = self.config.bar();
+        let bar_height = bar_config.height();
+        let border_size = bar_config.border().size().value();
+        let padding = bar_config.padding();
+        
+        let inner_left = border_size + padding.left().value() as f32;
+        let inner_right = border_size + padding.right().value() as f32;
+        let inner_top = border_size + padding.top().value() as f32;
+        let inner_bottom = border_size + padding.bottom().value() as f32;
+
+        let available_height = bar_height as f32 - inner_top - inner_bottom;
+        
+        let get_size = |id: &ModuleId| {
+            self.module_sizes.get(monitor).and_then(|m| m.get(id)).cloned().unwrap_or(Size::new(0, 0))
+        };
+
+        // Calculate left modules
+        let mut left_x = inner_left;
+        for &id in &self.left_modules {
+            let size = get_size(&id);
+            let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
+            layouts.push(ModuleLayout {
+                id,
+                bounds: Rect::new(Position::new(left_x as i32, y as i32), size),
+            });
+            left_x += size.width() as f32;
+        }
+
+        // Calculate right modules
+        let mut right_x = bar_width.value() as f32 - inner_right;
+        let mut right_layouts = Vec::new();
+        for &id in self.right_modules.iter().rev() {
+            let size = get_size(&id);
+            right_x -= size.width() as f32;
+            let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
+            right_layouts.push(ModuleLayout {
+                id,
+                bounds: Rect::new(Position::new(right_x as i32, y as i32), size),
+            });
+        }
+        layouts.extend(right_layouts.into_iter().rev());
+
+        // Calculate center modules
+        let mut center_width = 0.0;
+        let mut center_sizes = Vec::new();
+        for &id in &self.center_modules {
+            let size = get_size(&id);
+            center_width += size.width() as f32;
+            center_sizes.push((id, size));
+        }
+
+        let mut center_x = (bar_width.value() as f32 - center_width) / 2.0;
+        for (id, size) in center_sizes {
+            let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
+            layouts.push(ModuleLayout {
+                id,
+                bounds: Rect::new(Position::new(center_x as i32, y as i32), size),
+            });
+            center_x += size.width() as f32;
+        }
+        
+        // Broadcast layout bounds to modules for this monitor
+        let mut updates_by_module: HashMap<ModuleId, HashMap<MonitorId, Rect>> = HashMap::new();
+        for layout in &layouts {
+            // Keep existing rects for other monitors
+            let mut all_rects = HashMap::new();
+            if let Some(sender) = layout_senders.get(&layout.id) {
+                all_rects = sender.borrow().clone();
+            }
+            all_rects.insert(monitor.clone(), layout.bounds);
+            updates_by_module.insert(layout.id, all_rects);
+        }
+        
+        for (id, rects) in updates_by_module {
+            if let Some(sender) = layout_senders.get(&id) {
+                let _ = sender.send(rects);
+            }
+        }
+
+        layouts
+    }
+}
+
+pub struct CrankyApp {
+    hub: Arc<SignalHub>,
+    read_model: AppReadModel,
+    command_rx: mpsc::Receiver<AppCommand>,
+    layout_senders: HashMap<ModuleId, watch::Sender<HashMap<MonitorId, Rect>>>,
     surface_manager: DynSurfaceManager,
     command_tx_clone: mpsc::Sender<AppCommand>,
     registry: Box<dyn crate::ports::registry::ModuleRegistryPort>,
@@ -73,23 +172,23 @@ impl CrankyApp {
         let right_modules = registry.right_modules();
         let layout_senders = registry.spawn_all(hub.clone(), surface_manager.clone(), command_tx.clone());
 
-        Ok(Self {
-            hub,
+        let read_model = AppReadModel {
             config,
-            command_rx,
             left_modules,
             center_modules,
             right_modules,
-            layout_senders,
             module_sizes: HashMap::new(),
+        };
+
+        Ok(Self {
+            hub,
+            read_model,
+            command_rx,
+            layout_senders,
             surface_manager: surface_manager.clone(),
             command_tx_clone: command_tx,
             registry,
         })
-    }
-
-    pub fn config(&self) -> &Config {
-        &self.config
     }
 
     pub fn hub(&self) -> &Arc<SignalHub> {
@@ -99,7 +198,7 @@ impl CrankyApp {
     pub async fn run(
         &mut self,
         mut display: impl DisplayServerPort,
-        mut dbus: impl crate::ports::DBusPort, // Left here for API compatibility but might need refactoring later
+        mut dbus: impl crate::ports::DBusPort, // Left here for API compatibility
         sni: impl crate::ports::sni::SniPort,
     ) -> Result<(), AppError> {
         let mut config_rx = self.hub.config_rx();
@@ -162,126 +261,39 @@ impl CrankyApp {
                     }
 
                     if needs_render {
-                        let _ = display.render_all(self);
+                        let _ = display.render_all(&self.read_model, &self.layout_senders);
                     }
                 }
                 Ok(_) = config_rx.changed() => {
                     info!("Config hot-reload triggered in App");
                     let new_config = config_rx.borrow().clone();
-                    self.config = new_config;
-                    self.module_sizes.clear();
+                    self.read_model.config = new_config;
+                    self.read_model.module_sizes.clear();
                     
                     self.registry.clear();
-                    if let Err(e) = self.registry.load(&self.config) {
+                    if let Err(e) = self.registry.load(&self.read_model.config) {
                         error!("Failed to reload registry on config change: {}", e);
                     } else {
-                        self.left_modules = self.registry.left_modules();
-                        self.center_modules = self.registry.center_modules();
-                        self.right_modules = self.registry.right_modules();
+                        self.read_model.left_modules = self.registry.left_modules();
+                        self.read_model.center_modules = self.registry.center_modules();
+                        self.read_model.right_modules = self.registry.right_modules();
                         self.layout_senders = self.registry.spawn_all(
                             self.hub.clone(),
                             self.surface_manager.clone(),
                             self.command_tx_clone.clone()
                         );
                     }
-                    
-                    // The WaylandAdapter will independently detect config change and recreate bars.
                 }
             }
         }
     }
 
     pub fn handle_size_changed(&mut self, monitor_id: MonitorId, module_id: ModuleId, size: Size) {
-        self.module_sizes.entry(monitor_id.clone()).or_default().insert(module_id, size);
+        self.read_model.module_sizes.entry(monitor_id.clone()).or_default().insert(module_id, size);
     }
 
     pub fn prepare_render(&mut self) {
         // No-op for now, modules react automatically.
-    }
-
-    // CrankyApp no longer takes `&mut dyn Canvas` for measuring. It uses the cached `module_sizes`.
-    pub fn calculate_layout(&self, monitor: &MonitorId, bar_width: u32) -> Vec<ModuleLayout> {
-        let mut layouts = Vec::new();
-        let bar_config = self.config.bar();
-        let bar_height = bar_config.height();
-        let border_size = bar_config.border().size().value();
-        let padding = bar_config.padding();
-        
-        let inner_left = border_size + padding.left().value() as f32;
-        let inner_right = border_size + padding.right().value() as f32;
-        let inner_top = border_size + padding.top().value() as f32;
-        let inner_bottom = border_size + padding.bottom().value() as f32;
-
-        let available_height = bar_height as f32 - inner_top - inner_bottom;
-        
-        let get_size = |id: &ModuleId| {
-            self.module_sizes.get(monitor).and_then(|m| m.get(id)).cloned().unwrap_or(Size::new(0, 0))
-        };
-
-        // Calculate left modules
-        let mut left_x = inner_left;
-        for &id in &self.left_modules {
-            let size = get_size(&id);
-            let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
-            layouts.push(ModuleLayout {
-                id,
-                bounds: Rect::new(Position::new(left_x as i32, y as i32), size),
-            });
-            left_x += size.width() as f32;
-        }
-
-        // Calculate right modules
-        let mut right_x = bar_width as f32 - inner_right;
-        let mut right_layouts = Vec::new();
-        for &id in self.right_modules.iter().rev() {
-            let size = get_size(&id);
-            right_x -= size.width() as f32;
-            let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
-            right_layouts.push(ModuleLayout {
-                id,
-                bounds: Rect::new(Position::new(right_x as i32, y as i32), size),
-            });
-        }
-        layouts.extend(right_layouts.into_iter().rev());
-
-        // Calculate center modules
-        let mut center_width = 0.0;
-        let mut center_sizes = Vec::new();
-        for &id in &self.center_modules {
-            let size = get_size(&id);
-            center_width += size.width() as f32;
-            center_sizes.push((id, size));
-        }
-
-        let mut center_x = (bar_width as f32 - center_width) / 2.0;
-        for (id, size) in center_sizes {
-            let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
-            layouts.push(ModuleLayout {
-                id,
-                bounds: Rect::new(Position::new(center_x as i32, y as i32), size),
-            });
-            center_x += size.width() as f32;
-        }
-        
-        // Broadcast layout bounds to modules for this monitor
-        let mut updates_by_module: HashMap<ModuleId, HashMap<MonitorId, Rect>> = HashMap::new();
-        for layout in &layouts {
-            // Keep existing rects for other monitors
-            let mut all_rects = HashMap::new();
-            if let Some(sender) = self.layout_senders.get(&layout.id) {
-                all_rects = sender.borrow().clone();
-            }
-            all_rects.insert(monitor.clone(), layout.bounds);
-            updates_by_module.insert(layout.id, all_rects);
-        }
-        
-        for (id, rects) in updates_by_module {
-            if let Some(sender) = self.layout_senders.get(&id) {
-                let _ = sender.send(rects);
-            }
-        }
-
-        layouts
     }
 }
 
@@ -301,7 +313,6 @@ mod tests {
         let (_, command_rx) = mpsc::channel(32);
         let (command_tx, _) = mpsc::channel(32);
         
-        // We need a dummy SurfaceManager
         let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
         
         let mut mock_registry = MockModuleRegistryPort::new();
