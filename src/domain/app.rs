@@ -225,15 +225,6 @@ impl CrankyApp {
                             AppCommand::RequestRender(_output_id) => {
                                 needs_render = true;
                             }
-                            AppCommand::Log(level, msg) => {
-                                match level {
-                                    tracing::Level::ERROR => tracing::error!("{}", msg),
-                                    tracing::Level::WARN => tracing::warn!("{}", msg),
-                                    tracing::Level::INFO => tracing::info!("{}", msg),
-                                    tracing::Level::DEBUG => tracing::debug!("{}", msg),
-                                    tracing::Level::TRACE => tracing::trace!("{}", msg),
-                                }
-                            }
                             AppCommand::DBusCall(_, _, _, _, _, _) => {}
                             AppCommand::CreateBar(_, _) => {}
                             AppCommand::DestroyBar(_) => {}
