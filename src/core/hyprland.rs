@@ -31,7 +31,8 @@ impl HyprlandProvider for RealHyprlandProvider {
     }
 
     fn listen_events(&self) -> Result<UnixStream, HyprError> {
-        let signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|_| HyprError::NoInstance)?;
+        let signature =
+            env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|_| HyprError::NoInstance)?;
         let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|_| HyprError::NoInstance)?;
 
         let socket_path = PathBuf::from(xdg_runtime_dir)
@@ -73,7 +74,7 @@ mod tests {
             "Hyprland instance signature not found. Is Hyprland running?"
         );
 
-        let err = HyprError::Io(std::io::Error::new(std::io::ErrorKind::Other, "test"));
+        let err = HyprError::Io(std::io::Error::other("test"));
         assert!(format!("{}", err).contains("IO error: test"));
     }
 

@@ -6,3 +6,24 @@ pub enum PointerEvent {
     Click { button: u32, x: f64, y: f64 },
     Scroll { axis: u32, amount: f64 },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pointer_event_variants() {
+        let _ = PointerEvent::PointerEnter;
+        let _ = PointerEvent::PointerLeave;
+        let _ = PointerEvent::PointerMotion { x: 0.0, y: 0.0 };
+        let _ = PointerEvent::Click {
+            button: 0,
+            x: 0.0,
+            y: 0.0,
+        };
+        let _ = PointerEvent::Scroll {
+            axis: 0,
+            amount: 0.0,
+        };
+    }
+}

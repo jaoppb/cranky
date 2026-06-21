@@ -1,12 +1,76 @@
 use crate::adapters::rendering::TinySkiaCosmicCanvas;
 use crate::domain::commands::AppCommand;
 use crate::domain::shared::render::RenderBuffer;
+use crate::domain::signals::SignalHub;
 use crate::domain::{
     MonitorId,
     shared::geometry::{Rect, Scale, Size},
 };
-use crate::ports::registry::{AnyModulePort, ModuleContext};
+use crate::ports::registry::AnyModulePort;
+use crate::ports::surface::DynSurfaceManager;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::watch;
+
+pub struct ModuleContext {
+    id: crate::domain::ModuleId,
+    hub: Arc<SignalHub>,
+    surface_manager: DynSurfaceManager,
+    command_tx: Arc<dyn crate::ports::registry::CommandSender>,
+    layout_rx: watch::Receiver<HashMap<MonitorId, Rect>>,
+    pointer_rx: tokio::sync::broadcast::Receiver<(
+        crate::domain::ModuleId,
+        crate::domain::events::PointerEvent,
+    )>,
+}
+
+impl ModuleContext {
+    pub fn new(
+        id: crate::domain::ModuleId,
+        hub: Arc<SignalHub>,
+        surface_manager: DynSurfaceManager,
+        command_tx: Arc<dyn crate::ports::registry::CommandSender>,
+        layout_rx: watch::Receiver<HashMap<MonitorId, Rect>>,
+    ) -> Self {
+        let pointer_rx = hub.pointer_rx();
+        Self {
+            id,
+            hub,
+            surface_manager,
+            command_tx,
+            layout_rx,
+            pointer_rx,
+        }
+    }
+
+    pub fn id(&self) -> crate::domain::ModuleId {
+        self.id
+    }
+
+    pub fn hub(&self) -> &Arc<SignalHub> {
+        &self.hub
+    }
+
+    pub fn surface_manager(&self) -> &DynSurfaceManager {
+        &self.surface_manager
+    }
+
+    pub fn command_tx(&self) -> &dyn crate::ports::registry::CommandSender {
+        self.command_tx.as_ref()
+    }
+
+    pub fn rxs_mut(
+        &mut self,
+    ) -> (
+        &mut watch::Receiver<HashMap<MonitorId, Rect>>,
+        &mut tokio::sync::broadcast::Receiver<(
+            crate::domain::ModuleId,
+            crate::domain::events::PointerEvent,
+        )>,
+    ) {
+        (&mut self.layout_rx, &mut self.pointer_rx)
+    }
+}
 
 pub struct ModuleActor {
     port: Box<dyn AnyModulePort>,
@@ -59,7 +123,7 @@ impl ModuleActor {
                             if target_id == ctx_id {
                                 let cmds = self.port.on_pointer_event(event);
                                 for cmd in cmds {
-                                    let _ = self.ctx.command_tx().try_send(cmd);
+                                    let _ = self.ctx.command_tx().send_command(cmd);
                                 }
                                 changed = true;
                             }
@@ -152,7 +216,7 @@ impl ModuleActor {
                 let _ = self
                     .ctx
                     .command_tx()
-                    .blocking_send(AppCommand::ModuleSizeChanged(
+                    .send_command(AppCommand::ModuleSizeChanged(
                         monitor_id.clone(),
                         self.ctx.id(),
                         size,

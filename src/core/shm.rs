@@ -23,10 +23,11 @@ impl MmappedShm {
         Ok(Self { mmap })
     }
 
-    pub fn mmap_mut(&mut self) -> &mut MmapMut {
+    pub fn mmap_mut(&mut self) -> &mut [u8] {
         &mut self.mmap
     }
 
+    #[cfg(test)]
     pub fn size(&self) -> usize {
         self.mmap.len()
     }
@@ -72,14 +73,11 @@ fn safe_borrowed_fd_from_file(file: &File) -> BorrowedFd<'_> {
 }
 
 impl ShmBuffer {
-    pub fn new<S>(
-        shm_proxy: &WlShm,
-        width: u32,
-        height: u32,
-        qh: &QueueHandle<S>,
-    ) -> Result<Self> 
-    where S: wayland_client::Dispatch<wayland_client::protocol::wl_shm_pool::WlShmPool, ()>
-           + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, ()> + 'static
+    pub fn new<S>(shm_proxy: &WlShm, width: u32, height: u32, qh: &QueueHandle<S>) -> Result<Self>
+    where
+        S: wayland_client::Dispatch<wayland_client::protocol::wl_shm_pool::WlShmPool, ()>
+            + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, ()>
+            + 'static,
     {
         let frame_size = (width * height * 4) as usize;
         let file = create_shm_file(frame_size)?;
@@ -95,7 +93,7 @@ impl ShmBuffer {
             (width * 4) as i32,
             wayland_client::protocol::wl_shm::Format::Argb8888,
             qh,
-            ()
+            (),
         );
 
         Ok(Self {
@@ -117,23 +115,7 @@ impl ShmBuffer {
     }
 
     pub fn swap_buffers(&mut self) {
-        // No-op for single buffering
-    }
-
-    pub fn pool(&self) -> &WlShmPool {
-        &self.pool
-    }
-
-    pub fn size(&self) -> usize {
-        self.shm.size()
-    }
-
-    pub fn width(&self) -> u32 {
-        self.width
-    }
-
-    pub fn height(&self) -> u32 {
-        self.height
+        // No-op for now, single buffer implementation
     }
 }
 

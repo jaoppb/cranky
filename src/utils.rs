@@ -1,13 +1,14 @@
 use resvg::usvg;
 use std::path::Path;
-use tiny_skia::{Transform};
+use tiny_skia::Transform;
 
-pub fn load_icon_rgba(
-    path: &Path,
-    icon_size: u16,
-    scale: f32,
-) -> Option<(u32, u32, Vec<u8>)> {
-    if path.extension().and_then(|s| s.to_str()).map(|s| s.eq_ignore_ascii_case("svg")).unwrap_or(false) {
+pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
+    if path
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.eq_ignore_ascii_case("svg"))
+        .unwrap_or(false)
+    {
         let svg_data = std::fs::read(path).ok()?;
         let tree = usvg::Tree::from_data(&svg_data, &usvg::Options::default()).ok()?;
         let icon_px = ((icon_size as f32) * scale.max(1.0))
@@ -31,8 +32,9 @@ pub fn load_icon_rgba(
             let (r, g, b) = if a == 0 {
                 (0, 0, 0)
             } else {
-                let unpremul =
-                    |c: u8| -> u8 { (((c as u16 * 255) + (a as u16 / 2)) / a as u16).min(255) as u8 };
+                let unpremul = |c: u8| -> u8 {
+                    (((c as u16 * 255) + (a as u16 / 2)) / a as u16).min(255) as u8
+                };
                 (unpremul(pixel[0]), unpremul(pixel[1]), unpremul(pixel[2]))
             };
             colors.push(r);
@@ -48,8 +50,9 @@ pub fn load_icon_rgba(
             .ceil()
             .max(icon_size as f32) as u32;
         let target = icon_px.max(1);
-        let resized = image::imageops::resize(&img, target, target, image::imageops::FilterType::Lanczos3);
-        
+        let resized =
+            image::imageops::resize(&img, target, target, image::imageops::FilterType::Lanczos3);
+
         let mut colors = Vec::with_capacity((resized.width() * resized.height() * 4) as usize);
         for pixel in resized.pixels() {
             let [r, g, b, a] = pixel.0;
@@ -58,7 +61,7 @@ pub fn load_icon_rgba(
             colors.push(b);
             colors.push(a);
         }
-        
+
         Some((resized.width(), resized.height(), colors))
     }
 }
@@ -76,18 +79,6 @@ mod tests {
             .as_nanos();
         std::env::temp_dir().join(format!(
             "cranky-utils-test-{}-{}.svg",
-            std::process::id(),
-            nanos
-        ))
-    }
-
-    fn temp_png_path() -> std::path::PathBuf {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        std::env::temp_dir().join(format!(
-            "cranky-utils-test-{}-{}.png",
             std::process::id(),
             nanos
         ))

@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum CpuMode {
     #[serde(rename = "percentage_0_100")]
     #[default]
@@ -46,8 +45,9 @@ pub enum DiskMode {
 pub struct UpdateInterval(u64);
 
 impl UpdateInterval {
-    pub fn new(ms: u64) -> Self { Self(ms) }
-    pub fn value(&self) -> u64 { self.0 }
+    pub fn value(&self) -> u64 {
+        self.0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -84,68 +84,69 @@ impl Default for MetricsConfig {
 }
 
 impl MetricsConfig {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        cpu: CpuMode,
-        memory: MemoryMode,
-        swap: MemoryMode,
-        network: Option<NetworkMode>,
-        temperature: Option<TemperatureMode>,
-        disk: Option<DiskMode>,
-        update_interval_ms: UpdateInterval,
-    ) -> Self {
-        Self { cpu, memory, swap, network, temperature, disk, update_interval_ms }
+    pub fn cpu(&self) -> &CpuMode {
+        &self.cpu
     }
-
-    pub fn cpu(&self) -> &CpuMode { &self.cpu }
-    pub fn memory(&self) -> &MemoryMode { &self.memory }
-    pub fn swap(&self) -> &MemoryMode { &self.swap }
-    pub fn network(&self) -> Option<&NetworkMode> { self.network.as_ref() }
-    pub fn temperature(&self) -> Option<&TemperatureMode> { self.temperature.as_ref() }
-    pub fn disk(&self) -> Option<&DiskMode> { self.disk.as_ref() }
-    pub fn update_interval_ms(&self) -> &UpdateInterval { &self.update_interval_ms }
+    pub fn network(&self) -> Option<&NetworkMode> {
+        self.network.as_ref()
+    }
+    pub fn temperature(&self) -> Option<&TemperatureMode> {
+        self.temperature.as_ref()
+    }
+    pub fn disk(&self) -> Option<&DiskMode> {
+        self.disk.as_ref()
+    }
+    pub fn update_interval_ms(&self) -> &UpdateInterval {
+        &self.update_interval_ms
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CpuUsage(f32);
 impl CpuUsage {
-    pub fn new(val: f32) -> Self { Self(val) }
-    pub fn value(&self) -> f32 { self.0 }
+    pub fn new(val: f32) -> Self {
+        Self(val)
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryBytes(u64);
 impl MemoryBytes {
-    pub fn new(val: u64) -> Self { Self(val) }
-    pub fn value(&self) -> u64 { self.0 }
+    pub fn new(val: u64) -> Self {
+        Self(val)
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkSpeed(u64);
 impl NetworkSpeed {
-    pub fn new(val: u64) -> Self { Self(val) }
-    pub fn value(&self) -> u64 { self.0 }
+    pub fn new(val: u64) -> Self {
+        Self(val)
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Temperature(f32);
 impl Temperature {
-    pub fn new(val: f32) -> Self { Self(val) }
-    pub fn value(&self) -> f32 { self.0 }
+    pub fn new(val: f32) -> Self {
+        Self(val)
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiskName(String);
 impl DiskName {
-    pub fn new(name: impl Into<String>) -> Self { Self(name.into()) }
-    pub fn as_str(&self) -> &str { &self.0 }
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MountPoint(String);
 impl MountPoint {
-    pub fn new(mp: impl Into<String>) -> Self { Self(mp.into()) }
-    pub fn as_str(&self) -> &str { &self.0 }
+    pub fn new(mp: impl Into<String>) -> Self {
+        Self(mp.into())
+    }
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -165,14 +166,14 @@ impl DiskMetric {
         available_bytes: MemoryBytes,
         used_bytes: MemoryBytes,
     ) -> Self {
-        Self { name, mount_point, total_bytes, available_bytes, used_bytes }
+        Self {
+            name,
+            mount_point,
+            total_bytes,
+            available_bytes,
+            used_bytes,
+        }
     }
-
-    pub fn name(&self) -> &DiskName { &self.name }
-    pub fn mount_point(&self) -> &MountPoint { &self.mount_point }
-    pub fn total_bytes(&self) -> &MemoryBytes { &self.total_bytes }
-    pub fn available_bytes(&self) -> &MemoryBytes { &self.available_bytes }
-    pub fn used_bytes(&self) -> &MemoryBytes { &self.used_bytes }
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -191,7 +192,6 @@ pub struct MetricsState {
 }
 
 impl MetricsState {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         cpu_usage: CpuUsage,
         per_core: Vec<CpuUsage>,
@@ -220,26 +220,21 @@ impl MetricsState {
         }
     }
 
-    pub fn cpu_usage(&self) -> &CpuUsage { &self.cpu_usage }
-    pub fn per_core(&self) -> &[CpuUsage] { &self.per_core }
-    pub fn memory_used(&self) -> &MemoryBytes { &self.memory_used }
-    pub fn memory_total(&self) -> &MemoryBytes { &self.memory_total }
-    pub fn swap_used(&self) -> &MemoryBytes { &self.swap_used }
-    pub fn swap_total(&self) -> &MemoryBytes { &self.swap_total }
-    pub fn disks(&self) -> &[DiskMetric] { &self.disks }
-    pub fn network_tx(&self) -> &NetworkSpeed { &self.network_tx }
-    pub fn network_rx(&self) -> &NetworkSpeed { &self.network_rx }
-    pub fn temperature(&self) -> &Temperature { &self.temperature }
-    pub fn config(&self) -> &MetricsConfig { &self.config }
-
-    pub fn normalize_cpu_usage(mode: &CpuMode, global_cpu: f32, nproc: f32, per_core: Vec<f32>) -> (CpuUsage, Vec<CpuUsage>) {
+    pub fn normalize_cpu_usage(
+        mode: &CpuMode,
+        global_cpu: f32,
+        nproc: f32,
+        per_core: Vec<f32>,
+    ) -> (CpuUsage, Vec<CpuUsage>) {
         match mode {
-            CpuMode::Percentage0to100 => {
-                (CpuUsage::new(global_cpu), per_core.into_iter().map(CpuUsage::new).collect())
-            }
-            CpuMode::PercentageNproc => {
-                (CpuUsage::new(global_cpu * nproc), per_core.into_iter().map(CpuUsage::new).collect())
-            }
+            CpuMode::Percentage0to100 => (
+                CpuUsage::new(global_cpu),
+                per_core.into_iter().map(CpuUsage::new).collect(),
+            ),
+            CpuMode::PercentageNproc => (
+                CpuUsage::new(global_cpu * nproc),
+                per_core.into_iter().map(CpuUsage::new).collect(),
+            ),
         }
     }
 }
@@ -253,9 +248,14 @@ mod tests {
         let global_cpu = 25.0; // 25% across 4 cores = 1 core fully loaded
         let nproc = 4.0;
         let per_core = vec![100.0, 0.0, 0.0, 0.0];
-        
-        let (norm_global, norm_per_core) = MetricsState::normalize_cpu_usage(&CpuMode::Percentage0to100, global_cpu, nproc, per_core.clone());
-        assert_eq!(norm_global.value(), 25.0);
+
+        let (norm_global, norm_per_core) = MetricsState::normalize_cpu_usage(
+            &CpuMode::Percentage0to100,
+            global_cpu,
+            nproc,
+            per_core.clone(),
+        );
+        assert_eq!(norm_global, CpuUsage::new(25.0));
         let expected_per_core: Vec<CpuUsage> = per_core.into_iter().map(CpuUsage::new).collect();
         assert_eq!(norm_per_core, expected_per_core);
     }
@@ -265,9 +265,14 @@ mod tests {
         let global_cpu = 25.0; // 25% across 4 cores = 1 core fully loaded
         let nproc = 4.0;
         let per_core = vec![100.0, 0.0, 0.0, 0.0];
-        
-        let (norm_global, norm_per_core) = MetricsState::normalize_cpu_usage(&CpuMode::PercentageNproc, global_cpu, nproc, per_core.clone());
-        assert_eq!(norm_global.value(), 100.0); // 25.0 * 4 = 100.0%
+
+        let (norm_global, norm_per_core) = MetricsState::normalize_cpu_usage(
+            &CpuMode::PercentageNproc,
+            global_cpu,
+            nproc,
+            per_core.clone(),
+        );
+        assert_eq!(norm_global, CpuUsage::new(100.0)); // 25.0 * 4 = 100.0%
         let expected_per_core: Vec<CpuUsage> = per_core.into_iter().map(CpuUsage::new).collect();
         assert_eq!(norm_per_core, expected_per_core);
     }

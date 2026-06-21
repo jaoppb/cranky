@@ -1,7 +1,7 @@
-use async_trait::async_trait;
-use crate::domain::signals::SignalHub;
 use crate::domain::applets::{AppletItem, AppletStatus, AppletsState};
+use crate::domain::signals::SignalHub;
 use crate::ports::sni::SniPort;
+use async_trait::async_trait;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -12,16 +12,16 @@ pub enum SniAdapterError {
     Internal(String),
 }
 
-use zbus::{Connection, interface};
+use freedesktop_icons::lookup;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, error, debug};
-use zbus::zvariant::ObjectPath;
+use tokio_stream::StreamExt;
+use tracing::{debug, error, info};
 use zbus::fdo::PropertiesProxy;
 use zbus::names::InterfaceName;
-use tokio_stream::StreamExt;
-use std::collections::HashMap;
-use freedesktop_icons::lookup;
+use zbus::zvariant::ObjectPath;
+use zbus::{Connection, interface};
 
 #[zbus::proxy(interface = "org.kde.StatusNotifierItem", assume_defaults = true)]
 trait StatusNotifierItem {
@@ -62,16 +62,23 @@ struct Watcher {
 
 #[interface(name = "org.kde.StatusNotifierWatcher")]
 impl Watcher {
-    async fn register_status_notifier_item(&self, service: String, #[zbus(header)] header: zbus::message::Header<'_>) {
+    async fn register_status_notifier_item(
+        &self,
+        service: String,
+        #[zbus(header)] header: zbus::message::Header<'_>,
+    ) {
         debug!("Registered SNI item: {}", service);
-        
+
         let mut full_path = service.clone();
         if !full_path.starts_with('/') {
             full_path = "/StatusNotifierItem".to_string();
         }
 
         let dbus_dest = if service.starts_with('/') {
-            header.sender().map(|s| s.as_str().to_string()).unwrap_or_else(|| service.clone())
+            header
+                .sender()
+                .map(|s| s.as_str().to_string())
+                .unwrap_or_else(|| service.clone())
         } else {
             service.clone()
         };
@@ -117,30 +124,55 @@ impl Watcher {
     ) -> AppletItem {
         let iface = InterfaceName::try_from("org.kde.StatusNotifierItem").unwrap();
         let path = ObjectPath::try_from(path_str.as_str()).unwrap();
-        
+
         let props = match PropertiesProxy::builder(conn)
-            .destination(dest.clone()).unwrap()
-            .path(path.clone()).unwrap()
+            .destination(dest.clone())
+            .unwrap()
+            .path(path.clone())
+            .unwrap()
             .build()
-            .await {
-                Ok(p) => p,
-                Err(_) => return AppletItem::new(
+            .await
+        {
+            Ok(p) => p,
+            Err(_) => {
+                return AppletItem::new(
                     crate::domain::applets::AppletId::new(id.clone()),
                     crate::domain::applets::Destination::new(dest.clone()),
                     crate::domain::applets::ObjectPath::new(path_str.clone()),
                     crate::domain::applets::Title::new(String::new()),
-                    AppletStatus::Unknown, None, None, None)
-            };
+                    AppletStatus::Unknown,
+                    None,
+                    None,
+                    None,
+                );
+            }
+        };
 
         let mut all_props = props.get_all(iface.clone()).await.unwrap_or_default();
 
-        let title: String = all_props.remove("Title").and_then(|v| v.try_into().ok()).unwrap_or_default();
-        let status_str: String = all_props.remove("Status").and_then(|v| v.try_into().ok()).unwrap_or_default();
-        let icon_name: Option<String> = all_props.remove("IconName").and_then(|v| v.try_into().ok());
-        let icon_theme_path: Option<String> = all_props.remove("IconThemePath").and_then(|v| v.try_into().ok());
-        
-        tracing::debug!("SNI fetch [{}]: title='{}', status='{}', icon_name='{:?}', theme_path='{:?}'", id, title, status_str, icon_name, icon_theme_path);
-        
+        let title: String = all_props
+            .remove("Title")
+            .and_then(|v| v.try_into().ok())
+            .unwrap_or_default();
+        let status_str: String = all_props
+            .remove("Status")
+            .and_then(|v| v.try_into().ok())
+            .unwrap_or_default();
+        let icon_name: Option<String> =
+            all_props.remove("IconName").and_then(|v| v.try_into().ok());
+        let icon_theme_path: Option<String> = all_props
+            .remove("IconThemePath")
+            .and_then(|v| v.try_into().ok());
+
+        tracing::debug!(
+            "SNI fetch [{}]: title='{}', status='{}', icon_name='{:?}', theme_path='{:?}'",
+            id,
+            title,
+            status_str,
+            icon_name,
+            icon_theme_path
+        );
+
         let status = match status_str.as_str() {
             "Active" => AppletStatus::Active,
             "Passive" => AppletStatus::Passive,
@@ -150,7 +182,9 @@ impl Watcher {
 
         let max_scale = 3.0f32; // Default to 3.0 for sharp scaling on any screen
 
-        let icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>> = all_props.remove("IconPixmap").and_then(|v| v.try_into().ok());
+        let icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>> = all_props
+            .remove("IconPixmap")
+            .and_then(|v| v.try_into().ok());
         let icon_name_clone = icon_name.clone();
         let (_, icon_image) = tokio::task::spawn_blocking(move || {
             let mut icon_loaded = false;
@@ -158,70 +192,80 @@ impl Watcher {
 
             // 1. Try to load from IconPixmap first, as many apps (like Slack/Discord) only supply this
             if let Some(pixmaps) = &icon_pixmap
-                && !pixmaps.is_empty() {
-                    let target_size = (24.0 * max_scale) as i32;
-                    let mut best_diff = i32::MAX;
-                    let mut best_pixmap: Option<&(i32, i32, Vec<u8>)> = None;
-                    for pixmap in pixmaps {
-                        let diff = (pixmap.0 - target_size).abs();
-                        if diff < best_diff {
-                            best_diff = diff;
-                            best_pixmap = Some(pixmap);
-                        }
-                    }
-                    
-                    if let Some(pixmap) = best_pixmap {
-                        let w = pixmap.0 as u32;
-                        let h = pixmap.1 as u32;
-                        let data = &pixmap.2;
-                        if data.len() == (w * h * 4) as usize {
-                            let mut rgba_data = Vec::with_capacity(data.len());
-                            for chunk in data.chunks_exact(4) {
-                                let a = chunk[0];
-                                let r = chunk[1];
-                                let g = chunk[2];
-                                let b = chunk[3];
-                                rgba_data.push(r);
-                                rgba_data.push(g);
-                                rgba_data.push(b);
-                                rgba_data.push(a);
-                            }
-                            icon_image = Some(crate::domain::applets::IconImage::new(rgba_data, crate::domain::shared::geometry::Size::new(w, h)));
-                            icon_loaded = true;
-                        }
+                && !pixmaps.is_empty()
+            {
+                let target_size = (24.0 * max_scale) as i32;
+                let mut best_diff = i32::MAX;
+                let mut best_pixmap: Option<&(i32, i32, Vec<u8>)> = None;
+                for pixmap in pixmaps {
+                    let diff = (pixmap.0 - target_size).abs();
+                    if diff < best_diff {
+                        best_diff = diff;
+                        best_pixmap = Some(pixmap);
                     }
                 }
+
+                if let Some(pixmap) = best_pixmap {
+                    let w = pixmap.0 as u32;
+                    let h = pixmap.1 as u32;
+                    let data = &pixmap.2;
+                    if data.len() == (w * h * 4) as usize {
+                        let mut rgba_data = Vec::with_capacity(data.len());
+                        for chunk in data.chunks_exact(4) {
+                            let a = chunk[0];
+                            let r = chunk[1];
+                            let g = chunk[2];
+                            let b = chunk[3];
+                            rgba_data.push(r);
+                            rgba_data.push(g);
+                            rgba_data.push(b);
+                            rgba_data.push(a);
+                        }
+                        icon_image = Some(crate::domain::applets::IconImage::new(
+                            rgba_data,
+                            crate::domain::shared::geometry::Size::new(w, h),
+                        ));
+                        icon_loaded = true;
+                    }
+                }
+            }
 
             // 2. Fall back to IconName if not loaded or if IconPixmap was empty
-            if !icon_loaded
-                && let Some(name) = &icon_name_clone {
-                    let mut found_path = None;
-                    
-                    if let Some(theme_path) = &icon_theme_path {
-                        let base = std::path::Path::new(theme_path);
-                        let png = base.join(format!("{}.png", name));
-                        if png.exists() {
-                            found_path = Some(png);
-                        } else {
-                            let svg = base.join(format!("{}.svg", name));
-                            if svg.exists() {
-                                found_path = Some(svg);
-                            }
+            if !icon_loaded && let Some(name) = &icon_name_clone {
+                let mut found_path = None;
+
+                if let Some(theme_path) = &icon_theme_path {
+                    let base = std::path::Path::new(theme_path);
+                    let png = base.join(format!("{}.png", name));
+                    if png.exists() {
+                        found_path = Some(png);
+                    } else {
+                        let svg = base.join(format!("{}.svg", name));
+                        if svg.exists() {
+                            found_path = Some(svg);
                         }
                     }
-
-                    if found_path.is_none() {
-                        found_path = lookup(name).find();
-                    }
-
-                    if let Some(icon_path) = found_path
-                        && let Some((w, h, bytes)) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale) {
-                            icon_image = Some(crate::domain::applets::IconImage::new(bytes, crate::domain::shared::geometry::Size::new(w, h)));
-                        }
                 }
-            
+
+                if found_path.is_none() {
+                    found_path = lookup(name).find();
+                }
+
+                if let Some(icon_path) = found_path
+                    && let Some((w, h, bytes)) =
+                        crate::utils::load_icon_rgba(&icon_path, 24, max_scale)
+                {
+                    icon_image = Some(crate::domain::applets::IconImage::new(
+                        bytes,
+                        crate::domain::shared::geometry::Size::new(w, h),
+                    ));
+                }
+            }
+
             (icon_loaded, icon_image)
-        }).await.unwrap_or((false, None));
+        })
+        .await
+        .unwrap_or((false, None));
 
         AppletItem::new(
             crate::domain::applets::AppletId::new(id),
@@ -244,14 +288,15 @@ impl Watcher {
         path_str: String,
     ) -> zbus::Result<()> {
         let id = format!("{}{}", dest, path_str);
-        
+
         let proxy = StatusNotifierItemProxy::builder(&conn)
             .destination(dest.clone())?
             .path(path_str.clone())?
             .build()
             .await?;
 
-        let applet = Self::fetch_applet_item(&conn, id.clone(), dest.clone(), path_str.clone()).await;
+        let applet =
+            Self::fetch_applet_item(&conn, id.clone(), dest.clone(), path_str.clone()).await;
 
         {
             let mut lock = items.write().await;
@@ -260,10 +305,22 @@ impl Watcher {
         Self::publish_state(&items, &hub).await;
 
         tracing::info!("Setting up SNI signal streams for {}", id);
-        let Ok(mut new_title) = proxy.receive_new_title().await else { tracing::error!("Failed to subscribe to new_title for {}", id); return Ok(()) };
-        let Ok(mut new_icon) = proxy.receive_new_icon().await else { tracing::error!("Failed to subscribe to new_icon for {}", id); return Ok(()) };
-        let Ok(mut new_status) = proxy.receive_new_status().await else { tracing::error!("Failed to subscribe to new_status for {}", id); return Ok(()) };
-        let Ok(mut new_path) = proxy.receive_new_icon_theme_path().await else { tracing::error!("Failed to subscribe to new_icon_theme_path for {}", id); return Ok(()) };
+        let Ok(mut new_title) = proxy.receive_new_title().await else {
+            tracing::error!("Failed to subscribe to new_title for {}", id);
+            return Ok(());
+        };
+        let Ok(mut new_icon) = proxy.receive_new_icon().await else {
+            tracing::error!("Failed to subscribe to new_icon for {}", id);
+            return Ok(());
+        };
+        let Ok(mut new_status) = proxy.receive_new_status().await else {
+            tracing::error!("Failed to subscribe to new_status for {}", id);
+            return Ok(());
+        };
+        let Ok(mut new_path) = proxy.receive_new_icon_theme_path().await else {
+            tracing::error!("Failed to subscribe to new_icon_theme_path for {}", id);
+            return Ok(());
+        };
 
         tracing::info!("Successfully subscribed to all SNI signals for {}", id);
 
@@ -287,7 +344,13 @@ impl Watcher {
                 }
 
                 tracing::debug!("Re-fetching applet properties for {}", id_clone);
-                let applet = Self::fetch_applet_item(&conn, id_clone.clone(), dest_clone.clone(), path_str_clone.clone()).await;
+                let applet = Self::fetch_applet_item(
+                    &conn,
+                    id_clone.clone(),
+                    dest_clone.clone(),
+                    path_str_clone.clone(),
+                )
+                .await;
                 {
                     let mut lock = items_clone.write().await;
                     lock.insert(id_clone.clone(), applet);
@@ -326,9 +389,10 @@ impl SniAdapter {
 #[async_trait]
 impl SniPort for SniAdapter {
     async fn start(&mut self) -> Result<(), SniAdapterError> {
-        let conn = Connection::session().await
+        let conn = Connection::session()
+            .await
             .map_err(|e| SniAdapterError::InitFailed(e.to_string()))?;
-        
+
         // Attempt to request the Watcher name
         match conn.request_name("org.kde.StatusNotifierWatcher").await {
             Ok(_) => {
@@ -339,11 +403,16 @@ impl SniPort for SniAdapter {
                     conn: conn.clone(),
                     runtime: tokio::runtime::Handle::current(),
                 };
-                let _res: bool = conn.object_server().at::<&str, Watcher>("/StatusNotifierWatcher", watcher).await
+                let _res: bool = conn
+                    .object_server()
+                    .at::<&str, Watcher>("/StatusNotifierWatcher", watcher)
+                    .await
                     .map_err(|e: zbus::Error| SniAdapterError::InitFailed(e.to_string()))?;
-            },
+            }
             Err(_) => {
-                info!("Could not claim org.kde.StatusNotifierWatcher. Will attempt to run as host only.");
+                info!(
+                    "Could not claim org.kde.StatusNotifierWatcher. Will attempt to run as host only."
+                );
             }
         }
 
@@ -355,7 +424,7 @@ impl SniPort for SniAdapter {
     async fn trigger_action(&self, id: &str, action: &str) -> Result<(), SniAdapterError> {
         let lock = self.conn.lock().await;
         let items_lock = self.items.read().await;
-        
+
         if let (Some(conn), Some(applet)) = (lock.as_ref(), items_lock.get(id)) {
             let proxy = zbus::Proxy::new(
                 conn,

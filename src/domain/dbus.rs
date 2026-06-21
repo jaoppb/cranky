@@ -29,9 +29,7 @@ pub enum DBusValue {
     Null,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct DBusState {
     pub properties: HashMap<String, DBusValue>,
 }
-

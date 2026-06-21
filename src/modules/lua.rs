@@ -110,39 +110,41 @@ impl AnyModulePort for LuaModule {
         let mut subs = Vec::new();
         if let Ok(subs_fn) = globals.get::<Function>("subscriptions") {
             if let Ok(result) = subs_fn.call::<mlua::Value>(())
-                && let mlua::Value::Table(t) = result {
-                    for (_, val) in t.pairs::<mlua::Value, mlua::Value>().flatten() {
-                        if let mlua::Value::String(s) = &val {
-                            if let Ok(s_str) = s.to_str() {
-                                match s_str.as_ref() {
-                                    "time" => subs.push(SignalKind::Time),
-                                    "hyprland" => subs.push(SignalKind::Hyprland),
-                                    "applets" => subs.push(SignalKind::Applets),
-                                    "metrics" => subs.push(SignalKind::Metrics),
-                                    _ => {}
-                                }
+                && let mlua::Value::Table(t) = result
+            {
+                for (_, val) in t.pairs::<mlua::Value, mlua::Value>().flatten() {
+                    if let mlua::Value::String(s) = &val {
+                        if let Ok(s_str) = s.to_str() {
+                            match s_str.as_ref() {
+                                "time" => subs.push(SignalKind::Time),
+                                "hyprland" => subs.push(SignalKind::Hyprland),
+                                "applets" => subs.push(SignalKind::Applets),
+                                "metrics" => subs.push(SignalKind::Metrics),
+                                _ => {}
                             }
-                        } else if let mlua::Value::Table(dbus_sub) = &val
-                            && let Ok(typ) = dbus_sub.get::<String>("type")
-                                && typ == "dbus" {
-                                    let bus_str = dbus_sub
-                                        .get::<String>("bus")
-                                        .unwrap_or_else(|_| "session".to_string());
-                                    let bus = if bus_str == "system" {
-                                        BusType::System
-                                    } else {
-                                        BusType::Session
-                                    };
-                                    subs.push(SignalKind::DBus(DBusSubscription {
-                                        bus,
-                                        destination: dbus_sub.get::<String>("destination").ok(),
-                                        path: dbus_sub.get::<String>("path").ok(),
-                                        interface: dbus_sub.get::<String>("interface").ok(),
-                                        member: dbus_sub.get::<String>("member").ok(),
-                                    }));
-                                }
+                        }
+                    } else if let mlua::Value::Table(dbus_sub) = &val
+                        && let Ok(typ) = dbus_sub.get::<String>("type")
+                        && typ == "dbus"
+                    {
+                        let bus_str = dbus_sub
+                            .get::<String>("bus")
+                            .unwrap_or_else(|_| "session".to_string());
+                        let bus = if bus_str == "system" {
+                            BusType::System
+                        } else {
+                            BusType::Session
+                        };
+                        subs.push(SignalKind::DBus(DBusSubscription {
+                            bus,
+                            destination: dbus_sub.get::<String>("destination").ok(),
+                            path: dbus_sub.get::<String>("path").ok(),
+                            interface: dbus_sub.get::<String>("interface").ok(),
+                            member: dbus_sub.get::<String>("member").ok(),
+                        }));
                     }
                 }
+            }
         } else {
             if self.name == "hour" {
                 subs.push(SignalKind::Time);
@@ -495,9 +497,7 @@ impl AnyModulePort for LuaModule {
 
                 let hide_tooltip = scope
                     .create_function(|_, ()| {
-                        commands_cell
-                            .borrow_mut()
-                            .push(AppCommand::HideTooltip);
+                        commands_cell.borrow_mut().push(AppCommand::HideTooltip);
                         Ok(())
                     })
                     .unwrap();

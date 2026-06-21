@@ -1,14 +1,14 @@
 pub mod shared;
 
-pub mod signals;
 pub mod app;
+pub mod applets;
 pub mod commands;
 pub mod config;
-pub mod workspace;
 pub mod dbus;
 pub mod events;
-pub mod applets;
 pub mod metrics;
+pub mod signals;
+pub mod workspace;
 
 use std::fmt;
 
@@ -18,10 +18,6 @@ pub struct ModuleId(u32);
 impl ModuleId {
     pub fn new(id: u32) -> Self {
         Self(id)
-    }
-
-    pub fn value(&self) -> u32 {
-        self.0
     }
 }
 

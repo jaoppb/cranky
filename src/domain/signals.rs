@@ -1,10 +1,10 @@
-use serde::Serialize;
 use crate::domain::config::Config;
-use crate::domain::workspace::{Workspace, Monitor};
+use crate::domain::workspace::{Monitor, Workspace};
+use serde::Serialize;
 use tokio::sync::watch;
 
-use crate::domain::dbus::{DBusState, DBusSubscription};
 use crate::domain::applets::AppletsState;
+use crate::domain::dbus::{DBusState, DBusSubscription};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SignalKind {
@@ -15,7 +15,6 @@ pub enum SignalKind {
     Metrics,
 }
 
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct HyprlandState {
     workspaces: Vec<Workspace>,
@@ -24,13 +23,11 @@ pub struct HyprlandState {
 
 impl HyprlandState {
     pub fn new(workspaces: Vec<Workspace>, monitors: Vec<Monitor>) -> Self {
-        Self { workspaces, monitors }
+        Self {
+            workspaces,
+            monitors,
+        }
     }
-
-    pub fn workspaces(&self) -> &[Workspace] {
-        &self.workspaces
-    }
-
     pub fn monitors(&self) -> &[Monitor] {
         &self.monitors
     }
@@ -39,11 +36,26 @@ impl HyprlandState {
 pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
     hyprland: (watch::Sender<HyprlandState>, watch::Receiver<HyprlandState>),
-    time: (watch::Sender<chrono::DateTime<chrono::Local>>, watch::Receiver<chrono::DateTime<chrono::Local>>),
+    time: (
+        watch::Sender<chrono::DateTime<chrono::Local>>,
+        watch::Receiver<chrono::DateTime<chrono::Local>>,
+    ),
     dbus: (watch::Sender<DBusState>, watch::Receiver<DBusState>),
     applets: (watch::Sender<AppletsState>, watch::Receiver<AppletsState>),
-    metrics: (watch::Sender<crate::domain::metrics::MetricsState>, watch::Receiver<crate::domain::metrics::MetricsState>),
-    pointer: (tokio::sync::broadcast::Sender<(crate::domain::ModuleId, crate::domain::events::PointerEvent)>, tokio::sync::broadcast::Receiver<(crate::domain::ModuleId, crate::domain::events::PointerEvent)>),
+    metrics: (
+        watch::Sender<crate::domain::metrics::MetricsState>,
+        watch::Receiver<crate::domain::metrics::MetricsState>,
+    ),
+    pointer: (
+        tokio::sync::broadcast::Sender<(
+            crate::domain::ModuleId,
+            crate::domain::events::PointerEvent,
+        )>,
+        tokio::sync::broadcast::Receiver<(
+            crate::domain::ModuleId,
+            crate::domain::events::PointerEvent,
+        )>,
+    ),
 }
 
 impl SignalHub {
@@ -114,12 +126,21 @@ impl SignalHub {
     pub fn metrics_rx(&self) -> watch::Receiver<crate::domain::metrics::MetricsState> {
         self.metrics.1.clone()
     }
-
-    pub fn pointer_tx(&self) -> tokio::sync::broadcast::Sender<(crate::domain::ModuleId, crate::domain::events::PointerEvent)> {
-        self.pointer.0.clone()
+    pub fn pointer_tx(
+        &self,
+    ) -> &tokio::sync::broadcast::Sender<(
+        crate::domain::ModuleId,
+        crate::domain::events::PointerEvent,
+    )> {
+        &self.pointer.0
     }
 
-    pub fn pointer_rx(&self) -> tokio::sync::broadcast::Receiver<(crate::domain::ModuleId, crate::domain::events::PointerEvent)> {
+    pub fn pointer_rx(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<(
+        crate::domain::ModuleId,
+        crate::domain::events::PointerEvent,
+    )> {
         self.pointer.0.subscribe()
     }
 }
@@ -137,7 +158,7 @@ mod tests {
 
         let new_config = Config::default();
         config_tx.send(new_config).unwrap();
-        
+
         assert!(config_rx.has_changed().unwrap());
     }
 

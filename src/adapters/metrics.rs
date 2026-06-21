@@ -1,7 +1,7 @@
-use std::sync::Arc;
-use sysinfo::{System, Networks, Components, Disks};
-use crate::domain::metrics::{MetricsConfig, MetricsState, DiskMetric};
+use crate::domain::metrics::{DiskMetric, MetricsConfig, MetricsState};
 use crate::domain::signals::SignalHub;
+use std::sync::Arc;
+use sysinfo::{Components, Disks, Networks, System};
 
 pub struct SysinfoAdapter {
     config: MetricsConfig,
@@ -33,9 +33,14 @@ impl SysinfoAdapter {
                 // CPU
                 let nproc = sys.cpus().len() as f32;
                 let global_cpu = sys.global_cpu_usage();
-                
+
                 let per_core_raw: Vec<f32> = sys.cpus().iter().map(|c| c.cpu_usage()).collect();
-                let (cpu_usage, per_core) = MetricsState::normalize_cpu_usage(config.cpu(), global_cpu, nproc, per_core_raw);
+                let (cpu_usage, per_core) = MetricsState::normalize_cpu_usage(
+                    config.cpu(),
+                    global_cpu,
+                    nproc,
+                    per_core_raw,
+                );
 
                 // Network
                 let mut network_tx: u64 = 0;
@@ -53,10 +58,14 @@ impl SysinfoAdapter {
                     for disk in &disks {
                         disk_metrics.push(DiskMetric::new(
                             crate::domain::metrics::DiskName::new(disk.name().to_string_lossy()),
-                            crate::domain::metrics::MountPoint::new(disk.mount_point().to_string_lossy()),
+                            crate::domain::metrics::MountPoint::new(
+                                disk.mount_point().to_string_lossy(),
+                            ),
                             crate::domain::metrics::MemoryBytes::new(disk.total_space()),
                             crate::domain::metrics::MemoryBytes::new(disk.available_space()),
-                            crate::domain::metrics::MemoryBytes::new(disk.total_space().saturating_sub(disk.available_space())),
+                            crate::domain::metrics::MemoryBytes::new(
+                                disk.total_space().saturating_sub(disk.available_space()),
+                            ),
                         ));
                     }
                 }
@@ -74,8 +83,10 @@ impl SysinfoAdapter {
                     if count > 0 {
                         temp /= count as f32;
                     }
-                    
-                    if config.temperature() == Some(&crate::domain::metrics::TemperatureMode::Fahrenheit) {
+
+                    if config.temperature()
+                        == Some(&crate::domain::metrics::TemperatureMode::Fahrenheit)
+                    {
                         temp = (temp * 9.0 / 5.0) + 32.0;
                     }
                 }
@@ -95,8 +106,10 @@ impl SysinfoAdapter {
                 );
 
                 let _ = hub.metrics_tx().send(state);
-                
-                std::thread::sleep(std::time::Duration::from_millis(config.update_interval_ms().value()));
+
+                std::thread::sleep(std::time::Duration::from_millis(
+                    config.update_interval_ms().value(),
+                ));
             }
         });
     }

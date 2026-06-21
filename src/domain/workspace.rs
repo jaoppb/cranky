@@ -4,16 +4,21 @@ use serde::Serialize;
 pub struct WorkspaceId(i32);
 
 impl WorkspaceId {
-    pub fn new(id: i32) -> Self { Self(id) }
-    pub fn value(&self) -> i32 { self.0 }
+    pub fn new(id: i32) -> Self {
+        Self(id)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Hash)]
 pub struct MonitorName(String);
 
 impl MonitorName {
-    pub fn new(name: impl Into<String>) -> Self { Self(name.into()) }
-    pub fn as_str(&self) -> &str { &self.0 }
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -24,18 +29,7 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn new(id: WorkspaceId, monitor: MonitorName) -> Self {
-        Self {
-            id,
-            monitor,
-        }
-    }
-
-    pub fn id(&self) -> &WorkspaceId {
-        &self.id
-    }
-
-    pub fn monitor(&self) -> &MonitorName {
-        &self.monitor
+        Self { id, monitor }
     }
 }
 
@@ -57,10 +51,6 @@ impl Monitor {
 
     pub fn name(&self) -> &MonitorName {
         &self.name
-    }
-
-    pub fn active_workspace_id(&self) -> &WorkspaceId {
-        &self.active_workspace_id
     }
 
     pub fn focused(&self) -> bool {

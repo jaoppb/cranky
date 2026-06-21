@@ -1,30 +1,32 @@
 #![deny(unsafe_code)]
+#![warn(clippy::type_complexity, clippy::needless_lifetimes)]
 
-use tracing::{info, info_span, error};
+use tracing::{error, info, info_span};
+mod adapters;
 mod core;
 mod domain;
 mod modules;
 mod ports;
 mod utils;
-mod adapters;
 
 #[cfg(test)]
 #[macro_use]
 pub mod test_utils;
 
-use crate::domain::signals::SignalHub;
-use crate::domain::app::CrankyApp;
-use crate::adapters::wayland::WaylandAdapter;
-use crate::adapters::hyprland::HyprlandAdapter;
 use crate::adapters::config::ConfigAdapter;
-use crate::adapters::zbus::ZbusAdapter;
-use crate::adapters::sni::SniAdapter;
+use crate::adapters::font::CosmicFontValidatorAdapter;
+use crate::adapters::hyprland::HyprlandAdapter;
 use crate::adapters::metrics::SysinfoAdapter;
+use crate::adapters::sni::SniAdapter;
+use crate::adapters::wayland::WaylandAdapter;
+use crate::adapters::zbus::ZbusAdapter;
+use crate::domain::app::CrankyApp;
+use crate::domain::commands::AppCommand;
+use crate::domain::signals::SignalHub;
 use crate::ports::DBusPort;
 use crate::ports::sni::SniPort;
-use crate::adapters::font::CosmicFontValidatorAdapter;
-use crate::domain::commands::AppCommand;
 use std::sync::Arc;
+
 use tokio::sync::mpsc;
 use tracing::Instrument;
 
@@ -39,26 +41,29 @@ fn init_tracing() -> tracing_appender::non_blocking::WorkerGuard {
     );
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let env_filter = tracing_subscriber::EnvFilter::from_default_env()
-        .add_directive(
-            std::env::var("RUST_LOG")
-                .unwrap_or_else(|_| "cranky=info".to_string())
-                .parse()
-                .unwrap(),
-        );
+    let env_filter = tracing_subscriber::EnvFilter::from_default_env().add_directive(
+        std::env::var("RUST_LOG")
+            .unwrap_or_else(|_| "cranky=info".to_string())
+            .parse()
+            .unwrap(),
+    );
 
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
 
     tracing_subscriber::registry()
         .with(env_filter)
-        .with(tracing_subscriber::fmt::layer()
-            .with_writer(std::io::stdout)
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE))
-        .with(tracing_subscriber::fmt::layer()
-            .with_writer(non_blocking)
-            .with_ansi(false)
-            .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stdout)
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE),
+        )
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking)
+                .with_ansi(false)
+                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE),
+        )
         .init();
 
     guard
@@ -86,19 +91,25 @@ async fn init_secondary_adapters(
 
 fn spawn_background_tasks(hub: Arc<SignalHub>, hyprland_adapter: HyprlandAdapter) {
     let hub_for_hypr = hub.clone();
-    tokio::spawn(async move {
-        hyprland_adapter.run(hub_for_hypr).await;
-    }.instrument(info_span!("hyprland_adapter")));
+    tokio::spawn(
+        async move {
+            hyprland_adapter.run(hub_for_hypr).await;
+        }
+        .instrument(info_span!("hyprland_adapter")),
+    );
 
     let hub_for_time = hub.clone();
-    tokio::spawn(async move {
-        loop {
-            let now = chrono::Local::now();
-            let ms_until_next_sec = 1000 - now.timestamp_subsec_millis() as u64;
-            tokio::time::sleep(std::time::Duration::from_millis(ms_until_next_sec)).await;
-            let _ = hub_for_time.time_tx().send(chrono::Local::now());
+    tokio::spawn(
+        async move {
+            loop {
+                let now = chrono::Local::now();
+                let ms_until_next_sec = 1000 - now.timestamp_subsec_millis() as u64;
+                tokio::time::sleep(std::time::Duration::from_millis(ms_until_next_sec)).await;
+                let _ = hub_for_time.time_tx().send(chrono::Local::now());
+            }
         }
-    }.instrument(info_span!("time_adapter")));
+        .instrument(info_span!("time_adapter")),
+    );
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -114,14 +125,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let font_validator = CosmicFontValidatorAdapter::new();
     let config_adapter = ConfigAdapter::new(font_validator);
     let initial_config = config_adapter.load_initial()?;
-    
+
     let hub = Arc::new(SignalHub::new(initial_config.clone()));
 
     // 2. Initialize Wayland and Core App
     let (command_tx, command_rx) = mpsc::channel::<AppCommand>(100);
-    
+
     let (wayland_adapter, surface_manager) = WaylandAdapter::new(hub.clone(), command_tx.clone())?;
-    let surface_manager: crate::ports::surface::DynSurfaceManager = std::sync::Arc::new(surface_manager);
+    let surface_manager: crate::ports::surface::DynSurfaceManager =
+        std::sync::Arc::new(surface_manager);
 
     let registry = Box::new(crate::modules::ModuleRegistry::new());
     let mut app = CrankyApp::new(
@@ -130,7 +142,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         command_rx,
         command_tx.clone(),
         surface_manager,
-        registry
+        registry,
     )?;
 
     // 3. Initialize secondary adapters

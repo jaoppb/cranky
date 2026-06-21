@@ -79,8 +79,7 @@ impl PaddingOffset {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Config {
     bar: BarConfig,
     modules: ModulesConfig,
@@ -89,7 +88,12 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(bar: BarConfig, modules: ModulesConfig, rendering: RenderingMode, metrics: crate::domain::metrics::MetricsConfig) -> Self {
+    pub fn new(
+        bar: BarConfig,
+        modules: ModulesConfig,
+        rendering: RenderingMode,
+        metrics: crate::domain::metrics::MetricsConfig,
+    ) -> Self {
         Self {
             bar,
             modules,
@@ -106,21 +110,14 @@ impl Config {
         &self.modules
     }
 
-    pub fn rendering(&self) -> &RenderingMode {
-        &self.rendering
-    }
-
     pub fn metrics(&self) -> &crate::domain::metrics::MetricsConfig {
         &self.metrics
     }
 }
 
-
 impl Default for RenderingMode {
     fn default() -> Self {
-        Self::Timebased {
-            duration_ms: 100,
-        }
+        Self::Timebased { duration_ms: 100 }
     }
 }
 
@@ -164,20 +161,6 @@ impl RenderingMode {
     pub fn new_timebased(duration_ms: u64) -> Self {
         Self::Timebased { duration_ms }
     }
-
-    pub fn fps_limit(&self) -> Option<u32> {
-        match self {
-            RenderingMode::Immediate { fps_limit } => *fps_limit,
-            RenderingMode::Timebased { .. } => None,
-        }
-    }
-
-    pub fn duration_ms(&self) -> Option<u64> {
-        match self {
-            RenderingMode::Immediate { .. } => None,
-            RenderingMode::Timebased { duration_ms } => Some(*duration_ms),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -202,7 +185,6 @@ pub struct BarConfig {
 }
 
 impl BarConfig {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         background: DrawingColor,
         height: u32,
@@ -235,6 +217,7 @@ impl BarConfig {
         self.height
     }
 
+    #[cfg(test)]
     pub fn vertical_alignment(&self) -> VerticalAlignment {
         self.vertical_alignment
     }
@@ -330,7 +313,12 @@ pub struct MarginConfig {
 }
 
 impl MarginConfig {
-    pub fn new(top: MarginOffset, bottom: MarginOffset, left: MarginOffset, right: MarginOffset) -> Self {
+    pub fn new(
+        top: MarginOffset,
+        bottom: MarginOffset,
+        left: MarginOffset,
+        right: MarginOffset,
+    ) -> Self {
         Self {
             top,
             bottom,
@@ -365,7 +353,12 @@ pub struct PaddingConfig {
 }
 
 impl PaddingConfig {
-    pub fn new(top: PaddingOffset, bottom: PaddingOffset, left: PaddingOffset, right: PaddingOffset) -> Self {
+    pub fn new(
+        top: PaddingOffset,
+        bottom: PaddingOffset,
+        left: PaddingOffset,
+        right: PaddingOffset,
+    ) -> Self {
         Self {
             top,
             bottom,
@@ -694,7 +687,7 @@ mod tests {
             MarginOffset::new(1),
             MarginOffset::new(2),
             MarginOffset::new(3),
-            MarginOffset::new(4)
+            MarginOffset::new(4),
         );
         assert_eq!(m.top().value(), 1);
         assert_eq!(m.bottom().value(), 2);
@@ -708,7 +701,7 @@ mod tests {
             PaddingOffset::new(1),
             PaddingOffset::new(2),
             PaddingOffset::new(3),
-            PaddingOffset::new(4)
+            PaddingOffset::new(4),
         );
         assert_eq!(p.top().value(), 1);
         assert_eq!(p.bottom().value(), 2);
@@ -719,11 +712,7 @@ mod tests {
     #[test]
     fn test_border_config() {
         let c = DrawingColor::parse("#ff0000").unwrap();
-        let b = BorderConfig::new(
-            BorderSize::new(2.0),
-            c.clone(),
-            BorderRadius::new(4.0)
-        );
+        let b = BorderConfig::new(BorderSize::new(2.0), c.clone(), BorderRadius::new(4.0));
         assert_eq!(b.size().value(), 2.0);
         assert_eq!(b.color(), &c);
         assert_eq!(b.radius().value(), 4.0);
@@ -736,7 +725,7 @@ mod tests {
         assert_eq!(bar.vertical_alignment(), VerticalAlignment::Center);
         assert_eq!(bar.font_family().as_str(), "");
         assert_eq!(bar.font_size().value(), 14.0);
-        
+
         let unfocused = bar.as_unfocused();
         assert_eq!(unfocused.height(), 30);
     }
@@ -745,12 +734,16 @@ mod tests {
     fn test_module_position() {
         let left = vec![ModuleConfig::new("time".to_string(), true, HashMap::new())];
         let modules = ModulesConfig::new(left, vec![], vec![]);
-        
-        let config = Config::new(BarConfig::default(), modules, RenderingMode::default(), crate::domain::metrics::MetricsConfig::default());
+
+        let config = Config::new(
+            BarConfig::default(),
+            modules,
+            RenderingMode::default(),
+            crate::domain::metrics::MetricsConfig::default(),
+        );
         assert_eq!(config.modules().left().len(), 1);
         assert_eq!(config.modules().left()[0].name(), "time");
         assert_eq!(config.modules().center().len(), 0);
         assert_eq!(config.modules().right().len(), 0);
     }
 }
-

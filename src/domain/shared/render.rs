@@ -11,16 +11,12 @@ impl RenderBuffer {
         Self { data, size }
     }
 
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    pub fn into_data(self) -> Vec<u8> {
-        self.data
-    }
-
     pub fn size(&self) -> &Size {
         &self.size
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data
     }
 
     pub fn width(&self) -> u32 {

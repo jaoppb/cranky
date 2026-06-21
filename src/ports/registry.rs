@@ -1,67 +1,23 @@
-use crate::domain::config::{Config, ModuleConfig, BarConfig};
-use crate::domain::signals::{SignalHub, SignalKind};
-use crate::domain::{ModuleId, MonitorId, shared::geometry::{Size, Rect}};
-use crate::ports::surface::DynSurfaceManager;
 use crate::domain::commands::AppCommand;
+use crate::domain::config::{BarConfig, Config, ModuleConfig};
 use crate::domain::events::PointerEvent;
+use crate::domain::signals::{SignalHub, SignalKind};
+use crate::domain::{
+    ModuleId, MonitorId,
+    shared::geometry::{Rect, Size},
+};
 use crate::ports::canvas::Canvas;
+use crate::ports::surface::DynSurfaceManager;
 use async_trait::async_trait;
 use std::sync::Arc;
-use tokio::sync::{watch, mpsc};
-
-pub struct ModuleContext {
-    id: ModuleId,
-    hub: Arc<SignalHub>,
-    surface_manager: DynSurfaceManager,
-    command_tx: mpsc::Sender<AppCommand>,
-    // The registry/app will send layout bounds for each monitor
-    layout_rx: watch::Receiver<std::collections::HashMap<MonitorId, Rect>>,
-    pointer_rx: tokio::sync::broadcast::Receiver<(ModuleId, PointerEvent)>,
+pub trait CommandSender: Send + Sync {
+    fn send_command(&self, cmd: AppCommand);
 }
 
-impl ModuleContext {
-    pub fn new(
-        id: ModuleId,
-        hub: Arc<SignalHub>,
-        surface_manager: DynSurfaceManager,
-        command_tx: mpsc::Sender<AppCommand>,
-        layout_rx: watch::Receiver<std::collections::HashMap<MonitorId, Rect>>,
-    ) -> Self {
-        let pointer_rx = hub.pointer_rx();
-        Self {
-            id,
-            hub,
-            surface_manager,
-            command_tx,
-            layout_rx,
-            pointer_rx,
-        }
-    }
-
-    pub fn id(&self) -> ModuleId {
-        self.id
-    }
-
-    pub fn hub(&self) -> &Arc<SignalHub> {
-        &self.hub
-    }
-
-    pub fn surface_manager(&self) -> &DynSurfaceManager {
-        &self.surface_manager
-    }
-
-    pub fn command_tx(&self) -> &mpsc::Sender<AppCommand> {
-        &self.command_tx
-    }
-
-    pub fn rxs_mut(&mut self) -> (
-        &mut watch::Receiver<std::collections::HashMap<MonitorId, Rect>>,
-        &mut tokio::sync::broadcast::Receiver<(ModuleId, PointerEvent)>
-    ) {
-        (&mut self.layout_rx, &mut self.pointer_rx)
-    }
+pub trait LayoutSender: Send + Sync {
+    fn send_layout(&self, layout: std::collections::HashMap<MonitorId, Rect>);
+    fn current_layout(&self) -> std::collections::HashMap<MonitorId, Rect>;
 }
-
 #[async_trait]
 pub trait AnyModulePort: Send + Sync {
     fn init(&mut self, config: &ModuleConfig, bar_config: &BarConfig) -> Result<(), String>;
@@ -80,14 +36,14 @@ pub trait ModuleRegistryPort: Send + Sync {
         &mut self,
         hub: Arc<SignalHub>,
         surface_manager: DynSurfaceManager,
-        command_tx: mpsc::Sender<AppCommand>
-    ) -> std::collections::HashMap<ModuleId, watch::Sender<std::collections::HashMap<MonitorId, Rect>>>;
-    
+        command_tx: Arc<dyn CommandSender>,
+    ) -> std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>;
+
     fn left_modules(&self) -> Vec<ModuleId>;
     fn center_modules(&self) -> Vec<ModuleId>;
     fn right_modules(&self) -> Vec<ModuleId>;
-    
+
     fn clear(&mut self);
-    
+
     async fn register_dbus_subscriptions(&self, dbus: &mut dyn crate::ports::DBusPort);
 }

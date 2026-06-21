@@ -51,6 +51,7 @@ impl Rect {
         Self { position, size }
     }
 
+    #[cfg(test)]
     pub fn position(&self) -> &Position {
         &self.position
     }
@@ -76,33 +77,17 @@ impl Rect {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Point64 {
-    x: f64,
-    y: f64,
-}
-
-impl Point64 {
-    pub fn new(x: f64, y: f64) -> Self {
-        Self { x, y }
-    }
-
-    pub fn x(&self) -> f64 {
-        self.x
-    }
-
-    pub fn y(&self) -> f64 {
-        self.y
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct LogicalPx(f32);
 
 impl LogicalPx {
-    pub fn new(value: f32) -> Self { Self(value) }
-    pub fn value(&self) -> f32 { self.0 }
-    
+    pub fn new(value: f32) -> Self {
+        Self(value)
+    }
+    pub fn value(&self) -> f32 {
+        self.0
+    }
+
     pub fn apply_scale(&self, scale: &Scale) -> PhysicalPx {
         PhysicalPx::new(self.0 * scale.value())
     }
@@ -112,9 +97,13 @@ impl LogicalPx {
 pub struct PhysicalPx(f32);
 
 impl PhysicalPx {
-    pub fn new(value: f32) -> Self { Self(value) }
-    pub fn value(&self) -> f32 { self.0 }
-    
+    pub fn new(value: f32) -> Self {
+        Self(value)
+    }
+    pub fn value(&self) -> f32 {
+        self.0
+    }
+
     pub fn apply_inverse_scale(&self, scale: &Scale) -> LogicalPx {
         if scale.value() == 0.0 {
             LogicalPx::new(0.0)
@@ -141,6 +130,10 @@ impl Scale {
 pub struct BarWidth(u32);
 
 impl BarWidth {
-    pub fn new(value: u32) -> Self { Self(value) }
-    pub fn value(&self) -> u32 { self.0 }
+    pub fn new(value: u32) -> Self {
+        Self(value)
+    }
+    pub fn value(&self) -> u32 {
+        self.0
+    }
 }

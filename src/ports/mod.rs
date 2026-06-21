@@ -1,6 +1,6 @@
 pub mod canvas;
-pub mod font;
 pub mod dbus;
+pub mod font;
 pub mod sni;
 
 pub use dbus::DBusPort;
@@ -14,8 +14,7 @@ use thiserror::Error;
 pub enum DisplayServerError {
     #[error("Display server connection failed: {reason}")]
     ConnectionFailed { reason: String },
-    #[error("Surface error for target {target_id}: {reason}")]
-    SurfaceError { target_id: u32, reason: String },
+
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("Internal error: {0}")]
@@ -31,20 +30,29 @@ pub enum WindowManagerError {
 #[async_trait]
 #[cfg_attr(test, mockall::automock)]
 pub trait DisplayServerPort: Send + Sync {
-    fn create_bar(&self, output_id: u32, name: &str) -> Result<(), DisplayServerError>;
-    fn destroy_bar(&self, output_id: u32) -> Result<(), DisplayServerError>;
     async fn wait_for_events(&mut self) -> Result<(), DisplayServerError>;
     fn dispatch_pending(&mut self) -> Result<(), DisplayServerError>;
     fn flush(&mut self) -> Result<(), DisplayServerError>;
     fn render_all(
-        &mut self, 
+        &mut self,
         read_model: &crate::domain::app::AppReadModel,
-        layout_senders: &std::collections::HashMap<crate::domain::ModuleId, tokio::sync::watch::Sender<std::collections::HashMap<crate::domain::MonitorId, crate::domain::shared::geometry::Rect>>>
+        layout_senders: &std::collections::HashMap<
+            crate::domain::ModuleId,
+            Box<dyn crate::ports::registry::LayoutSender>,
+        >,
     ) -> Result<(), DisplayServerError>;
     fn show_tooltip(&mut self, text: &str) -> Result<(), DisplayServerError>;
     fn hide_tooltip(&mut self) -> Result<(), DisplayServerError>;
 }
 
 pub trait WindowManagerPort: Send + Sync {
-    fn get_state(&self) -> Result<(Vec<crate::domain::workspace::Workspace>, Vec<crate::domain::workspace::Monitor>), WindowManagerError>;
+    fn get_state(
+        &self,
+    ) -> Result<
+        (
+            Vec<crate::domain::workspace::Workspace>,
+            Vec<crate::domain::workspace::Monitor>,
+        ),
+        WindowManagerError,
+    >;
 }

@@ -18,11 +18,13 @@ impl FontValidatorPort for CosmicFontValidatorAdapter {
         if family.is_empty() {
             return true;
         }
-        
-        // cosmic-text uses its own Family enum for matches, 
+
+        // cosmic-text uses its own Family enum for matches,
         // but we can query the internal database for exact family name matches.
         self.font_system.db().faces().any(|face| {
-            face.families.iter().any(|(f, _)| f.to_lowercase() == family.to_lowercase())
+            face.families
+                .iter()
+                .any(|(f, _)| f.to_lowercase() == family.to_lowercase())
         })
     }
 }

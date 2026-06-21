@@ -1,7 +1,7 @@
-use crate::domain::{ModuleId, MonitorId};
 use crate::domain::shared::render::RenderBuffer;
-use std::sync::Arc;
+use crate::domain::{ModuleId, MonitorId};
 use async_trait::async_trait;
+use std::sync::Arc;
 
 #[async_trait]
 #[cfg_attr(test, mockall::automock)]

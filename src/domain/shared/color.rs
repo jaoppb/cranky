@@ -26,10 +26,18 @@ impl Color {
         Self { r, g, b, a }
     }
 
-    pub fn r(&self) -> u8 { self.r }
-    pub fn g(&self) -> u8 { self.g }
-    pub fn b(&self) -> u8 { self.b }
-    pub fn a(&self) -> u8 { self.a }
+    pub fn r(&self) -> u8 {
+        self.r
+    }
+    pub fn g(&self) -> u8 {
+        self.g
+    }
+    pub fn b(&self) -> u8 {
+        self.b
+    }
+    pub fn a(&self) -> u8 {
+        self.a
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -263,7 +271,10 @@ mod tests {
     fn test_parse_errors() {
         assert_eq!(DrawingColor::parse("  "), Err(ColorError::Empty));
         assert!(DrawingColor::parse("not-a-color").is_err());
-        assert!(matches!(DrawingColor::parse("#ff0000 #00ff00 invalid"), Err(ColorError::InvalidAngle(_))));
+        assert!(matches!(
+            DrawingColor::parse("#ff0000 #00ff00 invalid"),
+            Err(ColorError::InvalidAngle(_))
+        ));
     }
 
     #[test]
