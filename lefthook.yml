@@ -5,7 +5,9 @@ pre-commit:
   parallel: true
   commands:
     clippy:
-      run: cargo clippy --all-targets --all-features
+      glob: "*.rs"
+      stage_fixed: true
+      run: cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features && cargo clippy --all-targets --all-features -- -D warnings
 
 pre-push:
   parallel: false
