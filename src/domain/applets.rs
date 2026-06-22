@@ -85,26 +85,29 @@ pub struct AppletItem {
     menu_path: Option<ObjectPath>,
 }
 
+
+pub struct CreateAppletCommand {
+    pub id: AppletId,
+    pub destination: Destination,
+    pub path: ObjectPath,
+    pub title: Title,
+    pub status: AppletStatus,
+    pub icon_name: Option<IconName>,
+    pub icon_image: Option<IconImage>,
+    pub menu_path: Option<ObjectPath>,
+}
+
 impl AppletItem {
-    pub fn new(
-        id: AppletId,
-        destination: Destination,
-        path: ObjectPath,
-        title: Title,
-        status: AppletStatus,
-        icon_name: Option<IconName>,
-        icon_image: Option<IconImage>,
-        menu_path: Option<ObjectPath>,
-    ) -> Self {
+    pub fn new(cmd: CreateAppletCommand) -> Self {
         Self {
-            id,
-            destination,
-            path,
-            title,
-            status,
-            icon_name,
-            icon_image,
-            menu_path,
+            id: cmd.id,
+            destination: cmd.destination,
+            path: cmd.path,
+            title: cmd.title,
+            status: cmd.status,
+            icon_name: cmd.icon_name,
+            icon_image: cmd.icon_image,
+            menu_path: cmd.menu_path,
         }
     }
 

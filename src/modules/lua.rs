@@ -250,15 +250,7 @@ impl AnyModulePort for LuaModule {
                             let r = radius.unwrap_or(0.0);
                             let s = size.unwrap_or(1.0);
                             with_canvas(&mut |c| {
-                                c.draw_border(
-                                    LogicalPx::new(x as f32),
-                                    LogicalPx::new(y as f32),
-                                    LogicalPx::new(w as f32),
-                                    LogicalPx::new(h as f32),
-                                    color.clone(),
-                                    LogicalPx::new(r as f32),
-                                    LogicalPx::new(s as f32),
-                                )
+                                c.draw_border(crate::domain::shared::geometry::Position::new(x as i32, y as i32), crate::domain::shared::geometry::Size::new(w as u32, h as u32), color.clone(), LogicalPx::new(r as f32), LogicalPx::new(s as f32))
                             });
                         }
                         Ok(())
@@ -324,15 +316,7 @@ impl AnyModulePort for LuaModule {
                         let image_data: Vec<u8> =
                             lua.from_value(image_data_val).unwrap_or_default();
                         with_canvas(&mut |c| {
-                            c.draw_image(
-                                &image_data,
-                                width,
-                                height,
-                                LogicalPx::new(logical_width as f32),
-                                LogicalPx::new(logical_height as f32),
-                                LogicalPx::new(x as f32),
-                                LogicalPx::new(y as f32),
-                            )
+                            c.draw_image(&image_data, crate::domain::shared::geometry::Size::new(width, height), crate::domain::shared::geometry::Size::new(logical_width as u32, logical_height as u32), crate::domain::shared::geometry::Position::new(x as i32, y as i32))
                         });
                         Ok(())
                     },
@@ -538,16 +522,8 @@ mod tests {
             .expect("Init failed");
 
         let hub = SignalHub::new(crate::domain::config::Config::default());
-        let item = AppletItem::new(
-            AppletId::new("test_applet"),
-            Destination::new("dest"),
-            ObjectPath::new("/path"),
-            Title::new("Test Applet"),
-            AppletStatus::Active,
-            None,
-            None, // icon_image is None
-            None,
-        );
+        let item = AppletItem::new(crate::domain::applets::CreateAppletCommand { id: AppletId::new("test_applet"), destination: Destination::new("dest"), path: ObjectPath::new("/path"), title: Title::new("Test Applet"), status: AppletStatus::Active, icon_name: None, icon_image: None, menu_path: // icon_image is None
+            None, });
 
         hub.applets_tx()
             .send(AppletsState::new(vec![item]))
@@ -573,7 +549,7 @@ mod tests {
         canvas
             .expect_draw_image()
             .times(0)
-            .returning(|_, _, _, _, _, _, _| ());
+            .returning(|_, _, _, _| ());
 
         module.view(&mut canvas, &MonitorId::new("DP-1"));
     }

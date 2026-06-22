@@ -91,19 +91,19 @@ impl SysinfoAdapter {
                     }
                 }
 
-                let state = MetricsState::new(
+                let state = MetricsState::new(crate::domain::metrics::CreateMetricsCommand {
                     cpu_usage,
                     per_core,
-                    crate::domain::metrics::MemoryBytes::new(sys.used_memory()),
-                    crate::domain::metrics::MemoryBytes::new(sys.total_memory()),
-                    crate::domain::metrics::MemoryBytes::new(sys.used_swap()),
-                    crate::domain::metrics::MemoryBytes::new(sys.total_swap()),
-                    disk_metrics,
-                    crate::domain::metrics::NetworkSpeed::new(network_tx),
-                    crate::domain::metrics::NetworkSpeed::new(network_rx),
-                    crate::domain::metrics::Temperature::new(temp),
-                    config.clone(),
-                );
+                    memory_used: crate::domain::metrics::MemoryBytes::new(sys.used_memory()),
+                    memory_total: crate::domain::metrics::MemoryBytes::new(sys.total_memory()),
+                    swap_used: crate::domain::metrics::MemoryBytes::new(sys.used_swap()),
+                    swap_total: crate::domain::metrics::MemoryBytes::new(sys.total_swap()),
+                    disks: disk_metrics,
+                    network_tx: crate::domain::metrics::NetworkSpeed::new(network_tx),
+                    network_rx: crate::domain::metrics::NetworkSpeed::new(network_rx),
+                    temperature: crate::domain::metrics::Temperature::new(temp),
+                    config: config.clone(),
+                });
 
                 let _ = hub.metrics_tx().send(state);
 

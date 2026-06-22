@@ -135,16 +135,7 @@ impl Watcher {
         {
             Ok(p) => p,
             Err(_) => {
-                return AppletItem::new(
-                    crate::domain::applets::AppletId::new(id.clone()),
-                    crate::domain::applets::Destination::new(dest.clone()),
-                    crate::domain::applets::ObjectPath::new(path_str.clone()),
-                    crate::domain::applets::Title::new(String::new()),
-                    AppletStatus::Unknown,
-                    None,
-                    None,
-                    None,
-                );
+                return AppletItem::new(crate::domain::applets::CreateAppletCommand { id: crate::domain::applets::AppletId::new(id.clone()), destination: crate::domain::applets::Destination::new(dest.clone()), path: crate::domain::applets::ObjectPath::new(path_str.clone()), title: crate::domain::applets::Title::new(String::new()), status: AppletStatus::Unknown, icon_name: None, icon_image: None, menu_path: None, });
             }
         };
 
@@ -267,16 +258,7 @@ impl Watcher {
         .await
         .unwrap_or((false, None));
 
-        AppletItem::new(
-            crate::domain::applets::AppletId::new(id),
-            crate::domain::applets::Destination::new(dest),
-            crate::domain::applets::ObjectPath::new(path_str),
-            crate::domain::applets::Title::new(title),
-            status,
-            icon_name.map(crate::domain::applets::IconName::new),
-            icon_image,
-            None,
-        )
+        AppletItem::new(crate::domain::applets::CreateAppletCommand { id: crate::domain::applets::AppletId::new(id), destination: crate::domain::applets::Destination::new(dest), path: crate::domain::applets::ObjectPath::new(path_str), title: crate::domain::applets::Title::new(title), status, icon_name: icon_name.map(crate::domain::applets::IconName::new), icon_image, menu_path: None, })
     }
 
     #[tracing::instrument(skip(conn, items, hub))]

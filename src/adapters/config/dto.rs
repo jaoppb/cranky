@@ -55,17 +55,17 @@ impl BarConfigDto {
 
         let font_size = self.font_size.unwrap_or(14.0);
 
-        domain::BarConfig::new(
-            self.background,
-            self.height,
-            self.vertical_alignment.into_domain(),
-            self.border.into_domain(),
-            self.margin.into_domain(),
-            self.padding.into_domain(),
-            domain::FontFamily::new(font_family),
-            domain::FontSize::new(font_size),
-            self.unfocused.map(|u| u.into_domain()),
-        )
+        domain::BarConfig::new(crate::domain::config::CreateBarConfigCommand {
+            background: self.background,
+            height: crate::domain::shared::geometry::BarHeight::new(self.height),
+            vertical_alignment: self.vertical_alignment.into_domain(),
+            border: self.border.into_domain(),
+            margin: self.margin.into_domain(),
+            padding: self.padding.into_domain(),
+            font_family: domain::FontFamily::new(font_family),
+            font_size: domain::FontSize::new(font_size),
+            unfocused: self.unfocused.map(|u| u.into_domain()),
+        })
     }
 }
 
@@ -435,15 +435,15 @@ pub struct PartialBarConfigDto {
 
 impl PartialBarConfigDto {
     pub fn into_domain(self) -> domain::PartialBarConfig {
-        domain::PartialBarConfig::new(
-            self.background,
-            self.height,
-            self.vertical_alignment.map(|va| va.into_domain()),
-            self.border.map(|b| b.into_domain()),
-            self.margin.map(|m| m.into_domain()),
-            self.padding.map(|p| p.into_domain()),
-            self.font_family.map(domain::FontFamily::new),
-            self.font_size.map(domain::FontSize::new),
-        )
+        domain::PartialBarConfig::new(crate::domain::config::CreatePartialBarConfigCommand {
+            background: self.background,
+            height: self.height.map(crate::domain::shared::geometry::BarHeight::new),
+            vertical_alignment: self.vertical_alignment.map(|v| v.into_domain()),
+            border: self.border.map(|b| b.into_domain()),
+            margin: self.margin.map(|m| m.into_domain()),
+            padding: self.padding.map(|p| p.into_domain()),
+            font_family: self.font_family.map(domain::FontFamily::new),
+            font_size: self.font_size.map(domain::FontSize::new),
+        })
     }
 }

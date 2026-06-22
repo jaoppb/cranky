@@ -7,6 +7,10 @@ pub enum PointerEvent {
     Scroll { axis: u32, amount: f64 },
 }
 
+
+pub type PointerSender = tokio::sync::broadcast::Sender<(crate::domain::ModuleId, PointerEvent)>;
+pub type PointerReceiver = tokio::sync::broadcast::Receiver<(crate::domain::ModuleId, PointerEvent)>;
+
 #[cfg(test)]
 mod tests {
     use super::*;

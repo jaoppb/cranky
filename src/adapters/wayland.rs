@@ -435,15 +435,7 @@ impl DisplayServerPort for WaylandAdapter {
                     bg_color.clone(),
                     LogicalPx::new(4.0),
                 );
-                actual_canvas.draw_border(
-                    LogicalPx::new(0.0),
-                    LogicalPx::new(0.0),
-                    LogicalPx::new(width as f32 / scale.value()),
-                    LogicalPx::new(height as f32 / scale.value()),
-                    border_color,
-                    LogicalPx::new(4.0),
-                    LogicalPx::new(1.0),
-                );
+                actual_canvas.draw_border(crate::domain::shared::geometry::Position::new(0, 0), crate::domain::shared::geometry::Size::new((width as f32 / scale.value()) as u32, (height as f32 / scale.value()) as u32), border_color, LogicalPx::new(4.0), LogicalPx::new(1.0));
 
                 let text_color =
                     crate::domain::shared::color::DrawingColor::parse("#c0caf5").unwrap();
@@ -505,8 +497,7 @@ impl DisplayServerPort for WaylandAdapter {
 }
 
 impl WaylandAdapter {
-    #[cfg(not(test))]
-    fn handle_surface_command(&mut self, cmd: SurfaceCommand) -> Result<(), DisplayServerError> {
+        fn handle_surface_command(&mut self, cmd: SurfaceCommand) -> Result<(), DisplayServerError> {
         let qh = self.event_queue.handle();
 
         let Some(compositor) = self.state.compositor.as_ref() else {
@@ -574,8 +565,7 @@ impl WaylandAdapter {
         Ok(())
     }
 
-    #[cfg(not(test))]
-    fn render_all_outputs(
+        fn render_all_outputs(
         &mut self,
         read_model: &crate::domain::app::AppReadModel,
         layout_senders: &std::collections::HashMap<
@@ -642,7 +632,7 @@ impl WaylandAdapter {
                 .monitors()
                 .iter()
                 .find(|m| m.name().as_str() == bar.output_name)
-                .map_or(false, |m| m.focused());
+                .is_some_and(|m| m.focused());
 
             let mut bar_config = read_model.config().bar().clone();
             if !is_focused {
@@ -653,13 +643,13 @@ impl WaylandAdapter {
             let border_config = bar_config.border();
 
             // Check if hot-reload of height or margin is needed
-            if bar.config_height != bar_config.height() || bar.config_margin != *bar_config.margin()
+            if bar.config_height != bar_config.height().value() || bar.config_margin != *bar_config.margin()
             {
                 debug!(
                     "Hot-reloading bar height/margin for output: {}",
                     bar.output_name
                 );
-                bar.config_height = bar_config.height();
+                bar.config_height = bar_config.height().value();
                 bar.config_margin = bar_config.margin().clone();
 
                 let margin = bar_config.margin();
@@ -699,15 +689,7 @@ impl WaylandAdapter {
                 config_bg,
                 LogicalPx::new(border_config.radius().value()),
             );
-            bar_canvas.draw_border(
-                LogicalPx::new(half_border),
-                LogicalPx::new(half_border),
-                LogicalPx::new(width as f32 - border_size),
-                LogicalPx::new(height as f32 - border_size),
-                border_config.color().clone(),
-                LogicalPx::new(border_config.radius().value()),
-                LogicalPx::new(border_size),
-            );
+            bar_canvas.draw_border(crate::domain::shared::geometry::Position::new(half_border as i32, half_border as i32), crate::domain::shared::geometry::Size::new((width as f32 - border_size) as u32, (height as f32 - border_size) as u32), border_config.color().clone(), LogicalPx::new(border_config.radius().value()), LogicalPx::new(border_size));
 
             // Calculate layout
             let monitor_id = crate::domain::MonitorId::new(&bar.output_name);
@@ -775,27 +757,10 @@ impl WaylandAdapter {
         Ok(())
     }
 
-    #[cfg(test)]
-    fn handle_surface_command(&mut self, _cmd: SurfaceCommand) -> Result<(), DisplayServerError> {
-        Ok(())
-    }
-    #[cfg(test)]
-    fn render_all_outputs(
-        &mut self,
-        _read_model: &crate::domain::app::AppReadModel,
-        _layout_senders: &std::collections::HashMap<
-            crate::domain::ModuleId,
-            Box<dyn crate::ports::registry::LayoutSender>,
-        >,
-        _qh: &QueueHandle<WaylandState>,
-    ) -> Result<(), DisplayServerError> {
-        Ok(())
-    }
 }
 
 impl WaylandState {
-    #[cfg(not(test))]
-    fn create_bar(
+        fn create_bar(
         &mut self,
         output: &WlOutput,
         qh: &QueueHandle<Self>,
@@ -823,7 +788,7 @@ impl WaylandState {
         let margin = bar_config.margin();
         info!(
             "Creating bar for output: {} (height: {}, scale: {})",
-            output_name, bar_height, output_scale
+            output_name, bar_height.value(), output_scale
         );
 
         let compositor = self
@@ -856,7 +821,7 @@ impl WaylandState {
         );
 
         layer_surface.set_anchor(Anchor::Top | Anchor::Left | Anchor::Right);
-        layer_surface.set_size(0, bar_height);
+        layer_surface.set_size(0, bar_height.value());
         layer_surface.set_margin(
             margin.top().value(),
             margin.right().value(),
@@ -864,14 +829,14 @@ impl WaylandState {
             margin.left().value(),
         );
         layer_surface
-            .set_exclusive_zone(bar_height as i32 + margin.top().value() + margin.bottom().value());
+            .set_exclusive_zone(bar_height.value() as i32 + margin.top().value() + margin.bottom().value());
         surface.set_buffer_scale(output_scale);
         surface.commit();
 
         let shm_buffer = ShmBuffer::new(
             shm,
             1920 * output_scale as u32,
-            bar_height * output_scale as u32,
+            bar_height.value() * output_scale as u32,
             qh,
         )
         .map_err(DisplayServerError::Io)?;
@@ -882,8 +847,8 @@ impl WaylandState {
             layer_surface,
             shm_buffer,
             width: 1920,
-            height: bar_height,
-            config_height: bar_height,
+            height: bar_height.value(),
+            config_height: bar_height.value(),
             config_margin: margin.clone(),
             scale: output_scale,
             module_surfaces: HashMap::new(),
@@ -893,17 +858,8 @@ impl WaylandState {
         Ok(())
     }
 
-    #[cfg(test)]
-    fn create_bar(
-        &mut self,
-        _output: &WlOutput,
-        _qh: &QueueHandle<Self>,
-    ) -> Result<(), DisplayServerError> {
-        Ok(())
-    }
 }
 
-#[cfg(not(test))]
 impl Dispatch<WlRegistry, ()> for WaylandState {
     fn event(
         state: &mut Self,
@@ -942,7 +898,6 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
     }
 }
 
-#[cfg(not(test))]
 impl Dispatch<WlCompositor, ()> for WaylandState {
     fn event(
         _: &mut Self,
@@ -954,7 +909,6 @@ impl Dispatch<WlCompositor, ()> for WaylandState {
     ) {
     }
 }
-#[cfg(not(test))]
 impl Dispatch<WlShm, ()> for WaylandState {
     fn event(
         _: &mut Self,
@@ -966,7 +920,6 @@ impl Dispatch<WlShm, ()> for WaylandState {
     ) {
     }
 }
-#[cfg(not(test))]
 impl Dispatch<ZwlrLayerShellV1, ()> for WaylandState {
     fn event(
         _: &mut Self,
@@ -978,7 +931,6 @@ impl Dispatch<ZwlrLayerShellV1, ()> for WaylandState {
     ) {
     }
 }
-#[cfg(not(test))]
 impl Dispatch<WlSubcompositor, ()> for WaylandState {
     fn event(
         _: &mut Self,
@@ -990,7 +942,6 @@ impl Dispatch<WlSubcompositor, ()> for WaylandState {
     ) {
     }
 }
-#[cfg(not(test))]
 impl Dispatch<WlOutput, ()> for WaylandState {
     fn event(
         state: &mut Self,
@@ -1009,7 +960,6 @@ impl Dispatch<WlOutput, ()> for WaylandState {
         }
     }
 }
-#[cfg(not(test))]
 impl Dispatch<WlSeat, ()> for WaylandState {
     fn event(
         state: &mut Self,
@@ -1031,7 +981,6 @@ impl Dispatch<WlSeat, ()> for WaylandState {
         }
     }
 }
-#[cfg(not(test))]
 impl Dispatch<WlPointer, ()> for WaylandState {
     fn event(
         state: &mut Self,
@@ -1135,7 +1084,6 @@ impl Dispatch<WlPointer, ()> for WaylandState {
         }
     }
 }
-#[cfg(not(test))]
 impl Dispatch<WlSurface, ()> for WaylandState {
     fn event(
         _: &mut Self,
@@ -1147,7 +1095,6 @@ impl Dispatch<WlSurface, ()> for WaylandState {
     ) {
     }
 }
-#[cfg(not(test))]
 impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
     fn event(
         state: &mut Self,
@@ -1200,7 +1147,6 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
         }
     }
 }
-#[cfg(not(test))]
 impl Dispatch<WlBuffer, ()> for WaylandState {
     fn event(
         _: &mut Self,
@@ -1213,7 +1159,6 @@ impl Dispatch<WlBuffer, ()> for WaylandState {
     }
 }
 
-#[cfg(not(test))]
 impl Dispatch<XdgWmBase, ()> for WaylandState {
     fn event(
         _state: &mut Self,
@@ -1229,7 +1174,6 @@ impl Dispatch<XdgWmBase, ()> for WaylandState {
     }
 }
 
-#[cfg(not(test))]
 impl Dispatch<XdgSurface, ()> for WaylandState {
     fn event(
         state: &mut Self,
@@ -1261,7 +1205,6 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
     }
 }
 
-#[cfg(not(test))]
 impl Dispatch<XdgPopup, ()> for WaylandState {
     fn event(
         _state: &mut Self,
@@ -1274,7 +1217,6 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
     }
 }
 
-#[cfg(not(test))]
 impl Dispatch<XdgPositioner, ()> for WaylandState {
     fn event(
         _state: &mut Self,
@@ -1286,7 +1228,6 @@ impl Dispatch<XdgPositioner, ()> for WaylandState {
     ) {
     }
 }
-#[cfg(not(test))]
 impl Dispatch<WlShmPool, ()> for WaylandState {
     fn event(
         _: &mut Self,
@@ -1298,7 +1239,6 @@ impl Dispatch<WlShmPool, ()> for WaylandState {
     ) {
     }
 }
-#[cfg(not(test))]
 impl Dispatch<WlSubsurface, ()> for WaylandState {
     fn event(
         _: &mut Self,
@@ -1311,214 +1251,10 @@ impl Dispatch<WlSubsurface, ()> for WaylandState {
     }
 }
 
-#[cfg(test)]
-impl Dispatch<WlRegistry, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlRegistry,
-        _: wl_registry::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<WlCompositor, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlCompositor,
-        _: wayland_client::protocol::wl_compositor::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<WlShm, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlShm,
-        _: wayland_client::protocol::wl_shm::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<ZwlrLayerShellV1, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &ZwlrLayerShellV1,
-        _: wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<WlSubcompositor, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlSubcompositor,
-        _: wayland_client::protocol::wl_subcompositor::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<WlOutput, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlOutput,
-        _: wl_output::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<WlSeat, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlSeat,
-        _: wl_seat::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<WlPointer, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlPointer,
-        _: wl_pointer::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<WlSurface, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlSurface,
-        _: wayland_client::protocol::wl_surface::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &ZwlrLayerSurfaceV1,
-        _: wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<WlBuffer, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlBuffer,
-        _: wayland_client::protocol::wl_buffer::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<WlShmPool, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlShmPool,
-        _: wayland_client::protocol::wl_shm_pool::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-#[cfg(test)]
-impl Dispatch<WlSubsurface, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlSubsurface,
-        _: wayland_client::protocol::wl_subsurface::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
 
-#[cfg(test)]
-impl Dispatch<XdgWmBase, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &XdgWmBase,
-        _: wayland_protocols::xdg::shell::client::xdg_wm_base::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
 
-#[cfg(test)]
-impl Dispatch<XdgSurface, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &XdgSurface,
-        _: wayland_protocols::xdg::shell::client::xdg_surface::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
 
-#[cfg(test)]
-impl Dispatch<XdgPopup, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &XdgPopup,
-        _: wayland_protocols::xdg::shell::client::xdg_popup::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
 
-#[cfg(test)]
-impl Dispatch<XdgPositioner, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &XdgPositioner,
-        _: wayland_protocols::xdg::shell::client::xdg_positioner::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -1604,33 +1340,7 @@ mod tests {
         let _ = &state.pointer;
         let _ = &state.command_tx;
 
-        fn dummy_consume(
-            bar: Option<&WaylandBar>,
-            surf: Option<&ModuleSurface>,
-            out: Option<&WaylandOutputInfo>,
-            tt: Option<&TooltipSurface>,
-        ) {
-            if let Some(b) = bar {
-                let _ = &b.shm_buffer;
-                let _ = &b.width;
-                let _ = &b.height;
-                let _ = &b.config_height;
-                let _ = &b.configured;
-            }
-            if let Some(s) = surf {
-                let _ = &s.subsurface;
-                let _ = &s.shm_buffer;
-                let _ = &s.size;
-            }
-            if let Some(o) = out {
-                let _ = &o.scale;
-            }
-            if let Some(t) = tt {
-                let _ = &t.shm_buffer;
-                let _ = &t.size;
-            }
-        }
-        dummy_consume(None, None, None, None);
+        // Removed dummy reads since the real implementation is compiled in test mode now.
     }
 
     #[tokio::test]

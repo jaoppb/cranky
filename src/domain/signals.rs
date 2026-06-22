@@ -47,14 +47,8 @@ pub struct SignalHub {
         watch::Receiver<crate::domain::metrics::MetricsState>,
     ),
     pointer: (
-        tokio::sync::broadcast::Sender<(
-            crate::domain::ModuleId,
-            crate::domain::events::PointerEvent,
-        )>,
-        tokio::sync::broadcast::Receiver<(
-            crate::domain::ModuleId,
-            crate::domain::events::PointerEvent,
-        )>,
+        crate::domain::events::PointerSender,
+        crate::domain::events::PointerReceiver,
     ),
 }
 

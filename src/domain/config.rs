@@ -1,4 +1,5 @@
 use crate::domain::shared::color::DrawingColor;
+use crate::domain::shared::geometry::BarHeight;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -125,7 +126,7 @@ impl Default for BarConfig {
     fn default() -> Self {
         Self {
             background: DrawingColor::Solid(crate::domain::shared::color::Color::new(0, 0, 0, 255)),
-            height: 30,
+            height: BarHeight::new(30),
             vertical_alignment: VerticalAlignment::default(),
             border: BorderConfig::default(),
             margin: MarginConfig::default(),
@@ -174,7 +175,7 @@ pub enum VerticalAlignment {
 #[derive(Debug, Clone, PartialEq)]
 pub struct BarConfig {
     background: DrawingColor,
-    height: u32,
+    height: BarHeight,
     vertical_alignment: VerticalAlignment,
     border: BorderConfig,
     margin: MarginConfig,
@@ -184,28 +185,31 @@ pub struct BarConfig {
     unfocused: Option<PartialBarConfig>,
 }
 
+
+pub struct CreateBarConfigCommand {
+    pub background: DrawingColor,
+    pub height: BarHeight,
+    pub vertical_alignment: VerticalAlignment,
+    pub border: BorderConfig,
+    pub margin: MarginConfig,
+    pub padding: PaddingConfig,
+    pub font_family: FontFamily,
+    pub font_size: FontSize,
+    pub unfocused: Option<PartialBarConfig>,
+}
+
 impl BarConfig {
-    pub fn new(
-        background: DrawingColor,
-        height: u32,
-        vertical_alignment: VerticalAlignment,
-        border: BorderConfig,
-        margin: MarginConfig,
-        padding: PaddingConfig,
-        font_family: FontFamily,
-        font_size: FontSize,
-        unfocused: Option<PartialBarConfig>,
-    ) -> Self {
+    pub fn new(cmd: CreateBarConfigCommand) -> Self {
         Self {
-            background,
-            height,
-            vertical_alignment,
-            border,
-            margin,
-            padding,
-            font_family,
-            font_size,
-            unfocused,
+            background: cmd.background,
+            height: cmd.height,
+            vertical_alignment: cmd.vertical_alignment,
+            border: cmd.border,
+            margin: cmd.margin,
+            padding: cmd.padding,
+            font_family: cmd.font_family,
+            font_size: cmd.font_size,
+            unfocused: cmd.unfocused,
         }
     }
 
@@ -213,7 +217,7 @@ impl BarConfig {
         &self.background
     }
 
-    pub fn height(&self) -> u32 {
+    pub fn height(&self) -> BarHeight {
         self.height
     }
 
@@ -583,7 +587,7 @@ impl PartialBorderConfig {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct PartialBarConfig {
     background: Option<DrawingColor>,
-    height: Option<u32>,
+    height: Option<BarHeight>,
     vertical_alignment: Option<VerticalAlignment>,
     border: Option<PartialBorderConfig>,
     margin: Option<PartialMarginConfig>,
@@ -592,33 +596,36 @@ pub struct PartialBarConfig {
     font_size: Option<FontSize>,
 }
 
+
+pub struct CreatePartialBarConfigCommand {
+    pub background: Option<DrawingColor>,
+    pub height: Option<BarHeight>,
+    pub vertical_alignment: Option<VerticalAlignment>,
+    pub border: Option<PartialBorderConfig>,
+    pub margin: Option<PartialMarginConfig>,
+    pub padding: Option<PartialPaddingConfig>,
+    pub font_family: Option<FontFamily>,
+    pub font_size: Option<FontSize>,
+}
+
 impl PartialBarConfig {
-    pub fn new(
-        background: Option<DrawingColor>,
-        height: Option<u32>,
-        vertical_alignment: Option<VerticalAlignment>,
-        border: Option<PartialBorderConfig>,
-        margin: Option<PartialMarginConfig>,
-        padding: Option<PartialPaddingConfig>,
-        font_family: Option<FontFamily>,
-        font_size: Option<FontSize>,
-    ) -> Self {
+    pub fn new(cmd: CreatePartialBarConfigCommand) -> Self {
         Self {
-            background,
-            height,
-            vertical_alignment,
-            border,
-            margin,
-            padding,
-            font_family,
-            font_size,
+            background: cmd.background,
+            height: cmd.height,
+            vertical_alignment: cmd.vertical_alignment,
+            border: cmd.border,
+            margin: cmd.margin,
+            padding: cmd.padding,
+            font_family: cmd.font_family,
+            font_size: cmd.font_size,
         }
     }
 
     pub fn background(&self) -> Option<&DrawingColor> {
         self.background.as_ref()
     }
-    pub fn height(&self) -> Option<u32> {
+    pub fn height(&self) -> Option<BarHeight> {
         self.height
     }
     pub fn vertical_alignment(&self) -> Option<VerticalAlignment> {
@@ -721,13 +728,13 @@ mod tests {
     #[test]
     fn test_bar_config_defaults() {
         let bar = BarConfig::default();
-        assert_eq!(bar.height(), 30);
+        assert_eq!(bar.height().value(), 30);
         assert_eq!(bar.vertical_alignment(), VerticalAlignment::Center);
         assert_eq!(bar.font_family().as_str(), "");
         assert_eq!(bar.font_size().value(), 14.0);
 
         let unfocused = bar.as_unfocused();
-        assert_eq!(unfocused.height(), 30);
+        assert_eq!(unfocused.height().value(), 30);
     }
 
     #[test]

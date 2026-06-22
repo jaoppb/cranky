@@ -168,14 +168,17 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
 
     fn draw_border(
         &mut self,
-        x: LogicalPx,
-        y: LogicalPx,
-        width: LogicalPx,
-        height: LogicalPx,
+        position: Position,
+        size: crate::domain::shared::geometry::Size,
         color: DrawingColor,
         radius: LogicalPx,
-        size: LogicalPx,
+        border_size: LogicalPx,
     ) {
+        let x = LogicalPx::new(position.x() as f32);
+        let y = LogicalPx::new(position.y() as f32);
+        let width = LogicalPx::new(size.width() as f32);
+        let height = LogicalPx::new(size.height() as f32);
+        let size = border_size;
         let physical_x = x.apply_scale(&self.scale).value();
         let physical_y = y.apply_scale(&self.scale).value();
         let physical_w = width.apply_scale(&self.scale).value();
@@ -396,13 +399,16 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
     fn draw_image(
         &mut self,
         image_data: &[u8],
-        width: u32,
-        height: u32,
-        logical_width: LogicalPx,
-        logical_height: LogicalPx,
-        x: LogicalPx,
-        y: LogicalPx,
+        pixel_size: crate::domain::shared::geometry::Size,
+        logical_size: crate::domain::shared::geometry::Size,
+        position: Position,
     ) {
+        let width = pixel_size.width();
+        let height = pixel_size.height();
+        let logical_width = LogicalPx::new(logical_size.width() as f32);
+        let logical_height = LogicalPx::new(logical_size.height() as f32);
+        let x = LogicalPx::new(position.x() as f32);
+        let y = LogicalPx::new(position.y() as f32);
         let mut bgra_premul = Vec::with_capacity(image_data.len());
         for chunk in image_data.chunks_exact(4) {
             let r = chunk[0];

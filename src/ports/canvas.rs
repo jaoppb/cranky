@@ -4,6 +4,7 @@ use crate::domain::config::{FontFamily, FontSize};
 use crate::domain::shared::geometry::{LogicalPx, Position};
 
 #[cfg_attr(test, mockall::automock)]
+#[allow(clippy::needless_lifetimes)]
 pub trait Canvas: Send + Sync {
     /// Draw a filled rectangle with optional radius
     fn draw_rect(
@@ -19,13 +20,11 @@ pub trait Canvas: Send + Sync {
     /// Draw a border around a rectangle
     fn draw_border(
         &mut self,
-        x: LogicalPx,
-        y: LogicalPx,
-        width: LogicalPx,
-        height: LogicalPx,
+        position: Position,
+        size: crate::domain::shared::geometry::Size,
         color: DrawingColor,
         radius: LogicalPx,
-        size: LogicalPx,
+        border_size: LogicalPx,
     );
 
     /// Measure text dimensions (width, height)
@@ -50,11 +49,8 @@ pub trait Canvas: Send + Sync {
     fn draw_image(
         &mut self,
         image_data: &[u8],
-        width: u32,
-        height: u32,
-        logical_width: LogicalPx,
-        logical_height: LogicalPx,
-        x: LogicalPx,
-        y: LogicalPx,
+        pixel_size: crate::domain::shared::geometry::Size,
+        logical_size: crate::domain::shared::geometry::Size,
+        position: Position,
     );
 }

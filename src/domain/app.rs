@@ -76,7 +76,7 @@ impl AppReadModel {
         let inner_top = border_size + padding.top().value() as f32;
         let inner_bottom = border_size + padding.bottom().value() as f32;
 
-        let available_height = bar_height as f32 - inner_top - inner_bottom;
+        let available_height = bar_height.value() as f32 - inner_top - inner_bottom;
 
         let get_size = |id: &ModuleId| {
             self.module_sizes
@@ -400,29 +400,29 @@ mod tests {
 
     #[test]
     fn test_calculate_layout_unfocused() {
-        let unfocused = crate::domain::config::PartialBarConfig::new(
-            None,
-            Some(20),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let unfocused = crate::domain::config::PartialBarConfig::new(crate::domain::config::CreatePartialBarConfigCommand {
+            background: None,
+            height: Some(crate::domain::shared::geometry::BarHeight::new(20)),
+            vertical_alignment: None,
+            border: None,
+            margin: None,
+            padding: None,
+            font_family: None,
+            font_size: None,
+        });
         let default_config = crate::domain::config::BarConfig::default();
         // We need to inject the unfocused config. Since fields are private, we construct a full BarConfig:
-        let bar_config = crate::domain::config::BarConfig::new(
-            default_config.background().clone(),
-            30,
-            default_config.vertical_alignment(),
-            default_config.border().clone(),
-            default_config.margin().clone(),
-            default_config.padding().clone(),
-            default_config.font_family().clone(),
-            default_config.font_size(),
-            Some(unfocused),
-        );
+        let bar_config = crate::domain::config::BarConfig::new(crate::domain::config::CreateBarConfigCommand {
+            background: default_config.background().clone(),
+            height: crate::domain::shared::geometry::BarHeight::new(30),
+            vertical_alignment: default_config.vertical_alignment(),
+            border: default_config.border().clone(),
+            margin: default_config.margin().clone(),
+            padding: default_config.padding().clone(),
+            font_family: default_config.font_family().clone(),
+            font_size: default_config.font_size(),
+            unfocused: Some(unfocused),
+        });
 
         let config = Config::new(
             bar_config.clone(),

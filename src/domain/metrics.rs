@@ -191,32 +191,35 @@ pub struct MetricsState {
     config: MetricsConfig,
 }
 
+
+pub struct CreateMetricsCommand {
+    pub cpu_usage: CpuUsage,
+    pub per_core: Vec<CpuUsage>,
+    pub memory_used: MemoryBytes,
+    pub memory_total: MemoryBytes,
+    pub swap_used: MemoryBytes,
+    pub swap_total: MemoryBytes,
+    pub disks: Vec<DiskMetric>,
+    pub network_tx: NetworkSpeed,
+    pub network_rx: NetworkSpeed,
+    pub temperature: Temperature,
+    pub config: MetricsConfig,
+}
+
 impl MetricsState {
-    pub fn new(
-        cpu_usage: CpuUsage,
-        per_core: Vec<CpuUsage>,
-        memory_used: MemoryBytes,
-        memory_total: MemoryBytes,
-        swap_used: MemoryBytes,
-        swap_total: MemoryBytes,
-        disks: Vec<DiskMetric>,
-        network_tx: NetworkSpeed,
-        network_rx: NetworkSpeed,
-        temperature: Temperature,
-        config: MetricsConfig,
-    ) -> Self {
+    pub fn new(cmd: CreateMetricsCommand) -> Self {
         Self {
-            cpu_usage,
-            per_core,
-            memory_used,
-            memory_total,
-            swap_used,
-            swap_total,
-            disks,
-            network_tx,
-            network_rx,
-            temperature,
-            config,
+            cpu_usage: cmd.cpu_usage,
+            per_core: cmd.per_core,
+            memory_used: cmd.memory_used,
+            memory_total: cmd.memory_total,
+            swap_used: cmd.swap_used,
+            swap_total: cmd.swap_total,
+            disks: cmd.disks,
+            network_tx: cmd.network_tx,
+            network_rx: cmd.network_rx,
+            temperature: cmd.temperature,
+            config: cmd.config,
         }
     }
 

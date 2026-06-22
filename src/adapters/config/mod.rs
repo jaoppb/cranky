@@ -137,6 +137,6 @@ mod tests {
 
         // Should fallback to include_str!
         let config = adapter.load_initial().unwrap();
-        assert_eq!(config.bar().height(), 40); // config.toml height is 40
+        assert_eq!(config.bar().height().value(), 40); // config.toml height is 40
     }
 }

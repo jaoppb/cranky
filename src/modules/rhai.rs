@@ -64,15 +64,7 @@ impl RhaiModule {
             |x: f32, y: f32, width: f32, height: f32, color_str: String, radius: f32, size: f32| {
                 if let Ok(color) = DrawingColor::parse(&color_str) {
                     with_canvas(|c| {
-                        c.draw_border(
-                            LogicalPx::new(x),
-                            LogicalPx::new(y),
-                            LogicalPx::new(width),
-                            LogicalPx::new(height),
-                            color,
-                            LogicalPx::new(radius),
-                            LogicalPx::new(size),
-                        )
+                        c.draw_border(crate::domain::shared::geometry::Position::new(x as i32, y as i32), crate::domain::shared::geometry::Size::new(width as u32, height as u32), color, LogicalPx::new(radius), LogicalPx::new(size))
                     });
                 }
             },
@@ -155,15 +147,7 @@ impl RhaiModule {
              y: f32| {
                 if let Ok(image_data) = rhai::serde::from_dynamic::<Vec<u8>>(&image_data_val) {
                     with_canvas(|c| {
-                        c.draw_image(
-                            &image_data,
-                            width as u32,
-                            height as u32,
-                            LogicalPx::new(logical_width),
-                            LogicalPx::new(logical_height),
-                            LogicalPx::new(x),
-                            LogicalPx::new(y),
-                        )
+                        c.draw_image(&image_data, crate::domain::shared::geometry::Size::new(width as u32, height as u32), crate::domain::shared::geometry::Size::new(logical_width as u32, logical_height as u32), crate::domain::shared::geometry::Position::new(x as i32, y as i32))
                     });
                 }
             },

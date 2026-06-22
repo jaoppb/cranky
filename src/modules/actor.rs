@@ -63,10 +63,7 @@ impl ModuleContext {
         &mut self,
     ) -> (
         &mut watch::Receiver<HashMap<MonitorId, Rect>>,
-        &mut tokio::sync::broadcast::Receiver<(
-            crate::domain::ModuleId,
-            crate::domain::events::PointerEvent,
-        )>,
+        &mut crate::domain::events::PointerReceiver,
     ) {
         (&mut self.layout_rx, &mut self.pointer_rx)
     }
@@ -123,7 +120,7 @@ impl ModuleActor {
                             if target_id == ctx_id {
                                 let cmds = self.port.on_pointer_event(event);
                                 for cmd in cmds {
-                                    let _ = self.ctx.command_tx().send_command(cmd);
+                                    self.ctx.command_tx().send_command(cmd);
                                 }
                                 changed = true;
                             }
@@ -213,7 +210,7 @@ impl ModuleActor {
                 .unwrap_or(Size::new(0, 0));
             if size != old_size {
                 self.sizes.insert(monitor_id.clone(), size);
-                let _ = self
+                self
                     .ctx
                     .command_tx()
                     .send_command(AppCommand::ModuleSizeChanged(
