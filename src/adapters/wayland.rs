@@ -122,6 +122,7 @@ struct TooltipSurface {
 }
 
 struct WaylandOutputInfo {
+    global_id: u32,
     output: WlOutput,
     name: String,
     scale: i32,
@@ -869,31 +870,54 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
         _conn: &Connection,
         qh: &QueueHandle<Self>,
     ) {
-        if let wl_registry::Event::Global {
-            name,
-            interface,
-            version,
-        } = event
-        {
-            match interface.as_str() {
-                "wl_compositor" => state.compositor = Some(proxy.bind(name, version, qh, ())),
-                "wl_shm" => state.shm = Some(proxy.bind(name, version, qh, ())),
-                "zwlr_layer_shell_v1" => {
-                    state.layer_shell = Some(proxy.bind(name, version, qh, ()))
+        match event {
+            wl_registry::Event::Global {
+                name,
+                interface,
+                version,
+            } => {
+                match interface.as_str() {
+                    "wl_compositor" => state.compositor = Some(proxy.bind(name, version, qh, ())),
+                    "wl_shm" => state.shm = Some(proxy.bind(name, version, qh, ())),
+                    "zwlr_layer_shell_v1" => {
+                        state.layer_shell = Some(proxy.bind(name, version, qh, ()))
+                    }
+                    "xdg_wm_base" => state.xdg_wm_base = Some(proxy.bind(name, 1, qh, ())),
+                    "wl_subcompositor" => state.subcompositor = Some(proxy.bind(name, version, qh, ())),
+                    "wl_output" => {
+                        let output: WlOutput = proxy.bind(name, version, qh, ());
+                        state.outputs.push(WaylandOutputInfo {
+                            global_id: name,
+                            output,
+                            name: String::new(),
+                            scale: 1,
+                        });
+                    }
+                    "wl_seat" => state.seat = Some(proxy.bind(name, version, qh, ())),
+                    _ => {}
                 }
-                "xdg_wm_base" => state.xdg_wm_base = Some(proxy.bind(name, 1, qh, ())),
-                "wl_subcompositor" => state.subcompositor = Some(proxy.bind(name, version, qh, ())),
-                "wl_output" => {
-                    let output: WlOutput = proxy.bind(name, version, qh, ());
-                    state.outputs.push(WaylandOutputInfo {
-                        output,
-                        name: String::new(),
-                        scale: 1,
+            }
+            wl_registry::Event::GlobalRemove { name } => {
+                if let Some(pos) = state.outputs.iter().position(|o| o.global_id == name) {
+                    let info = state.outputs.remove(pos);
+                    if let Some(bar_pos) = state.bars.iter().position(|b| b.output_name == info.name) {
+                        let mut bar = state.bars.remove(bar_pos);
+                        for (_, ms) in bar.module_surfaces.drain() {
+                            ms.subsurface.destroy();
+                            ms.surface.destroy();
+                        }
+                        bar.layer_surface.destroy();
+                        bar.surface.destroy();
+                    }
+                    info.output.release();
+                    
+                    let tx = state.command_tx.clone();
+                    tokio::spawn(async move {
+                        let _ = tx.send(crate::domain::commands::AppCommand::RequestRender).await;
                     });
                 }
-                "wl_seat" => state.seat = Some(proxy.bind(name, version, qh, ())),
-                _ => {}
             }
+            _ => {}
         }
     }
 }
