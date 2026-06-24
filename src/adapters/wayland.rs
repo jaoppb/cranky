@@ -151,6 +151,21 @@ struct ModuleSurface {
     y: i32,
 }
 
+impl Drop for ModuleSurface {
+    fn drop(&mut self) {
+        self.subsurface.destroy();
+        self.surface.destroy();
+    }
+}
+
+impl Drop for WaylandBar {
+    fn drop(&mut self) {
+        self.module_surfaces.clear();
+        self.layer_surface.destroy();
+        self.surface.destroy();
+    }
+}
+
 impl WaylandAdapter {
     pub fn new(
         hub: Arc<SignalHub>,
@@ -1328,6 +1343,20 @@ mod tests {
         assert_eq!(cmd.module_id, module_id);
         assert_eq!(cmd.monitor_id, monitor_id);
         assert_eq!(cmd.buffer.size().height(), 20);
+    }
+
+    #[test]
+    #[allow(drop_bounds)]
+    fn test_regression_wayland_bar_and_module_surface_implement_drop() {
+        // Regression test: Wayland proxy objects like WlSurface and ZwlrLayerSurfaceV1
+        // must be explicitly destroyed in wayland-rs because dropping the proxy
+        // struct does not send a destroy request.
+        // We ensure that WaylandBar and ModuleSurface explicitly implement Drop
+        // so they don't leak Wayland objects when cleared during config hot-reloads.
+        fn assert_impl_drop<T: Drop>() {}
+
+        assert_impl_drop::<super::WaylandBar>();
+        assert_impl_drop::<super::ModuleSurface>();
     }
 
     #[tokio::test]
