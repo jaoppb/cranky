@@ -7,6 +7,8 @@ pub enum CpuMode {
     Percentage0to100,
     #[serde(rename = "percentage_nproc")]
     PercentageNproc,
+    #[serde(rename = "disabled")]
+    Disabled,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -16,12 +18,16 @@ pub enum MemoryMode {
     #[serde(rename = "percentual")]
     #[default]
     Percentual,
+    #[serde(rename = "disabled")]
+    Disabled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum NetworkMode {
     #[serde(rename = "tx_rx")]
     TxRx,
+    #[serde(rename = "disabled")]
+    Disabled,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -30,6 +36,8 @@ pub enum TemperatureMode {
     Celsius,
     #[serde(rename = "fahrenheit")]
     Fahrenheit,
+    #[serde(rename = "disabled")]
+    Disabled,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,6 +47,8 @@ pub enum DiskMode {
     #[serde(rename = "percentual")]
     #[default]
     Percentual,
+    #[serde(rename = "disabled")]
+    Disabled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -237,6 +247,10 @@ impl MetricsState {
             CpuMode::PercentageNproc => (
                 CpuUsage::new(global_cpu * nproc),
                 per_core.into_iter().map(CpuUsage::new).collect(),
+            ),
+            CpuMode::Disabled => (
+                CpuUsage::new(0.0),
+                per_core.into_iter().map(|_| CpuUsage::new(0.0)).collect(),
             ),
         }
     }
