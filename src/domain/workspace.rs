@@ -21,15 +21,25 @@ impl MonitorName {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Hash)]
+pub struct WorkspaceName(String);
+
+impl WorkspaceName {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Workspace {
     id: WorkspaceId,
+    name: WorkspaceName,
     monitor: MonitorName,
 }
 
 impl Workspace {
-    pub fn new(id: WorkspaceId, monitor: MonitorName) -> Self {
-        Self { id, monitor }
+    pub fn new(id: WorkspaceId, name: WorkspaceName, monitor: MonitorName) -> Self {
+        Self { id, name, monitor }
     }
 }
 
@@ -37,14 +47,21 @@ impl Workspace {
 pub struct Monitor {
     name: MonitorName,
     active_workspace_id: WorkspaceId,
+    special_workspace_id: Option<WorkspaceId>,
     focused: bool,
 }
 
 impl Monitor {
-    pub fn new(name: MonitorName, active_workspace_id: WorkspaceId, focused: bool) -> Self {
+    pub fn new(
+        name: MonitorName,
+        active_workspace_id: WorkspaceId,
+        special_workspace_id: Option<WorkspaceId>,
+        focused: bool,
+    ) -> Self {
         Self {
             name,
             active_workspace_id,
+            special_workspace_id,
             focused,
         }
     }

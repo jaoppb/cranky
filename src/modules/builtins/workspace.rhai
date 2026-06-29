@@ -29,7 +29,13 @@ fn refresh() {
     
     active_workspaces.clear();
     for m in hyprland.monitors {
-        active_workspaces[m.name] = m.active_workspace_id;
+        let state = #{};
+        state.active = m.active_workspace_id;
+        let t = type_of(m.special_workspace_id);
+        if t == "i64" || t == "i32" {
+            state.special = m.special_workspace_id;
+        }
+        active_workspaces[m.name] = state;
         if m.focused {
             focused_monitor = m.name;
         }
@@ -44,6 +50,7 @@ fn refresh() {
         if !found {
             let empty_ws = #{};
             empty_ws.id = m.active_workspace_id;
+            empty_ws.name = m.active_workspace_id.to_string();
             empty_ws.monitor = m.name;
             workspaces.push(empty_ws);
         }
@@ -55,30 +62,45 @@ fn refresh() {
 
 fn measure(monitor_id) {
     let count = 0;
+    let width = 0.0;
+    
+    let text_size = measure_text("0");
+    let padding_y = 4.0;
+    let padding_x = 6.0;
+    let item_size = text_size[1].to_float() + padding_y * 2.0;
+    let item_spacing = 6.0;
+    
     for ws in workspaces {
         if ws.monitor == monitor_id {
+            let label = ws.name;
+            if label.starts_with("special:") {
+                label = label.sub_string(8);
+            }
+            let ws_text_size = measure_text(label);
+            let lw = ws_text_size[0].to_float();
+            let rect_w = lw + padding_x * 2.0;
+            if rect_w < item_size { rect_w = item_size; }
+            width += rect_w;
             count += 1;
         }
     }
     
     if count == 0 { return [0, 0]; }
     
-    let text_size = measure_text("0");
-    let padding_y = 4.0;
-    let item_size = text_size[1].to_float() + padding_y * 2.0;
-    let item_spacing = 6.0;
-    
     let c = count;
     if c < 1 { c = 1; }
     
-    let width = (c - 1).to_float() * item_spacing + item_size * count.to_float();
+    width += (c - 1).to_float() * item_spacing;
     [width.to_int(), item_size.to_int()]
 }
 
 fn view(monitor_id) {
     let active_id = -1;
+    let special_id = -1;
     if monitor_id in active_workspaces {
-        active_id = active_workspaces[monitor_id];
+        let state = active_workspaces[monitor_id];
+        if "active" in state { active_id = state.active; }
+        if "special" in state { special_id = state.special; }
     }
     
     let is_monitor_focused = (focused_monitor == monitor_id);
@@ -95,8 +117,12 @@ fn view(monitor_id) {
     
     for ws in workspaces {
         if ws.monitor == monitor_id {
-            let label = ws.id.to_string();
-            let is_visible = (ws.id == active_id);
+            let label = ws.name;
+            if label.starts_with("special:") {
+                label = label.sub_string(8);
+            }
+            let current_active = if special_id != -1 { special_id } else { active_id };
+            let is_visible = (ws.id == current_active);
             let ws_text_size = measure_text(label);
             let lw = ws_text_size[0].to_float();
             

@@ -9,6 +9,7 @@ use std::sync::Arc;
 #[derive(Deserialize)]
 struct HyprWorkspaceDto {
     id: i32,
+    name: String,
     monitor: String,
 }
 
@@ -16,6 +17,7 @@ impl HyprWorkspaceDto {
     fn into_domain(self) -> Workspace {
         Workspace::new(
             crate::domain::workspace::WorkspaceId::new(self.id),
+            crate::domain::workspace::WorkspaceName::new(self.name),
             crate::domain::workspace::MonitorName::new(self.monitor),
         )
     }
@@ -26,6 +28,8 @@ struct HyprMonitorDto {
     name: String,
     #[serde(rename = "activeWorkspace")]
     active_workspace: HyprActiveWorkspaceDto,
+    #[serde(rename = "specialWorkspace")]
+    special_workspace: HyprActiveWorkspaceDto,
     focused: bool,
 }
 
@@ -36,9 +40,15 @@ struct HyprActiveWorkspaceDto {
 
 impl HyprMonitorDto {
     fn into_domain(self) -> Monitor {
+        let special_ws_id = if self.special_workspace.id != 0 {
+            Some(crate::domain::workspace::WorkspaceId::new(self.special_workspace.id))
+        } else {
+            None
+        };
         Monitor::new(
             crate::domain::workspace::MonitorName::new(self.name),
             crate::domain::workspace::WorkspaceId::new(self.active_workspace.id),
+            special_ws_id,
             self.focused,
         )
     }

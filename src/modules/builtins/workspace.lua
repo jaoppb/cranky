@@ -28,7 +28,10 @@ function refresh()
     workspaces = hyprland.workspaces
     active_workspaces = {}
     for _, m in ipairs(hyprland.monitors) do
-        active_workspaces[m.name] = m.active_workspace_id
+        active_workspaces[m.name] = {
+            active = m.active_workspace_id,
+            special = m.special_workspace_id
+        }
         if m.focused then
             focused_monitor = m.name
         end
@@ -43,6 +46,7 @@ function refresh()
         if not found then
             table.insert(workspaces, {
                 id = m.active_workspace_id,
+                name = tostring(m.active_workspace_id),
                 monitor = m.name
             })
         end
@@ -55,25 +59,32 @@ end
 function measure(canvas, monitor)
     local monitor_id = monitor:id()
     local count = 0
+    local width = 0
+    local _, lh = canvas:measure_text("0")
+    local padding_y = 4
+    local padding_x = 6
+    local item_size = lh + padding_y * 2
+    local item_spacing = 6
+    
     for _, ws in ipairs(workspaces) do
         if ws.monitor == monitor_id then
+            local label = ws.name:match("^special:(.*)") or ws.name
+            local lw, _ = canvas:measure_text(label)
+            local rect_w = math.max(lw + padding_x * 2, item_size)
+            width = width + rect_w
             count = count + 1
         end
     end
     
     if count == 0 then return 0, 0 end
     
-    local _, lh = canvas:measure_text("0")
-    local padding_y = 4
-    local item_size = lh + padding_y * 2
-    local item_spacing = 6
-    local width = (math.max(count, 1) - 1) * item_spacing + item_size * count
+    width = width + (count - 1) * item_spacing
     return math.ceil(width), item_size
 end
 
 function view(canvas, monitor)
     local monitor_id = monitor:id()
-    local active_id = active_workspaces[monitor_id] or -1
+    local active_ids = active_workspaces[monitor_id] or { active = -1 }
     local is_monitor_focused = focused_monitor == monitor_id
     
     local _, lh = canvas:measure_text("0")
@@ -88,8 +99,9 @@ function view(canvas, monitor)
     
     for _, ws in ipairs(workspaces) do
         if ws.monitor == monitor_id then
-            local label = tostring(ws.id)
-            local is_visible = ws.id == active_id
+            local label = ws.name:match("^special:(.*)") or ws.name
+            local active_ws = (type(active_ids.special) == "number") and active_ids.special or active_ids.active
+            local is_visible = (ws.id == active_ws)
             local lw, _ = canvas:measure_text(label)
             
             if is_visible then
