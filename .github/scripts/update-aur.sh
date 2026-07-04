@@ -13,6 +13,7 @@ prepare_pkg() {
 
 	mkdir -p "$dir"
 	cp "$src_pkgbuild" "$dir/PKGBUILD"
+	chown -R builder:builder "$dir"
 	(
 		cd "$dir"
 		sudo -u builder updpkgsums
