@@ -45,14 +45,12 @@ pub trait DisplayServerPort: Send + Sync {
     fn hide_tooltip(&mut self) -> Result<(), DisplayServerError>;
 }
 
+pub type WindowManagerState = (
+    std::collections::BTreeMap<crate::domain::workspace::WorkspaceId, crate::domain::workspace::Workspace>,
+    std::collections::BTreeMap<crate::domain::workspace::MonitorName, crate::domain::workspace::Monitor>,
+    Option<crate::domain::workspace::MonitorName>,
+);
+
 pub trait WindowManagerPort: Send + Sync {
-    fn get_state(
-        &self,
-    ) -> Result<
-        (
-            Vec<crate::domain::workspace::Workspace>,
-            Vec<crate::domain::workspace::Monitor>,
-        ),
-        WindowManagerError,
-    >;
+    fn get_state(&self) -> Result<WindowManagerState, WindowManagerError>;
 }

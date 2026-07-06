@@ -13,7 +13,7 @@ pub enum SniAdapterError {
 }
 
 use freedesktop_icons::lookup;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt;
@@ -50,11 +50,11 @@ trait StatusNotifierItem {
 pub struct SniAdapter {
     hub: Arc<SignalHub>,
     conn: Arc<tokio::sync::Mutex<Option<Connection>>>,
-    items: Arc<RwLock<HashMap<String, AppletItem>>>,
+    items: Arc<RwLock<BTreeMap<crate::domain::applets::AppletId, AppletItem>>>,
 }
 
 struct Watcher {
-    items: Arc<RwLock<HashMap<String, AppletItem>>>,
+    items: Arc<RwLock<BTreeMap<crate::domain::applets::AppletId, AppletItem>>>,
     hub: Arc<SignalHub>,
     conn: Connection,
     runtime: tokio::runtime::Handle,
@@ -101,7 +101,7 @@ impl Watcher {
     #[zbus(property)]
     async fn registered_status_notifier_items(&self) -> Vec<String> {
         let items = self.items.read().await;
-        items.keys().cloned().collect()
+        items.keys().map(|id| id.as_str().to_string()).collect()
     }
 
     #[zbus(property)]
@@ -264,7 +264,7 @@ impl Watcher {
     #[tracing::instrument(skip(conn, items, hub))]
     async fn track_item(
         conn: Connection,
-        items: Arc<RwLock<HashMap<String, AppletItem>>>,
+        items: Arc<RwLock<BTreeMap<crate::domain::applets::AppletId, AppletItem>>>,
         hub: Arc<SignalHub>,
         dest: String,
         path_str: String,
@@ -282,7 +282,7 @@ impl Watcher {
 
         {
             let mut lock = items.write().await;
-            lock.insert(id.clone(), applet);
+            lock.insert(crate::domain::applets::AppletId::new(&id), applet);
         }
         Self::publish_state(&items, &hub).await;
 
@@ -335,7 +335,7 @@ impl Watcher {
                 .await;
                 {
                     let mut lock = items_clone.write().await;
-                    lock.insert(id_clone.clone(), applet);
+                    lock.insert(crate::domain::applets::AppletId::new(&id_clone), applet);
                 }
                 Self::publish_state(&items_clone, &hub_clone).await;
             }
@@ -343,7 +343,7 @@ impl Watcher {
             tracing::info!("Applet {} loop terminated, cleaning up state", id_clone);
             {
                 let mut lock = items_clone.write().await;
-                lock.remove(&id_clone);
+                lock.remove(&crate::domain::applets::AppletId::new(&id_clone));
             }
             Self::publish_state(&items_clone, &hub_clone).await;
         });
@@ -351,9 +351,9 @@ impl Watcher {
         Ok(())
     }
 
-    async fn publish_state(items: &Arc<RwLock<HashMap<String, AppletItem>>>, hub: &Arc<SignalHub>) {
+    async fn publish_state(items: &Arc<RwLock<BTreeMap<crate::domain::applets::AppletId, AppletItem>>>, hub: &Arc<SignalHub>) {
         let lock = items.read().await;
-        let state = AppletsState::new(lock.values().cloned().collect());
+        let state = AppletsState::new(lock.clone());
         let _ = hub.applets_tx().send(state);
     }
 }
@@ -363,7 +363,7 @@ impl SniAdapter {
         Self {
             hub,
             conn: Arc::new(tokio::sync::Mutex::new(None)),
-            items: Arc::new(RwLock::new(HashMap::new())),
+            items: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
 }
@@ -407,7 +407,7 @@ impl SniPort for SniAdapter {
         let lock = self.conn.lock().await;
         let items_lock = self.items.read().await;
 
-        if let (Some(conn), Some(applet)) = (lock.as_ref(), items_lock.get(id)) {
+        if let (Some(conn), Some(applet)) = (lock.as_ref(), items_lock.get(&crate::domain::applets::AppletId::new(id))) {
             let proxy = zbus::Proxy::new(
                 conn,
                 applet.destination().as_str().to_string(),

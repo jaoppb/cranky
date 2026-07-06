@@ -8,12 +8,15 @@ pub enum AppletStatus {
     Unknown,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AppletId(String);
 
 impl AppletId {
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
     }
 }
 
@@ -111,6 +114,10 @@ impl AppletItem {
         }
     }
 
+    pub fn id(&self) -> &AppletId {
+        &self.id
+    }
+
     pub fn destination(&self) -> &Destination {
         &self.destination
     }
@@ -119,17 +126,48 @@ impl AppletItem {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct AppletsState {
-    items: Vec<AppletItem>,
+    items: std::collections::BTreeMap<AppletId, AppletItem>,
+}
+
+impl serde::Serialize for AppletsState {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("AppletsState", 1)?;
+        let items: Vec<&AppletItem> = self.items.values().collect();
+        state.serialize_field("items", &items)?;
+        state.end()
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for AppletsState {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Helper {
+            items: Vec<AppletItem>,
+        }
+        let helper = Helper::deserialize(deserializer)?;
+        let mut items = std::collections::BTreeMap::new();
+        for item in helper.items {
+            items.insert(item.id().clone(), item);
+        }
+        Ok(Self { items })
+    }
 }
 
 impl AppletsState {
-    pub fn new(items: Vec<AppletItem>) -> Self {
+    pub fn new(items: std::collections::BTreeMap<AppletId, AppletItem>) -> Self {
         Self { items }
     }
 
-    pub fn items(&self) -> &[AppletItem] {
+    pub fn items(&self) -> &std::collections::BTreeMap<AppletId, AppletItem> {
         &self.items
     }
 }

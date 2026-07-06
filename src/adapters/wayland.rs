@@ -645,10 +645,9 @@ impl WaylandAdapter {
             let hypr_rx = self.state.hub.hyprland_rx();
             let hyprland_state = hypr_rx.borrow();
             let is_focused = hyprland_state
-                .monitors()
-                .iter()
-                .find(|m| m.name().as_str() == bar.output_name)
-                .is_some_and(|m| m.focused());
+                .focused_monitor()
+                .is_some_and(|name| name.as_str() == bar.output_name);
+
 
             let mut bar_config = read_model.config().bar().clone();
             if !is_focused {

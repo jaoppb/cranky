@@ -290,9 +290,8 @@ impl CrankyApp {
                 }
                 Ok(_) = hyprland_rx.changed() => {
                     let state = hyprland_rx.borrow().clone();
-                    let new_focused = state.monitors().iter()
-                        .find(|m| m.focused())
-                        .map(|m| m.name().as_str().to_string())
+                    let new_focused = state.focused_monitor()
+                        .map(|n| n.as_str().to_string())
                         .unwrap_or_default();
 
                     if new_focused != current_focused_monitor {

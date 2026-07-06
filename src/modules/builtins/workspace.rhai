@@ -26,6 +26,11 @@ fn refresh() {
     if hyprland == () { return; }
     
     workspaces = hyprland.workspaces;
+    if hyprland.focused_monitor != () {
+        focused_monitor = hyprland.focused_monitor;
+    } else {
+        focused_monitor = "";
+    }
     
     active_workspaces.clear();
     for m in hyprland.monitors {
@@ -36,9 +41,6 @@ fn refresh() {
             state.special = m.special_workspace_id;
         }
         active_workspaces[m.name] = state;
-        if m.focused {
-            focused_monitor = m.name;
-        }
         
         let found = false;
         for ws in workspaces {

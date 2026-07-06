@@ -26,15 +26,13 @@ function refresh()
     if not hyprland then return end
     
     workspaces = hyprland.workspaces
+    focused_monitor = hyprland.focused_monitor or ""
     active_workspaces = {}
     for _, m in ipairs(hyprland.monitors) do
         active_workspaces[m.name] = {
             active = m.active_workspace_id,
             special = m.special_workspace_id
         }
-        if m.focused then
-            focused_monitor = m.name
-        end
         
         local found = false
         for _, ws in ipairs(workspaces) do

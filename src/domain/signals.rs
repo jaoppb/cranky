@@ -1,6 +1,6 @@
 use crate::domain::config::Config;
 use crate::domain::workspace::{Monitor, Workspace};
-use serde::Serialize;
+
 use tokio::sync::watch;
 
 use crate::domain::applets::AppletsState;
@@ -15,21 +15,114 @@ pub enum SignalKind {
     Metrics,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct HyprlandState {
-    workspaces: Vec<Workspace>,
-    monitors: Vec<Monitor>,
+    workspaces: std::collections::BTreeMap<crate::domain::workspace::WorkspaceId, Workspace>,
+    monitors: std::collections::BTreeMap<crate::domain::workspace::MonitorName, Monitor>,
+    focused_monitor: Option<crate::domain::workspace::MonitorName>,
+}
+
+impl serde::Serialize for HyprlandState {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("HyprlandState", 3)?;
+        
+        let workspaces_vec: Vec<_> = self.workspaces.values().collect();
+        state.serialize_field("workspaces", &workspaces_vec)?;
+        
+        let monitors_vec: Vec<_> = self.monitors.values().collect();
+        state.serialize_field("monitors", &monitors_vec)?;
+        
+        state.serialize_field("focused_monitor", &self.focused_monitor)?;
+        state.end()
+    }
 }
 
 impl HyprlandState {
-    pub fn new(workspaces: Vec<Workspace>, monitors: Vec<Monitor>) -> Self {
+    pub fn new(
+        workspaces: std::collections::BTreeMap<crate::domain::workspace::WorkspaceId, Workspace>,
+        monitors: std::collections::BTreeMap<crate::domain::workspace::MonitorName, Monitor>,
+        focused_monitor: Option<crate::domain::workspace::MonitorName>,
+    ) -> Self {
         Self {
             workspaces,
             monitors,
+            focused_monitor,
         }
     }
-    pub fn monitors(&self) -> &[Monitor] {
+    
+    pub fn monitors(&self) -> &std::collections::BTreeMap<crate::domain::workspace::MonitorName, Monitor> {
         &self.monitors
+    }
+    
+    pub fn workspaces(&self) -> &std::collections::BTreeMap<crate::domain::workspace::WorkspaceId, Workspace> {
+        &self.workspaces
+    }
+    
+    pub fn focused_monitor(&self) -> Option<&crate::domain::workspace::MonitorName> {
+        self.focused_monitor.as_ref()
+    }
+    
+    pub fn apply_event(&mut self, event: &crate::domain::events::WindowManagerEvent) {
+        use crate::domain::events::WindowManagerEvent;
+        use crate::domain::workspace::Workspace;
+        
+        match event {
+            WindowManagerEvent::WorkspaceActivated { id, name } => {
+                let mon = self.focused_monitor.clone();
+                if !self.workspaces.contains_key(id) {
+                    // Do not assume the monitor, leave it as None so inconsistency check catches it
+                    self.workspaces.insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
+                }
+                
+                if let Some(mon_name) = mon
+                    && let Some(m) = self.monitors.get_mut(&mon_name) {
+                        m.set_active_workspace(id.clone());
+                    }
+            }
+            WindowManagerEvent::WorkspaceCreated { id, name } => {
+                if !self.workspaces.contains_key(id) {
+                    self.workspaces.insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
+                }
+            }
+            WindowManagerEvent::WorkspaceDestroyed { id, name: _ } => {
+                self.workspaces.remove(id);
+            }
+            WindowManagerEvent::WorkspaceMoved { id, name, monitor_name } => {
+                if let Some(ws) = self.workspaces.get_mut(id) {
+                    ws.set_monitor(monitor_name.clone());
+                } else {
+                    self.workspaces.insert(id.clone(), Workspace::new(id.clone(), name.clone(), Some(monitor_name.clone())));
+                }
+            }
+            WindowManagerEvent::WorkspaceRenamed { id, new_name } => {
+                if let Some(old) = self.workspaces.get(id) {
+                    let new_ws = Workspace::new(id.clone(), new_name.clone(), old.monitor().cloned());
+                    self.workspaces.insert(id.clone(), new_ws);
+                }
+            }
+            WindowManagerEvent::MonitorFocused { monitor_name, workspace_id } => {
+                self.focused_monitor = Some(monitor_name.clone());
+                if let Some(m) = self.monitors.get_mut(monitor_name) {
+                    m.set_active_workspace(workspace_id.clone());
+                }
+                
+                // Edge case: update workspace's monitor if missing or wrong
+                if let Some(ws) = self.workspaces.get_mut(workspace_id) {
+                    ws.set_monitor(monitor_name.clone());
+                }
+            }
+            WindowManagerEvent::SpecialWorkspaceActivated { id, name: _, monitor_name } => {
+                if let Some(m) = self.monitors.get_mut(monitor_name) {
+                    m.set_special_workspace(id.clone());
+                }
+            }
+            WindowManagerEvent::ActiveWindowChanged { .. } => {}
+            WindowManagerEvent::WindowTitleChanged { .. } => {}
+        }
     }
 }
 
@@ -55,7 +148,7 @@ pub struct SignalHub {
 impl SignalHub {
     pub fn new(initial_config: Config) -> Self {
         let config = watch::channel(initial_config);
-        let hyprland = watch::channel(HyprlandState::new(Vec::new(), Vec::new()));
+        let hyprland = watch::channel(HyprlandState::new(std::collections::BTreeMap::new(), std::collections::BTreeMap::new(), None));
         let time = watch::channel(chrono::Local::now());
         let dbus = watch::channel(DBusState::default());
         let applets = watch::channel(AppletsState::default());
@@ -162,7 +255,7 @@ mod tests {
         let hypr_rx = hub.hyprland_rx();
         let hypr_tx = hub.hyprland_tx();
 
-        let new_state = HyprlandState::new(Vec::new(), Vec::new());
+        let new_state = HyprlandState::new(std::collections::BTreeMap::new(), std::collections::BTreeMap::new(), None);
         hypr_tx.send(new_state).unwrap();
 
         assert!(hypr_rx.has_changed().unwrap());

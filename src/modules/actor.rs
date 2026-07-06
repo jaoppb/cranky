@@ -178,7 +178,7 @@ impl ModuleActor {
             .hyprland_rx()
             .borrow()
             .monitors()
-            .iter()
+            .values()
             .map(|m| MonitorId::new(m.name().as_str()))
             .collect();
         let layouts: std::collections::HashMap<MonitorId, Rect> =

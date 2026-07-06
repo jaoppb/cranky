@@ -173,7 +173,7 @@ impl AnyModulePort for LuaModule {
         }
 
         let applets_state = hub.applets_rx().borrow().clone();
-        if let Ok(applets_lua) = lua.to_value(&applets_state.items()) {
+        if let Ok(applets_lua) = lua.to_value(&applets_state.items().values().collect::<Vec<_>>()) {
             let _ = globals.set("applets", applets_lua);
         }
 
@@ -525,8 +525,10 @@ mod tests {
         let item = AppletItem::new(crate::domain::applets::CreateAppletCommand { id: AppletId::new("test_applet"), destination: Destination::new("dest"), path: ObjectPath::new("/path"), title: Title::new("Test Applet"), status: AppletStatus::Active, icon_name: None, icon_image: None, menu_path: // icon_image is None
             None, });
 
+        let mut map = std::collections::BTreeMap::new();
+        map.insert(item.id().clone(), item);
         hub.applets_tx()
-            .send(AppletsState::new(vec![item]))
+            .send(AppletsState::new(map))
             .unwrap();
 
         module.refresh(&hub);
