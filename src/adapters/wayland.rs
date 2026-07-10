@@ -54,6 +54,7 @@ impl AsRawFd for WaylandFd {
 pub struct SurfaceCommand {
     pub module_id: crate::domain::ModuleId,
     pub monitor_id: crate::domain::MonitorId,
+    pub position: crate::domain::shared::geometry::Position,
     pub buffer: crate::domain::shared::render::RenderBuffer,
 }
 
@@ -67,6 +68,7 @@ impl SurfaceManagerPort for WaylandSurfaceManager {
         &self,
         module_id: crate::domain::ModuleId,
         monitor_id: crate::domain::MonitorId,
+        position: crate::domain::shared::geometry::Position,
         buffer: crate::domain::shared::render::RenderBuffer,
     ) {
         let _ = self
@@ -74,6 +76,7 @@ impl SurfaceManagerPort for WaylandSurfaceManager {
             .send(SurfaceCommand {
                 module_id,
                 monitor_id,
+                position,
                 buffer,
             })
             .await;
@@ -539,7 +542,9 @@ impl WaylandAdapter {
         let width = cmd.buffer.width().max(1);
         let height = cmd.buffer.height().max(1);
 
+        let mut newly_created = false;
         let ms = bar.module_surfaces.entry(cmd.module_id).or_insert_with(|| {
+            newly_created = true;
             let surface = compositor.create_surface(&qh, ());
             let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, &qh, ());
             subsurface.set_desync();
@@ -562,6 +567,12 @@ impl WaylandAdapter {
                 .expect("Failed to recreate SHM buffer for resize");
             ms.size = *cmd.buffer.size();
         }
+        
+        if ms.x != cmd.position.x() || ms.y != cmd.position.y() {
+            ms.subsurface.set_position(cmd.position.x(), cmd.position.y());
+            ms.x = cmd.position.x();
+            ms.y = cmd.position.y();
+        }
 
         let data = ms.shm_buffer.mmap_mut();
         let src_data = cmd.buffer.data();
@@ -572,8 +583,14 @@ impl WaylandAdapter {
             .attach(Some(ms.shm_buffer.current_buffer()), 0, 0);
         ms.surface.damage_buffer(0, 0, width as i32, height as i32);
         ms.surface.commit();
-        ms.shm_buffer.swap_buffers();
+        
+        // Always commit the parent surface to ensure the compositor applies the subsurface 
+        // update, working around bugs in some compositors (like Hyprland/wlroots) where 
+        // subsurface desync mode is ignored for layer shell surfaces.
+        bar.surface.commit();
 
+        ms.shm_buffer.swap_buffers();
+        
         self.state
             .surface_to_id
             .insert(ms.surface.clone(), cmd.module_id);
@@ -1317,7 +1334,7 @@ mod tests {
             crate::domain::shared::geometry::Size::new(10, 10),
         );
 
-        manager.submit_buffer(module_id, monitor_id, buffer).await;
+        manager.submit_buffer(module_id, monitor_id, crate::domain::shared::geometry::Position::new(0, 0), buffer).await;
 
         let cmd = rx.recv().await.expect("Failed to receive command");
         assert_eq!(cmd.module_id, module_id);
@@ -1336,6 +1353,7 @@ mod tests {
         let cmd = SurfaceCommand {
             module_id,
             monitor_id: monitor_id.clone(),
+            position: crate::domain::shared::geometry::Position::new(0, 0),
             buffer,
         };
 
@@ -1450,6 +1468,7 @@ mod tests {
         let cmd = SurfaceCommand {
             module_id: crate::domain::ModuleId::new(1),
             monitor_id: crate::domain::MonitorId::new("test"),
+            position: crate::domain::shared::geometry::Position::new(0, 0),
             buffer: crate::domain::shared::render::RenderBuffer::new(
                 vec![0; 4],
                 crate::domain::shared::geometry::Size::new(1, 1),

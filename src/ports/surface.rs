@@ -1,5 +1,6 @@
 use crate::domain::shared::render::RenderBuffer;
 use crate::domain::{ModuleId, MonitorId};
+use crate::domain::shared::geometry::Position;
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -7,7 +8,7 @@ use std::sync::Arc;
 #[cfg_attr(test, mockall::automock)]
 pub trait SurfaceManagerPort: Send + Sync {
     /// Submit a rendered buffer for a specific module on a specific monitor.
-    async fn submit_buffer(&self, module_id: ModuleId, monitor_id: MonitorId, buffer: RenderBuffer);
+    async fn submit_buffer(&self, module_id: ModuleId, monitor_id: MonitorId, position: Position, buffer: RenderBuffer);
 }
 
 pub type DynSurfaceManager = Arc<dyn SurfaceManagerPort>;

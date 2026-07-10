@@ -44,8 +44,9 @@ mlua = { version = "0.11", features = [
 	"send",
 ] }
 rhai = { version = "1.25", features = ["sync", "serde"] }
-tokio-stream = "0.1"
+tokio-stream = { version = "0.1", features = ["sync"] }
 tracing-appender = "0.2.5"
+futures-util = "0.3.32"
 
 [dev-dependencies]
 mockall = "0.14"

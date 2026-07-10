@@ -236,7 +236,7 @@ impl CrankyApp {
                         match command {
 
                             AppCommand::RequestRender => {
-                                // Ignore here, usually handled directly by rendering system or triggers re-render 
+                                needs_render = true;
                             },
                             AppCommand::AppletAction { id, action } => {
                                 let _ = sni.trigger_action(&id, &action).await;

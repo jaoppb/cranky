@@ -90,10 +90,28 @@ impl ModuleActor {
             let mut font_system = cosmic_text::FontSystem::new();
             let mut swash_cache = cosmic_text::SwashCache::new();
 
-            let mut time_rx = self.ctx.hub().time_rx();
-            let mut hypr_rx = self.ctx.hub().hyprland_rx();
-            let mut applets_rx = self.ctx.hub().applets_rx();
-            let mut metrics_rx = self.ctx.hub().metrics_rx();
+            use futures_util::stream::{SelectAll, StreamExt};
+            use tokio_stream::wrappers::WatchStream;
+            use crate::domain::signals::SignalKind;
+
+            let mut events_stream = SelectAll::new();
+            let subs = self.port.subscriptions();
+
+            if subs.contains(&SignalKind::Time) {
+                events_stream.push(WatchStream::new(self.ctx.hub().time_rx()).map(|_| SignalKind::Time).boxed());
+            }
+            if subs.contains(&SignalKind::Hyprland) {
+                events_stream.push(WatchStream::new(self.ctx.hub().hyprland_rx()).map(|_| SignalKind::Hyprland).boxed());
+            }
+            if subs.contains(&SignalKind::Applets) {
+                events_stream.push(WatchStream::new(self.ctx.hub().applets_rx()).map(|_| SignalKind::Applets).boxed());
+            }
+            if subs.contains(&SignalKind::Metrics) {
+                events_stream.push(WatchStream::new(self.ctx.hub().metrics_rx()).map(|_| SignalKind::Metrics).boxed());
+            }
+            if subs.iter().any(|s| matches!(s, SignalKind::DBus(_))) {
+                events_stream.push(WatchStream::new(self.ctx.hub().dbus_rx()).map(|_| SignalKind::DBus(crate::domain::dbus::DBusSubscription { bus: crate::domain::dbus::BusType::Session, destination: None, path: None, interface: None, member: None })).boxed());
+            }
 
             // Initial refresh
             self.port.refresh(self.ctx.hub());
@@ -106,11 +124,15 @@ impl ModuleActor {
                 let should_continue = rt.block_on(async {
                     let ctx_id = self.ctx.id();
                     let (layout_rx, input_rx) = self.ctx.rxs_mut();
+
                     tokio::select! {
-                        Ok(_) = time_rx.changed() => changed = true,
-                        Ok(_) = hypr_rx.changed() => changed = true,
-                        Ok(_) = applets_rx.changed() => changed = true,
-                        Ok(_) = metrics_rx.changed() => changed = true,
+                        Some(_) = events_stream.next(), if !events_stream.is_empty() => {
+                            changed = true;
+                            // Drain any immediately pending events from the select_all stream to debounce
+                            while let Some(Some(_)) = futures_util::FutureExt::now_or_never(events_stream.next()) {
+                                // drained
+                            }
+                        }
                         res = layout_rx.changed() => {
                             if res.is_err() {
                                 return false; // layout_rx dropped, we should exit
@@ -127,28 +149,13 @@ impl ModuleActor {
                         }
                     }
 
-                    // Debounce rapid changes (e.g. layout bounds updates following size changes)
+                    // Debounce rapid layout changes
                     tokio::time::sleep(std::time::Duration::from_millis(16)).await;
-
-                    if time_rx.has_changed().unwrap_or(false) {
-                        let _ = time_rx.changed().await;
-                        changed = true;
-                    }
-                    if hypr_rx.has_changed().unwrap_or(false) {
-                        let _ = hypr_rx.changed().await;
-                        changed = true;
-                    }
-                    if applets_rx.has_changed().unwrap_or(false) {
-                        let _ = applets_rx.changed().await;
-                        changed = true;
-                    }
-                    if metrics_rx.has_changed().unwrap_or(false) {
-                        let _ = metrics_rx.changed().await;
-                        changed = true;
-                    }
+                    
                     if self.ctx.rxs_mut().0.has_changed().unwrap_or(false) {
                         let _ = self.ctx.rxs_mut().0.changed().await;
                     }
+                    
                     true
                 });
 
@@ -249,8 +256,9 @@ impl ModuleActor {
                     let sm = self.ctx.surface_manager().clone();
                     let mod_id = self.ctx.id();
                     let mon_id = monitor_id.clone();
+                    let position = crate::domain::shared::geometry::Position::new(bounds.x(), bounds.y());
                     rt.block_on(async move {
-                        sm.submit_buffer(mod_id, mon_id, buffer).await;
+                        sm.submit_buffer(mod_id, mon_id, position, buffer).await;
                     });
                 }
             }
