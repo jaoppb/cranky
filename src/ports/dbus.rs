@@ -1,6 +1,12 @@
-use crate::adapters::zbus::DBusPortError;
 use crate::domain::dbus::DBusSubscription;
 use async_trait::async_trait;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum DBusPortError {
+    #[error("Failed to subscribe to DBus signal: {0}")]
+    Subscription(String),
+}
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]

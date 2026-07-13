@@ -306,8 +306,8 @@ impl AnyModulePort for RhaiModule {
     fn on_pointer_event(
         &mut self,
         event: crate::domain::events::PointerEvent,
-    ) -> Vec<crate::domain::commands::AppCommand> {
-        let commands = Vec::new();
+        _command_tx: &dyn crate::ports::registry::CommandSender,
+    ) {
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
 
@@ -338,6 +338,5 @@ impl AnyModulePort for RhaiModule {
             }
         }
         let _ = engine.call_fn::<()>(&mut scope, &self.ast, "on_event", (event_map,));
-        commands
     }
 }

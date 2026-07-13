@@ -136,12 +136,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::sync::Arc::new(surface_manager);
 
     let registry = Box::new(crate::modules::ModuleRegistry::new());
+    
+    let canvas_factory = 
+        Arc::new(std::sync::Mutex::new(crate::adapters::rendering::TinySkiaCanvasFactory::new()));
+
     let mut app = CrankyApp::new(
         hub.clone(),
         initial_config.clone(),
         command_rx,
         command_tx.clone(),
         surface_manager,
+        canvas_factory,
         registry,
     )?;
 

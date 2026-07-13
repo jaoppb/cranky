@@ -1,4 +1,3 @@
-use crate::adapters::rendering::TinySkiaCosmicCanvas;
 use crate::domain::commands::AppCommand;
 use crate::domain::shared::render::RenderBuffer;
 use crate::domain::signals::SignalHub;
@@ -69,26 +68,30 @@ impl ModuleContext {
     }
 }
 
-pub struct ModuleActor {
+pub struct ModuleActor<F: crate::ports::canvas::CanvasFactory + 'static> {
     port: Box<dyn AnyModulePort>,
     ctx: ModuleContext,
     sizes: HashMap<MonitorId, Size>,
+    canvas_factory: std::sync::Arc<std::sync::Mutex<F>>,
 }
 
-impl ModuleActor {
-    pub fn new(port: Box<dyn AnyModulePort>, ctx: ModuleContext) -> Self {
+impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
+    pub fn new(
+        port: Box<dyn AnyModulePort>,
+        ctx: ModuleContext,
+        canvas_factory: std::sync::Arc<std::sync::Mutex<F>>,
+    ) -> Self {
         Self {
             port,
             ctx,
             sizes: HashMap::new(),
+            canvas_factory,
         }
     }
 
     pub fn spawn(mut self) {
         tokio::task::spawn_blocking(move || {
             let rt = tokio::runtime::Handle::current();
-            let mut font_system = cosmic_text::FontSystem::new();
-            let mut swash_cache = cosmic_text::SwashCache::new();
 
             use futures_util::stream::{SelectAll, StreamExt};
             use tokio_stream::wrappers::WatchStream;
@@ -115,7 +118,7 @@ impl ModuleActor {
 
             // Initial refresh
             self.port.refresh(self.ctx.hub());
-            self.measure_and_render_all(&mut font_system, &mut swash_cache);
+            self.measure_and_render_all();
 
             loop {
                 // Determine what woke us up
@@ -140,10 +143,7 @@ impl ModuleActor {
                         }
                         Ok((target_id, event)) = input_rx.recv() => {
                             if target_id == ctx_id {
-                                let cmds = self.port.on_pointer_event(event);
-                                for cmd in cmds {
-                                    self.ctx.command_tx().send_command(cmd);
-                                }
+                                self.port.on_pointer_event(event, self.ctx.command_tx());
                                 changed = true;
                             }
                         }
@@ -167,16 +167,14 @@ impl ModuleActor {
                     self.port.refresh(self.ctx.hub());
                 }
 
-                self.measure_and_render_all(&mut font_system, &mut swash_cache);
+                self.measure_and_render_all();
             }
         });
     }
 
-    #[tracing::instrument(level = "debug", skip(self, font_system, swash_cache), fields(module = %self.ctx.id()))]
+    #[tracing::instrument(level = "debug", skip(self), fields(module = %self.ctx.id()))]
     fn measure_and_render_all(
         &mut self,
-        font_system: &mut cosmic_text::FontSystem,
-        swash_cache: &mut cosmic_text::SwashCache,
     ) {
         let t0 = std::time::Instant::now();
         let monitors: Vec<MonitorId> = self
@@ -194,21 +192,22 @@ impl ModuleActor {
         for monitor_id in monitors {
             // Measure
             let mut dummy_data = vec![0u8; 4];
-            let dummy_pixmap = tiny_skia::PixmapMut::from_bytes(&mut dummy_data, 1, 1).unwrap();
+            let _dummy_pixmap = tiny_skia::PixmapMut::from_bytes(&mut dummy_data, 1, 1).unwrap();
             let config = self.ctx.hub().config_rx().borrow().clone();
             let default_font_family = config.bar().font_family().clone();
             let default_font_size = config.bar().font_size();
 
-            let mut dummy_canvas = TinySkiaCosmicCanvas::new(
-                dummy_pixmap,
-                font_system,
-                swash_cache,
-                Scale::new(1.0),
-                default_font_family.clone(),
-                default_font_size,
-            );
-
-            let size = self.port.measure(&mut dummy_canvas, &monitor_id);
+            let size = {
+                let mut factory = self.canvas_factory.lock().unwrap();
+                let mut dummy_canvas = factory.create_canvas(
+                    &mut dummy_data,
+                    Size::new(1, 1),
+                    Scale::new(1.0),
+                    default_font_family.clone(),
+                    default_font_size,
+                );
+                self.port.measure(&mut dummy_canvas, &monitor_id)
+            };
 
             let old_size = self
                 .sizes
@@ -235,32 +234,31 @@ impl ModuleActor {
                 let w = bounds.width();
                 let h = bounds.height();
                 let mut data = vec![0u8; (w * h * 4) as usize];
-                if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(&mut data, w, h) {
+                {
                     let config = self.ctx.hub().config_rx().borrow().clone();
                     let default_font_family = config.bar().font_family().clone();
                     let default_font_size = config.bar().font_size();
 
-                    let mut canvas = TinySkiaCosmicCanvas::new(
-                        pixmap,
-                        font_system,
-                        swash_cache,
+                    let mut factory = self.canvas_factory.lock().unwrap();
+                    let mut canvas = factory.create_canvas(
+                        &mut data,
+                        *bounds.size(),
                         Scale::new(1.0),
                         default_font_family,
                         default_font_size,
                     );
                     self.port.view(&mut canvas, &monitor_id);
-
-                    // Send buffer to surface manager
-                    let buffer = RenderBuffer::new(data, *bounds.size());
-                    let rt = tokio::runtime::Handle::current();
-                    let sm = self.ctx.surface_manager().clone();
-                    let mod_id = self.ctx.id();
-                    let mon_id = monitor_id.clone();
-                    let position = crate::domain::shared::geometry::Position::new(bounds.x(), bounds.y());
-                    rt.block_on(async move {
-                        sm.submit_buffer(mod_id, mon_id, position, buffer).await;
-                    });
                 }
+
+                let buffer = RenderBuffer::new(data, *bounds.size());
+                let rt = tokio::runtime::Handle::current();
+                let sm = self.ctx.surface_manager().clone();
+                let mod_id = self.ctx.id();
+                let mon_id = monitor_id.clone();
+                let position = crate::domain::shared::geometry::Position::new(bounds.x(), bounds.y());
+                rt.block_on(async move {
+                    sm.submit_buffer(mod_id, mon_id, position, buffer).await;
+                });
             }
         }
 

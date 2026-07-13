@@ -416,9 +416,9 @@ impl AnyModulePort for LuaModule {
     fn on_pointer_event(
         &mut self,
         event: crate::domain::events::PointerEvent,
-    ) -> Vec<crate::domain::commands::AppCommand> {
+        command_tx: &dyn crate::ports::registry::CommandSender,
+    ) {
         use crate::domain::commands::AppCommand;
-        let mut commands = Vec::new();
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
 
@@ -427,7 +427,7 @@ impl AnyModulePort for LuaModule {
                 Ok(t) => t,
                 Err(e) => {
                     tracing::error!("Failed to create event table: {}", e);
-                    return commands;
+                    return;
                 }
             };
             use crate::domain::events::PointerEvent;
@@ -455,15 +455,12 @@ impl AnyModulePort for LuaModule {
                     let _ = event_table.set("amount", amount);
                 }
             }
-            let commands_cell = RefCell::new(&mut commands);
 
             let _ = lua.scope(|scope| {
                 let cranky_table = lua.create_table().unwrap();
                 let applet_action = scope
                     .create_function(|_, (id, action): (String, String)| {
-                        commands_cell
-                            .borrow_mut()
-                            .push(AppCommand::AppletAction { id, action });
+                        command_tx.send_command(AppCommand::AppletAction { id, action });
                         Ok(())
                     })
                     .unwrap();
@@ -471,9 +468,7 @@ impl AnyModulePort for LuaModule {
 
                 let show_tooltip = scope
                     .create_function(|_, text: String| {
-                        commands_cell
-                            .borrow_mut()
-                            .push(AppCommand::ShowTooltip { text });
+                        command_tx.send_command(AppCommand::ShowTooltip { text });
                         Ok(())
                     })
                     .unwrap();
@@ -481,7 +476,7 @@ impl AnyModulePort for LuaModule {
 
                 let hide_tooltip = scope
                     .create_function(|_, ()| {
-                        commands_cell.borrow_mut().push(AppCommand::HideTooltip);
+                        command_tx.send_command(AppCommand::HideTooltip);
                         Ok(())
                     })
                     .unwrap();
@@ -495,7 +490,6 @@ impl AnyModulePort for LuaModule {
                 Ok::<(), mlua::Error>(())
             });
         }
-        commands
     }
 }
 

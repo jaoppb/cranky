@@ -7,16 +7,9 @@ use zbus::zvariant::Value;
 use zbus::{Connection, MatchRule, MessageStream};
 
 use crate::domain::dbus::{BusType, DBusState, DBusSubscription, DBusValue};
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum DBusPortError {
-    #[error("DBus error: {reason}")]
-    DBusError { reason: String },
-}
 
 use crate::domain::signals::SignalHub;
-use crate::ports::DBusPort;
+use crate::ports::{DBusPort, dbus::DBusPortError};
 
 pub struct ZbusAdapter {
     session_conn: Option<Connection>,
@@ -92,9 +85,9 @@ impl DBusPort for ZbusAdapter {
         };
 
         let Some(conn) = conn else {
-            return Err(DBusPortError::DBusError {
-                reason: "DBus connection not initialized".into(),
-            });
+            return Err(DBusPortError::Subscription(
+                "DBus connection not initialized".into(),
+            ));
         };
 
         let mut rule_builder = MatchRule::builder().msg_type(zbus::message::Type::Signal);
@@ -104,41 +97,41 @@ impl DBusPort for ZbusAdapter {
             rule_builder =
                 rule_builder
                     .sender(dest.clone())
-                    .map_err(|e| DBusPortError::DBusError {
-                        reason: e.to_string(),
-                    })?;
+                    .map_err(|e| DBusPortError::Subscription(
+                        e.to_string(),
+                    ))?;
         }
         if let Some(ref path) = sub.path {
             rule_builder =
                 rule_builder
                     .path(path.clone())
-                    .map_err(|e| DBusPortError::DBusError {
-                        reason: e.to_string(),
-                    })?;
+                    .map_err(|e| DBusPortError::Subscription(
+                        e.to_string(),
+                    ))?;
         }
         if let Some(ref iface) = sub.interface {
             rule_builder =
                 rule_builder
                     .interface(iface.clone())
-                    .map_err(|e| DBusPortError::DBusError {
-                        reason: e.to_string(),
-                    })?;
+                    .map_err(|e| DBusPortError::Subscription(
+                        e.to_string(),
+                    ))?;
         }
         if let Some(ref member) = sub.member {
             rule_builder =
                 rule_builder
                     .member(member.clone())
-                    .map_err(|e| DBusPortError::DBusError {
-                        reason: e.to_string(),
-                    })?;
+                    .map_err(|e| DBusPortError::Subscription(
+                        e.to_string(),
+                    ))?;
         }
 
         let rule = rule_builder.build();
         let mut stream = MessageStream::for_match_rule(rule, &conn, None)
             .await
-            .map_err(|e| DBusPortError::DBusError {
-                reason: format!("Failed to create MessageStream: {}", e),
-            })?;
+            .map_err(|e| DBusPortError::Subscription(
+                format!("Failed to create MessageStream: {}", e),
+            ))?;
 
         info!("Subscribed to DBus match rule");
 

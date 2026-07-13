@@ -1,7 +1,18 @@
 use crate::domain::shared::color::DrawingColor;
 
+use crate::domain::shared::geometry::{LogicalPx, Position, Scale, Size};
 use crate::domain::config::{FontFamily, FontSize};
-use crate::domain::shared::geometry::{LogicalPx, Position};
+
+pub trait CanvasFactory: Send + Sync {
+    fn create_canvas<'a>(
+        &'a mut self,
+        data: &'a mut [u8],
+        size: Size,
+        scale: Scale,
+        font_family: FontFamily,
+        font_size: FontSize,
+    ) -> impl Canvas + 'a;
+}
 
 #[cfg_attr(test, mockall::automock)]
 #[allow(clippy::needless_lifetimes)]

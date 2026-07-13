@@ -25,18 +25,19 @@ pub trait AnyModulePort: Send + Sync {
     fn refresh(&mut self, hub: &SignalHub);
     fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId);
     fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
-    fn on_pointer_event(&mut self, event: PointerEvent) -> Vec<AppCommand>;
+    fn on_pointer_event(&mut self, event: PointerEvent, command_tx: &dyn crate::ports::registry::CommandSender);
 }
 
 #[async_trait]
 #[cfg_attr(test, mockall::automock)]
-pub trait ModuleRegistryPort: Send + Sync {
+pub trait ModuleRegistryPort<Fact: crate::ports::canvas::CanvasFactory + 'static>: Send + Sync {
     fn load(&mut self, config: &Config) -> Result<(), String>;
     fn spawn_all(
         &mut self,
         hub: Arc<SignalHub>,
         surface_manager: DynSurfaceManager,
         command_tx: Arc<dyn CommandSender>,
+        canvas_factory: Arc<std::sync::Mutex<Fact>>,
     ) -> std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>;
 
     fn left_modules(&self) -> Vec<ModuleId>;

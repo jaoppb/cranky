@@ -1,16 +1,7 @@
 use crate::domain::applets::{AppletItem, AppletStatus, AppletsState};
 use crate::domain::signals::SignalHub;
-use crate::ports::sni::SniPort;
+use crate::ports::sni::{SniPort, SniPortError};
 use async_trait::async_trait;
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum SniAdapterError {
-    #[error("SNI initialization failed: {0}")]
-    InitFailed(String),
-    #[error("Internal SNI error: {0}")]
-    Internal(String),
-}
 
 use freedesktop_icons::lookup;
 use std::collections::BTreeMap;
@@ -370,10 +361,10 @@ impl SniAdapter {
 
 #[async_trait]
 impl SniPort for SniAdapter {
-    async fn start(&mut self) -> Result<(), SniAdapterError> {
+    async fn start(&mut self) -> Result<(), SniPortError> {
         let conn = Connection::session()
             .await
-            .map_err(|e| SniAdapterError::InitFailed(e.to_string()))?;
+            .map_err(|e| SniPortError::StartFailed(e.to_string()))?;
 
         // Attempt to request the Watcher name
         match conn.request_name("org.kde.StatusNotifierWatcher").await {
@@ -389,7 +380,7 @@ impl SniPort for SniAdapter {
                     .object_server()
                     .at::<&str, Watcher>("/StatusNotifierWatcher", watcher)
                     .await
-                    .map_err(|e: zbus::Error| SniAdapterError::InitFailed(e.to_string()))?;
+                    .map_err(|e: zbus::Error| SniPortError::StartFailed(e.to_string()))?;
             }
             Err(_) => {
                 info!(
@@ -403,7 +394,7 @@ impl SniPort for SniAdapter {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn trigger_action(&self, id: &str, action: &str) -> Result<(), SniAdapterError> {
+    async fn trigger_action(&self, id: &str, action: &str) -> Result<(), SniPortError> {
         let lock = self.conn.lock().await;
         let items_lock = self.items.read().await;
 
@@ -415,7 +406,10 @@ impl SniPort for SniAdapter {
                 "org.kde.StatusNotifierItem",
             )
             .await
-            .map_err(|e: zbus::Error| SniAdapterError::Internal(e.to_string()))?;
+            .map_err(|e: zbus::Error| SniPortError::ActionFailed {
+                id: id.to_string(),
+                error: e.to_string(),
+            })?;
 
             let x: i32 = 0;
             let y: i32 = 0;

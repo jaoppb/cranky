@@ -1,12 +1,20 @@
-use crate::adapters::sni::SniAdapterError;
 use async_trait::async_trait;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum SniPortError {
+    #[error("Failed to start SNI watcher: {0}")]
+    StartFailed(String),
+    #[error("Failed to trigger action on {id}: {error}")]
+    ActionFailed { id: String, error: String },
+}
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait SniPort: Send + Sync {
     /// Initialize the SNI Host (and optionally the Watcher)
-    async fn start(&mut self) -> Result<(), SniAdapterError>;
+    async fn start(&mut self) -> Result<(), SniPortError>;
 
     /// Trigger an action on an applet (e.g. "Activate", "SecondaryActivate", "ContextMenu")
-    async fn trigger_action(&self, id: &str, action: &str) -> Result<(), SniAdapterError>;
+    async fn trigger_action(&self, id: &str, action: &str) -> Result<(), SniPortError>;
 }

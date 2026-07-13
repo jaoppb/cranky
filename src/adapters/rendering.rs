@@ -10,6 +10,43 @@ use tiny_skia::{
 use crate::domain::config::{FontFamily, FontSize};
 use crate::domain::shared::geometry::{LogicalPx, Position, Scale};
 
+use crate::domain::shared::geometry::Size;
+
+pub struct TinySkiaCanvasFactory {
+    font_system: FontSystem,
+    swash_cache: SwashCache,
+}
+
+impl TinySkiaCanvasFactory {
+    pub fn new() -> Self {
+        Self {
+            font_system: FontSystem::new(),
+            swash_cache: SwashCache::new(),
+        }
+    }
+}
+
+impl crate::ports::canvas::CanvasFactory for TinySkiaCanvasFactory {
+    fn create_canvas<'a>(
+        &'a mut self,
+        data: &'a mut [u8],
+        size: Size,
+        scale: Scale,
+        font_family: FontFamily,
+        font_size: FontSize,
+    ) -> impl Canvas + 'a {
+        let pixmap = PixmapMut::from_bytes(data, size.width(), size.height()).unwrap();
+        TinySkiaCosmicCanvas::new(
+            pixmap,
+            &mut self.font_system,
+            &mut self.swash_cache,
+            scale,
+            font_family,
+            font_size,
+        )
+    }
+}
+
 pub struct TinySkiaCosmicCanvas<'a> {
     pixmap: PixmapMut<'a>,
     font_system: &'a mut FontSystem,

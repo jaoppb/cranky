@@ -116,7 +116,7 @@ impl crate::ports::registry::LayoutSender for WatchLayoutSender {
 }
 
 #[async_trait::async_trait]
-impl ModuleRegistryPort for ModuleRegistry {
+impl<Fact: crate::ports::canvas::CanvasFactory + 'static> ModuleRegistryPort<Fact> for ModuleRegistry {
     fn left_modules(&self) -> Vec<ModuleId> {
         self.left_modules.clone()
     }
@@ -151,6 +151,7 @@ impl ModuleRegistryPort for ModuleRegistry {
         hub: std::sync::Arc<SignalHub>,
         surface_manager: crate::ports::surface::DynSurfaceManager,
         command_tx: std::sync::Arc<dyn crate::ports::registry::CommandSender>,
+        canvas_factory: std::sync::Arc<std::sync::Mutex<Fact>>,
     ) -> std::collections::HashMap<ModuleId, Box<dyn crate::ports::registry::LayoutSender>> {
         let mut layout_senders: std::collections::HashMap<
             ModuleId,
@@ -170,7 +171,7 @@ impl ModuleRegistryPort for ModuleRegistry {
                 layout_rx,
             );
 
-            actor::ModuleActor::new(module, ctx).spawn();
+            actor::ModuleActor::new(module, ctx, canvas_factory.clone()).spawn();
         }
 
         layout_senders
@@ -222,7 +223,7 @@ mod tests {
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
 
-        registry.load(&config).unwrap();
-        assert_eq!(registry.left_modules().len(), 1);
+        crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::load(&mut registry, &config).unwrap();
+        assert_eq!(crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::left_modules(&registry).len(), 1);
     }
 }

@@ -1,6 +1,6 @@
 # Cranky: Project Guidelines
 
-- **Encapsulation:** Never expose struct fields as `pub`. Use getter methods instead.
+- **Encapsulation:** Never expose struct fields as `pub`. Use getter methods instead. *Exception: Command structs may use `pub` fields. Events and Domain Entities/Value Objects must remain strictly read-only with private fields and getters.*
 - **Errors:** Do not use a global error module. Define errors near where they occur (locally within modules).
 - **Crates:** Use `cargo add` to add new crates, then modify `Cargo.toml` to use exactly MAJOR.MINOR version (e.g., "1.0", "0.4"). Always remove the PATCH version.
 - **Dead Code:** Never use `#[allow(dead_code)]`. All code must be used or removed.

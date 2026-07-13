@@ -731,9 +731,25 @@ impl WaylandAdapter {
             let layouts = read_model.calculate_layout(
                 &monitor_id,
                 crate::domain::shared::geometry::BarWidth::new(width),
-                layout_senders,
                 &bar_config,
             );
+
+            // Broadcast layout bounds to modules for this monitor
+            let mut updates_by_module: std::collections::HashMap<crate::domain::ModuleId, std::collections::HashMap<crate::domain::MonitorId, crate::domain::shared::geometry::Rect>> = std::collections::HashMap::new();
+            for layout in &layouts {
+                let mut all_rects = std::collections::HashMap::new();
+                if let Some(sender) = layout_senders.get(&layout.id()) {
+                    all_rects = sender.current_layout();
+                }
+                all_rects.insert(monitor_id.clone(), *layout.bounds());
+                updates_by_module.insert(layout.id(), all_rects);
+            }
+
+            for (id, rects) in updates_by_module {
+                if let Some(sender) = layout_senders.get(&id) {
+                    sender.send_layout(rects);
+                }
+            }
 
             // However, the display server must still position the subsurfaces correctly on the screen!
             for layout in layouts {

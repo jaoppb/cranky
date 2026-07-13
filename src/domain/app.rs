@@ -6,7 +6,6 @@ use crate::domain::{
     shared::geometry::{BarWidth, Position, Rect, Size},
 };
 use crate::ports::DisplayServerPort;
-use crate::ports::registry::ModuleRegistryPort;
 use crate::ports::surface::DynSurfaceManager;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -63,7 +62,6 @@ impl AppReadModel {
         &self,
         monitor: &MonitorId,
         bar_width: BarWidth,
-        layout_senders: &HashMap<ModuleId, Box<dyn crate::ports::registry::LayoutSender>>,
         bar_config: &crate::domain::config::BarConfig,
     ) -> Vec<ModuleLayout> {
         let mut layouts = Vec::new();
@@ -131,36 +129,19 @@ impl AppReadModel {
             center_x += size.width() as f32;
         }
 
-        // Broadcast layout bounds to modules for this monitor
-        let mut updates_by_module: HashMap<ModuleId, HashMap<MonitorId, Rect>> = HashMap::new();
-        for layout in &layouts {
-            // Keep existing rects for other monitors
-            let mut all_rects = HashMap::new();
-            if let Some(sender) = layout_senders.get(&layout.id) {
-                all_rects = sender.current_layout();
-            }
-            all_rects.insert(monitor.clone(), layout.bounds);
-            updates_by_module.insert(layout.id, all_rects);
-        }
-
-        for (id, rects) in updates_by_module {
-            if let Some(sender) = layout_senders.get(&id) {
-                sender.send_layout(rects);
-            }
-        }
-
         layouts
     }
 }
 
-pub struct CrankyApp {
+pub struct CrankyApp<R: crate::ports::registry::ModuleRegistryPort<F> + 'static, F: crate::ports::canvas::CanvasFactory + 'static> {
     hub: Arc<SignalHub>,
     read_model: AppReadModel,
     command_rx: mpsc::Receiver<AppCommand>,
     layout_senders: HashMap<ModuleId, Box<dyn crate::ports::registry::LayoutSender>>,
     surface_manager: DynSurfaceManager,
     command_tx_clone: mpsc::Sender<AppCommand>,
-    registry: Box<dyn crate::ports::registry::ModuleRegistryPort>,
+    registry: Box<R>,
+    canvas_factory: Arc<std::sync::Mutex<F>>,
 }
 
 struct MpscCommandSender(mpsc::Sender<AppCommand>);
@@ -170,13 +151,14 @@ impl crate::ports::registry::CommandSender for MpscCommandSender {
     }
 }
 
-impl CrankyApp {
-    pub fn new<R: ModuleRegistryPort + 'static>(
+impl<R: crate::ports::registry::ModuleRegistryPort<F> + 'static, F: crate::ports::canvas::CanvasFactory + 'static> CrankyApp<R, F> {
+    pub fn new(
         hub: Arc<SignalHub>,
         config: Config,
         command_rx: mpsc::Receiver<AppCommand>,
         command_tx: mpsc::Sender<AppCommand>,
         surface_manager: DynSurfaceManager,
+        canvas_factory: Arc<std::sync::Mutex<F>>,
         mut registry: Box<R>,
     ) -> Result<Self, AppError> {
         registry.load(&config).map_err(AppError::Module)?;
@@ -186,7 +168,7 @@ impl CrankyApp {
         let right_modules = registry.right_modules();
         let command_tx_arc = Arc::new(MpscCommandSender(command_tx.clone()));
         let layout_senders =
-            registry.spawn_all(hub.clone(), surface_manager.clone(), command_tx_arc);
+            registry.spawn_all(hub.clone(), surface_manager.clone(), command_tx_arc, canvas_factory.clone());
 
         let read_model = AppReadModel {
             config,
@@ -204,6 +186,7 @@ impl CrankyApp {
             surface_manager: surface_manager.clone(),
             command_tx_clone: command_tx,
             registry,
+            canvas_factory,
         })
     }
 
@@ -284,7 +267,8 @@ impl CrankyApp {
                         self.layout_senders = self.registry.spawn_all(
                             self.hub.clone(),
                             self.surface_manager.clone(),
-                            Arc::new(MpscCommandSender(self.command_tx_clone.clone()))
+                            Arc::new(MpscCommandSender(self.command_tx_clone.clone())),
+                            self.canvas_factory.clone()
                         );
                     }
                 }
@@ -330,14 +314,16 @@ mod tests {
 
         let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
 
-        let mut mock_registry = MockModuleRegistryPort::new();
+        let mut mock_registry = MockModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::new();
         mock_registry.expect_load().returning(|_| Ok(()));
         mock_registry.expect_left_modules().returning(Vec::new);
         mock_registry.expect_center_modules().returning(Vec::new);
         mock_registry.expect_right_modules().returning(Vec::new);
         mock_registry
             .expect_spawn_all()
-            .returning(|_, _, _| HashMap::new());
+            .returning(|_, _, _, _| HashMap::new());
+
+        let canvas_factory = Arc::new(std::sync::Mutex::new(crate::adapters::rendering::TinySkiaCanvasFactory::new()));
 
         let app_result = CrankyApp::new(
             hub,
@@ -345,6 +331,7 @@ mod tests {
             command_rx,
             command_tx,
             surface_manager,
+            canvas_factory,
             Box::new(mock_registry),
         );
 
@@ -360,17 +347,19 @@ mod tests {
 
         let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
 
-        let mut mock_registry = MockModuleRegistryPort::new();
+        let mut mock_registry = MockModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::new();
         mock_registry.expect_load().returning(|_| Ok(()));
         mock_registry.expect_left_modules().returning(Vec::new);
         mock_registry.expect_center_modules().returning(Vec::new);
         mock_registry.expect_right_modules().returning(Vec::new);
         mock_registry
             .expect_spawn_all()
-            .returning(|_, _, _| HashMap::new());
+            .returning(|_, _, _, _| HashMap::new());
         mock_registry
             .expect_register_dbus_subscriptions()
             .returning(|_| Box::pin(std::future::ready(())));
+
+        let canvas_factory = Arc::new(std::sync::Mutex::new(crate::adapters::rendering::TinySkiaCanvasFactory::new()));
 
         let mut app = CrankyApp::new(
             hub,
@@ -378,6 +367,7 @@ mod tests {
             command_rx,
             command_tx,
             surface_manager,
+            canvas_factory,
             Box::new(mock_registry),
         )
         .unwrap();
@@ -447,14 +437,12 @@ mod tests {
             },
         };
 
-        let monitor = MonitorId::new("DP-1");
-        let layout_senders = HashMap::new();
+        let monitor_1 = MonitorId::new("DP-1");
 
         // 1. Calculate with focused config
         let layouts_focused = read_model.calculate_layout(
-            &monitor,
+            &monitor_1,
             BarWidth::new(1920),
-            &layout_senders,
             config.bar(),
         );
         assert_eq!(layouts_focused.len(), 1);
@@ -466,9 +454,8 @@ mod tests {
         // 2. Calculate with unfocused config
         let unfocused_bar = config.bar().as_unfocused();
         let layouts_unfocused = read_model.calculate_layout(
-            &monitor,
+            &monitor_1,
             BarWidth::new(1920),
-            &layout_senders,
             &unfocused_bar,
         );
         assert_eq!(layouts_unfocused.len(), 1);
