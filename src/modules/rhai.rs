@@ -232,25 +232,31 @@ impl AnyModulePort for RhaiModule {
         subs
     }
 
-    fn refresh(&mut self, hub: &SignalHub) {
+    fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
 
-        let time = *hub.time_rx().borrow();
-        scope.set_or_push("current_time", time.to_rfc3339());
-
-        let hypr = hub.hyprland_rx().borrow().clone();
-        if let Ok(hypr_json) = serde_json::to_string(&hypr)
-            && let Ok(hypr_rhai) = engine.parse_json(&hypr_json, true)
-        {
-            scope.set_or_push("hyprland", hypr_rhai);
+        if changed.contains(&SignalKind::Time) {
+            let time = *hub.time_rx().borrow();
+            scope.set_or_push("current_time", time.to_rfc3339());
         }
 
-        let metrics = hub.metrics_rx().borrow().clone();
-        if let Ok(metrics_json) = serde_json::to_string(&metrics)
-            && let Ok(metrics_rhai) = engine.parse_json(&metrics_json, true)
-        {
-            scope.set_or_push("metrics", metrics_rhai);
+        if changed.contains(&SignalKind::Hyprland) {
+            let hypr = hub.hyprland_rx().borrow().clone();
+            if let Ok(hypr_json) = serde_json::to_string(&hypr)
+                && let Ok(hypr_rhai) = engine.parse_json(&hypr_json, true)
+            {
+                scope.set_or_push("hyprland", hypr_rhai);
+            }
+        }
+
+        if changed.contains(&SignalKind::Metrics) {
+            let metrics = hub.metrics_rx().borrow().clone();
+            if let Ok(metrics_json) = serde_json::to_string(&metrics)
+                && let Ok(metrics_rhai) = engine.parse_json(&metrics_json, true)
+            {
+                scope.set_or_push("metrics", metrics_rhai);
+            }
         }
 
         let _ = engine.call_fn::<()>(&mut scope, &self.ast, "refresh", ());

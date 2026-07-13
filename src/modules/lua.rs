@@ -155,31 +155,42 @@ impl AnyModulePort for LuaModule {
         subs
     }
 
-    fn refresh(&mut self, hub: &SignalHub) {
+    fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
 
-        let time = *hub.time_rx().borrow();
-        let _ = globals.set("current_time", time.to_rfc3339());
-
-        let hypr = hub.hyprland_rx().borrow().clone();
-        if let Ok(hypr_lua) = lua.to_value(&hypr) {
-            let _ = globals.set("hyprland", hypr_lua);
+        if changed.contains(&SignalKind::Time) {
+            let time = *hub.time_rx().borrow();
+            let _ = globals.set("current_time", time.to_rfc3339());
         }
 
-        let dbus_state = hub.dbus_rx().borrow().clone();
-        if let Ok(dbus_lua) = lua.to_value(&dbus_state.properties) {
-            let _ = globals.set("dbus", dbus_lua);
+        if changed.contains(&SignalKind::Hyprland) {
+            let hypr = hub.hyprland_rx().borrow().clone();
+            if let Ok(hypr_lua) = lua.to_value(&hypr) {
+                let _ = globals.set("hyprland", hypr_lua);
+            }
         }
 
-        let applets_state = hub.applets_rx().borrow().clone();
-        if let Ok(applets_lua) = lua.to_value(&applets_state.items().values().collect::<Vec<_>>()) {
-            let _ = globals.set("applets", applets_lua);
+        let has_dbus = changed.iter().any(|s| matches!(s, SignalKind::DBus(_)));
+        if has_dbus {
+            let dbus_state = hub.dbus_rx().borrow().clone();
+            if let Ok(dbus_lua) = lua.to_value(&dbus_state.properties) {
+                let _ = globals.set("dbus", dbus_lua);
+            }
         }
 
-        let metrics_state = hub.metrics_rx().borrow().clone();
-        if let Ok(metrics_lua) = lua.to_value(&metrics_state) {
-            let _ = globals.set("metrics", metrics_lua);
+        if changed.contains(&SignalKind::Applets) {
+            let applets_state = hub.applets_rx().borrow().clone();
+            if let Ok(applets_lua) = lua.to_value(&applets_state.items().values().collect::<Vec<_>>()) {
+                let _ = globals.set("applets", applets_lua);
+            }
+        }
+
+        if changed.contains(&SignalKind::Metrics) {
+            let metrics_state = hub.metrics_rx().borrow().clone();
+            if let Ok(metrics_lua) = lua.to_value(&metrics_state) {
+                let _ = globals.set("metrics", metrics_lua);
+            }
         }
 
         if let Ok(refresh_fn) = globals.get::<Function>("refresh") {
@@ -525,7 +536,8 @@ mod tests {
             .send(AppletsState::new(map))
             .unwrap();
 
-        module.refresh(&hub);
+        let subs = module.subscriptions();
+        module.refresh(&hub, &subs);
 
         let mut canvas = MockCanvas::new();
         // The applet module should draw a placeholder rectangle for missing icons.

@@ -50,3 +50,6 @@ futures-util = "0.3.32"
 
 [dev-dependencies]
 mockall = "0.14"
+
+[profile.release]
+debug = 1

@@ -22,7 +22,7 @@ pub trait LayoutSender: Send + Sync {
 pub trait AnyModulePort: Send + Sync {
     fn init(&mut self, config: &ModuleConfig, bar_config: &BarConfig) -> Result<(), String>;
     fn subscriptions(&self) -> Vec<SignalKind>;
-    fn refresh(&mut self, hub: &SignalHub);
+    fn refresh(&mut self, hub: &SignalHub, changed_signals: &[SignalKind]);
     fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId);
     fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
     fn on_pointer_event(&mut self, event: PointerEvent, command_tx: &dyn crate::ports::registry::CommandSender);

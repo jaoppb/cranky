@@ -117,23 +117,26 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
             }
 
             // Initial refresh
-            self.port.refresh(self.ctx.hub());
+            let initial_sigs = self.port.subscriptions();
+            self.port.refresh(self.ctx.hub(), &initial_sigs);
             self.measure_and_render_all();
 
             loop {
                 // Determine what woke us up
                 let mut changed = false;
+                let mut changed_signals = std::collections::HashSet::new();
 
                 let should_continue = rt.block_on(async {
                     let ctx_id = self.ctx.id();
                     let (layout_rx, input_rx) = self.ctx.rxs_mut();
 
                     tokio::select! {
-                        Some(_) = events_stream.next(), if !events_stream.is_empty() => {
+                        Some(sig) = events_stream.next(), if !events_stream.is_empty() => {
                             changed = true;
+                            changed_signals.insert(sig);
                             // Drain any immediately pending events from the select_all stream to debounce
-                            while let Some(Some(_)) = futures_util::FutureExt::now_or_never(events_stream.next()) {
-                                // drained
+                            while let Some(Some(sig2)) = futures_util::FutureExt::now_or_never(events_stream.next()) {
+                                changed_signals.insert(sig2);
                             }
                         }
                         res = layout_rx.changed() => {
@@ -164,7 +167,8 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                 }
 
                 if changed {
-                    self.port.refresh(self.ctx.hub());
+                    let sigs: Vec<_> = changed_signals.into_iter().collect();
+                    self.port.refresh(self.ctx.hub(), &sigs);
                 }
 
                 self.measure_and_render_all();
