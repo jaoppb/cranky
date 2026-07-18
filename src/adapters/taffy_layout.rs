@@ -151,6 +151,64 @@ impl From<&crate::domain::layout::FlexStyle> for Style {
     }
 }
 
+fn node_to_style(node: &LayoutNode, measurer: &mut dyn TextMeasurer) -> Style {
+    match node {
+        LayoutNode::Flex { style, .. } => style.into(),
+        LayoutNode::Text { text, font, size, .. } => {
+            let measured = measurer.measure(text.as_str(), font.as_ref(), *size);
+            Style {
+                size: TaffySize {
+                    width: Dimension::length(measured.width() as f32),
+                    height: Dimension::length(measured.height() as f32),
+                },
+                ..Default::default()
+            }
+        }
+        LayoutNode::Rect { size, .. } | LayoutNode::Image { size, .. } => Style {
+            size: TaffySize {
+                width: Dimension::length(size.width() as f32),
+                height: Dimension::length(size.height() as f32),
+            },
+            ..Default::default()
+        },
+    }
+}
+
+struct TaffyTreeBuilder<'a> {
+    taffy: &'a mut TaffyTree,
+}
+
+impl<'a> TaffyTreeBuilder<'a> {
+    fn new(taffy: &'a mut TaffyTree) -> Self {
+        Self { taffy }
+    }
+
+    fn add_leaf(&mut self, style: Style) -> Result<NodeId, LayoutError> {
+        self.taffy.new_leaf(style).map_err(|e| LayoutError::EngineError(e.to_string()))
+    }
+
+    fn add_node(&mut self, style: Style, children: &[NodeId]) -> Result<NodeId, LayoutError> {
+        self.taffy.new_with_children(style, children).map_err(|e| LayoutError::EngineError(e.to_string()))
+    }
+
+    fn set_style(&mut self, node_id: NodeId, style: Style) -> Result<(), LayoutError> {
+        self.taffy.set_style(node_id, style).map_err(|e| LayoutError::EngineError(e.to_string()))
+    }
+
+    fn set_children(&mut self, node_id: NodeId, children: &[NodeId]) -> Result<(), LayoutError> {
+        self.taffy.set_children(node_id, children).map_err(|e| LayoutError::EngineError(e.to_string()))
+    }
+
+    fn remove_recursive(&mut self, node_id: NodeId) {
+        if let Ok(children) = self.taffy.children(node_id) {
+            for child in children {
+                self.remove_recursive(child);
+            }
+        }
+        let _ = self.taffy.remove(node_id);
+    }
+}
+
 impl LayoutEnginePort for TaffyLayoutAdapter {
     fn calculate_layout(
         &mut self,
@@ -158,11 +216,12 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
         measurer: &mut dyn TextMeasurer,
         start_pos: Position,
     ) -> Result<RenderNode, LayoutError> {
+        let mut builder = TaffyTreeBuilder::new(&mut self.taffy);
         let new_state = if let Some(state) = &self.state {
             let patch = diff(state, &node, measurer);
-            apply_patch(&mut self.taffy, patch, measurer)?
+            apply_patch(&mut builder, patch, measurer)?
         } else {
-            build_layout_state(&mut self.taffy, &node, measurer)?
+            build_layout_state(&mut builder, &node, measurer)?
         };
 
         let root_node_id = new_state.root_node;
@@ -182,26 +241,23 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
 }
 
 fn build_layout_state(
-    taffy: &mut TaffyTree,
+    builder: &mut TaffyTreeBuilder,
     node: &LayoutNode,
     measurer: &mut dyn TextMeasurer,
 ) -> Result<LayoutState, LayoutError> {
+    let style = node_to_style(node, measurer);
+
     match node {
-        LayoutNode::Flex {
-            style, children, ..
-        } => {
+        LayoutNode::Flex { children, .. } => {
             let mut state_children = Vec::new();
             let mut child_ids = Vec::new();
             for child in children {
-                let state_child = build_layout_state(taffy, child, measurer)?;
+                let state_child = build_layout_state(builder, child, measurer)?;
                 child_ids.push(state_child.root_node);
                 state_children.push(state_child);
             }
 
-            let taffy_style: Style = style.into();
-            let node_id = taffy
-                .new_with_children(taffy_style, &child_ids)
-                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+            let node_id = builder.add_node(style, &child_ids)?;
 
             Ok(LayoutState {
                 root_node: node_id,
@@ -209,37 +265,8 @@ fn build_layout_state(
                 children: state_children,
             })
         }
-        LayoutNode::Text {
-            text, font, size, ..
-        } => {
-            let measured = measurer.measure(text.as_str(), font.as_ref(), *size);
-            let style = Style {
-                size: TaffySize {
-                    width: Dimension::length(measured.width() as f32),
-                    height: Dimension::length(measured.height() as f32),
-                },
-                ..Default::default()
-            };
-            let node_id = taffy
-                .new_leaf(style)
-                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
-            Ok(LayoutState {
-                root_node: node_id,
-                layout: node.clone(),
-                children: Vec::new(),
-            })
-        }
-        LayoutNode::Rect { size, .. } | LayoutNode::Image { size, .. } => {
-            let style = Style {
-                size: TaffySize {
-                    width: Dimension::length(size.width() as f32),
-                    height: Dimension::length(size.height() as f32),
-                },
-                ..Default::default()
-            };
-            let node_id = taffy
-                .new_leaf(style)
-                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+        _ => {
+            let node_id = builder.add_leaf(style)?;
             Ok(LayoutState {
                 root_node: node_id,
                 layout: node.clone(),
@@ -247,15 +274,6 @@ fn build_layout_state(
             })
         }
     }
-}
-
-fn remove_taffy_tree(taffy: &mut TaffyTree, node_id: NodeId) {
-    if let Ok(children) = taffy.children(node_id) {
-        for child in children {
-            remove_taffy_tree(taffy, child);
-        }
-    }
-    let _ = taffy.remove(node_id);
 }
 
 fn diff<'a>(
@@ -274,7 +292,6 @@ fn diff<'a>(
         (
             LayoutNode::Flex {
                 style: old_style,
-                children: _old_children,
                 ..
             },
             LayoutNode::Flex {
@@ -284,7 +301,7 @@ fn diff<'a>(
             },
         ) => {
             let style = if old_style != new_style {
-                Some(new_style.into())
+                Some(node_to_style(new_layout, measurer))
             } else {
                 None
             };
@@ -322,14 +339,7 @@ fn diff<'a>(
             },
         ) => {
             let style = if old_text != new_text || old_font != new_font || old_size != new_size {
-                let measured = measurer.measure(new_text.as_str(), new_font.as_ref(), *new_size);
-                Some(Style {
-                    size: TaffySize {
-                        width: Dimension::length(measured.width() as f32),
-                        height: Dimension::length(measured.height() as f32),
-                    },
-                    ..Default::default()
-                })
+                Some(node_to_style(new_layout, measurer))
             } else {
                 None
             };
@@ -348,13 +358,7 @@ fn diff<'a>(
         (LayoutNode::Rect { size: old_size, .. }, LayoutNode::Rect { size: new_size, .. })
         | (LayoutNode::Image { size: old_size, .. }, LayoutNode::Image { size: new_size, .. }) => {
             let style = if old_size != new_size {
-                Some(Style {
-                    size: TaffySize {
-                        width: Dimension::length(new_size.width() as f32),
-                        height: Dimension::length(new_size.height() as f32),
-                    },
-                    ..Default::default()
-                })
+                Some(node_to_style(new_layout, measurer))
             } else {
                 None
             };
@@ -375,7 +379,7 @@ fn diff<'a>(
 }
 
 fn apply_patch(
-    taffy: &mut TaffyTree,
+    builder: &mut TaffyTreeBuilder,
     patch: Patch,
     measurer: &mut dyn TextMeasurer,
 ) -> Result<LayoutState, LayoutError> {
@@ -390,29 +394,25 @@ fn apply_patch(
             let node_id = old_state.root_node;
 
             if let Some(s) = *style {
-                taffy
-                    .set_style(node_id, s)
-                    .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+                builder.set_style(node_id, s)?;
             }
 
             let mut new_state_children = Vec::new();
             if let Some(child_patches) = children {
                 let mut new_child_ids = Vec::new();
                 for cp in child_patches {
-                    let child_state = apply_patch(taffy, cp, measurer)?;
+                    let child_state = apply_patch(builder, cp, measurer)?;
                     new_child_ids.push(child_state.root_node);
                     new_state_children.push(child_state);
                 }
 
                 if old_state.children.len() > new_state_children.len() {
                     for i in new_state_children.len()..old_state.children.len() {
-                        remove_taffy_tree(taffy, old_state.children[i].root_node);
+                        builder.remove_recursive(old_state.children[i].root_node);
                     }
                 }
 
-                taffy
-                    .set_children(node_id, &new_child_ids)
-                    .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+                builder.set_children(node_id, &new_child_ids)?;
             }
 
             Ok(LayoutState {
@@ -429,11 +429,11 @@ fn apply_patch(
             old_state,
             new_layout,
         } => {
-            let new_state = build_layout_state(taffy, new_layout, measurer)?;
-            remove_taffy_tree(taffy, old_state.root_node);
+            let new_state = build_layout_state(builder, new_layout, measurer)?;
+            builder.remove_recursive(old_state.root_node);
             Ok(new_state)
         }
-        Patch::Create { new_layout } => build_layout_state(taffy, new_layout, measurer),
+        Patch::Create { new_layout } => build_layout_state(builder, new_layout, measurer),
     }
 }
 
