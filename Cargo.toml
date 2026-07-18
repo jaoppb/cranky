@@ -47,6 +47,7 @@ rhai = { version = "1.25", features = ["sync", "serde"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tracing-appender = "0.2.5"
 futures-util = "0.3.32"
+taffy = "0.12"
 
 [dev-dependencies]
 mockall = "0.14"

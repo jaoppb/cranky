@@ -1,9 +1,9 @@
 use crate::domain::layout::{LayoutNode, RenderNode, TextMeasurer, LayoutError};
 use crate::domain::shared::geometry::Position;
 
-pub trait LayoutEnginePort: Send + Sync {
+pub trait LayoutEnginePort {
     fn calculate_layout(
-        &self,
+        &mut self,
         node: LayoutNode,
         measurer: &mut dyn TextMeasurer,
         start_pos: Position,

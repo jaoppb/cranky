@@ -115,10 +115,12 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                 events_stream.push(WatchStream::new(self.ctx.hub().dbus_rx()).map(|_| SignalKind::DBus(crate::domain::dbus::DBusSubscription { bus: crate::domain::dbus::BusType::Session, destination: None, path: None, interface: None, member: None })).boxed());
             }
 
+            let mut layout_engines: std::collections::HashMap<MonitorId, Box<dyn crate::ports::layout::LayoutEnginePort>> = std::collections::HashMap::new();
+
             // Initial refresh
             let initial_sigs = self.port.subscriptions();
             self.port.refresh(self.ctx.hub(), &initial_sigs);
-            self.measure_and_render_all();
+            self.measure_and_render_all(&mut layout_engines);
 
             loop {
                 // Determine what woke us up
@@ -186,14 +188,15 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                     self.port.refresh(self.ctx.hub(), &sigs);
                 }
 
-                self.measure_and_render_all();
+                self.measure_and_render_all(&mut layout_engines);
             }
         });
     }
 
-    #[tracing::instrument(level = "debug", skip(self), fields(module = %self.ctx.id()))]
+    #[tracing::instrument(level = "debug", skip(self, layout_engines), fields(module = %self.ctx.id()))]
     fn measure_and_render_all(
         &mut self,
+        layout_engines: &mut std::collections::HashMap<MonitorId, Box<dyn crate::ports::layout::LayoutEnginePort>>
     ) {
         let t0 = std::time::Instant::now();
         let monitors: Vec<MonitorId> = self
@@ -224,9 +227,11 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                     default_font_size,
                 );
                 
-                let adapter = crate::adapters::taffy_layout::TaffyLayoutAdapter::new();
-                use crate::ports::layout::LayoutEnginePort;
-                adapter.calculate_layout(layout_node, &mut measurer, crate::domain::shared::geometry::Position::new(0, 0))
+                let engine = layout_engines.entry(monitor_id.clone()).or_insert_with(|| {
+                    Box::new(crate::adapters::taffy_layout::TaffyLayoutAdapter::new())
+                });
+                
+                engine.calculate_layout(layout_node, &mut measurer, crate::domain::shared::geometry::Position::new(0, 0))
             };
             
             let render_node = match render_node_res {
