@@ -12,6 +12,13 @@ pub trait CanvasFactory: Send + Sync {
         font_family: FontFamily,
         font_size: FontSize,
     ) -> impl Canvas + 'a;
+
+    fn create_text_measurer<'a>(
+        &'a mut self,
+        scale: Scale,
+        font_family: FontFamily,
+        font_size: FontSize,
+    ) -> impl crate::domain::layout::TextMeasurer + 'a;
 }
 
 #[cfg_attr(test, mockall::automock)]
@@ -38,13 +45,7 @@ pub trait Canvas: Send + Sync {
         border_size: LogicalPx,
     );
 
-    /// Measure text dimensions (width, height)
-    fn measure_text<'a>(
-        &mut self,
-        text: &str,
-        font_family: Option<&'a FontFamily>,
-        font_size: Option<FontSize>,
-    ) -> (LogicalPx, LogicalPx);
+
 
     /// Draw text at a position
     fn draw_text<'a>(
@@ -65,3 +66,5 @@ pub trait Canvas: Send + Sync {
         position: Position,
     );
 }
+
+

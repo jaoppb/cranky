@@ -43,6 +43,8 @@ pub struct BarConfigDto {
     #[serde(default)]
     padding: PaddingConfigDto,
     #[serde(default)]
+    module_gap: u32,
+    #[serde(default)]
     unfocused: Option<PartialBarConfigDto>,
 }
 
@@ -62,6 +64,7 @@ impl BarConfigDto {
             border: self.border.into_domain(),
             margin: self.margin.into_domain(),
             padding: self.padding.into_domain(),
+            module_gap: domain::ModuleGap::new(self.module_gap),
             font_family: domain::FontFamily::new(font_family),
             font_size: domain::FontSize::new(font_size),
             unfocused: self.unfocused.map(|u| u.into_domain()),
@@ -431,6 +434,7 @@ pub struct PartialBarConfigDto {
     border: Option<PartialBorderConfigDto>,
     margin: Option<PartialMarginConfigDto>,
     padding: Option<PartialPaddingConfigDto>,
+    module_gap: Option<u32>,
 }
 
 impl PartialBarConfigDto {
@@ -442,6 +446,7 @@ impl PartialBarConfigDto {
             border: self.border.map(|b| b.into_domain()),
             margin: self.margin.map(|m| m.into_domain()),
             padding: self.padding.map(|p| p.into_domain()),
+            module_gap: self.module_gap.map(domain::ModuleGap::new),
             font_family: self.font_family.map(domain::FontFamily::new),
             font_size: self.font_size.map(domain::FontSize::new),
         })

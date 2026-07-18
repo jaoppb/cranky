@@ -9,10 +9,13 @@ pub mod events;
 pub mod metrics;
 pub mod signals;
 pub mod workspace;
+pub mod layout;
 
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
 pub struct ModuleId(u32);
 
 impl ModuleId {
@@ -27,7 +30,7 @@ impl fmt::Display for ModuleId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
 pub struct MonitorId(String);
 
 impl MonitorId {

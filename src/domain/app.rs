@@ -84,6 +84,8 @@ impl AppReadModel {
                 .unwrap_or(Size::new(0, 0))
         };
 
+        let gap = self.config.bar().module_gap().value() as f32;
+
         // Calculate left modules
         let mut left_x = inner_left;
         for &id in &self.left_modules {
@@ -93,7 +95,7 @@ impl AppReadModel {
                 id,
                 bounds: Rect::new(Position::new(left_x as i32, y as i32), size),
             });
-            left_x += size.width() as f32;
+            left_x += size.width() as f32 + gap;
         }
 
         // Calculate right modules
@@ -107,6 +109,7 @@ impl AppReadModel {
                 id,
                 bounds: Rect::new(Position::new(right_x as i32, y as i32), size),
             });
+            right_x -= gap;
         }
         layouts.extend(right_layouts.into_iter().rev());
 
@@ -118,6 +121,9 @@ impl AppReadModel {
             center_width += size.width() as f32;
             center_sizes.push((id, size));
         }
+        if !center_sizes.is_empty() {
+            center_width += ((center_sizes.len() - 1) as f32) * gap;
+        }
 
         let mut center_x = (bar_width.value() as f32 - center_width) / 2.0;
         for (id, size) in center_sizes {
@@ -126,7 +132,7 @@ impl AppReadModel {
                 id,
                 bounds: Rect::new(Position::new(center_x as i32, y as i32), size),
             });
-            center_x += size.width() as f32;
+            center_x += size.width() as f32 + gap;
         }
 
         layouts
@@ -220,6 +226,10 @@ impl<R: crate::ports::registry::ModuleRegistryPort<F> + 'static, F: crate::ports
 
                             AppCommand::RequestRender => {
                                 needs_render = true;
+                            },
+                            AppCommand::Exec(cmd) => {
+                                tracing::debug!("Executing shell command: {}", cmd);
+                                let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
                             },
                             AppCommand::AppletAction { id, action } => {
                                 let _ = sni.trigger_action(&id, &action).await;
@@ -396,6 +406,7 @@ mod tests {
             border: None,
             margin: None,
             padding: None,
+            module_gap: None,
             font_family: None,
             font_size: None,
         });
@@ -408,6 +419,7 @@ mod tests {
             border: default_config.border().clone(),
             margin: default_config.margin().clone(),
             padding: default_config.padding().clone(),
+            module_gap: default_config.module_gap(),
             font_family: default_config.font_family().clone(),
             font_size: default_config.font_size(),
             unfocused: Some(unfocused),

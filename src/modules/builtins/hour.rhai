@@ -41,22 +41,15 @@ fn refresh() {
     }
 }
 
-fn measure(monitor) {
-    measure_text(time_str)
-}
-
-fn view(monitor) {
+fn render(monitor) {
     let color = "#c0caf5";
-    draw_text(time_str, color, 0.0, 0.0);
-}
-
-fn on_event(event) {
-    if event.type == "click" && event.button == 272 {
-        if format == "%H:%M:%S" {
-            format = "%I:%M:%S %p";
-        } else {
-            format = "%H:%M:%S";
-        }
-        refresh();
-    }
+    
+    // Construct the layout node as a Map
+    let node = #{
+        type: "text",
+        text: time_str,
+        color: color
+    };
+    
+    node
 }

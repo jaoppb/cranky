@@ -1,33 +1,14 @@
 #![allow(unsafe_code)]
 
-use crate::domain::config::{BarConfig, FontFamily, FontSize, ModuleConfig};
-use crate::domain::shared::color::{Color, DrawingColor};
+use crate::domain::config::{BarConfig, ModuleConfig};
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::{
     MonitorId,
-    shared::geometry::{LogicalPx, Position, Size},
 };
 use crate::modules::ModuleError;
-use crate::ports::canvas::Canvas;
 use crate::ports::registry::AnyModulePort;
-use rhai::{AST, Array, Dynamic, Engine, EvalAltResult, Scope};
+use rhai::{AST, Dynamic, Engine, Scope};
 use std::sync::Mutex;
-
-#[derive(Copy, Clone)]
-struct CanvasPtr(*mut (dyn Canvas + 'static));
-
-thread_local! {
-    static CURRENT_CANVAS: std::cell::Cell<Option<CanvasPtr>> = const { std::cell::Cell::new(None) };
-}
-
-fn with_canvas<F, R>(f: F) -> Option<R>
-where
-    F: FnOnce(&mut dyn Canvas) -> R,
-{
-    CURRENT_CANVAS
-        .with(|c| c.get())
-        .map(|ptr| f(unsafe { &mut *ptr.0 }))
-}
 
 pub struct RhaiModule {
     engine: Mutex<Engine>,
@@ -38,120 +19,6 @@ pub struct RhaiModule {
 impl RhaiModule {
     pub fn new(name: String, source: &str) -> Result<Self, ModuleError> {
         let mut engine = Engine::new();
-
-        // Register API functions once
-        engine.register_fn(
-            "draw_rect",
-            |x: f32, y: f32, width: f32, height: f32, color_str: String, radius: Dynamic| {
-                let color = DrawingColor::parse(&color_str)
-                    .unwrap_or(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
-                let r = radius.as_float().unwrap_or(0.0);
-                with_canvas(|c| {
-                    c.draw_rect(
-                        LogicalPx::new(x),
-                        LogicalPx::new(y),
-                        LogicalPx::new(width),
-                        LogicalPx::new(height),
-                        color.clone(),
-                        LogicalPx::new(r as f32),
-                    )
-                });
-            },
-        );
-
-        engine.register_fn(
-            "draw_border",
-            |x: f32, y: f32, width: f32, height: f32, color_str: String, radius: f32, size: f32| {
-                if let Ok(color) = DrawingColor::parse(&color_str) {
-                    with_canvas(|c| {
-                        c.draw_border(crate::domain::shared::geometry::Position::new(x as i32, y as i32), crate::domain::shared::geometry::Size::new(width as u32, height as u32), color, LogicalPx::new(radius), LogicalPx::new(size))
-                    });
-                }
-            },
-        );
-
-        engine.register_fn(
-            "draw_text",
-            move |text: String,
-                  color_str: String,
-                  x: f64,
-                  y: f64,
-                  font_family: String,
-                  font_size: f64|
-                  -> Result<(), Box<EvalAltResult>> {
-                let color = DrawingColor::parse(&color_str)
-                    .unwrap_or(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
-                let family = FontFamily::new(font_family);
-                let size = FontSize::new(font_size as f32);
-                let position = Position::new(x as i32, y as i32);
-                with_canvas(|c| {
-                    c.draw_text(&text, Some(&family), Some(size), color.clone(), position)
-                });
-                Ok(())
-            },
-        );
-
-        engine.register_fn(
-            "draw_text",
-            |text: String, color_str: String, x: f32, y: f32| {
-                if let Ok(color) = DrawingColor::parse(&color_str) {
-                    let position = Position::new(x as i32, y as i32);
-                    with_canvas(|c| c.draw_text(&text, None, None, color, position));
-                }
-            },
-        );
-
-        engine.register_fn(
-            "measure_text_with_font",
-            move |text: String,
-                  font_family: String,
-                  font_size: f64|
-                  -> Result<rhai::Array, Box<EvalAltResult>> {
-                let mut w = 0.0;
-                let mut h = 0.0;
-                let family = FontFamily::new(font_family);
-                let size = FontSize::new(font_size as f32);
-                with_canvas(|c| {
-                    let (width, height) = c.measure_text(&text, Some(&family), Some(size));
-                    w = width.value();
-                    h = height.value();
-                });
-                let arr = vec![rhai::Dynamic::from(w as f64), rhai::Dynamic::from(h as f64)];
-                Ok(arr)
-            },
-        );
-
-        engine.register_fn(
-            "measure_text",
-            move |text: String| -> Result<rhai::Array, Box<EvalAltResult>> {
-                let mut w = 0.0;
-                let mut h = 0.0;
-                with_canvas(|c| {
-                    let (width, height) = c.measure_text(&text, None, None);
-                    w = width.value();
-                    h = height.value();
-                });
-                let arr = vec![rhai::Dynamic::from(w as f64), rhai::Dynamic::from(h as f64)];
-                Ok(arr)
-            },
-        );
-
-        engine.register_fn(
-            "draw_image",
-            |image_data_val: rhai::Dynamic,
-             width: i64,
-             height: i64,
-             logical_width: f32,
-             logical_height: f32,
-             x: f32,
-             y: f32| {
-                if let Ok(image_data) = rhai::serde::from_dynamic::<Vec<u8>>(&image_data_val) {
-                    with_canvas(|c| {
-                        c.draw_image(&image_data, crate::domain::shared::geometry::Size::new(width as u32, height as u32), crate::domain::shared::geometry::Size::new(logical_width as u32, logical_height as u32), crate::domain::shared::geometry::Position::new(x as i32, y as i32))
-                    });
-                }
-            },
-        );
 
         engine.register_fn("exec", |cmd: String| {
             let _ = std::process::Command::new("sh").arg("-c").arg(&cmd).spawn();
@@ -216,20 +83,22 @@ impl AnyModulePort for RhaiModule {
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
 
-        let mut subs = Vec::new();
-        if let Ok(result) = engine.call_fn::<Array>(&mut scope, &self.ast, "subscriptions", ()) {
-            for val in result {
-                if let Ok(s) = val.into_string() {
+        if let Ok(subs) = engine.call_fn::<rhai::Array>(&mut scope, &self.ast, "subscriptions", ())
+        {
+            let mut result = Vec::new();
+            for sub in subs {
+                if let Some(s) = sub.try_cast::<String>() {
                     match s.as_str() {
-                        "time" => subs.push(SignalKind::Time),
-                        "hyprland" => subs.push(SignalKind::Hyprland),
-                        "metrics" => subs.push(SignalKind::Metrics),
+                        "time" => result.push(SignalKind::Time),
+                        "hyprland" => result.push(SignalKind::Hyprland),
+                        "metrics" => result.push(SignalKind::Metrics),
                         _ => {}
                     }
                 }
             }
+            return result;
         }
-        subs
+        vec![]
     }
 
     fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
@@ -262,87 +131,25 @@ impl AnyModulePort for RhaiModule {
         let _ = engine.call_fn::<()>(&mut scope, &self.ast, "refresh", ());
     }
 
-    fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) {
+    fn render(&self, monitor: &MonitorId) -> crate::domain::layout::LayoutNode {
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
-
-        let ptr = unsafe {
-            std::mem::transmute::<*mut dyn Canvas, *mut (dyn Canvas + 'static)>(
-                canvas as *mut dyn Canvas,
-            )
-        };
-        CURRENT_CANVAS.with(|c| c.set(Some(CanvasPtr(ptr))));
-
         let monitor_id = monitor.as_str().to_string();
-        let _ = engine.call_fn::<()>(&mut scope, &self.ast, "view", (monitor_id,));
 
-        CURRENT_CANVAS.with(|c| c.set(None));
-    }
-
-    fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size {
-        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
-        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
-
-        let ptr = unsafe {
-            std::mem::transmute::<*mut dyn Canvas, *mut (dyn Canvas + 'static)>(
-                canvas as *mut dyn Canvas,
-            )
-        };
-        CURRENT_CANVAS.with(|c| c.set(Some(CanvasPtr(ptr))));
-
-        let monitor_id = monitor.as_str().to_string();
-        let size = if let Ok(result) =
-            engine.call_fn::<Array>(&mut scope, &self.ast, "measure", (monitor_id,))
-        {
-            if result.len() == 2 {
-                let w = result[0].as_int().unwrap_or(0) as u32;
-                let h = result[1].as_int().unwrap_or(0) as u32;
-                Size::new(w, h)
-            } else {
-                Size::new(0, 0)
+        match engine.call_fn::<rhai::Dynamic>(&mut scope, &self.ast, "render", (monitor_id,)) {
+            Ok(result) => {
+                match rhai::serde::from_dynamic::<crate::domain::layout::LayoutNode>(&result) {
+                    Ok(node) => node,
+                    Err(e) => {
+                        tracing::error!("Failed to deserialize render output in rhai module: {}", e);
+                        crate::domain::layout::LayoutNode::Row { children: vec![], gap: None, align_items: crate::domain::layout::AlignY::default(), on_click: None, on_hover: None }
+                    }
+                }
             }
-        } else {
-            Size::new(0, 0)
-        };
-
-        CURRENT_CANVAS.with(|c| c.set(None));
-        size
-    }
-
-    fn on_pointer_event(
-        &mut self,
-        event: crate::domain::events::PointerEvent,
-        _command_tx: &dyn crate::ports::registry::CommandSender,
-    ) {
-        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
-        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
-
-        let mut event_map = rhai::Map::new();
-        use crate::domain::events::PointerEvent;
-        match event {
-            PointerEvent::PointerEnter => {
-                event_map.insert("type".into(), Dynamic::from("pointer_enter".to_string()));
-            }
-            PointerEvent::PointerLeave => {
-                event_map.insert("type".into(), Dynamic::from("leave".to_string()));
-            }
-            PointerEvent::PointerMotion { x, y } => {
-                event_map.insert("type".into(), Dynamic::from("motion".to_string()));
-                event_map.insert("x".into(), Dynamic::from(x));
-                event_map.insert("y".into(), Dynamic::from(y));
-            }
-            PointerEvent::Click { button, x, y } => {
-                event_map.insert("type".into(), Dynamic::from("click".to_string()));
-                event_map.insert("button".into(), Dynamic::from(button as i64));
-                event_map.insert("x".into(), Dynamic::from(x));
-                event_map.insert("y".into(), Dynamic::from(y));
-            }
-            PointerEvent::Scroll { axis, amount } => {
-                event_map.insert("type".into(), Dynamic::from("scroll".to_string()));
-                event_map.insert("axis".into(), Dynamic::from(axis as i64));
-                event_map.insert("amount".into(), Dynamic::from(amount));
+            Err(e) => {
+                tracing::warn!("Module render error in rhai: {}", e);
+                crate::domain::layout::LayoutNode::Row { children: vec![], gap: None, align_items: crate::domain::layout::AlignY::default(), on_click: None, on_hover: None }
             }
         }
-        let _ = engine.call_fn::<()>(&mut scope, &self.ast, "on_event", (event_map,));
     }
 }

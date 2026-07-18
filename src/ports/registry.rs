@@ -1,12 +1,10 @@
 use crate::domain::commands::AppCommand;
 use crate::domain::config::{BarConfig, Config, ModuleConfig};
-use crate::domain::events::PointerEvent;
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::{
     ModuleId, MonitorId,
-    shared::geometry::{Rect, Size},
+    shared::geometry::Rect,
 };
-use crate::ports::canvas::Canvas;
 use crate::ports::surface::DynSurfaceManager;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -23,9 +21,7 @@ pub trait AnyModulePort: Send + Sync {
     fn init(&mut self, config: &ModuleConfig, bar_config: &BarConfig) -> Result<(), String>;
     fn subscriptions(&self) -> Vec<SignalKind>;
     fn refresh(&mut self, hub: &SignalHub, changed_signals: &[SignalKind]);
-    fn view(&self, canvas: &mut dyn Canvas, monitor: &MonitorId);
-    fn measure(&self, canvas: &mut dyn Canvas, monitor: &MonitorId) -> Size;
-    fn on_pointer_event(&mut self, event: PointerEvent, command_tx: &dyn crate::ports::registry::CommandSender);
+    fn render(&self, monitor: &MonitorId) -> crate::domain::layout::LayoutNode;
 }
 
 #[async_trait]

@@ -9,6 +9,7 @@ pub enum AppletStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(transparent)]
 pub struct AppletId(String);
 
 impl AppletId {
@@ -21,6 +22,7 @@ impl AppletId {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
 pub struct Destination(String);
 
 impl Destination {
@@ -33,6 +35,7 @@ impl Destination {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
 pub struct ObjectPath(String);
 
 impl ObjectPath {
@@ -45,6 +48,7 @@ impl ObjectPath {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
 pub struct Title(String);
 
 impl Title {
@@ -54,6 +58,7 @@ impl Title {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(transparent)]
 pub struct IconName(String);
 
 impl IconName {

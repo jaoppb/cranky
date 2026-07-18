@@ -17,10 +17,7 @@ pub struct ModuleContext {
     surface_manager: DynSurfaceManager,
     command_tx: Arc<dyn crate::ports::registry::CommandSender>,
     layout_rx: watch::Receiver<HashMap<MonitorId, Rect>>,
-    pointer_rx: tokio::sync::broadcast::Receiver<(
-        crate::domain::ModuleId,
-        crate::domain::events::PointerEvent,
-    )>,
+    pointer_rx: crate::domain::events::PointerReceiver,
 }
 
 impl ModuleContext {
@@ -71,8 +68,9 @@ impl ModuleContext {
 pub struct ModuleActor<F: crate::ports::canvas::CanvasFactory + 'static> {
     port: Box<dyn AnyModulePort>,
     ctx: ModuleContext,
-    sizes: HashMap<MonitorId, Size>,
+    sizes: std::collections::HashMap<MonitorId, Size>,
     canvas_factory: std::sync::Arc<std::sync::Mutex<F>>,
+    render_trees: std::collections::HashMap<MonitorId, crate::domain::layout::RenderNode>,
 }
 
 impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
@@ -84,8 +82,9 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
         Self {
             port,
             ctx,
-            sizes: HashMap::new(),
+            sizes: std::collections::HashMap::new(),
             canvas_factory,
+            render_trees: std::collections::HashMap::new(),
         }
     }
 
@@ -144,11 +143,27 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                                 return false; // layout_rx dropped, we should exit
                             }
                         }
-                        Ok((target_id, event)) = input_rx.recv() => {
-                            if target_id == ctx_id {
-                                self.port.on_pointer_event(event, self.ctx.command_tx());
-                                changed = true;
-                            }
+                        Ok((target_id, monitor_id, event)) = input_rx.recv() => {
+                            if target_id == ctx_id
+                                && let Some(render_tree) = self.render_trees.get(&monitor_id) {
+                                    use crate::domain::shared::geometry::Position;
+                                    use crate::domain::events::PointerEvent;
+                                    match event {
+                                        PointerEvent::Click { x, y, .. } => {
+                                            if let Some(hit) = render_tree.hit_test(Position::new(x as i32, y as i32))
+                                                && let Some(cmd) = hit.on_click() {
+                                                    self.ctx.command_tx().send_command(cmd.clone());
+                                                }
+                                        },
+                                        PointerEvent::PointerMotion { x, y } => {
+                                            if let Some(hit) = render_tree.hit_test(Position::new(x as i32, y as i32))
+                                                && let Some(cmd) = hit.on_hover() {
+                                                    self.ctx.command_tx().send_command(cmd.clone());
+                                                }
+                                        },
+                                        _ => {}
+                                    }
+                                }
                         }
                     }
 
@@ -194,24 +209,25 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
             self.ctx.rxs_mut().0.borrow().clone();
 
         for monitor_id in monitors {
+            let layout_node = self.port.render(&monitor_id);
+
             // Measure
-            let mut dummy_data = vec![0u8; 4];
-            let _dummy_pixmap = tiny_skia::PixmapMut::from_bytes(&mut dummy_data, 1, 1).unwrap();
             let config = self.ctx.hub().config_rx().borrow().clone();
             let default_font_family = config.bar().font_family().clone();
             let default_font_size = config.bar().font_size();
 
-            let size = {
+            let render_node = {
                 let mut factory = self.canvas_factory.lock().unwrap();
-                let mut dummy_canvas = factory.create_canvas(
-                    &mut dummy_data,
-                    Size::new(1, 1),
+                let mut measurer = factory.create_text_measurer(
                     Scale::new(1.0),
                     default_font_family.clone(),
                     default_font_size,
                 );
-                self.port.measure(&mut dummy_canvas, &monitor_id)
+                
+                crate::domain::layout::LayoutEngine::layout(layout_node, &mut measurer, crate::domain::shared::geometry::Position::new(0, 0))
             };
+
+            let size = *render_node.rect().size();
 
             let old_size = self
                 .sizes
@@ -239,19 +255,15 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                 let h = bounds.height();
                 let mut data = vec![0u8; (w * h * 4) as usize];
                 {
-                    let config = self.ctx.hub().config_rx().borrow().clone();
-                    let default_font_family = config.bar().font_family().clone();
-                    let default_font_size = config.bar().font_size();
-
                     let mut factory = self.canvas_factory.lock().unwrap();
                     let mut canvas = factory.create_canvas(
                         &mut data,
                         *bounds.size(),
                         Scale::new(1.0),
-                        default_font_family,
+                        default_font_family.clone(),
                         default_font_size,
                     );
-                    self.port.view(&mut canvas, &monitor_id);
+                    render_node.render_to_canvas(&mut canvas);
                 }
 
                 let buffer = RenderBuffer::new(data, *bounds.size());

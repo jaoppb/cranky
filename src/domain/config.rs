@@ -2,7 +2,9 @@ use crate::domain::shared::color::DrawingColor;
 use crate::domain::shared::geometry::BarHeight;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq)]
+use serde::Deserialize;
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct FontFamily(String);
 
 impl FontFamily {
@@ -15,7 +17,7 @@ impl FontFamily {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct FontSize(f32);
 
 impl FontSize {
@@ -41,7 +43,7 @@ impl BorderSize {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct BorderRadius(f32);
 
 impl BorderRadius {
@@ -131,10 +133,24 @@ impl Default for BarConfig {
             border: BorderConfig::default(),
             margin: MarginConfig::default(),
             padding: PaddingConfig::default(),
+            module_gap: ModuleGap::default(),
             font_family: FontFamily::new("".to_string()),
             font_size: FontSize::new(14.0),
             unfocused: None,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ModuleGap(u32);
+
+impl ModuleGap {
+    pub fn new(val: u32) -> Self {
+        Self(val)
+    }
+
+    pub fn value(&self) -> u32 {
+        self.0
     }
 }
 
@@ -178,11 +194,12 @@ pub struct BarConfig {
     height: BarHeight,
     vertical_alignment: VerticalAlignment,
     border: BorderConfig,
-    margin: MarginConfig,
-    padding: PaddingConfig,
-    font_family: FontFamily,
-    font_size: FontSize,
-    unfocused: Option<PartialBarConfig>,
+    pub margin: MarginConfig,
+    pub padding: PaddingConfig,
+    pub module_gap: ModuleGap,
+    pub font_family: FontFamily,
+    pub font_size: FontSize,
+    pub unfocused: Option<PartialBarConfig>,
 }
 
 
@@ -193,6 +210,7 @@ pub struct CreateBarConfigCommand {
     pub border: BorderConfig,
     pub margin: MarginConfig,
     pub padding: PaddingConfig,
+    pub module_gap: ModuleGap,
     pub font_family: FontFamily,
     pub font_size: FontSize,
     pub unfocused: Option<PartialBarConfig>,
@@ -207,6 +225,7 @@ impl BarConfig {
             border: cmd.border,
             margin: cmd.margin,
             padding: cmd.padding,
+            module_gap: cmd.module_gap,
             font_family: cmd.font_family,
             font_size: cmd.font_size,
             unfocused: cmd.unfocused,
@@ -236,6 +255,10 @@ impl BarConfig {
 
     pub fn padding(&self) -> &PaddingConfig {
         &self.padding
+    }
+
+    pub fn module_gap(&self) -> ModuleGap {
+        self.module_gap
     }
 
     pub fn font_family(&self) -> &FontFamily {
@@ -296,6 +319,9 @@ impl BarConfig {
                 if let Some(r) = pp.right() {
                     base.padding.right = r;
                 }
+            }
+            if let Some(gap) = unfocused.module_gap() {
+                base.module_gap = gap;
             }
             if let Some(ff) = unfocused.font_family() {
                 base.font_family = ff.clone();
@@ -592,6 +618,7 @@ pub struct PartialBarConfig {
     border: Option<PartialBorderConfig>,
     margin: Option<PartialMarginConfig>,
     padding: Option<PartialPaddingConfig>,
+    module_gap: Option<ModuleGap>,
     font_family: Option<FontFamily>,
     font_size: Option<FontSize>,
 }
@@ -604,6 +631,7 @@ pub struct CreatePartialBarConfigCommand {
     pub border: Option<PartialBorderConfig>,
     pub margin: Option<PartialMarginConfig>,
     pub padding: Option<PartialPaddingConfig>,
+    pub module_gap: Option<ModuleGap>,
     pub font_family: Option<FontFamily>,
     pub font_size: Option<FontSize>,
 }
@@ -617,6 +645,7 @@ impl PartialBarConfig {
             border: cmd.border,
             margin: cmd.margin,
             padding: cmd.padding,
+            module_gap: cmd.module_gap,
             font_family: cmd.font_family,
             font_size: cmd.font_size,
         }
@@ -639,6 +668,10 @@ impl PartialBarConfig {
     }
     pub fn padding(&self) -> Option<&PartialPaddingConfig> {
         self.padding.as_ref()
+    }
+
+    pub fn module_gap(&self) -> Option<ModuleGap> {
+        self.module_gap
     }
     pub fn font_family(&self) -> Option<&FontFamily> {
         self.font_family.as_ref()

@@ -54,93 +54,55 @@ function refresh()
     table.sort(workspaces, function(a, b) return a.id < b.id end)
 end
 
-function measure(canvas, monitor)
-    local monitor_id = monitor:id()
-    local count = 0
-    local width = 0
-    local _, lh = canvas:measure_text("0")
-    local padding_y = 4
-    local padding_x = 6
-    local item_size = lh + padding_y * 2
-    local item_spacing = 6
-    
-    for _, ws in ipairs(workspaces) do
-        if ws.monitor == monitor_id then
-            local label = ws.name:match("^special:(.*)") or ws.name
-            local lw, _ = canvas:measure_text(label)
-            local rect_w = math.max(lw + padding_x * 2, item_size)
-            width = width + rect_w
-            count = count + 1
-        end
-    end
-    
-    if count == 0 then return 0, 0 end
-    
-    width = width + (count - 1) * item_spacing
-    return math.ceil(width), item_size
-end
-
-function view(canvas, monitor)
+function render(monitor)
     local monitor_id = monitor:id()
     local active_ids = active_workspaces[monitor_id] or { active = -1 }
-    local is_monitor_focused = focused_monitor == monitor_id
-    
-    local _, lh = canvas:measure_text("0")
-    local padding_y = 4
-    local padding_x = 6
-    local item_size = lh + padding_y * 2
-    local item_spacing = 6
-    local x_offset = 0
     
     local inactive_color = "#7aa2f7"
     local active_text_color = "#ffffff"
+    
+    local children = {}
     
     for _, ws in ipairs(workspaces) do
         if ws.monitor == monitor_id then
             local label = ws.name:match("^special:(.*)") or ws.name
             local active_ws = (type(active_ids.special) == "number") and active_ids.special or active_ids.active
             local is_visible = (ws.id == active_ws)
-            local lw, _ = canvas:measure_text(label)
             
-            if is_visible then
-                local bg = is_monitor_focused and active_bg or focused_bg
-                local rect_w = math.max(lw + padding_x * 2, item_size)
-                canvas:draw_rect(x_offset, 0, rect_w, item_size, bg, border_radius)
-                
-                canvas:draw_text(label, active_text_color, x_offset + (rect_w - lw) / 2, padding_y)
-                x_offset = x_offset + rect_w + item_spacing
-            else
-                local rect_w = math.max(lw + padding_x * 2, item_size)
-                canvas:draw_text(label, inactive_color, x_offset + (rect_w - lw) / 2, padding_y)
-                x_offset = x_offset + rect_w + item_spacing
-            end
+            local color = is_visible and active_text_color or inactive_color
+            
+            local text_node = {
+                type = "text",
+                text = label,
+                color = color,
+                on_click = {
+                    Exec = "hyprctl dispatch workspace " .. ws.id
+                }
+            }
+            
+            local bg = is_visible and ((focused_monitor == monitor_id) and active_bg or focused_bg) or "#00000000"
+            
+            table.insert(children, {
+                type = "stack",
+                align_x = "center",
+                align_y = "center",
+                on_click = text_node.on_click,
+                children = {
+                    {
+                        type = "rect",
+                        size = { width = 24, height = 24 },
+                        color = bg,
+                        radius = border_radius
+                    },
+                    text_node
+                }
+            })
         end
     end
-end
-
-function on_event(event)
-    if event.type == "click" and event.button == 272 then -- 272 is BTN_LEFT in wayland
-        -- Find which workspace was clicked
-        -- Note: with dynamic width this is an approximation
-        local _, lh = canvas:measure_text("0")
-        local padding_x = 6
-        local rect_w = math.max(16 + padding_x * 2, lh + 8)
-        local item_spacing = 6
-        local index = math.floor(event.x / (rect_w + item_spacing)) + 1
-        
-        -- We don't have the exact monitor ID here, but we can assume the active one or 
-        -- just iterate all workspaces and pick the nth one that matches the x coordinate.
-        -- A better approach is to store the bounding box of each workspace in view()
-        -- but for simplicity, we just use the index.
-        local current = 1
-        for _, ws in ipairs(workspaces) do
-            -- Note: in a real implementation we need the monitor ID.
-            -- This is a simplified version.
-            if current == index then
-                os.execute("hyprctl dispatch workspace " .. ws.id)
-                break
-            end
-            current = current + 1
-        end
-    end
+    
+    return {
+        type = "row",
+        gap = 6,
+        children = children
+    }
 end

@@ -119,79 +119,74 @@ local bar_width = 50
 local bar_height = 6
 local bar_radius = 3
 
-function measure(canvas, monitor)
+function render(monitor)
     local widgets = get_widgets()
     if #widgets == 0 then
-        local w, h = canvas:measure_text("Loading metrics...")
-        return math.ceil(w + padding * 2), h
+        return {
+            type = "text",
+            text = "Loading metrics...",
+            color = "#cccccc"
+        }
     end
 
-    local total_width = padding * 2
-    local max_height = 0
-
+    local children = {}
+    local text_color = "#cccccc"
+    local bg_color = "#313244"
+    
     for i, w in ipairs(widgets) do
-        local lw, lh = canvas:measure_text(w.label)
-        local widget_width = lw + 5 -- label + spacing
+        local widget_children = {}
+        
+        table.insert(widget_children, {
+            type = "text",
+            text = w.label,
+            color = text_color
+        })
         
         if w.type == "bar" then
-            widget_width = widget_width + bar_width
-        elseif w.type == "text" then
-            local tw, th = canvas:measure_text(w.text)
-            widget_width = widget_width + tw
-        end
-
-        total_width = total_width + widget_width
-        if i < #widgets then
-            total_width = total_width + spacing
-        end
-
-        if lh > max_height then max_height = lh end
-    end
-
-    return math.ceil(total_width), max_height
-end
-
-function view(canvas, monitor)
-    local widgets = get_widgets()
-    if #widgets == 0 then
-        canvas:draw_text("Loading metrics...", "#cccccc", padding, 0)
-        return
-    end
-
-    local x = padding
-    local text_color = "#cccccc"
-    local bg_color = "#313244" -- subtle background for the progress bar
-    local text_font_size = bar_config and bar_config.font_size or nil
-
-    for i, w in ipairs(widgets) do
-        -- Draw label
-        local lw, lh = canvas:measure_text(w.label)
-        canvas:draw_text(w.label, text_color, x, 0)
-        x = x + lw + 5
-
-        if w.type == "bar" then
-            -- Draw background bar
-            local y_offset = (lh - bar_height) / 2
-            canvas:draw_rect(x, y_offset, bar_width, bar_height, bg_color, bar_radius)
-            
-            -- Draw foreground bar
             local percent = math.min(100, math.max(0, w.value))
-            local fg_width = (percent / 100) * bar_width
+            local fg_width = math.floor((percent / 100) * bar_width)
+            local fg_color = get_color(percent)
+            local bar_children = {}
+            -- Background
+            table.insert(bar_children, {
+                type = "rect",
+                size = { width = bar_width, height = bar_height },
+                color = bg_color,
+                radius = bar_radius
+            })
+            
             if fg_width > 0 then
-                local fg_color = get_color(percent)
-                -- We only round the right side, so we draw it over the background
-                canvas:draw_rect(x, y_offset, fg_width, bar_height, fg_color, bar_radius)
+                table.insert(bar_children, {
+                    type = "rect",
+                    size = { width = fg_width, height = bar_height },
+                    color = fg_color,
+                    radius = bar_radius
+                })
             end
             
-            x = x + bar_width
+            table.insert(widget_children, {
+                type = "stack",
+                align_x = "left",
+                children = bar_children
+            })
         elseif w.type == "text" then
-            canvas:draw_text(w.text, text_color, x, 0)
-            local tw, th = canvas:measure_text(w.text)
-            x = x + tw
+            table.insert(widget_children, {
+                type = "text",
+                text = w.text,
+                color = text_color
+            })
         end
-
-        if i < #widgets then
-            x = x + spacing
-        end
+        
+        table.insert(children, {
+            type = "row",
+            gap = 5,
+            children = widget_children
+        })
     end
+
+    return {
+        type = "row",
+        gap = 15,
+        children = children
+    }
 end

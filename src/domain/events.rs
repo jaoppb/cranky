@@ -30,5 +30,5 @@ pub enum PointerEvent {
     Scroll { axis: u32, amount: f64 },
 }
 
-pub type PointerSender = tokio::sync::broadcast::Sender<(crate::domain::ModuleId, PointerEvent)>;
-pub type PointerReceiver = tokio::sync::broadcast::Receiver<(crate::domain::ModuleId, PointerEvent)>;
+pub type PointerSender = tokio::sync::broadcast::Sender<(crate::domain::ModuleId, crate::domain::MonitorId, PointerEvent)>;
+pub type PointerReceiver = tokio::sync::broadcast::Receiver<(crate::domain::ModuleId, crate::domain::MonitorId, PointerEvent)>;

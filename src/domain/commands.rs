@@ -1,6 +1,9 @@
-#[derive(Debug)]
+use serde::Deserialize;
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub enum AppCommand {
     RequestRender,
+    Exec(String),
     AppletAction {
         id: String,
         action: String,

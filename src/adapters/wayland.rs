@@ -106,7 +106,7 @@ pub struct WaylandState {
 
     command_tx: tokio::sync::mpsc::Sender<crate::domain::commands::AppCommand>,
 
-    surface_to_id: HashMap<WlSurface, crate::domain::ModuleId>,
+    surface_to_id: HashMap<WlSurface, (crate::domain::ModuleId, crate::domain::MonitorId)>,
     pointer_surface: Option<WlSurface>,
     pointer_pos: (f64, f64),
 
@@ -401,27 +401,23 @@ impl DisplayServerPort for WaylandAdapter {
         let font_size = crate::domain::config::FontSize::new(12.0);
         let scale = Scale::new(bar_scale as f32);
 
-        let mut dummy_data = vec![0; 4];
-        let dummy_pixmap = tiny_skia::PixmapMut::from_bytes(&mut dummy_data, 1, 1).unwrap();
-
         let (text_w, text_h) = {
-            let mut canvas = TinySkiaCosmicCanvas::new(
-                dummy_pixmap,
+            let mut measurer = crate::adapters::rendering::CosmicTextMeasurer::new(
                 &mut state.font_system,
-                &mut state.swash_cache,
                 scale,
                 font_family.clone(),
                 font_size,
             );
-            use crate::ports::canvas::Canvas;
-            canvas.measure_text(text, Some(&font_family), Some(font_size))
+            use crate::domain::layout::TextMeasurer;
+            let size = measurer.measure(text, Some(&font_family), Some(font_size));
+            (size.width(), size.height())
         };
 
         let padding_x = 8.0;
         let padding_y = 4.0;
 
-        let width = ((text_w.value() + padding_x * 2.0) * scale.value()).ceil() as u32;
-        let height = ((text_h.value() + padding_y * 2.0) * scale.value()).ceil() as u32;
+        let width = ((text_w as f32 + padding_x * 2.0) * scale.value()).ceil() as u32;
+        let height = ((text_h as f32 + padding_y * 2.0) * scale.value()).ceil() as u32;
 
         let width = width.max(1);
         let height = height.max(1);
@@ -593,7 +589,7 @@ impl WaylandAdapter {
         
         self.state
             .surface_to_id
-            .insert(ms.surface.clone(), cmd.module_id);
+            .insert(ms.surface.clone(), (cmd.module_id, cmd.monitor_id.clone()));
 
         Ok(())
     }
@@ -775,7 +771,7 @@ impl WaylandAdapter {
                                 }
                             };
 
-                        surface_to_id.insert(surface.clone(), module_id);
+                        surface_to_id.insert(surface.clone(), (module_id, monitor_id.clone()));
 
                         v.insert(ModuleSurface {
                             surface,
@@ -1072,21 +1068,21 @@ impl Dispatch<WlPointer, ()> for WaylandState {
             } => {
                 state.pointer_surface = Some(surface.clone());
                 state.pointer_pos = (surface_x, surface_y);
-                if let Some(id) = state.surface_to_id.get(&surface) {
+                if let Some((id, mon_id)) = state.surface_to_id.get(&surface) {
                     let _ = state
                         .hub
                         .pointer_tx()
-                        .send((*id, PointerEvent::PointerEnter));
+                        .send((*id, mon_id.clone(), PointerEvent::PointerEnter));
                 }
             }
             wl_pointer::Event::Leave { surface: _, .. } => {
                 if let Some(surface) = state.pointer_surface.take()
-                    && let Some(id) = state.surface_to_id.get(&surface)
+                    && let Some((id, mon_id)) = state.surface_to_id.get(&surface)
                 {
                     let _ = state
                         .hub
                         .pointer_tx()
-                        .send((*id, PointerEvent::PointerLeave));
+                        .send((*id, mon_id.clone(), PointerEvent::PointerLeave));
                 }
             }
             wl_pointer::Event::Motion {
@@ -1096,10 +1092,11 @@ impl Dispatch<WlPointer, ()> for WaylandState {
             } => {
                 state.pointer_pos = (surface_x, surface_y);
                 if let Some(surface) = &state.pointer_surface
-                    && let Some(id) = state.surface_to_id.get(surface)
+                    && let Some((id, mon_id)) = state.surface_to_id.get(surface)
                 {
                     let _ = state.hub.pointer_tx().send((
                         *id,
+                        mon_id.clone(),
                         PointerEvent::PointerMotion {
                             x: surface_x,
                             y: surface_y,
@@ -1117,10 +1114,11 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                         wayland_client::protocol::wl_pointer::ButtonState::Released,
                     )
                     && let Some(surface) = &state.pointer_surface
-                    && let Some(id) = state.surface_to_id.get(surface)
+                    && let Some((id, mon_id)) = state.surface_to_id.get(surface)
                 {
                     let _ = state.hub.pointer_tx().send((
                         *id,
+                        mon_id.clone(),
                         PointerEvent::Click {
                             button,
                             x: state.pointer_pos.0,
@@ -1131,7 +1129,7 @@ impl Dispatch<WlPointer, ()> for WaylandState {
             }
             wl_pointer::Event::Axis { axis, value, .. } => {
                 if let Some(surface) = &state.pointer_surface
-                    && let Some(id) = state.surface_to_id.get(surface)
+                    && let Some((id, mon_id)) = state.surface_to_id.get(surface)
                 {
                     let axis_val = match axis {
                         wayland_client::WEnum::Value(
@@ -1144,6 +1142,7 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                     };
                     let _ = state.hub.pointer_tx().send((
                         *id,
+                        mon_id.clone(),
                         PointerEvent::Scroll {
                             axis: axis_val,
                             amount: value,

@@ -215,19 +215,13 @@ impl SignalHub {
     }
     pub fn pointer_tx(
         &self,
-    ) -> &tokio::sync::broadcast::Sender<(
-        crate::domain::ModuleId,
-        crate::domain::events::PointerEvent,
-    )> {
+    ) -> &crate::domain::events::PointerSender {
         &self.pointer.0
     }
 
     pub fn pointer_rx(
         &self,
-    ) -> tokio::sync::broadcast::Receiver<(
-        crate::domain::ModuleId,
-        crate::domain::events::PointerEvent,
-    )> {
+    ) -> crate::domain::events::PointerReceiver {
         self.pointer.0.subscribe()
     }
 }

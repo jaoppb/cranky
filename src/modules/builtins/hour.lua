@@ -15,22 +15,10 @@ function refresh()
     time_str = os.date(format)
 end
 
-function measure(canvas, monitor)
-    return canvas:measure_text(time_str)
-end
-
-function view(canvas, monitor)
-    local color = "#c0caf5"
-    canvas:draw_text(time_str, color, 0, 0)
-end
-
-function on_event(event)
-    if event.type == "click" and event.button == 272 then
-        if format == "%H:%M:%S" then
-            format = "%I:%M:%S %p"
-        else
-            format = "%H:%M:%S"
-        end
-        time_str = os.date(format)
-    end
+function render(monitor)
+    return {
+        type = "text",
+        text = time_str,
+        color = "#c0caf5"
+    }
 end

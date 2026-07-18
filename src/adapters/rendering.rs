@@ -45,6 +45,20 @@ impl crate::ports::canvas::CanvasFactory for TinySkiaCanvasFactory {
             font_size,
         )
     }
+
+    fn create_text_measurer<'a>(
+        &'a mut self,
+        scale: Scale,
+        font_family: FontFamily,
+        font_size: FontSize,
+    ) -> impl crate::domain::layout::TextMeasurer + 'a {
+        CosmicTextMeasurer::new(
+            &mut self.font_system,
+            scale,
+            font_family,
+            font_size,
+        )
+    }
 }
 
 pub struct TinySkiaCosmicCanvas<'a> {
@@ -126,7 +140,7 @@ impl<'a> TinySkiaCosmicCanvas<'a> {
         paint
     }
 
-    fn get_family(name: &str) -> Family<'_> {
+    pub fn get_family(name: &str) -> Family<'_> {
         match name.to_lowercase().as_str() {
             "monospace" => Family::Monospace,
             "serif" => Family::Serif,
@@ -271,36 +285,7 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         }
     }
 
-    fn measure_text(
-        &mut self,
-        text: &str,
-        font_family: Option<&FontFamily>,
-        font_size: Option<FontSize>,
-    ) -> (LogicalPx, LogicalPx) {
-        let size = font_size.unwrap_or(self.default_font_size).value();
-        let family = font_family.unwrap_or(&self.default_font_family).as_str();
 
-        let physical_size = LogicalPx::new(size).apply_scale(&self.scale).value();
-        let metrics = Metrics::new(physical_size, physical_size * 1.0);
-        let mut buffer = Buffer::new(self.font_system, metrics);
-        let attrs = Attrs::new().family(Self::get_family(family));
-
-        buffer.set_text(text, &attrs, Shaping::Advanced, None);
-        buffer.shape_until_scroll(self.font_system, false);
-
-        let mut physical_width: f32 = 0.0;
-        let mut physical_height: f32 = 0.0;
-        for run in buffer.layout_runs() {
-            physical_width = physical_width.max(run.line_w);
-            physical_height += metrics.line_height;
-        }
-
-        use crate::domain::shared::geometry::PhysicalPx;
-        (
-            PhysicalPx::new(physical_width).apply_inverse_scale(&self.scale),
-            PhysicalPx::new(physical_height).apply_inverse_scale(&self.scale),
-        )
-    }
 
     fn draw_text(
         &mut self,
@@ -487,6 +472,62 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
     }
 }
 
+pub struct CosmicTextMeasurer<'a> {
+    pub font_system: &'a mut FontSystem,
+    pub scale: Scale,
+    pub default_font_family: FontFamily,
+    pub default_font_size: FontSize,
+}
+
+impl<'a> CosmicTextMeasurer<'a> {
+    pub fn new(
+        font_system: &'a mut FontSystem,
+        scale: Scale,
+        default_font_family: FontFamily,
+        default_font_size: FontSize,
+    ) -> Self {
+        Self {
+            font_system,
+            scale,
+            default_font_family,
+            default_font_size,
+        }
+    }
+}
+
+impl<'a> crate::domain::layout::TextMeasurer for CosmicTextMeasurer<'a> {
+    fn measure(
+        &mut self,
+        text: &str,
+        font_family: Option<&FontFamily>,
+        font_size: Option<FontSize>,
+    ) -> crate::domain::shared::geometry::Size {
+        let size = font_size.unwrap_or(self.default_font_size).value();
+        let family = font_family.unwrap_or(&self.default_font_family).as_str();
+
+        let physical_size = LogicalPx::new(size).apply_scale(&self.scale).value();
+        let metrics = Metrics::new(physical_size, physical_size * 1.0);
+        let mut buffer = Buffer::new(self.font_system, metrics);
+        let attrs = Attrs::new().family(TinySkiaCosmicCanvas::get_family(family));
+
+        buffer.set_text(text, &attrs, Shaping::Advanced, None);
+        buffer.shape_until_scroll(self.font_system, false);
+
+        let mut physical_width: f32 = 0.0;
+        let mut physical_height: f32 = 0.0;
+        for run in buffer.layout_runs() {
+            physical_width = physical_width.max(run.line_w);
+            physical_height += metrics.line_height;
+        }
+
+        use crate::domain::shared::geometry::PhysicalPx;
+        let w = PhysicalPx::new(physical_width).apply_inverse_scale(&self.scale);
+        let h = PhysicalPx::new(physical_height).apply_inverse_scale(&self.scale);
+        
+        crate::domain::shared::geometry::Size::new(w.value().ceil() as u32, h.value().ceil() as u32)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -529,22 +570,19 @@ mod tests {
 
     #[test]
     fn test_canvas_measure_text() {
-        let mut pixmap = Pixmap::new(100, 100).unwrap();
         let mut font_system = FontSystem::new();
-        let mut swash_cache = SwashCache::new();
 
-        let mut canvas = TinySkiaCosmicCanvas::new(
-            pixmap.as_mut(),
+        let mut measurer = CosmicTextMeasurer::new(
             &mut font_system,
-            &mut swash_cache,
             Scale::new(1.0),
             FontFamily::new("sans-serif".to_string()),
             FontSize::new(14.0),
         );
 
-        let (w, h) = canvas.measure_text("test", None, None);
-        assert!(w.value() > 0.0);
-        assert!(h.value() > 0.0);
+        use crate::domain::layout::TextMeasurer;
+        let size = measurer.measure("test", None, None);
+        assert!(size.width() > 0);
+        assert!(size.height() > 0);
     }
 
     #[test]
