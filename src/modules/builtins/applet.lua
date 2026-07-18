@@ -80,8 +80,8 @@ function render(monitor)
         end
         
         local applet_node = {
-            type = "row",
-            gap = 6,
+            type = "flex",
+            style = { gap = 6, align_items = "center" },
             children = item_children,
             on_click = {
                 AppletAction = {
@@ -94,8 +94,8 @@ function render(monitor)
     end
     
     return {
-        type = "row",
-        gap = 8,
+        type = "flex",
+        style = { gap = 8, align_items = "center" },
         children = children
     }
 end

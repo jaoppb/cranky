@@ -215,7 +215,7 @@ impl AnyModulePort for LuaModule {
                         Ok(node) => return node,
                         Err(e) => {
                             let msg = format!("Deserialization error: {}", e);
-                            return crate::domain::layout::LayoutNode::Row { 
+                            return crate::domain::layout::LayoutNode::Flex { 
                                 children: vec![
                                     crate::domain::layout::LayoutNode::Text {
                                         text: crate::domain::layout::TextContent::new(msg),
@@ -226,8 +226,9 @@ impl AnyModulePort for LuaModule {
                                         on_hover: None,
                                     }
                                 ], 
-                                gap: None, 
-                                align_items: crate::domain::layout::AlignY::default(),
+                                style: crate::domain::layout::FlexStyle::default(),
+                                background: None,
+                                radius: None,
                                 on_click: None, 
                                 on_hover: None 
                             };
@@ -240,7 +241,7 @@ impl AnyModulePort for LuaModule {
             }
         }
         
-        crate::domain::layout::LayoutNode::Row { children: vec![], gap: None, align_items: crate::domain::layout::AlignY::default(), on_click: None, on_hover: None }
+        crate::domain::layout::LayoutNode::Flex { children: vec![], style: crate::domain::layout::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None }
     }
 }
 
@@ -290,17 +291,17 @@ mod tests {
         let layout = module.render(&MonitorId::new("DP-1")); println!("{:#?}", layout);
         
         // Assert it returns a row with a single child (the applet)
-        if let crate::domain::layout::LayoutNode::Row { children, .. } = layout {
+        if let crate::domain::layout::LayoutNode::Flex { children, .. } = layout {
             assert_eq!(children.len(), 1);
             let applet_node = &children[0];
             
             // The applet node itself should be a row containing a rect (icon) and text (title)
-            if let crate::domain::layout::LayoutNode::Row { children: applet_children, .. } = applet_node {
+            if let crate::domain::layout::LayoutNode::Flex { children: applet_children, .. } = applet_node {
                 assert_eq!(applet_children.len(), 2);
                 assert!(matches!(applet_children[0], crate::domain::layout::LayoutNode::Rect { .. }));
                 assert!(matches!(applet_children[1], crate::domain::layout::LayoutNode::Text { .. }));
             } else {
-                panic!("Applet node is not a Row");
+                panic!("Applet node is not a Flex");
             }
         } else {
             panic!("Root node is not a Row");

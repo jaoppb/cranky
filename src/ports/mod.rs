@@ -2,6 +2,7 @@ pub mod canvas;
 pub mod dbus;
 pub mod font;
 pub mod sni;
+pub mod layout;
 
 pub use dbus::DBusPort;
 pub mod registry;

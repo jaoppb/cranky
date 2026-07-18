@@ -5,4 +5,5 @@ pub mod metrics;
 pub mod rendering;
 pub mod sni;
 pub mod wayland;
+pub mod taffy_layout;
 pub mod zbus;

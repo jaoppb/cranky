@@ -83,26 +83,23 @@ function render(monitor)
             local bg = is_visible and ((focused_monitor == monitor_id) and active_bg or focused_bg) or "#00000000"
             
             table.insert(children, {
-                type = "stack",
-                align_x = "center",
-                align_y = "center",
+                type = "flex",
+                style = { 
+                    justify = "center", 
+                    align_items = "center", 
+                    padding = { top = 4, bottom = 4, left = 8, right = 8 } 
+                },
+                background = bg,
+                radius = border_radius,
                 on_click = text_node.on_click,
-                children = {
-                    {
-                        type = "rect",
-                        size = { width = 24, height = 24 },
-                        color = bg,
-                        radius = border_radius
-                    },
-                    text_node
-                }
+                children = { text_node }
             })
         end
     end
     
     return {
-        type = "row",
-        gap = 6,
+        type = "flex",
+        style = { gap = 6, align_items = "center" },
         children = children
     }
 end

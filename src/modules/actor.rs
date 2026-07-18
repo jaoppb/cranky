@@ -216,7 +216,7 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
             let default_font_family = config.bar().font_family().clone();
             let default_font_size = config.bar().font_size();
 
-            let render_node = {
+            let render_node_res = {
                 let mut factory = self.canvas_factory.lock().unwrap();
                 let mut measurer = factory.create_text_measurer(
                     Scale::new(1.0),
@@ -224,7 +224,17 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                     default_font_size,
                 );
                 
-                crate::domain::layout::LayoutEngine::layout(layout_node, &mut measurer, crate::domain::shared::geometry::Position::new(0, 0))
+                let adapter = crate::adapters::taffy_layout::TaffyLayoutAdapter::new();
+                use crate::ports::layout::LayoutEnginePort;
+                adapter.calculate_layout(layout_node, &mut measurer, crate::domain::shared::geometry::Position::new(0, 0))
+            };
+            
+            let render_node = match render_node_res {
+                Ok(node) => node,
+                Err(e) => {
+                    eprintln!("Module layout failed: {}", e);
+                    continue;
+                }
             };
 
             let size = *render_node.rect().size();

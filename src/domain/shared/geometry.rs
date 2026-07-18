@@ -60,14 +60,6 @@ impl Rect {
         &self.size
     }
 
-    pub fn set_x(&mut self, x: i32) {
-        self.position.x = x;
-    }
-
-    pub fn set_y(&mut self, y: i32) {
-        self.position.y = y;
-    }
-
     pub fn x(&self) -> i32 {
         self.position.x()
     }

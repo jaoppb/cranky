@@ -157,16 +157,22 @@ function render(monitor)
             
             if fg_width > 0 then
                 table.insert(bar_children, {
-                    type = "rect",
-                    size = { width = fg_width, height = bar_height },
-                    color = fg_color,
-                    radius = bar_radius
+                    type = "flex",
+                    style = { position = "absolute" },
+                    children = {
+                        {
+                            type = "rect",
+                            size = { width = fg_width, height = bar_height },
+                            color = fg_color,
+                            radius = bar_radius
+                        }
+                    }
                 })
             end
             
             table.insert(widget_children, {
-                type = "stack",
-                align_x = "left",
+                type = "flex",
+                style = { align_items = "center" },
                 children = bar_children
             })
         elseif w.type == "text" then
@@ -178,15 +184,15 @@ function render(monitor)
         end
         
         table.insert(children, {
-            type = "row",
-            gap = 5,
+            type = "flex",
+            style = { gap = 5, align_items = "center" },
             children = widget_children
         })
     end
 
     return {
-        type = "row",
-        gap = 15,
+        type = "flex",
+        style = { gap = 15, align_items = "center" },
         children = children
     }
 end

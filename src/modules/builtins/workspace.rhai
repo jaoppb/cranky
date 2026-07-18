@@ -109,19 +109,19 @@ fn render(monitor_id) {
                 }
                 
                 let box_node = #{
-                    type: "box",
-                    child: text_node,
+                    type: "flex",
+                    children: [text_node],
                     background: bg,
                     radius: border_radius,
-                    padding: 6.0,
+                    style: #{ padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 }, justify: "center", align_items: "center" },
                     on_click: on_click_cmd
                 };
                 children.push(box_node);
             } else {
                 let box_node = #{
-                    type: "box",
-                    child: text_node,
-                    padding: 6.0,
+                    type: "flex",
+                    children: [text_node],
+                    style: #{ padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 }, justify: "center", align_items: "center" },
                     on_click: on_click_cmd
                 };
                 children.push(box_node);
@@ -130,8 +130,8 @@ fn render(monitor_id) {
     }
     
     let root = #{
-        type: "row",
-        gap: 6.0,
+        type: "flex",
+        style: #{ gap: 6.0, align_items: "center" },
         children: children
     };
     

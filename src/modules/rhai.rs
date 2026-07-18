@@ -142,13 +142,13 @@ impl AnyModulePort for RhaiModule {
                     Ok(node) => node,
                     Err(e) => {
                         tracing::error!("Failed to deserialize render output in rhai module: {}", e);
-                        crate::domain::layout::LayoutNode::Row { children: vec![], gap: None, align_items: crate::domain::layout::AlignY::default(), on_click: None, on_hover: None }
+                        crate::domain::layout::LayoutNode::Flex { children: vec![], style: crate::domain::layout::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None }
                     }
                 }
             }
             Err(e) => {
                 tracing::warn!("Module render error in rhai: {}", e);
-                crate::domain::layout::LayoutNode::Row { children: vec![], gap: None, align_items: crate::domain::layout::AlignY::default(), on_click: None, on_hover: None }
+                crate::domain::layout::LayoutNode::Flex { children: vec![], style: crate::domain::layout::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None }
             }
         }
     }
