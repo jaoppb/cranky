@@ -226,4 +226,123 @@ mod tests {
         crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::load(&mut registry, &config).unwrap();
         assert_eq!(crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::left_modules(&registry).len(), 1);
     }
+
+    #[test]
+    fn test_module_error_display() {
+        let err1 = ModuleError::ModuleNotFound { module_name: "test".into() };
+        assert_eq!(err1.to_string(), "Module 'test' not found");
+        
+        let err2 = ModuleError::Internal { message: "error".into() };
+        assert_eq!(err2.to_string(), "Internal module error: error");
+    }
+
+    #[test]
+    fn test_watch_layout_sender() {
+        use crate::ports::registry::LayoutSender;
+        let (tx, _rx) = tokio::sync::watch::channel(std::collections::HashMap::new());
+        let sender = WatchLayoutSender { tx };
+        
+        let mut layout = std::collections::HashMap::new();
+        layout.insert(crate::domain::MonitorId::new("1"), crate::domain::shared::geometry::Rect::new(
+            crate::domain::shared::geometry::Position::new(0, 0),
+            crate::domain::shared::geometry::Size::new(0, 0)
+        ));
+        sender.send_layout(layout.clone());
+        
+        let current = sender.current_layout();
+        assert!(current.contains_key(&crate::domain::MonitorId::new("1")));
+    }
+
+    #[test]
+    fn test_module_registry_load_errors() {
+        let mut registry = ModuleRegistry::new();
+        let toml_str = r##"
+            [bar]
+            [modules]
+            left = [{ name = "nonexistent", enable = true }]
+            center = []
+            right = []
+        "##;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+
+        let result = crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::load(&mut registry, &config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[test]
+    fn test_module_registry_clear() {
+        let mut registry = ModuleRegistry::new();
+        let toml_str = r##"
+            [bar]
+            [modules]
+            left = [{ name = "hour", enable = true }]
+            center = []
+            right = []
+        "##;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+
+        crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::load(&mut registry, &config).unwrap();
+        
+        crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::clear(&mut registry);
+        
+        assert!(registry.left_modules.is_empty());
+        assert!(registry.modules.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_module_registry_register_dbus() {
+        let mut registry = ModuleRegistry::new();
+        let toml_str = r##"
+            [bar]
+            [modules]
+            left = [{ name = "hour", enable = true }]
+            center = []
+            right = []
+        "##;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+        crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::load(&mut registry, &config).unwrap();
+
+        let mut mock_dbus = crate::ports::dbus::MockDBusPort::new();
+        crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::register_dbus_subscriptions(&registry, &mut mock_dbus).await;
+    }
+
+    #[tokio::test]
+    async fn test_module_registry_spawn_all() {
+        let mut registry = ModuleRegistry::new();
+        let toml_str = r##"
+            [bar]
+            [modules]
+            left = [{ name = "hour", enable = true }]
+            center = []
+            right = []
+        "##;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+        crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::load(&mut registry, &config).unwrap();
+
+        let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
+        let surface_manager: crate::ports::surface::DynSurfaceManager = std::sync::Arc::new(crate::ports::surface::MockSurfaceManagerPort::new());
+        
+        struct MockSender;
+        impl crate::ports::registry::CommandSender for MockSender {
+            fn send_command(&self, _cmd: crate::domain::commands::AppCommand) {}
+        }
+        let command_tx = std::sync::Arc::new(MockSender);
+        let canvas_factory = std::sync::Arc::new(std::sync::Mutex::new(crate::adapters::rendering::TinySkiaCanvasFactory::new()));
+
+        let senders = crate::ports::registry::ModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::spawn_all(
+            &mut registry,
+            hub,
+            surface_manager,
+            command_tx,
+            canvas_factory
+        );
+
+        assert_eq!(senders.len(), 1);
+        assert!(registry.modules.is_empty());
+    }
 }

@@ -91,3 +91,58 @@ impl Monitor {
         self.special_workspace_id = id;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_workspace_id() {
+        let id = WorkspaceId::new(42);
+        assert_eq!(id, WorkspaceId(42));
+    }
+
+    #[test]
+    fn test_monitor_name() {
+        let name = MonitorName::new("DP-1");
+        assert_eq!(name.as_str(), "DP-1");
+    }
+
+    #[test]
+    fn test_workspace_name() {
+        let name = WorkspaceName::new("1");
+        assert_eq!(name, WorkspaceName("1".to_string()));
+    }
+
+    #[test]
+    fn test_workspace_operations() {
+        let mut ws = Workspace::new(
+            WorkspaceId::new(1),
+            WorkspaceName::new("1"),
+            None,
+        );
+        assert_eq!(*ws.id(), WorkspaceId::new(1));
+        assert_eq!(ws.monitor(), None);
+
+        ws.set_monitor(MonitorName::new("eDP-1"));
+        assert_eq!(ws.monitor(), Some(&MonitorName::new("eDP-1")));
+    }
+
+    #[test]
+    fn test_monitor_operations() {
+        let mut monitor = Monitor::new(
+            MonitorName::new("DP-1"),
+            WorkspaceId::new(1),
+            None,
+        );
+        assert_eq!(monitor.name(), &MonitorName::new("DP-1"));
+        assert_eq!(*monitor.active_workspace_id(), WorkspaceId::new(1));
+
+        monitor.set_active_workspace(WorkspaceId::new(2));
+        assert_eq!(*monitor.active_workspace_id(), WorkspaceId::new(2));
+
+        monitor.set_special_workspace(Some(WorkspaceId::new(3)));
+        assert_eq!(monitor.special_workspace_id, Some(WorkspaceId::new(3)));
+    }
+}
+

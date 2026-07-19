@@ -32,3 +32,20 @@ pub enum PointerEvent {
 
 pub type PointerSender = tokio::sync::broadcast::Sender<(crate::domain::ModuleId, crate::domain::MonitorId, PointerEvent)>;
 pub type PointerReceiver = tokio::sync::broadcast::Receiver<(crate::domain::ModuleId, crate::domain::MonitorId, PointerEvent)>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_window_address() {
+        let addr = WindowAddress::new("0x1234");
+        assert_eq!(addr, WindowAddress("0x1234".to_string()));
+    }
+
+    #[test]
+    fn test_window_title() {
+        let title = WindowTitle::new("Firefox");
+        assert_eq!(title, WindowTitle("Firefox".to_string()));
+    }
+}

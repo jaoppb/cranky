@@ -476,4 +476,110 @@ mod tests {
         // height 20, available height = 20, module height = 10, y should be (20 - 10) / 2 = 5
         assert_eq!(layout_unfocused.bounds().position().y(), 5);
     }
+
+    #[test]
+    fn test_app_error_fmt() {
+        let err1 = AppError::Module("test".into());
+        assert_eq!(err1.to_string(), "Module error: test");
+        let err2 = AppError::Internal { message: "test".into() };
+        assert_eq!(err2.to_string(), "Internal error: test");
+    }
+
+    #[test]
+    fn test_calculate_layout_left_right() {
+        let config = Config::default();
+        let mut read_model = AppReadModel {
+            config: config.clone(),
+            left_modules: vec![ModuleId::new(1), ModuleId::new(2)],
+            center_modules: vec![],
+            right_modules: vec![ModuleId::new(3)],
+            module_sizes: HashMap::new(),
+        };
+        
+        let mut sizes = HashMap::new();
+        sizes.insert(ModuleId::new(1), Size::new(100, 20));
+        sizes.insert(ModuleId::new(2), Size::new(50, 20));
+        sizes.insert(ModuleId::new(3), Size::new(80, 20));
+        read_model.module_sizes.insert(MonitorId::new("DP-1"), sizes);
+        
+        let layouts = read_model.calculate_layout(&MonitorId::new("DP-1"), BarWidth::new(1920), config.bar());
+        assert_eq!(layouts.len(), 3);
+        
+        let gap = config.bar().module_gap().value() as i32;
+        
+        let l1 = layouts.iter().find(|l| l.id() == ModuleId::new(1)).unwrap();
+        assert_eq!(l1.bounds().x(), 0);
+        
+        let l2 = layouts.iter().find(|l| l.id() == ModuleId::new(2)).unwrap();
+        assert_eq!(l2.bounds().x(), 100 + gap);
+        
+        let l3 = layouts.iter().find(|l| l.id() == ModuleId::new(3)).unwrap();
+        assert_eq!(l3.bounds().x(), 1920 - 80); 
+    }
+
+    #[tokio::test]
+    async fn test_app_run_commands_and_signals() {
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let (command_tx, command_rx) = mpsc::channel(32);
+        
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
+
+        let mut mock_registry = MockModuleRegistryPort::<crate::adapters::rendering::TinySkiaCanvasFactory>::new();
+        mock_registry.expect_load().returning(|_| Ok(()));
+        mock_registry.expect_left_modules().returning(Vec::new);
+        mock_registry.expect_center_modules().returning(Vec::new);
+        mock_registry.expect_right_modules().returning(Vec::new);
+        mock_registry.expect_spawn_all().returning(|_, _, _, _| HashMap::new());
+        mock_registry.expect_register_dbus_subscriptions().returning(|_| Box::pin(std::future::ready(())));
+        mock_registry.expect_clear().returning(|| ());
+
+        let canvas_factory = Arc::new(std::sync::Mutex::new(crate::adapters::rendering::TinySkiaCanvasFactory::new()));
+
+        let mut app = CrankyApp::new(
+            hub.clone(),
+            config,
+            command_rx,
+            command_tx.clone(),
+            surface_manager,
+            canvas_factory,
+            Box::new(mock_registry),
+        ).unwrap();
+
+        let mut mock_display = MockDisplayServerPort::new();
+        mock_display.expect_flush().returning(|| Ok(()));
+        
+        // Let it succeed twice, then fail to exit the loop
+        let mut call_count = 0;
+        mock_display.expect_wait_for_events().returning(move || {
+            call_count += 1;
+            if call_count <= 2 {
+                Box::pin(std::future::ready(Ok(())))
+            } else {
+                Box::pin(std::future::ready(Err(crate::ports::DisplayServerError::Internal("Exit".into()))))
+            }
+        });
+        mock_display.expect_dispatch_pending().returning(|| Ok(()));
+        mock_display.expect_render_all().returning(|_, _| Ok(()));
+        mock_display.expect_show_tooltip().returning(|_| Ok(()));
+        mock_display.expect_hide_tooltip().returning(|| Ok(()));
+
+        let mock_dbus = crate::ports::dbus::MockDBusPort::new();
+        let mut mock_sni = crate::ports::sni::MockSniPort::new();
+        mock_sni.expect_trigger_action().returning(|_, _| Ok(()));
+
+        // Queue commands
+        command_tx.send(AppCommand::RequestRender).await.unwrap();
+        command_tx.send(AppCommand::ModuleSizeChanged(MonitorId::new("1"), ModuleId::new(1), Size::new(10, 10))).await.unwrap();
+        command_tx.send(AppCommand::ShowTooltip { text: "t".into() }).await.unwrap();
+        command_tx.send(AppCommand::HideTooltip).await.unwrap();
+        command_tx.send(AppCommand::AppletAction { id: "a".into(), action: "b".into() }).await.unwrap();
+        
+        // Trigger config and hyprland changes
+        hub.config_tx().send(Config::default()).unwrap();
+        hub.hyprland_tx().send(crate::domain::signals::HyprlandState::new(std::collections::BTreeMap::new(), std::collections::BTreeMap::new(), Some(crate::domain::workspace::MonitorName::new("1")))).unwrap();
+
+        let result = app.run(mock_display, mock_dbus, mock_sni).await;
+        assert!(result.is_err());
+    }
 }

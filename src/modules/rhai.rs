@@ -153,3 +153,77 @@ impl AnyModulePort for RhaiModule {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::config::{BarConfig, ModuleConfig};
+
+    #[test]
+    fn test_rhai_module_new_success() {
+        let source = "
+            fn init() {}
+            fn subscriptions() { return [\"time\"]; }
+            fn refresh() {}
+            fn render(monitor) {
+                return #{
+                    type: \"flex\",
+                    children: []
+                };
+            }
+        ";
+        let module = RhaiModule::new("test".into(), source);
+        assert!(module.is_ok());
+    }
+
+    #[test]
+    fn test_rhai_module_new_error() {
+        let source = "fn invalid syntax(";
+        let module = RhaiModule::new("test".into(), source);
+        assert!(module.is_err());
+    }
+
+    #[test]
+    fn test_rhai_module_lifecycle() {
+        let source = "
+            fn init() {}
+            fn subscriptions() { return [\"time\", \"hyprland\", \"metrics\"]; }
+            fn refresh() {}
+            fn render(monitor) {
+                return #{
+                    type: \"flex\",
+                    style: #{
+                        direction: \"column\",
+                    }
+                };
+            }
+        ";
+        let mut module = RhaiModule::new("test".into(), source).unwrap();
+        
+        let mod_config = ModuleConfig::new(
+            "test".into(),
+            true,
+            std::collections::HashMap::new(),
+        );
+        let bar_config = BarConfig::default();
+        
+        assert!(module.init(&mod_config, &bar_config).is_ok());
+        
+        let subs = module.subscriptions();
+        assert!(subs.contains(&SignalKind::Time));
+        assert!(subs.contains(&SignalKind::Hyprland));
+        assert!(subs.contains(&SignalKind::Metrics));
+        
+        let hub = SignalHub::new(
+            crate::domain::config::Config::default()
+        );
+        module.refresh(&hub, &[SignalKind::Time]);
+        
+        let render_node = module.render(&MonitorId::new("DP-1"));
+        if let crate::domain::layout::LayoutNode::Flex { style, .. } = render_node {
+            assert_eq!(style.direction(), crate::domain::layout::FlexDirection::Column);
+        } else {
+            panic!("Expected Flex node");
+        }
+    }
+}

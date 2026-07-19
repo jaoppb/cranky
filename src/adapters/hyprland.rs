@@ -337,4 +337,141 @@ mod tests {
         assert_eq!(res.1.len(), 0);
         assert_eq!(res.2, None);
     }
+
+    #[tokio::test]
+    async fn test_hyprland_adapter_get_state_valid() {
+        let mut mock_provider = MockHyprlandProvider::new();
+        mock_provider
+            .expect_query_workspaces()
+            .times(1)
+            .returning(|| Ok(r#"[{"id": 1, "name": "1", "monitor": "DP-1"}]"#.to_string()));
+        mock_provider
+            .expect_query_monitors()
+            .times(1)
+            .returning(|| Ok(r#"[{"name": "DP-1", "activeWorkspace": {"id": 1}, "specialWorkspace": {"id": 0}, "focused": true}]"#.to_string()));
+
+        let adapter = HyprlandAdapter {
+            provider: Box::new(mock_provider),
+        };
+
+        let res = adapter.get_state().unwrap();
+        assert_eq!(res.0.len(), 1); // workspaces
+        assert_eq!(res.1.len(), 1); // monitors
+        assert_eq!(res.2, Some(crate::domain::workspace::MonitorName::new("DP-1"))); // focused
+    }
+
+    #[test]
+    fn test_parse_event() {
+        use crate::domain::events::{WindowManagerEvent, WindowAddress, WindowTitle};
+        use crate::domain::workspace::{MonitorName, WorkspaceId, WorkspaceName};
+
+        // workspacev2
+        let e = HyprlandAdapter::parse_event("workspacev2>>1,test_ws").unwrap();
+        assert_eq!(e, WindowManagerEvent::WorkspaceActivated {
+            id: WorkspaceId::new(1),
+            name: WorkspaceName::new("test_ws"),
+        });
+
+        // focusedmonv2
+        let e = HyprlandAdapter::parse_event("focusedmonv2>>DP-1,2").unwrap();
+        assert_eq!(e, WindowManagerEvent::MonitorFocused {
+            monitor_name: MonitorName::new("DP-1"),
+            workspace_id: WorkspaceId::new(2),
+        });
+
+        // createworkspacev2
+        let e = HyprlandAdapter::parse_event("createworkspacev2>>3,new_ws").unwrap();
+        assert_eq!(e, WindowManagerEvent::WorkspaceCreated {
+            id: WorkspaceId::new(3),
+            name: WorkspaceName::new("new_ws"),
+        });
+
+        // destroyworkspacev2
+        let e = HyprlandAdapter::parse_event("destroyworkspacev2>>4,old_ws").unwrap();
+        assert_eq!(e, WindowManagerEvent::WorkspaceDestroyed {
+            id: WorkspaceId::new(4),
+            name: WorkspaceName::new("old_ws"),
+        });
+
+        // moveworkspacev2
+        let e = HyprlandAdapter::parse_event("moveworkspacev2>>5,moved_ws,HDMI-1").unwrap();
+        assert_eq!(e, WindowManagerEvent::WorkspaceMoved {
+            id: WorkspaceId::new(5),
+            name: WorkspaceName::new("moved_ws"),
+            monitor_name: MonitorName::new("HDMI-1"),
+        });
+
+        // renameworkspace
+        let e = HyprlandAdapter::parse_event("renameworkspace>>6,renamed_ws").unwrap();
+        assert_eq!(e, WindowManagerEvent::WorkspaceRenamed {
+            id: WorkspaceId::new(6),
+            new_name: WorkspaceName::new("renamed_ws"),
+        });
+
+        // activespecialv2
+        let e = HyprlandAdapter::parse_event("activespecialv2>>7,special,DP-2").unwrap();
+        assert_eq!(e, WindowManagerEvent::SpecialWorkspaceActivated {
+            id: Some(WorkspaceId::new(7)),
+            name: Some(WorkspaceName::new("special")),
+            monitor_name: MonitorName::new("DP-2"),
+        });
+
+        // activewindowv2
+        let e = HyprlandAdapter::parse_event("activewindowv2>>0x123").unwrap();
+        assert_eq!(e, WindowManagerEvent::ActiveWindowChanged {
+            address: WindowAddress::new("0x123"),
+        });
+
+        // windowtitlev2
+        let e = HyprlandAdapter::parse_event("windowtitlev2>>0x456,Title").unwrap();
+        assert_eq!(e, WindowManagerEvent::WindowTitleChanged {
+            address: WindowAddress::new("0x456"),
+            title: WindowTitle::new("Title"),
+        });
+
+        // invalid
+        assert_eq!(HyprlandAdapter::parse_event("invalid>>data"), None);
+        assert_eq!(HyprlandAdapter::parse_event("missing"), None);
+    }
+
+    #[tokio::test]
+    async fn test_hyprland_adapter_run() {
+        use std::os::unix::net::UnixStream;
+        use std::io::Write;
+        
+        let (mut sender, receiver) = UnixStream::pair().unwrap();
+        
+        let mut mock_provider = MockHyprlandProvider::new();
+        mock_provider
+            .expect_query_workspaces()
+            .returning(|| Ok("[]".to_string()));
+        mock_provider
+            .expect_query_monitors()
+            .returning(|| Ok("[]".to_string()));
+        
+        mock_provider
+            .expect_listen_events()
+            .times(1)
+            .returning(move || {
+                let stream = receiver.try_clone().unwrap();
+                Ok(stream)
+            });
+
+        let adapter = HyprlandAdapter {
+            provider: Box::new(mock_provider),
+        };
+
+        let config = crate::domain::config::Config::default();
+        let hub = Arc::new(SignalHub::new(config));
+        
+        let run_handle = tokio::task::spawn(adapter.run(hub.clone()));
+
+        sender.write_all(b"workspacev2>>1,test_ws\n").unwrap();
+        
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        
+        drop(sender);
+        
+        let _ = run_handle.await;
+    }
 }

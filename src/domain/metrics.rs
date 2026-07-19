@@ -114,33 +114,31 @@ impl MetricsConfig {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CpuUsage(f32);
 impl CpuUsage {
-    pub fn new(val: f32) -> Self {
-        Self(val)
-    }
+    pub fn new(val: f32) -> Self { Self(val) }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryBytes(u64);
 impl MemoryBytes {
-    pub fn new(val: u64) -> Self {
-        Self(val)
-    }
+    pub fn new(val: u64) -> Self { Self(val) }
+    #[cfg(test)]
+    pub fn value(&self) -> u64 { self.0 }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkSpeed(u64);
 impl NetworkSpeed {
-    pub fn new(val: u64) -> Self {
-        Self(val)
-    }
+    pub fn new(val: u64) -> Self { Self(val) }
+    #[cfg(test)]
+    pub fn value(&self) -> u64 { self.0 }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Temperature(f32);
 impl Temperature {
-    pub fn new(val: f32) -> Self {
-        Self(val)
-    }
+    pub fn new(val: f32) -> Self { Self(val) }
+    #[cfg(test)]
+    pub fn value(&self) -> f32 { self.0 }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -254,6 +252,17 @@ impl MetricsState {
             ),
         }
     }
+    
+    #[cfg(test)]
+    pub fn memory_total(&self) -> &MemoryBytes { &self.memory_total }
+    #[cfg(test)]
+    pub fn disks(&self) -> &[DiskMetric] { &self.disks }
+    #[cfg(test)]
+    pub fn network_tx(&self) -> &NetworkSpeed { &self.network_tx }
+    #[cfg(test)]
+    pub fn network_rx(&self) -> &NetworkSpeed { &self.network_rx }
+    #[cfg(test)]
+    pub fn temperature(&self) -> &Temperature { &self.temperature }
 }
 
 #[cfg(test)]
@@ -292,5 +301,70 @@ mod tests {
         assert_eq!(norm_global, CpuUsage::new(100.0)); // 25.0 * 4 = 100.0%
         let expected_per_core: Vec<CpuUsage> = per_core.into_iter().map(CpuUsage::new).collect();
         assert_eq!(norm_per_core, expected_per_core);
+    }
+
+    #[test]
+    fn test_normalize_cpu_usage_disabled() {
+        let (norm_global, norm_per_core) = MetricsState::normalize_cpu_usage(
+            &CpuMode::Disabled,
+            25.0,
+            4.0,
+            vec![100.0, 0.0],
+        );
+        assert_eq!(norm_global, CpuUsage::new(0.0));
+        assert_eq!(norm_per_core, vec![CpuUsage::new(0.0), CpuUsage::new(0.0)]);
+    }
+
+    #[test]
+    fn test_metrics_config() {
+        let config = MetricsConfig::default();
+        assert_eq!(*config.cpu(), CpuMode::Percentage0to100);
+        assert_eq!(config.network(), None);
+        assert_eq!(config.temperature(), None);
+        assert_eq!(config.disk(), None);
+        assert_eq!(config.update_interval_ms().value(), 1000);
+    }
+
+    #[test]
+    fn test_metrics_types() {
+        assert_eq!(CpuUsage::new(42.0).0, 42.0);
+        assert_eq!(MemoryBytes::new(1024).0, 1024);
+        assert_eq!(NetworkSpeed::new(512).0, 512);
+        assert_eq!(Temperature::new(60.0).0, 60.0);
+        assert_eq!(DiskName::new("sda1"), DiskName("sda1".to_string()));
+        assert_eq!(MountPoint::new("/mnt"), MountPoint("/mnt".to_string()));
+    }
+
+    #[test]
+    fn test_disk_metric() {
+        let dm = DiskMetric::new(
+            DiskName::new("nvme0n1"),
+            MountPoint::new("/"),
+            MemoryBytes::new(100),
+            MemoryBytes::new(20),
+            MemoryBytes::new(80),
+        );
+        assert_eq!(dm.name, DiskName::new("nvme0n1"));
+        assert_eq!(dm.mount_point, MountPoint::new("/"));
+    }
+
+    #[test]
+    fn test_metrics_state_new() {
+        let cmd = CreateMetricsCommand {
+            cpu_usage: CpuUsage::new(10.0),
+            per_core: vec![],
+            memory_used: MemoryBytes::new(100),
+            memory_total: MemoryBytes::new(200),
+            swap_used: MemoryBytes::new(10),
+            swap_total: MemoryBytes::new(20),
+            disks: vec![],
+            network_tx: NetworkSpeed::new(1),
+            network_rx: NetworkSpeed::new(2),
+            temperature: Temperature::new(40.0),
+            config: MetricsConfig::default(),
+        };
+        let state = MetricsState::new(cmd);
+        assert_eq!(state.cpu_usage, CpuUsage::new(10.0));
+        assert_eq!(state.memory_used, MemoryBytes::new(100));
     }
 }

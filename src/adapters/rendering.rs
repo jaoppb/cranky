@@ -619,4 +619,134 @@ mod tests {
         }
         assert!(drawn, "Text should have drawn some pixels");
     }
+
+    #[test]
+    fn test_canvas_factory() {
+        use crate::ports::canvas::CanvasFactory;
+        let mut factory = TinySkiaCanvasFactory::new();
+        let mut data = vec![0; 100 * 100 * 4];
+        {
+            let _canvas = factory.create_canvas(
+                &mut data,
+                Size::new(100, 100),
+                Scale::new(1.0),
+                FontFamily::new("sans-serif".to_string()),
+                FontSize::new(14.0),
+            );
+        }
+        let _measurer = factory.create_text_measurer(
+            Scale::new(1.0),
+            FontFamily::new("sans-serif".to_string()),
+            FontSize::new(14.0),
+        );
+    }
+
+    #[test]
+    fn test_canvas_draw_border() {
+        let mut pixmap = Pixmap::new(100, 100).unwrap();
+        let mut font_system = FontSystem::new();
+        let mut swash_cache = SwashCache::new();
+
+        let mut canvas = TinySkiaCosmicCanvas::new(
+            pixmap.as_mut(),
+            &mut font_system,
+            &mut swash_cache,
+            Scale::new(1.0),
+            FontFamily::new("sans-serif".to_string()),
+            FontSize::new(14.0),
+        );
+
+        canvas.draw_border(
+            Position::new(10, 10),
+            Size::new(80, 80),
+            DrawingColor::Solid(Color::new(0, 255, 0, 255)),
+            LogicalPx::new(0.0), // No radius
+            LogicalPx::new(2.0),
+        );
+
+        canvas.draw_border(
+            Position::new(20, 20),
+            Size::new(60, 60),
+            DrawingColor::Solid(Color::new(0, 0, 255, 255)),
+            LogicalPx::new(10.0), // With radius
+            LogicalPx::new(2.0),
+        );
+    }
+
+    #[test]
+    fn test_canvas_draw_rect_with_radius() {
+        let mut pixmap = Pixmap::new(100, 100).unwrap();
+        let mut font_system = FontSystem::new();
+        let mut swash_cache = SwashCache::new();
+
+        let mut canvas = TinySkiaCosmicCanvas::new(
+            pixmap.as_mut(),
+            &mut font_system,
+            &mut swash_cache,
+            Scale::new(1.0),
+            FontFamily::new("sans-serif".to_string()),
+            FontSize::new(14.0),
+        );
+
+        canvas.draw_rect(
+            LogicalPx::new(10.0),
+            LogicalPx::new(10.0),
+            LogicalPx::new(80.0),
+            LogicalPx::new(80.0),
+            DrawingColor::Gradient(vec![Color::new(255, 0, 0, 255), Color::new(0, 255, 0, 255)], 45.0),
+            LogicalPx::new(20.0), // With radius
+        );
+    }
+
+    #[test]
+    fn test_canvas_draw_text_gradient() {
+        let mut pixmap = Pixmap::new(100, 100).unwrap();
+        let mut font_system = FontSystem::new();
+        let mut swash_cache = SwashCache::new();
+
+        let mut canvas = TinySkiaCosmicCanvas::new(
+            pixmap.as_mut(),
+            &mut font_system,
+            &mut swash_cache,
+            Scale::new(1.0),
+            FontFamily::new("sans-serif".to_string()),
+            FontSize::new(14.0),
+        );
+
+        canvas.draw_text(
+            "gradient text",
+            None,
+            None,
+            DrawingColor::Gradient(vec![Color::new(255, 0, 0, 255), Color::new(0, 255, 0, 255)], 0.0),
+            Position::new(10, 10),
+        );
+    }
+
+    #[test]
+    fn test_canvas_draw_image() {
+        let mut pixmap = Pixmap::new(100, 100).unwrap();
+        let mut font_system = FontSystem::new();
+        let mut swash_cache = SwashCache::new();
+
+        let mut canvas = TinySkiaCosmicCanvas::new(
+            pixmap.as_mut(),
+            &mut font_system,
+            &mut swash_cache,
+            Scale::new(1.0),
+            FontFamily::new("sans-serif".to_string()),
+            FontSize::new(14.0),
+        );
+
+        let image_data = vec![
+            255, 0, 0, 255,   0, 255, 0, 255,
+            0, 0, 255, 255,   255, 255, 0, 255,
+        ];
+
+        canvas.draw_image(
+            &image_data,
+            Size::new(2, 2),
+            Size::new(20, 20),
+            Position::new(10, 10),
+        );
+    }
 }

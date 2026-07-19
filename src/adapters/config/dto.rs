@@ -452,3 +452,71 @@ impl PartialBarConfigDto {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // MockValidator removed
+
+    #[test]
+    fn test_margin_dto_all() {
+        let dto = MarginConfigDto::All(10);
+        let domain = dto.into_domain();
+        assert_eq!(domain.top().value(), 10);
+        assert_eq!(domain.bottom().value(), 10);
+        assert_eq!(domain.left().value(), 10);
+        assert_eq!(domain.right().value(), 10);
+    }
+
+    #[test]
+    fn test_margin_dto_fields() {
+        let dto = MarginConfigDto::Fields {
+            top: Some(5),
+            bottom: None,
+            left: None,
+            right: None,
+            horizontal: Some(10),
+            vertical: Some(20),
+        };
+        let domain = dto.into_domain();
+        assert_eq!(domain.top().value(), 5);
+        assert_eq!(domain.bottom().value(), 20);
+        assert_eq!(domain.left().value(), 10);
+        assert_eq!(domain.right().value(), 10);
+    }
+
+    #[test]
+    fn test_padding_dto_fields() {
+        let dto = PaddingConfigDto::Fields {
+            top: Some(5),
+            bottom: None,
+            left: None,
+            right: None,
+            horizontal: Some(10),
+            vertical: Some(20),
+        };
+        let domain = dto.into_domain();
+        assert_eq!(domain.top().value(), 5);
+        assert_eq!(domain.bottom().value(), 20);
+        assert_eq!(domain.left().value(), 10);
+        assert_eq!(domain.right().value(), 10);
+    }
+
+    #[test]
+    fn test_rendering_mode_dto() {
+        let mode1 = RenderingModeDto::Immediate { fps_limit: Some(60) };
+        if let domain::RenderingMode::Immediate { fps_limit } = mode1.into_domain() {
+            assert_eq!(fps_limit, Some(60));
+        } else {
+            panic!("Expected Immediate");
+        }
+
+        let mode2 = RenderingModeDto::Timebased { duration_ms: 50 };
+        if let domain::RenderingMode::Timebased { duration_ms } = mode2.into_domain() {
+            assert_eq!(duration_ms, 50);
+        } else {
+            panic!("Expected Timebased");
+        }
+    }
+}

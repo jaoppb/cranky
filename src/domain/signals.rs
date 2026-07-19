@@ -258,12 +258,90 @@ mod tests {
     #[tokio::test]
     async fn test_signal_hub_time_propagation() {
         let hub = SignalHub::new(Config::default());
-        let time_rx = hub.time_rx();
+        let mut time_rx = hub.time_rx();
         let time_tx = hub.time_tx();
 
         let now = chrono::Local::now();
         time_tx.send(now).unwrap();
 
-        assert!(time_rx.has_changed().unwrap());
+        assert!(time_rx.changed().await.is_ok());
+    }
+
+    #[test]
+    fn test_hyprland_state_apply_event() {
+        use crate::domain::events::WindowManagerEvent;
+        use crate::domain::workspace::{WorkspaceId, WorkspaceName, MonitorName, Monitor};
+        
+        let mut state = HyprlandState::new(std::collections::BTreeMap::new(), std::collections::BTreeMap::new(), None);
+        
+        // Test WorkspaceCreated
+        state.apply_event(&WindowManagerEvent::WorkspaceCreated { id: WorkspaceId::new(1), name: WorkspaceName::new("1") });
+        assert!(state.workspaces().contains_key(&WorkspaceId::new(1)));
+        
+        // Test WorkspaceActivated
+        state.apply_event(&WindowManagerEvent::WorkspaceActivated { id: WorkspaceId::new(2), name: WorkspaceName::new("2") });
+        assert!(state.workspaces().contains_key(&WorkspaceId::new(2)));
+        
+        // Test WorkspaceDestroyed
+        state.apply_event(&WindowManagerEvent::WorkspaceDestroyed { id: WorkspaceId::new(1), name: WorkspaceName::new("1") });
+        assert!(!state.workspaces().contains_key(&WorkspaceId::new(1)));
+        
+        // Test WorkspaceMoved
+        state.apply_event(&WindowManagerEvent::WorkspaceMoved { id: WorkspaceId::new(2), name: WorkspaceName::new("2"), monitor_name: MonitorName::new("DP-1") });
+        assert_eq!(state.workspaces().get(&WorkspaceId::new(2)).unwrap().monitor(), Some(&MonitorName::new("DP-1")));
+        
+        // Test WorkspaceMoved (new workspace)
+        state.apply_event(&WindowManagerEvent::WorkspaceMoved { id: WorkspaceId::new(3), name: WorkspaceName::new("3"), monitor_name: MonitorName::new("DP-2") });
+        assert_eq!(state.workspaces().get(&WorkspaceId::new(3)).unwrap().monitor(), Some(&MonitorName::new("DP-2")));
+        
+        // Test WorkspaceRenamed
+        state.apply_event(&WindowManagerEvent::WorkspaceRenamed { id: WorkspaceId::new(2), new_name: WorkspaceName::new("2-renamed") });
+        assert!(state.workspaces().contains_key(&WorkspaceId::new(2)));
+        
+        // Test MonitorFocused
+        state.monitors.insert(MonitorName::new("DP-1"), Monitor::new(MonitorName::new("DP-1"), WorkspaceId::new(1), None));
+        state.apply_event(&WindowManagerEvent::MonitorFocused { monitor_name: MonitorName::new("DP-1"), workspace_id: WorkspaceId::new(2) });
+        assert_eq!(state.focused_monitor(), Some(&MonitorName::new("DP-1")));
+        assert_eq!(state.monitors().get(&MonitorName::new("DP-1")).unwrap().active_workspace_id(), &WorkspaceId::new(2));
+        
+        // Test SpecialWorkspaceActivated
+        state.apply_event(&WindowManagerEvent::SpecialWorkspaceActivated { id: Some(WorkspaceId::new(99)), name: Some(WorkspaceName::new("special")), monitor_name: MonitorName::new("DP-1") });
+        // The event mutates special_workspace_id internally
+    }
+
+    #[test]
+    fn test_hyprland_state_serialize() {
+        let mut workspaces = std::collections::BTreeMap::new();
+        workspaces.insert(crate::domain::workspace::WorkspaceId::new(1), crate::domain::workspace::Workspace::new(crate::domain::workspace::WorkspaceId::new(1), crate::domain::workspace::WorkspaceName::new("1"), None));
+        let state = HyprlandState::new(workspaces, std::collections::BTreeMap::new(), None);
+        
+        let json = serde_json::to_string(&state).unwrap();
+        assert!(json.contains("\"workspaces\":["));
+        assert!(json.contains("\"id\":1"));
+    }
+
+    #[tokio::test]
+    async fn test_signal_hub_other_propagation() {
+        let hub = SignalHub::new(Config::default());
+        
+        let dbus_tx = hub.dbus_tx();
+        let mut dbus_rx = hub.dbus_rx();
+        dbus_tx.send(DBusState::default()).unwrap();
+        assert!(dbus_rx.changed().await.is_ok());
+
+        let applets_tx = hub.applets_tx();
+        let mut applets_rx = hub.applets_rx();
+        applets_tx.send(AppletsState::default()).unwrap();
+        assert!(applets_rx.changed().await.is_ok());
+
+        let metrics_tx = hub.metrics_tx();
+        let mut metrics_rx = hub.metrics_rx();
+        metrics_tx.send(crate::domain::metrics::MetricsState::default()).unwrap();
+        assert!(metrics_rx.changed().await.is_ok());
+        
+        let ptr_tx = hub.pointer_tx();
+        let mut ptr_rx = hub.pointer_rx();
+        ptr_tx.send((crate::domain::ModuleId::new(1), crate::domain::MonitorId::new("1"), crate::domain::events::PointerEvent::PointerLeave)).unwrap();
+        assert!(ptr_rx.recv().await.is_ok());
     }
 }

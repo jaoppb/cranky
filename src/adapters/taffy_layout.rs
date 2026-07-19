@@ -525,3 +525,229 @@ fn build_render_tree(
         }),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::layout::{
+        FlexStyle, LayoutNode, RenderNode, TextContent, TextMeasurer,
+    };
+    use crate::domain::shared::geometry::{Position, Size};
+    use crate::domain::shared::color::DrawingColor;
+    use crate::domain::config::FontFamily;
+    use crate::domain::config::FontSize;
+
+    struct MockMeasurer;
+    impl TextMeasurer for MockMeasurer {
+        fn measure(&mut self, text: &str, _font: Option<&FontFamily>, _size: Option<FontSize>) -> Size {
+            Size::new(text.len() as u32 * 10, 20)
+        }
+    }
+
+    #[test]
+    fn test_node_to_style_flex() {
+        let mut measurer = MockMeasurer;
+        let node = LayoutNode::Flex {
+            children: vec![],
+            style: FlexStyle::default(),
+            background: None,
+            radius: None,
+            on_click: None,
+            on_hover: None,
+        };
+        let style = node_to_style(&node, &mut measurer);
+        assert_eq!(style.flex_direction, taffy::style::FlexDirection::Row);
+    }
+
+    #[test]
+    fn test_calculate_layout_simple_rect() {
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+        
+        let node = LayoutNode::Rect {
+            size: Size::new(100, 50),
+            color: DrawingColor::default(),
+            radius: None,
+            on_click: None,
+            on_hover: None,
+        };
+        
+        let render_tree = adapter.calculate_layout(node, &mut measurer, Position::new(10, 10)).unwrap();
+        
+        if let RenderNode::Rect { rect, .. } = render_tree {
+            assert_eq!(rect.x(), 10);
+            assert_eq!(rect.y(), 10);
+            assert_eq!(rect.width(), 100);
+            assert_eq!(rect.height(), 50);
+        } else {
+            panic!("Expected RenderNode::Rect");
+        }
+    }
+
+    #[test]
+    fn test_calculate_layout_flex_with_children() {
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+        
+        let child1 = LayoutNode::Rect {
+            size: Size::new(50, 50),
+            color: DrawingColor::default(),
+            radius: None,
+            on_click: None,
+            on_hover: None,
+        };
+        
+        let child2 = LayoutNode::Text {
+            text: TextContent::new("hello".to_string()),
+            color: DrawingColor::default(),
+            font: None,
+            size: None,
+            on_click: None,
+            on_hover: None,
+        };
+        
+        let parent = LayoutNode::Flex {
+            children: vec![child1, child2],
+            style: FlexStyle::default(),
+            background: None,
+            radius: None,
+            on_click: None,
+            on_hover: None,
+        };
+        
+        let render_tree = adapter.calculate_layout(parent, &mut measurer, Position::new(0, 0)).unwrap();
+        
+        if let RenderNode::Flex { rect, children, .. } = render_tree {
+            assert_eq!(rect.width(), 100);
+            assert_eq!(rect.height(), 50);
+            assert_eq!(children.len(), 2);
+            
+            assert_eq!(children[0].rect().x(), 0);
+            assert_eq!(children[0].rect().y(), 0);
+            
+            assert_eq!(children[1].rect().x(), 50);
+            assert_eq!(children[1].rect().y(), 0);
+        } else {
+            panic!("Expected RenderNode::Flex");
+        }
+    }
+
+    #[test]
+    fn test_calculate_layout_diffing() {
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+        
+        let node1 = LayoutNode::Rect {
+            size: Size::new(100, 50),
+            color: DrawingColor::default(),
+            radius: None,
+            on_click: None,
+            on_hover: None,
+        };
+        adapter.calculate_layout(node1.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        
+        let node2 = LayoutNode::Rect {
+            size: Size::new(200, 50),
+            color: DrawingColor::default(),
+            radius: None,
+            on_click: None,
+            on_hover: None,
+        };
+        let render2 = adapter.calculate_layout(node2.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        assert_eq!(render2.rect().width(), 200);
+        
+        let node3 = LayoutNode::Text {
+            text: TextContent::new("hello".to_string()),
+            color: DrawingColor::default(),
+            font: None,
+            size: None,
+            on_click: None,
+            on_hover: None,
+        };
+        let render3 = adapter.calculate_layout(node3.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        assert_eq!(render3.rect().width(), 50);
+        
+        // Test updating text node style
+        let node4 = LayoutNode::Text {
+            text: TextContent::new("hello world".to_string()),
+            color: DrawingColor::default(),
+            font: None,
+            size: None,
+            on_click: None,
+            on_hover: None,
+        };
+        let render4 = adapter.calculate_layout(node4.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        assert_eq!(render4.rect().width(), 110);
+        
+        // Test Image -> Image with diff sizes
+        let node5 = LayoutNode::Image {
+            data: vec![],
+            pixel_size: Size::new(10, 10),
+            size: Size::new(20, 20),
+        };
+        let render5 = adapter.calculate_layout(node5.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        assert_eq!(render5.rect().width(), 20);
+
+        let node6 = LayoutNode::Image {
+            data: vec![],
+            pixel_size: Size::new(10, 10),
+            size: Size::new(30, 30),
+        };
+        let render6 = adapter.calculate_layout(node6.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        assert_eq!(render6.rect().width(), 30);
+
+        // Test Flex shrinking children
+        let parent1 = LayoutNode::Flex {
+            children: vec![node1.clone(), node2.clone()],
+            style: FlexStyle::default(),
+            background: None,
+            radius: None,
+            on_click: None,
+            on_hover: None,
+        };
+        adapter.calculate_layout(parent1.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+
+        let parent2 = LayoutNode::Flex {
+            children: vec![node1.clone()],
+            style: FlexStyle::default(),
+            background: None,
+            radius: None,
+            on_click: None,
+            on_hover: None,
+        };
+        adapter.calculate_layout(parent2.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+
+        // Test Flex growing children
+        let parent3 = LayoutNode::Flex {
+            children: vec![node1.clone(), node2.clone(), node3.clone()],
+            style: FlexStyle::default(),
+            background: None,
+            radius: None,
+            on_click: None,
+            on_hover: None,
+        };
+        adapter.calculate_layout(parent3.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        
+        // Test Flex keep children but update style
+        let flex_style_modified: FlexStyle = serde_json::from_value(serde_json::json!({
+            "gap": 15.0
+        })).unwrap();
+        let parent4 = LayoutNode::Flex {
+            children: vec![node1.clone(), node2.clone(), node3.clone()],
+            style: flex_style_modified,
+            background: Some(crate::domain::shared::color::DrawingColor::parse("#000000").unwrap()),
+            radius: None,
+            on_click: None,
+            on_hover: None,
+        };
+        adapter.calculate_layout(parent4.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+
+        // Keep Text
+        adapter.calculate_layout(node3.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        adapter.calculate_layout(node3.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        
+        // Keep Image
+        adapter.calculate_layout(node6.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        adapter.calculate_layout(node6.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+    }
+}
