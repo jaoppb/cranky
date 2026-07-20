@@ -119,6 +119,22 @@ impl AppletItem {
         }
     }
 
+    pub fn with_title(mut self, title: String) -> Self {
+        self.title = Title::new(title);
+        self
+    }
+
+    pub fn with_status(mut self, status: AppletStatus) -> Self {
+        self.status = status;
+        self
+    }
+
+    pub fn with_icon(mut self, icon_name: Option<IconName>, icon_image: Option<IconImage>) -> Self {
+        self.icon_name = icon_name;
+        self.icon_image = icon_image;
+        self
+    }
+
     pub fn id(&self) -> &AppletId {
         &self.id
     }
