@@ -1073,9 +1073,11 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 surface_y,
                 ..
             } => {
+                tracing::debug!(surface_x, surface_y, "wl_pointer Enter");
                 state.pointer_surface = Some(surface.clone());
                 state.pointer_pos = (surface_x, surface_y);
                 if let Some((id, mon_id)) = state.surface_to_id.get(&surface) {
+                    tracing::debug!(module = %id, monitor = %mon_id, "Forwarding PointerEnter");
                     let _ = state
                         .hub
                         .pointer_tx()
@@ -1083,9 +1085,11 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 }
             }
             wl_pointer::Event::Leave { surface: _, .. } => {
+                tracing::debug!("wl_pointer Leave");
                 if let Some(surface) = state.pointer_surface.take()
                     && let Some((id, mon_id)) = state.surface_to_id.get(&surface)
                 {
+                    tracing::debug!(module = %id, monitor = %mon_id, "Forwarding PointerLeave");
                     let _ = state
                         .hub
                         .pointer_tx()
@@ -1116,6 +1120,7 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 state: button_state,
                 ..
             } => {
+                tracing::debug!(button, ?button_state, "wl_pointer Button");
                 if button_state
                     == wayland_client::WEnum::Value(
                         wayland_client::protocol::wl_pointer::ButtonState::Released,
@@ -1123,6 +1128,7 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                     && let Some(surface) = &state.pointer_surface
                     && let Some((id, mon_id)) = state.surface_to_id.get(surface)
                 {
+                    tracing::debug!(module = %id, monitor = %mon_id, "Forwarding Click");
                     let _ = state.hub.pointer_tx().send((
                         *id,
                         mon_id.clone(),
@@ -1135,6 +1141,7 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 }
             }
             wl_pointer::Event::Axis { axis, value, .. } => {
+                tracing::debug!(?axis, value, "wl_pointer Axis");
                 if let Some(surface) = &state.pointer_surface
                     && let Some((id, mon_id)) = state.surface_to_id.get(surface)
                 {
@@ -1147,6 +1154,7 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                         ) => 1,
                         _ => 0,
                     };
+                    tracing::debug!(module = %id, monitor = %mon_id, "Forwarding Scroll");
                     let _ = state.hub.pointer_tx().send((
                         *id,
                         mon_id.clone(),

@@ -93,7 +93,7 @@ fn render(monitor_id) {
             }
             
             let on_click_cmd = #{};
-            on_click_cmd["Exec"] = "hyprctl dispatch workspace " + ws.id.to_string();
+            on_click_cmd["Exec"] = "hyprctl eval 'hl.dispatch(hl.dsp.focus({ workspace = " + ws.id.to_string() + " }))'";
             
             let text_node = #{
                 type: "text",

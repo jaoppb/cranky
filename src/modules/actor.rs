@@ -146,36 +146,40 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                             }
                         }
                         Ok((target_id, monitor_id, event)) = input_rx.recv() => {
-                            if target_id == ctx_id
-                                && let Some(render_tree) = self.render_trees.get(&monitor_id) {
+                            if target_id == ctx_id {
+                                tracing::debug!(module = %ctx_id, monitor = %monitor_id, event = ?event, "Received pointer event in module actor");
+                                if let Some(render_tree) = self.render_trees.get(&monitor_id) {
                                     use crate::domain::shared::geometry::Position;
                                     use crate::domain::events::PointerEvent;
                                     match event {
                                         PointerEvent::Click { x, y, .. } => {
-                                            if let Some(hit) = render_tree.hit_test(Position::new(x as i32, y as i32))
+                                            let pos = Position::new(x as i32, y as i32);
+                                            let hit = render_tree.hit_test(pos);
+                                            tracing::debug!(module = %ctx_id, pos = ?pos, hit = ?hit.is_some(), "Hit test for click");
+                                            if let Some(hit) = hit
                                                 && let Some(cmd) = hit.on_click() {
+                                                    tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_click command");
                                                     self.ctx.command_tx().send_command(cmd.clone());
                                                 }
                                         },
                                         PointerEvent::PointerMotion { x, y } => {
-                                            if let Some(hit) = render_tree.hit_test(Position::new(x as i32, y as i32))
+                                            let pos = Position::new(x as i32, y as i32);
+                                            let hit = render_tree.hit_test(pos);
+                                            if let Some(hit) = hit
                                                 && let Some(cmd) = hit.on_hover() {
+                                                    tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_hover command");
                                                     self.ctx.command_tx().send_command(cmd.clone());
                                                 }
                                         },
                                         _ => {}
                                     }
+                                } else {
+                                    tracing::warn!(module = %ctx_id, monitor = %monitor_id, "Received pointer event but no render tree found for monitor");
                                 }
+                            }
                         }
                     }
 
-                    // Debounce rapid layout changes
-                    tokio::time::sleep(std::time::Duration::from_millis(16)).await;
-                    
-                    if self.ctx.rxs_mut().0.has_changed().unwrap_or(false) {
-                        let _ = self.ctx.rxs_mut().0.changed().await;
-                    }
-                    
                     true
                 });
 
@@ -241,6 +245,8 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                     continue;
                 }
             };
+
+            self.render_trees.insert(monitor_id.clone(), render_node.clone());
 
             let size = *render_node.rect().size();
 

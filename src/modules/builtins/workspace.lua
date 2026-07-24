@@ -76,7 +76,7 @@ function render(monitor)
                 text = label,
                 color = color,
                 on_click = {
-                    Exec = "hyprctl dispatch workspace " .. ws.id
+                    Exec = "hyprctl eval 'hl.dispatch(hl.dsp.focus({ workspace = " .. ws.id .. " }))'"
                 }
             }
             
