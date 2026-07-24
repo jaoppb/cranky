@@ -14,7 +14,6 @@ pub trait CommandSender: Send + Sync {
 
 pub trait LayoutSender: Send + Sync {
     fn send_layout(&self, layout: std::collections::HashMap<MonitorId, Rect>);
-    fn current_layout(&self) -> std::collections::HashMap<MonitorId, Rect>;
 }
 #[async_trait]
 pub trait AnyModulePort: Send + Sync {

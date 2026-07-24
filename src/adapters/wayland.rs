@@ -635,6 +635,11 @@ impl WaylandAdapter {
             return Ok(());
         };
 
+        let mut all_layouts_by_module: std::collections::HashMap<
+            crate::domain::ModuleId,
+            std::collections::HashMap<crate::domain::MonitorId, crate::domain::shared::geometry::Rect>,
+        > = std::collections::HashMap::new();
+
         for bar in bars {
             if !bar.configured {
                 debug!("Skipping render for unconfigured bar: {}", bar.output_name);
@@ -730,22 +735,14 @@ impl WaylandAdapter {
                 &bar_config,
             );
 
-            // Broadcast layout bounds to modules for this monitor
-            let mut updates_by_module: std::collections::HashMap<crate::domain::ModuleId, std::collections::HashMap<crate::domain::MonitorId, crate::domain::shared::geometry::Rect>> = std::collections::HashMap::new();
+            // Collect layout bounds to modules for this monitor
             for layout in &layouts {
-                let mut all_rects = std::collections::HashMap::new();
-                if let Some(sender) = layout_senders.get(&layout.id()) {
-                    all_rects = sender.current_layout();
-                }
-                all_rects.insert(monitor_id.clone(), *layout.bounds());
-                updates_by_module.insert(layout.id(), all_rects);
+                all_layouts_by_module
+                    .entry(layout.id())
+                    .or_default()
+                    .insert(monitor_id.clone(), *layout.bounds());
             }
 
-            for (id, rects) in updates_by_module {
-                if let Some(sender) = layout_senders.get(&id) {
-                    sender.send_layout(rects);
-                }
-            }
 
             // However, the display server must still position the subsurfaces correctly on the screen!
             for layout in layouts {
@@ -797,6 +794,16 @@ impl WaylandAdapter {
             bar.surface.commit();
             bar.shm_buffer.swap_buffers();
         }
+
+        // Broadcast layout bounds to modules for ALL active monitors
+        for (id, sender) in layout_senders {
+            if let Some(rects) = all_layouts_by_module.get(id) {
+                sender.send_layout(rects.clone());
+            } else {
+                sender.send_layout(std::collections::HashMap::new());
+            }
+        }
+
         let _ = self.connection.flush();
         Ok(())
     }

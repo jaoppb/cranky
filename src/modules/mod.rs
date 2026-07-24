@@ -98,20 +98,8 @@ struct WatchLayoutSender {
 }
 
 impl crate::ports::registry::LayoutSender for WatchLayoutSender {
-    fn send_layout(
-        &self,
-        layout: std::collections::HashMap<
-            crate::domain::MonitorId,
-            crate::domain::shared::geometry::Rect,
-        >,
-    ) {
+    fn send_layout(&self, layout: std::collections::HashMap<crate::domain::MonitorId, crate::domain::shared::geometry::Rect>) {
         let _ = self.tx.send(layout);
-    }
-    fn current_layout(
-        &self,
-    ) -> std::collections::HashMap<crate::domain::MonitorId, crate::domain::shared::geometry::Rect>
-    {
-        self.tx.borrow().clone()
     }
 }
 
@@ -249,7 +237,7 @@ mod tests {
         ));
         sender.send_layout(layout.clone());
         
-        let current = sender.current_layout();
+        let current = _rx.borrow().clone();
         assert!(current.contains_key(&crate::domain::MonitorId::new("1")));
     }
 
