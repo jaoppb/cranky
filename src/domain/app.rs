@@ -238,8 +238,8 @@ impl<R: crate::ports::registry::ModuleRegistryPort<F> + 'static, F: crate::ports
                                 self.handle_size_changed(monitor_id, module_id, size);
                                 needs_render = true;
                             }
-                            AppCommand::ShowTooltip { text } => {
-                                let _ = display.show_tooltip(&text);
+                            AppCommand::ShowTooltip { layout } => {
+                                let _ = display.show_tooltip(*layout);
                             }
                             AppCommand::HideTooltip => {
                                 let _ = display.hide_tooltip();
@@ -430,6 +430,7 @@ mod tests {
             crate::domain::config::ModulesConfig::default(),
             crate::domain::config::RenderingMode::default(),
             crate::domain::metrics::MetricsConfig::default(),
+            crate::domain::config::TooltipConfig::default(),
         );
 
         let read_model = AppReadModel {
@@ -571,7 +572,7 @@ mod tests {
         // Queue commands
         command_tx.send(AppCommand::RequestRender).await.unwrap();
         command_tx.send(AppCommand::ModuleSizeChanged(MonitorId::new("1"), ModuleId::new(1), Size::new(10, 10))).await.unwrap();
-        command_tx.send(AppCommand::ShowTooltip { text: "t".into() }).await.unwrap();
+        command_tx.send(AppCommand::ShowTooltip { layout: Box::new(crate::domain::layout::LayoutNode::Text { text: crate::domain::layout::TextContent::new("t".into()), color: crate::domain::shared::color::DrawingColor::Solid(crate::domain::shared::color::Color::new(0, 0, 0, 255)), font: None, size: None, on_click: None, on_hover: None, tooltip: None }) }).await.unwrap();
         command_tx.send(AppCommand::HideTooltip).await.unwrap();
         command_tx.send(AppCommand::AppletAction { id: "a".into(), action: "b".into() }).await.unwrap();
         

@@ -1,4 +1,4 @@
-use crate::domain::config::{BarConfig, ModuleConfig};
+use crate::domain::config::ModuleConfig;
 use crate::domain::dbus::{BusType, DBusSubscription};
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::MonitorId;
@@ -115,9 +115,11 @@ impl LuaModule {
 }
 
 impl AnyModulePort for LuaModule {
-    fn init(&mut self, config: &ModuleConfig, bar_config: &BarConfig) -> Result<(), String> {
+    fn init(&mut self, config: &ModuleConfig, full_config: &crate::domain::config::Config) -> Result<(), String> {
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
+
+        let bar_config = full_config.bar();
 
         // Expose bar config
         let bar_config_table = lua.create_table().map_err(|e| e.to_string())?;
@@ -224,13 +226,15 @@ impl AnyModulePort for LuaModule {
                                         size: None,
                                         on_click: None,
                                         on_hover: None,
+                                        tooltip: None,
                                     }
                                 ], 
                                 style: crate::domain::layout::FlexStyle::default(),
                                 background: None,
                                 radius: None,
                                 on_click: None, 
-                                on_hover: None 
+                                on_hover: None,
+                                tooltip: None,
                             };
                         }
                     }
@@ -241,7 +245,7 @@ impl AnyModulePort for LuaModule {
             }
         }
         
-        crate::domain::layout::LayoutNode::Flex { children: vec![], style: crate::domain::layout::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None }
+        crate::domain::layout::LayoutNode::Flex { children: vec![], style: crate::domain::layout::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None, tooltip: None }
     }
 }
 
@@ -252,7 +256,7 @@ mod tests {
     use crate::domain::applets::{
         AppletId, AppletItem, AppletStatus, AppletsState, Destination, ObjectPath, Title,
     };
-    use crate::domain::config::{BarConfig, ModuleConfig};
+    use crate::domain::config::ModuleConfig;
     
     
     use std::collections::HashMap;
@@ -261,10 +265,10 @@ mod tests {
     fn test_applet_missing_icon_regression() {
         let mut module = LuaModule::built_in("applet").expect("Failed to load applet module");
         let module_config = ModuleConfig::new("applet".into(), true, HashMap::new());
-        let bar_config = BarConfig::default();
+        let config = crate::domain::config::Config::default();
 
         module
-            .init(&module_config, &bar_config)
+            .init(&module_config, &config)
             .expect("Init failed");
 
         let hub = SignalHub::new(crate::domain::config::Config::default());

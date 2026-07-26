@@ -92,6 +92,15 @@ function render(monitor)
                 background = bg,
                 radius = border_radius,
                 on_click = text_node.on_click,
+                tooltip = {
+                    type = "flex",
+                    background = "#1e1e2eff",
+                    radius = 4,
+                    style = { padding = { top = 4, bottom = 4, left = 8, right = 8 } },
+                    children = {
+                        { type = "text", text = "Switch to workspace " .. label, color = "#ffffff" }
+                    }
+                },
                 children = { text_node }
             })
         end

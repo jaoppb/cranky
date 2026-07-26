@@ -1,5 +1,5 @@
 use crate::domain::commands::AppCommand;
-use crate::domain::config::{BarConfig, Config, ModuleConfig};
+use crate::domain::config::{Config, ModuleConfig};
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::{
     ModuleId, MonitorId,
@@ -17,7 +17,7 @@ pub trait LayoutSender: Send + Sync {
 }
 #[async_trait]
 pub trait AnyModulePort: Send + Sync {
-    fn init(&mut self, config: &ModuleConfig, bar_config: &BarConfig) -> Result<(), String>;
+    fn init(&mut self, config: &ModuleConfig, full_config: &Config) -> Result<(), String>;
     fn subscriptions(&self) -> Vec<SignalKind>;
     fn refresh(&mut self, hub: &SignalHub, changed_signals: &[SignalKind]);
     fn render(&self, monitor: &MonitorId) -> crate::domain::layout::LayoutNode;

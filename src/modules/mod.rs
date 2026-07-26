@@ -39,7 +39,7 @@ impl ModuleRegistry {
     fn load_section(
         &mut self,
         configs: &[ModuleConfig],
-        bar_config: &crate::domain::config::BarConfig,
+        full_config: &crate::domain::config::Config,
         next_id: &mut u32,
     ) -> Result<Vec<ModuleId>, String> {
         let mut ids = Vec::new();
@@ -83,7 +83,7 @@ impl ModuleRegistry {
                 }
             };
 
-            module.init(config, bar_config).map_err(|e| e.to_string())?;
+            module.init(config, full_config).map_err(|e| e.to_string())?;
             self.modules.insert(id, module);
             ids.push(id);
         }
@@ -122,13 +122,13 @@ impl<Fact: crate::ports::canvas::CanvasFactory + 'static> ModuleRegistryPort<Fac
         let mut next_id = 0;
 
         self.left_modules = self
-            .load_section(config.modules().left(), config.bar(), &mut next_id)
+            .load_section(config.modules().left(), config, &mut next_id)
             .map_err(|e| e.to_string())?;
         self.center_modules = self
-            .load_section(config.modules().center(), config.bar(), &mut next_id)
+            .load_section(config.modules().center(), config, &mut next_id)
             .map_err(|e| e.to_string())?;
         self.right_modules = self
-            .load_section(config.modules().right(), config.bar(), &mut next_id)
+            .load_section(config.modules().right(), config, &mut next_id)
             .map_err(|e| e.to_string())?;
 
         Ok(())

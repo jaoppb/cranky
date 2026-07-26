@@ -14,7 +14,7 @@ pub enum AppCommand {
         crate::domain::shared::geometry::Size,
     ),
     ShowTooltip {
-        text: String,
+        layout: Box<crate::domain::layout::LayoutNode>,
     },
     HideTooltip,
 }

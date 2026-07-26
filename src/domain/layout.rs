@@ -74,6 +74,12 @@ pub struct BoxMargin {
 }
 
 impl BoxMargin {
+    pub fn new(top: f64, bottom: f64, left: f64, right: f64) -> Self {
+        Self { top, bottom, left, right }
+    }
+}
+
+impl BoxMargin {
     pub fn top(&self) -> f64 {
         self.top
     }
@@ -107,6 +113,10 @@ pub struct FlexStyle {
 }
 
 impl FlexStyle {
+    pub fn with_padding(mut self, padding: BoxMargin) -> Self {
+        self.padding = padding;
+        self
+    }
     pub fn direction(&self) -> FlexDirection { self.direction }
     pub fn justify(&self) -> JustifyContent { self.justify }
     pub fn align_items(&self) -> AlignItems { self.align_items }
@@ -146,6 +156,8 @@ pub enum LayoutNode {
         radius: Option<BorderRadius>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
+        #[serde(default)]
+        tooltip: Option<Box<LayoutNode>>,
     },
     #[serde(rename = "text")]
     Text {
@@ -155,6 +167,8 @@ pub enum LayoutNode {
         size: Option<FontSize>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
+        #[serde(default)]
+        tooltip: Option<Box<LayoutNode>>,
     },
     #[serde(rename = "rect")]
     Rect {
@@ -163,12 +177,16 @@ pub enum LayoutNode {
         radius: Option<BorderRadius>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
+        #[serde(default)]
+        tooltip: Option<Box<LayoutNode>>,
     },
     #[serde(rename = "image")]
     Image {
         size: Size,
         data: Vec<u8>,
         pixel_size: Size,
+        #[serde(default)]
+        tooltip: Option<Box<LayoutNode>>,
     }
 }
 
@@ -187,6 +205,7 @@ pub enum RenderNode {
         radius: Option<BorderRadius>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
+        tooltip: Option<Box<LayoutNode>>,
     },
     Text {
         rect: Rect,
@@ -196,6 +215,7 @@ pub enum RenderNode {
         size: Option<FontSize>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
+        tooltip: Option<Box<LayoutNode>>,
     },
     Rect {
         rect: Rect,
@@ -203,11 +223,13 @@ pub enum RenderNode {
         radius: Option<BorderRadius>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
+        tooltip: Option<Box<LayoutNode>>,
     },
     Image {
         rect: Rect,
         data: Vec<u8>,
         pixel_size: Size,
+        tooltip: Option<Box<LayoutNode>>,
     }
 }
 
@@ -239,19 +261,34 @@ impl RenderNode {
         }
     }
 
-    pub fn hit_test(&self, pos: crate::domain::shared::geometry::Position) -> Option<&RenderNode> {
+    pub fn hit_test(&self, pos: crate::domain::shared::geometry::Position) -> Vec<&RenderNode> {
+        let mut path = Vec::new();
+        self.hit_test_internal(pos, &mut path);
+        path
+    }
+
+    fn hit_test_internal<'a>(&'a self, pos: crate::domain::shared::geometry::Position, path: &mut Vec<&'a RenderNode>) {
         let r = self.rect();
         if pos.x() >= r.x() && pos.x() < r.x() + r.width() as i32 && pos.y() >= r.y() && pos.y() < r.y() + r.height() as i32 {
+            path.push(self);
             if let Self::Flex { children, .. } = self {
                 for child in children {
-                    if let Some(hit) = child.hit_test(pos) {
-                        return Some(hit);
+                    let prev_len = path.len();
+                    child.hit_test_internal(pos, path);
+                    if path.len() > prev_len {
+                        break;
                     }
                 }
             }
-            Some(self)
-        } else {
-            None
+        }
+    }
+
+    pub fn tooltip(&self) -> Option<&LayoutNode> {
+        match self {
+            RenderNode::Flex { tooltip, .. } => tooltip.as_deref(),
+            RenderNode::Text { tooltip, .. } => tooltip.as_deref(),
+            RenderNode::Rect { tooltip, .. } => tooltip.as_deref(),
+            RenderNode::Image { tooltip, .. } => tooltip.as_deref(),
         }
     }
 
@@ -292,7 +329,7 @@ impl RenderNode {
                     crate::domain::shared::geometry::Position::new(rect.x(), rect.y()),
                 );
             }
-            Self::Image { rect, data, pixel_size } => {
+            Self::Image { rect, data, pixel_size, tooltip: _ } => {
                 let logical_size = crate::domain::shared::geometry::Size::new(rect.width(), rect.height());
                 canvas.draw_image(
                     data,
@@ -359,6 +396,7 @@ mod tests {
             radius: None,
             on_click: None,
             on_hover: None,
+            tooltip: None,
         };
         assert_eq!(node.rect(), rect);
         assert_eq!(node.on_click(), None);
@@ -376,6 +414,7 @@ mod tests {
             radius: None,
             on_click: None,
             on_hover: None,
+            tooltip: None,
         };
 
         let parent_node = RenderNode::Flex {
@@ -385,18 +424,19 @@ mod tests {
             radius: None,
             on_click: None,
             on_hover: None,
+            tooltip: None,
         };
 
         // Hit child
-        let hit = parent_node.hit_test(Position::new(20, 20)).unwrap();
-        assert_eq!(*hit, child_node);
+        let hit = parent_node.hit_test(Position::new(20, 20));
+        assert_eq!(*hit.last().unwrap(), &child_node);
 
         // Hit parent only
-        let hit2 = parent_node.hit_test(Position::new(80, 80)).unwrap();
-        assert_eq!(*hit2, parent_node);
+        let hit2 = parent_node.hit_test(Position::new(80, 80));
+        assert_eq!(*hit2.last().unwrap(), &parent_node);
 
         // Miss
-        assert!(parent_node.hit_test(Position::new(200, 200)).is_none());
+        assert!(parent_node.hit_test(Position::new(200, 200)).is_empty());
     }
 
     #[test]
@@ -412,6 +452,7 @@ mod tests {
             radius: None,
             on_click: None,
             on_hover: None,
+            tooltip: None,
         };
         
         rect.render_to_canvas(&mut canvas);
@@ -425,6 +466,7 @@ mod tests {
             radius: None,
             on_click: None,
             on_hover: None,
+            tooltip: None,
         };
         flex.render_to_canvas(&mut canvas);
         
@@ -438,6 +480,7 @@ mod tests {
             size: None,
             on_click: None,
             on_hover: None,
+            tooltip: None,
         };
         text.render_to_canvas(&mut canvas);
         
@@ -447,6 +490,7 @@ mod tests {
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             data: vec![0,0,0,0],
             pixel_size: Size::new(1, 1),
+            tooltip: None,
         };
         image.render_to_canvas(&mut canvas);
     }

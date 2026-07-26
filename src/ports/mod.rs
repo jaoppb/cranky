@@ -42,7 +42,7 @@ pub trait DisplayServerPort: Send + Sync {
             Box<dyn crate::ports::registry::LayoutSender>,
         >,
     ) -> Result<(), DisplayServerError>;
-    fn show_tooltip(&mut self, text: &str) -> Result<(), DisplayServerError>;
+    fn show_tooltip(&mut self, layout: crate::domain::layout::LayoutNode) -> Result<(), DisplayServerError>;
     fn hide_tooltip(&mut self) -> Result<(), DisplayServerError>;
 }
 

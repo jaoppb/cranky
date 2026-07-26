@@ -13,6 +13,8 @@ pub struct ConfigDto {
     rendering: RenderingModeDto,
     #[serde(default)]
     metrics: crate::domain::metrics::MetricsConfig,
+    #[serde(default)]
+    tooltip: TooltipConfigDto,
 }
 
 impl ConfigDto {
@@ -20,8 +22,9 @@ impl ConfigDto {
         let bar = self.bar.into_domain(validator);
         let modules = self.modules.into_domain();
         let rendering = self.rendering.into_domain();
+        let tooltip = self.tooltip.into_domain();
 
-        domain::Config::new(bar, modules, rendering, self.metrics)
+        domain::Config::new(bar, modules, rendering, self.metrics, tooltip)
     }
 }
 #[derive(Debug, Deserialize)]
@@ -450,6 +453,34 @@ impl PartialBarConfigDto {
             font_family: self.font_family.map(domain::FontFamily::new),
             font_size: self.font_size.map(domain::FontSize::new),
         })
+    }
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct TooltipConfigDto {
+    background: Option<String>,
+    border_color: Option<String>,
+    text_color: Option<String>,
+    font: Option<String>,
+    size: Option<f32>,
+    radius: Option<f32>,
+    border_width: Option<f32>,
+    padding: Option<u32>,
+}
+
+impl TooltipConfigDto {
+    pub fn into_domain(self) -> domain::TooltipConfig {
+        let default = domain::TooltipConfig::default();
+        domain::TooltipConfig::new(
+            self.background.and_then(|c| DrawingColor::parse(&c).ok()).unwrap_or_else(|| default.background().clone()),
+            self.border_color.and_then(|c| DrawingColor::parse(&c).ok()).unwrap_or_else(|| default.border_color().clone()),
+            self.text_color.and_then(|c| DrawingColor::parse(&c).ok()).unwrap_or_else(|| default.text_color().clone()),
+            self.font.map(domain::FontFamily::new).or_else(|| default.font().cloned()),
+            self.size.map(domain::FontSize::new).or_else(|| default.size()),
+            self.radius.map(domain::BorderRadius::new).unwrap_or_else(|| default.radius()),
+            self.border_width.map(domain::BorderSize::new).unwrap_or_else(|| default.border_width()),
+            self.padding.map(domain::PaddingOffset::new).unwrap_or_else(|| default.padding()),
+        )
     }
 }
 

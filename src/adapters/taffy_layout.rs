@@ -462,6 +462,7 @@ fn build_render_tree(
             radius,
             on_click,
             on_hover,
+            tooltip,
             ..
         } => {
             let child_ids = taffy
@@ -485,6 +486,7 @@ fn build_render_tree(
                 radius: *radius,
                 on_click: on_click.clone(),
                 on_hover: on_hover.clone(),
+                tooltip: tooltip.clone(),
             })
         }
         LayoutNode::Text {
@@ -494,6 +496,7 @@ fn build_render_tree(
             size,
             on_click,
             on_hover,
+            tooltip,
         } => Ok(RenderNode::Text {
             rect,
             text: text.clone(),
@@ -502,12 +505,14 @@ fn build_render_tree(
             size: *size,
             on_click: on_click.clone(),
             on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(),
         }),
         LayoutNode::Rect {
             color,
             radius,
             on_click,
             on_hover,
+            tooltip,
             ..
         } => Ok(RenderNode::Rect {
             rect,
@@ -515,13 +520,15 @@ fn build_render_tree(
             radius: *radius,
             on_click: on_click.clone(),
             on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(),
         }),
         LayoutNode::Image {
-            data, pixel_size, ..
+            data, pixel_size, tooltip, ..
         } => Ok(RenderNode::Image {
             rect,
             data: data.clone(),
             pixel_size: *pixel_size,
+            tooltip: tooltip.clone(),
         }),
     }
 }
@@ -553,7 +560,7 @@ mod tests {
             background: None,
             radius: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         let style = node_to_style(&node, &mut measurer);
         assert_eq!(style.flex_direction, taffy::style::FlexDirection::Row);
@@ -569,7 +576,7 @@ mod tests {
             color: DrawingColor::default(),
             radius: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         
         let render_tree = adapter.calculate_layout(node, &mut measurer, Position::new(10, 10)).unwrap();
@@ -594,7 +601,7 @@ mod tests {
             color: DrawingColor::default(),
             radius: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         
         let child2 = LayoutNode::Text {
@@ -603,7 +610,7 @@ mod tests {
             font: None,
             size: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         
         let parent = LayoutNode::Flex {
@@ -612,7 +619,7 @@ mod tests {
             background: None,
             radius: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         
         let render_tree = adapter.calculate_layout(parent, &mut measurer, Position::new(0, 0)).unwrap();
@@ -642,7 +649,7 @@ mod tests {
             color: DrawingColor::default(),
             radius: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         adapter.calculate_layout(node1.clone(), &mut measurer, Position::new(0, 0)).unwrap();
         
@@ -651,7 +658,7 @@ mod tests {
             color: DrawingColor::default(),
             radius: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         let render2 = adapter.calculate_layout(node2.clone(), &mut measurer, Position::new(0, 0)).unwrap();
         assert_eq!(render2.rect().width(), 200);
@@ -662,7 +669,7 @@ mod tests {
             font: None,
             size: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         let render3 = adapter.calculate_layout(node3.clone(), &mut measurer, Position::new(0, 0)).unwrap();
         assert_eq!(render3.rect().width(), 50);
@@ -674,7 +681,7 @@ mod tests {
             font: None,
             size: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         let render4 = adapter.calculate_layout(node4.clone(), &mut measurer, Position::new(0, 0)).unwrap();
         assert_eq!(render4.rect().width(), 110);
@@ -684,6 +691,7 @@ mod tests {
             data: vec![],
             pixel_size: Size::new(10, 10),
             size: Size::new(20, 20),
+            tooltip: None,
         };
         let render5 = adapter.calculate_layout(node5.clone(), &mut measurer, Position::new(0, 0)).unwrap();
         assert_eq!(render5.rect().width(), 20);
@@ -692,6 +700,7 @@ mod tests {
             data: vec![],
             pixel_size: Size::new(10, 10),
             size: Size::new(30, 30),
+            tooltip: None,
         };
         let render6 = adapter.calculate_layout(node6.clone(), &mut measurer, Position::new(0, 0)).unwrap();
         assert_eq!(render6.rect().width(), 30);
@@ -703,7 +712,7 @@ mod tests {
             background: None,
             radius: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         adapter.calculate_layout(parent1.clone(), &mut measurer, Position::new(0, 0)).unwrap();
 
@@ -713,7 +722,7 @@ mod tests {
             background: None,
             radius: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         adapter.calculate_layout(parent2.clone(), &mut measurer, Position::new(0, 0)).unwrap();
 
@@ -724,7 +733,7 @@ mod tests {
             background: None,
             radius: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         adapter.calculate_layout(parent3.clone(), &mut measurer, Position::new(0, 0)).unwrap();
         
@@ -738,7 +747,7 @@ mod tests {
             background: Some(crate::domain::shared::color::DrawingColor::parse("#000000").unwrap()),
             radius: None,
             on_click: None,
-            on_hover: None,
+            on_hover: None, tooltip: None,
         };
         adapter.calculate_layout(parent4.clone(), &mut measurer, Position::new(0, 0)).unwrap();
 

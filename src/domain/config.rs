@@ -88,6 +88,7 @@ pub struct Config {
     modules: ModulesConfig,
     rendering: RenderingMode,
     metrics: crate::domain::metrics::MetricsConfig,
+    tooltip: TooltipConfig,
 }
 
 impl Config {
@@ -96,12 +97,14 @@ impl Config {
         modules: ModulesConfig,
         rendering: RenderingMode,
         metrics: crate::domain::metrics::MetricsConfig,
+        tooltip: TooltipConfig,
     ) -> Self {
         Self {
             bar,
             modules,
             rendering,
             metrics,
+            tooltip,
         }
     }
 
@@ -115,6 +118,69 @@ impl Config {
 
     pub fn metrics(&self) -> &crate::domain::metrics::MetricsConfig {
         &self.metrics
+    }
+
+
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TooltipConfig {
+    background: DrawingColor,
+    border_color: DrawingColor,
+    text_color: DrawingColor,
+    font: Option<FontFamily>,
+    size: Option<FontSize>,
+    radius: BorderRadius,
+    border_width: BorderSize,
+    padding: PaddingOffset,
+}
+
+impl TooltipConfig {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        background: DrawingColor,
+        border_color: DrawingColor,
+        text_color: DrawingColor,
+        font: Option<FontFamily>,
+        size: Option<FontSize>,
+        radius: BorderRadius,
+        border_width: BorderSize,
+        padding: PaddingOffset,
+    ) -> Self {
+        Self {
+            background,
+            border_color,
+            text_color,
+            font,
+            size,
+            radius,
+            border_width,
+            padding,
+        }
+    }
+
+    pub fn background(&self) -> &DrawingColor { &self.background }
+    pub fn border_color(&self) -> &DrawingColor { &self.border_color }
+    pub fn text_color(&self) -> &DrawingColor { &self.text_color }
+    pub fn font(&self) -> Option<&FontFamily> { self.font.as_ref() }
+    pub fn size(&self) -> Option<FontSize> { self.size }
+    pub fn radius(&self) -> BorderRadius { self.radius }
+    pub fn border_width(&self) -> BorderSize { self.border_width }
+    pub fn padding(&self) -> PaddingOffset { self.padding }
+}
+
+impl Default for TooltipConfig {
+    fn default() -> Self {
+        Self {
+            background: DrawingColor::parse("#1e1e2e").unwrap(),
+            border_color: DrawingColor::parse("#c0caf5").unwrap(),
+            text_color: DrawingColor::parse("#c0caf5").unwrap(),
+            font: Some(FontFamily::new("Inter".to_string())),
+            size: Some(FontSize::new(12.0)),
+            radius: BorderRadius::new(4.0),
+            border_width: BorderSize::new(1.0),
+            padding: PaddingOffset::new(8),
+        }
     }
 }
 
@@ -780,6 +846,7 @@ mod tests {
             modules,
             RenderingMode::default(),
             crate::domain::metrics::MetricsConfig::default(),
+            TooltipConfig::default(),
         );
         assert_eq!(config.modules().left().len(), 1);
         assert_eq!(config.modules().left()[0].name(), "time");

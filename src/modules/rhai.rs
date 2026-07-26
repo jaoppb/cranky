@@ -1,6 +1,6 @@
 #![allow(unsafe_code)]
 
-use crate::domain::config::{BarConfig, ModuleConfig};
+use crate::domain::config::ModuleConfig;
 use crate::domain::signals::{SignalHub, SignalKind};
 use crate::domain::{
     MonitorId,
@@ -51,7 +51,8 @@ impl RhaiModule {
 }
 
 impl AnyModulePort for RhaiModule {
-    fn init(&mut self, config: &ModuleConfig, bar_config: &BarConfig) -> Result<(), String> {
+    fn init(&mut self, config: &ModuleConfig, full_config: &crate::domain::config::Config) -> Result<(), String> {
+        let bar_config = full_config.bar();
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
 
@@ -142,13 +143,13 @@ impl AnyModulePort for RhaiModule {
                     Ok(node) => node,
                     Err(e) => {
                         tracing::error!("Failed to deserialize render output in rhai module: {}", e);
-                        crate::domain::layout::LayoutNode::Flex { children: vec![], style: crate::domain::layout::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None }
+                        crate::domain::layout::LayoutNode::Flex { children: vec![], style: crate::domain::layout::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None, tooltip: None }
                     }
                 }
             }
             Err(e) => {
                 tracing::warn!("Module render error in rhai: {}", e);
-                crate::domain::layout::LayoutNode::Flex { children: vec![], style: crate::domain::layout::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None }
+                crate::domain::layout::LayoutNode::Flex { children: vec![], style: crate::domain::layout::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None, tooltip: None }
             }
         }
     }
@@ -157,7 +158,7 @@ impl AnyModulePort for RhaiModule {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::config::{BarConfig, ModuleConfig};
+    use crate::domain::config::ModuleConfig;
 
     #[test]
     fn test_rhai_module_new_success() {
@@ -205,9 +206,9 @@ mod tests {
             true,
             std::collections::HashMap::new(),
         );
-        let bar_config = BarConfig::default();
+        let config = crate::domain::config::Config::default();
         
-        assert!(module.init(&mod_config, &bar_config).is_ok());
+        assert!(module.init(&mod_config, &config).is_ok());
         
         let subs = module.subscriptions();
         assert!(subs.contains(&SignalKind::Time));

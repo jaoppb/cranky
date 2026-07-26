@@ -122,6 +122,8 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
             self.port.refresh(self.ctx.hub(), &initial_sigs);
             self.measure_and_render_all(&mut layout_engines);
 
+            let mut last_tooltip: Option<crate::domain::layout::LayoutNode> = None;
+
             loop {
                 // Determine what woke us up
                 let mut changed = false;
@@ -155,21 +157,38 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                                         PointerEvent::Click { x, y, .. } => {
                                             let pos = Position::new(x as i32, y as i32);
                                             let hit = render_tree.hit_test(pos);
-                                            tracing::debug!(module = %ctx_id, pos = ?pos, hit = ?hit.is_some(), "Hit test for click");
-                                            if let Some(hit) = hit
-                                                && let Some(cmd) = hit.on_click() {
-                                                    tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_click command");
-                                                    self.ctx.command_tx().send_command(cmd.clone());
-                                                }
+                                            tracing::debug!(module = %ctx_id, pos = ?pos, hit = !hit.is_empty(), "Hit test for click");
+                                            if let Some(cmd) = hit.iter().rev().find_map(|n| n.on_click()) {
+                                                tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_click command");
+                                                self.ctx.command_tx().send_command(cmd.clone());
+                                            }
                                         },
                                         PointerEvent::PointerMotion { x, y } => {
                                             let pos = Position::new(x as i32, y as i32);
                                             let hit = render_tree.hit_test(pos);
-                                            if let Some(hit) = hit
-                                                && let Some(cmd) = hit.on_hover() {
-                                                    tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_hover command");
-                                                    self.ctx.command_tx().send_command(cmd.clone());
+                                            if let Some(cmd) = hit.iter().rev().find_map(|n| n.on_hover()) {
+                                                tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_hover command");
+                                                self.ctx.command_tx().send_command(cmd.clone());
+                                            }
+                                                
+                                            let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
+                                            if hit_tooltip != last_tooltip {
+                                                tracing::debug!(module = %ctx_id, changed = true, has_tooltip = hit_tooltip.is_some(), "Tooltip state changed");
+                                                if let Some(layout) = &hit_tooltip {
+                                                    self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::ShowTooltip { layout: Box::new(layout.clone()) });
+                                                } else {
+                                                    self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::HideTooltip);
                                                 }
+                                                last_tooltip = hit_tooltip;
+                                            }
+                                        },
+                                        PointerEvent::PointerLeave => {
+                                            tracing::debug!(module = %ctx_id, "Pointer left module bounds");
+                                            if last_tooltip.is_some() {
+                                                tracing::debug!(module = %ctx_id, "Hiding tooltip due to pointer leave");
+                                                self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::HideTooltip);
+                                                last_tooltip = None;
+                                            }
                                         },
                                         _ => {}
                                     }
@@ -378,7 +397,7 @@ mod tests {
     }
     
     impl AnyModulePort for MockAnyModulePort {
-        fn init(&mut self, _config: &crate::domain::config::ModuleConfig, _bar_config: &crate::domain::config::BarConfig) -> Result<(), String> {
+        fn init(&mut self, _config: &crate::domain::config::ModuleConfig, _full_config: &crate::domain::config::Config) -> Result<(), String> {
             Ok(())
         }
         
@@ -454,6 +473,7 @@ mod tests {
                 radius: None,
                 on_click: None,
                 on_hover: None,
+                tooltip: None,
             },
         });
         
@@ -502,8 +522,9 @@ mod tests {
             size: crate::domain::shared::geometry::Size::new(100, 100),
             color: crate::domain::shared::color::DrawingColor::parse("#000000").unwrap(),
             radius: None,
-            on_click: Some(AppCommand::RequestRender),
-            on_hover: Some(AppCommand::RequestRender),
+            on_click: Some(crate::domain::commands::AppCommand::RequestRender),
+            on_hover: Some(crate::domain::commands::AppCommand::RequestRender),
+            tooltip: None,
         };
 
         let port = Box::new(MockAnyModulePort {
@@ -518,6 +539,7 @@ mod tests {
             radius: None,
             on_click: Some(AppCommand::RequestRender),
             on_hover: Some(AppCommand::RequestRender),
+            tooltip: None,
         });
         
         actor.spawn();

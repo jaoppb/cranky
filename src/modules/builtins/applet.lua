@@ -43,7 +43,16 @@ function render(monitor)
         return {
             type = "text",
             text = empty_label,
-            color = text_color
+            color = text_color,
+            tooltip = {
+                type = "flex",
+                background = "#1e1e2eff",
+                radius = 4,
+                style = { padding = { top = 4, bottom = 4, left = 8, right = 8 } },
+                children = {
+                    { type = "text", text = "No applets are currently active", color = text_color }
+                }
+            }
         }
     end
 
@@ -87,6 +96,19 @@ function render(monitor)
                 AppletAction = {
                     id = item.id,
                     action = "Primary"
+                }
+            },
+            tooltip = {
+                type = "flex",
+                style = { padding = { top = 4, bottom = 4, left = 8, right = 8 } },
+                background = "#1e1e2eff",
+                radius = 4,
+                children = {
+                    {
+                        type = "text",
+                        text = item.title or "app",
+                        color = "#c0caf5"
+                    }
                 }
             }
         }

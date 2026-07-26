@@ -121,7 +121,7 @@ struct TooltipSurface {
     xdg_popup: XdgPopup,
     shm_buffer: ShmBuffer,
     size: crate::domain::shared::geometry::Size,
-    text: String,
+    layout: crate::domain::layout::LayoutNode,
 }
 
 struct WaylandOutputInfo {
@@ -318,10 +318,12 @@ impl DisplayServerPort for WaylandAdapter {
         self.render_all_outputs(read_model, layout_senders, &qh)
     }
 
-    fn show_tooltip(&mut self, text: &str) -> Result<(), DisplayServerError> {
+    fn show_tooltip(&mut self, layout: crate::domain::layout::LayoutNode) -> Result<(), DisplayServerError> {
+        tracing::debug!("Requested show_tooltip");
         if let Some(tooltip) = &self.state.tooltip
-            && tooltip.text == text
+            && tooltip.layout == layout
         {
+            tracing::trace!("Tooltip layout hasn't changed, skipping update");
             return Ok(());
         }
 
@@ -401,23 +403,33 @@ impl DisplayServerPort for WaylandAdapter {
         let font_size = crate::domain::config::FontSize::new(12.0);
         let scale = Scale::new(bar_scale as f32);
 
-        let (text_w, text_h) = {
+        let (text_w, text_h, render_node) = {
             let mut measurer = crate::adapters::rendering::CosmicTextMeasurer::new(
                 &mut state.font_system,
                 scale,
                 font_family.clone(),
                 font_size,
             );
-            use crate::domain::layout::TextMeasurer;
-            let size = measurer.measure(text, Some(&font_family), Some(font_size));
-            (size.width(), size.height())
+            
+            use crate::ports::layout::LayoutEnginePort;
+            let mut engine = crate::adapters::taffy_layout::TaffyLayoutAdapter::new();
+            if let Ok(render_node) = engine.calculate_layout(layout.clone(), &mut measurer, crate::domain::shared::geometry::Position::new(0, 0)) {
+                let rect = render_node.rect();
+                (rect.width() as i32, rect.height() as i32, render_node)
+            } else {
+                (1, 1, crate::domain::layout::RenderNode::Rect {
+                    rect: crate::domain::shared::geometry::Rect::new(crate::domain::shared::geometry::Position::new(0, 0), crate::domain::shared::geometry::Size::new(1, 1)),
+                    color: crate::domain::shared::color::DrawingColor::Solid(crate::domain::shared::color::Color::new(0, 0, 0, 255)),
+                    radius: None,
+                    on_click: None,
+                    on_hover: None,
+                    tooltip: None,
+                })
+            }
         };
 
-        let padding_x = 8.0;
-        let padding_y = 4.0;
-
-        let width = ((text_w as f32 + padding_x * 2.0) * scale.value()).ceil() as u32;
-        let height = ((text_h as f32 + padding_y * 2.0) * scale.value()).ceil() as u32;
+        let width = ((text_w as f32) * scale.value()).ceil() as u32;
+        let height = ((text_h as f32) * scale.value()).ceil() as u32;
 
         let width = width.max(1);
         let height = height.max(1);
@@ -437,33 +449,8 @@ impl DisplayServerPort for WaylandAdapter {
                     font_family.clone(),
                     font_size,
                 );
-                use crate::ports::canvas::Canvas;
-                let bg_color =
-                    crate::domain::shared::color::DrawingColor::parse("#1e1e2e").unwrap();
-                let border_color =
-                    crate::domain::shared::color::DrawingColor::parse("#c0caf5").unwrap();
-                actual_canvas.draw_rect(
-                    LogicalPx::new(0.0),
-                    LogicalPx::new(0.0),
-                    LogicalPx::new(width as f32 / scale.value()),
-                    LogicalPx::new(height as f32 / scale.value()),
-                    bg_color.clone(),
-                    LogicalPx::new(4.0),
-                );
-                actual_canvas.draw_border(crate::domain::shared::geometry::Position::new(0, 0), crate::domain::shared::geometry::Size::new((width as f32 / scale.value()) as u32, (height as f32 / scale.value()) as u32), border_color, LogicalPx::new(4.0), LogicalPx::new(1.0));
-
-                let text_color =
-                    crate::domain::shared::color::DrawingColor::parse("#c0caf5").unwrap();
-                actual_canvas.draw_text(
-                    text,
-                    Some(&font_family),
-                    Some(font_size),
-                    text_color,
-                    crate::domain::shared::geometry::Position::new(
-                        padding_x as i32,
-                        padding_y as i32,
-                    ),
-                );
+                
+                render_node.render_to_canvas(&mut actual_canvas);
             }
         }
 
@@ -476,12 +463,14 @@ impl DisplayServerPort for WaylandAdapter {
             .set_gravity(wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::Bottom);
         positioner.set_constraint_adjustment(
             wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideX |
-            wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideY
+            wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideY |
+            wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::FlipY
         );
 
         let surface = compositor.create_surface(&qh, ());
         let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &qh, ());
         let xdg_popup = xdg_surface.get_popup(None, &positioner, &qh, ());
+        tracing::debug!(width, height, pointer_x, bar_height, "Creating tooltip surface");
 
         bar_layer_surface.get_popup(&xdg_popup);
 
@@ -494,7 +483,7 @@ impl DisplayServerPort for WaylandAdapter {
             xdg_popup,
             shm_buffer,
             size: crate::domain::shared::geometry::Size::new(width, height),
-            text: text.to_string(),
+            layout,
         });
 
         Ok(())
@@ -503,6 +492,7 @@ impl DisplayServerPort for WaylandAdapter {
     fn hide_tooltip(&mut self) -> Result<(), DisplayServerError> {
         let state = &mut self.state;
         if let Some(tooltip) = state.tooltip.take() {
+            tracing::debug!("Hiding tooltip");
             tooltip.xdg_popup.destroy();
             tooltip.xdg_surface.destroy();
             tooltip.surface.destroy();
@@ -1271,10 +1261,12 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
         if let wayland_protocols::xdg::shell::client::xdg_surface::Event::Configure { serial } =
             event
         {
+            tracing::debug!("xdg_surface Configure serial={serial}");
             proxy.ack_configure(serial);
             if let Some(tooltip) = &mut state.tooltip
                 && &tooltip.xdg_surface == proxy
             {
+                tracing::debug!("Attaching buffer to tooltip surface");
                 tooltip
                     .surface
                     .attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
@@ -1285,6 +1277,8 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
                     tooltip.size.height() as i32,
                 );
                 tooltip.surface.commit();
+            } else {
+                tracing::debug!("Configure event for unknown xdg_surface");
             }
         }
     }
@@ -1299,6 +1293,7 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
+        tracing::debug!("xdg_popup Event: {:?}", _event);
     }
 }
 
