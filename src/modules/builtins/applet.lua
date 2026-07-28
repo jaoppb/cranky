@@ -63,12 +63,19 @@ function render(monitor)
         local item_children = {}
         
         if show_icons then
-            if type(item.icon_image) == "table" then
+            local img = nil
+            if item.icon and type(item.icon) == "table" then
+                img = item.icon.image or (item.icon.data and item.icon)
+            end
+            if not img then
+                img = item.icon_image
+            end
+            if type(img) == "table" then
                 table.insert(item_children, {
                     type = "image",
                     size = { width = icon_size, height = icon_size },
-                    data = item.icon_image.data,
-                    pixel_size = item.icon_image.size
+                    data = img.data,
+                    pixel_size = img.size
                 })
             else
                 table.insert(item_children, {

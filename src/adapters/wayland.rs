@@ -122,6 +122,7 @@ struct TooltipSurface {
     shm_buffer: ShmBuffer,
     size: crate::domain::shared::geometry::Size,
     layout: crate::domain::layout::LayoutNode,
+    reposition_token: u32,
 }
 
 struct WaylandOutputInfo {
@@ -327,7 +328,6 @@ impl DisplayServerPort for WaylandAdapter {
             return Ok(());
         }
 
-        let _ = self.hide_tooltip();
         let state = &mut self.state;
 
         let Some(parent_surface) = state.pointer_surface.clone() else {
@@ -433,6 +433,67 @@ impl DisplayServerPort for WaylandAdapter {
 
         let width = width.max(1);
         let height = height.max(1);
+        let new_size = crate::domain::shared::geometry::Size::new(width, height);
+
+        if let Some(tooltip) = &mut state.tooltip {
+            if tooltip.size == new_size {
+                let data = tooltip.shm_buffer.mmap_mut();
+                if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(data, width, height) {
+                    let mut actual_canvas = TinySkiaCosmicCanvas::new(
+                        pixmap,
+                        &mut state.font_system,
+                        &mut state.swash_cache,
+                        scale,
+                        font_family.clone(),
+                        font_size,
+                    );
+                    render_node.render_to_canvas(&mut actual_canvas);
+                }
+                tooltip.layout = layout;
+                tooltip.surface.attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
+                tooltip.surface.damage_buffer(0, 0, width as i32, height as i32);
+                tooltip.surface.commit();
+                tracing::debug!(size = ?new_size, "Redrew tooltip in-place (same Size VO)");
+                return Ok(());
+            } else {
+                let qh = self.event_queue.handle();
+                let mut new_shm_buffer = ShmBuffer::new(shm, width, height, &qh)
+                    .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
+                let data = new_shm_buffer.mmap_mut();
+                if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(data, width, height) {
+                    let mut actual_canvas = TinySkiaCosmicCanvas::new(
+                        pixmap,
+                        &mut state.font_system,
+                        &mut state.swash_cache,
+                        scale,
+                        font_family.clone(),
+                        font_size,
+                    );
+                    render_node.render_to_canvas(&mut actual_canvas);
+                }
+                let positioner = xdg_wm_base.create_positioner(&qh, ());
+                positioner.set_size(width as i32, height as i32);
+                positioner.set_anchor_rect(pointer_x as i32, bar_height as i32, 1, 1);
+                positioner.set_anchor(wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom);
+                positioner.set_gravity(wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::Bottom);
+                positioner.set_constraint_adjustment(
+                    wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideX |
+                    wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideY |
+                    wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::FlipY
+                );
+                tooltip.reposition_token = tooltip.reposition_token.wrapping_add(1);
+                tooltip.xdg_popup.reposition(&positioner, tooltip.reposition_token);
+                positioner.destroy();
+                tooltip.shm_buffer = new_shm_buffer;
+                tooltip.size = new_size;
+                tooltip.layout = layout;
+                tooltip.surface.attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
+                tooltip.surface.damage_buffer(0, 0, width as i32, height as i32);
+                tooltip.surface.commit();
+                tracing::debug!(size = ?new_size, token = tooltip.reposition_token, "Redrew and repositioned tooltip in-place (new Size VO)");
+                return Ok(());
+            }
+        }
 
         let qh = self.event_queue.handle();
         let mut shm_buffer = ShmBuffer::new(shm, width, height, &qh)
@@ -482,8 +543,9 @@ impl DisplayServerPort for WaylandAdapter {
             xdg_surface,
             xdg_popup,
             shm_buffer,
-            size: crate::domain::shared::geometry::Size::new(width, height),
+            size: new_size,
             layout,
+            reposition_token: 0,
         });
 
         Ok(())
@@ -922,7 +984,7 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                     "zwlr_layer_shell_v1" => {
                         state.layer_shell = Some(proxy.bind(name, version, qh, ()))
                     }
-                    "xdg_wm_base" => state.xdg_wm_base = Some(proxy.bind(name, 1, qh, ())),
+                    "xdg_wm_base" => state.xdg_wm_base = Some(proxy.bind(name, u32::min(version, 5), qh, ())),
                     "wl_subcompositor" => state.subcompositor = Some(proxy.bind(name, version, qh, ())),
                     "wl_output" => {
                         let output: WlOutput = proxy.bind(name, version, qh, ());
@@ -1288,12 +1350,17 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
     fn event(
         _state: &mut Self,
         _proxy: &XdgPopup,
-        _event: wayland_protocols::xdg::shell::client::xdg_popup::Event,
+        event: wayland_protocols::xdg::shell::client::xdg_popup::Event,
         _data: &(),
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        tracing::debug!("xdg_popup Event: {:?}", _event);
+        match event {
+            wayland_protocols::xdg::shell::client::xdg_popup::Event::Repositioned { token } => {
+                tracing::debug!("Tooltip popup repositioned (token={token})");
+            }
+            other => tracing::debug!("xdg_popup Event: {:?}", other),
+        }
     }
 }
 

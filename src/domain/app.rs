@@ -231,8 +231,8 @@ impl<R: crate::ports::registry::ModuleRegistryPort<F> + 'static, F: crate::ports
                                 tracing::debug!("Executing shell command: {}", cmd);
                                 let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
                             },
-                            AppCommand::AppletAction { id, action } => {
-                                let _ = sni.trigger_action(&id, &action).await;
+                            AppCommand::AppletAction { id, action, pos } => {
+                                let _ = sni.trigger_action(&id, &action, pos).await;
                             }
                             AppCommand::ModuleSizeChanged(monitor_id, module_id, size) => {
                                 self.handle_size_changed(monitor_id, module_id, size);
@@ -567,14 +567,14 @@ mod tests {
 
         let mock_dbus = crate::ports::dbus::MockDBusPort::new();
         let mut mock_sni = crate::ports::sni::MockSniPort::new();
-        mock_sni.expect_trigger_action().returning(|_, _| Ok(()));
+        mock_sni.expect_trigger_action().returning(|_, _, _| Ok(()));
 
         // Queue commands
         command_tx.send(AppCommand::RequestRender).await.unwrap();
         command_tx.send(AppCommand::ModuleSizeChanged(MonitorId::new("1"), ModuleId::new(1), Size::new(10, 10))).await.unwrap();
         command_tx.send(AppCommand::ShowTooltip { layout: Box::new(crate::domain::layout::LayoutNode::Text { text: crate::domain::layout::TextContent::new("t".into()), color: crate::domain::shared::color::DrawingColor::Solid(crate::domain::shared::color::Color::new(0, 0, 0, 255)), font: None, size: None, on_click: None, on_hover: None, tooltip: None }) }).await.unwrap();
         command_tx.send(AppCommand::HideTooltip).await.unwrap();
-        command_tx.send(AppCommand::AppletAction { id: "a".into(), action: "b".into() }).await.unwrap();
+        command_tx.send(AppCommand::AppletAction { id: "a".into(), action: "b".into(), pos: None }).await.unwrap();
         
         // Trigger config and hyprland changes
         hub.config_tx().send(Config::default()).unwrap();

@@ -16,5 +16,10 @@ pub trait SniPort: Send + Sync {
     async fn start(&mut self) -> Result<(), SniPortError>;
 
     /// Trigger an action on an applet (e.g. "Activate", "SecondaryActivate", "ContextMenu")
-    async fn trigger_action(&self, id: &str, action: &str) -> Result<(), SniPortError>;
+    async fn trigger_action(
+        &self,
+        id: &crate::domain::applets::AppletId,
+        action: &crate::domain::applets::AppletActionName,
+        pos: Option<crate::domain::shared::geometry::Position>,
+    ) -> Result<(), SniPortError>;
 }

@@ -272,16 +272,17 @@ mod tests {
             .expect("Init failed");
 
         let hub = SignalHub::new(crate::domain::config::Config::default());
-        let item = AppletItem::new(crate::domain::applets::CreateAppletCommand {
-            id: AppletId::new("test_applet"),
-            destination: Destination::new("dest"),
-            path: ObjectPath::new("/path"),
-            title: Title::new("Test Applet"),
-            status: AppletStatus::Active,
-            icon_name: None,
-            icon_image: None,
-            menu_path: None,
-        });
+        let item = AppletItem::new(crate::domain::applets::CreateAppletCommand::new(
+            AppletId::new("test_applet"),
+            Destination::new("dest"),
+            ObjectPath::new("/path"),
+            Title::new("Test Applet"),
+            AppletStatus::Active,
+            None,
+            None,
+            crate::domain::applets::AppletCategory::ApplicationStatus,
+            crate::domain::applets::ItemIsMenu::new(false),
+        ));
 
         let mut map = std::collections::BTreeMap::new();
         map.insert(item.id().clone(), item);
@@ -304,6 +305,73 @@ mod tests {
                 assert_eq!(applet_children.len(), 2);
                 assert!(matches!(applet_children[0], crate::domain::layout::LayoutNode::Rect { .. }));
                 assert!(matches!(applet_children[1], crate::domain::layout::LayoutNode::Text { .. }));
+            } else {
+                panic!("Applet node is not a Flex");
+            }
+        } else {
+            panic!("Root node is not a Row");
+        }
+    }
+
+    #[test]
+    fn test_applet_with_icon_renders_image() {
+        let mut module =
+            LuaModule::built_in("applet").expect("Failed to load applet module");
+        let module_config = ModuleConfig::new("applet".into(), true, HashMap::new());
+        let config = crate::domain::config::Config::default();
+        module
+            .init(&module_config, &config)
+            .expect("Init failed");
+
+        let hub = SignalHub::new(crate::domain::config::Config::default());
+        let icon_img = crate::domain::applets::IconImage::new(
+            vec![255; 16 * 16 * 4],
+            crate::domain::shared::geometry::Size::new(16, 16),
+        );
+        let icon = crate::domain::applets::AppletIcon::new(
+            Some(crate::domain::applets::IconName::new("test-icon")),
+            Some(icon_img),
+        );
+
+        let item = AppletItem::new(crate::domain::applets::CreateAppletCommand::new(
+            AppletId::new("test_applet"),
+            Destination::new("dest"),
+            ObjectPath::new("/path"),
+            Title::new("Test Applet"),
+            AppletStatus::Active,
+            icon,
+            None,
+            crate::domain::applets::AppletCategory::ApplicationStatus,
+            crate::domain::applets::ItemIsMenu::new(false),
+        ));
+
+        let mut map = std::collections::BTreeMap::new();
+        map.insert(item.id().clone(), item);
+        hub.applets_tx()
+            .send(AppletsState::new(map))
+            .unwrap();
+
+        let subs = module.subscriptions();
+        module.refresh(&hub, &subs);
+
+        let layout = module.render(&MonitorId::new("DP-1"));
+        if let crate::domain::layout::LayoutNode::Flex { children, .. } = layout {
+            assert_eq!(children.len(), 1);
+            let applet_node = &children[0];
+            if let crate::domain::layout::LayoutNode::Flex {
+                children: applet_children,
+                ..
+            } = applet_node
+            {
+                assert_eq!(applet_children.len(), 2);
+                assert!(matches!(
+                    applet_children[0],
+                    crate::domain::layout::LayoutNode::Image { .. }
+                ));
+                assert!(matches!(
+                    applet_children[1],
+                    crate::domain::layout::LayoutNode::Text { .. }
+                ));
             } else {
                 panic!("Applet node is not a Flex");
             }

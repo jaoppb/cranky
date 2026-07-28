@@ -123,6 +123,7 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
             self.measure_and_render_all(&mut layout_engines);
 
             let mut last_tooltip: Option<crate::domain::layout::LayoutNode> = None;
+            let mut last_pointer_pos: Option<(MonitorId, crate::domain::shared::geometry::Position)> = None;
 
             loop {
                 // Determine what woke us up
@@ -156,6 +157,7 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                                     match event {
                                         PointerEvent::Click { x, y, .. } => {
                                             let pos = Position::new(x as i32, y as i32);
+                                            last_pointer_pos = Some((monitor_id.clone(), pos));
                                             let hit = render_tree.hit_test(pos);
                                             tracing::debug!(module = %ctx_id, pos = ?pos, hit = !hit.is_empty(), "Hit test for click");
                                             if let Some(cmd) = hit.iter().rev().find_map(|n| n.on_click()) {
@@ -165,6 +167,7 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                                         },
                                         PointerEvent::PointerMotion { x, y } => {
                                             let pos = Position::new(x as i32, y as i32);
+                                            last_pointer_pos = Some((monitor_id.clone(), pos));
                                             let hit = render_tree.hit_test(pos);
                                             if let Some(cmd) = hit.iter().rev().find_map(|n| n.on_hover()) {
                                                 tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_hover command");
@@ -184,6 +187,7 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                                         },
                                         PointerEvent::PointerLeave => {
                                             tracing::debug!(module = %ctx_id, "Pointer left module bounds");
+                                            last_pointer_pos = None;
                                             if last_tooltip.is_some() {
                                                 tracing::debug!(module = %ctx_id, "Hiding tooltip due to pointer leave");
                                                 self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::HideTooltip);
@@ -212,6 +216,22 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                 }
 
                 self.measure_and_render_all(&mut layout_engines);
+
+                if let Some((monitor_id, pos)) = &last_pointer_pos
+                    && let Some(render_tree) = self.render_trees.get(monitor_id)
+                {
+                    let hit = render_tree.hit_test(*pos);
+                    let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
+                    if hit_tooltip != last_tooltip {
+                        tracing::debug!(module = %self.ctx.id(), changed = true, has_tooltip = hit_tooltip.is_some(), "Tooltip state changed after render");
+                        if let Some(layout) = &hit_tooltip {
+                            self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::ShowTooltip { layout: Box::new(layout.clone()) });
+                        } else {
+                            self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::HideTooltip);
+                        }
+                        last_tooltip = hit_tooltip;
+                    }
+                }
             }
         });
     }

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use zbus::fdo::PropertiesProxy;
 use zbus::names::InterfaceName;
 use zbus::zvariant::ObjectPath;
@@ -16,16 +16,33 @@ use zbus::{Connection, interface};
 
 #[zbus::proxy(interface = "org.kde.StatusNotifierItem", assume_defaults = true)]
 trait StatusNotifierItem {
-    #[zbus(property)]
+    #[zbus(property(emits_changed_signal = "false"))]
     fn title(&self) -> zbus::Result<String>;
-    #[zbus(property)]
+    #[zbus(property(emits_changed_signal = "false"))]
     fn status(&self) -> zbus::Result<String>;
-    #[zbus(property)]
+    #[zbus(property(emits_changed_signal = "false"))]
     fn icon_name(&self) -> zbus::Result<String>;
-    #[zbus(property)]
+    #[zbus(property(emits_changed_signal = "false"))]
     fn icon_theme_path(&self) -> zbus::Result<String>;
-    #[zbus(property)]
+    #[zbus(property(emits_changed_signal = "false"))]
     fn icon_pixmap(&self) -> zbus::Result<Vec<(i32, i32, Vec<u8>)>>;
+
+    #[zbus(property(emits_changed_signal = "false"))]
+    fn attention_icon_name(&self) -> zbus::Result<String>;
+    #[zbus(property(emits_changed_signal = "false"))]
+    fn attention_icon_theme_path(&self) -> zbus::Result<String>;
+    #[zbus(property(emits_changed_signal = "false"))]
+    fn attention_icon_pixmap(&self) -> zbus::Result<Vec<(i32, i32, Vec<u8>)>>;
+    #[zbus(property(emits_changed_signal = "false"))]
+    fn overlay_icon_name(&self) -> zbus::Result<String>;
+    #[zbus(property(emits_changed_signal = "false"))]
+    fn overlay_icon_pixmap(&self) -> zbus::Result<Vec<(i32, i32, Vec<u8>)>>;
+    #[zbus(property(emits_changed_signal = "false"))]
+    fn item_is_menu(&self) -> zbus::Result<bool>;
+    #[zbus(property(emits_changed_signal = "false"))]
+    fn menu(&self) -> zbus::Result<zbus::zvariant::OwnedObjectPath>;
+    #[zbus(property(emits_changed_signal = "false"))]
+    fn tool_tip(&self) -> zbus::Result<zbus::zvariant::OwnedValue>;
 
     #[zbus(signal)]
     fn new_title(&self) -> zbus::Result<()>;
@@ -35,13 +52,26 @@ trait StatusNotifierItem {
     fn new_status(&self, status: String) -> zbus::Result<()>;
     #[zbus(signal)]
     fn new_icon_theme_path(&self, path: String) -> zbus::Result<()>;
+    #[zbus(signal)]
+    fn new_attention_icon(&self) -> zbus::Result<()>;
+    #[zbus(signal)]
+    fn new_overlay_icon(&self) -> zbus::Result<()>;
+    #[zbus(signal)]
+    fn new_tool_tip(&self) -> zbus::Result<()>;
+    #[zbus(signal)]
+    fn new_menu(&self) -> zbus::Result<()>;
 }
 
+#[derive(Debug)]
 enum SniEvent {
     Title,
     Status(String),
     Icon,
     ThemePath,
+    AttentionIcon,
+    OverlayIcon,
+    ToolTip,
+    Menu,
 }
 
 impl SniEvent {
@@ -49,6 +79,7 @@ impl SniEvent {
         match self {
             SniEvent::Title => {
                 let title = proxy.title().await.unwrap_or_default();
+                tracing::info!("SniEvent::Title: updated title to '{}'", title);
                 applet.with_title(title)
             }
             SniEvent::Status(status_str) => {
@@ -58,17 +89,129 @@ impl SniEvent {
                     "NeedsAttention" => AppletStatus::NeedsAttention,
                     _ => AppletStatus::Unknown,
                 };
+                tracing::info!("SniEvent::Status: updated status to {:?}", status);
                 applet.with_status(status)
             }
             SniEvent::Icon | SniEvent::ThemePath => {
                 let icon_name = proxy.icon_name().await.ok();
                 let icon_theme_path = proxy.icon_theme_path().await.ok();
                 let icon_pixmap = proxy.icon_pixmap().await.ok();
+                tracing::info!(
+                    "SniEvent::Icon/ThemePath: updated icon_name={:?}, theme_path={:?}, has_pixmap={}",
+                    icon_name,
+                    icon_theme_path,
+                    icon_pixmap.as_ref().map(|p| !p.is_empty()).unwrap_or(false)
+                );
                 let icon_image = resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
-                applet.with_icon(icon_name.map(crate::domain::applets::IconName::new), icon_image)
+                let icon = crate::domain::applets::AppletIcon::new(
+                    icon_name.map(crate::domain::applets::IconName::new),
+                    icon_image,
+                );
+                applet.with_icon(icon)
+            }
+            SniEvent::AttentionIcon => {
+                let icon_name = proxy.attention_icon_name().await.ok();
+                let icon_theme_path = proxy.attention_icon_theme_path().await.ok();
+                let icon_pixmap = proxy.attention_icon_pixmap().await.ok();
+                tracing::info!("SniEvent::AttentionIcon: updated attention icon");
+                let icon_image = resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
+                let icon = crate::domain::applets::AppletIcon::new(
+                    icon_name.map(crate::domain::applets::IconName::new),
+                    icon_image,
+                );
+                applet.with_attention_icon(icon)
+            }
+            SniEvent::OverlayIcon => {
+                let icon_name = proxy.overlay_icon_name().await.ok();
+                let icon_pixmap = proxy.overlay_icon_pixmap().await.ok();
+                tracing::info!("SniEvent::OverlayIcon: updated overlay icon");
+                let icon_image = resolve_icon(icon_name.clone(), None, icon_pixmap).await;
+                let icon = crate::domain::applets::AppletIcon::new(
+                    icon_name.map(crate::domain::applets::IconName::new),
+                    icon_image,
+                );
+                applet.with_overlay_icon(icon)
+            }
+            SniEvent::ToolTip => {
+                type RawTooltip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);
+                let tooltip = if let Ok(val) = proxy.tool_tip().await
+                    && let Ok((icon_name, pixmap, title, description)) = RawTooltip::try_from(val)
+                {
+                    let icon_name_opt = if icon_name.is_empty() { None } else { Some(icon_name) };
+                    let icon_img_opt = resolve_pixmap_data(&pixmap, 3.0);
+                    let tooltip_icon = crate::domain::applets::AppletIcon::new(
+                        icon_name_opt.map(crate::domain::applets::IconName::new),
+                        icon_img_opt,
+                    );
+                    Some(crate::domain::applets::AppletTooltip::new(
+                        tooltip_icon,
+                        crate::domain::applets::AppletTooltipTitle::new(title),
+                        crate::domain::applets::AppletTooltipDescription::new(description),
+                    ))
+                } else {
+                    None
+                };
+                tracing::info!("SniEvent::ToolTip: updated tooltip");
+                applet.with_tooltip(tooltip)
+            }
+            SniEvent::Menu => {
+                let mut applet = applet;
+                if let Ok(menu_path) = proxy.menu().await {
+                    applet = applet.with_menu_path(Some(crate::domain::applets::ObjectPath::new(
+                        menu_path.as_str(),
+                    )));
+                }
+                if let Ok(item_is_menu_val) = proxy.item_is_menu().await {
+                    applet = applet.with_item_is_menu(crate::domain::applets::ItemIsMenu::new(item_is_menu_val));
+                }
+                tracing::info!("SniEvent::Menu: updated menu");
+                applet
             }
         }
     }
+}
+
+fn resolve_pixmap_data(
+    pixmaps: &[(i32, i32, Vec<u8>)],
+    max_scale: f32,
+) -> Option<crate::domain::applets::IconImage> {
+    if pixmaps.is_empty() {
+        return None;
+    }
+    let target_size = (24.0 * max_scale) as i32;
+    let mut best_diff = i32::MAX;
+    let mut best_pixmap: Option<&(i32, i32, Vec<u8>)> = None;
+    for pixmap in pixmaps {
+        let diff = (pixmap.0 - target_size).abs();
+        if diff < best_diff {
+            best_diff = diff;
+            best_pixmap = Some(pixmap);
+        }
+    }
+
+    if let Some(pixmap) = best_pixmap {
+        let w = pixmap.0 as u32;
+        let h = pixmap.1 as u32;
+        let data = &pixmap.2;
+        if data.len() == (w * h * 4) as usize {
+            let mut rgba_data = Vec::with_capacity(data.len());
+            for chunk in data.chunks_exact(4) {
+                let a = chunk[0];
+                let r = chunk[1];
+                let g = chunk[2];
+                let b = chunk[3];
+                rgba_data.push(r);
+                rgba_data.push(g);
+                rgba_data.push(b);
+                rgba_data.push(a);
+            }
+            return Some(crate::domain::applets::IconImage::new(
+                rgba_data,
+                crate::domain::shared::geometry::Size::new(w, h),
+            ));
+        }
+    }
+    None
 }
 
 async fn resolve_icon(
@@ -82,75 +225,47 @@ async fn resolve_icon(
         let mut icon_loaded = false;
         let mut icon_image = None;
 
-        if let Some(pixmaps) = &icon_pixmap
-            && !pixmaps.is_empty() {
-                let target_size = (24.0 * max_scale) as i32;
-                let mut best_diff = i32::MAX;
-                let mut best_pixmap: Option<&(i32, i32, Vec<u8>)> = None;
-                for pixmap in pixmaps {
-                    let diff = (pixmap.0 - target_size).abs();
-                    if diff < best_diff {
-                        best_diff = diff;
-                        best_pixmap = Some(pixmap);
-                    }
-                }
+        if let Some(name) = &icon_name_clone {
+            let mut found_path = None;
 
-                if let Some(pixmap) = best_pixmap {
-                    let w = pixmap.0 as u32;
-                    let h = pixmap.1 as u32;
-                    let data = &pixmap.2;
-                    if data.len() == (w * h * 4) as usize {
-                        let mut rgba_data = Vec::with_capacity(data.len());
-                        for chunk in data.chunks_exact(4) {
-                            let a = chunk[0];
-                            let r = chunk[1];
-                            let g = chunk[2];
-                            let b = chunk[3];
-                            rgba_data.push(r);
-                            rgba_data.push(g);
-                            rgba_data.push(b);
-                            rgba_data.push(a);
-                        }
-                        icon_image = Some(crate::domain::applets::IconImage::new(
-                            rgba_data,
-                            crate::domain::shared::geometry::Size::new(w, h),
-                        ));
-                        icon_loaded = true;
+            if let Some(theme_path) = &icon_theme_path {
+                let base = std::path::Path::new(theme_path);
+                let png = base.join(format!("{}.png", name));
+                if png.exists() {
+                    found_path = Some(png);
+                } else {
+                    let svg = base.join(format!("{}.svg", name));
+                    if svg.exists() {
+                        found_path = Some(svg);
                     }
                 }
             }
+
+            if found_path.is_none() {
+                found_path = lookup(name).find();
+            }
+
+            if let Some(icon_path) = found_path
+                && let Some((w, h, bytes)) =
+                    crate::utils::load_icon_rgba(&icon_path, 24, max_scale)
+            {
+                icon_image = Some(crate::domain::applets::IconImage::new(
+                    bytes,
+                    crate::domain::shared::geometry::Size::new(w, h),
+                ));
+                icon_loaded = true;
+            }
+        }
 
         if !icon_loaded
-            && let Some(name) = &icon_name_clone {
-                let mut found_path = None;
-
-                if let Some(theme_path) = &icon_theme_path {
-                    let base = std::path::Path::new(theme_path);
-                    let png = base.join(format!("{}.png", name));
-                    if png.exists() {
-                        found_path = Some(png);
-                    } else {
-                        let svg = base.join(format!("{}.svg", name));
-                        if svg.exists() {
-                            found_path = Some(svg);
-                        }
-                    }
-                }
-
-                if found_path.is_none() {
-                    found_path = lookup(name).find();
-                }
-
-                if let Some(icon_path) = found_path
-                    && let Some((w, h, bytes)) =
-                        crate::utils::load_icon_rgba(&icon_path, 24, max_scale)
-                    {
-                        icon_image = Some(crate::domain::applets::IconImage::new(
-                            bytes,
-                            crate::domain::shared::geometry::Size::new(w, h),
-                        ));
-                    }
+            && let Some(pixmaps) = &icon_pixmap
+            && !pixmaps.is_empty()
+        {
+            icon_image = resolve_pixmap_data(pixmaps, max_scale);
+            if icon_image.is_some() {
+                icon_loaded = true;
             }
+        }
 
         (icon_loaded, icon_image)
     })
@@ -249,7 +364,17 @@ impl Watcher {
         {
             Ok(p) => p,
             Err(_) => {
-                return AppletItem::new(crate::domain::applets::CreateAppletCommand { id: crate::domain::applets::AppletId::new(id.clone()), destination: crate::domain::applets::Destination::new(dest.clone()), path: crate::domain::applets::ObjectPath::new(path_str.clone()), title: crate::domain::applets::Title::new(String::new()), status: AppletStatus::Unknown, icon_name: None, icon_image: None, menu_path: None, });
+                return AppletItem::new(crate::domain::applets::CreateAppletCommand::new(
+                    crate::domain::applets::AppletId::new(id.clone()),
+                    crate::domain::applets::Destination::new(dest.clone()),
+                    crate::domain::applets::ObjectPath::new(path_str.clone()),
+                    crate::domain::applets::Title::new(String::new()),
+                    AppletStatus::Unknown,
+                    None,
+                    None,
+                    crate::domain::applets::AppletCategory::ApplicationStatus,
+                    crate::domain::applets::ItemIsMenu::new(false),
+                ));
             }
         };
 
@@ -268,6 +393,37 @@ impl Watcher {
         let icon_theme_path: Option<String> = all_props
             .remove("IconThemePath")
             .and_then(|v| v.try_into().ok());
+        let category_str: String = all_props
+            .remove("Category")
+            .and_then(|v| v.try_into().ok())
+            .unwrap_or_default();
+        let item_id: Option<String> =
+            all_props.remove("Id").and_then(|v| v.try_into().ok());
+        let window_id: Option<u32> = all_props
+            .remove("WindowId")
+            .and_then(|v| v.try_into().ok())
+            .or_else(|| {
+                all_props
+                    .remove("WindowId")
+                    .and_then(|v| v.try_into().ok())
+                    .map(|id: i32| id as u32)
+            });
+        let item_is_menu_val: bool = all_props
+            .remove("ItemIsMenu")
+            .and_then(|v| v.try_into().ok())
+            .unwrap_or_default();
+        let menu_path_str: Option<String> = all_props
+            .remove("Menu")
+            .and_then(|v| v.try_into().ok())
+            .or_else(|| {
+                all_props.remove("Menu").and_then(|v| {
+                    if let zbus::zvariant::Value::ObjectPath(p) = &*v {
+                        Some(p.as_str().to_string())
+                    } else {
+                        None
+                    }
+                })
+            });
 
         tracing::debug!(
             "SNI fetch [{}]: title='{}', status='{}', icon_name='{:?}', theme_path='{:?}'",
@@ -288,9 +444,98 @@ impl Watcher {
         let icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>> = all_props
             .remove("IconPixmap")
             .and_then(|v| v.try_into().ok());
-        let icon_image = resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
+        let icon_image = resolve_icon(icon_name.clone(), icon_theme_path.clone(), icon_pixmap).await;
+        let icon = crate::domain::applets::AppletIcon::new(
+            icon_name.map(crate::domain::applets::IconName::new),
+            icon_image,
+        );
 
-        AppletItem::new(crate::domain::applets::CreateAppletCommand { id: crate::domain::applets::AppletId::new(id), destination: crate::domain::applets::Destination::new(dest), path: crate::domain::applets::ObjectPath::new(path_str), title: crate::domain::applets::Title::new(title), status, icon_name: icon_name.map(crate::domain::applets::IconName::new), icon_image, menu_path: None, })
+        let attention_icon_name: Option<String> = all_props
+            .remove("AttentionIconName")
+            .and_then(|v| v.try_into().ok());
+        let attention_icon_theme_path: Option<String> = all_props
+            .remove("AttentionIconThemePath")
+            .and_then(|v| v.try_into().ok());
+        let attention_icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>> = all_props
+            .remove("AttentionIconPixmap")
+            .and_then(|v| v.try_into().ok());
+        let attention_icon_image = resolve_icon(
+            attention_icon_name.clone(),
+            attention_icon_theme_path,
+            attention_icon_pixmap,
+        )
+        .await;
+        let attention_icon = crate::domain::applets::AppletIcon::new(
+            attention_icon_name.map(crate::domain::applets::IconName::new),
+            attention_icon_image,
+        );
+
+        let overlay_icon_name: Option<String> = all_props
+            .remove("OverlayIconName")
+            .and_then(|v| v.try_into().ok());
+        let overlay_icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>> = all_props
+            .remove("OverlayIconPixmap")
+            .and_then(|v| v.try_into().ok());
+        let overlay_icon_image = resolve_icon(
+            overlay_icon_name.clone(),
+            icon_theme_path,
+            overlay_icon_pixmap,
+        )
+        .await;
+        let overlay_icon = crate::domain::applets::AppletIcon::new(
+            overlay_icon_name.map(crate::domain::applets::IconName::new),
+            overlay_icon_image,
+        );
+
+        type RawTooltip = (
+            String,
+            Vec<(i32, i32, Vec<u8>)>,
+            String,
+            String,
+        );
+
+        let tooltip: Option<crate::domain::applets::AppletTooltip> = all_props
+            .remove("Tooltip")
+            .and_then(|v| {
+                v.try_into().ok().map(
+                    |(icon_name, pixmap, title, description): RawTooltip| {
+                        let icon_name_opt = if icon_name.is_empty() {
+                            None
+                        } else {
+                            Some(icon_name)
+                        };
+                        let icon_img_opt = resolve_pixmap_data(&pixmap, 3.0);
+                        let tooltip_icon = crate::domain::applets::AppletIcon::new(
+                            icon_name_opt.map(crate::domain::applets::IconName::new),
+                            icon_img_opt,
+                        );
+                        crate::domain::applets::AppletTooltip::new(
+                            tooltip_icon,
+                            crate::domain::applets::AppletTooltipTitle::new(title),
+                            crate::domain::applets::AppletTooltipDescription::new(description),
+                        )
+                    },
+                )
+            });
+
+        let cmd = crate::domain::applets::CreateAppletCommand::new(
+            crate::domain::applets::AppletId::new(id),
+            crate::domain::applets::Destination::new(dest),
+            crate::domain::applets::ObjectPath::new(path_str),
+            crate::domain::applets::Title::new(title),
+            status,
+            icon,
+            menu_path_str.map(crate::domain::applets::ObjectPath::new),
+            crate::domain::applets::AppletCategory::from_str(&category_str),
+            crate::domain::applets::ItemIsMenu::new(item_is_menu_val),
+        )
+        .with_item_id(item_id.map(crate::domain::applets::ItemId::new))
+        .with_window_id(window_id.map(crate::domain::applets::WindowId::new))
+        .with_attention_icon(attention_icon)
+        .with_overlay_icon(overlay_icon)
+        .with_tooltip(tooltip);
+
+        AppletItem::new(cmd)
     }
 
     #[tracing::instrument(skip(conn, items, hub))]
@@ -335,6 +580,22 @@ impl Watcher {
             tracing::error!("Failed to subscribe to new_icon_theme_path for {}", id);
             return Ok(());
         };
+        let Ok(new_attention_icon) = proxy.receive_new_attention_icon().await else {
+            tracing::error!("Failed to subscribe to new_attention_icon for {}", id);
+            return Ok(());
+        };
+        let Ok(new_overlay_icon) = proxy.receive_new_overlay_icon().await else {
+            tracing::error!("Failed to subscribe to new_overlay_icon for {}", id);
+            return Ok(());
+        };
+        let Ok(new_tool_tip) = proxy.receive_new_tool_tip().await else {
+            tracing::error!("Failed to subscribe to new_tool_tip for {}", id);
+            return Ok(());
+        };
+        let Ok(new_menu) = proxy.receive_new_menu().await else {
+            tracing::error!("Failed to subscribe to new_menu for {}", id);
+            return Ok(());
+        };
 
         tracing::info!("Successfully subscribed to all SNI signals for {}", id);
 
@@ -349,9 +610,14 @@ impl Watcher {
                     sig.args().map(|a| a.status().to_string()).unwrap_or_default()
                 )))
                 .merge(new_icon.map(|_| SniEvent::Icon))
-                .merge(new_path.map(|_| SniEvent::ThemePath));
+                .merge(new_path.map(|_| SniEvent::ThemePath))
+                .merge(new_attention_icon.map(|_| SniEvent::AttentionIcon))
+                .merge(new_overlay_icon.map(|_| SniEvent::OverlayIcon))
+                .merge(new_tool_tip.map(|_| SniEvent::ToolTip))
+                .merge(new_menu.map(|_| SniEvent::Menu));
 
             while let Some(event) = events.next().await {
+                tracing::info!("Received SNI event {:?} for applet {}", event, id_clone);
                 let current_applet = {
                     let lock = items_clone.read().await;
                     lock.get(&crate::domain::applets::AppletId::new(&id_clone)).cloned()
@@ -379,6 +645,41 @@ impl Watcher {
         Ok(())
     }
 
+    async fn remove_by_destination(
+        items: &Arc<RwLock<BTreeMap<crate::domain::applets::AppletId, AppletItem>>>,
+        hub: &Arc<SignalHub>,
+        destination: &str,
+    ) -> bool {
+        let mut removed = false;
+        {
+            let mut lock = items.write().await;
+            let keys_to_remove: Vec<_> = lock
+                .iter()
+                .filter_map(|(id, item)| {
+                    if item.destination().as_str() == destination {
+                        Some(id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            for key in keys_to_remove {
+                tracing::info!(
+                    "Removing SNI applet {} because D-Bus name {} disconnected",
+                    key.as_str(),
+                    destination
+                );
+                lock.remove(&key);
+                removed = true;
+            }
+        }
+        if removed {
+            Self::publish_state(items, hub).await;
+        }
+        removed
+    }
+
     async fn publish_state(items: &Arc<RwLock<BTreeMap<crate::domain::applets::AppletId, AppletItem>>>, hub: &Arc<SignalHub>) {
         let lock = items.read().await;
         let state = AppletsState::new(lock.clone());
@@ -402,6 +703,37 @@ impl SniPort for SniAdapter {
         let conn = Connection::session()
             .await
             .map_err(|e| SniPortError::StartFailed(e.to_string()))?;
+
+        let items_clone = self.items.clone();
+        let hub_clone = self.hub.clone();
+        let conn_clone = conn.clone();
+
+        tokio::spawn(async move {
+            use tokio_stream::StreamExt;
+            let Ok(proxy) = zbus::fdo::DBusProxy::new(&conn_clone).await else {
+                error!("Failed to create DBusProxy for NameOwnerChanged monitoring");
+                return;
+            };
+            let Ok(mut stream) = proxy.receive_name_owner_changed().await else {
+                error!("Failed to subscribe to NameOwnerChanged");
+                return;
+            };
+
+            while let Some(sig) = stream.next().await {
+                if let Ok(args) = sig.args() {
+                    let is_unowned = args.new_owner().is_none()
+                        || args
+                            .new_owner()
+                            .as_ref()
+                            .map(|n| n.as_str().is_empty())
+                            .unwrap_or(true);
+                    if is_unowned {
+                        Watcher::remove_by_destination(&items_clone, &hub_clone, args.name())
+                            .await;
+                    }
+                }
+            }
+        });
 
         // Attempt to request the Watcher name
         match conn.request_name("org.kde.StatusNotifierWatcher").await {
@@ -431,11 +763,25 @@ impl SniPort for SniAdapter {
     }
 
     #[tracing::instrument(skip(self))]
-    async fn trigger_action(&self, id: &str, action: &str) -> Result<(), SniPortError> {
+    async fn trigger_action(
+        &self,
+        id: &crate::domain::applets::AppletId,
+        action: &crate::domain::applets::AppletActionName,
+        pos: Option<crate::domain::shared::geometry::Position>,
+    ) -> Result<(), SniPortError> {
         let lock = self.conn.lock().await;
         let items_lock = self.items.read().await;
 
-        if let (Some(conn), Some(applet)) = (lock.as_ref(), items_lock.get(&crate::domain::applets::AppletId::new(id))) {
+        if let (Some(conn), Some(applet)) = (lock.as_ref(), items_lock.get(id)) {
+            info!(
+                "trigger_action: Applet found [id={}, dest={}, path={}, item_is_menu={}], routing action '{}' at pos {:?}",
+                id.as_str(),
+                applet.destination().as_str(),
+                applet.path().as_str(),
+                applet.item_is_menu().value(),
+                action.as_str(),
+                pos
+            );
             let proxy = zbus::Proxy::new(
                 conn,
                 applet.destination().as_str().to_string(),
@@ -443,44 +789,209 @@ impl SniPort for SniAdapter {
                 "org.kde.StatusNotifierItem",
             )
             .await
-            .map_err(|e: zbus::Error| SniPortError::ActionFailed {
-                id: id.to_string(),
-                error: e.to_string(),
+            .map_err(|e: zbus::Error| {
+                error!("trigger_action: Failed to create D-Bus proxy for {}: {}", id.as_str(), e);
+                SniPortError::ActionFailed {
+                    id: id.as_str().to_string(),
+                    error: e.to_string(),
+                }
             })?;
 
-            let x: i32 = 0;
-            let y: i32 = 0;
+            let (x, y) = pos.map(|p| (p.x(), p.y())).unwrap_or((0, 0));
 
-            match action {
+            match action.as_str() {
                 "Primary" => {
-                    if proxy.call_method("ContextMenu", &(x, y)).await.is_err() {
-                        let _ = proxy.call_method("Activate", &(x, y)).await;
+                    if applet.item_is_menu().value() {
+                        info!("trigger_action: item_is_menu=true, calling ContextMenu({}, {}) on D-Bus", x, y);
+                        match proxy.call_method("ContextMenu", &(x, y)).await {
+                            Ok(_) => info!("trigger_action: ContextMenu({}, {}) succeeded", x, y),
+                            Err(e) => error!("trigger_action: ContextMenu({}, {}) failed: {}", x, y, e),
+                        }
+                    } else {
+                        info!("trigger_action: item_is_menu=false, calling Activate({}, {}) on D-Bus", x, y);
+                        match proxy.call_method("Activate", &(x, y)).await {
+                            Ok(_) => info!("trigger_action: Activate({}, {}) succeeded", x, y),
+                            Err(e) => {
+                                warn!("trigger_action: Activate({}, {}) failed: {}, attempting SecondaryActivate({}, {})", x, y, e, x, y);
+                                match proxy.call_method("SecondaryActivate", &(x, y)).await {
+                                    Ok(_) => info!("trigger_action: SecondaryActivate({}, {}) succeeded", x, y),
+                                    Err(e2) => error!("trigger_action: SecondaryActivate({}, {}) failed: {}", x, y, e2),
+                                }
+                            }
+                        }
                     }
                 }
                 "Activate" => {
-                    let _ = proxy.call_method("Activate", &(x, y)).await;
+                    info!("trigger_action: Calling Activate({}, {}) on D-Bus", x, y);
+                    match proxy.call_method("Activate", &(x, y)).await {
+                        Ok(_) => info!("trigger_action: Activate({}, {}) succeeded", x, y),
+                        Err(e) => error!("trigger_action: Activate({}, {}) failed: {}", x, y, e),
+                    }
                 }
                 "SecondaryActivate" => {
-                    let _ = proxy.call_method("SecondaryActivate", &(x, y)).await;
+                    info!("trigger_action: Calling SecondaryActivate({}, {}) on D-Bus", x, y);
+                    match proxy.call_method("SecondaryActivate", &(x, y)).await {
+                        Ok(_) => info!("trigger_action: SecondaryActivate({}, {}) succeeded", x, y),
+                        Err(e) => error!("trigger_action: SecondaryActivate({}, {}) failed: {}", x, y, e),
+                    }
                 }
                 "ContextMenu" => {
-                    let _ = proxy.call_method("ContextMenu", &(x, y)).await;
+                    info!("trigger_action: Calling ContextMenu({}, {}) on D-Bus", x, y);
+                    match proxy.call_method("ContextMenu", &(x, y)).await {
+                        Ok(_) => info!("trigger_action: ContextMenu({}, {}) succeeded", x, y),
+                        Err(e) => error!("trigger_action: ContextMenu({}, {}) failed: {}", x, y, e),
+                    }
                 }
                 "ScrollUp" => {
-                    let _ = proxy.call_method("Scroll", &(-1, "vertical")).await;
+                    info!("trigger_action: Calling Scroll(-1, 'vertical') on D-Bus");
+                    match proxy.call_method("Scroll", &(-1, "vertical")).await {
+                        Ok(_) => info!("trigger_action: Scroll(-1, 'vertical') succeeded"),
+                        Err(e) => error!("trigger_action: Scroll(-1, 'vertical') failed: {}", e),
+                    }
                 }
                 "ScrollDown" => {
-                    let _ = proxy.call_method("Scroll", &(1, "vertical")).await;
+                    info!("trigger_action: Calling Scroll(1, 'vertical') on D-Bus");
+                    match proxy.call_method("Scroll", &(1, "vertical")).await {
+                        Ok(_) => info!("trigger_action: Scroll(1, 'vertical') succeeded"),
+                        Err(e) => error!("trigger_action: Scroll(1, 'vertical') failed: {}", e),
+                    }
                 }
                 "ScrollLeft" => {
-                    let _ = proxy.call_method("Scroll", &(-1, "horizontal")).await;
+                    info!("trigger_action: Calling Scroll(-1, 'horizontal') on D-Bus");
+                    match proxy.call_method("Scroll", &(-1, "horizontal")).await {
+                        Ok(_) => info!("trigger_action: Scroll(-1, 'horizontal') succeeded"),
+                        Err(e) => error!("trigger_action: Scroll(-1, 'horizontal') failed: {}", e),
+                    }
                 }
                 "ScrollRight" => {
-                    let _ = proxy.call_method("Scroll", &(1, "horizontal")).await;
+                    info!("trigger_action: Calling Scroll(1, 'horizontal') on D-Bus");
+                    match proxy.call_method("Scroll", &(1, "horizontal")).await {
+                        Ok(_) => info!("trigger_action: Scroll(1, 'horizontal') succeeded"),
+                        Err(e) => error!("trigger_action: Scroll(1, 'horizontal') failed: {}", e),
+                    }
                 }
-                _ => {}
+                other => {
+                    warn!("trigger_action: Unrecognized action '{}'", other);
+                }
+            }
+        } else {
+            if lock.is_none() {
+                error!("trigger_action: No D-Bus connection available when trying to trigger action '{}' on {}", action.as_str(), id.as_str());
+            }
+            if items_lock.get(id).is_none() {
+                error!("trigger_action: Applet ID '{}' not found in registry when trying to trigger action '{}'", id.as_str(), action.as_str());
             }
         }
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::applets::{
+        AppletCategory, AppletId, CreateAppletCommand, Destination, ItemIsMenu, ObjectPath, Title,
+    };
+    use crate::domain::config::Config;
+
+    #[tokio::test]
+    async fn test_remove_by_destination_removes_matching_items() {
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let mut map = BTreeMap::new();
+
+        let item1 = AppletItem::new(CreateAppletCommand::new(
+            AppletId::new("app1"),
+            Destination::new(":1.42"),
+            ObjectPath::new("/StatusNotifierItem"),
+            Title::new("App 1"),
+            AppletStatus::Active,
+            None,
+            None,
+            AppletCategory::ApplicationStatus,
+            ItemIsMenu::new(false),
+        ));
+        let item2 = AppletItem::new(CreateAppletCommand::new(
+            AppletId::new("app2"),
+            Destination::new(":1.42"),
+            ObjectPath::new("/StatusNotifierItem2"),
+            Title::new("App 1 secondary"),
+            AppletStatus::Active,
+            None,
+            None,
+            AppletCategory::ApplicationStatus,
+            ItemIsMenu::new(false),
+        ));
+        let item3 = AppletItem::new(CreateAppletCommand::new(
+            AppletId::new("app3"),
+            Destination::new(":1.43"),
+            ObjectPath::new("/StatusNotifierItem"),
+            Title::new("App 2"),
+            AppletStatus::Active,
+            None,
+            None,
+            AppletCategory::ApplicationStatus,
+            ItemIsMenu::new(false),
+        ));
+
+        map.insert(AppletId::new("app1"), item1);
+        map.insert(AppletId::new("app2"), item2);
+        map.insert(AppletId::new("app3"), item3);
+
+        let items = Arc::new(RwLock::new(map));
+
+        let removed = Watcher::remove_by_destination(&items, &hub, ":1.42").await;
+        assert!(removed);
+
+        let lock = items.read().await;
+        assert_eq!(lock.len(), 1);
+        assert!(lock.contains_key(&AppletId::new("app3")));
+        assert!(!lock.contains_key(&AppletId::new("app1")));
+        assert!(!lock.contains_key(&AppletId::new("app2")));
+
+        let state = hub.applets_rx().borrow().clone();
+        assert_eq!(state.items().len(), 1);
+        assert!(state.items().contains_key(&AppletId::new("app3")));
+    }
+
+    #[tokio::test]
+    async fn test_remove_by_destination_no_match_returns_false() {
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let mut map = BTreeMap::new();
+
+        let item = AppletItem::new(CreateAppletCommand::new(
+            AppletId::new("app1"),
+            Destination::new(":1.42"),
+            ObjectPath::new("/StatusNotifierItem"),
+            Title::new("App 1"),
+            AppletStatus::Active,
+            None,
+            None,
+            AppletCategory::ApplicationStatus,
+            ItemIsMenu::new(false),
+        ));
+        map.insert(AppletId::new("app1"), item);
+
+        let items = Arc::new(RwLock::new(map));
+
+        let removed = Watcher::remove_by_destination(&items, &hub, ":1.99").await;
+        assert!(!removed);
+
+        let lock = items.read().await;
+        assert_eq!(lock.len(), 1);
+    }
+
+    #[test]
+    fn test_sni_event_variants() {
+        let _events = [
+            SniEvent::Title,
+            SniEvent::Status("Active".to_string()),
+            SniEvent::Icon,
+            SniEvent::ThemePath,
+            SniEvent::AttentionIcon,
+            SniEvent::OverlayIcon,
+            SniEvent::ToolTip,
+            SniEvent::Menu,
+        ];
+    }
+}
+
