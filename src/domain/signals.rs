@@ -115,9 +115,16 @@ impl HyprlandState {
                     ws.set_monitor(monitor_name.clone());
                 }
             }
-            WindowManagerEvent::SpecialWorkspaceActivated { id, name: _, monitor_name } => {
+            WindowManagerEvent::SpecialWorkspaceActivated { id, name, monitor_name } => {
                 if let Some(m) = self.monitors.get_mut(monitor_name) {
                     m.set_special_workspace(id.clone());
+                }
+                if let Some(ws_id) = id {
+                    if let Some(ws) = self.workspaces.get_mut(ws_id) {
+                        ws.set_monitor(monitor_name.clone());
+                    } else if let Some(ws_name) = name {
+                        self.workspaces.insert(ws_id.clone(), Workspace::new(ws_id.clone(), ws_name.clone(), Some(monitor_name.clone())));
+                    }
                 }
             }
             WindowManagerEvent::ActiveWindowChanged { .. } => {}
@@ -306,7 +313,8 @@ mod tests {
         
         // Test SpecialWorkspaceActivated
         state.apply_event(&WindowManagerEvent::SpecialWorkspaceActivated { id: Some(WorkspaceId::new(99)), name: Some(WorkspaceName::new("special")), monitor_name: MonitorName::new("DP-1") });
-        // The event mutates special_workspace_id internally
+        assert_eq!(state.monitors().get(&MonitorName::new("DP-1")).unwrap().special_workspace_id(), Some(&WorkspaceId::new(99)));
+        assert_eq!(state.workspaces().get(&WorkspaceId::new(99)).unwrap().monitor(), Some(&MonitorName::new("DP-1")));
     }
 
     #[test]

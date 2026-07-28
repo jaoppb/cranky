@@ -90,6 +90,10 @@ impl Monitor {
     pub fn set_special_workspace(&mut self, id: Option<WorkspaceId>) {
         self.special_workspace_id = id;
     }
+
+    pub fn special_workspace_id(&self) -> Option<&WorkspaceId> {
+        self.special_workspace_id.as_ref()
+    }
 }
 
 #[cfg(test)]
@@ -142,7 +146,7 @@ mod tests {
         assert_eq!(*monitor.active_workspace_id(), WorkspaceId::new(2));
 
         monitor.set_special_workspace(Some(WorkspaceId::new(3)));
-        assert_eq!(monitor.special_workspace_id, Some(WorkspaceId::new(3)));
+        assert_eq!(monitor.special_workspace_id(), Some(&WorkspaceId::new(3)));
     }
 }
 

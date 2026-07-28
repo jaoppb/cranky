@@ -48,6 +48,23 @@ function refresh()
                 monitor = m.name
             })
         end
+
+        if type(m.special_workspace_id) == "number" and m.special_workspace_id ~= 0 then
+            local found_sp = false
+            for _, ws in ipairs(workspaces) do
+                if ws.id == m.special_workspace_id then
+                    found_sp = true
+                    break
+                end
+            end
+            if not found_sp then
+                table.insert(workspaces, {
+                    id = m.special_workspace_id,
+                    name = "special:" .. tostring(m.special_workspace_id),
+                    monitor = m.name
+                })
+            end
+        end
     end
     
     -- sort workspaces by id after adding potentially empty active workspaces
@@ -66,7 +83,7 @@ function render(monitor)
     for _, ws in ipairs(workspaces) do
         if ws.monitor == monitor_id then
             local label = ws.name:match("^special:(.*)") or ws.name
-            local active_ws = (type(active_ids.special) == "number") and active_ids.special or active_ids.active
+            local active_ws = (type(active_ids.special) == "number" and active_ids.special ~= 0) and active_ids.special or active_ids.active
             local is_visible = (ws.id == active_ws)
             
             local color = is_visible and active_text_color or inactive_color

@@ -119,8 +119,11 @@ impl HyprlandAdapter {
             "activespecialv2" => {
                 let parts: Vec<&str> = payload.splitn(3, ',').collect();
                 if parts.len() != 3 { return None; }
-                let id = parts[0].parse::<i32>().ok().map(WorkspaceId::new);
-                let ws_name = if parts[1].is_empty() { None } else { Some(WorkspaceName::new(parts[1])) };
+                let id = match parts[0].parse::<i32>() {
+                    Ok(0) | Err(_) => None,
+                    Ok(val) => Some(WorkspaceId::new(val)),
+                };
+                let ws_name = if id.is_none() || parts[1].is_empty() { None } else { Some(WorkspaceName::new(parts[1])) };
                 Some(WindowManagerEvent::SpecialWorkspaceActivated {
                     id,
                     name: ws_name,
@@ -226,16 +229,35 @@ impl HyprlandAdapter {
                             // Validate state consistency before broadcast
                             if state_changed {
                                 let mut inconsistent = false;
-                                for mon in current_state.monitors().values() {
-                                    if let Some(ws) = current_state.workspaces().get(mon.active_workspace_id()) {
-                                        if ws.monitor() != Some(mon.name()) {
+                                for ws in current_state.workspaces().values() {
+                                    if ws.monitor().is_none() {
+                                        inconsistent = true;
+                                        break;
+                                    }
+                                }
+                                if !inconsistent {
+                                    for mon in current_state.monitors().values() {
+                                        if let Some(ws) = current_state.workspaces().get(mon.active_workspace_id()) {
+                                            if ws.monitor() != Some(mon.name()) {
+                                                inconsistent = true;
+                                                break;
+                                            }
+                                        } else {
+                                            // Missing workspace
                                             inconsistent = true;
                                             break;
                                         }
-                                    } else {
-                                        // Missing workspace
-                                        inconsistent = true;
-                                        break;
+                                        if let Some(sp_id) = mon.special_workspace_id() {
+                                            if let Some(ws) = current_state.workspaces().get(sp_id) {
+                                                if ws.monitor() != Some(mon.name()) {
+                                                    inconsistent = true;
+                                                    break;
+                                                }
+                                            } else {
+                                                inconsistent = true;
+                                                break;
+                                            }
+                                        }
                                     }
                                 }
                                 
@@ -413,6 +435,22 @@ mod tests {
         assert_eq!(e, WindowManagerEvent::SpecialWorkspaceActivated {
             id: Some(WorkspaceId::new(7)),
             name: Some(WorkspaceName::new("special")),
+            monitor_name: MonitorName::new("DP-2"),
+        });
+
+        // activespecialv2 closed (0 ID)
+        let e = HyprlandAdapter::parse_event("activespecialv2>>0,,DP-2").unwrap();
+        assert_eq!(e, WindowManagerEvent::SpecialWorkspaceActivated {
+            id: None,
+            name: None,
+            monitor_name: MonitorName::new("DP-2"),
+        });
+
+        // activespecialv2 negative ID
+        let e = HyprlandAdapter::parse_event("activespecialv2>>-98,special:magic,DP-2").unwrap();
+        assert_eq!(e, WindowManagerEvent::SpecialWorkspaceActivated {
+            id: Some(WorkspaceId::new(-98)),
+            name: Some(WorkspaceName::new("special:magic")),
             monitor_name: MonitorName::new("DP-2"),
         });
 

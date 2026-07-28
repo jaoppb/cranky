@@ -38,7 +38,9 @@ fn refresh() {
         state.active = m.active_workspace_id;
         let t = type_of(m.special_workspace_id);
         if t == "i64" || t == "i32" {
-            state.special = m.special_workspace_id;
+            if m.special_workspace_id != 0 {
+                state.special = m.special_workspace_id;
+            }
         }
         active_workspaces[m.name] = state;
         
@@ -55,6 +57,23 @@ fn refresh() {
             empty_ws.name = m.active_workspace_id.to_string();
             empty_ws.monitor = m.name;
             workspaces.push(empty_ws);
+        }
+
+        if "special" in state {
+            let found_sp = false;
+            for ws in workspaces {
+                if ws.id == state.special {
+                    found_sp = true;
+                    break;
+                }
+            }
+            if !found_sp {
+                let empty_ws = #{};
+                empty_ws.id = state.special;
+                empty_ws.name = "special:" + state.special.to_string();
+                empty_ws.monitor = m.name;
+                workspaces.push(empty_ws);
+            }
         }
     }
     
@@ -84,7 +103,7 @@ fn render(monitor_id) {
             if label.starts_with("special:") {
                 label = label.sub_string(8);
             }
-            let current_active = if special_id != -1 { special_id } else { active_id };
+            let current_active = if special_id != -1 && special_id != 0 { special_id } else { active_id };
             let is_visible = (ws.id == current_active);
             
             let color = inactive_color;
