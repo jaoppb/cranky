@@ -5,8 +5,11 @@ pub mod sni;
 pub mod layout;
 
 pub use dbus::DBusPort;
+pub mod engine;
 pub mod registry;
 pub mod surface;
+
+pub use engine::ScriptEnginePort;
 
 use async_trait::async_trait;
 use thiserror::Error;

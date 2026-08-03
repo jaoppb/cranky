@@ -254,13 +254,19 @@ impl ModulesConfigDto {
 pub struct ModuleConfigDto {
     name: String,
     enable: bool,
+    #[serde(default)]
+    engine: Option<String>,
     #[serde(flatten)]
     options: HashMap<String, serde_json::Value>,
 }
 
 impl ModuleConfigDto {
     pub fn into_domain(self) -> domain::ModuleConfig {
-        domain::ModuleConfig::new(self.name, self.enable, self.options)
+        let selection = match self.engine {
+            Some(e) => domain::EngineSelection::Explicit(domain::EngineId::new(e)),
+            None => domain::EngineSelection::Auto,
+        };
+        domain::ModuleConfig::new(self.name, self.enable, selection, self.options)
     }
 }
 

@@ -95,6 +95,25 @@ function render(monitor)
             })
         end
         
+        local tooltip_children = {}
+        if item.tooltip and type(item.tooltip) == "table" then
+            local t = item.tooltip.title or ""
+            local d = item.tooltip.description or ""
+            if t ~= "" then
+                table.insert(tooltip_children, { type = "text", text = t, color = "#c0caf5" })
+            end
+            if d ~= "" and d ~= t then
+                table.insert(tooltip_children, { type = "text", text = d, color = "#c0caf5" })
+            end
+        end
+        if #tooltip_children == 0 then
+            table.insert(tooltip_children, {
+                type = "text",
+                text = item.title or item.app_id or "app",
+                color = "#c0caf5"
+            })
+        end
+
         local applet_node = {
             type = "flex",
             style = { gap = 6, align_items = "center" },
@@ -107,16 +126,10 @@ function render(monitor)
             },
             tooltip = {
                 type = "flex",
-                style = { padding = { top = 4, bottom = 4, left = 8, right = 8 } },
+                style = { padding = { top = 6, bottom = 6, left = 10, right = 10 }, gap = 4, direction = "column" },
                 background = "#1e1e2eff",
-                radius = 4,
-                children = {
-                    {
-                        type = "text",
-                        text = item.title or "app",
-                        color = "#c0caf5"
-                    }
-                }
+                radius = 6,
+                children = tooltip_children
             }
         }
         table.insert(children, applet_node)

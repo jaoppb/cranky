@@ -15,8 +15,10 @@ impl UserData for LuaMonitor {
     }
 }
 
+#[cfg(test)]
 pub struct LuaScriptLoader;
 
+#[cfg(test)]
 impl LuaScriptLoader {
     pub fn load_built_in(name: &str) -> Option<String> {
         match name {
@@ -28,18 +30,6 @@ impl LuaScriptLoader {
         }
     }
 
-    pub fn load_external(name: &str) -> Option<String> {
-        let home = std::env::var("HOME").ok()?;
-        let path = std::path::PathBuf::from(home)
-            .join(".config/cranky/modules")
-            .join(format!("{}.lua", name));
-
-        if path.exists() {
-            std::fs::read_to_string(path).ok()
-        } else {
-            None
-        }
-    }
 }
 
 pub struct LuaStateSynchronizer;
@@ -105,12 +95,9 @@ impl LuaModule {
         }
     }
 
+    #[cfg(test)]
     pub fn built_in(name: &str) -> Option<Self> {
         LuaScriptLoader::load_built_in(name).map(|source| Self::new(name.to_string(), source))
-    }
-
-    pub fn external(name: &str) -> Option<Self> {
-        LuaScriptLoader::load_external(name).map(|source| Self::new(name.to_string(), source))
     }
 }
 
@@ -264,7 +251,7 @@ mod tests {
     #[test]
     fn test_applet_missing_icon_regression() {
         let mut module = LuaModule::built_in("applet").expect("Failed to load applet module");
-        let module_config = ModuleConfig::new("applet".into(), true, HashMap::new());
+        let module_config = ModuleConfig::new("applet".into(), true, crate::domain::config::EngineSelection::Auto, HashMap::new());
         let config = crate::domain::config::Config::default();
 
         module
@@ -317,7 +304,7 @@ mod tests {
     fn test_applet_with_icon_renders_image() {
         let mut module =
             LuaModule::built_in("applet").expect("Failed to load applet module");
-        let module_config = ModuleConfig::new("applet".into(), true, HashMap::new());
+        let module_config = ModuleConfig::new("applet".into(), true, crate::domain::config::EngineSelection::Auto, HashMap::new());
         let config = crate::domain::config::Config::default();
         module
             .init(&module_config, &config)

@@ -121,6 +121,16 @@ fn render(monitor_id) {
                 on_click: on_click_cmd
             };
             
+            let tooltip_node = #{
+                type: "flex",
+                background: "#1e1e2eff",
+                radius: 4.0,
+                style: #{ padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 } },
+                children: [
+                    #{ type: "text", text: "Switch to workspace " + label, color: "#ffffff" }
+                ]
+            };
+            
             if is_visible {
                 let bg = focused_bg;
                 if is_monitor_focused {
@@ -133,7 +143,8 @@ fn render(monitor_id) {
                     background: bg,
                     radius: border_radius,
                     style: #{ padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 }, justify: "center", align_items: "center" },
-                    on_click: on_click_cmd
+                    on_click: on_click_cmd,
+                    tooltip: tooltip_node
                 };
                 children.push(box_node);
             } else {
@@ -141,7 +152,8 @@ fn render(monitor_id) {
                     type: "flex",
                     children: [text_node],
                     style: #{ padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 }, justify: "center", align_items: "center" },
-                    on_click: on_click_cmd
+                    on_click: on_click_cmd,
+                    tooltip: tooltip_node
                 };
                 children.push(box_node);
             }

@@ -542,18 +542,84 @@ impl ModulesConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EngineId(String);
+
+impl EngineId {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for EngineId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FileExtension(String);
+
+impl FileExtension {
+    pub fn new(ext: impl Into<String>) -> Self {
+        Self(ext.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for FileExtension {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum EngineSelection {
+    #[default]
+    Auto,
+    Explicit(EngineId),
+}
+
+impl EngineSelection {
+    #[cfg(test)]
+    pub fn is_auto(&self) -> bool {
+        matches!(self, Self::Auto)
+    }
+
+    pub fn as_explicit(&self) -> Option<&EngineId> {
+        match self {
+            Self::Explicit(id) => Some(id),
+            Self::Auto => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleConfig {
     name: String,
     enable: bool,
+    engine: EngineSelection,
     options: HashMap<String, serde_json::Value>,
 }
 
 impl ModuleConfig {
-    pub fn new(name: String, enable: bool, options: HashMap<String, serde_json::Value>) -> Self {
+    pub fn new(
+        name: String,
+        enable: bool,
+        engine: EngineSelection,
+        options: HashMap<String, serde_json::Value>,
+    ) -> Self {
         Self {
             name,
             enable,
+            engine,
             options,
         }
     }
@@ -564,6 +630,10 @@ impl ModuleConfig {
 
     pub fn is_enabled(&self) -> bool {
         self.enable
+    }
+
+    pub fn engine(&self) -> &EngineSelection {
+        &self.engine
     }
 
     pub fn options(&self) -> &HashMap<String, serde_json::Value> {
@@ -838,7 +908,12 @@ mod tests {
 
     #[test]
     fn test_module_position() {
-        let left = vec![ModuleConfig::new("time".to_string(), true, HashMap::new())];
+        let left = vec![ModuleConfig::new(
+            "time".to_string(),
+            true,
+            EngineSelection::Auto,
+            HashMap::new(),
+        )];
         let modules = ModulesConfig::new(left, vec![], vec![]);
 
         let config = Config::new(
@@ -852,5 +927,21 @@ mod tests {
         assert_eq!(config.modules().left()[0].name(), "time");
         assert_eq!(config.modules().center().len(), 0);
         assert_eq!(config.modules().right().len(), 0);
+    }
+
+    #[test]
+    fn test_module_config_engine() {
+        let explicit = EngineSelection::Explicit(EngineId::new("rhai"));
+        let cfg = ModuleConfig::new("hour".into(), true, explicit.clone(), HashMap::new());
+        assert_eq!(cfg.engine(), &explicit);
+        assert_eq!(cfg.engine().as_explicit().map(|id| id.as_str()), Some("rhai"));
+        assert!(!cfg.engine().is_auto());
+        assert_eq!(cfg.name(), "hour");
+        assert!(cfg.is_enabled());
+        assert!(cfg.options().is_empty());
+
+        let auto = EngineSelection::default();
+        assert!(auto.is_auto());
+        assert_eq!(auto.as_explicit(), None);
     }
 }

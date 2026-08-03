@@ -14,6 +14,8 @@ use zbus::names::InterfaceName;
 use zbus::zvariant::ObjectPath;
 use zbus::{Connection, interface};
 
+type RawTooltip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);
+
 #[zbus::proxy(interface = "org.kde.StatusNotifierItem", assume_defaults = true)]
 trait StatusNotifierItem {
     #[zbus(property(emits_changed_signal = "false"))]
@@ -133,23 +135,9 @@ impl SniEvent {
                 applet.with_overlay_icon(icon)
             }
             SniEvent::ToolTip => {
-                type RawTooltip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);
-                let tooltip = if let Ok(val) = proxy.tool_tip().await
-                    && let Ok((icon_name, pixmap, title, description)) = RawTooltip::try_from(val)
-                {
-                    let icon_name_opt = if icon_name.is_empty() { None } else { Some(icon_name) };
-                    let icon_img_opt = resolve_pixmap_data(&pixmap, 3.0);
-                    let tooltip_icon = crate::domain::applets::AppletIcon::new(
-                        icon_name_opt.map(crate::domain::applets::IconName::new),
-                        icon_img_opt,
-                    );
-                    Some(crate::domain::applets::AppletTooltip::new(
-                        tooltip_icon,
-                        crate::domain::applets::AppletTooltipTitle::new(title),
-                        crate::domain::applets::AppletTooltipDescription::new(description),
-                    ))
-                } else {
-                    None
+                let tooltip = match proxy.tool_tip().await {
+                    Ok(val) => Watcher::parse_raw_tooltip(val),
+                    Err(_) => None,
                 };
                 tracing::info!("SniEvent::ToolTip: updated tooltip");
                 applet.with_tooltip(tooltip)
@@ -345,6 +333,58 @@ impl Watcher {
 }
 
 impl Watcher {
+    fn clean_sni_text(input: &str) -> String {
+        let s = input
+            .replace("<br>", "\n")
+            .replace("<br/>", "\n")
+            .replace("<br />", "\n")
+            .replace("<BR>", "\n")
+            .replace("<BR/>", "\n")
+            .replace("<BR />", "\n");
+        let mut clean = String::with_capacity(s.len());
+        let mut in_tag = false;
+        for c in s.chars() {
+            if c == '<' {
+                in_tag = true;
+            } else if c == '>' {
+                in_tag = false;
+            } else if !in_tag {
+                clean.push(c);
+            }
+        }
+        clean
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&#10;", "\n")
+            .trim()
+            .to_string()
+    }
+
+    fn parse_raw_tooltip(v: zbus::zvariant::OwnedValue) -> Option<crate::domain::applets::AppletTooltip> {
+        if let Ok((icon_name, pixmap, title, description)) = RawTooltip::try_from(v) {
+            let icon_name_opt = if icon_name.is_empty() {
+                None
+            } else {
+                Some(icon_name)
+            };
+            let icon_img_opt = resolve_pixmap_data(&pixmap, 3.0);
+            let tooltip_icon = crate::domain::applets::AppletIcon::new(
+                icon_name_opt.map(crate::domain::applets::IconName::new),
+                icon_img_opt,
+            );
+            Some(crate::domain::applets::AppletTooltip::new(
+                tooltip_icon,
+                crate::domain::applets::AppletTooltipTitle::new(Self::clean_sni_text(&title)),
+                crate::domain::applets::AppletTooltipDescription::new(Self::clean_sni_text(&description)),
+            ))
+        } else {
+            None
+        }
+    }
+
     async fn fetch_applet_item(
         conn: &Connection,
         id: String,
@@ -487,36 +527,10 @@ impl Watcher {
             overlay_icon_image,
         );
 
-        type RawTooltip = (
-            String,
-            Vec<(i32, i32, Vec<u8>)>,
-            String,
-            String,
-        );
-
         let tooltip: Option<crate::domain::applets::AppletTooltip> = all_props
-            .remove("Tooltip")
-            .and_then(|v| {
-                v.try_into().ok().map(
-                    |(icon_name, pixmap, title, description): RawTooltip| {
-                        let icon_name_opt = if icon_name.is_empty() {
-                            None
-                        } else {
-                            Some(icon_name)
-                        };
-                        let icon_img_opt = resolve_pixmap_data(&pixmap, 3.0);
-                        let tooltip_icon = crate::domain::applets::AppletIcon::new(
-                            icon_name_opt.map(crate::domain::applets::IconName::new),
-                            icon_img_opt,
-                        );
-                        crate::domain::applets::AppletTooltip::new(
-                            tooltip_icon,
-                            crate::domain::applets::AppletTooltipTitle::new(title),
-                            crate::domain::applets::AppletTooltipDescription::new(description),
-                        )
-                    },
-                )
-            });
+            .remove("ToolTip")
+            .or_else(|| all_props.remove("Tooltip"))
+            .and_then(Self::parse_raw_tooltip);
 
         let cmd = crate::domain::applets::CreateAppletCommand::new(
             crate::domain::applets::AppletId::new(id),
@@ -989,9 +1003,29 @@ mod tests {
             SniEvent::ThemePath,
             SniEvent::AttentionIcon,
             SniEvent::OverlayIcon,
-            SniEvent::ToolTip,
-            SniEvent::Menu,
         ];
+    }
+
+    #[test]
+    fn test_clean_sni_text_strips_html_and_converts_br() {
+        let raw = "<b>Ducking ON</b><br/>Audio: &lt;enabled&gt; &amp; active";
+        let cleaned = Watcher::clean_sni_text(raw);
+        assert_eq!(cleaned, "Ducking ON\nAudio: <enabled> & active");
+    }
+
+    #[test]
+    fn test_parse_raw_tooltip() {
+        use zbus::zvariant::Value;
+        let raw_tuple: RawTooltip = (
+            "test-icon".to_string(),
+            vec![],
+            "<b>Title</b>".to_string(),
+            "Description<br/>Line 2".to_string(),
+        );
+        let val = Value::from(raw_tuple).try_into().unwrap();
+        let tooltip = Watcher::parse_raw_tooltip(val).expect("Should parse tooltip");
+        assert_eq!(tooltip.title().as_str(), "Title");
+        assert_eq!(tooltip.description().as_str(), "Description\nLine 2");
     }
 }
 
