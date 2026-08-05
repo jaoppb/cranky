@@ -232,17 +232,29 @@ impl<R: crate::ports::registry::ModuleRegistryPort<F> + 'static, F: crate::ports
                                 let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
                             },
                             AppCommand::AppletAction { id, action, pos } => {
-                                let _ = sni.trigger_action(&id, &action, pos).await;
+                                tracing::debug!(?id, ?action, ?pos, "Received AppCommand::AppletAction, triggering SNI action");
+                                match sni.trigger_action(&id, &action, pos).await {
+                                    Ok(_) => tracing::debug!(?id, ?action, "SNI trigger_action succeeded"),
+                                    Err(e) => tracing::error!(?id, ?action, err = ?e, "SNI trigger_action failed"),
+                                }
                             }
                             AppCommand::ModuleSizeChanged(monitor_id, module_id, size) => {
                                 self.handle_size_changed(monitor_id, module_id, size);
                                 needs_render = true;
                             }
                             AppCommand::ShowTooltip { layout } => {
-                                let _ = display.show_tooltip(*layout);
+                                tracing::debug!(?layout, "Received AppCommand::ShowTooltip, calling display.show_tooltip");
+                                match display.show_tooltip(*layout) {
+                                    Ok(_) => tracing::debug!("display.show_tooltip succeeded"),
+                                    Err(e) => tracing::error!(err = ?e, "display.show_tooltip failed"),
+                                }
                             }
                             AppCommand::HideTooltip => {
-                                let _ = display.hide_tooltip();
+                                tracing::debug!("Received AppCommand::HideTooltip, calling display.hide_tooltip");
+                                match display.hide_tooltip() {
+                                    Ok(_) => tracing::debug!("display.hide_tooltip succeeded"),
+                                    Err(e) => tracing::error!(err = ?e, "display.hide_tooltip failed"),
+                                }
                             }
                         }
 

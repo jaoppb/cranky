@@ -55,13 +55,22 @@ impl LuaStateSynchronizer {
                     dbus_handled = true;
                 }
                 SignalKind::Applets => {
+                    let t0 = std::time::Instant::now();
                     let applets = hub.applets_rx().borrow().clone();
                     let items = applets.items().values().collect::<Vec<_>>();
+                    let item_count = items.len();
+                    tracing::debug!(item_count, "Serializing applets to Lua");
                     match lua.to_value(&items) {
                         Ok(val) => {
                             globals.set("applets", val)?;
+                            tracing::debug!(
+                                item_count,
+                                duration_ms = t0.elapsed().as_millis(),
+                                duration_micros = t0.elapsed().as_micros(),
+                                "Successfully serialized applets to Lua"
+                            );
                         }
-                        Err(e) => println!("Failed to serialize applets: {:?}", e),
+                        Err(e) => tracing::error!(err = ?e, "Failed to serialize applets to Lua"),
                     }
                 }
                 SignalKind::Metrics => {
@@ -73,7 +82,19 @@ impl LuaStateSynchronizer {
         }
 
         if let Ok(refresh_fn) = globals.get::<Function>("refresh") {
-            let _ = refresh_fn.call::<()>(());
+            let t0 = std::time::Instant::now();
+            match refresh_fn.call::<()>(()) {
+                Ok(_) => {
+                    tracing::debug!(
+                        duration_ms = t0.elapsed().as_millis(),
+                        duration_micros = t0.elapsed().as_micros(),
+                        "Lua refresh function called successfully"
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(err = ?e, "Lua refresh function failed");
+                }
+            }
         }
 
         Ok(())
@@ -188,11 +209,26 @@ impl AnyModulePort for LuaModule {
     }
 
     fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
+        let t0 = std::time::Instant::now();
+        tracing::debug!(?changed, "Refreshing LuaModulePort");
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
-        let _ = LuaStateSynchronizer::sync(&lua, hub, changed);
+        match LuaStateSynchronizer::sync(&lua, hub, changed) {
+            Ok(_) => {
+                tracing::debug!(
+                    ?changed,
+                    duration_ms = t0.elapsed().as_millis(),
+                    duration_micros = t0.elapsed().as_micros(),
+                    "LuaModulePort refresh completed successfully"
+                );
+            }
+            Err(e) => {
+                tracing::error!(?changed, err = ?e, "LuaModulePort refresh failed");
+            }
+        }
     }
 
     fn render(&self, monitor: &MonitorId) -> crate::domain::layout::LayoutNode {
+        let t0 = std::time::Instant::now();
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
         let lua_monitor = LuaMonitor(monitor.clone());
@@ -200,9 +236,20 @@ impl AnyModulePort for LuaModule {
         if let Ok(render_fn) = globals.get::<mlua::Function>("render") {
             match render_fn.call::<mlua::Value>(lua_monitor) {
                 Ok(val) => {
+                    let call_ms = t0.elapsed().as_millis();
                     match lua.from_value::<crate::domain::layout::LayoutNode>(val) {
-                        Ok(node) => return node,
+                        Ok(node) => {
+                            tracing::debug!(
+                                monitor = %monitor,
+                                call_ms,
+                                total_ms = t0.elapsed().as_millis(),
+                                ?node,
+                                "Lua render_fn succeeded and deserialized layout node"
+                            );
+                            return node;
+                        }
                         Err(e) => {
+                            tracing::error!(monitor = %monitor, err = ?e, "Failed to deserialize LayoutNode from Lua render_fn");
                             let msg = format!("Deserialization error: {}", e);
                             return crate::domain::layout::LayoutNode::Flex { 
                                 children: vec![
@@ -227,7 +274,7 @@ impl AnyModulePort for LuaModule {
                     }
                 }
                 Err(e) => {
-                    println!("Lua render_fn failed: {}", e);
+                    tracing::error!(monitor = %monitor, err = ?e, "Lua render_fn execution failed");
                 }
             }
         }

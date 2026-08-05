@@ -148,56 +148,97 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
                                 return false; // layout_rx dropped, we should exit
                             }
                         }
-                        Ok((target_id, monitor_id, event)) = input_rx.recv() => {
-                            if target_id == ctx_id {
-                                tracing::debug!(module = %ctx_id, monitor = %monitor_id, event = ?event, "Received pointer event in module actor");
-                                if let Some(render_tree) = self.render_trees.get(&monitor_id) {
-                                    use crate::domain::shared::geometry::Position;
-                                    use crate::domain::events::PointerEvent;
-                                    match event {
-                                        PointerEvent::Click { x, y, .. } => {
-                                            let pos = Position::new(x as i32, y as i32);
-                                            last_pointer_pos = Some((monitor_id.clone(), pos));
-                                            let hit = render_tree.hit_test(pos);
-                                            tracing::debug!(module = %ctx_id, pos = ?pos, hit = !hit.is_empty(), "Hit test for click");
-                                            if let Some(cmd) = hit.iter().rev().find_map(|n| n.on_click()) {
-                                                tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_click command");
-                                                self.ctx.command_tx().send_command(cmd.clone());
+                        res = input_rx.recv() => {
+                            match res {
+                                Ok((target_id, monitor_id, event)) => {
+                                    if target_id == ctx_id {
+                                        tracing::debug!(module = %ctx_id, monitor = %monitor_id, event = ?event, "Received pointer event in module actor");
+                                        if let Some(render_tree) = self.render_trees.get(&monitor_id) {
+                                            use crate::domain::shared::geometry::Position;
+                                            use crate::domain::events::PointerEvent;
+                                            match event {
+                                                PointerEvent::Click { x, y, .. } => {
+                                                    let pos = Position::new(x as i32, y as i32);
+                                                    last_pointer_pos = Some((monitor_id.clone(), pos));
+                                                    let hit = render_tree.hit_test(pos);
+                                                    let hit_cmd = hit.iter().rev().find_map(|n| n.on_click());
+                                                    tracing::debug!(
+                                                        module = %ctx_id,
+                                                        monitor = %monitor_id,
+                                                        pos = ?pos,
+                                                        hit_nodes = hit.len(),
+                                                        has_on_click = hit_cmd.is_some(),
+                                                        "Hit test for Click"
+                                                    );
+                                                    if let Some(cmd) = hit_cmd {
+                                                        tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_click command");
+                                                        self.ctx.command_tx().send_command(cmd.clone());
+                                                    } else {
+                                                        tracing::debug!(module = %ctx_id, "No on_click command found in hit tree");
+                                                    }
+                                                },
+                                                PointerEvent::PointerMotion { x, y } => {
+                                                    let pos = Position::new(x as i32, y as i32);
+                                                    last_pointer_pos = Some((monitor_id.clone(), pos));
+                                                    let hit = render_tree.hit_test(pos);
+                                                    let hit_cmd = hit.iter().rev().find_map(|n| n.on_hover());
+                                                    tracing::debug!(
+                                                        module = %ctx_id,
+                                                        monitor = %monitor_id,
+                                                        pos = ?pos,
+                                                        hit_nodes = hit.len(),
+                                                        has_on_hover = hit_cmd.is_some(),
+                                                        "Hit test for PointerMotion"
+                                                    );
+                                                    if let Some(cmd) = hit_cmd {
+                                                        tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_hover command");
+                                                        self.ctx.command_tx().send_command(cmd.clone());
+                                                    }
+                                                        
+                                                    let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
+                                                    if hit_tooltip != last_tooltip {
+                                                        tracing::debug!(
+                                                            module = %ctx_id,
+                                                            monitor = %monitor_id,
+                                                            changed = true,
+                                                            has_tooltip = hit_tooltip.is_some(),
+                                                            "Tooltip state changed"
+                                                        );
+                                                        if let Some(layout) = &hit_tooltip {
+                                                            tracing::debug!(module = %ctx_id, ?layout, "Sending ShowTooltip command");
+                                                            self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::ShowTooltip { layout: Box::new(layout.clone()) });
+                                                        } else {
+                                                            tracing::debug!(module = %ctx_id, "Sending HideTooltip command");
+                                                            self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::HideTooltip);
+                                                        }
+                                                        last_tooltip = hit_tooltip;
+                                                    }
+                                                },
+                                                PointerEvent::PointerEnter => {
+                                                    tracing::debug!(module = %ctx_id, "Pointer entered module bounds");
+                                                },
+                                                PointerEvent::PointerLeave => {
+                                                    tracing::debug!(module = %ctx_id, "Pointer left module bounds");
+                                                    last_pointer_pos = None;
+                                                    if last_tooltip.is_some() {
+                                                        tracing::debug!(module = %ctx_id, "Hiding tooltip due to pointer leave");
+                                                        self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::HideTooltip);
+                                                        last_tooltip = None;
+                                                    }
+                                                },
+                                                _ => {}
                                             }
-                                        },
-                                        PointerEvent::PointerMotion { x, y } => {
-                                            let pos = Position::new(x as i32, y as i32);
-                                            last_pointer_pos = Some((monitor_id.clone(), pos));
-                                            let hit = render_tree.hit_test(pos);
-                                            if let Some(cmd) = hit.iter().rev().find_map(|n| n.on_hover()) {
-                                                tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_hover command");
-                                                self.ctx.command_tx().send_command(cmd.clone());
-                                            }
-                                                
-                                            let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
-                                            if hit_tooltip != last_tooltip {
-                                                tracing::debug!(module = %ctx_id, changed = true, has_tooltip = hit_tooltip.is_some(), "Tooltip state changed");
-                                                if let Some(layout) = &hit_tooltip {
-                                                    self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::ShowTooltip { layout: Box::new(layout.clone()) });
-                                                } else {
-                                                    self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::HideTooltip);
-                                                }
-                                                last_tooltip = hit_tooltip;
-                                            }
-                                        },
-                                        PointerEvent::PointerLeave => {
-                                            tracing::debug!(module = %ctx_id, "Pointer left module bounds");
-                                            last_pointer_pos = None;
-                                            if last_tooltip.is_some() {
-                                                tracing::debug!(module = %ctx_id, "Hiding tooltip due to pointer leave");
-                                                self.ctx.command_tx().send_command(crate::domain::commands::AppCommand::HideTooltip);
-                                                last_tooltip = None;
-                                            }
-                                        },
-                                        _ => {}
+                                        } else {
+                                            tracing::warn!(module = %ctx_id, monitor = %monitor_id, "Received pointer event but no render tree found for monitor");
+                                        }
                                     }
-                                } else {
-                                    tracing::warn!(module = %ctx_id, monitor = %monitor_id, "Received pointer event but no render tree found for monitor");
+                                }
+                                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                                    tracing::warn!(module = %ctx_id, lagged = n, "ModuleActor input_rx lagged, skipped messages");
+                                }
+                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                                    tracing::debug!(module = %ctx_id, "ModuleActor input_rx closed");
+                                    return false;
                                 }
                             }
                         }

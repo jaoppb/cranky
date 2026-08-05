@@ -87,6 +87,7 @@ use crate::domain::shared::geometry::Size;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct IconImage {
+    #[serde(with = "serde_bytes")]
     data: Vec<u8>,
     size: Size,
 }

@@ -9,7 +9,7 @@ use crate::domain::shared::geometry::{LogicalPx, Scale};
 use crate::ports::canvas::Canvas;
 use tiny_skia::PixmapMut;
 use async_trait::async_trait;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::io::unix::AsyncFd;
 use tracing::{info, debug, info_span};
 
@@ -58,8 +58,10 @@ pub struct SurfaceCommand {
     pub buffer: crate::domain::shared::render::RenderBuffer,
 }
 
+#[derive(Clone)]
 pub struct WaylandSurfaceManager {
-    tx: tokio::sync::mpsc::Sender<SurfaceCommand>,
+    pending_surfaces: Arc<Mutex<HashMap<(crate::domain::ModuleId, crate::domain::MonitorId), SurfaceCommand>>>,
+    notify_tx: tokio::sync::mpsc::Sender<()>,
 }
 
 #[async_trait]
@@ -71,15 +73,19 @@ impl SurfaceManagerPort for WaylandSurfaceManager {
         position: crate::domain::shared::geometry::Position,
         buffer: crate::domain::shared::render::RenderBuffer,
     ) {
-        let _ = self
-            .tx
-            .send(SurfaceCommand {
-                module_id,
-                monitor_id,
-                position,
-                buffer,
-            })
-            .await;
+        {
+            let mut map = self.pending_surfaces.lock().unwrap();
+            map.insert(
+                (module_id, monitor_id.clone()),
+                SurfaceCommand {
+                    module_id,
+                    monitor_id,
+                    position,
+                    buffer,
+                },
+            );
+        }
+        let _ = self.notify_tx.try_send(());
     }
 }
 
@@ -88,7 +94,8 @@ pub struct WaylandAdapter {
     event_queue: EventQueue<WaylandState>,
     state: WaylandState,
     async_fd: AsyncFd<WaylandFd>,
-    surface_rx: tokio::sync::mpsc::Receiver<SurfaceCommand>,
+    pending_surfaces: Arc<Mutex<HashMap<(crate::domain::ModuleId, crate::domain::MonitorId), SurfaceCommand>>>,
+    notify_rx: tokio::sync::mpsc::Receiver<()>,
     config_rx: tokio::sync::watch::Receiver<crate::domain::config::Config>,
 }
 
@@ -211,18 +218,23 @@ impl WaylandAdapter {
             tooltip: None,
         };
 
-        let (surface_tx, surface_rx) = tokio::sync::mpsc::channel(100);
+        let pending_surfaces = Arc::new(Mutex::new(HashMap::new()));
+        let (notify_tx, notify_rx) = tokio::sync::mpsc::channel(1);
 
         let adapter = Self {
             connection,
             event_queue,
             state,
             async_fd,
-            surface_rx,
+            pending_surfaces: pending_surfaces.clone(),
+            notify_rx,
             config_rx,
         };
 
-        let manager = WaylandSurfaceManager { tx: surface_tx };
+        let manager = WaylandSurfaceManager {
+            pending_surfaces,
+            notify_tx,
+        };
 
         Ok((adapter, manager))
     }
@@ -247,10 +259,16 @@ impl DisplayServerPort for WaylandAdapter {
                         }
                     }
                 }
-                Some(cmd) = self.surface_rx.recv() => {
-                    // Drop read guard to process surface command, then we will loop again in App
+                Some(()) = self.notify_rx.recv() => {
+                    // Drop read guard to process surface commands, then we will loop again in App
                     drop(r_guard);
-                    self.handle_surface_command(cmd)?;
+                    let cmds: Vec<SurfaceCommand> = {
+                        let mut map = self.pending_surfaces.lock().unwrap();
+                        map.drain().map(|(_, cmd)| cmd).collect()
+                    };
+                    for cmd in cmds {
+                        self.handle_surface_command(cmd)?;
+                    }
                     return Ok(());
                 }
             }
@@ -331,20 +349,25 @@ impl DisplayServerPort for WaylandAdapter {
         let state = &mut self.state;
 
         let Some(parent_surface) = state.pointer_surface.clone() else {
+            tracing::debug!("show_tooltip skipped: state.pointer_surface is None");
             return Ok(());
         };
 
         let Some(compositor) = state.compositor.as_ref() else {
+            tracing::debug!("show_tooltip skipped: state.compositor is None");
             return Ok(());
         };
         let Some(_layer_shell) = state.layer_shell.as_ref() else {
+            tracing::debug!("show_tooltip skipped: state.layer_shell is None");
             return Ok(());
         };
         let Some(shm) = state.shm.as_ref() else {
+            tracing::debug!("show_tooltip skipped: state.shm is None");
             return Ok(());
         };
 
         let Some(xdg_wm_base) = state.xdg_wm_base.as_ref() else {
+            tracing::debug!("show_tooltip skipped: state.xdg_wm_base is None");
             return Ok(());
         };
 
@@ -386,10 +409,12 @@ impl DisplayServerPort for WaylandAdapter {
         }
 
         if output_name.is_empty() {
+            tracing::debug!("show_tooltip skipped: output_name is empty (parent_surface not found in bars)");
             return Ok(());
         }
 
         let Some(bar_layer_surface) = bar_layer_surface else {
+            tracing::debug!("show_tooltip skipped: bar_layer_surface is None");
             return Ok(());
         };
 
@@ -590,15 +615,16 @@ impl WaylandAdapter {
         let width = cmd.buffer.width().max(1);
         let height = cmd.buffer.height().max(1);
 
-        let mut newly_created = false;
+        let mut new_surface_to_register = None;
         let ms = bar.module_surfaces.entry(cmd.module_id).or_insert_with(|| {
-            newly_created = true;
             let surface = compositor.create_surface(&qh, ());
             let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, &qh, ());
             subsurface.set_desync();
 
             let shm_buffer =
                 ShmBuffer::new(shm, width, height, &qh).expect("Failed to create SHM buffer");
+
+            new_surface_to_register = Some(surface.clone());
 
             ModuleSurface {
                 surface,
@@ -609,6 +635,12 @@ impl WaylandAdapter {
                 y: 0,
             }
         });
+
+        if let Some(surface) = new_surface_to_register {
+            self.state
+                .surface_to_id
+                .insert(surface, (cmd.module_id, cmd.monitor_id.clone()));
+        }
 
         if ms.size != *cmd.buffer.size() {
             ms.shm_buffer = ShmBuffer::new(shm, width, height, &qh)
@@ -820,8 +852,6 @@ impl WaylandAdapter {
                                 }
                             };
 
-                        surface_to_id.insert(surface.clone(), (module_id, monitor_id.clone()));
-
                         v.insert(ModuleSurface {
                             surface,
                             subsurface,
@@ -832,6 +862,8 @@ impl WaylandAdapter {
                         })
                     }
                 };
+
+                surface_to_id.insert(ms.surface.clone(), (module_id, monitor_id.clone()));
 
                 ms.x = bounds.x();
                 ms.y = bounds.y();
@@ -1416,8 +1448,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_wayland_surface_manager() {
-        let (tx, mut rx) = tokio::sync::mpsc::channel(10);
-        let manager = WaylandSurfaceManager { tx };
+        let pending_surfaces = Arc::new(Mutex::new(HashMap::new()));
+        let (notify_tx, mut notify_rx) = tokio::sync::mpsc::channel(1);
+        let manager = WaylandSurfaceManager {
+            pending_surfaces: pending_surfaces.clone(),
+            notify_tx,
+        };
 
         let module_id = crate::domain::ModuleId::new(1);
         let monitor_id = crate::domain::MonitorId::new("DP-1");
@@ -1426,12 +1462,43 @@ mod tests {
             crate::domain::shared::geometry::Size::new(10, 10),
         );
 
-        manager.submit_buffer(module_id, monitor_id, crate::domain::shared::geometry::Position::new(0, 0), buffer).await;
+        manager.submit_buffer(module_id, monitor_id.clone(), crate::domain::shared::geometry::Position::new(0, 0), buffer).await;
 
-        let cmd = rx.recv().await.expect("Failed to receive command");
+        notify_rx.recv().await.expect("Failed to receive notification");
+        let cmd = pending_surfaces.lock().unwrap().remove(&(module_id, monitor_id)).expect("Failed to find command");
         assert_eq!(cmd.module_id, module_id);
         assert_eq!(cmd.monitor_id.as_str(), "DP-1");
         assert_eq!(cmd.buffer.size().width(), 10);
+    }
+
+    #[tokio::test]
+    async fn test_wayland_surface_manager_coalesces_latest_frame() {
+        let pending_surfaces = Arc::new(Mutex::new(HashMap::new()));
+        let (notify_tx, mut notify_rx) = tokio::sync::mpsc::channel(1);
+        let manager = WaylandSurfaceManager {
+            pending_surfaces: pending_surfaces.clone(),
+            notify_tx,
+        };
+
+        let module_id = crate::domain::ModuleId::new(1);
+        let monitor_id = crate::domain::MonitorId::new("DP-1");
+        let buffer1 = crate::domain::shared::render::RenderBuffer::new(
+            vec![0; 400],
+            crate::domain::shared::geometry::Size::new(10, 10),
+        );
+        let buffer2 = crate::domain::shared::render::RenderBuffer::new(
+            vec![0; 1600],
+            crate::domain::shared::geometry::Size::new(20, 20),
+        );
+
+        manager.submit_buffer(module_id, monitor_id.clone(), crate::domain::shared::geometry::Position::new(0, 0), buffer1).await;
+        manager.submit_buffer(module_id, monitor_id.clone(), crate::domain::shared::geometry::Position::new(0, 0), buffer2).await;
+
+        notify_rx.recv().await.expect("Failed to receive notification");
+        let mut map = pending_surfaces.lock().unwrap();
+        assert_eq!(map.len(), 1);
+        let cmd = map.remove(&(module_id, monitor_id)).expect("Failed to find command");
+        assert_eq!(cmd.buffer.size().width(), 20);
     }
 
     #[test]
@@ -1542,14 +1609,16 @@ mod tests {
             tooltip: None,
         };
 
-        let (_, surface_rx) = tokio::sync::mpsc::channel(100);
+        let pending_surfaces = Arc::new(Mutex::new(HashMap::new()));
+        let (_, notify_rx) = tokio::sync::mpsc::channel(1);
 
         let mut adapter = WaylandAdapter {
             connection,
             event_queue,
             state,
             async_fd,
-            surface_rx,
+            pending_surfaces,
+            notify_rx,
             config_rx,
         };
 

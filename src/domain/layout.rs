@@ -183,6 +183,7 @@ pub enum LayoutNode {
     #[serde(rename = "image")]
     Image {
         size: Size,
+        #[serde(with = "serde_bytes")]
         data: Vec<u8>,
         pixel_size: Size,
         #[serde(default)]
