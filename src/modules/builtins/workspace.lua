@@ -82,18 +82,26 @@ function render(monitor)
     
     for _, ws in ipairs(workspaces) do
         if ws.monitor == monitor_id then
+            local is_special = ws.name:match("^special:")
             local label = ws.name:match("^special:(.*)") or ws.name
             local active_ws = (type(active_ids.special) == "number" and active_ids.special ~= 0) and active_ids.special or active_ids.active
             local is_visible = (ws.id == active_ws)
             
             local color = is_visible and active_text_color or inactive_color
             
+            local exec_cmd
+            if is_special then
+                exec_cmd = "hyprctl eval 'hl.dispatch(\"togglespecialworkspace\", \"" .. label .. "\")'"
+            else
+                exec_cmd = "hyprctl eval 'hl.dispatch(hl.dsp.focus({ workspace = " .. ws.id .. " }))'"
+            end
+
             local text_node = {
                 type = "text",
                 text = label,
                 color = color,
                 on_click = {
-                    Exec = "hyprctl eval 'hl.dispatch(hl.dsp.focus({ workspace = " .. ws.id .. " }))'"
+                    Exec = exec_cmd
                 }
             }
             

@@ -100,8 +100,10 @@ fn render(monitor_id) {
     for ws in workspaces {
         if ws.monitor == monitor_id {
             let label = ws.name;
+            let is_special = false;
             if label.starts_with("special:") {
                 label = label.sub_string(8);
+                is_special = true;
             }
             let current_active = if special_id != -1 && special_id != 0 { special_id } else { active_id };
             let is_visible = (ws.id == current_active);
@@ -112,7 +114,11 @@ fn render(monitor_id) {
             }
             
             let on_click_cmd = #{};
-            on_click_cmd["Exec"] = "hyprctl eval 'hl.dispatch(hl.dsp.focus({ workspace = " + ws.id.to_string() + " }))'";
+            if is_special {
+                on_click_cmd["Exec"] = "hyprctl eval 'hl.dispatch(\"togglespecialworkspace\", \"" + label + "\")'";
+            } else {
+                on_click_cmd["Exec"] = "hyprctl eval 'hl.dispatch(hl.dsp.focus({ workspace = " + ws.id.to_string() + " }))'";
+            }
             
             let text_node = #{
                 type: "text",
