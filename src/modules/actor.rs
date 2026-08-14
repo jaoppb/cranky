@@ -283,17 +283,17 @@ impl<F: crate::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
         layout_engines: &mut std::collections::HashMap<MonitorId, Box<dyn crate::ports::layout::LayoutEnginePort>>
     ) {
         let t0 = std::time::Instant::now();
-        let monitors: Vec<MonitorId> = self
-            .ctx
-            .hub()
-            .hyprland_rx()
-            .borrow()
-            .monitors()
-            .values()
-            .map(|m| MonitorId::new(m.name().as_str()))
-            .collect();
         let layouts: std::collections::HashMap<MonitorId, Rect> =
             self.ctx.rxs_mut().0.borrow().clone();
+
+        let mut all_monitors: std::collections::HashSet<MonitorId> = std::collections::HashSet::new();
+        for m in self.ctx.hub().hyprland_rx().borrow().monitors().values() {
+            all_monitors.insert(MonitorId::new(m.name().as_str()));
+        }
+        for m in layouts.keys() {
+            all_monitors.insert(m.clone());
+        }
+        let monitors: Vec<MonitorId> = all_monitors.into_iter().collect();
 
         for monitor_id in monitors {
             let layout_node = self.port.render(&monitor_id);
@@ -616,5 +616,64 @@ mod tests {
         
         drop(layout_tx);
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    #[tokio::test]
+    async fn test_module_actor_renders_unknown_hyprland_monitor_from_layout() {
+        use crate::domain::shared::geometry::Rect;
+        
+        let id = crate::domain::ModuleId::new(1);
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config));
+        
+        // 1. Hyprland state is empty (no monitors)
+        let h_state = crate::domain::signals::HyprlandState::new(
+            std::collections::BTreeMap::new(),
+            std::collections::BTreeMap::new(),
+            None
+        );
+        hub.hyprland_tx().send(h_state).unwrap();
+
+        let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
+        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
+        let sender: Arc<dyn CommandSender> = Arc::new(TestCommandSender { tx: cmd_tx });
+        
+        let (layout_tx, layout_rx) = watch::channel(HashMap::new());
+        let ctx = ModuleContext::new(id, hub.clone(), sm.clone(), sender, layout_rx);
+        
+        let port = Box::new(MockAnyModulePort {
+            render_node: crate::domain::layout::LayoutNode::Rect {
+                size: crate::domain::shared::geometry::Size::new(100, 20),
+                color: crate::domain::shared::color::DrawingColor::parse("#000000").unwrap(),
+                radius: None,
+                on_click: None,
+                on_hover: None,
+                tooltip: None,
+            },
+        });
+        
+        let mut actor = ModuleActor::new(port, ctx, Arc::new(std::sync::Mutex::new(MockCanvasFactory)));
+        
+        // 2. Wayland sends layout update for DP-2
+        let mut layouts = HashMap::new();
+        layouts.insert(MonitorId::new("DP-2"), Rect::new(crate::domain::shared::geometry::Position::new(0, 0), crate::domain::shared::geometry::Size::new(100, 20)));
+        layout_tx.send(layouts).unwrap();
+        
+        let _ = tokio::task::spawn_blocking(move || {
+            let mut layout_engines = HashMap::new();
+            // 3. This should process DP-2 because it's in the layouts map, even though hyprland state is empty!
+            actor.measure_and_render_all(&mut layout_engines);
+            actor
+        }).await.unwrap();
+        
+        // 4. Verify the actor processed the monitor and emitted a size changed command
+        let cmd = cmd_rx.try_recv().expect("Should send size changed command for DP-2");
+        match cmd {
+            AppCommand::ModuleSizeChanged(mon, mod_id, size) => {
+                assert_eq!(mon.as_str(), "DP-2");
+                assert_eq!(mod_id, id);
+                assert_eq!(size.width(), 100);
+            }
+            _ => panic!("Unexpected command"),
+        }
     }
 }
