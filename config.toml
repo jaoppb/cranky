@@ -3,8 +3,16 @@ background = "#1a1b26"
 text_color = "#c0caf5"
 font_family = "JetBrainsMono Nerd Font"
 font_size = 14.0
-scale = 1.0
 height = 40
+padding.horizontal = 8
+module_gap = 8
+
+[render]
+mode = "immediate"
+fps_limit = 30
+
+[bar.unfocused.border]
+color = "#565f89"
 
 [bar.margin]
 top = 8
@@ -13,30 +21,31 @@ left = 8
 right = 8
 
 [bar.border]
-size = 2
-color = "#7aa2f7"
+size = 2.0
+color = "#7aa2f7 #bb9af7 45deg"
 radius = 8.0
-
-[rendering]
-mode = "timebased"
-duration_ms = 100
-# mode = "immediate"
-# fps_limit = 60
-# fps_limit omitted means unlimited FPS.
 
 [[modules.left]]
 name = "workspace"
 enable = true
 border_radius = 4.0
+active = { background_color = "#565f89" }
+
+[[modules.center]]
+name = "hour"
+enable = true
+format = "%H:%M:%S %d/%m/%Y"
+
+[[modules.right]]
+name = "metrics"
+update_interval_ms = 100
+enable = true
+network = false
+temperature = false
 
 [[modules.right]]
 name = "applet"
 enable = true
 show_icons = true
 show_titles = false
-icon_size = 16
-# icon_theme = "Papirus-Dark"
-
-[[modules.right]]
-name = "hour"
-enable = true
+icon_size = 22
