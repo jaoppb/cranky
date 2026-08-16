@@ -9,12 +9,58 @@ pub enum BusType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Destination(String);
+impl Destination {
+    pub fn new(val: impl Into<String>) -> Self { Self(val.into()) }
+    pub fn as_str(&self) -> &str { &self.0 }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Path(String);
+impl Path {
+    pub fn new(val: impl Into<String>) -> Self { Self(val.into()) }
+    pub fn as_str(&self) -> &str { &self.0 }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Interface(String);
+impl Interface {
+    pub fn new(val: impl Into<String>) -> Self { Self(val.into()) }
+    pub fn as_str(&self) -> &str { &self.0 }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Member(String);
+impl Member {
+    pub fn new(val: impl Into<String>) -> Self { Self(val.into()) }
+    pub fn as_str(&self) -> &str { &self.0 }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DBusSubscription {
-    pub bus: BusType,
-    pub destination: Option<String>,
-    pub path: Option<String>,
-    pub interface: Option<String>,
-    pub member: Option<String>,
+    bus: BusType,
+    destination: Option<Destination>,
+    path: Option<Path>,
+    interface: Option<Interface>,
+    member: Option<Member>,
+}
+
+impl DBusSubscription {
+    pub fn new(
+        bus: BusType,
+        destination: Option<Destination>,
+        path: Option<Path>,
+        interface: Option<Interface>,
+        member: Option<Member>,
+    ) -> Self {
+        Self { bus, destination, path, interface, member }
+    }
+
+    pub fn bus(&self) -> BusType { self.bus }
+    pub fn destination(&self) -> Option<&Destination> { self.destination.as_ref() }
+    pub fn path(&self) -> Option<&Path> { self.path.as_ref() }
+    pub fn interface(&self) -> Option<&Interface> { self.interface.as_ref() }
+    pub fn member(&self) -> Option<&Member> { self.member.as_ref() }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -31,5 +77,15 @@ pub enum DBusValue {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct DBusState {
-    pub properties: HashMap<String, DBusValue>,
+    properties: HashMap<String, DBusValue>,
+}
+
+impl DBusState {
+    pub fn new(properties: HashMap<String, DBusValue>) -> Self {
+        Self { properties }
+    }
+
+    pub fn properties(&self) -> &HashMap<String, DBusValue> {
+        &self.properties
+    }
 }

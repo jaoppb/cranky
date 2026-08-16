@@ -51,7 +51,7 @@ impl LuaStateSynchronizer {
                 }
                 SignalKind::DBus(_) if !dbus_handled => {
                     let dbus_state = hub.dbus_rx().borrow().clone();
-                    if let Ok(val) = lua.to_value(&dbus_state.properties) { globals.set("dbus", val)?; }
+                    if let Ok(val) = lua.to_value(&dbus_state.properties()) { globals.set("dbus", val)?; }
                     dbus_handled = true;
                 }
                 SignalKind::Applets => {
@@ -195,13 +195,13 @@ impl AnyModulePort for LuaModule {
                                     } else {
                                         BusType::Session
                                     };
-                                    subs.push(SignalKind::DBus(DBusSubscription {
+                                    subs.push(SignalKind::DBus(DBusSubscription::new(
                                         bus,
-                                        destination: dbus_sub.get::<String>("destination").ok(),
-                                        path: dbus_sub.get::<String>("path").ok(),
-                                        interface: dbus_sub.get::<String>("interface").ok(),
-                                        member: dbus_sub.get::<String>("member").ok(),
-                                    }));
+                                        dbus_sub.get::<String>("destination").ok().map(crate::shared::dbus::domain::Destination::new),
+                                        dbus_sub.get::<String>("path").ok().map(crate::shared::dbus::domain::Path::new),
+                                        dbus_sub.get::<String>("interface").ok().map(crate::shared::dbus::domain::Interface::new),
+                                        dbus_sub.get::<String>("member").ok().map(crate::shared::dbus::domain::Member::new),
+                                    )));
                                 }
                     }
                 }

@@ -136,19 +136,19 @@ mod tests {
         let mut metrics_mod = BuiltinModules::find_module("metrics", &selection).unwrap();
         let hub = crate::shared::events::signals::SignalHub::new(crate::shared::config::domain::Config::default());
         let metrics_state = crate::features::metrics::domain::MetricsState::new(
-            crate::features::metrics::domain::CreateMetricsCommand {
-                cpu_usage: crate::features::metrics::domain::CpuUsage::new(50.0),
-                per_core: vec![],
-                memory_used: crate::features::metrics::domain::MemoryBytes::new(1024),
-                memory_total: crate::features::metrics::domain::MemoryBytes::new(2048),
-                swap_used: crate::features::metrics::domain::MemoryBytes::new(0),
-                swap_total: crate::features::metrics::domain::MemoryBytes::new(0),
-                disks: vec![],
-                network_tx: crate::features::metrics::domain::NetworkSpeed::new(0),
-                network_rx: crate::features::metrics::domain::NetworkSpeed::new(0),
-                temperature: crate::features::metrics::domain::Temperature::new(45.0),
-                config: crate::features::metrics::domain::MetricsConfig::default(),
-            },
+            crate::features::metrics::domain::CreateMetricsCommand::new(
+                crate::features::metrics::domain::CpuUsage::new(50.0),
+                vec![],
+                crate::features::metrics::domain::MemoryBytes::new(1024),
+                crate::features::metrics::domain::MemoryBytes::new(2048),
+                crate::features::metrics::domain::MemoryBytes::new(0),
+                crate::features::metrics::domain::MemoryBytes::new(0),
+                vec![],
+                crate::features::metrics::domain::NetworkSpeed::new(0),
+                crate::features::metrics::domain::NetworkSpeed::new(0),
+                crate::features::metrics::domain::Temperature::new(45.0),
+                crate::features::metrics::domain::MetricsConfig::default(),
+            ),
         );
         hub.metrics_tx().send(metrics_state).unwrap();
         metrics_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Metrics]);

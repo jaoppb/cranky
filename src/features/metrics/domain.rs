@@ -201,33 +201,108 @@ pub struct MetricsState {
 
 
 pub struct CreateMetricsCommand {
-    pub cpu_usage: CpuUsage,
-    pub per_core: Vec<CpuUsage>,
-    pub memory_used: MemoryBytes,
-    pub memory_total: MemoryBytes,
-    pub swap_used: MemoryBytes,
-    pub swap_total: MemoryBytes,
-    pub disks: Vec<DiskMetric>,
-    pub network_tx: NetworkSpeed,
-    pub network_rx: NetworkSpeed,
-    pub temperature: Temperature,
-    pub config: MetricsConfig,
+    cpu_usage: CpuUsage,
+    per_core: Vec<CpuUsage>,
+    memory_used: MemoryBytes,
+    memory_total: MemoryBytes,
+    swap_used: MemoryBytes,
+    swap_total: MemoryBytes,
+    disks: Vec<DiskMetric>,
+    network_tx: NetworkSpeed,
+    network_rx: NetworkSpeed,
+    temperature: Temperature,
+    config: MetricsConfig,
+}
+
+impl CreateMetricsCommand {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        cpu_usage: CpuUsage,
+        per_core: Vec<CpuUsage>,
+        memory_used: MemoryBytes,
+        memory_total: MemoryBytes,
+        swap_used: MemoryBytes,
+        swap_total: MemoryBytes,
+        disks: Vec<DiskMetric>,
+        network_tx: NetworkSpeed,
+        network_rx: NetworkSpeed,
+        temperature: Temperature,
+        config: MetricsConfig,
+    ) -> Self {
+        Self {
+            cpu_usage,
+            per_core,
+            memory_used,
+            memory_total,
+            swap_used,
+            swap_total,
+            disks,
+            network_tx,
+            network_rx,
+            temperature,
+            config,
+        }
+    }
+
+    pub fn cpu_usage(&self) -> &CpuUsage {
+        &self.cpu_usage
+    }
+
+    pub fn per_core(&self) -> &[CpuUsage] {
+        &self.per_core
+    }
+
+    pub fn memory_used(&self) -> &MemoryBytes {
+        &self.memory_used
+    }
+
+    pub fn memory_total(&self) -> &MemoryBytes {
+        &self.memory_total
+    }
+
+    pub fn swap_used(&self) -> &MemoryBytes {
+        &self.swap_used
+    }
+
+    pub fn swap_total(&self) -> &MemoryBytes {
+        &self.swap_total
+    }
+
+    pub fn disks(&self) -> &[DiskMetric] {
+        &self.disks
+    }
+
+    pub fn network_tx(&self) -> &NetworkSpeed {
+        &self.network_tx
+    }
+
+    pub fn network_rx(&self) -> &NetworkSpeed {
+        &self.network_rx
+    }
+
+    pub fn temperature(&self) -> &Temperature {
+        &self.temperature
+    }
+
+    pub fn config(&self) -> &MetricsConfig {
+        &self.config
+    }
 }
 
 impl MetricsState {
     pub fn new(cmd: CreateMetricsCommand) -> Self {
         Self {
-            cpu_usage: cmd.cpu_usage,
-            per_core: cmd.per_core,
-            memory_used: cmd.memory_used,
-            memory_total: cmd.memory_total,
-            swap_used: cmd.swap_used,
-            swap_total: cmd.swap_total,
-            disks: cmd.disks,
-            network_tx: cmd.network_tx,
-            network_rx: cmd.network_rx,
-            temperature: cmd.temperature,
-            config: cmd.config,
+            cpu_usage: cmd.cpu_usage().clone(),
+            per_core: cmd.per_core().to_vec(),
+            memory_used: cmd.memory_used().clone(),
+            memory_total: cmd.memory_total().clone(),
+            swap_used: cmd.swap_used().clone(),
+            swap_total: cmd.swap_total().clone(),
+            disks: cmd.disks().to_vec(),
+            network_tx: cmd.network_tx().clone(),
+            network_rx: cmd.network_rx().clone(),
+            temperature: cmd.temperature().clone(),
+            config: cmd.config().clone(),
         }
     }
 
@@ -350,19 +425,19 @@ mod tests {
 
     #[test]
     fn test_metrics_state_new() {
-        let cmd = CreateMetricsCommand {
-            cpu_usage: CpuUsage::new(10.0),
-            per_core: vec![],
-            memory_used: MemoryBytes::new(100),
-            memory_total: MemoryBytes::new(200),
-            swap_used: MemoryBytes::new(10),
-            swap_total: MemoryBytes::new(20),
-            disks: vec![],
-            network_tx: NetworkSpeed::new(1),
-            network_rx: NetworkSpeed::new(2),
-            temperature: Temperature::new(40.0),
-            config: MetricsConfig::default(),
-        };
+        let cmd = CreateMetricsCommand::new(
+            CpuUsage::new(10.0),
+            vec![],
+            MemoryBytes::new(100),
+            MemoryBytes::new(200),
+            MemoryBytes::new(10),
+            MemoryBytes::new(20),
+            vec![],
+            NetworkSpeed::new(1),
+            NetworkSpeed::new(2),
+            Temperature::new(40.0),
+            MetricsConfig::default(),
+        );
         let state = MetricsState::new(cmd);
         assert_eq!(state.cpu_usage, CpuUsage::new(10.0));
         assert_eq!(state.memory_used, MemoryBytes::new(100));

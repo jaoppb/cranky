@@ -78,7 +78,7 @@ impl DBusPort for ZbusAdapter {
     }
 
     async fn subscribe(&mut self, sub: DBusSubscription) -> Result<(), DBusPortError> {
-        let conn = match sub.bus {
+        let conn = match sub.bus() {
             BusType::Session => self.session_conn.clone(),
             BusType::System => self.system_conn.clone(),
         };
@@ -91,35 +91,35 @@ impl DBusPort for ZbusAdapter {
 
         let mut rule_builder = MatchRule::builder().msg_type(zbus::message::Type::Signal);
 
-        if let Some(ref dest) = sub.destination {
+        if let Some(dest) = sub.destination() {
             // Using sender instead of destination for signals
             rule_builder =
                 rule_builder
-                    .sender(dest.clone())
+                    .sender(dest.as_str())
                     .map_err(|e| DBusPortError::Subscription(
                         e.to_string(),
                     ))?;
         }
-        if let Some(ref path) = sub.path {
+        if let Some(path) = sub.path() {
             rule_builder =
                 rule_builder
-                    .path(path.clone())
+                    .path(path.as_str())
                     .map_err(|e| DBusPortError::Subscription(
                         e.to_string(),
                     ))?;
         }
-        if let Some(ref iface) = sub.interface {
+        if let Some(iface) = sub.interface() {
             rule_builder =
                 rule_builder
-                    .interface(iface.clone())
+                    .interface(iface.as_str())
                     .map_err(|e| DBusPortError::Subscription(
                         e.to_string(),
                     ))?;
         }
-        if let Some(ref member) = sub.member {
+        if let Some(member) = sub.member() {
             rule_builder =
                 rule_builder
-                    .member(member.clone())
+                    .member(member.as_str())
                     .map_err(|e| DBusPortError::Subscription(
                         e.to_string(),
                     ))?;
@@ -140,7 +140,7 @@ impl DBusPort for ZbusAdapter {
             while let Some(Ok(msg)) = stream.next().await {
                 // Parse message and update state
                 // This is a simplified version, ideally we would share `handle_message` logic.
-                let mut state = tx.borrow().clone();
+                let mut properties = tx.borrow().properties().clone();
                 let header = msg.header();
 
                 let path = match header.path() {
@@ -166,17 +166,18 @@ impl DBusPort for ZbusAdapter {
                         for (k, v) in changed.iter() {
                             let parsed = ZbusAdapter::parse_value(v);
                             let prop_key = format!("{}.{}", iface, k);
-                            state.properties.insert(prop_key, parsed);
+                            properties.insert(prop_key, parsed);
                         }
                     }
                 } else {
                     if let Ok(body_val) = msg.body().deserialize::<Value<'_>>() {
                         let parsed = ZbusAdapter::parse_value(&body_val);
                         let prop_key = format!("{}.{}", path, member);
-                        state.properties.insert(prop_key, parsed);
+                        properties.insert(prop_key, parsed);
                     }
                 }
 
+                let state = DBusState::new(properties);
                 let _ = tx.send(state);
             }
         });
@@ -282,13 +283,13 @@ mod tests {
         // But it exercises the code paths!
         let _ = adapter.connect().await;
 
-        let sub = DBusSubscription {
-            bus: BusType::Session,
-            destination: Some("org.freedesktop.DBus".into()),
-            path: Some("/org/freedesktop/DBus".into()),
-            interface: Some("org.freedesktop.DBus".into()),
-            member: Some("NameOwnerChanged".into()),
-        };
+        let sub = DBusSubscription::new(
+            BusType::Session,
+            Some(crate::shared::dbus::domain::Destination::new("org.freedesktop.DBus")),
+            Some(crate::shared::dbus::domain::Path::new("/org/freedesktop/DBus")),
+            Some(crate::shared::dbus::domain::Interface::new("org.freedesktop.DBus")),
+            Some(crate::shared::dbus::domain::Member::new("NameOwnerChanged")),
+        );
 
         // Subscribe exercises MatchRule building
         let _ = adapter.subscribe(sub).await;

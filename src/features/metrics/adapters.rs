@@ -118,19 +118,19 @@ impl SysinfoAdapter {
             }
         }
 
-        MetricsState::new(crate::features::metrics::domain::CreateMetricsCommand {
+        MetricsState::new(crate::features::metrics::domain::CreateMetricsCommand::new(
             cpu_usage,
             per_core,
-            memory_used: crate::features::metrics::domain::MemoryBytes::new(sys.used_memory()),
-            memory_total: crate::features::metrics::domain::MemoryBytes::new(sys.total_memory()),
-            swap_used: crate::features::metrics::domain::MemoryBytes::new(sys.used_swap()),
-            swap_total: crate::features::metrics::domain::MemoryBytes::new(sys.total_swap()),
-            disks: disk_metrics,
-            network_tx: crate::features::metrics::domain::NetworkSpeed::new(network_tx),
-            network_rx: crate::features::metrics::domain::NetworkSpeed::new(network_rx),
-            temperature: crate::features::metrics::domain::Temperature::new(temp),
-            config: config.clone(),
-        })
+            crate::features::metrics::domain::MemoryBytes::new(sys.used_memory()),
+            crate::features::metrics::domain::MemoryBytes::new(sys.total_memory()),
+            crate::features::metrics::domain::MemoryBytes::new(sys.used_swap()),
+            crate::features::metrics::domain::MemoryBytes::new(sys.total_swap()),
+            disk_metrics,
+            crate::features::metrics::domain::NetworkSpeed::new(network_tx),
+            crate::features::metrics::domain::NetworkSpeed::new(network_rx),
+            crate::features::metrics::domain::Temperature::new(temp),
+            config.clone(),
+        ))
     }
 }
 

@@ -411,31 +411,31 @@ mod tests {
 
     #[test]
     fn test_calculate_layout_unfocused() {
-        let unfocused = crate::shared::config::domain::PartialBarConfig::new(crate::shared::config::domain::CreatePartialBarConfigCommand {
-            background: None,
-            height: Some(crate::shared::primitives::geometry::BarHeight::new(20)),
-            vertical_alignment: None,
-            border: None,
-            margin: None,
-            padding: None,
-            module_gap: None,
-            font_family: None,
-            font_size: None,
-        });
+        let unfocused = crate::shared::config::domain::PartialBarConfig::new(crate::shared::config::domain::CreatePartialBarConfigCommand::new(
+            None,
+            Some(crate::shared::primitives::geometry::BarHeight::new(20)),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        ));
         let default_config = crate::shared::config::domain::BarConfig::default();
         // We need to inject the unfocused config. Since fields are private, we construct a full BarConfig:
-        let bar_config = crate::shared::config::domain::BarConfig::new(crate::shared::config::domain::CreateBarConfigCommand {
-            background: default_config.background().clone(),
-            height: crate::shared::primitives::geometry::BarHeight::new(30),
-            vertical_alignment: default_config.vertical_alignment(),
-            border: default_config.border().clone(),
-            margin: default_config.margin().clone(),
-            padding: default_config.padding().clone(),
-            module_gap: default_config.module_gap(),
-            font_family: default_config.font_family().clone(),
-            font_size: default_config.font_size(),
-            unfocused: Some(unfocused),
-        });
+        let bar_config = crate::shared::config::domain::BarConfig::new(crate::shared::config::domain::CreateBarConfigCommand::new(
+            default_config.background().clone(),
+            crate::shared::primitives::geometry::BarHeight::new(30),
+            default_config.vertical_alignment(),
+            default_config.border().clone(),
+            default_config.margin().clone(),
+            default_config.padding().clone(),
+            default_config.module_gap(),
+            default_config.font_family().clone(),
+            default_config.font_size(),
+            Some(unfocused),
+        ));
 
         let config = Config::new(
             bar_config.clone(),

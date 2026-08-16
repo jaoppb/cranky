@@ -52,10 +52,31 @@ impl AsRawFd for WaylandFd {
 }
 
 pub struct SurfaceCommand {
-    pub module_id: crate::shared::primitives::ModuleId,
-    pub monitor_id: crate::shared::primitives::MonitorId,
-    pub position: crate::shared::primitives::geometry::Position,
-    pub buffer: crate::shared::primitives::render::RenderBuffer,
+    module_id: crate::shared::primitives::ModuleId,
+    monitor_id: crate::shared::primitives::MonitorId,
+    position: crate::shared::primitives::geometry::Position,
+    buffer: crate::shared::primitives::render::RenderBuffer,
+}
+
+impl SurfaceCommand {
+    pub fn new(
+        module_id: crate::shared::primitives::ModuleId,
+        monitor_id: crate::shared::primitives::MonitorId,
+        position: crate::shared::primitives::geometry::Position,
+        buffer: crate::shared::primitives::render::RenderBuffer,
+    ) -> Self {
+        Self {
+            module_id,
+            monitor_id,
+            position,
+            buffer,
+        }
+    }
+
+    pub fn module_id(&self) -> crate::shared::primitives::ModuleId { self.module_id }
+    pub fn monitor_id(&self) -> &crate::shared::primitives::MonitorId { &self.monitor_id }
+    pub fn position(&self) -> crate::shared::primitives::geometry::Position { self.position }
+    pub fn buffer(&self) -> &crate::shared::primitives::render::RenderBuffer { &self.buffer }
 }
 
 #[derive(Clone)]
@@ -77,12 +98,12 @@ impl SurfaceManagerPort for WaylandSurfaceManager {
             let mut map = self.pending_surfaces.lock().unwrap();
             map.insert(
                 (module_id, monitor_id.clone()),
-                SurfaceCommand {
+                SurfaceCommand::new(
                     module_id,
                     monitor_id,
                     position,
                     buffer,
-                },
+                ),
             );
         }
         let _ = self.notify_tx.try_send(());
@@ -606,17 +627,17 @@ impl WaylandAdapter {
             .state
             .bars
             .iter_mut()
-            .find(|b| b.output_name == cmd.monitor_id.as_str())
+            .find(|b| b.output_name == cmd.monitor_id().as_str())
         {
             Some(b) => b,
             None => return Ok(()),
         };
 
-        let width = cmd.buffer.width().max(1);
-        let height = cmd.buffer.height().max(1);
+        let width = cmd.buffer().width().max(1);
+        let height = cmd.buffer().height().max(1);
 
         let mut new_surface_to_register = None;
-        let ms = bar.module_surfaces.entry(cmd.module_id).or_insert_with(|| {
+        let ms = bar.module_surfaces.entry(cmd.module_id()).or_insert_with(|| {
             let surface = compositor.create_surface(&qh, ());
             let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, &qh, ());
             subsurface.set_desync();
@@ -630,7 +651,7 @@ impl WaylandAdapter {
                 surface,
                 subsurface,
                 shm_buffer,
-                size: *cmd.buffer.size(),
+                size: *cmd.buffer().size(),
                 x: 0,
                 y: 0,
             }
@@ -639,23 +660,23 @@ impl WaylandAdapter {
         if let Some(surface) = new_surface_to_register {
             self.state
                 .surface_to_id
-                .insert(surface, (cmd.module_id, cmd.monitor_id.clone()));
+                .insert(surface, (cmd.module_id(), cmd.monitor_id().clone()));
         }
 
-        if ms.size != *cmd.buffer.size() {
+        if ms.size != *cmd.buffer().size() {
             ms.shm_buffer = ShmBuffer::new(shm, width, height, &qh)
                 .expect("Failed to recreate SHM buffer for resize");
-            ms.size = *cmd.buffer.size();
+            ms.size = *cmd.buffer().size();
         }
         
-        if ms.x != cmd.position.x() || ms.y != cmd.position.y() {
-            ms.subsurface.set_position(cmd.position.x(), cmd.position.y());
-            ms.x = cmd.position.x();
-            ms.y = cmd.position.y();
+        if ms.x != cmd.position().x() || ms.y != cmd.position().y() {
+            ms.subsurface.set_position(cmd.position().x(), cmd.position().y());
+            ms.x = cmd.position().x();
+            ms.y = cmd.position().y();
         }
 
         let data = ms.shm_buffer.mmap_mut();
-        let src_data = cmd.buffer.data();
+        let src_data = cmd.buffer().data();
         let len = std::cmp::min(data.len(), src_data.len());
         data[..len].copy_from_slice(&src_data[..len]);
 
@@ -673,7 +694,7 @@ impl WaylandAdapter {
         
         self.state
             .surface_to_id
-            .insert(ms.surface.clone(), (cmd.module_id, cmd.monitor_id.clone()));
+            .insert(ms.surface.clone(), (cmd.module_id(), cmd.monitor_id().clone()));
 
         Ok(())
     }
@@ -1466,9 +1487,9 @@ mod tests {
 
         notify_rx.recv().await.expect("Failed to receive notification");
         let cmd = pending_surfaces.lock().unwrap().remove(&(module_id, monitor_id)).expect("Failed to find command");
-        assert_eq!(cmd.module_id, module_id);
+        assert_eq!(cmd.module_id(), module_id);
         assert_eq!(cmd.monitor_id.as_str(), "DP-1");
-        assert_eq!(cmd.buffer.size().width(), 10);
+        assert_eq!(cmd.buffer().size().width(), 10);
     }
 
     #[tokio::test]
@@ -1498,7 +1519,7 @@ mod tests {
         let mut map = pending_surfaces.lock().unwrap();
         assert_eq!(map.len(), 1);
         let cmd = map.remove(&(module_id, monitor_id)).expect("Failed to find command");
-        assert_eq!(cmd.buffer.size().width(), 20);
+        assert_eq!(cmd.buffer().size().width(), 20);
     }
 
     #[test]
@@ -1509,16 +1530,16 @@ mod tests {
             vec![0; 1600],
             crate::shared::primitives::geometry::Size::new(20, 20),
         );
-        let cmd = SurfaceCommand {
+        let cmd = SurfaceCommand::new(
             module_id,
-            monitor_id: monitor_id.clone(),
-            position: crate::shared::primitives::geometry::Position::new(0, 0),
+            monitor_id.clone(),
+            crate::shared::primitives::geometry::Position::new(0, 0),
             buffer,
-        };
+        );
 
-        assert_eq!(cmd.module_id, module_id);
-        assert_eq!(cmd.monitor_id, monitor_id);
-        assert_eq!(cmd.buffer.size().height(), 20);
+        assert_eq!(cmd.module_id(), module_id);
+        assert_eq!(cmd.monitor_id(), &monitor_id);
+        assert_eq!(cmd.buffer().size().height(), 20);
     }
 
     #[test]
@@ -1626,15 +1647,15 @@ mod tests {
 
         let _ = adapter.dispatch_pending();
 
-        let cmd = SurfaceCommand {
-            module_id: crate::shared::primitives::ModuleId::new(1),
-            monitor_id: crate::shared::primitives::MonitorId::new("test"),
-            position: crate::shared::primitives::geometry::Position::new(0, 0),
-            buffer: crate::shared::primitives::render::RenderBuffer::new(
+        let cmd = SurfaceCommand::new(
+            crate::shared::primitives::ModuleId::new(1),
+            crate::shared::primitives::MonitorId::new("test"),
+            crate::shared::primitives::geometry::Position::new(0, 0),
+            crate::shared::primitives::render::RenderBuffer::new(
                 vec![0; 4],
                 crate::shared::primitives::geometry::Size::new(1, 1),
             ),
-        };
+        );
         let _ = adapter.handle_surface_command(cmd);
 
         let (tx, _rx) = tokio::sync::mpsc::channel(10);

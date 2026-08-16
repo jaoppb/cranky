@@ -112,7 +112,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                 events_stream.push(WatchStream::new(self.ctx.hub().metrics_rx()).map(|_| SignalKind::Metrics).boxed());
             }
             if subs.iter().any(|s| matches!(s, SignalKind::DBus(_))) {
-                events_stream.push(WatchStream::new(self.ctx.hub().dbus_rx()).map(|_| SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription { bus: crate::shared::dbus::domain::BusType::Session, destination: None, path: None, interface: None, member: None })).boxed());
+                events_stream.push(WatchStream::new(self.ctx.hub().dbus_rx()).map(|_| SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))).boxed());
             }
 
             let mut layout_engines: std::collections::HashMap<MonitorId, Box<dyn crate::features::layout_engine::ports::LayoutEnginePort>> = std::collections::HashMap::new();
@@ -463,7 +463,7 @@ mod tests {
         }
         
         fn subscriptions(&self) -> Vec<crate::shared::events::signals::SignalKind> {
-            vec![crate::shared::events::signals::SignalKind::Time, crate::shared::events::signals::SignalKind::Hyprland, crate::shared::events::signals::SignalKind::Applets, crate::shared::events::signals::SignalKind::Metrics, crate::shared::events::signals::SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription { bus: crate::shared::dbus::domain::BusType::Session, destination: None, path: None, interface: None, member: None })]
+            vec![crate::shared::events::signals::SignalKind::Time, crate::shared::events::signals::SignalKind::Hyprland, crate::shared::events::signals::SignalKind::Applets, crate::shared::events::signals::SignalKind::Metrics, crate::shared::events::signals::SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))]
         }
         
         fn refresh(&mut self, _hub: &SignalHub, _signals: &[crate::shared::events::signals::SignalKind]) {

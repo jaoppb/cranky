@@ -479,10 +479,10 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
 }
 
 pub struct CosmicTextMeasurer<'a> {
-    pub font_system: &'a mut FontSystem,
-    pub scale: Scale,
-    pub default_font_family: FontFamily,
-    pub default_font_size: FontSize,
+    font_system: &'a mut FontSystem,
+    scale: Scale,
+    default_font_family: FontFamily,
+    default_font_size: FontSize,
 }
 
 impl<'a> CosmicTextMeasurer<'a> {

@@ -260,41 +260,80 @@ pub struct BarConfig {
     height: BarHeight,
     vertical_alignment: VerticalAlignment,
     border: BorderConfig,
-    pub margin: MarginConfig,
-    pub padding: PaddingConfig,
-    pub module_gap: ModuleGap,
-    pub font_family: FontFamily,
-    pub font_size: FontSize,
-    pub unfocused: Option<PartialBarConfig>,
+    margin: MarginConfig,
+    padding: PaddingConfig,
+    module_gap: ModuleGap,
+    font_family: FontFamily,
+    font_size: FontSize,
+    unfocused: Option<PartialBarConfig>,
 }
 
-
 pub struct CreateBarConfigCommand {
-    pub background: DrawingColor,
-    pub height: BarHeight,
-    pub vertical_alignment: VerticalAlignment,
-    pub border: BorderConfig,
-    pub margin: MarginConfig,
-    pub padding: PaddingConfig,
-    pub module_gap: ModuleGap,
-    pub font_family: FontFamily,
-    pub font_size: FontSize,
-    pub unfocused: Option<PartialBarConfig>,
+    background: DrawingColor,
+    height: BarHeight,
+    vertical_alignment: VerticalAlignment,
+    border: BorderConfig,
+    margin: MarginConfig,
+    padding: PaddingConfig,
+    module_gap: ModuleGap,
+    font_family: FontFamily,
+    font_size: FontSize,
+    unfocused: Option<PartialBarConfig>,
+}
+
+impl CreateBarConfigCommand {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        background: DrawingColor,
+        height: BarHeight,
+        vertical_alignment: VerticalAlignment,
+        border: BorderConfig,
+        margin: MarginConfig,
+        padding: PaddingConfig,
+        module_gap: ModuleGap,
+        font_family: FontFamily,
+        font_size: FontSize,
+        unfocused: Option<PartialBarConfig>,
+    ) -> Self {
+        Self {
+            background,
+            height,
+            vertical_alignment,
+            border,
+            margin,
+            padding,
+            module_gap,
+            font_family,
+            font_size,
+            unfocused,
+        }
+    }
+
+    pub fn background(&self) -> &DrawingColor { &self.background }
+    pub fn height(&self) -> BarHeight { self.height }
+    pub fn vertical_alignment(&self) -> VerticalAlignment { self.vertical_alignment }
+    pub fn border(&self) -> &BorderConfig { &self.border }
+    pub fn margin(&self) -> &MarginConfig { &self.margin }
+    pub fn padding(&self) -> &PaddingConfig { &self.padding }
+    pub fn module_gap(&self) -> ModuleGap { self.module_gap }
+    pub fn font_family(&self) -> &FontFamily { &self.font_family }
+    pub fn font_size(&self) -> FontSize { self.font_size }
+    pub fn unfocused(&self) -> Option<&PartialBarConfig> { self.unfocused.as_ref() }
 }
 
 impl BarConfig {
     pub fn new(cmd: CreateBarConfigCommand) -> Self {
         Self {
-            background: cmd.background,
-            height: cmd.height,
-            vertical_alignment: cmd.vertical_alignment,
-            border: cmd.border,
-            margin: cmd.margin,
-            padding: cmd.padding,
-            module_gap: cmd.module_gap,
-            font_family: cmd.font_family,
-            font_size: cmd.font_size,
-            unfocused: cmd.unfocused,
+            background: cmd.background().clone(),
+            height: cmd.height(),
+            vertical_alignment: cmd.vertical_alignment(),
+            border: cmd.border().clone(),
+            margin: cmd.margin().clone(),
+            padding: cmd.padding().clone(),
+            module_gap: cmd.module_gap(),
+            font_family: cmd.font_family().clone(),
+            font_size: cmd.font_size(),
+            unfocused: cmd.unfocused().cloned(),
         }
     }
 
@@ -761,29 +800,66 @@ pub struct PartialBarConfig {
 
 
 pub struct CreatePartialBarConfigCommand {
-    pub background: Option<DrawingColor>,
-    pub height: Option<BarHeight>,
-    pub vertical_alignment: Option<VerticalAlignment>,
-    pub border: Option<PartialBorderConfig>,
-    pub margin: Option<PartialMarginConfig>,
-    pub padding: Option<PartialPaddingConfig>,
-    pub module_gap: Option<ModuleGap>,
-    pub font_family: Option<FontFamily>,
-    pub font_size: Option<FontSize>,
+    background: Option<DrawingColor>,
+    height: Option<BarHeight>,
+    vertical_alignment: Option<VerticalAlignment>,
+    border: Option<PartialBorderConfig>,
+    margin: Option<PartialMarginConfig>,
+    padding: Option<PartialPaddingConfig>,
+    module_gap: Option<ModuleGap>,
+    font_family: Option<FontFamily>,
+    font_size: Option<FontSize>,
+}
+
+impl CreatePartialBarConfigCommand {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        background: Option<DrawingColor>,
+        height: Option<BarHeight>,
+        vertical_alignment: Option<VerticalAlignment>,
+        border: Option<PartialBorderConfig>,
+        margin: Option<PartialMarginConfig>,
+        padding: Option<PartialPaddingConfig>,
+        module_gap: Option<ModuleGap>,
+        font_family: Option<FontFamily>,
+        font_size: Option<FontSize>,
+    ) -> Self {
+        Self {
+            background,
+            height,
+            vertical_alignment,
+            border,
+            margin,
+            padding,
+            module_gap,
+            font_family,
+            font_size,
+        }
+    }
+
+    pub fn background(&self) -> Option<&DrawingColor> { self.background.as_ref() }
+    pub fn height(&self) -> Option<BarHeight> { self.height }
+    pub fn vertical_alignment(&self) -> Option<VerticalAlignment> { self.vertical_alignment }
+    pub fn border(&self) -> Option<&PartialBorderConfig> { self.border.as_ref() }
+    pub fn margin(&self) -> Option<&PartialMarginConfig> { self.margin.as_ref() }
+    pub fn padding(&self) -> Option<&PartialPaddingConfig> { self.padding.as_ref() }
+    pub fn module_gap(&self) -> Option<ModuleGap> { self.module_gap }
+    pub fn font_family(&self) -> Option<&FontFamily> { self.font_family.as_ref() }
+    pub fn font_size(&self) -> Option<FontSize> { self.font_size }
 }
 
 impl PartialBarConfig {
     pub fn new(cmd: CreatePartialBarConfigCommand) -> Self {
         Self {
-            background: cmd.background,
-            height: cmd.height,
-            vertical_alignment: cmd.vertical_alignment,
-            border: cmd.border,
-            margin: cmd.margin,
-            padding: cmd.padding,
-            module_gap: cmd.module_gap,
-            font_family: cmd.font_family,
-            font_size: cmd.font_size,
+            background: cmd.background().cloned(),
+            height: cmd.height(),
+            vertical_alignment: cmd.vertical_alignment(),
+            border: cmd.border().cloned(),
+            margin: cmd.margin().cloned(),
+            padding: cmd.padding().cloned(),
+            module_gap: cmd.module_gap(),
+            font_family: cmd.font_family().cloned(),
+            font_size: cmd.font_size(),
         }
     }
 

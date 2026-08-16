@@ -104,13 +104,13 @@ impl AnyModulePort for RhaiModule {
                         } else {
                             crate::shared::dbus::domain::BusType::Session
                         };
-                        result.push(SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription {
+                        result.push(SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(
                             bus,
-                            destination: map.get("destination").and_then(|v| v.clone().try_cast::<String>()),
-                            path: map.get("path").and_then(|v| v.clone().try_cast::<String>()),
-                            interface: map.get("interface").and_then(|v| v.clone().try_cast::<String>()),
-                            member: map.get("member").and_then(|v| v.clone().try_cast::<String>()),
-                        }));
+                            map.get("destination").and_then(|v| v.clone().try_cast::<String>()).map(crate::shared::dbus::domain::Destination::new),
+                            map.get("path").and_then(|v| v.clone().try_cast::<String>()).map(crate::shared::dbus::domain::Path::new),
+                            map.get("interface").and_then(|v| v.clone().try_cast::<String>()).map(crate::shared::dbus::domain::Interface::new),
+                            map.get("member").and_then(|v| v.clone().try_cast::<String>()).map(crate::shared::dbus::domain::Member::new),
+                        )));
                     }
             }
             return result;
@@ -160,7 +160,7 @@ impl AnyModulePort for RhaiModule {
             if let SignalKind::DBus(_) = signal
                 && !dbus_handled {
                     let dbus_state = hub.dbus_rx().borrow().clone();
-                    if let Ok(dbus_json) = serde_json::to_string(&dbus_state.properties)
+                    if let Ok(dbus_json) = serde_json::to_string(&dbus_state.properties())
                         && let Ok(dbus_rhai) = engine.parse_json(&dbus_json, true)
                     {
                         scope.set_or_push("dbus", dbus_rhai);
