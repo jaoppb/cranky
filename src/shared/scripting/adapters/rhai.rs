@@ -62,6 +62,7 @@ impl RhaiModule {
                         "hyprland" => result.push(SignalKind::Hyprland),
                         "applets" => result.push(SignalKind::Applets),
                         "metrics" => result.push(SignalKind::Metrics),
+                        "mpris" => result.push(SignalKind::Mpris),
                         _ => {}
                     }
                 } else if let Some(map) = sub.clone().try_cast::<rhai::Map>()
@@ -163,6 +164,15 @@ impl AnyModulePort for RhaiModule {
             }
         }
 
+        if changed.contains(&SignalKind::Mpris) {
+            let mpris = hub.mpris_rx().borrow().clone();
+            if let Ok(mpris_json) = serde_json::to_string(&mpris)
+                && let Ok(mpris_rhai) = engine.parse_json(&mpris_json, true)
+            {
+                scope.set_or_push("mpris", mpris_rhai);
+            }
+        }
+
         let mut dbus_handled = false;
         for signal in changed {
             if let SignalKind::DBus(_) = signal
@@ -200,6 +210,24 @@ impl AnyModulePort for RhaiModule {
             Err(e) => {
                 tracing::warn!("Module render error in rhai: {}", e);
                 crate::features::layout_engine::domain::LayoutNode::Flex { children: vec![], style: crate::features::layout_engine::domain::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None, tooltip: None }
+            }
+        }
+    }
+
+    fn call_function(&mut self, name: &crate::shared::primitives::FunctionName) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
+        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
+
+        // Check if function exists first to avoid error if it doesn't? 
+        // rhai's call_fn will return an error if not found. Since we want Ok(()) if it's missing, let's catch it.
+        match engine.call_fn::<()>(&mut scope, &self.ast, name.as_str(), ()) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                if matches!(*e, rhai::EvalAltResult::ErrorFunctionNotFound(..)) {
+                    Ok(())
+                } else {
+                    Err(crate::features::module_runtime::ports::ModuleInitError::ScriptError(format!("Failed to call function '{}': {}", name, e)))
+                }
             }
         }
     }

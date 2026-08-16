@@ -33,6 +33,8 @@ impl BuiltinModules {
         ("applet.rhai", include_str!("../../assets/widgets/applet.rhai")),
         ("metrics.lua", include_str!("../../assets/widgets/metrics.lua")),
         ("metrics.rhai", include_str!("../../assets/widgets/metrics.rhai")),
+        ("mpris.lua", include_str!("../../assets/widgets/mpris.lua")),
+        ("mpris.rhai", include_str!("../../assets/widgets/mpris.rhai")),
     ];
 
     pub fn ensure_builtins(app_env: &crate::shared::env::domain::AppEnvironment) -> Result<PathBuf, BuiltinError> {

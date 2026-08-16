@@ -77,6 +77,10 @@ impl LuaStateSynchronizer {
                     let metrics = hub.metrics_rx().borrow().clone();
                     if let Ok(val) = lua.to_value(&metrics) { globals.set("metrics", val)?; }
                 }
+                SignalKind::Mpris => {
+                    let mpris = hub.mpris_rx().borrow().clone();
+                    if let Ok(val) = lua.to_value(&mpris) { let _ = globals.set("mpris", val); }
+                }
                 _ => {}
             }
         }
@@ -138,6 +142,7 @@ impl LuaModule {
                                     "hyprland" => subs.push(SignalKind::Hyprland),
                                     "applets" => subs.push(SignalKind::Applets),
                                     "metrics" => subs.push(SignalKind::Metrics),
+                                    "mpris" => subs.push(SignalKind::Mpris),
                                     _ => {}
                                 }
                             }
@@ -289,6 +294,19 @@ impl AnyModulePort for LuaModule {
         }
         
         crate::features::layout_engine::domain::LayoutNode::Flex { children: vec![], style: crate::features::layout_engine::domain::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None, tooltip: None }
+    }
+
+    fn call_function(&mut self, name: &crate::shared::primitives::FunctionName) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
+        let globals = lua.globals();
+
+        if let Ok(func) = globals.get::<mlua::Function>(name.as_str()) {
+            func.call::<()>(())
+                .map_err(|e| crate::features::module_runtime::ports::ModuleInitError::ScriptError(format!("Failed to call function '{}': {}", name, e)))
+        } else {
+            // It's not necessarily an error if a script doesn't handle an action, but the port signature asks for Ok if successful
+            Ok(())
+        }
     }
 }
 

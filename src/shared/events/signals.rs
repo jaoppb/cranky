@@ -13,6 +13,7 @@ pub enum SignalKind {
     DBus(DBusSubscription),
     Applets,
     Metrics,
+    Mpris,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -150,6 +151,10 @@ pub struct SignalHub {
         crate::shared::events::core::PointerSender,
         crate::shared::events::core::PointerReceiver,
     ),
+    mpris: (
+        watch::Sender<crate::features::mpris::domain::MprisState>,
+        watch::Receiver<crate::features::mpris::domain::MprisState>,
+    ),
 }
 
 impl SignalHub {
@@ -160,6 +165,7 @@ impl SignalHub {
         let dbus = watch::channel(DBusState::default());
         let applets = watch::channel(AppletsState::default());
         let metrics = watch::channel(crate::features::metrics::domain::MetricsState::default());
+        let mpris = watch::channel(crate::features::mpris::domain::MprisState::default());
         let pointer = tokio::sync::broadcast::channel(32);
 
         Self {
@@ -170,7 +176,16 @@ impl SignalHub {
             applets,
             metrics,
             pointer,
+            mpris,
         }
+    }
+
+    pub fn mpris_tx(&self) -> watch::Sender<crate::features::mpris::domain::MprisState> {
+        self.mpris.0.clone()
+    }
+
+    pub fn mpris_rx(&self) -> watch::Receiver<crate::features::mpris::domain::MprisState> {
+        self.mpris.1.clone()
     }
 
     pub fn config_tx(&self) -> watch::Sender<Config> {

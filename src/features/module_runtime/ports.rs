@@ -51,6 +51,10 @@ pub trait AnyModulePort: Send + Sync {
     fn subscriptions(&self) -> &[SignalKind];
     fn refresh(&mut self, hub: &SignalHub, changed_signals: &[SignalKind]);
     fn render(&self, monitor: &MonitorId) -> crate::features::layout_engine::domain::LayoutNode;
+    
+    /// Invoke a named function on the script. Used by ScriptCall click actions.
+    /// Returns Ok(()) if the function exists and ran successfully.
+    fn call_function(&mut self, name: &crate::shared::primitives::FunctionName) -> Result<(), ModuleInitError>;
 }
 
 #[async_trait]
@@ -81,5 +85,5 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
 
     fn clear(&mut self);
 
-    async fn register_dbus_subscriptions(&self, dbus: &mut dyn crate::shared::dbus::ports::DBusPort);
+    async fn register_dbus_subscriptions(&self, dbus: &mut crate::shared::dbus::subscription_manager::DbusSubscriptionManager);
 }

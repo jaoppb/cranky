@@ -199,7 +199,7 @@ impl<R: crate::features::module_runtime::ports::ModuleRegistryPort<F> + 'static,
     pub async fn run(
         &mut self,
         mut display: impl DisplayServerPort,
-        mut dbus: impl crate::shared::dbus::ports::DBusPort, // Left here for API compatibility
+        mut dbus: crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
         sni: impl crate::features::systray::ports::SniPort,
     ) -> Result<(), AppError> {
         let mut config_rx = self.hub.config_rx();
@@ -267,6 +267,10 @@ impl<R: crate::features::module_runtime::ports::ModuleRegistryPort<F> + 'static,
                                     }
                                     Err(e) => tracing::error!("Failed to reload module {}: {}", name.as_str(), e),
                                 }
+                            }
+                            AppCommand::ScriptCall(_) => {
+                                // ScriptCall is handled locally by ModuleActor — should not reach here
+                                tracing::warn!("Received ScriptCall at application state level; ignoring");
                             }
                         }
 
@@ -396,7 +400,7 @@ mod tests {
         let canvas_factory = Arc::new(std::sync::Mutex::new(crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new()));
 
         let mut app = CrankyApp::new(
-            hub,
+            hub.clone(),
             config,
             command_rx,
             command_tx,
@@ -414,7 +418,8 @@ mod tests {
             )))
         });
 
-        let mock_dbus = crate::shared::dbus::ports::MockDBusPort::new();
+        let mock_conn = crate::shared::dbus::ports::MockDbusConnectionPort::new();
+        let mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(std::sync::Arc::new(mock_conn), &hub);
         let mock_sni = crate::features::systray::ports::MockSniPort::new();
 
         let result = app.run(mock_display, mock_dbus, mock_sni).await;
@@ -589,7 +594,8 @@ mod tests {
         mock_display.expect_show_tooltip().returning(|_| Ok(()));
         mock_display.expect_hide_tooltip().returning(|| Ok(()));
 
-        let mock_dbus = crate::shared::dbus::ports::MockDBusPort::new();
+        let mock_conn = crate::shared::dbus::ports::MockDbusConnectionPort::new();
+        let mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(std::sync::Arc::new(mock_conn), &hub);
         let mut mock_sni = crate::features::systray::ports::MockSniPort::new();
         mock_sni.expect_trigger_action().returning(|_, _, _| Ok(()));
 

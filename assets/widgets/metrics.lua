@@ -120,12 +120,12 @@ end
 
 function render(monitor)
     if not state.config then
-        return { type = "flex", children = {} }
+        return { type = "flex" }
     end
     
     local widgets = get_widgets()
     if #widgets == 0 then
-        return { type = "flex", children = {} }
+        return { type = "flex" }
     end
 
     local children = {}

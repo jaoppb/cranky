@@ -17,11 +17,9 @@ use crate::features::workspaces::adapters::hyprland::HyprlandAdapter;
 use crate::features::metrics::adapters::SysinfoAdapter;
 use crate::features::systray::adapters::SniAdapter;
 use crate::shared::wayland::adapters::wayland::WaylandAdapter;
-use crate::shared::dbus::adapters::zbus::ZbusAdapter;
 use crate::app::state::CrankyApp;
 use crate::app::commands::AppCommand;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::dbus::ports::DBusPort;
 use crate::features::systray::ports::SniPort;
 use std::sync::Arc;
 
@@ -77,10 +75,16 @@ fn init_tracing(env: &AppEnvironment) -> tracing_appender::non_blocking::WorkerG
 async fn init_secondary_adapters(
     hub: &Arc<SignalHub>,
     metrics_config: &crate::features::metrics::domain::MetricsConfig,
-) -> (ZbusAdapter, SniAdapter) {
-    let mut zbus_adapter = ZbusAdapter::new(hub);
-    if let Err(e) = zbus_adapter.connect().await {
-        error!("Failed to connect to DBus: {}", e);
+) -> Result<(crate::shared::dbus::subscription_manager::DbusSubscriptionManager, SniAdapter), Box<dyn std::error::Error>> {
+    let conn_adapter = crate::shared::dbus::adapters::connection::ZbusConnectionAdapter::new().connect().await
+        .map_err(|e| format!("DBus connection required: {}", e))?;
+    let conn: Arc<dyn crate::shared::dbus::ports::DbusConnectionPort> = Arc::new(conn_adapter);
+    
+    let dbus_manager = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(conn.clone(), hub);
+    
+    let mut mpris_adapter = crate::features::mpris::adapters::zbus::ZbusMprisAdapter::new(conn.clone(), hub);
+    if let Err(e) = mpris_adapter.start_watching().await {
+        error!("Failed to start MPRIS watcher: {}", e);
     }
 
     let mut sni_adapter = SniAdapter::new(hub.clone());
@@ -91,7 +95,7 @@ async fn init_secondary_adapters(
     let metrics_adapter = SysinfoAdapter::new(metrics_config.clone(), hub.clone());
     metrics_adapter.start().await;
 
-    (zbus_adapter, sni_adapter)
+    Ok((dbus_manager, sni_adapter))
 }
 
 fn spawn_background_tasks(hub: Arc<SignalHub>, hyprland_adapter: HyprlandAdapter) {
@@ -161,7 +165,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     // 3. Initialize secondary adapters
-    let (zbus_adapter, sni_adapter) = init_secondary_adapters(&hub, initial_config.metrics()).await;
+    let (zbus_adapter, sni_adapter) = init_secondary_adapters(&hub, initial_config.metrics()).await?;
 
     // 4. Spawn background worker tasks
     let hyprland_adapter = HyprlandAdapter::new(app_env.clone());

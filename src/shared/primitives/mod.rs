@@ -68,3 +68,22 @@ impl fmt::Display for ModuleName {
         write!(f, "{}", self.0)
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize)]
+pub struct FunctionName(String);
+
+impl FunctionName {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for FunctionName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}

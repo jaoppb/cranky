@@ -111,6 +111,9 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
             if subs.contains(&SignalKind::Metrics) {
                 events_stream.push(WatchStream::new(self.ctx.hub().metrics_rx()).map(|_| SignalKind::Metrics).boxed());
             }
+            if subs.contains(&SignalKind::Mpris) {
+                events_stream.push(WatchStream::new(self.ctx.hub().mpris_rx()).map(|_| SignalKind::Mpris).boxed());
+            }
             if subs.iter().any(|s| matches!(s, SignalKind::DBus(_))) {
                 events_stream.push(WatchStream::new(self.ctx.hub().dbus_rx()).map(|_| SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))).boxed());
             }
@@ -172,7 +175,15 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                                                     );
                                                     if let Some(cmd) = hit_cmd {
                                                         tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_click command");
-                                                        self.ctx.command_tx().send_command(cmd.clone());
+                                                        if let crate::app::commands::AppCommand::ScriptCall(func_name) = &cmd {
+                                                            if let Err(e) = self.port.call_function(func_name) {
+                                                                tracing::error!(module = %ctx_id, func = %func_name, "ScriptCall failed: {}", e);
+                                                            } else {
+                                                                changed = true;
+                                                            }
+                                                        } else {
+                                                            self.ctx.command_tx().send_command(cmd.clone());
+                                                        }
                                                     } else {
                                                         tracing::debug!(module = %ctx_id, "No on_click command found in hit tree");
                                                     }
@@ -472,6 +483,10 @@ mod tests {
         
         fn render(&self, _monitor: &MonitorId) -> crate::features::layout_engine::domain::LayoutNode {
             self.render_node.clone()
+        }
+
+        fn call_function(&mut self, _name: &crate::shared::primitives::FunctionName) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+            Ok(())
         }
     }
 

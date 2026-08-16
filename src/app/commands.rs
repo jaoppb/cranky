@@ -20,6 +20,7 @@ pub enum AppCommand {
     },
     HideTooltip,
     ReloadModule(crate::shared::primitives::ModuleName),
+    ScriptCall(crate::shared::primitives::FunctionName),
 }
 
 #[cfg(test)]

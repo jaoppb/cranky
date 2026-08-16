@@ -239,7 +239,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
 
     async fn register_dbus_subscriptions(
         &self,
-        dbus: &mut dyn crate::shared::dbus::ports::DBusPort,
+        dbus: &mut crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
     ) {
         for sub in &self.dbus_subscriptions {
             if let Err(e) = dbus.subscribe(sub.clone()).await {
@@ -407,7 +407,9 @@ mod tests {
         >::load(&mut registry, &config)
         .unwrap();
 
-        let mut mock_dbus = crate::shared::dbus::ports::MockDBusPort::new();
+        let hub = std::sync::Arc::new(crate::shared::events::signals::SignalHub::new(config.clone()));
+        let mock_conn = crate::shared::dbus::ports::MockDbusConnectionPort::new();
+        let mut mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(std::sync::Arc::new(mock_conn), &hub);
         crate::features::module_runtime::ports::ModuleRegistryPort::<
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
         >::register_dbus_subscriptions(&registry, &mut mock_dbus)
