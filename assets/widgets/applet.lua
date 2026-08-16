@@ -5,7 +5,6 @@ local max_items = 6
 local empty_label = "applet: none"
 
 local items = {}
-local error_message = nil
 
 function init()
     if config.show_titles ~= nil then show_titles = config.show_titles end
@@ -20,25 +19,12 @@ function subscriptions()
 end
 
 function refresh()
-    items = {}
-    if _G.applets then
-        for _, item in ipairs(_G.applets) do
-            table.insert(items, item)
-        end
-    end
+    items = applets or {}
 end
 
 function render(monitor)
     local text_color = "#c0caf5"
     
-    if error_message then
-        return {
-            type = "text",
-            text = "error: " .. error_message,
-            color = text_color
-        }
-    end
-
     if #items == 0 then
         return {
             type = "text",
@@ -65,10 +51,7 @@ function render(monitor)
         if show_icons then
             local img = nil
             if item.icon and type(item.icon) == "table" then
-                img = item.icon.image or (item.icon.data and item.icon)
-            end
-            if not img then
-                img = item.icon_image
+                img = item.icon.image
             end
             if type(img) == "table" then
                 table.insert(item_children, {
@@ -87,7 +70,7 @@ function render(monitor)
         end
         
         if show_titles then
-            local label = item.title or item.app_id or "app"
+            local label = (item.title and item.title ~= "") and item.title or item.item_id or "app"
             table.insert(item_children, {
                 type = "text",
                 text = label,
@@ -100,17 +83,17 @@ function render(monitor)
             local t = item.tooltip.title or ""
             local d = item.tooltip.description or ""
             if t ~= "" then
-                table.insert(tooltip_children, { type = "text", text = t, color = "#c0caf5" })
+                table.insert(tooltip_children, { type = "text", text = t, color = text_color })
             end
             if d ~= "" and d ~= t then
-                table.insert(tooltip_children, { type = "text", text = d, color = "#c0caf5" })
+                table.insert(tooltip_children, { type = "text", text = d, color = text_color })
             end
         end
         if #tooltip_children == 0 then
             table.insert(tooltip_children, {
                 type = "text",
-                text = item.title or item.app_id or "app",
-                color = "#c0caf5"
+                text = (item.title and item.title ~= "") and item.title or item.item_id or "app",
+                color = text_color
             })
         end
 

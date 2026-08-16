@@ -9,7 +9,18 @@ let state = #{
     config: ()
 };
 
+let text_color = "#cccccc";
+let bg_color = "#313244";
+let bar_width = 50;
+let bar_height = 6;
+let bar_radius = 3.0;
+
 fn init() {
+    if "text_color" in config { text_color = config.text_color; }
+    if "bg_color" in config { bg_color = config.bg_color; }
+    if "bar_width" in config { bar_width = config.bar_width.to_int(); }
+    if "bar_height" in config { bar_height = config.bar_height.to_int(); }
+    if "bar_radius" in config { bar_radius = config.bar_radius.to_float(); }
 }
 
 fn subscriptions() {
@@ -55,7 +66,7 @@ fn is_enabled(metric_name, global_mode, cfg) {
     if metric_name in cfg && cfg[metric_name] == false {
         return false;
     }
-    if global_mode == "disabled" {
+    if global_mode == () || global_mode == "disabled" {
         return false;
     }
     true
@@ -65,13 +76,11 @@ fn get_widgets(s, cfg) {
     let widgets = [];
     if s.config == () { return widgets; }
 
-    // CPU
-    if is_enabled("cpu", s.config.cpu, cfg) {
+    if "cpu" in s.config && is_enabled("cpu", s.config.cpu, cfg) {
         widgets.push(#{ type: "bar", label: "CPU", value: s.cpu, max: 100.0 });
     }
 
-    // Memory
-    if is_enabled("memory", s.config.memory, cfg) {
+    if "memory" in s.config && is_enabled("memory", s.config.memory, cfg) {
         if s.config.memory == "absolute" {
             widgets.push(#{ type: "text", label: "RAM", text: format_bytes(s.ram_used) });
         } else {
@@ -83,7 +92,6 @@ fn get_widgets(s, cfg) {
         }
     }
 
-    // Disks
     if "disk" in s.config && is_enabled("disk", s.config.disk, cfg) && s.disks.len() > 0 {
         let d = s.disks[0];
         if s.config.disk == "absolute" {
@@ -97,13 +105,11 @@ fn get_widgets(s, cfg) {
         }
     }
 
-    // Network
     if "network" in s.config && is_enabled("network", s.config.network, cfg) {
         let text_val = "▼" + format_bytes(s.net_rx) + " ▲" + format_bytes(s.net_tx);
         widgets.push(#{ type: "text", label: "NET", text: text_val });
     }
 
-    // Temperature
     if "temperature" in s.config && is_enabled("temperature", s.config.temperature, cfg) {
         let unit = if s.config.temperature == "celsius" { "°C" } else { "°F" };
         let rounded_temp = (s.temp * 10.0).to_int().to_float() / 10.0;
@@ -115,21 +121,16 @@ fn get_widgets(s, cfg) {
 }
 
 fn render(monitor_id) {
+    if state.config == () {
+        return #{ type: "flex", children: [] };
+    }
+    
     let widgets = get_widgets(state, config);
     if widgets.len() == 0 {
-        return #{
-            type: "text",
-            text: "Loading metrics...",
-            color: "#cccccc"
-        };
+        return #{ type: "flex", children: [] };
     }
 
     let children = [];
-    let text_color = "#cccccc";
-    let bg_color = "#313244";
-    let bar_width = 50;
-    let bar_height = 6;
-    let bar_radius = 3.0;
 
     for w in widgets {
         let widget_children = [];

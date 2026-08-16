@@ -5,7 +5,6 @@ let max_items = 6;
 let empty_label = "applet: none";
 
 let items = [];
-let error_message = ();
 
 fn init() {
     if "show_titles" in config { show_titles = config["show_titles"]; }
@@ -20,25 +19,16 @@ fn subscriptions() {
 }
 
 fn refresh() {
-    items = [];
     if applets != () {
-        for item in applets {
-            items.push(item);
-        }
+        items = applets;
+    } else {
+        items = [];
     }
 }
 
 fn render(monitor_id) {
     let text_color = "#c0caf5";
     
-    if error_message != () {
-        return #{
-            type: "text",
-            text: "error: " + error_message.to_string(),
-            color: text_color
-        };
-    }
-
     if items.len() == 0 {
         return #{
             type: "text",
@@ -66,18 +56,11 @@ fn render(monitor_id) {
         
         if show_icons {
             let img = ();
-            if "icon" in item {
+            if "icon" in item && item.icon != () {
                 let icon_val = item.icon;
-                if type_of(icon_val) == "map" {
-                    if "image" in icon_val {
-                        img = icon_val.image;
-                    } else if "data" in icon_val {
-                        img = icon_val;
-                    }
+                if type_of(icon_val) == "map" && "image" in icon_val {
+                    img = icon_val.image;
                 }
-            }
-            if img == () && "icon_image" in item {
-                img = item.icon_image;
             }
             if img != () && type_of(img) == "map" {
                 item_children.push(#{
@@ -99,8 +82,8 @@ fn render(monitor_id) {
             let label = "app";
             if "title" in item && item.title != () && item.title != "" {
                 label = item.title;
-            } else if "app_id" in item && item.app_id != () && item.app_id != "" {
-                label = item.app_id;
+            } else if "item_id" in item && item.item_id != () && item.item_id != "" {
+                label = item.item_id;
             }
             item_children.push(#{
                 type: "text",
@@ -120,20 +103,20 @@ fn render(monitor_id) {
                 d = item.tooltip.description;
             }
             if t != "" {
-                tooltip_children.push(#{ type: "text", text: t, color: "#c0caf5" });
+                tooltip_children.push(#{ type: "text", text: t, color: text_color });
             }
             if d != "" && d != t {
-                tooltip_children.push(#{ type: "text", text: d, color: "#c0caf5" });
+                tooltip_children.push(#{ type: "text", text: d, color: text_color });
             }
         }
         if tooltip_children.len() == 0 {
             let fallback = "app";
             if "title" in item && item.title != () && item.title != "" {
                 fallback = item.title;
-            } else if "app_id" in item && item.app_id != () && item.app_id != "" {
-                fallback = item.app_id;
+            } else if "item_id" in item && item.item_id != () && item.item_id != "" {
+                fallback = item.item_id;
             }
-            tooltip_children.push(#{ type: "text", text: fallback, color: "#c0caf5" });
+            tooltip_children.push(#{ type: "text", text: fallback, color: text_color });
         }
         
         let applet_node = #{

@@ -1,17 +1,25 @@
+let format_str = "%H:%M:%S";
+let time_str = "";
+let text_color = "#c0caf5";
+let font_val = ();
+let size_val = ();
+let tooltip_val = ();
+let on_click_val = ();
+
+fn init() {
+    if "format" in config { format_str = config["format"]; }
+    if "color" in config { text_color = config["color"]; }
+    if "font" in config { font_val = config["font"]; }
+    if "size" in config { size_val = config["size"]; }
+    if "tooltip" in config { tooltip_val = config["tooltip"]; }
+    if "on_click" in config { on_click_val = #{ Exec: config["on_click"] }; }
+}
+
 fn subscriptions() {
     ["time"]
 }
 
 fn refresh() {
-}
-
-fn render(monitor) {
-    let fmt = "%H:%M:%S";
-    if "format" in config {
-        fmt = config["format"];
-    }
-
-    let time_str = "";
     if current_time != () {
         let t = current_time.to_string();
         if t.len() >= 19 {
@@ -31,7 +39,7 @@ fn render(monitor) {
             let h_12_str = h_12.to_string();
             if h_12_str.len() == 1 { h_12_str = "0" + h_12_str; }
 
-            let result = fmt;
+            let result = format_str;
             result.replace("%Y", yr);
             result.replace("%m", mo);
             result.replace("%d", da);
@@ -48,10 +56,17 @@ fn render(monitor) {
             time_str = t;
         }
     }
+}
 
-    #{
+fn render(monitor_id) {
+    let node = #{
         type: "text",
         text: time_str,
-        color: "#c0caf5"
-    }
+        color: text_color
+    };
+    if font_val != () { node.font = font_val; }
+    if size_val != () { node.size = size_val; }
+    if tooltip_val != () { node.tooltip = tooltip_val; }
+    if on_click_val != () { node.on_click = on_click_val; }
+    node
 }

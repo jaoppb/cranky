@@ -1,5 +1,3 @@
--- Metrics built-in module for Cranky
-
 local state = {
     cpu = 0.0,
     ram_used = 0,
@@ -11,7 +9,20 @@ local state = {
     config = nil
 }
 
+local text_color = "#cccccc"
+local bg_color = "#313244"
+local bar_width = 50
+local bar_height = 6
+local bar_radius = 3
+
 function init()
+    if config then
+        if config.text_color then text_color = config.text_color end
+        if config.bg_color then bg_color = config.bg_color end
+        if config.bar_width then bar_width = config.bar_width end
+        if config.bar_height then bar_height = config.bar_height end
+        if config.bar_radius then bar_radius = config.bar_radius end
+    end
 end
 
 function subscriptions()
@@ -31,7 +42,6 @@ function refresh()
     end
 end
 
--- Helper to format bytes
 local function format_bytes(bytes)
     local units = {"B", "KB", "MB", "GB", "TB"}
     local i = 1
@@ -45,11 +55,11 @@ end
 
 local function get_color(percent)
     if percent < 50 then
-        return "#a6e3a1" -- green
+        return "#a6e3a1"
     elseif percent < 80 then
-        return "#f9e2af" -- yellow
+        return "#f9e2af"
     else
-        return "#f38ba8" -- red
+        return "#f38ba8"
     end
 end
 
@@ -57,7 +67,7 @@ local function is_enabled(metric_name, global_mode)
     if config and config[metric_name] == false then
         return false
     end
-    if global_mode == "disabled" then
+    if global_mode == nil or global_mode == "disabled" then
         return false
     end
     return true
@@ -67,12 +77,10 @@ local function get_widgets()
     local widgets = {}
     if not state.config then return widgets end
 
-    -- CPU
     if is_enabled("cpu", state.config.cpu) then
         table.insert(widgets, { type = "bar", label = "CPU", value = state.cpu, max = 100 })
     end
 
-    -- Memory
     if is_enabled("memory", state.config.memory) then
         if state.config.memory == "absolute" then
             table.insert(widgets, { type = "text", label = "RAM", text = format_bytes(state.ram_used) })
@@ -85,7 +93,6 @@ local function get_widgets()
         end
     end
 
-    -- Disks
     if state.config.disk and is_enabled("disk", state.config.disk) and #state.disks > 0 then
         local d = state.disks[1]
         if state.config.disk == "absolute" then
@@ -99,12 +106,10 @@ local function get_widgets()
         end
     end
 
-    -- Network
     if state.config.network and is_enabled("network", state.config.network) then
         table.insert(widgets, { type = "text", label = "NET", text = string.format("▼%s ▲%s", format_bytes(state.net_rx), format_bytes(state.net_tx)) })
     end
 
-    -- Temperature
     if state.config.temperature and is_enabled("temperature", state.config.temperature) then
         local unit = state.config.temperature == "celsius" and "°C" or "°F"
         table.insert(widgets, { type = "text", label = "TMP", text = string.format("%.1f%s", state.temp, unit) })
@@ -113,25 +118,17 @@ local function get_widgets()
     return widgets
 end
 
-local padding = 10
-local spacing = 15
-local bar_width = 50
-local bar_height = 6
-local bar_radius = 3
-
 function render(monitor)
+    if not state.config then
+        return { type = "flex", children = {} }
+    end
+    
     local widgets = get_widgets()
     if #widgets == 0 then
-        return {
-            type = "text",
-            text = "Loading metrics...",
-            color = "#cccccc"
-        }
+        return { type = "flex", children = {} }
     end
 
     local children = {}
-    local text_color = "#cccccc"
-    local bg_color = "#313244"
     
     for i, w in ipairs(widgets) do
         local widget_children = {}
@@ -147,7 +144,6 @@ function render(monitor)
             local fg_width = math.floor((percent / 100) * bar_width)
             local fg_color = get_color(percent)
             local bar_children = {}
-            -- Background
             table.insert(bar_children, {
                 type = "rect",
                 size = { width = bar_width, height = bar_height },
