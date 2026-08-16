@@ -252,7 +252,7 @@ impl ModulesConfigDto {
 
 #[derive(Debug, Deserialize)]
 pub struct ModuleConfigDto {
-    name: String,
+    name: crate::shared::primitives::ModuleName,
     enable: bool,
     #[serde(default)]
     engine: Option<String>,

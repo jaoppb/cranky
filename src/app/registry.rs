@@ -17,26 +17,24 @@ use crate::app::builtins;
 
 pub struct ModuleRegistry {
     modules: HashMap<ModuleId, Box<dyn AnyModulePort>>,
+    module_configs: HashMap<ModuleId, ModuleConfig>,
     left_modules: Vec<ModuleId>,
     center_modules: Vec<ModuleId>,
     right_modules: Vec<ModuleId>,
     dbus_subscriptions: Vec<crate::shared::dbus::domain::DBusSubscription>,
-}
-
-impl Default for ModuleRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
+    app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
 }
 
 impl ModuleRegistry {
-    pub fn new() -> Self {
+    pub fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
         Self {
             modules: HashMap::new(),
+            module_configs: HashMap::new(),
             left_modules: Vec::new(),
             center_modules: Vec::new(),
             right_modules: Vec::new(),
             dbus_subscriptions: Vec::new(),
+            app_env,
         }
     }
 
@@ -56,9 +54,9 @@ impl ModuleRegistry {
                 let id = ModuleId::new(*next_id);
                 *next_id += 1;
 
-                let mut module = builtins::BuiltinModules::find_module(config.name(), config.engine())
+                let mut module = builtins::BuiltinModules::find_module(config.name(), config.engine(), &self.app_env)
                     .map_err(|e| match e {
-                        BuiltinError::ModuleNotFound { module_name } => RegistryLoadError::ModuleNotFound(module_name),
+                        BuiltinError::ModuleNotFound { module_name, .. } => RegistryLoadError::ModuleNotFound(module_name),
                         BuiltinError::UnsupportedEngine { engine, module_name } => RegistryLoadError::UnsupportedEngine { engine, module_name },
                         BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
                     })?;
@@ -66,7 +64,7 @@ impl ModuleRegistry {
                 module
                     .init(config, full_config)
                     .map_err(|e| RegistryLoadError::ModuleInit {
-                        module_name: config.name().to_string(),
+                        module_name: config.name().clone(),
                         source: e,
                     })?;
 
@@ -76,6 +74,7 @@ impl ModuleRegistry {
                     }
                 }
 
+                self.module_configs.insert(id, config.clone());
                 self.modules.insert(id, module);
                 Ok(id)
             })
@@ -174,8 +173,64 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
         layout_senders
     }
 
+    fn reload_module(
+        &mut self,
+        name: &crate::shared::primitives::ModuleName,
+        config: &crate::shared::config::domain::Config,
+        hub: std::sync::Arc<SignalHub>,
+        surface_manager: crate::shared::wayland::ports::DynSurfaceManager,
+        command_tx: std::sync::Arc<dyn crate::features::module_runtime::ports::CommandSender>,
+        canvas_factory: std::sync::Arc<std::sync::Mutex<Fact>>,
+    ) -> Result<std::collections::HashMap<ModuleId, Box<dyn crate::features::module_runtime::ports::LayoutSender>>, crate::features::module_runtime::ports::RegistryLoadError> {
+        use crate::features::module_runtime::ports::RegistryLoadError;
+        use crate::app::builtins::BuiltinError;
+
+        let mut new_senders: std::collections::HashMap<ModuleId, Box<dyn crate::features::module_runtime::ports::LayoutSender>> = std::collections::HashMap::new();
+        let target_ids: Vec<ModuleId> = self.module_configs.iter()
+            .filter(|(_, cfg)| cfg.name() == name)
+            .map(|(id, _)| *id)
+            .collect();
+
+        for id in target_ids {
+            let cfg = self.module_configs.get(&id).unwrap();
+            let mut module = builtins::BuiltinModules::find_module(cfg.name(), cfg.engine(), &self.app_env)
+                .map_err(|e| match e {
+                    BuiltinError::ModuleNotFound { module_name, .. } => RegistryLoadError::ModuleNotFound(module_name),
+                    BuiltinError::UnsupportedEngine { engine, module_name } => RegistryLoadError::UnsupportedEngine { engine, module_name },
+                    BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
+                })?;
+
+            module.init(cfg, config)
+                .map_err(|e| RegistryLoadError::ModuleInit {
+                    module_name: cfg.name().clone(),
+                    source: e,
+                })?;
+
+            let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
+            new_senders.insert(id, Box::new(WatchLayoutSender { tx: layout_tx }));
+
+            let ctx = crate::features::module_runtime::application::ModuleContext::new(
+                id,
+                hub.clone(),
+                surface_manager.clone(),
+                command_tx.clone(),
+                layout_rx,
+            );
+
+            crate::features::module_runtime::application::ModuleActor::new(
+                module,
+                ctx,
+                canvas_factory.clone(),
+            )
+            .spawn();
+        }
+
+        Ok(new_senders)
+    }
+
     fn clear(&mut self) {
         self.modules.clear();
+        self.module_configs.clear();
         self.left_modules.clear();
         self.center_modules.clear();
         self.right_modules.clear();
@@ -209,7 +264,14 @@ mod tests {
 
     #[test]
     fn test_module_registry_load() {
-        let mut registry = ModuleRegistry::new();
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let mut registry = ModuleRegistry::new(app_env);
         let toml_str = r##"
             [bar]
             [modules]
@@ -263,7 +325,14 @@ mod tests {
 
     #[test]
     fn test_module_registry_load_errors() {
-        let mut registry = ModuleRegistry::new();
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let mut registry = ModuleRegistry::new(app_env);
         let toml_str = r##"
             [bar]
             [modules]
@@ -283,7 +352,14 @@ mod tests {
 
     #[test]
     fn test_module_registry_clear() {
-        let mut registry = ModuleRegistry::new();
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let mut registry = ModuleRegistry::new(app_env);
         let toml_str = r##"
             [bar]
             [modules]
@@ -309,7 +385,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_module_registry_register_dbus() {
-        let mut registry = ModuleRegistry::new();
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let mut registry = ModuleRegistry::new(app_env);
         let toml_str = r##"
             [bar]
             [modules]
@@ -333,7 +416,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_module_registry_spawn_all() {
-        let mut registry = ModuleRegistry::new();
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let mut registry = ModuleRegistry::new(app_env);
         let toml_str = r##"
             [bar]
             [modules]

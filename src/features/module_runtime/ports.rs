@@ -24,15 +24,15 @@ pub enum ModuleInitError {
 pub enum RegistryLoadError {
     #[error("Failed to initialize module '{module_name}': {source}")]
     ModuleInit {
-        module_name: String,
+        module_name: crate::shared::primitives::ModuleName,
         #[source] source: ModuleInitError,
     },
     #[error("Module not found: {0}")]
-    ModuleNotFound(String),
+    ModuleNotFound(crate::shared::primitives::ModuleName),
     #[error("Unsupported engine '{engine}' for module '{module_name}'")]
     UnsupportedEngine {
         engine: String,
-        module_name: String,
+        module_name: crate::shared::primitives::ModuleName,
     },
     #[error("Internal registry error: {0}")]
     Internal(String),
@@ -64,6 +64,16 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
         command_tx: Arc<dyn CommandSender>,
         canvas_factory: Arc<std::sync::Mutex<Fact>>,
     ) -> std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>;
+
+    fn reload_module(
+        &mut self,
+        name: &crate::shared::primitives::ModuleName,
+        config: &Config,
+        hub: Arc<SignalHub>,
+        surface_manager: DynSurfaceManager,
+        command_tx: Arc<dyn CommandSender>,
+        canvas_factory: Arc<std::sync::Mutex<Fact>>,
+    ) -> Result<std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>, RegistryLoadError>;
 
     fn left_modules(&self) -> &[ModuleId];
     fn center_modules(&self) -> &[ModuleId];

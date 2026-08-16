@@ -640,9 +640,11 @@ impl EngineSelection {
     }
 }
 
+use crate::shared::primitives::ModuleName;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleConfig {
-    name: String,
+    name: ModuleName,
     enable: bool,
     engine: EngineSelection,
     options: HashMap<String, serde_json::Value>,
@@ -650,7 +652,7 @@ pub struct ModuleConfig {
 
 impl ModuleConfig {
     pub fn new(
-        name: String,
+        name: ModuleName,
         enable: bool,
         engine: EngineSelection,
         options: HashMap<String, serde_json::Value>,
@@ -663,7 +665,7 @@ impl ModuleConfig {
         }
     }
 
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &ModuleName {
         &self.name
     }
 
@@ -985,7 +987,7 @@ mod tests {
     #[test]
     fn test_module_position() {
         let left = vec![ModuleConfig::new(
-            "time".to_string(),
+            ModuleName::new("time"),
             true,
             EngineSelection::Auto,
             HashMap::new(),

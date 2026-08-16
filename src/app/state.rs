@@ -256,6 +256,18 @@ impl<R: crate::features::module_runtime::ports::ModuleRegistryPort<F> + 'static,
                                     Err(e) => tracing::error!(err = ?e, "display.hide_tooltip failed"),
                                 }
                             }
+                            AppCommand::ReloadModule(name) => {
+                                tracing::info!("Reloading module: {}", name.as_str());
+                                match self.registry.reload_module(&name, &self.read_model.config, self.hub.clone(), self.surface_manager.clone(), Arc::new(MpscCommandSender(self.command_tx_clone.clone())), self.canvas_factory.clone()) {
+                                    Ok(new_senders) => {
+                                        for (id, sender) in new_senders {
+                                            self.layout_senders.insert(id, sender);
+                                        }
+                                        needs_render = true;
+                                    }
+                                    Err(e) => tracing::error!("Failed to reload module {}: {}", name.as_str(), e),
+                                }
+                            }
                         }
 
                         if process_count > 50 {

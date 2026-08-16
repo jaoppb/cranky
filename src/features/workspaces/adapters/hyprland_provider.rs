@@ -1,4 +1,4 @@
-use std::env;
+
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -19,38 +19,45 @@ pub trait HyprlandProvider: Send + Sync {
     fn listen_events(&self) -> Result<UnixStream, HyprError>;
 }
 
-pub struct RealHyprlandProvider;
+pub struct RealHyprlandProvider {
+    app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
+}
+
+impl RealHyprlandProvider {
+    pub fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
+        Self { app_env }
+    }
+}
 
 impl HyprlandProvider for RealHyprlandProvider {
     fn query_monitors(&self) -> Result<String, HyprError> {
-        query_socket("j/monitors")
+        query_socket("j/monitors", &self.app_env)
     }
 
     fn query_workspaces(&self) -> Result<String, HyprError> {
-        query_socket("j/workspaces")
+        query_socket("j/workspaces", &self.app_env)
     }
 
     fn listen_events(&self) -> Result<UnixStream, HyprError> {
-        let signature =
-            env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|_| HyprError::NoInstance)?;
-        let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|_| HyprError::NoInstance)?;
+        let signature = self.app_env.hyprland_instance_signature().ok_or(HyprError::NoInstance)?;
+        let xdg_runtime_dir = self.app_env.xdg_runtime_dir().as_path();
 
         let socket_path = PathBuf::from(xdg_runtime_dir)
             .join("hypr")
-            .join(signature)
+            .join(signature.as_str())
             .join(".socket2.sock");
 
         UnixStream::connect(socket_path).map_err(HyprError::Io)
     }
 }
 
-fn query_socket(command: &str) -> Result<String, HyprError> {
-    let signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|_| HyprError::NoInstance)?;
-    let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|_| HyprError::NoInstance)?;
+fn query_socket(command: &str, app_env: &crate::shared::env::domain::AppEnvironment) -> Result<String, HyprError> {
+    let signature = app_env.hyprland_instance_signature().ok_or(HyprError::NoInstance)?;
+    let xdg_runtime_dir = app_env.xdg_runtime_dir().as_path();
 
     let socket_path = PathBuf::from(xdg_runtime_dir)
         .join("hypr")
-        .join(signature)
+        .join(signature.as_str())
         .join(".socket.sock");
 
     let mut stream = UnixStream::connect(socket_path)?;
@@ -80,7 +87,14 @@ mod tests {
 
     #[test]
     fn test_real_provider_paths() {
-        let provider = RealHyprlandProvider;
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let provider = RealHyprlandProvider::new(app_env);
         // These will likely fail in test env, but we want to exercise the wrapper logic
         let _ = provider.query_monitors();
         let _ = provider.query_workspaces();

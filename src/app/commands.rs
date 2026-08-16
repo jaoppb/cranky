@@ -19,6 +19,7 @@ pub enum AppCommand {
         layout: Box<crate::features::layout_engine::domain::LayoutNode>,
     },
     HideTooltip,
+    ReloadModule(crate::shared::primitives::ModuleName),
 }
 
 #[cfg(test)]

@@ -12,11 +12,12 @@ pub enum BuiltinError {
     #[error("Unsupported engine '{engine}' for module '{module_name}' (expected 'rhai' or 'lua')")]
     UnsupportedEngine {
         engine: String,
-        module_name: String,
+        module_name: crate::shared::primitives::ModuleName,
     },
-    #[error("Module '{module_name}' not found")]
+    #[error("Module '{module_name}' not found{engine_suffix}")]
     ModuleNotFound {
-        module_name: String,
+        module_name: crate::shared::primitives::ModuleName,
+        engine_suffix: String,
     },
 }
 
@@ -34,8 +35,8 @@ impl BuiltinModules {
         ("metrics.rhai", include_str!("../../assets/widgets/metrics.rhai")),
     ];
 
-    pub fn ensure_builtins() -> Result<PathBuf, BuiltinError> {
-        let home = std::env::var("HOME").map_err(|e| BuiltinError::Env(e.to_string()))?;
+    pub fn ensure_builtins(app_env: &crate::shared::env::domain::AppEnvironment) -> Result<PathBuf, BuiltinError> {
+        let home = app_env.home().as_path();
         let dir = PathBuf::from(home).join(".local/share/cranky/modules");
 
         fs::create_dir_all(&dir).map_err(|e| BuiltinError::Io(e.to_string()))?;
@@ -58,14 +59,15 @@ impl BuiltinModules {
     }
 
     pub fn find_module(
-        name: &str,
+        name: &crate::shared::primitives::ModuleName,
         selection: &crate::shared::config::domain::EngineSelection,
+        app_env: &crate::shared::env::domain::AppEnvironment,
     ) -> Result<Box<dyn AnyModulePort>, BuiltinError> {
-        let _ = Self::ensure_builtins()?;
+        let _ = Self::ensure_builtins(app_env)?;
 
-        let home = std::env::var("HOME").map_err(|e| BuiltinError::Env(e.to_string()))?;
-        let user_dir = PathBuf::from(&home).join(".config/cranky/modules");
-        let shadow_dir = PathBuf::from(&home).join(".local/share/cranky/modules");
+        let home = app_env.home().as_path();
+        let user_dir = PathBuf::from(home).join(".config/cranky/modules");
+        let shadow_dir = PathBuf::from(home).join(".local/share/cranky/modules");
 
         let engines = Self::registered_engines();
 
@@ -82,7 +84,7 @@ impl BuiltinModules {
                 if matching.is_empty() {
                     return Err(BuiltinError::UnsupportedEngine {
                         engine: id.as_str().to_string(),
-                        module_name: name.to_string(),
+                        module_name: name.clone(),
                     });
                 }
                 matching
@@ -91,23 +93,60 @@ impl BuiltinModules {
 
         for dir in &[&user_dir, &shadow_dir] {
             for engine in &target_engines {
-                let path = dir.join(format!("{}.{}", name, engine.file_extension().as_str()));
+                let path = dir.join(format!("{}.{}", name.as_str(), engine.file_extension().as_str()));
                 if let Ok(source) = fs::read_to_string(&path)
-                    && let Ok(module) = engine.load_module(name, &source)
+                    && let Ok(module) = engine.load_module(name.as_str(), &source)
                 {
                     return Ok(module);
                 }
             }
         }
 
-        let err_name = match selection.as_explicit() {
-            Some(id) => format!("{} (engine: {})", name, id.as_str()),
-            None => name.to_string(),
+        let engine_suffix = match selection.as_explicit() {
+            Some(id) => format!(" (engine: {})", id.as_str()),
+            None => "".to_string(),
         };
 
         Err(BuiltinError::ModuleNotFound {
-            module_name: err_name,
+            module_name: name.clone(),
+            engine_suffix,
         })
+    }
+
+    pub fn watch_scripts(
+        command_tx: std::sync::Arc<dyn crate::features::module_runtime::ports::CommandSender>,
+        app_env: &crate::shared::env::domain::AppEnvironment,
+    ) -> Result<Box<dyn notify::Watcher>, BuiltinError> {
+        use notify::{Event, RecursiveMode, Watcher};
+
+        let home = app_env.home().as_path();
+        let user_dir = PathBuf::from(home).join(".config/cranky/modules");
+        let shadow_dir = PathBuf::from(home).join(".local/share/cranky/modules");
+
+        let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
+            if let Ok(event) = res
+                && event.kind.is_modify()
+            {
+                for path in event.paths {
+                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                        tracing::info!("Script modified: {:?}", path);
+                        command_tx.send_command(crate::app::commands::AppCommand::ReloadModule(
+                            crate::shared::primitives::ModuleName::new(stem),
+                        ));
+                    }
+                }
+            }
+        })
+        .map_err(|e| BuiltinError::Io(format!("Failed to create watcher: {}", e)))?;
+
+        if user_dir.exists() {
+            let _ = watcher.watch(&user_dir, RecursiveMode::NonRecursive);
+        }
+        if shadow_dir.exists() {
+            let _ = watcher.watch(&shadow_dir, RecursiveMode::NonRecursive);
+        }
+
+        Ok(Box::new(watcher))
     }
 }
 
@@ -116,9 +155,20 @@ mod tests {
     use super::*;
     use crate::shared::config::domain::{EngineId, EngineSelection};
 
+    fn get_test_env() -> crate::shared::env::domain::AppEnvironment {
+        crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()))),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        )
+    }
+
     #[test]
     fn test_ensure_builtins() {
-        let dir = BuiltinModules::ensure_builtins().expect("ensure_builtins failed");
+        let env = get_test_env();
+        let dir = BuiltinModules::ensure_builtins(&env).expect("ensure_builtins failed");
         assert!(dir.join("hour.rhai").exists());
         assert!(dir.join("hour.lua").exists());
         assert!(dir.join("workspace.rhai").exists());
@@ -131,9 +181,11 @@ mod tests {
 
     #[test]
     fn test_find_module_applet_and_metrics_rhai() {
+        use crate::shared::primitives::ModuleName;
+        let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let applet_mod = BuiltinModules::find_module("applet", &selection).unwrap();
-        let mut metrics_mod = BuiltinModules::find_module("metrics", &selection).unwrap();
+        let applet_mod = BuiltinModules::find_module(&ModuleName::new("applet"), &selection, &env).unwrap();
+        let mut metrics_mod = BuiltinModules::find_module(&ModuleName::new("metrics"), &selection, &env).unwrap();
         let hub = crate::shared::events::signals::SignalHub::new(crate::shared::config::domain::Config::default());
         let metrics_state = crate::features::metrics::domain::MetricsState::new(
             crate::features::metrics::domain::CreateMetricsCommand::new(
@@ -160,12 +212,14 @@ mod tests {
 
     #[test]
     fn test_find_module_hour_rhai_format() {
+        use crate::shared::primitives::ModuleName;
+        let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let mut hour_mod = BuiltinModules::find_module("hour", &selection).unwrap();
+        let mut hour_mod = BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env).unwrap();
         let mut options = std::collections::HashMap::new();
         options.insert("format".to_string(), serde_json::Value::String("%H:%M".to_string()));
         hour_mod.init(
-            &crate::shared::config::domain::ModuleConfig::new("hour".to_string(), true, selection.clone(), options),
+            &crate::shared::config::domain::ModuleConfig::new(ModuleName::new("hour"), true, selection.clone(), options),
             &crate::shared::config::domain::Config::default(),
         ).unwrap();
         let hub = crate::shared::events::signals::SignalHub::new(crate::shared::config::domain::Config::default());
@@ -183,68 +237,83 @@ mod tests {
 
     #[test]
     fn test_find_module_default_prioritizes_lua() {
-        let module = BuiltinModules::find_module("hour", &EngineSelection::Auto);
+        use crate::shared::primitives::ModuleName;
+        let env = get_test_env();
+        let module = BuiltinModules::find_module(&ModuleName::new("hour"), &EngineSelection::Auto, &env);
         assert!(module.is_ok());
     }
 
     #[test]
     fn test_find_module_explicit_rhai() {
+        use crate::shared::primitives::ModuleName;
+        let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let module = BuiltinModules::find_module("hour", &selection);
+        let module = BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env);
         assert!(module.is_ok());
     }
 
     #[test]
     fn test_find_module_explicit_lua() {
+        use crate::shared::primitives::ModuleName;
+        let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("lua"));
-        let module = BuiltinModules::find_module("hour", &selection);
+        let module = BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env);
         assert!(module.is_ok());
     }
 
     #[test]
     fn test_find_module_unsupported_engine() {
+        use crate::shared::primitives::ModuleName;
+        let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("python"));
-        let err = BuiltinModules::find_module("hour", &selection)
+        let err = BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env)
             .err()
             .expect("Expected error");
         assert_eq!(
             err,
             BuiltinError::UnsupportedEngine {
                 engine: "python".to_string(),
-                module_name: "hour".to_string(),
+                module_name: ModuleName::new("hour"),
             }
         );
     }
 
     #[test]
     fn test_find_module_not_found() {
-        let err = BuiltinModules::find_module("nonexistent_module_test", &EngineSelection::Auto)
+        use crate::shared::primitives::ModuleName;
+        let env = get_test_env();
+        let err = BuiltinModules::find_module(&ModuleName::new("nonexistent_module_test"), &EngineSelection::Auto, &env)
             .err()
             .expect("Expected error");
         assert_eq!(
             err,
             BuiltinError::ModuleNotFound {
-                module_name: "nonexistent_module_test".to_string(),
+                module_name: ModuleName::new("nonexistent_module_test"),
+                engine_suffix: "".to_string(),
             }
         );
     }
 
     #[test]
     fn test_find_module_not_found_with_engine() {
+        use crate::shared::primitives::ModuleName;
+        let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let err = BuiltinModules::find_module("nonexistent_module_test", &selection)
+        let err = BuiltinModules::find_module(&ModuleName::new("nonexistent_module_test"), &selection, &env)
             .err()
             .expect("Expected error");
         assert_eq!(
             err,
             BuiltinError::ModuleNotFound {
-                module_name: "nonexistent_module_test (engine: rhai)".to_string(),
+                module_name: ModuleName::new("nonexistent_module_test"),
+                engine_suffix: " (engine: rhai)".to_string(),
             }
         );
     }
 
     #[test]
     fn test_builtin_error_display() {
+        use crate::shared::primitives::ModuleName;
         assert_eq!(
             BuiltinError::Env("var".into()).to_string(),
             "HOME environment variable not set: var"
@@ -256,17 +325,18 @@ mod tests {
         assert_eq!(
             BuiltinError::UnsupportedEngine {
                 engine: "py".into(),
-                module_name: "mod".into(),
+                module_name: ModuleName::new("mod"),
             }
             .to_string(),
             "Unsupported engine 'py' for module 'mod' (expected 'rhai' or 'lua')"
         );
         assert_eq!(
             BuiltinError::ModuleNotFound {
-                module_name: "mod".into(),
+                module_name: ModuleName::new("mod"),
+                engine_suffix: " (engine: rhai)".to_string(),
             }
             .to_string(),
-            "Module 'mod' not found"
+            "Module 'mod' not found (engine: rhai)"
         );
     }
 }

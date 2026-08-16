@@ -141,6 +141,7 @@ pub struct WaylandState {
     font_system: FontSystem,
     swash_cache: SwashCache,
     tooltip: Option<TooltipSurface>,
+    app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
 }
 
 struct TooltipSurface {
@@ -202,6 +203,7 @@ impl WaylandAdapter {
     pub fn new(
         hub: Arc<SignalHub>,
         command_tx: tokio::sync::mpsc::Sender<crate::app::commands::AppCommand>,
+        app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
     ) -> Result<(Self, WaylandSurfaceManager), DisplayServerError> {
         let connection =
             Connection::connect_to_env().map_err(|e| DisplayServerError::ConnectionFailed {
@@ -237,6 +239,7 @@ impl WaylandAdapter {
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
             tooltip: None,
+            app_env,
         };
 
         let pending_surfaces = Arc::new(Mutex::new(HashMap::new()));
@@ -503,7 +506,7 @@ impl DisplayServerPort for WaylandAdapter {
                 return Ok(());
             } else {
                 let qh = self.event_queue.handle();
-                let mut new_shm_buffer = ShmBuffer::new(shm, width, height, &qh)
+                let mut new_shm_buffer = ShmBuffer::new(shm, width, height, &qh, state.app_env.xdg_runtime_dir().as_path())
                     .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
                 let data = new_shm_buffer.mmap_mut();
                 if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(data, width, height) {
@@ -542,7 +545,7 @@ impl DisplayServerPort for WaylandAdapter {
         }
 
         let qh = self.event_queue.handle();
-        let mut shm_buffer = ShmBuffer::new(shm, width, height, &qh)
+        let mut shm_buffer = ShmBuffer::new(shm, width, height, &qh, state.app_env.xdg_runtime_dir().as_path())
             .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
 
         {
@@ -643,7 +646,7 @@ impl WaylandAdapter {
             subsurface.set_desync();
 
             let shm_buffer =
-                ShmBuffer::new(shm, width, height, &qh).expect("Failed to create SHM buffer");
+                ShmBuffer::new(shm, width, height, &qh, self.state.app_env.xdg_runtime_dir().as_path()).expect("Failed to create SHM buffer");
 
             new_surface_to_register = Some(surface.clone());
 
@@ -664,7 +667,7 @@ impl WaylandAdapter {
         }
 
         if ms.size != *cmd.buffer().size() {
-            ms.shm_buffer = ShmBuffer::new(shm, width, height, &qh)
+            ms.shm_buffer = ShmBuffer::new(shm, width, height, &qh, self.state.app_env.xdg_runtime_dir().as_path())
                 .expect("Failed to recreate SHM buffer for resize");
             ms.size = *cmd.buffer().size();
         }
@@ -865,7 +868,7 @@ impl WaylandAdapter {
                         let width = bounds.width().max(1);
                         let height = bounds.height().max(1);
                         let shm_buffer =
-                            match crate::shared::wayland::adapters::shm::ShmBuffer::new(shm, width, height, qh) {
+                            match crate::shared::wayland::adapters::shm::ShmBuffer::new(shm, width, height, qh, self.state.app_env.xdg_runtime_dir().as_path()) {
                                 Ok(b) => b,
                                 Err(e) => {
                                     tracing::error!("Failed to create shm buffer: {}", e);
@@ -991,11 +994,11 @@ impl WaylandState {
 
         let shm_buffer = ShmBuffer::new(
             shm,
-            1920 * output_scale as u32,
-            bar_height.value() * output_scale as u32,
+            1920,
+            bar_height.value(),
             qh,
-        )
-        .map_err(DisplayServerError::Io)?;
+            self.app_env.xdg_runtime_dir().as_path()
+        ).expect("Failed to create SHM buffer");
 
         self.bars.push(WaylandBar {
             output_name,
@@ -1320,6 +1323,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
                             physical_width,
                             physical_height,
                             qh,
+                            state.app_env.xdg_runtime_dir().as_path()
                         ) {
                             bar.shm_buffer = new_shm;
                         }
@@ -1559,15 +1563,20 @@ mod tests {
     #[tokio::test]
     async fn test_wayland_state_initialization() {
         let (command_tx, _) = tokio::sync::mpsc::channel(10);
-        let config = crate::shared::config::domain::Config::default();
-        let hub = Arc::new(SignalHub::new(config));
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
         let state = WaylandState {
-            hub,
+            hub: Arc::new(SignalHub::new(crate::shared::config::domain::Config::default())),
             compositor: None,
             shm: None,
             layer_shell: None,
-            xdg_wm_base: None,
             subcompositor: None,
+            xdg_wm_base: None,
             outputs: Vec::new(),
             bars: Vec::new(),
             seat: None,
@@ -1579,6 +1588,7 @@ mod tests {
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
             tooltip: None,
+            app_env,
         };
         assert!(state.bars.is_empty());
         assert!(state.outputs.is_empty());
@@ -1610,6 +1620,13 @@ mod tests {
         let hub = Arc::new(SignalHub::new(config));
         let config_rx = hub.config_rx();
 
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
         let state = WaylandState {
             hub: hub.clone(),
             compositor: None,
@@ -1628,6 +1645,7 @@ mod tests {
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
             tooltip: None,
+            app_env,
         };
 
         let pending_surfaces = Arc::new(Mutex::new(HashMap::new()));
@@ -1659,6 +1677,13 @@ mod tests {
         let _ = adapter.handle_surface_command(cmd);
 
         let (tx, _rx) = tokio::sync::mpsc::channel(10);
-        let _ = WaylandAdapter::new(hub.clone(), tx);
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let _ = WaylandAdapter::new(hub.clone(), tx, app_env);
     }
 }

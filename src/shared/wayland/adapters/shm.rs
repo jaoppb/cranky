@@ -1,12 +1,10 @@
 #![allow(unsafe_code)]
 
 use memmap2::MmapMut;
-use std::env;
 use std::fs::File;
-use std::io::{Error, ErrorKind, Result};
+use std::io::Result;
 use std::os::unix::io::AsRawFd;
 use std::os::unix::io::BorrowedFd;
-use std::path::PathBuf;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
@@ -17,8 +15,8 @@ pub struct MmappedShm {
 
 impl MmappedShm {
     #[cfg(test)]
-    pub fn new(size: usize) -> Result<Self> {
-        let file = create_shm_file(size)?;
+    pub fn new(size: usize, xdg_runtime_dir: &std::path::Path) -> Result<Self> {
+        let file = create_shm_file(size, xdg_runtime_dir)?;
         let mmap = safe_mmap_file(&file)?;
         Ok(Self { mmap })
     }
@@ -41,11 +39,8 @@ pub struct ShmBuffer {
     buffer: wayland_client::protocol::wl_buffer::WlBuffer,
 }
 
-fn create_shm_file(size: usize) -> Result<File> {
-    // Use XDG_RUNTIME_DIR for SHM files as per Wayland standards
-    let mut path = env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .ok_or_else(|| Error::new(ErrorKind::NotFound, "XDG_RUNTIME_DIR not set"))?;
+fn create_shm_file(size: usize, xdg_runtime_dir: &std::path::Path) -> Result<File> {
+    let mut path = xdg_runtime_dir.to_path_buf();
 
     path.push(format!("cranky-shm-{}", uuid::Uuid::new_v4()));
 
@@ -73,14 +68,14 @@ fn safe_borrowed_fd_from_file(file: &File) -> BorrowedFd<'_> {
 }
 
 impl ShmBuffer {
-    pub fn new<S>(shm_proxy: &WlShm, width: u32, height: u32, qh: &QueueHandle<S>) -> Result<Self>
+    pub fn new<S>(shm_proxy: &WlShm, width: u32, height: u32, qh: &QueueHandle<S>, xdg_runtime_dir: &std::path::Path) -> Result<Self>
     where
         S: wayland_client::Dispatch<wayland_client::protocol::wl_shm_pool::WlShmPool, ()>
             + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, ()>
             + 'static,
     {
         let frame_size = (width * height * 4) as usize;
-        let file = create_shm_file(frame_size)?;
+        let file = create_shm_file(frame_size, xdg_runtime_dir)?;
 
         let mmap = safe_mmap_file(&file)?;
         let fd = safe_borrowed_fd_from_file(&file);
@@ -127,69 +122,40 @@ impl Drop for ShmBuffer {
 }
 
 #[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
-
-    fn with_env<F: FnOnce()>(key: &str, value: Option<&str>, f: F) {
-        let old_value = env::var_os(key);
-        if let Some(val) = value {
-            unsafe {
-                env::set_var(key, val);
-            }
-        } else {
-            unsafe {
-                env::remove_var(key);
-            }
-        }
-        f();
-        if let Some(val) = old_value {
-            unsafe {
-                env::set_var(key, val);
-            }
-        } else {
-            unsafe {
-                env::remove_var(key);
-            }
-        }
-    }
+    use std::path::Path;
 
     #[test]
-    fn test_shm_env_dependent_logic() {
-        // Combined test to avoid race conditions with env var manipulation in parallel tests
-        with_env("XDG_RUNTIME_DIR", Some("/tmp"), || {
-            // Test create_shm_file success
-            let size = 1024;
-            let file = create_shm_file(size).unwrap();
-            assert_eq!(file.metadata().unwrap().len(), size as u64);
+    fn test_shm_logic() {
+        let tmp = Path::new("/tmp");
 
-            // Test mmapped_shm_methods
-            let size = 4096;
-            let mut shm = MmappedShm::new(size).unwrap();
-            assert_eq!(shm.size(), size);
-            assert_eq!(shm.mmap_mut().len(), size);
+        // Test create_shm_file success
+        let size = 1024;
+        let file = create_shm_file(size, tmp).unwrap();
+        assert_eq!(file.metadata().unwrap().len(), size as u64);
 
-            // Test mmapped_shm_mut_access
-            let mut shm = MmappedShm::new(100).unwrap();
-            let data = shm.mmap_mut();
-            data[0] = 42;
-            assert_eq!(data[0], 42);
-        });
+        // Test mmapped_shm_methods
+        let size = 4096;
+        let mut shm = MmappedShm::new(size, tmp).unwrap();
+        assert_eq!(shm.size(), size);
+        assert_eq!(shm.mmap_mut().len(), size);
 
-        with_env("XDG_RUNTIME_DIR", None, || {
-            // Test create_shm_file failure
-            let res = create_shm_file(64);
-            assert!(res.is_err());
-            assert_eq!(res.unwrap_err().kind(), ErrorKind::NotFound);
+        // Test mmapped_shm_mut_access
+        let mut shm = MmappedShm::new(100, tmp).unwrap();
+        let data = shm.mmap_mut();
+        data[0] = 42;
+        assert_eq!(data[0], 42);
 
-            // Test mmapped_shm_new_failure
-            let res = MmappedShm::new(1024);
-            assert!(res.is_err());
-        });
+        // Test failure with invalid dir
+        let res = create_shm_file(64, Path::new("/non_existent_dir_12345"));
+        assert!(res.is_err());
     }
 
     #[test]
     fn test_create_shm_file_error() {
-        let res = create_shm_file(usize::MAX);
+        let res = create_shm_file(usize::MAX, Path::new("/tmp"));
         assert!(res.is_err());
     }
 }

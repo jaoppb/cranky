@@ -55,20 +55,19 @@ impl HyprMonitorDto {
 }
 
 pub struct HyprlandAdapter {
-    provider: Box<dyn HyprlandProvider>,
-}
-
-impl Default for HyprlandAdapter {
-    fn default() -> Self {
-        Self::new()
-    }
+    provider: Arc<dyn HyprlandProvider>,
 }
 
 impl HyprlandAdapter {
-    pub fn new() -> Self {
+    pub fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
         Self {
-            provider: Box::new(RealHyprlandProvider),
+            provider: Arc::new(RealHyprlandProvider::new(app_env)),
         }
+    }
+
+    #[cfg(test)]
+    pub fn with_provider(provider: Arc<dyn HyprlandProvider>) -> Self {
+        Self { provider }
     }
 
     fn parse_event(raw_line: &str) -> Option<crate::shared::events::core::WindowManagerEvent> {
@@ -356,9 +355,7 @@ mod tests {
             .times(1)
             .returning(|| Ok("[]".to_string()));
 
-        let adapter = HyprlandAdapter {
-            provider: Box::new(mock_provider),
-        };
+        let adapter = HyprlandAdapter::with_provider(Arc::new(mock_provider));
 
         let res = adapter.get_state().unwrap();
         assert_eq!(res.0.len(), 0);
@@ -378,9 +375,7 @@ mod tests {
             .times(1)
             .returning(|| Ok(r#"[{"name": "DP-1", "activeWorkspace": {"id": 1}, "specialWorkspace": {"id": 0}, "focused": true}]"#.to_string()));
 
-        let adapter = HyprlandAdapter {
-            provider: Box::new(mock_provider),
-        };
+        let adapter = HyprlandAdapter::with_provider(Arc::new(mock_provider));
 
         let res = adapter.get_state().unwrap();
         assert_eq!(res.0.len(), 1); // workspaces
@@ -501,9 +496,7 @@ mod tests {
                 Ok(stream)
             });
 
-        let adapter = HyprlandAdapter {
-            provider: Box::new(mock_provider),
-        };
+        let adapter = HyprlandAdapter::with_provider(Arc::new(mock_provider));
 
         let config = crate::shared::config::domain::Config::default();
         let hub = Arc::new(SignalHub::new(config));

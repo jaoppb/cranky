@@ -25,9 +25,8 @@ pub struct ConfigAdapter<V: FontValidatorPort + Send + Sync + 'static> {
 }
 
 impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
-    pub fn new(validator: V) -> Self {
-        let config_path = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default())
-            .join(".config/cranky/config.toml");
+    pub fn new(validator: V, app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
+        let config_path = app_env.home().as_path().join(".config/cranky/config.toml");
         Self {
             config_path,
             validator: Arc::new(validator),
@@ -142,7 +141,14 @@ mod tests {
 
     #[test]
     fn test_config_adapter_new() {
-        let adapter = ConfigAdapter::new(MockValidator);
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let adapter = ConfigAdapter::new(MockValidator, app_env);
         assert!(adapter.config_path.ends_with(".config/cranky/config.toml"));
     }
     

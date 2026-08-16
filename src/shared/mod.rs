@@ -4,5 +4,6 @@ pub mod scripting;
 pub mod rendering;
 pub mod config;
 pub mod events;
+pub mod env;
 
 pub mod primitives;
