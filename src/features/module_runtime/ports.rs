@@ -18,7 +18,7 @@ pub trait LayoutSender: Send + Sync {
 #[async_trait]
 pub trait AnyModulePort: Send + Sync {
     fn init(&mut self, config: &ModuleConfig, full_config: &Config) -> Result<(), String>;
-    fn subscriptions(&self) -> Vec<SignalKind>;
+    fn subscriptions(&self) -> &[SignalKind];
     fn refresh(&mut self, hub: &SignalHub, changed_signals: &[SignalKind]);
     fn render(&self, monitor: &MonitorId) -> crate::features::layout_engine::domain::LayoutNode;
 }
@@ -35,9 +35,9 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
         canvas_factory: Arc<std::sync::Mutex<Fact>>,
     ) -> std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>;
 
-    fn left_modules(&self) -> Vec<ModuleId>;
-    fn center_modules(&self) -> Vec<ModuleId>;
-    fn right_modules(&self) -> Vec<ModuleId>;
+    fn left_modules(&self) -> &[ModuleId];
+    fn center_modules(&self) -> &[ModuleId];
+    fn right_modules(&self) -> &[ModuleId];
 
     fn clear(&mut self);
 

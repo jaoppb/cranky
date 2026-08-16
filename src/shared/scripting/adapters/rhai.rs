@@ -12,6 +12,7 @@ pub struct RhaiModule {
     engine: Mutex<Engine>,
     scope: Mutex<Scope<'static>>,
     ast: AST,
+    cached_subs: Vec<SignalKind>,
 }
 
 impl RhaiModule {
@@ -46,45 +47,12 @@ impl RhaiModule {
             engine: Mutex::new(engine),
             scope: Mutex::new(scope),
             ast,
+            cached_subs: Vec::new(),
         })
     }
-}
 
-impl AnyModulePort for RhaiModule {
-    fn init(&mut self, config: &ModuleConfig, full_config: &crate::shared::config::domain::Config) -> Result<(), String> {
-        let bar_config = full_config.bar();
-        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
-        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
-
-        // Expose bar config
-        let mut bar_map = rhai::Map::new();
-        bar_map.insert(
-            "font_family".into(),
-            Dynamic::from(bar_config.font_family().as_str().to_string()),
-        );
-        bar_map.insert(
-            "font_size".into(),
-            Dynamic::from(bar_config.font_size().value()),
-        );
-        scope.set_or_push("bar_config", bar_map);
-
-        // Expose module config options
-        let options_json = serde_json::to_string(config.options()).map_err(|e| e.to_string())?;
-        let options_rhai: rhai::Map = engine
-            .parse_json(&options_json, true)
-            .map_err(|e| e.to_string())?;
-        scope.set_or_push("config", options_rhai);
-
-        // Call init if it exists
-        let _ = engine.call_fn::<()>(&mut scope, &self.ast, "init", ());
-        Ok(())
-    }
-
-    fn subscriptions(&self) -> Vec<SignalKind> {
-        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
-        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
-
-        if let Ok(subs) = engine.call_fn::<rhai::Array>(&mut scope, &self.ast, "subscriptions", ())
+    fn evaluate_subscriptions(engine: &Engine, scope: &mut Scope<'static>, ast: &AST) -> Vec<SignalKind> {
+        if let Ok(subs) = engine.call_fn::<rhai::Array>(scope, ast, "subscriptions", ())
         {
             let mut result = Vec::new();
             for sub in subs {
@@ -116,6 +84,44 @@ impl AnyModulePort for RhaiModule {
             return result;
         }
         vec![]
+    }
+}
+
+impl AnyModulePort for RhaiModule {
+    fn init(&mut self, config: &ModuleConfig, full_config: &crate::shared::config::domain::Config) -> Result<(), String> {
+        let bar_config = full_config.bar();
+        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
+        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
+
+        // Expose bar config
+        let mut bar_map = rhai::Map::new();
+        bar_map.insert(
+            "font_family".into(),
+            Dynamic::from(bar_config.font_family().as_str().to_string()),
+        );
+        bar_map.insert(
+            "font_size".into(),
+            Dynamic::from(bar_config.font_size().value()),
+        );
+        scope.set_or_push("bar_config", bar_map);
+
+        // Expose module config options
+        let options_json = serde_json::to_string(config.options()).map_err(|e| e.to_string())?;
+        let options_rhai: rhai::Map = engine
+            .parse_json(&options_json, true)
+            .map_err(|e| e.to_string())?;
+        scope.set_or_push("config", options_rhai);
+
+        // Call init if it exists
+        let _ = engine.call_fn::<()>(&mut scope, &self.ast, "init", ());
+
+        self.cached_subs = Self::evaluate_subscriptions(&engine, &mut scope, &self.ast);
+
+        Ok(())
+    }
+
+    fn subscriptions(&self) -> &[SignalKind] {
+        &self.cached_subs
     }
 
     fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {

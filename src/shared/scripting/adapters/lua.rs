@@ -105,6 +105,7 @@ pub struct LuaModule {
     lua: Mutex<Lua>,
     source: String,
     name: String,
+    cached_subs: Vec<SignalKind>,
 }
 
 impl LuaModule {
@@ -113,12 +114,55 @@ impl LuaModule {
             lua: Mutex::new(Lua::new()),
             source,
             name,
+            cached_subs: Vec::new(),
         }
     }
 
     #[cfg(test)]
     pub fn built_in(name: &str) -> Option<Self> {
         LuaScriptLoader::load_built_in(name).map(|source| Self::new(name.to_string(), source))
+    }
+
+    fn evaluate_subscriptions(lua: &Lua) -> Vec<SignalKind> {
+        let globals = lua.globals();
+
+        let mut subs = Vec::new();
+        if let Ok(subs_fn) = globals.get::<Function>("subscriptions")
+            && let Ok(result) = subs_fn.call::<mlua::Value>(())
+                && let mlua::Value::Table(t) = result {
+                    for (_, val) in t.pairs::<mlua::Value, mlua::Value>().flatten() {
+                        if let mlua::Value::String(s) = &val {
+                            if let Ok(s_str) = s.to_str() {
+                                match s_str.as_ref() {
+                                    "time" => subs.push(SignalKind::Time),
+                                    "hyprland" => subs.push(SignalKind::Hyprland),
+                                    "applets" => subs.push(SignalKind::Applets),
+                                    "metrics" => subs.push(SignalKind::Metrics),
+                                    _ => {}
+                                }
+                            }
+                        } else if let mlua::Value::Table(dbus_sub) = &val
+                            && let Ok(typ) = dbus_sub.get::<String>("type")
+                                && typ == "dbus" {
+                                    let bus_str = dbus_sub
+                                        .get::<String>("bus")
+                                        .unwrap_or_else(|_| "session".to_string());
+                                    let bus = if bus_str == "system" {
+                                        BusType::System
+                                    } else {
+                                        BusType::Session
+                                    };
+                                    subs.push(SignalKind::DBus(DBusSubscription::new(
+                                        bus,
+                                        dbus_sub.get::<String>("destination").ok().map(crate::shared::dbus::domain::Destination::new),
+                                        dbus_sub.get::<String>("path").ok().map(crate::shared::dbus::domain::Path::new),
+                                        dbus_sub.get::<String>("interface").ok().map(crate::shared::dbus::domain::Interface::new),
+                                        dbus_sub.get::<String>("member").ok().map(crate::shared::dbus::domain::Member::new),
+                                    )));
+                                }
+                    }
+                }
+        subs
     }
 }
 
@@ -162,50 +206,13 @@ impl AnyModulePort for LuaModule {
                 .map_err(|e| format!("Lua init error in {}: {}", self.name, e))?;
         }
 
+        self.cached_subs = Self::evaluate_subscriptions(&lua);
+
         Ok(())
     }
 
-    fn subscriptions(&self) -> Vec<SignalKind> {
-        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
-        let globals = lua.globals();
-
-        let mut subs = Vec::new();
-        if let Ok(subs_fn) = globals.get::<Function>("subscriptions")
-            && let Ok(result) = subs_fn.call::<mlua::Value>(())
-                && let mlua::Value::Table(t) = result {
-                    for (_, val) in t.pairs::<mlua::Value, mlua::Value>().flatten() {
-                        if let mlua::Value::String(s) = &val {
-                            if let Ok(s_str) = s.to_str() {
-                                match s_str.as_ref() {
-                                    "time" => subs.push(SignalKind::Time),
-                                    "hyprland" => subs.push(SignalKind::Hyprland),
-                                    "applets" => subs.push(SignalKind::Applets),
-                                    "metrics" => subs.push(SignalKind::Metrics),
-                                    _ => {}
-                                }
-                            }
-                        } else if let mlua::Value::Table(dbus_sub) = &val
-                            && let Ok(typ) = dbus_sub.get::<String>("type")
-                                && typ == "dbus" {
-                                    let bus_str = dbus_sub
-                                        .get::<String>("bus")
-                                        .unwrap_or_else(|_| "session".to_string());
-                                    let bus = if bus_str == "system" {
-                                        BusType::System
-                                    } else {
-                                        BusType::Session
-                                    };
-                                    subs.push(SignalKind::DBus(DBusSubscription::new(
-                                        bus,
-                                        dbus_sub.get::<String>("destination").ok().map(crate::shared::dbus::domain::Destination::new),
-                                        dbus_sub.get::<String>("path").ok().map(crate::shared::dbus::domain::Path::new),
-                                        dbus_sub.get::<String>("interface").ok().map(crate::shared::dbus::domain::Interface::new),
-                                        dbus_sub.get::<String>("member").ok().map(crate::shared::dbus::domain::Member::new),
-                                    )));
-                                }
-                    }
-                }
-        subs
+    fn subscriptions(&self) -> &[SignalKind] {
+        &self.cached_subs
     }
 
     fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
@@ -324,7 +331,7 @@ mod tests {
             .send(AppletsState::new(map))
             .unwrap();
 
-        let subs = module.subscriptions();
+        let subs = module.subscriptions().to_vec();
         module.refresh(&hub, &subs);
 
         let layout = module.render(&MonitorId::new("DP-1")); println!("{:#?}", layout);
@@ -385,7 +392,7 @@ mod tests {
             .send(AppletsState::new(map))
             .unwrap();
 
-        let subs = module.subscriptions();
+        let subs = module.subscriptions().to_vec();
         module.refresh(&hub, &subs);
 
         let layout = module.render(&MonitorId::new("DP-1"));

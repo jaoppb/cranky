@@ -169,9 +169,9 @@ impl<R: crate::features::module_runtime::ports::ModuleRegistryPort<F> + 'static,
     ) -> Result<Self, AppError> {
         registry.load(&config).map_err(AppError::Module)?;
 
-        let left_modules = registry.left_modules();
-        let center_modules = registry.center_modules();
-        let right_modules = registry.right_modules();
+        let left_modules = registry.left_modules().to_vec();
+        let center_modules = registry.center_modules().to_vec();
+        let right_modules = registry.right_modules().to_vec();
         let command_tx_arc = Arc::new(MpscCommandSender(command_tx.clone()));
         let layout_senders =
             registry.spawn_all(hub.clone(), surface_manager.clone(), command_tx_arc, canvas_factory.clone());
@@ -283,9 +283,9 @@ impl<R: crate::features::module_runtime::ports::ModuleRegistryPort<F> + 'static,
                     if let Err(e) = self.registry.load(&self.read_model.config) {
                         error!("Failed to reload registry on config change: {}", e);
                     } else {
-                        self.read_model.left_modules = self.registry.left_modules();
-                        self.read_model.center_modules = self.registry.center_modules();
-                        self.read_model.right_modules = self.registry.right_modules();
+                        self.read_model.left_modules = self.registry.left_modules().to_vec();
+                        self.read_model.center_modules = self.registry.center_modules().to_vec();
+                        self.read_model.right_modules = self.registry.right_modules().to_vec();
                         self.layout_senders = self.registry.spawn_all(
                             self.hub.clone(),
                             self.surface_manager.clone(),
@@ -338,9 +338,9 @@ mod tests {
 
         let mut mock_registry = MockModuleRegistryPort::<crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory>::new();
         mock_registry.expect_load().returning(|_| Ok(()));
-        mock_registry.expect_left_modules().returning(Vec::new);
-        mock_registry.expect_center_modules().returning(Vec::new);
-        mock_registry.expect_right_modules().returning(Vec::new);
+        mock_registry.expect_left_modules().return_const(Vec::new());
+        mock_registry.expect_center_modules().return_const(Vec::new());
+        mock_registry.expect_right_modules().return_const(Vec::new());
         mock_registry
             .expect_spawn_all()
             .returning(|_, _, _, _| HashMap::new());
@@ -371,9 +371,9 @@ mod tests {
 
         let mut mock_registry = MockModuleRegistryPort::<crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory>::new();
         mock_registry.expect_load().returning(|_| Ok(()));
-        mock_registry.expect_left_modules().returning(Vec::new);
-        mock_registry.expect_center_modules().returning(Vec::new);
-        mock_registry.expect_right_modules().returning(Vec::new);
+        mock_registry.expect_left_modules().return_const(Vec::new());
+        mock_registry.expect_center_modules().return_const(Vec::new());
+        mock_registry.expect_right_modules().return_const(Vec::new());
         mock_registry
             .expect_spawn_all()
             .returning(|_, _, _, _| HashMap::new());
@@ -540,9 +540,9 @@ mod tests {
 
         let mut mock_registry = MockModuleRegistryPort::<crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory>::new();
         mock_registry.expect_load().returning(|_| Ok(()));
-        mock_registry.expect_left_modules().returning(Vec::new);
-        mock_registry.expect_center_modules().returning(Vec::new);
-        mock_registry.expect_right_modules().returning(Vec::new);
+        mock_registry.expect_left_modules().return_const(Vec::new());
+        mock_registry.expect_center_modules().return_const(Vec::new());
+        mock_registry.expect_right_modules().return_const(Vec::new());
         mock_registry.expect_spawn_all().returning(|_, _, _, _| HashMap::new());
         mock_registry.expect_register_dbus_subscriptions().returning(|_| Box::pin(std::future::ready(())));
         mock_registry.expect_clear().returning(|| ());

@@ -118,7 +118,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
             let mut layout_engines: std::collections::HashMap<MonitorId, Box<dyn crate::features::layout_engine::ports::LayoutEnginePort>> = std::collections::HashMap::new();
 
             // Initial refresh
-            let initial_sigs = self.port.subscriptions();
+            let initial_sigs = self.port.subscriptions().to_vec();
             self.port.refresh(self.ctx.hub(), &initial_sigs);
             self.measure_and_render_all(&mut layout_engines);
 
@@ -455,6 +455,7 @@ mod tests {
 
     struct MockAnyModulePort {
         render_node: crate::features::layout_engine::domain::LayoutNode,
+        subs: Vec<crate::shared::events::signals::SignalKind>,
     }
     
     impl AnyModulePort for MockAnyModulePort {
@@ -462,8 +463,8 @@ mod tests {
             Ok(())
         }
         
-        fn subscriptions(&self) -> Vec<crate::shared::events::signals::SignalKind> {
-            vec![crate::shared::events::signals::SignalKind::Time, crate::shared::events::signals::SignalKind::Hyprland, crate::shared::events::signals::SignalKind::Applets, crate::shared::events::signals::SignalKind::Metrics, crate::shared::events::signals::SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))]
+        fn subscriptions(&self) -> &[crate::shared::events::signals::SignalKind] {
+            &self.subs
         }
         
         fn refresh(&mut self, _hub: &SignalHub, _signals: &[crate::shared::events::signals::SignalKind]) {
@@ -536,6 +537,7 @@ mod tests {
                 on_hover: None,
                 tooltip: None,
             },
+            subs: vec![crate::shared::events::signals::SignalKind::Time, crate::shared::events::signals::SignalKind::Hyprland, crate::shared::events::signals::SignalKind::Applets, crate::shared::events::signals::SignalKind::Metrics, crate::shared::events::signals::SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))],
         });
         
         let mut actor = ModuleActor::new(port, ctx, Arc::new(std::sync::Mutex::new(MockCanvasFactory)));
@@ -590,6 +592,7 @@ mod tests {
 
         let port = Box::new(MockAnyModulePort {
             render_node: click_node,
+            subs: vec![crate::shared::events::signals::SignalKind::Time, crate::shared::events::signals::SignalKind::Hyprland, crate::shared::events::signals::SignalKind::Applets, crate::shared::events::signals::SignalKind::Metrics, crate::shared::events::signals::SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))],
         });
         
         let mut actor = ModuleActor::new(port, ctx, Arc::new(std::sync::Mutex::new(MockCanvasFactory)));
@@ -649,6 +652,7 @@ mod tests {
                 on_hover: None,
                 tooltip: None,
             },
+            subs: vec![crate::shared::events::signals::SignalKind::Time, crate::shared::events::signals::SignalKind::Hyprland, crate::shared::events::signals::SignalKind::Applets, crate::shared::events::signals::SignalKind::Metrics, crate::shared::events::signals::SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))],
         });
         
         let mut actor = ModuleActor::new(port, ctx, Arc::new(std::sync::Mutex::new(MockCanvasFactory)));
