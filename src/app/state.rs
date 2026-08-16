@@ -14,14 +14,14 @@ use tracing::{error, info};
 
 #[derive(Debug)]
 pub enum AppError {
-    Module(String),
+    Module(crate::features::module_runtime::ports::RegistryLoadError),
     Internal { message: String },
 }
 
 impl std::fmt::Display for AppError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Module(msg) => write!(f, "Module error: {}", msg)?,
+            Self::Module(err) => write!(f, "Module error: {}", err)?,
             Self::Internal { message } => write!(f, "Internal error: {}", message)?,
         }
         Ok(())
@@ -492,8 +492,8 @@ mod tests {
 
     #[test]
     fn test_app_error_fmt() {
-        let err1 = AppError::Module("test".into());
-        assert_eq!(err1.to_string(), "Module error: test");
+        let err1 = AppError::Module(crate::features::module_runtime::ports::RegistryLoadError::ModuleNotFound("test".into()));
+        assert_eq!(err1.to_string(), "Module error: Module not found: test");
         let err2 = AppError::Internal { message: "test".into() };
         assert_eq!(err2.to_string(), "Internal error: test");
     }

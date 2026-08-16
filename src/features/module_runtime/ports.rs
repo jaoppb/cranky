@@ -8,6 +8,36 @@ use crate::shared::primitives::{
 use crate::shared::wayland::ports::DynSurfaceManager;
 use async_trait::async_trait;
 use std::sync::Arc;
+use thiserror::Error;
+
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum ModuleInitError {
+    #[error("Script evaluation error: {0}")]
+    ScriptError(String),
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
+    #[error("Internal module error: {0}")]
+    Internal(String),
+}
+
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum RegistryLoadError {
+    #[error("Failed to initialize module '{module_name}': {source}")]
+    ModuleInit {
+        module_name: String,
+        #[source] source: ModuleInitError,
+    },
+    #[error("Module not found: {0}")]
+    ModuleNotFound(String),
+    #[error("Unsupported engine '{engine}' for module '{module_name}'")]
+    UnsupportedEngine {
+        engine: String,
+        module_name: String,
+    },
+    #[error("Internal registry error: {0}")]
+    Internal(String),
+}
+
 pub trait CommandSender: Send + Sync {
     fn send_command(&self, cmd: AppCommand);
 }
@@ -17,7 +47,7 @@ pub trait LayoutSender: Send + Sync {
 }
 #[async_trait]
 pub trait AnyModulePort: Send + Sync {
-    fn init(&mut self, config: &ModuleConfig, full_config: &Config) -> Result<(), String>;
+    fn init(&mut self, config: &ModuleConfig, full_config: &Config) -> Result<(), ModuleInitError>;
     fn subscriptions(&self) -> &[SignalKind];
     fn refresh(&mut self, hub: &SignalHub, changed_signals: &[SignalKind]);
     fn render(&self, monitor: &MonitorId) -> crate::features::layout_engine::domain::LayoutNode;
@@ -26,7 +56,7 @@ pub trait AnyModulePort: Send + Sync {
 #[async_trait]
 #[cfg_attr(test, mockall::automock)]
 pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>: Send + Sync {
-    fn load(&mut self, config: &Config) -> Result<(), String>;
+    fn load(&mut self, config: &Config) -> Result<(), RegistryLoadError>;
     fn spawn_all(
         &mut self,
         hub: Arc<SignalHub>,

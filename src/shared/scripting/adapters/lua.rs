@@ -167,43 +167,45 @@ impl LuaModule {
 }
 
 impl AnyModulePort for LuaModule {
-    fn init(&mut self, config: &ModuleConfig, full_config: &crate::shared::config::domain::Config) -> Result<(), String> {
+    fn init(&mut self, config: &ModuleConfig, full_config: &crate::shared::config::domain::Config) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+        use crate::features::module_runtime::ports::ModuleInitError;
+
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
 
         let bar_config = full_config.bar();
 
         // Expose bar config
-        let bar_config_table = lua.create_table().map_err(|e| e.to_string())?;
+        let bar_config_table = lua.create_table().map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
         bar_config_table
             .set("font_family", bar_config.font_family().as_str())
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
         bar_config_table
             .set("font_size", bar_config.font_size().value())
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
         globals
             .set("bar_config", bar_config_table)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
 
         // Expose module config options using mlua's serde support
         let options_lua = lua
             .to_value(config.options())
-            .map_err(|e| format!("Failed to convert config to Lua: {}", e))?;
+            .map_err(|e| ModuleInitError::ConfigError(format!("Failed to convert config to Lua: {}", e)))?;
         globals
             .set("config", options_lua)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
 
         // Load the script
         lua.load(&self.source)
             .set_name(&self.name)
             .exec()
-            .map_err(|e| format!("Lua load error in {}: {}", self.name, e))?;
+            .map_err(|e| ModuleInitError::ScriptError(format!("Lua load error in {}: {}", self.name, e)))?;
 
         // Call init if it exists
-        if let Ok(init_fn) = globals.get::<Function>("init") {
+        if let Ok(init_fn) = globals.get::<mlua::Function>("init") {
             init_fn
                 .call::<()>(())
-                .map_err(|e| format!("Lua init error in {}: {}", self.name, e))?;
+                .map_err(|e| ModuleInitError::ScriptError(format!("Lua init error in {}: {}", self.name, e)))?;
         }
 
         self.cached_subs = Self::evaluate_subscriptions(&lua);

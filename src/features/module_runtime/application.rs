@@ -459,7 +459,7 @@ mod tests {
     }
     
     impl AnyModulePort for MockAnyModulePort {
-        fn init(&mut self, _config: &crate::shared::config::domain::ModuleConfig, _full_config: &crate::shared::config::domain::Config) -> Result<(), String> {
+        fn init(&mut self, _config: &crate::shared::config::domain::ModuleConfig, _full_config: &crate::shared::config::domain::Config) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
             Ok(())
         }
         

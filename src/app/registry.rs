@@ -45,7 +45,10 @@ impl ModuleRegistry {
         configs: &[ModuleConfig],
         full_config: &crate::shared::config::domain::Config,
         next_id: &mut u32,
-    ) -> Result<Vec<ModuleId>, String> {
+    ) -> Result<Vec<ModuleId>, crate::features::module_runtime::ports::RegistryLoadError> {
+        use crate::features::module_runtime::ports::RegistryLoadError;
+        use crate::app::builtins::BuiltinError;
+
         configs
             .iter()
             .filter(|c| c.is_enabled())
@@ -53,13 +56,19 @@ impl ModuleRegistry {
                 let id = ModuleId::new(*next_id);
                 *next_id += 1;
 
-                let mut module =
-                    builtins::BuiltinModules::find_module(config.name(), config.engine())
-                        .map_err(|e| e.to_string())?;
+                let mut module = builtins::BuiltinModules::find_module(config.name(), config.engine())
+                    .map_err(|e| match e {
+                        BuiltinError::ModuleNotFound { module_name } => RegistryLoadError::ModuleNotFound(module_name),
+                        BuiltinError::UnsupportedEngine { engine, module_name } => RegistryLoadError::UnsupportedEngine { engine, module_name },
+                        BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
+                    })?;
 
                 module
                     .init(config, full_config)
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| RegistryLoadError::ModuleInit {
+                        module_name: config.name().to_string(),
+                        source: e,
+                    })?;
 
                 for kind in module.subscriptions() {
                     if let crate::shared::events::signals::SignalKind::DBus(sub) = kind {
@@ -111,20 +120,17 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
         &self.right_modules
     }
 
-    fn load(&mut self, config: &crate::shared::config::domain::Config) -> Result<(), String> {
+    fn load(&mut self, config: &crate::shared::config::domain::Config) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
         self.modules.clear();
         self.dbus_subscriptions.clear();
         let mut next_id = 0;
 
         self.left_modules = self
-            .load_section(config.modules().left(), config, &mut next_id)
-            .map_err(|e| e.to_string())?;
+            .load_section(config.modules().left(), config, &mut next_id)?;
         self.center_modules = self
-            .load_section(config.modules().center(), config, &mut next_id)
-            .map_err(|e| e.to_string())?;
+            .load_section(config.modules().center(), config, &mut next_id)?;
         self.right_modules = self
-            .load_section(config.modules().right(), config, &mut next_id)
-            .map_err(|e| e.to_string())?;
+            .load_section(config.modules().right(), config, &mut next_id)?;
 
         Ok(())
     }
@@ -272,7 +278,7 @@ mod tests {
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
         >::load(&mut registry, &config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("not found"));
+        assert!(matches!(result.unwrap_err(), crate::features::module_runtime::ports::RegistryLoadError::ModuleNotFound(_)));
     }
 
     #[test]

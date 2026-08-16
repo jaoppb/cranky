@@ -88,7 +88,9 @@ impl RhaiModule {
 }
 
 impl AnyModulePort for RhaiModule {
-    fn init(&mut self, config: &ModuleConfig, full_config: &crate::shared::config::domain::Config) -> Result<(), String> {
+    fn init(&mut self, config: &ModuleConfig, full_config: &crate::shared::config::domain::Config) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+        use crate::features::module_runtime::ports::ModuleInitError;
+
         let bar_config = full_config.bar();
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
@@ -106,10 +108,10 @@ impl AnyModulePort for RhaiModule {
         scope.set_or_push("bar_config", bar_map);
 
         // Expose module config options
-        let options_json = serde_json::to_string(config.options()).map_err(|e| e.to_string())?;
+        let options_json = serde_json::to_string(config.options()).map_err(|e| ModuleInitError::ConfigError(e.to_string()))?;
         let options_rhai: rhai::Map = engine
             .parse_json(&options_json, true)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
         scope.set_or_push("config", options_rhai);
 
         // Call init if it exists
