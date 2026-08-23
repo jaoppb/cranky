@@ -1,0 +1,628 @@
+use crate::app::commands::AppCommand;
+use crate::features::layout_engine::domain::StyledNode;
+use crate::features::styling::domain::{
+    ClassNameList, ElementId, ElementQuery, Orientation, ProgressValue,
+};
+use crate::features::styling::ports::StyleResolverPort;
+use crate::shared::primitives::geometry::Size;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use uuid::Uuid;
+
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
+pub enum VdomError {
+    #[error("Invalid NodeKey: {0}")]
+    InvalidNodeKey(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct NodeId(Uuid);
+
+impl NodeId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+
+    pub fn from_uuid(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+
+    pub fn uuid(&self) -> &Uuid {
+        &self.0
+    }
+}
+
+impl Default for NodeId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+pub struct NodeKey(String);
+
+impl NodeKey {
+    pub fn new(key: impl Into<String>) -> Result<Self, VdomError> {
+        let s = key.into();
+        if s.trim().is_empty() {
+            return Err(VdomError::InvalidNodeKey(
+                "NodeKey cannot be empty or whitespace".to_string(),
+            ));
+        }
+        Ok(Self(s))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for NodeKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for NodeKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        NodeKey::new(s).map_err(serde::de::Error::custom)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NodeTag {
+    Flex,
+    Text,
+    Progress,
+    Rect,
+    Image,
+}
+
+impl NodeTag {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Flex => "flex",
+            Self::Text => "text",
+            Self::Progress => "progress",
+            Self::Rect => "rect",
+            Self::Image => "image",
+        }
+    }
+
+    pub fn is_container(&self) -> bool {
+        matches!(self, Self::Flex)
+    }
+
+    pub fn is_leaf(&self) -> bool {
+        !self.is_container()
+    }
+}
+
+impl std::fmt::Display for NodeTag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(transparent)]
+pub struct TextContent {
+    text: String,
+}
+
+impl TextContent {
+    pub fn new(text: String) -> Self {
+        Self { text }
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.text
+    }
+}
+
+impl std::str::FromStr for TextContent {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::new(s.to_string()))
+    }
+}
+
+impl From<&str> for TextContent {
+    fn from(s: &str) -> Self {
+        Self::new(s.to_string())
+    }
+}
+
+impl From<String> for TextContent {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl std::fmt::Display for TextContent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.text)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "type")]
+pub enum VNodeKind {
+    #[serde(rename = "flex")]
+    Flex {
+        #[serde(default)]
+        children: Vec<VNode>,
+    },
+    #[serde(rename = "text")]
+    Text { text: TextContent },
+    #[serde(rename = "progress")]
+    Progress {
+        #[serde(default)]
+        value: ProgressValue,
+        #[serde(default)]
+        orientation: Orientation,
+    },
+    #[serde(rename = "rect")]
+    Rect,
+    #[serde(rename = "image")]
+    Image {
+        #[serde(with = "serde_bytes")]
+        data: Vec<u8>,
+        pixel_size: Size,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct VNode {
+    #[serde(skip_deserializing, default = "NodeId::new")]
+    node_id: NodeId,
+    #[serde(default)]
+    key: Option<NodeKey>,
+    #[serde(default)]
+    id: Option<ElementId>,
+    #[serde(default)]
+    class: Option<ClassNameList>,
+    #[serde(default)]
+    on_click: Option<AppCommand>,
+    #[serde(default)]
+    on_hover: Option<AppCommand>,
+    #[serde(default)]
+    tooltip: Option<Box<VNode>>,
+    #[serde(flatten)]
+    kind: VNodeKind,
+}
+
+impl VNode {
+    pub fn new_flex(
+        children: Vec<VNode>,
+        class: Option<ClassNameList>,
+        id: Option<ElementId>,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<VNode>>,
+    ) -> Self {
+        Self {
+            node_id: NodeId::new(),
+            key: None,
+            id,
+            class,
+            on_click,
+            on_hover,
+            tooltip,
+            kind: VNodeKind::Flex { children },
+        }
+    }
+
+    pub fn new_text(
+        text: TextContent,
+        class: Option<ClassNameList>,
+        id: Option<ElementId>,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<VNode>>,
+    ) -> Self {
+        Self {
+            node_id: NodeId::new(),
+            key: None,
+            id,
+            class,
+            on_click,
+            on_hover,
+            tooltip,
+            kind: VNodeKind::Text { text },
+        }
+    }
+
+    pub fn new_progress(
+        value: ProgressValue,
+        orientation: Orientation,
+        class: Option<ClassNameList>,
+        id: Option<ElementId>,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<VNode>>,
+    ) -> Self {
+        Self {
+            node_id: NodeId::new(),
+            key: None,
+            id,
+            class,
+            on_click,
+            on_hover,
+            tooltip,
+            kind: VNodeKind::Progress { value, orientation },
+        }
+    }
+
+    pub fn new_rect(
+        class: Option<ClassNameList>,
+        id: Option<ElementId>,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<VNode>>,
+    ) -> Self {
+        Self {
+            node_id: NodeId::new(),
+            key: None,
+            id,
+            class,
+            on_click,
+            on_hover,
+            tooltip,
+            kind: VNodeKind::Rect,
+        }
+    }
+
+    pub fn new_image(
+        data: Vec<u8>,
+        pixel_size: Size,
+        class: Option<ClassNameList>,
+        id: Option<ElementId>,
+        tooltip: Option<Box<VNode>>,
+    ) -> Self {
+        Self {
+            node_id: NodeId::new(),
+            key: None,
+            id,
+            class,
+            on_click: None,
+            on_hover: None,
+            tooltip,
+            kind: VNodeKind::Image { data, pixel_size },
+        }
+    }
+
+    pub fn node_id(&self) -> NodeId {
+        self.node_id
+    }
+
+    pub fn with_node_id(mut self, node_id: NodeId) -> Self {
+        self.node_id = node_id;
+        self
+    }
+
+    pub fn key(&self) -> Option<&NodeKey> {
+        self.key.as_ref()
+    }
+
+    pub fn with_key(mut self, key: NodeKey) -> Self {
+        self.key = Some(key);
+        self
+    }
+
+    pub fn element_id(&self) -> Option<&ElementId> {
+        self.id.as_ref()
+    }
+
+    pub fn class_names(&self) -> Option<&ClassNameList> {
+        self.class.as_ref()
+    }
+
+    pub fn on_click(&self) -> Option<&AppCommand> {
+        self.on_click.as_ref()
+    }
+
+    pub fn on_hover(&self) -> Option<&AppCommand> {
+        self.on_hover.as_ref()
+    }
+
+    pub fn tooltip(&self) -> Option<&VNode> {
+        self.tooltip.as_deref()
+    }
+
+    pub fn tag(&self) -> NodeTag {
+        match &self.kind {
+            VNodeKind::Flex { .. } => NodeTag::Flex,
+            VNodeKind::Text { .. } => NodeTag::Text,
+            VNodeKind::Progress { .. } => NodeTag::Progress,
+            VNodeKind::Rect => NodeTag::Rect,
+            VNodeKind::Image { .. } => NodeTag::Image,
+        }
+    }
+
+    pub fn kind(&self) -> &VNodeKind {
+        &self.kind
+    }
+
+    pub fn kind_mut(&mut self) -> &mut VNodeKind {
+        &mut self.kind
+    }
+
+    pub fn children(&self) -> &[VNode] {
+        match &self.kind {
+            VNodeKind::Flex { children } => children.as_slice(),
+            _ => &[],
+        }
+    }
+
+    pub fn children_mut(&mut self) -> Option<&mut Vec<VNode>> {
+        match &mut self.kind {
+            VNodeKind::Flex { children } => Some(children),
+            _ => None,
+        }
+    }
+
+    pub fn resolve_styles(
+        &self,
+        resolver: &dyn StyleResolverPort,
+        parent: Option<&ElementQuery>,
+    ) -> StyledNode {
+        let empty_classes = ClassNameList::default();
+        let classes_slice = self
+            .class
+            .as_ref()
+            .map(|c| c.as_slice())
+            .unwrap_or(empty_classes.as_slice());
+        let query = ElementQuery::new(
+            self.tag().as_str(),
+            self.id.as_ref(),
+            classes_slice,
+            &[],
+            parent,
+        );
+        let style = resolver.resolve_style(&query);
+        let styled_tooltip = self
+            .tooltip
+            .as_ref()
+            .map(|t| Box::new(t.resolve_styles(resolver, None)));
+
+        match &self.kind {
+            VNodeKind::Flex { children } => {
+                let styled_children = children
+                    .iter()
+                    .map(|child| child.resolve_styles(resolver, Some(&query)))
+                    .collect();
+                StyledNode::Flex {
+                    children: styled_children,
+                    style,
+                    on_click: self.on_click.clone(),
+                    on_hover: self.on_hover.clone(),
+                    tooltip: styled_tooltip,
+                }
+            }
+            VNodeKind::Text { text } => StyledNode::Text {
+                text: text.clone(),
+                style,
+                on_click: self.on_click.clone(),
+                on_hover: self.on_hover.clone(),
+                tooltip: styled_tooltip,
+            },
+            VNodeKind::Progress { value, orientation } => StyledNode::Progress {
+                value: *value,
+                orientation: *orientation,
+                style,
+                on_click: self.on_click.clone(),
+                on_hover: self.on_hover.clone(),
+                tooltip: styled_tooltip,
+            },
+            VNodeKind::Rect => StyledNode::Rect {
+                style,
+                on_click: self.on_click.clone(),
+                on_hover: self.on_hover.clone(),
+                tooltip: styled_tooltip,
+            },
+            VNodeKind::Image { data, pixel_size } => StyledNode::Image {
+                data: data.clone(),
+                pixel_size: *pixel_size,
+                style,
+                tooltip: styled_tooltip,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Patch {
+    NoChange,
+    Replace {
+        old_node_id: NodeId,
+        new_node: Box<VNode>,
+    },
+    UpdateProps {
+        node_id: NodeId,
+        class_changed: bool,
+        id_changed: bool,
+        handlers_changed: bool,
+        tooltip_patch: Option<Box<Patch>>,
+        kind_patch: Box<Patch>,
+    },
+    UpdateText {
+        node_id: NodeId,
+        new_text: TextContent,
+    },
+    UpdateProgress {
+        node_id: NodeId,
+        new_value: ProgressValue,
+        new_orientation: Orientation,
+    },
+    UpdateImage {
+        node_id: NodeId,
+        new_data: Vec<u8>,
+        new_pixel_size: Size,
+    },
+    UpdateChildren {
+        node_id: NodeId,
+        child_patches: Vec<ChildPatchOp>,
+    },
+}
+
+impl Patch {
+    pub fn is_no_change(&self) -> bool {
+        matches!(self, Self::NoChange)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChildPatchOp {
+    Insert {
+        index: usize,
+        node: Box<VNode>,
+    },
+    Remove {
+        node_id: NodeId,
+        index: usize,
+    },
+    Move {
+        node_id: NodeId,
+        from: usize,
+        to: usize,
+    },
+    Update {
+        node_id: NodeId,
+        patch: Box<Patch>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DiffResult {
+    patch: Patch,
+}
+
+impl DiffResult {
+    pub fn new(patch: Patch) -> Self {
+        Self { patch }
+    }
+
+    pub fn unchanged() -> Self {
+        Self {
+            patch: Patch::NoChange,
+        }
+    }
+
+    pub fn is_unchanged(&self) -> bool {
+        self.patch.is_no_change()
+    }
+
+    pub fn patch(&self) -> &Patch {
+        &self.patch
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_node_id_creation_and_uniqueness() {
+        let id1 = NodeId::new();
+        let id2 = NodeId::new();
+        assert_ne!(id1, id2);
+        assert_eq!(id1, NodeId::from_uuid(*id1.uuid()));
+        assert!(!id1.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_node_key_validation() {
+        assert!(NodeKey::new("valid-key_123").is_ok());
+        assert!(NodeKey::new("").is_err());
+        assert!(NodeKey::new("   ").is_err());
+
+        let key = NodeKey::new("tab-1").unwrap();
+        assert_eq!(key.as_str(), "tab-1");
+        assert_eq!(key.to_string(), "tab-1");
+    }
+
+    #[test]
+    fn test_text_content() {
+        let text = TextContent::new("Hello World".to_string());
+        assert_eq!(text.as_str(), "Hello World");
+        assert_eq!(text.to_string(), "Hello World");
+    }
+
+    #[test]
+    fn test_vnode_constructors_and_accessors() {
+        let text_node = VNode::new_text(
+            TextContent::new("clock".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(text_node.tag(), NodeTag::Text);
+        assert!(text_node.tag().is_leaf());
+        assert_eq!(text_node.children().len(), 0);
+
+        let flex_node = VNode::new_flex(vec![text_node.clone()], None, None, None, None, None);
+        assert_eq!(flex_node.tag(), NodeTag::Flex);
+        assert!(flex_node.tag().is_container());
+        assert_eq!(flex_node.children().len(), 1);
+        assert_eq!(flex_node.children()[0].tag(), NodeTag::Text);
+    }
+
+    #[test]
+    fn test_vnode_serde_deserialization() {
+        let json = r#"{
+            "type": "flex",
+            "key": "main_bar",
+            "children": [
+                {
+                    "type": "text",
+                    "text": "12:00"
+                }
+            ]
+        }"#;
+
+        let node: VNode = serde_json::from_str(json).expect("Deserialization failed");
+        assert_eq!(node.tag(), NodeTag::Flex);
+        assert_eq!(node.key().unwrap().as_str(), "main_bar");
+        assert_eq!(node.children().len(), 1);
+        assert_eq!(node.children()[0].tag(), NodeTag::Text);
+    }
+
+    #[test]
+    fn test_vnode_ignores_deserialized_node_id() {
+        let fake_uuid = "00000000-0000-0000-0000-000000000000";
+        let json = format!(
+            r#"{{
+            "type": "text",
+            "text": "test",
+            "node_id": "{}"
+        }}"#,
+            fake_uuid
+        );
+
+        let node: VNode = serde_json::from_str(&json).expect("Deserialization failed");
+        assert_ne!(node.node_id().to_string(), fake_uuid);
+    }
+
+    #[test]
+    fn test_diff_result() {
+        let res = DiffResult::unchanged();
+        assert!(res.is_unchanged());
+        assert_eq!(res.patch(), &Patch::NoChange);
+    }
+}

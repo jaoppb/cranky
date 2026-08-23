@@ -158,10 +158,9 @@ fn compile_selector(selector: &Selector) -> CompiledSelector {
                 LightningPseudoClass::Focus | LightningPseudoClass::FocusVisible => {
                     current_step.pseudo_classes.push(PseudoClass::Focused)
                 }
-                LightningPseudoClass::Custom { name }
-                    if name.as_ref() == "focused" => {
-                        current_step.pseudo_classes.push(PseudoClass::Focused);
-                    }
+                LightningPseudoClass::Custom { name } if name.as_ref() == "focused" => {
+                    current_step.pseudo_classes.push(PseudoClass::Focused);
+                }
                 _ => {}
             },
             Component::Combinator(comb) => {
@@ -243,9 +242,11 @@ fn matches_selector(selector: &CompiledSelector, query: &ElementQuery) -> bool {
 
 fn step_matches(step: &SelectorStep, query: &ElementQuery) -> bool {
     if let Some(tag) = &step.tag
-        && tag != "*" && tag != &query.tag().to_lowercase() {
-            return false;
-        }
+        && tag != "*"
+        && tag != &query.tag().to_lowercase()
+    {
+        return false;
+    }
 
     if let Some(id) = &step.id {
         match query.id() {
@@ -301,9 +302,10 @@ fn parse_declarations(declarations: &DeclarationBlock) -> ComputedStyle {
                 if name == "accent-color" || name == "progress-color" || name == "fill-color" {
                     for item in &custom.value.0 {
                         if let lightningcss::properties::custom::TokenOrValue::Color(c) = item
-                            && let Some(col) = convert_color(c) {
-                                style.set_accent_color(DrawingColor::Solid(col));
-                            }
+                            && let Some(col) = convert_color(c)
+                        {
+                            style.set_accent_color(DrawingColor::Solid(col));
+                        }
                     }
                 }
             }
@@ -499,9 +501,10 @@ fn parse_declarations(declarations: &DeclarationBlock) -> ComputedStyle {
                 if let Ok(c) = DrawingColor::parse(s.trim()) {
                     style.set_background(c);
                 } else if let Some(first) = bgs.first()
-                    && let Some(c) = convert_color(&first.color) {
-                        style.set_background(DrawingColor::Solid(c));
-                    }
+                    && let Some(c) = convert_color(&first.color)
+                {
+                    style.set_background(DrawingColor::Solid(c));
+                }
             }
             Property::FlexGrow(fg, _) => {
                 if let Ok(val) = FlexGrow::new(*fg) {
@@ -636,9 +639,10 @@ fn parse_declarations(declarations: &DeclarationBlock) -> ComputedStyle {
                     .to_css_string(PrinterOptions::default())
                     .unwrap_or_default();
                 if let Ok(v) = s.parse::<f32>()
-                    && let Ok(val) = Opacity::new(v) {
-                        style.set_opacity(val);
-                    }
+                    && let Ok(val) = Opacity::new(v)
+                {
+                    style.set_opacity(val);
+                }
             }
             _ => {}
         }
@@ -818,9 +822,9 @@ mod tests {
     #[test]
     fn test_arbitrary_style_name_and_progress_rendering() {
         use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
-        use crate::features::layout_engine::domain::LayoutNode;
         use crate::features::layout_engine::ports::LayoutEnginePort;
         use crate::features::styling::domain::{ClassNameList, Orientation, ProgressValue};
+        use crate::features::vdom::domain::{TextContent, VNode};
         use crate::shared::primitives::geometry::Position;
         use crate::shared::rendering::ports::canvas::MockCanvas;
 
@@ -846,27 +850,27 @@ mod tests {
             ]);
 
         // 1. Clock requesting random style
-        let clock_node = LayoutNode::Text {
-            text: crate::features::layout_engine::domain::TextContent::new("12:00".to_string()),
-            class: Some(ClassNameList::parse("clock-label").unwrap()),
-            id: None,
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-        };
+        let clock_node = VNode::new_text(
+            TextContent::new("12:00".to_string()),
+            Some(ClassNameList::parse("clock-label").unwrap()),
+            None,
+            None,
+            None,
+            None,
+        );
         let styled_clock = clock_node.resolve_styles(&resolver, None);
         assert_eq!(styled_clock.style().font_size().unwrap().value(), 16.0);
 
         // 2. Progress bar horizontal & vertical rendering
-        let h_prog = LayoutNode::Progress {
-            value: ProgressValue::new(0.6).unwrap(),
-            orientation: Orientation::Horizontal,
-            class: Some(ClassNameList::parse("battery").unwrap()),
-            id: None,
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-        };
+        let h_prog = VNode::new_progress(
+            ProgressValue::new(0.6).unwrap(),
+            Orientation::Horizontal,
+            Some(ClassNameList::parse("battery").unwrap()),
+            None,
+            None,
+            None,
+            None,
+        );
         let styled_h = h_prog.resolve_styles(&resolver, None);
         let mut engine = TaffyLayoutAdapter::new();
 
@@ -893,9 +897,9 @@ mod tests {
     #[test]
     fn test_width_height_parsing_and_layout() {
         use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
-        use crate::features::layout_engine::domain::LayoutNode;
         use crate::features::layout_engine::ports::LayoutEnginePort;
         use crate::features::styling::domain::ClassNameList;
+        use crate::features::vdom::domain::VNode;
         use crate::shared::primitives::geometry::{Position, Size};
 
         let parser = LightningCssAdapter::new();
@@ -913,13 +917,13 @@ mod tests {
                 parsed,
             ]);
 
-        let img_node = LayoutNode::Image {
-            data: vec![0; 400 * 4],
-            pixel_size: Size::new(48, 48),
-            class: Some(ClassNameList::parse("icon").unwrap()),
-            id: None,
-            tooltip: None,
-        };
+        let img_node = VNode::new_image(
+            vec![0; 400 * 4],
+            Size::new(48, 48),
+            Some(ClassNameList::parse("icon").unwrap()),
+            None,
+            None,
+        );
 
         let styled_img = img_node.resolve_styles(&resolver, None);
         assert_eq!(

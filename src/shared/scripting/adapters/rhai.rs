@@ -82,9 +82,9 @@ impl RhaiModule {
                     if let Some(str_val) = s.try_cast::<String>()
                         && let Ok(sheet) =
                             crate::features::styling::domain::StyleSheetName::new(str_val)
-                        {
-                            styles.push(sheet);
-                        }
+                    {
+                        styles.push(sheet);
+                    }
                 }
             }
         } else if let Ok(subs_arr) = engine.call_fn::<rhai::Array>(scope, ast, "subscriptions", ())
@@ -95,9 +95,9 @@ impl RhaiModule {
         if styles.is_empty()
             && let Ok(default_sheet) =
                 crate::features::styling::domain::StyleSheetName::new(module_name)
-            {
-                styles.push(default_sheet);
-            }
+        {
+            styles.push(default_sheet);
+        }
 
         (subs, styles)
     }
@@ -264,43 +264,34 @@ impl AnyModulePort for RhaiModule {
         }
     }
 
-    fn render(&self, monitor: &MonitorId) -> crate::features::layout_engine::domain::LayoutNode {
+    fn render(&self, monitor: &MonitorId) -> crate::features::vdom::domain::VNode {
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
         let monitor_id = monitor.as_str().to_string();
 
         match engine.call_fn::<rhai::Dynamic>(&mut scope, &self.ast, "render", (monitor_id,)) {
             Ok(result) => {
-                match rhai::serde::from_dynamic::<crate::features::layout_engine::domain::LayoutNode>(
-                    &result,
-                ) {
+                match rhai::serde::from_dynamic::<crate::features::vdom::domain::VNode>(&result) {
                     Ok(node) => node,
                     Err(e) => {
                         tracing::error!(
                             "Failed to deserialize render output in rhai module: {}",
                             e
                         );
-                        crate::features::layout_engine::domain::LayoutNode::Flex {
-                            children: vec![],
-                            class: None,
-                            id: None,
-                            on_click: None,
-                            on_hover: None,
-                            tooltip: None,
-                        }
+                        crate::features::vdom::domain::VNode::new_flex(
+                            vec![],
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
                     }
                 }
             }
             Err(e) => {
                 tracing::warn!("Module render error in rhai: {}", e);
-                crate::features::layout_engine::domain::LayoutNode::Flex {
-                    children: vec![],
-                    class: None,
-                    id: None,
-                    on_click: None,
-                    on_hover: None,
-                    tooltip: None,
-                }
+                crate::features::vdom::domain::VNode::new_flex(vec![], None, None, None, None, None)
             }
         }
     }
@@ -312,20 +303,15 @@ impl AnyModulePort for RhaiModule {
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
 
-        // Check if function exists first to avoid error if it doesn't?
-        // rhai's call_fn will return an error if not found. Since we want Ok(()) if it's missing, let's catch it.
         match engine.call_fn::<()>(&mut scope, &self.ast, name.as_str(), ()) {
-            Ok(_) => Ok(()),
+            Ok(()) => Ok(()),
             Err(e) => {
-                if matches!(*e, rhai::EvalAltResult::ErrorFunctionNotFound(..)) {
-                    Ok(())
-                } else {
-                    Err(
-                        crate::features::module_runtime::ports::ModuleInitError::ScriptError(
-                            format!("Failed to call function '{}': {}", name, e),
-                        ),
-                    )
-                }
+                tracing::error!("Function call '{}' failed: {}", name.as_str(), e);
+                Err(
+                    crate::features::module_runtime::ports::ModuleInitError::ScriptError(
+                        e.to_string(),
+                    ),
+                )
             }
         }
     }
@@ -334,13 +320,37 @@ impl AnyModulePort for RhaiModule {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::config::domain::ModuleConfig;
+    use crate::shared::events::signals::SignalKind;
 
     #[test]
     fn test_rhai_module_new_success() {
         let source = "
-            fn init() {}
             fn subscriptions() { return [\"time\"]; }
+            fn refresh() {}
+            fn render(monitor) {
+                return #{
+                    type: \"flex\",
+                    children: [
+                        #{ type: \"text\", text: \"hello\" }
+                    ]
+                };
+            }
+        ";
+        let module = RhaiModule::new("test_mod".into(), source);
+        assert!(module.is_ok());
+    }
+
+    #[test]
+    fn test_rhai_module_new_error() {
+        let source = "this is not valid rhai syntax !!!";
+        let module = RhaiModule::new("test_err".into(), source);
+        assert!(module.is_err());
+    }
+
+    #[test]
+    fn test_rhai_module_lifecycle() {
+        let source = "
+            fn subscriptions() { return [\"time\", \"hyprland\", \"metrics\"]; }
             fn refresh() {}
             fn render(monitor) {
                 return #{
@@ -349,42 +359,14 @@ mod tests {
                 };
             }
         ";
-        let module = RhaiModule::new("test".into(), source);
-        assert!(module.is_ok());
-    }
-
-    #[test]
-    fn test_rhai_module_new_error() {
-        let source = "fn invalid syntax(";
-        let module = RhaiModule::new("test".into(), source);
-        assert!(module.is_err());
-    }
-
-    #[test]
-    fn test_rhai_module_lifecycle() {
-        let source = "
-            fn init() {}
-            fn subscriptions() { return [\"time\", \"hyprland\", \"metrics\"]; }
-            fn refresh() {}
-            fn render(monitor) {
-                return #{
-                    type: \"flex\",
-                    style: #{
-                        direction: \"column\",
-                    }
-                };
-            }
-        ";
-        let mut module = RhaiModule::new("test".into(), source).unwrap();
-
-        let mod_config = ModuleConfig::new(
-            "test".into(),
+        let mut module = RhaiModule::new("test_life".into(), source).unwrap();
+        let mod_config = crate::shared::config::domain::ModuleConfig::new(
+            "test_life".into(),
             true,
             crate::shared::config::domain::EngineSelection::Auto,
             std::collections::HashMap::new(),
         );
         let config = crate::shared::config::domain::Config::default();
-
         assert!(module.init(&mod_config, &config).is_ok());
 
         let subs = module.subscriptions();
@@ -396,11 +378,10 @@ mod tests {
         module.refresh(&hub, &[SignalKind::Time]);
 
         let render_node = module.render(&MonitorId::new("DP-1"));
-        if let crate::features::layout_engine::domain::LayoutNode::Flex { .. } = render_node {
-            // Successfully returned Flex node
-        } else {
-            panic!("Expected Flex node");
-        }
+        assert_eq!(
+            render_node.tag(),
+            crate::features::vdom::domain::NodeTag::Flex
+        );
     }
 
     #[test]
@@ -425,7 +406,11 @@ mod tests {
         let hub = SignalHub::new(crate::shared::config::domain::Config::default());
         module.refresh(&hub, &[]);
         let render_node = module.render(&MonitorId::new("DP-1"));
-        if let crate::features::layout_engine::domain::LayoutNode::Text { text, .. } = render_node {
+        assert_eq!(
+            render_node.tag(),
+            crate::features::vdom::domain::NodeTag::Text
+        );
+        if let crate::features::vdom::domain::VNodeKind::Text { text } = render_node.kind() {
             assert_eq!(text.as_str(), "Hello, Rhai!");
         } else {
             panic!("Expected Text node");

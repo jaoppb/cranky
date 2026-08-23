@@ -69,9 +69,12 @@ pub struct ModuleActor<F: crate::shared::rendering::ports::canvas::CanvasFactory
     port: Box<dyn AnyModulePort>,
     ctx: ModuleContext,
     sizes: std::collections::HashMap<MonitorId, Size>,
+    rendered_bounds: std::collections::HashMap<MonitorId, Rect>,
     canvas_factory: std::sync::Arc<std::sync::Mutex<F>>,
     render_trees:
         std::collections::HashMap<MonitorId, crate::features::layout_engine::domain::RenderNode>,
+    vdom_trees: std::collections::HashMap<MonitorId, crate::features::vdom::domain::VNode>,
+    vdom_diff: std::sync::Arc<dyn crate::features::vdom::ports::VdomDiffPort>,
     style_resolver: std::sync::Arc<dyn crate::features::styling::ports::StyleResolverPort>,
 }
 
@@ -81,13 +84,17 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
         ctx: ModuleContext,
         canvas_factory: std::sync::Arc<std::sync::Mutex<F>>,
         style_resolver: std::sync::Arc<dyn crate::features::styling::ports::StyleResolverPort>,
+        vdom_diff: std::sync::Arc<dyn crate::features::vdom::ports::VdomDiffPort>,
     ) -> Self {
         Self {
             port,
             ctx,
             sizes: std::collections::HashMap::new(),
+            rendered_bounds: std::collections::HashMap::new(),
             canvas_factory,
             render_trees: std::collections::HashMap::new(),
+            vdom_trees: std::collections::HashMap::new(),
+            vdom_diff,
             style_resolver,
         }
     }
@@ -359,70 +366,114 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
         let monitors: Vec<MonitorId> = all_monitors.into_iter().collect();
 
         for monitor_id in monitors {
-            let layout_node = self.port.render(&monitor_id);
-            tracing::trace!(module = %self.ctx.id(), monitor = %monitor_id, "Resolving styles for module layout node");
-            let styled_node = layout_node.resolve_styles(self.style_resolver.as_ref(), None);
+            let new_vdom = self.port.render(&monitor_id);
+            let diff_result = self
+                .vdom_diff
+                .diff(self.vdom_trees.get(&monitor_id), &new_vdom);
 
-            // Measure
-            let config = self.ctx.hub().config_rx().borrow().clone();
-            let default_font_family = config.bar().font_family().clone();
-            let default_font_size = config.bar().font_size();
+            let current_bounds = layouts.get(&monitor_id).copied();
+            let bounds_changed = current_bounds != self.rendered_bounds.get(&monitor_id).copied();
 
-            let render_node_res = {
-                let mut factory = self.canvas_factory.lock().unwrap();
-                let mut measurer = factory.create_text_measurer(
-                    Scale::new(1.0),
-                    default_font_family.clone(),
-                    default_font_size,
+            if diff_result.is_unchanged()
+                && !bounds_changed
+                && self.render_trees.contains_key(&monitor_id)
+            {
+                tracing::trace!(
+                    module = %self.ctx.id(),
+                    monitor = %monitor_id,
+                    "VDOM and bounds unchanged; skipping style resolution, layout, and canvas render"
                 );
-
-                let engine = layout_engines.entry(monitor_id.clone()).or_insert_with(|| {
-                    Box::new(
-                        crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new(),
-                    )
-                });
-
-                engine.calculate_layout(
-                    styled_node,
-                    &mut measurer,
-                    crate::shared::primitives::geometry::Position::new(0, 0),
-                )
-            };
-
-            let render_node = match render_node_res {
-                Ok(node) => node,
-                Err(e) => {
-                    tracing::error!(module = %self.ctx.id(), monitor = %monitor_id, err = ?e, "Module layout calculation failed");
-                    continue;
-                }
-            };
-
-            self.render_trees
-                .insert(monitor_id.clone(), render_node.clone());
-
-            let size = *render_node.rect().size();
-
-            let old_size = self
-                .sizes
-                .get(&monitor_id)
-                .copied()
-                .unwrap_or(Size::new(0, 0));
-            if size != old_size {
-                self.sizes.insert(monitor_id.clone(), size);
-                self.ctx
-                    .command_tx()
-                    .send_command(AppCommand::ModuleSizeChanged(
-                        monitor_id.clone(),
-                        self.ctx.id(),
-                        size,
-                    ));
+                continue;
             }
 
+            let render_node = if !diff_result.is_unchanged()
+                || !self.render_trees.contains_key(&monitor_id)
+            {
+                tracing::trace!(
+                    module = %self.ctx.id(),
+                    monitor = %monitor_id,
+                    patch = ?diff_result.patch(),
+                    "VDOM dirty; updating cached tree and calculating layout"
+                );
+
+                self.vdom_trees.insert(monitor_id.clone(), new_vdom.clone());
+
+                tracing::trace!(module = %self.ctx.id(), monitor = %monitor_id, "Resolving styles for module VNode");
+                let styled_node = new_vdom.resolve_styles(self.style_resolver.as_ref(), None);
+
+                // Measure
+                let config = self.ctx.hub().config_rx().borrow().clone();
+                let default_font_family = config.bar().font_family().clone();
+                let default_font_size = config.bar().font_size();
+
+                let render_node_res = {
+                    let mut factory = self.canvas_factory.lock().unwrap();
+                    let mut measurer = factory.create_text_measurer(
+                        Scale::new(1.0),
+                        default_font_family.clone(),
+                        default_font_size,
+                    );
+
+                    let engine = layout_engines.entry(monitor_id.clone()).or_insert_with(|| {
+                        Box::new(
+                            crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new(),
+                        )
+                    });
+
+                    engine.calculate_layout(
+                        styled_node,
+                        &mut measurer,
+                        crate::shared::primitives::geometry::Position::new(0, 0),
+                    )
+                };
+
+                let render_node = match render_node_res {
+                    Ok(node) => node,
+                    Err(e) => {
+                        tracing::error!(module = %self.ctx.id(), monitor = %monitor_id, err = ?e, "Module layout calculation failed");
+                        continue;
+                    }
+                };
+
+                self.render_trees
+                    .insert(monitor_id.clone(), render_node.clone());
+
+                let size = *render_node.rect().size();
+
+                let old_size = self
+                    .sizes
+                    .get(&monitor_id)
+                    .copied()
+                    .unwrap_or(Size::new(0, 0));
+                if size != old_size {
+                    self.sizes.insert(monitor_id.clone(), size);
+                    self.ctx
+                        .command_tx()
+                        .send_command(AppCommand::ModuleSizeChanged(
+                            monitor_id.clone(),
+                            self.ctx.id(),
+                            size,
+                        ));
+                }
+                render_node
+            } else {
+                tracing::trace!(
+                    module = %self.ctx.id(),
+                    monitor = %monitor_id,
+                    "VDOM unchanged but bounds changed; using cached layout to re-render canvas"
+                );
+                self.render_trees.get(&monitor_id).unwrap().clone()
+            };
+
             // Render if we have bounds
-            if let Some(bounds) = layouts.get(&monitor_id)
+            if let Some(bounds) = current_bounds
                 && bounds.width() > 0
                 && bounds.height() > 0
             {
+                let config = self.ctx.hub().config_rx().borrow().clone();
+                let default_font_family = config.bar().font_family().clone();
+                let default_font_size = config.bar().font_size();
+
                 let w = bounds.width();
                 let h = bounds.height();
                 let mut data = vec![0u8; (w * h * 4) as usize];
@@ -432,7 +483,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                         &mut data,
                         *bounds.size(),
                         Scale::new(1.0),
-                        default_font_family.clone(),
+                        default_font_family,
                         default_font_size,
                     );
                     render_node.render_to_canvas(&mut canvas);
@@ -448,6 +499,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                 rt.block_on(async move {
                     sm.submit_buffer(mod_id, mon_id, position, buffer).await;
                 });
+                self.rendered_bounds.insert(monitor_id.clone(), bounds);
             }
         }
 
@@ -570,7 +622,7 @@ mod tests {
     }
 
     struct MockAnyModulePort {
-        render_node: crate::features::layout_engine::domain::LayoutNode,
+        render_node: crate::features::vdom::domain::VNode,
         subs: Vec<crate::shared::events::signals::SignalKind>,
     }
 
@@ -598,10 +650,7 @@ mod tests {
         ) {
         }
 
-        fn render(
-            &self,
-            _monitor: &MonitorId,
-        ) -> crate::features::layout_engine::domain::LayoutNode {
+        fn render(&self, _monitor: &MonitorId) -> crate::features::vdom::domain::VNode {
             self.render_node.clone()
         }
 
@@ -665,13 +714,9 @@ mod tests {
         let ctx = ModuleContext::new(id, hub.clone(), sm.clone(), sender, layout_rx);
 
         let port = Box::new(MockAnyModulePort {
-            render_node: crate::features::layout_engine::domain::LayoutNode::Rect {
-                class: None,
-                id: None,
-                on_click: None,
-                on_hover: None,
-                tooltip: None,
-            },
+            render_node: crate::features::vdom::domain::VNode::new_rect(
+                None, None, None, None, None,
+            ),
             subs: vec![
                 crate::shared::events::signals::SignalKind::Time,
                 crate::shared::events::signals::SignalKind::Hyprland,
@@ -692,11 +737,13 @@ mod tests {
         let resolver = Arc::new(
             crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
         );
+        let diff_adapter = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
         let mut actor = ModuleActor::new(
             port,
             ctx,
             Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
             resolver,
+            diff_adapter,
         );
 
         let mut actor = tokio::task::spawn_blocking(move || {
@@ -748,13 +795,13 @@ mod tests {
         let (layout_tx, layout_rx) = watch::channel(HashMap::new());
         let ctx = ModuleContext::new(id, hub.clone(), sm, sender, layout_rx);
 
-        let click_node = crate::features::layout_engine::domain::LayoutNode::Rect {
-            class: None,
-            id: None,
-            on_click: Some(crate::app::commands::AppCommand::RequestRender),
-            on_hover: Some(crate::app::commands::AppCommand::RequestRender),
-            tooltip: None,
-        };
+        let click_node = crate::features::vdom::domain::VNode::new_rect(
+            None,
+            None,
+            Some(crate::app::commands::AppCommand::RequestRender),
+            Some(crate::app::commands::AppCommand::RequestRender),
+            None,
+        );
 
         let port = Box::new(MockAnyModulePort {
             render_node: click_node,
@@ -778,11 +825,13 @@ mod tests {
         let resolver = Arc::new(
             crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
         );
+        let diff_adapter = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
         let mut actor = ModuleActor::new(
             port,
             ctx,
             Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
             resolver,
+            diff_adapter,
         );
         // Pre-populate render_trees for hit testing
         actor.render_trees.insert(
@@ -833,6 +882,7 @@ mod tests {
         drop(layout_tx);
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
+
     #[tokio::test]
     async fn test_module_actor_renders_unknown_hyprland_monitor_from_layout() {
         use crate::shared::primitives::geometry::Rect;
@@ -857,13 +907,9 @@ mod tests {
         let ctx = ModuleContext::new(id, hub.clone(), sm.clone(), sender, layout_rx);
 
         let port = Box::new(MockAnyModulePort {
-            render_node: crate::features::layout_engine::domain::LayoutNode::Rect {
-                class: None,
-                id: None,
-                on_click: None,
-                on_hover: None,
-                tooltip: None,
-            },
+            render_node: crate::features::vdom::domain::VNode::new_rect(
+                None, None, None, None, None,
+            ),
             subs: vec![
                 crate::shared::events::signals::SignalKind::Time,
                 crate::shared::events::signals::SignalKind::Hyprland,
@@ -884,11 +930,13 @@ mod tests {
         let resolver = Arc::new(
             crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
         );
+        let diff_adapter = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
         let mut actor = ModuleActor::new(
             port,
             ctx,
             Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
             resolver,
+            diff_adapter,
         );
 
         // 2. Wayland sends layout update for DP-2
@@ -923,5 +971,74 @@ mod tests {
             }
             _ => panic!("Unexpected command"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_module_actor_skips_pipeline_when_vdom_unchanged() {
+        let id = crate::shared::primitives::ModuleId::new(1);
+        let hub = Arc::new(SignalHub::new(Config::default()));
+
+        {
+            let mut monitors = std::collections::BTreeMap::new();
+            monitors.insert(
+                crate::features::workspaces::domain::MonitorName::new("DP-1"),
+                crate::features::workspaces::domain::Monitor::new(
+                    crate::features::workspaces::domain::MonitorName::new("DP-1"),
+                    crate::features::workspaces::domain::WorkspaceId::new(1),
+                    None,
+                ),
+            );
+            let h_state = crate::shared::events::signals::HyprlandState::new(
+                std::collections::BTreeMap::new(),
+                monitors,
+                Some(crate::features::workspaces::domain::MonitorName::new(
+                    "DP-1",
+                )),
+            );
+            hub.hyprland_tx().send(h_state).unwrap();
+        }
+
+        let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
+        let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
+        let sender: Arc<dyn CommandSender> = Arc::new(TestCommandSender { tx: cmd_tx });
+        let (_layout_tx, layout_rx) = watch::channel(HashMap::new());
+        let ctx = ModuleContext::new(id, hub.clone(), sm, sender, layout_rx);
+
+        let node = crate::features::vdom::domain::VNode::new_text(
+            crate::features::vdom::domain::TextContent::new("unchanged".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let port = Box::new(MockAnyModulePort {
+            render_node: node.clone(),
+            subs: vec![],
+        });
+
+        let resolver = Arc::new(
+            crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
+        );
+        let diff_adapter = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
+        let mut actor = ModuleActor::new(
+            port,
+            ctx,
+            Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
+            resolver,
+            diff_adapter,
+        );
+
+        let mut layout_engines = HashMap::new();
+        // First run computes layout and caches VNode
+        actor.measure_and_render_all(&mut layout_engines);
+        assert!(actor.vdom_trees.contains_key(&MonitorId::new("DP-1")));
+        assert!(actor.render_trees.contains_key(&MonitorId::new("DP-1")));
+
+        // Second run with identical VDOM triggers early continue in loop (render_trees preserved)
+        actor.measure_and_render_all(&mut layout_engines);
+        assert!(actor.vdom_trees.contains_key(&MonitorId::new("DP-1")));
+        assert!(actor.render_trees.contains_key(&MonitorId::new("DP-1")));
     }
 }

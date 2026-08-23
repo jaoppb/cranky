@@ -5,4 +5,5 @@ pub mod module_runtime;
 pub mod mpris;
 pub mod styling;
 pub mod systray;
+pub mod vdom;
 pub mod workspaces;

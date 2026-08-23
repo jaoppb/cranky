@@ -49,7 +49,7 @@ pub trait AnyModulePort: Send + Sync {
     fn subscriptions(&self) -> &[SignalKind];
     fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName];
     fn refresh(&mut self, hub: &SignalHub, changed_signals: &[SignalKind]);
-    fn render(&self, monitor: &MonitorId) -> crate::features::layout_engine::domain::LayoutNode;
+    fn render(&self, monitor: &MonitorId) -> crate::features::vdom::domain::VNode;
 
     /// Invoke a named function on the script. Used by ScriptCall click actions.
     /// Returns Ok(()) if the function exists and ran successfully.

@@ -3,6 +3,11 @@ use std::path::Path;
 use tiny_skia::Transform;
 
 pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
+    let icon_px = ((icon_size as f32) * scale.max(1.0))
+        .ceil()
+        .max(icon_size as f32) as u32;
+    let target = icon_px.max(1);
+
     if path
         .extension()
         .and_then(|s| s.to_str())
@@ -11,22 +16,21 @@ pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u
     {
         let svg_data = std::fs::read(path).ok()?;
         let tree = usvg::Tree::from_data(&svg_data, &usvg::Options::default()).ok()?;
-        let icon_px = ((icon_size as f32) * scale.max(1.0))
-            .ceil()
-            .max(icon_size as f32) as u32;
-        let target = icon_px.max(1);
         let tree_size = tree.size();
         let sx = target as f32 / tree_size.width();
         let sy = target as f32 / tree_size.height();
         let fit_scale = sx.min(sy).max(0.001);
-        let width = (tree_size.width() * fit_scale).ceil().max(1.0) as u32;
-        let height = (tree_size.height() * fit_scale).ceil().max(1.0) as u32;
-        let mut pixmap = tiny_skia::Pixmap::new(width, height)?;
-        let transform = Transform::from_scale(fit_scale, fit_scale);
+        let render_w = tree_size.width() * fit_scale;
+        let render_h = tree_size.height() * fit_scale;
+        let dx = (target as f32 - render_w) / 2.0;
+        let dy = (target as f32 - render_h) / 2.0;
+
+        let mut pixmap = tiny_skia::Pixmap::new(target, target)?;
+        let transform = Transform::from_scale(fit_scale, fit_scale).post_translate(dx, dy);
         let mut pixmap_mut = pixmap.as_mut();
         resvg::render(&tree, transform, &mut pixmap_mut);
 
-        let mut colors = Vec::with_capacity((width * height * 4) as usize);
+        let mut colors = Vec::with_capacity((target * target * 4) as usize);
         for pixel in pixmap.data().chunks_exact(4) {
             let a = pixel[3];
             let (r, g, b) = if a == 0 {
@@ -43,13 +47,9 @@ pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u
             colors.push(a);
         }
 
-        Some((width, height, colors))
+        Some((target, target, colors))
     } else {
         let img = image::open(path).ok()?;
-        let icon_px = ((icon_size as f32) * scale.max(1.0))
-            .ceil()
-            .max(icon_size as f32) as u32;
-        let target = icon_px.max(1);
         let resized =
             image::imageops::resize(&img, target, target, image::imageops::FilterType::Lanczos3);
 

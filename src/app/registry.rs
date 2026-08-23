@@ -12,6 +12,7 @@ pub enum ModuleError {
 
 use crate::shared::primitives::ModuleId;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use crate::app::builtins;
 
@@ -73,17 +74,19 @@ impl ModuleRegistry {
         // 1. Always load base.css first if available
         if let Ok(base_name) = StyleSheetName::new("base")
             && let Ok(base_css) = loader.load_stylesheet(&base_name)
-                && let Ok(sheet) = parser.parse_stylesheet(base_name, &base_css) {
-                    parsed_sheets.push(sheet);
-                }
+            && let Ok(sheet) = parser.parse_stylesheet(base_name, &base_css)
+        {
+            parsed_sheets.push(sheet);
+        }
 
         // 2. Load module stylesheets
         for style_name in styles {
             if style_name.as_str() != "base"
                 && let Ok(css) = loader.load_stylesheet(style_name)
-                    && let Ok(sheet) = parser.parse_stylesheet(style_name.clone(), &css) {
-                        parsed_sheets.push(sheet);
-                    }
+                && let Ok(sheet) = parser.parse_stylesheet(style_name.clone(), &css)
+            {
+                parsed_sheets.push(sheet);
+            }
         }
 
         std::sync::Arc::new(CompositeStyleResolver::new(parsed_sheets))
@@ -242,11 +245,15 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
 
             let style_resolver = self.create_style_resolver_for_module(module.styles());
 
+            let vdom_diff =
+                Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
+
             crate::features::module_runtime::application::ModuleActor::new(
                 module,
                 ctx,
                 canvas_factory.clone(),
                 style_resolver,
+                vdom_diff,
             )
             .spawn();
         }
@@ -329,12 +336,15 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
             );
 
             let style_resolver = self.create_style_resolver_for_module(module.styles());
+            let vdom_diff =
+                Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
 
             crate::features::module_runtime::application::ModuleActor::new(
                 module,
                 ctx,
                 canvas_factory.clone(),
                 style_resolver,
+                vdom_diff,
             )
             .spawn();
         }

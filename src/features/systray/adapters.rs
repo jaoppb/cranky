@@ -238,7 +238,12 @@ async fn resolve_icon(
             }
 
             if found_path.is_none() {
-                found_path = lookup(name).find();
+                let p = std::path::Path::new(name);
+                if p.is_absolute() && p.exists() {
+                    found_path = Some(p.to_path_buf());
+                } else {
+                    found_path = lookup(name).find();
+                }
             }
 
             if let Some(icon_path) = found_path

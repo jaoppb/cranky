@@ -243,10 +243,10 @@ mod tests {
 
         let _ = applet_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
         let metrics_node = metrics_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-        assert!(matches!(
-            metrics_node,
-            crate::features::layout_engine::domain::LayoutNode::Flex { .. }
-        ));
+        assert_eq!(
+            metrics_node.tag(),
+            crate::features::vdom::domain::NodeTag::Flex
+        );
     }
 
     #[test]
@@ -281,7 +281,8 @@ mod tests {
         hub.time_tx().send(test_time).unwrap();
         hour_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
         let node = hour_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-        if let crate::features::layout_engine::domain::LayoutNode::Text { text, .. } = node {
+        assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Text);
+        if let crate::features::vdom::domain::VNodeKind::Text { text } = node.kind() {
             let expected = test_time.format("%H:%M").to_string();
             assert_eq!(text.as_str(), expected.as_str());
         } else {

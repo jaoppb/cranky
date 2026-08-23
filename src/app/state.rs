@@ -705,7 +705,7 @@ mod tests {
         command_tx
             .send(AppCommand::ShowTooltip {
                 layout: Box::new(crate::features::layout_engine::domain::StyledNode::Text {
-                    text: crate::features::layout_engine::domain::TextContent::new("t".into()),
+                    text: crate::features::layout_engine::domain::TextContent::new("t".to_string()),
                     style: crate::features::styling::domain::ComputedStyle::default(),
                     on_click: None,
                     on_hover: None,

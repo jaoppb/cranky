@@ -182,9 +182,9 @@ impl LuaModule {
         if styles.is_empty()
             && let Ok(default_sheet) =
                 crate::features::styling::domain::StyleSheetName::new(module_name)
-            {
-                styles.push(default_sheet);
-            }
+        {
+            styles.push(default_sheet);
+        }
 
         (subs, styles)
     }
@@ -322,7 +322,7 @@ impl AnyModulePort for LuaModule {
         }
     }
 
-    fn render(&self, monitor: &MonitorId) -> crate::features::layout_engine::domain::LayoutNode {
+    fn render(&self, monitor: &MonitorId) -> crate::features::vdom::domain::VNode {
         let t0 = std::time::Instant::now();
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
@@ -332,41 +332,35 @@ impl AnyModulePort for LuaModule {
             match render_fn.call::<mlua::Value>(lua_monitor) {
                 Ok(val) => {
                     let call_ms = t0.elapsed().as_millis();
-                    match lua.from_value::<crate::features::layout_engine::domain::LayoutNode>(val)
-                    {
+                    match lua.from_value::<crate::features::vdom::domain::VNode>(val) {
                         Ok(node) => {
                             tracing::debug!(
                                 monitor = %monitor,
                                 call_ms,
                                 total_ms = t0.elapsed().as_millis(),
                                 ?node,
-                                "Lua render_fn succeeded and deserialized layout node"
+                                "Lua render_fn succeeded and deserialized VNode"
                             );
                             return node;
                         }
                         Err(e) => {
-                            tracing::error!(monitor = %monitor, err = ?e, "Failed to deserialize LayoutNode from Lua render_fn");
+                            tracing::error!(monitor = %monitor, err = ?e, "Failed to deserialize VNode from Lua render_fn");
                             let msg = format!("Deserialization error: {}", e);
-                            return crate::features::layout_engine::domain::LayoutNode::Flex {
-                                children: vec![
-                                    crate::features::layout_engine::domain::LayoutNode::Text {
-                                        text:
-                                            crate::features::layout_engine::domain::TextContent::new(
-                                                msg,
-                                            ),
-                                        class: None,
-                                        id: None,
-                                        on_click: None,
-                                        on_hover: None,
-                                        tooltip: None,
-                                    },
-                                ],
-                                class: None,
-                                id: None,
-                                on_click: None,
-                                on_hover: None,
-                                tooltip: None,
-                            };
+                            return crate::features::vdom::domain::VNode::new_flex(
+                                vec![crate::features::vdom::domain::VNode::new_text(
+                                    crate::features::vdom::domain::TextContent::new(msg),
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                    None,
+                                )],
+                                None,
+                                None,
+                                None,
+                                None,
+                                None,
+                            );
                         }
                     }
                 }
@@ -376,14 +370,7 @@ impl AnyModulePort for LuaModule {
             }
         }
 
-        crate::features::layout_engine::domain::LayoutNode::Flex {
-            children: vec![],
-            class: None,
-            id: None,
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-        }
+        crate::features::vdom::domain::VNode::new_flex(vec![], None, None, None, None, None)
     }
 
     fn call_function(
@@ -454,32 +441,25 @@ mod tests {
         let layout = module.render(&MonitorId::new("DP-1"));
         println!("{:#?}", layout);
 
-        // Assert it returns a row with a single child (the applet)
-        if let crate::features::layout_engine::domain::LayoutNode::Flex { children, .. } = layout {
-            assert_eq!(children.len(), 1);
-            let applet_node = &children[0];
+        // Assert it returns a flex with a single child (the applet)
+        assert_eq!(layout.tag(), crate::features::vdom::domain::NodeTag::Flex);
+        assert_eq!(layout.children().len(), 1);
+        let applet_node = &layout.children()[0];
 
-            // The applet node itself should be a row containing a rect (icon) and text (title)
-            if let crate::features::layout_engine::domain::LayoutNode::Flex {
-                children: applet_children,
-                ..
-            } = applet_node
-            {
-                assert_eq!(applet_children.len(), 2);
-                assert!(matches!(
-                    applet_children[0],
-                    crate::features::layout_engine::domain::LayoutNode::Rect { .. }
-                ));
-                assert!(matches!(
-                    applet_children[1],
-                    crate::features::layout_engine::domain::LayoutNode::Text { .. }
-                ));
-            } else {
-                panic!("Applet node is not a Flex");
-            }
-        } else {
-            panic!("Root node is not a Row");
-        }
+        // The applet node itself should be a flex containing a rect (icon) and text (title)
+        assert_eq!(
+            applet_node.tag(),
+            crate::features::vdom::domain::NodeTag::Flex
+        );
+        assert_eq!(applet_node.children().len(), 2);
+        assert_eq!(
+            applet_node.children()[0].tag(),
+            crate::features::vdom::domain::NodeTag::Rect
+        );
+        assert_eq!(
+            applet_node.children()[1].tag(),
+            crate::features::vdom::domain::NodeTag::Text
+        );
     }
 
     #[test]
@@ -524,28 +504,21 @@ mod tests {
         module.refresh(&hub, &subs);
 
         let layout = module.render(&MonitorId::new("DP-1"));
-        if let crate::features::layout_engine::domain::LayoutNode::Flex { children, .. } = layout {
-            assert_eq!(children.len(), 1);
-            let applet_node = &children[0];
-            if let crate::features::layout_engine::domain::LayoutNode::Flex {
-                children: applet_children,
-                ..
-            } = applet_node
-            {
-                assert_eq!(applet_children.len(), 2);
-                assert!(matches!(
-                    applet_children[0],
-                    crate::features::layout_engine::domain::LayoutNode::Image { .. }
-                ));
-                assert!(matches!(
-                    applet_children[1],
-                    crate::features::layout_engine::domain::LayoutNode::Text { .. }
-                ));
-            } else {
-                panic!("Applet node is not a Flex");
-            }
-        } else {
-            panic!("Root node is not a Row");
-        }
+        assert_eq!(layout.tag(), crate::features::vdom::domain::NodeTag::Flex);
+        assert_eq!(layout.children().len(), 1);
+        let applet_node = &layout.children()[0];
+        assert_eq!(
+            applet_node.tag(),
+            crate::features::vdom::domain::NodeTag::Flex
+        );
+        assert_eq!(applet_node.children().len(), 2);
+        assert_eq!(
+            applet_node.children()[0].tag(),
+            crate::features::vdom::domain::NodeTag::Image
+        );
+        assert_eq!(
+            applet_node.children()[1].tag(),
+            crate::features::vdom::domain::NodeTag::Text
+        );
     }
 }
