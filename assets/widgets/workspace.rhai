@@ -1,27 +1,15 @@
-let active_bg = "#3b4261";
-let focused_bg = "#565f89";
-let border_radius = 0.0;
-let inactive_color = "#7aa2f7";
-let active_text_color = "#ffffff";
-
 let workspaces = [];
 let active_workspaces = #{};
 let focused_monitor = "";
 
 fn init() {
-    if "active" in config && "background_color" in config.active {
-        active_bg = config.active.background_color;
-    }
-    if "focused" in config && "background_color" in config.focused {
-        focused_bg = config.focused.background_color;
-    }
-    if "border_radius" in config { border_radius = config.border_radius; }
-    if "inactive_color" in config { inactive_color = config.inactive_color; }
-    if "active_text_color" in config { active_text_color = config.active_text_color; }
 }
 
-fn subscriptions() {
-    ["hyprland"]
+fn metadata() {
+    #{
+        subscriptions: ["hyprland"],
+        styles: ["workspace"]
+    }
 }
 
 fn refresh() {
@@ -117,48 +105,44 @@ fn render(monitor_id) {
             let current_active = if special_id != -1 && special_id != 0 { special_id } else { active_id };
             let is_visible = (ws.id == current_active);
             
-            let color = inactive_color;
-            if is_visible { color = active_text_color; }
-            
             let on_click_cmd = #{};
             if is_special {
-                on_click_cmd["Exec"] = "hyprctl dispatch togglespecialworkspace " + label;
+                on_click_cmd["Exec"] = "hyprctl dispatch 'hl.dsp.workspace.toggle_special(\"" + label + "\")'";
             } else {
-                on_click_cmd["Exec"] = "hyprctl dispatch workspace " + ws.id.to_string();
+                on_click_cmd["Exec"] = "hyprctl dispatch 'hl.dsp.focus({ workspace = \"" + ws.id.to_string() + "\"})'";
             }
             
             let text_node = #{
                 type: "text",
-                text: label,
-                color: color
+                class: "label",
+                text: label
             };
             
             let tooltip_node = #{
                 type: "flex",
-                background: "#1e1e2eff",
-                radius: 4.0,
-                style: #{ padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 } },
+                class: "tooltip",
                 children: [
-                    #{ type: "text", text: "Switch to workspace " + label, color: "#ffffff" }
+                    #{ type: "text", text: "Switch to workspace " + label }
                 ]
             };
             
+            let classes = "item";
+            if is_visible {
+                if is_monitor_focused {
+                    classes = "item active focused";
+                } else {
+                    classes = "item active";
+                }
+            }
+
             let box_node = #{
                 type: "flex",
+                class: classes,
+                id: "ws-" + ws.id.to_string(),
                 children: [text_node],
-                style: #{ padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 }, justify: "center", align_items: "center" },
                 on_click: on_click_cmd,
                 tooltip: tooltip_node
             };
-            
-            if is_visible {
-                let bg = active_bg;
-                if is_monitor_focused {
-                    bg = focused_bg;
-                }
-                box_node.background = bg;
-                box_node.radius = border_radius;
-            }
             
             children.push(box_node);
         }
@@ -166,7 +150,7 @@ fn render(monitor_id) {
     
     #{
         type: "flex",
-        style: #{ gap: 6.0, align_items: "center" },
+        class: "container",
         children: children
     }
 }

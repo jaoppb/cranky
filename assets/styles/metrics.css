@@ -1,0 +1,31 @@
+.container {
+    gap: 8px;
+    align-items: center;
+}
+
+.item {
+    gap: 4px;
+    align-items: center;
+    color: #c0caf5;
+}
+
+.label {
+    font-size: 12px;
+    color: #7aa2f7;
+}
+
+progress {
+    width: 40px;
+    height: 8px;
+    background-color: #24283b;
+    border-radius: 4px;
+    accent-color: #7aa2f7;
+}
+
+progress.warning {
+    accent-color: #e0af68;
+}
+
+progress.critical {
+    accent-color: #f7768e;
+}

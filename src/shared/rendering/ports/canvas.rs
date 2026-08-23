@@ -1,7 +1,7 @@
 use crate::shared::primitives::color::DrawingColor;
 
-use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
 use crate::shared::config::domain::{FontFamily, FontSize};
+use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
 
 pub trait CanvasFactory: Send + Sync {
     fn create_canvas<'a>(
@@ -45,8 +45,6 @@ pub trait Canvas: Send + Sync {
         border_size: LogicalPx,
     );
 
-
-
     /// Draw text at a position
     fn draw_text<'a>(
         &mut self,
@@ -66,5 +64,3 @@ pub trait Canvas: Send + Sync {
         position: Position,
     );
 }
-
-

@@ -1,10 +1,10 @@
 #![allow(unsafe_code)]
 
+use crate::app::registry::ModuleError;
+use crate::features::module_runtime::ports::AnyModulePort;
 use crate::shared::config::domain::ModuleConfig;
 use crate::shared::events::signals::{SignalHub, SignalKind};
 use crate::shared::primitives::MonitorId;
-use crate::app::registry::ModuleError;
-use crate::features::module_runtime::ports::AnyModulePort;
 use rhai::{AST, Dynamic, Engine, Scope};
 use std::sync::Mutex;
 
@@ -12,7 +12,9 @@ pub struct RhaiModule {
     engine: Mutex<Engine>,
     scope: Mutex<Scope<'static>>,
     ast: AST,
+    name: String,
     cached_subs: Vec<SignalKind>,
+    cached_styles: Vec<crate::features::styling::domain::StyleSheetName>,
 }
 
 impl RhaiModule {
@@ -47,49 +49,111 @@ impl RhaiModule {
             engine: Mutex::new(engine),
             scope: Mutex::new(scope),
             ast,
+            name,
             cached_subs: Vec::new(),
+            cached_styles: Vec::new(),
         })
     }
 
-    fn evaluate_subscriptions(engine: &Engine, scope: &mut Scope<'static>, ast: &AST) -> Vec<SignalKind> {
-        if let Ok(subs) = engine.call_fn::<rhai::Array>(scope, ast, "subscriptions", ())
-        {
-            let mut result = Vec::new();
-            for sub in subs {
-                if let Some(s) = sub.clone().try_cast::<String>() {
-                    match s.as_str() {
-                        "time" => result.push(SignalKind::Time),
-                        "hyprland" => result.push(SignalKind::Hyprland),
-                        "applets" => result.push(SignalKind::Applets),
-                        "metrics" => result.push(SignalKind::Metrics),
-                        "mpris" => result.push(SignalKind::Mpris),
-                        _ => {}
-                    }
-                } else if let Some(map) = sub.clone().try_cast::<rhai::Map>()
-                    && map.get("type").and_then(|v| v.clone().try_cast::<String>()).as_deref() == Some("dbus") {
-                        let bus_str = map.get("bus").and_then(|v| v.clone().try_cast::<String>());
-                        let bus = if bus_str.as_deref() == Some("system") {
-                            crate::shared::dbus::domain::BusType::System
-                        } else {
-                            crate::shared::dbus::domain::BusType::Session
-                        };
-                        result.push(SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(
-                            bus,
-                            map.get("destination").and_then(|v| v.clone().try_cast::<String>()).map(crate::shared::dbus::domain::Destination::new),
-                            map.get("path").and_then(|v| v.clone().try_cast::<String>()).map(crate::shared::dbus::domain::Path::new),
-                            map.get("interface").and_then(|v| v.clone().try_cast::<String>()).map(crate::shared::dbus::domain::Interface::new),
-                            map.get("member").and_then(|v| v.clone().try_cast::<String>()).map(crate::shared::dbus::domain::Member::new),
-                        )));
-                    }
+    fn evaluate_metadata(
+        engine: &Engine,
+        scope: &mut Scope<'static>,
+        ast: &AST,
+        module_name: &str,
+    ) -> (
+        Vec<SignalKind>,
+        Vec<crate::features::styling::domain::StyleSheetName>,
+    ) {
+        let mut subs = Vec::new();
+        let mut styles = Vec::new();
+
+        if let Ok(meta) = engine.call_fn::<rhai::Map>(scope, ast, "metadata", ()) {
+            if let Some(subs_arr) = meta
+                .get("subscriptions")
+                .and_then(|v| v.clone().try_cast::<rhai::Array>())
+            {
+                Self::parse_subscriptions_array(&subs_arr, &mut subs);
             }
-            return result;
+            if let Some(styles_arr) = meta
+                .get("styles")
+                .and_then(|v| v.clone().try_cast::<rhai::Array>())
+            {
+                for s in styles_arr {
+                    if let Some(str_val) = s.try_cast::<String>()
+                        && let Ok(sheet) =
+                            crate::features::styling::domain::StyleSheetName::new(str_val)
+                        {
+                            styles.push(sheet);
+                        }
+                }
+            }
+        } else if let Ok(subs_arr) = engine.call_fn::<rhai::Array>(scope, ast, "subscriptions", ())
+        {
+            Self::parse_subscriptions_array(&subs_arr, &mut subs);
         }
-        vec![]
+
+        if styles.is_empty()
+            && let Ok(default_sheet) =
+                crate::features::styling::domain::StyleSheetName::new(module_name)
+            {
+                styles.push(default_sheet);
+            }
+
+        (subs, styles)
+    }
+
+    fn parse_subscriptions_array(subs: &rhai::Array, result: &mut Vec<SignalKind>) {
+        for sub in subs {
+            if let Some(s) = sub.clone().try_cast::<String>() {
+                match s.as_str() {
+                    "time" => result.push(SignalKind::Time),
+                    "hyprland" => result.push(SignalKind::Hyprland),
+                    "applets" => result.push(SignalKind::Applets),
+                    "metrics" => result.push(SignalKind::Metrics),
+                    "mpris" => result.push(SignalKind::Mpris),
+                    _ => {}
+                }
+            } else if let Some(map) = sub.clone().try_cast::<rhai::Map>()
+                && map
+                    .get("type")
+                    .and_then(|v| v.clone().try_cast::<String>())
+                    .as_deref()
+                    == Some("dbus")
+            {
+                let bus_str = map.get("bus").and_then(|v| v.clone().try_cast::<String>());
+                let bus = if bus_str.as_deref() == Some("system") {
+                    crate::shared::dbus::domain::BusType::System
+                } else {
+                    crate::shared::dbus::domain::BusType::Session
+                };
+                result.push(SignalKind::DBus(
+                    crate::shared::dbus::domain::DBusSubscription::new(
+                        bus,
+                        map.get("destination")
+                            .and_then(|v| v.clone().try_cast::<String>())
+                            .map(crate::shared::dbus::domain::Destination::new),
+                        map.get("path")
+                            .and_then(|v| v.clone().try_cast::<String>())
+                            .map(crate::shared::dbus::domain::Path::new),
+                        map.get("interface")
+                            .and_then(|v| v.clone().try_cast::<String>())
+                            .map(crate::shared::dbus::domain::Interface::new),
+                        map.get("member")
+                            .and_then(|v| v.clone().try_cast::<String>())
+                            .map(crate::shared::dbus::domain::Member::new),
+                    ),
+                ));
+            }
+        }
     }
 }
 
 impl AnyModulePort for RhaiModule {
-    fn init(&mut self, config: &ModuleConfig, full_config: &crate::shared::config::domain::Config) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+    fn init(
+        &mut self,
+        config: &ModuleConfig,
+        full_config: &crate::shared::config::domain::Config,
+    ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
         use crate::features::module_runtime::ports::ModuleInitError;
 
         let bar_config = full_config.bar();
@@ -109,7 +173,8 @@ impl AnyModulePort for RhaiModule {
         scope.set_or_push("bar_config", bar_map);
 
         // Expose module config options
-        let options_json = serde_json::to_string(config.options()).map_err(|e| ModuleInitError::ConfigError(e.to_string()))?;
+        let options_json = serde_json::to_string(config.options())
+            .map_err(|e| ModuleInitError::ConfigError(e.to_string()))?;
         let options_rhai: rhai::Map = engine
             .parse_json(&options_json, true)
             .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
@@ -118,13 +183,19 @@ impl AnyModulePort for RhaiModule {
         // Call init if it exists
         let _ = engine.call_fn::<()>(&mut scope, &self.ast, "init", ());
 
-        self.cached_subs = Self::evaluate_subscriptions(&engine, &mut scope, &self.ast);
+        let (subs, styles) = Self::evaluate_metadata(&engine, &mut scope, &self.ast, &self.name);
+        self.cached_subs = subs;
+        self.cached_styles = styles;
 
         Ok(())
     }
 
     fn subscriptions(&self) -> &[SignalKind] {
         &self.cached_subs
+    }
+
+    fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName] {
+        &self.cached_styles
     }
 
     fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
@@ -176,15 +247,16 @@ impl AnyModulePort for RhaiModule {
         let mut dbus_handled = false;
         for signal in changed {
             if let SignalKind::DBus(_) = signal
-                && !dbus_handled {
-                    let dbus_state = hub.dbus_rx().borrow().clone();
-                    if let Ok(dbus_json) = serde_json::to_string(&dbus_state.properties())
-                        && let Ok(dbus_rhai) = engine.parse_json(&dbus_json, true)
-                    {
-                        scope.set_or_push("dbus", dbus_rhai);
-                    }
-                    dbus_handled = true;
+                && !dbus_handled
+            {
+                let dbus_state = hub.dbus_rx().borrow().clone();
+                if let Ok(dbus_json) = serde_json::to_string(&dbus_state.properties())
+                    && let Ok(dbus_rhai) = engine.parse_json(&dbus_json, true)
+                {
+                    scope.set_or_push("dbus", dbus_rhai);
                 }
+                dbus_handled = true;
+            }
         }
 
         if let Err(e) = engine.call_fn::<()>(&mut scope, &self.ast, "refresh", ()) {
@@ -199,26 +271,48 @@ impl AnyModulePort for RhaiModule {
 
         match engine.call_fn::<rhai::Dynamic>(&mut scope, &self.ast, "render", (monitor_id,)) {
             Ok(result) => {
-                match rhai::serde::from_dynamic::<crate::features::layout_engine::domain::LayoutNode>(&result) {
+                match rhai::serde::from_dynamic::<crate::features::layout_engine::domain::LayoutNode>(
+                    &result,
+                ) {
                     Ok(node) => node,
                     Err(e) => {
-                        tracing::error!("Failed to deserialize render output in rhai module: {}", e);
-                        crate::features::layout_engine::domain::LayoutNode::Flex { children: vec![], style: crate::features::layout_engine::domain::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None, tooltip: None }
+                        tracing::error!(
+                            "Failed to deserialize render output in rhai module: {}",
+                            e
+                        );
+                        crate::features::layout_engine::domain::LayoutNode::Flex {
+                            children: vec![],
+                            class: None,
+                            id: None,
+                            on_click: None,
+                            on_hover: None,
+                            tooltip: None,
+                        }
                     }
                 }
             }
             Err(e) => {
                 tracing::warn!("Module render error in rhai: {}", e);
-                crate::features::layout_engine::domain::LayoutNode::Flex { children: vec![], style: crate::features::layout_engine::domain::FlexStyle::default(), background: None, radius: None, on_click: None, on_hover: None, tooltip: None }
+                crate::features::layout_engine::domain::LayoutNode::Flex {
+                    children: vec![],
+                    class: None,
+                    id: None,
+                    on_click: None,
+                    on_hover: None,
+                    tooltip: None,
+                }
             }
         }
     }
 
-    fn call_function(&mut self, name: &crate::shared::primitives::FunctionName) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+    fn call_function(
+        &mut self,
+        name: &crate::shared::primitives::FunctionName,
+    ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
 
-        // Check if function exists first to avoid error if it doesn't? 
+        // Check if function exists first to avoid error if it doesn't?
         // rhai's call_fn will return an error if not found. Since we want Ok(()) if it's missing, let's catch it.
         match engine.call_fn::<()>(&mut scope, &self.ast, name.as_str(), ()) {
             Ok(_) => Ok(()),
@@ -226,7 +320,11 @@ impl AnyModulePort for RhaiModule {
                 if matches!(*e, rhai::EvalAltResult::ErrorFunctionNotFound(..)) {
                     Ok(())
                 } else {
-                    Err(crate::features::module_runtime::ports::ModuleInitError::ScriptError(format!("Failed to call function '{}': {}", name, e)))
+                    Err(
+                        crate::features::module_runtime::ports::ModuleInitError::ScriptError(
+                            format!("Failed to call function '{}': {}", name, e),
+                        ),
+                    )
                 }
             }
         }
@@ -278,7 +376,7 @@ mod tests {
             }
         ";
         let mut module = RhaiModule::new("test".into(), source).unwrap();
-        
+
         let mod_config = ModuleConfig::new(
             "test".into(),
             true,
@@ -286,22 +384,20 @@ mod tests {
             std::collections::HashMap::new(),
         );
         let config = crate::shared::config::domain::Config::default();
-        
+
         assert!(module.init(&mod_config, &config).is_ok());
-        
+
         let subs = module.subscriptions();
         assert!(subs.contains(&SignalKind::Time));
         assert!(subs.contains(&SignalKind::Hyprland));
         assert!(subs.contains(&SignalKind::Metrics));
-        
-        let hub = SignalHub::new(
-            crate::shared::config::domain::Config::default()
-        );
+
+        let hub = SignalHub::new(crate::shared::config::domain::Config::default());
         module.refresh(&hub, &[SignalKind::Time]);
-        
+
         let render_node = module.render(&MonitorId::new("DP-1"));
-        if let crate::features::layout_engine::domain::LayoutNode::Flex { style, .. } = render_node {
-            assert_eq!(style.direction(), crate::features::layout_engine::domain::FlexDirection::Column);
+        if let crate::features::layout_engine::domain::LayoutNode::Flex { .. } = render_node {
+            // Successfully returned Flex node
         } else {
             panic!("Expected Flex node");
         }

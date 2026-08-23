@@ -1,6 +1,5 @@
 let show_titles = true;
 let show_icons = true;
-let icon_size = 16;
 let max_items = 6;
 let empty_label = "applet: none";
 
@@ -9,13 +8,15 @@ let items = [];
 fn init() {
     if "show_titles" in config { show_titles = config["show_titles"]; }
     if "show_icons" in config { show_icons = config["show_icons"]; }
-    if "icon_size" in config { icon_size = config["icon_size"].to_int(); }
     if "max_items" in config { max_items = config["max_items"].to_int(); }
     if "empty_label" in config { empty_label = config["empty_label"]; }
 }
 
-fn subscriptions() {
-    ["applets"]
+fn metadata() {
+    #{
+        subscriptions: ["applets"],
+        styles: ["applet"]
+    }
 }
 
 fn refresh() {
@@ -27,20 +28,16 @@ fn refresh() {
 }
 
 fn render(monitor_id) {
-    let text_color = "#c0caf5";
-    
     if items.len() == 0 {
         return #{
             type: "text",
+            class: "empty",
             text: empty_label,
-            color: text_color,
             tooltip: #{
                 type: "flex",
-                background: "#1e1e2eff",
-                radius: 4.0,
-                style: #{ padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 } },
+                class: "tooltip",
                 children: [
-                    #{ type: "text", text: "No applets are currently active", color: text_color }
+                    #{ type: "text", text: "No applets are currently active" }
                 ]
             }
         };
@@ -65,15 +62,14 @@ fn render(monitor_id) {
             if img != () && type_of(img) == "map" {
                 item_children.push(#{
                     type: "image",
-                    size: #{ width: icon_size, height: icon_size },
+                    class: "icon",
                     data: img.data,
                     pixel_size: img.size
                 });
             } else {
                 item_children.push(#{
                     type: "rect",
-                    size: #{ width: icon_size, height: icon_size },
-                    color: text_color
+                    class: "icon-placeholder"
                 });
             }
         }
@@ -87,8 +83,8 @@ fn render(monitor_id) {
             }
             item_children.push(#{
                 type: "text",
-                text: label,
-                color: text_color
+                class: "title",
+                text: label
             });
         }
         
@@ -103,10 +99,10 @@ fn render(monitor_id) {
                 d = item.tooltip.description;
             }
             if t != "" {
-                tooltip_children.push(#{ type: "text", text: t, color: text_color });
+                tooltip_children.push(#{ type: "text", class: "tooltip-title", text: t });
             }
             if d != "" && d != t {
-                tooltip_children.push(#{ type: "text", text: d, color: text_color });
+                tooltip_children.push(#{ type: "text", class: "tooltip-desc", text: d });
             }
         }
         if tooltip_children.len() == 0 {
@@ -116,12 +112,12 @@ fn render(monitor_id) {
             } else if "item_id" in item && item.item_id != () && item.item_id != "" {
                 fallback = item.item_id;
             }
-            tooltip_children.push(#{ type: "text", text: fallback, color: text_color });
+            tooltip_children.push(#{ type: "text", class: "tooltip-title", text: fallback });
         }
         
         let applet_node = #{
             type: "flex",
-            style: #{ gap: 6.0, align_items: "center" },
+            class: "item",
             children: item_children,
             on_click: #{
                 AppletAction: #{
@@ -131,9 +127,7 @@ fn render(monitor_id) {
             },
             tooltip: #{
                 type: "flex",
-                style: #{ padding: #{ top: 6.0, bottom: 6.0, left: 10.0, right: 10.0 }, gap: 4.0, direction: "column" },
-                background: "#1e1e2eff",
-                radius: 6.0,
+                class: "tooltip",
                 children: tooltip_children
             }
         };
@@ -142,7 +136,7 @@ fn render(monitor_id) {
     
     #{
         type: "flex",
-        style: #{ gap: 8.0, align_items: "center" },
+        class: "container",
         children: children
     }
 }

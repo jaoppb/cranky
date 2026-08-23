@@ -1,4 +1,3 @@
-
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -39,7 +38,10 @@ impl HyprlandProvider for RealHyprlandProvider {
     }
 
     fn listen_events(&self) -> Result<UnixStream, HyprError> {
-        let signature = self.app_env.hyprland_instance_signature().ok_or(HyprError::NoInstance)?;
+        let signature = self
+            .app_env
+            .hyprland_instance_signature()
+            .ok_or(HyprError::NoInstance)?;
         let xdg_runtime_dir = self.app_env.xdg_runtime_dir().as_path();
 
         let socket_path = PathBuf::from(xdg_runtime_dir)
@@ -51,8 +53,13 @@ impl HyprlandProvider for RealHyprlandProvider {
     }
 }
 
-fn query_socket(command: &str, app_env: &crate::shared::env::domain::AppEnvironment) -> Result<String, HyprError> {
-    let signature = app_env.hyprland_instance_signature().ok_or(HyprError::NoInstance)?;
+fn query_socket(
+    command: &str,
+    app_env: &crate::shared::env::domain::AppEnvironment,
+) -> Result<String, HyprError> {
+    let signature = app_env
+        .hyprland_instance_signature()
+        .ok_or(HyprError::NoInstance)?;
     let xdg_runtime_dir = app_env.xdg_runtime_dir().as_path();
 
     let socket_path = PathBuf::from(xdg_runtime_dir)

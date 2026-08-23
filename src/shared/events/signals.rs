@@ -1,5 +1,5 @@
-use crate::shared::config::domain::Config;
 use crate::features::workspaces::domain::{Monitor, Workspace};
+use crate::shared::config::domain::Config;
 
 use tokio::sync::watch;
 
@@ -18,7 +18,8 @@ pub enum SignalKind {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct HyprlandState {
-    workspaces: std::collections::BTreeMap<crate::features::workspaces::domain::WorkspaceId, Workspace>,
+    workspaces:
+        std::collections::BTreeMap<crate::features::workspaces::domain::WorkspaceId, Workspace>,
     monitors: std::collections::BTreeMap<crate::features::workspaces::domain::MonitorName, Monitor>,
     focused_monitor: Option<crate::features::workspaces::domain::MonitorName>,
 }
@@ -30,13 +31,13 @@ impl serde::Serialize for HyprlandState {
     {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("HyprlandState", 3)?;
-        
+
         let workspaces_vec: Vec<_> = self.workspaces.values().collect();
         state.serialize_field("workspaces", &workspaces_vec)?;
-        
+
         let monitors_vec: Vec<_> = self.monitors.values().collect();
         state.serialize_field("monitors", &monitors_vec)?;
-        
+
         state.serialize_field("focused_monitor", &self.focused_monitor)?;
         state.end()
     }
@@ -44,8 +45,14 @@ impl serde::Serialize for HyprlandState {
 
 impl HyprlandState {
     pub fn new(
-        workspaces: std::collections::BTreeMap<crate::features::workspaces::domain::WorkspaceId, Workspace>,
-        monitors: std::collections::BTreeMap<crate::features::workspaces::domain::MonitorName, Monitor>,
+        workspaces: std::collections::BTreeMap<
+            crate::features::workspaces::domain::WorkspaceId,
+            Workspace,
+        >,
+        monitors: std::collections::BTreeMap<
+            crate::features::workspaces::domain::MonitorName,
+            Monitor,
+        >,
         focused_monitor: Option<crate::features::workspaces::domain::MonitorName>,
     ) -> Self {
         Self {
@@ -54,69 +61,93 @@ impl HyprlandState {
             focused_monitor,
         }
     }
-    
-    pub fn monitors(&self) -> &std::collections::BTreeMap<crate::features::workspaces::domain::MonitorName, Monitor> {
+
+    pub fn monitors(
+        &self,
+    ) -> &std::collections::BTreeMap<crate::features::workspaces::domain::MonitorName, Monitor>
+    {
         &self.monitors
     }
-    
-    pub fn workspaces(&self) -> &std::collections::BTreeMap<crate::features::workspaces::domain::WorkspaceId, Workspace> {
+
+    pub fn workspaces(
+        &self,
+    ) -> &std::collections::BTreeMap<crate::features::workspaces::domain::WorkspaceId, Workspace>
+    {
         &self.workspaces
     }
-    
+
     pub fn focused_monitor(&self) -> Option<&crate::features::workspaces::domain::MonitorName> {
         self.focused_monitor.as_ref()
     }
-    
+
     pub fn apply_event(&mut self, event: &crate::shared::events::core::WindowManagerEvent) {
-        use crate::shared::events::core::WindowManagerEvent;
         use crate::features::workspaces::domain::Workspace;
-        
+        use crate::shared::events::core::WindowManagerEvent;
+
         match event {
             WindowManagerEvent::WorkspaceActivated { id, name } => {
                 let mon = self.focused_monitor.clone();
                 if !self.workspaces.contains_key(id) {
                     // Do not assume the monitor, leave it as None so inconsistency check catches it
-                    self.workspaces.insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
+                    self.workspaces
+                        .insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
                 }
-                
+
                 if let Some(mon_name) = mon
-                    && let Some(m) = self.monitors.get_mut(&mon_name) {
-                        m.set_active_workspace(id.clone());
-                    }
+                    && let Some(m) = self.monitors.get_mut(&mon_name)
+                {
+                    m.set_active_workspace(id.clone());
+                }
             }
             WindowManagerEvent::WorkspaceCreated { id, name } => {
                 if !self.workspaces.contains_key(id) {
-                    self.workspaces.insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
+                    self.workspaces
+                        .insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
                 }
             }
             WindowManagerEvent::WorkspaceDestroyed { id, name: _ } => {
                 self.workspaces.remove(id);
             }
-            WindowManagerEvent::WorkspaceMoved { id, name, monitor_name } => {
+            WindowManagerEvent::WorkspaceMoved {
+                id,
+                name,
+                monitor_name,
+            } => {
                 if let Some(ws) = self.workspaces.get_mut(id) {
                     ws.set_monitor(monitor_name.clone());
                 } else {
-                    self.workspaces.insert(id.clone(), Workspace::new(id.clone(), name.clone(), Some(monitor_name.clone())));
+                    self.workspaces.insert(
+                        id.clone(),
+                        Workspace::new(id.clone(), name.clone(), Some(monitor_name.clone())),
+                    );
                 }
             }
             WindowManagerEvent::WorkspaceRenamed { id, new_name } => {
                 if let Some(old) = self.workspaces.get(id) {
-                    let new_ws = Workspace::new(id.clone(), new_name.clone(), old.monitor().cloned());
+                    let new_ws =
+                        Workspace::new(id.clone(), new_name.clone(), old.monitor().cloned());
                     self.workspaces.insert(id.clone(), new_ws);
                 }
             }
-            WindowManagerEvent::MonitorFocused { monitor_name, workspace_id } => {
+            WindowManagerEvent::MonitorFocused {
+                monitor_name,
+                workspace_id,
+            } => {
                 self.focused_monitor = Some(monitor_name.clone());
                 if let Some(m) = self.monitors.get_mut(monitor_name) {
                     m.set_active_workspace(workspace_id.clone());
                 }
-                
+
                 // Edge case: update workspace's monitor if missing or wrong
                 if let Some(ws) = self.workspaces.get_mut(workspace_id) {
                     ws.set_monitor(monitor_name.clone());
                 }
             }
-            WindowManagerEvent::SpecialWorkspaceActivated { id, name, monitor_name } => {
+            WindowManagerEvent::SpecialWorkspaceActivated {
+                id,
+                name,
+                monitor_name,
+            } => {
                 if let Some(m) = self.monitors.get_mut(monitor_name) {
                     m.set_special_workspace(id.clone());
                 }
@@ -124,7 +155,14 @@ impl HyprlandState {
                     if let Some(ws) = self.workspaces.get_mut(ws_id) {
                         ws.set_monitor(monitor_name.clone());
                     } else if let Some(ws_name) = name {
-                        self.workspaces.insert(ws_id.clone(), Workspace::new(ws_id.clone(), ws_name.clone(), Some(monitor_name.clone())));
+                        self.workspaces.insert(
+                            ws_id.clone(),
+                            Workspace::new(
+                                ws_id.clone(),
+                                ws_name.clone(),
+                                Some(monitor_name.clone()),
+                            ),
+                        );
                     }
                 }
             }
@@ -160,7 +198,11 @@ pub struct SignalHub {
 impl SignalHub {
     pub fn new(initial_config: Config) -> Self {
         let config = watch::channel(initial_config);
-        let hyprland = watch::channel(HyprlandState::new(std::collections::BTreeMap::new(), std::collections::BTreeMap::new(), None));
+        let hyprland = watch::channel(HyprlandState::new(
+            std::collections::BTreeMap::new(),
+            std::collections::BTreeMap::new(),
+            None,
+        ));
         let time = watch::channel(chrono::Local::now());
         let dbus = watch::channel(DBusState::default());
         let applets = watch::channel(AppletsState::default());
@@ -235,15 +277,11 @@ impl SignalHub {
     pub fn metrics_rx(&self) -> watch::Receiver<crate::features::metrics::domain::MetricsState> {
         self.metrics.1.clone()
     }
-    pub fn pointer_tx(
-        &self,
-    ) -> &crate::shared::events::core::PointerSender {
+    pub fn pointer_tx(&self) -> &crate::shared::events::core::PointerSender {
         &self.pointer.0
     }
 
-    pub fn pointer_rx(
-        &self,
-    ) -> crate::shared::events::core::PointerReceiver {
+    pub fn pointer_rx(&self) -> crate::shared::events::core::PointerReceiver {
         self.pointer.0.subscribe()
     }
 }
@@ -271,7 +309,11 @@ mod tests {
         let hypr_rx = hub.hyprland_rx();
         let hypr_tx = hub.hyprland_tx();
 
-        let new_state = HyprlandState::new(std::collections::BTreeMap::new(), std::collections::BTreeMap::new(), None);
+        let new_state = HyprlandState::new(
+            std::collections::BTreeMap::new(),
+            std::collections::BTreeMap::new(),
+            None,
+        );
         hypr_tx.send(new_state).unwrap();
 
         assert!(hypr_rx.has_changed().unwrap());
@@ -291,53 +333,131 @@ mod tests {
 
     #[test]
     fn test_hyprland_state_apply_event() {
+        use crate::features::workspaces::domain::{
+            Monitor, MonitorName, WorkspaceId, WorkspaceName,
+        };
         use crate::shared::events::core::WindowManagerEvent;
-        use crate::features::workspaces::domain::{WorkspaceId, WorkspaceName, MonitorName, Monitor};
-        
-        let mut state = HyprlandState::new(std::collections::BTreeMap::new(), std::collections::BTreeMap::new(), None);
-        
+
+        let mut state = HyprlandState::new(
+            std::collections::BTreeMap::new(),
+            std::collections::BTreeMap::new(),
+            None,
+        );
+
         // Test WorkspaceCreated
-        state.apply_event(&WindowManagerEvent::WorkspaceCreated { id: WorkspaceId::new(1), name: WorkspaceName::new("1") });
+        state.apply_event(&WindowManagerEvent::WorkspaceCreated {
+            id: WorkspaceId::new(1),
+            name: WorkspaceName::new("1"),
+        });
         assert!(state.workspaces().contains_key(&WorkspaceId::new(1)));
-        
+
         // Test WorkspaceActivated
-        state.apply_event(&WindowManagerEvent::WorkspaceActivated { id: WorkspaceId::new(2), name: WorkspaceName::new("2") });
+        state.apply_event(&WindowManagerEvent::WorkspaceActivated {
+            id: WorkspaceId::new(2),
+            name: WorkspaceName::new("2"),
+        });
         assert!(state.workspaces().contains_key(&WorkspaceId::new(2)));
-        
+
         // Test WorkspaceDestroyed
-        state.apply_event(&WindowManagerEvent::WorkspaceDestroyed { id: WorkspaceId::new(1), name: WorkspaceName::new("1") });
+        state.apply_event(&WindowManagerEvent::WorkspaceDestroyed {
+            id: WorkspaceId::new(1),
+            name: WorkspaceName::new("1"),
+        });
         assert!(!state.workspaces().contains_key(&WorkspaceId::new(1)));
-        
+
         // Test WorkspaceMoved
-        state.apply_event(&WindowManagerEvent::WorkspaceMoved { id: WorkspaceId::new(2), name: WorkspaceName::new("2"), monitor_name: MonitorName::new("DP-1") });
-        assert_eq!(state.workspaces().get(&WorkspaceId::new(2)).unwrap().monitor(), Some(&MonitorName::new("DP-1")));
-        
+        state.apply_event(&WindowManagerEvent::WorkspaceMoved {
+            id: WorkspaceId::new(2),
+            name: WorkspaceName::new("2"),
+            monitor_name: MonitorName::new("DP-1"),
+        });
+        assert_eq!(
+            state
+                .workspaces()
+                .get(&WorkspaceId::new(2))
+                .unwrap()
+                .monitor(),
+            Some(&MonitorName::new("DP-1"))
+        );
+
         // Test WorkspaceMoved (new workspace)
-        state.apply_event(&WindowManagerEvent::WorkspaceMoved { id: WorkspaceId::new(3), name: WorkspaceName::new("3"), monitor_name: MonitorName::new("DP-2") });
-        assert_eq!(state.workspaces().get(&WorkspaceId::new(3)).unwrap().monitor(), Some(&MonitorName::new("DP-2")));
-        
+        state.apply_event(&WindowManagerEvent::WorkspaceMoved {
+            id: WorkspaceId::new(3),
+            name: WorkspaceName::new("3"),
+            monitor_name: MonitorName::new("DP-2"),
+        });
+        assert_eq!(
+            state
+                .workspaces()
+                .get(&WorkspaceId::new(3))
+                .unwrap()
+                .monitor(),
+            Some(&MonitorName::new("DP-2"))
+        );
+
         // Test WorkspaceRenamed
-        state.apply_event(&WindowManagerEvent::WorkspaceRenamed { id: WorkspaceId::new(2), new_name: WorkspaceName::new("2-renamed") });
+        state.apply_event(&WindowManagerEvent::WorkspaceRenamed {
+            id: WorkspaceId::new(2),
+            new_name: WorkspaceName::new("2-renamed"),
+        });
         assert!(state.workspaces().contains_key(&WorkspaceId::new(2)));
-        
+
         // Test MonitorFocused
-        state.monitors.insert(MonitorName::new("DP-1"), Monitor::new(MonitorName::new("DP-1"), WorkspaceId::new(1), None));
-        state.apply_event(&WindowManagerEvent::MonitorFocused { monitor_name: MonitorName::new("DP-1"), workspace_id: WorkspaceId::new(2) });
+        state.monitors.insert(
+            MonitorName::new("DP-1"),
+            Monitor::new(MonitorName::new("DP-1"), WorkspaceId::new(1), None),
+        );
+        state.apply_event(&WindowManagerEvent::MonitorFocused {
+            monitor_name: MonitorName::new("DP-1"),
+            workspace_id: WorkspaceId::new(2),
+        });
         assert_eq!(state.focused_monitor(), Some(&MonitorName::new("DP-1")));
-        assert_eq!(state.monitors().get(&MonitorName::new("DP-1")).unwrap().active_workspace_id(), &WorkspaceId::new(2));
-        
+        assert_eq!(
+            state
+                .monitors()
+                .get(&MonitorName::new("DP-1"))
+                .unwrap()
+                .active_workspace_id(),
+            &WorkspaceId::new(2)
+        );
+
         // Test SpecialWorkspaceActivated
-        state.apply_event(&WindowManagerEvent::SpecialWorkspaceActivated { id: Some(WorkspaceId::new(99)), name: Some(WorkspaceName::new("special")), monitor_name: MonitorName::new("DP-1") });
-        assert_eq!(state.monitors().get(&MonitorName::new("DP-1")).unwrap().special_workspace_id(), Some(&WorkspaceId::new(99)));
-        assert_eq!(state.workspaces().get(&WorkspaceId::new(99)).unwrap().monitor(), Some(&MonitorName::new("DP-1")));
+        state.apply_event(&WindowManagerEvent::SpecialWorkspaceActivated {
+            id: Some(WorkspaceId::new(99)),
+            name: Some(WorkspaceName::new("special")),
+            monitor_name: MonitorName::new("DP-1"),
+        });
+        assert_eq!(
+            state
+                .monitors()
+                .get(&MonitorName::new("DP-1"))
+                .unwrap()
+                .special_workspace_id(),
+            Some(&WorkspaceId::new(99))
+        );
+        assert_eq!(
+            state
+                .workspaces()
+                .get(&WorkspaceId::new(99))
+                .unwrap()
+                .monitor(),
+            Some(&MonitorName::new("DP-1"))
+        );
     }
 
     #[test]
     fn test_hyprland_state_serialize() {
         let mut workspaces = std::collections::BTreeMap::new();
-        workspaces.insert(crate::features::workspaces::domain::WorkspaceId::new(1), crate::features::workspaces::domain::Workspace::new(crate::features::workspaces::domain::WorkspaceId::new(1), crate::features::workspaces::domain::WorkspaceName::new("1"), None));
+        workspaces.insert(
+            crate::features::workspaces::domain::WorkspaceId::new(1),
+            crate::features::workspaces::domain::Workspace::new(
+                crate::features::workspaces::domain::WorkspaceId::new(1),
+                crate::features::workspaces::domain::WorkspaceName::new("1"),
+                None,
+            ),
+        );
         let state = HyprlandState::new(workspaces, std::collections::BTreeMap::new(), None);
-        
+
         let json = serde_json::to_string(&state).unwrap();
         assert!(json.contains("\"workspaces\":["));
         assert!(json.contains("\"id\":1"));
@@ -346,7 +466,7 @@ mod tests {
     #[tokio::test]
     async fn test_signal_hub_other_propagation() {
         let hub = SignalHub::new(Config::default());
-        
+
         let dbus_tx = hub.dbus_tx();
         let mut dbus_rx = hub.dbus_rx();
         dbus_tx.send(DBusState::default()).unwrap();
@@ -359,12 +479,20 @@ mod tests {
 
         let metrics_tx = hub.metrics_tx();
         let mut metrics_rx = hub.metrics_rx();
-        metrics_tx.send(crate::features::metrics::domain::MetricsState::default()).unwrap();
+        metrics_tx
+            .send(crate::features::metrics::domain::MetricsState::default())
+            .unwrap();
         assert!(metrics_rx.changed().await.is_ok());
-        
+
         let ptr_tx = hub.pointer_tx();
         let mut ptr_rx = hub.pointer_rx();
-        ptr_tx.send((crate::shared::primitives::ModuleId::new(1), crate::shared::primitives::MonitorId::new("1"), crate::shared::events::core::PointerEvent::PointerLeave)).unwrap();
+        ptr_tx
+            .send((
+                crate::shared::primitives::ModuleId::new(1),
+                crate::shared::primitives::MonitorId::new("1"),
+                crate::shared::events::core::PointerEvent::PointerLeave,
+            ))
+            .unwrap();
         assert!(ptr_rx.recv().await.is_ok());
     }
 }

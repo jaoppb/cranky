@@ -15,11 +15,13 @@ pub enum AppCommand {
         crate::shared::primitives::ModuleId,
         crate::shared::primitives::geometry::Size,
     ),
+    #[serde(skip_deserializing)]
     ShowTooltip {
-        layout: Box<crate::features::layout_engine::domain::LayoutNode>,
+        layout: Box<crate::features::layout_engine::domain::StyledNode>,
     },
     HideTooltip,
     ReloadModule(crate::shared::primitives::ModuleName),
+    ReloadStyle(crate::features::styling::domain::StyleSheetName),
     ScriptCall(crate::shared::primitives::FunctionName),
 }
 
@@ -34,7 +36,10 @@ mod tests {
         match cmd {
             AppCommand::AppletAction { id, action, pos } => {
                 assert_eq!(id.as_str(), "test_applet");
-                assert_eq!(action, crate::features::applets::domain::AppletActionName::Primary);
+                assert_eq!(
+                    action,
+                    crate::features::applets::domain::AppletActionName::Primary
+                );
                 assert!(pos.is_none());
             }
             _ => panic!("Expected AppletAction"),
@@ -48,11 +53,16 @@ mod tests {
         match cmd {
             AppCommand::AppletAction { id, action, pos } => {
                 assert_eq!(id.as_str(), "test_applet");
-                assert_eq!(action, crate::features::applets::domain::AppletActionName::ContextMenu);
-                assert_eq!(pos, Some(crate::shared::primitives::geometry::Position::new(100, 200)));
+                assert_eq!(
+                    action,
+                    crate::features::applets::domain::AppletActionName::ContextMenu
+                );
+                assert_eq!(
+                    pos,
+                    Some(crate::shared::primitives::geometry::Position::new(100, 200))
+                );
             }
             _ => panic!("Expected AppletAction"),
         }
     }
 }
-

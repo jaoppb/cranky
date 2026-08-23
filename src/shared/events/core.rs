@@ -2,23 +2,59 @@ use crate::features::workspaces::domain::{MonitorName, WorkspaceId, WorkspaceNam
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WindowAddress(String);
-impl WindowAddress { pub fn new(addr: impl Into<String>) -> Self { Self(addr.into()) } }
+impl WindowAddress {
+    pub fn new(addr: impl Into<String>) -> Self {
+        Self(addr.into())
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WindowTitle(String);
-impl WindowTitle { pub fn new(title: impl Into<String>) -> Self { Self(title.into()) } }
+impl WindowTitle {
+    pub fn new(title: impl Into<String>) -> Self {
+        Self(title.into())
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WindowManagerEvent {
-    WorkspaceActivated { id: WorkspaceId, name: WorkspaceName },
-    MonitorFocused { monitor_name: MonitorName, workspace_id: WorkspaceId },
-    WorkspaceCreated { id: WorkspaceId, name: WorkspaceName },
-    WorkspaceDestroyed { id: WorkspaceId, name: WorkspaceName },
-    WorkspaceMoved { id: WorkspaceId, name: WorkspaceName, monitor_name: MonitorName },
-    WorkspaceRenamed { id: WorkspaceId, new_name: WorkspaceName },
-    SpecialWorkspaceActivated { id: Option<WorkspaceId>, name: Option<WorkspaceName>, monitor_name: MonitorName },
-    ActiveWindowChanged { address: WindowAddress },
-    WindowTitleChanged { address: WindowAddress, title: WindowTitle },
+    WorkspaceActivated {
+        id: WorkspaceId,
+        name: WorkspaceName,
+    },
+    MonitorFocused {
+        monitor_name: MonitorName,
+        workspace_id: WorkspaceId,
+    },
+    WorkspaceCreated {
+        id: WorkspaceId,
+        name: WorkspaceName,
+    },
+    WorkspaceDestroyed {
+        id: WorkspaceId,
+        name: WorkspaceName,
+    },
+    WorkspaceMoved {
+        id: WorkspaceId,
+        name: WorkspaceName,
+        monitor_name: MonitorName,
+    },
+    WorkspaceRenamed {
+        id: WorkspaceId,
+        new_name: WorkspaceName,
+    },
+    SpecialWorkspaceActivated {
+        id: Option<WorkspaceId>,
+        name: Option<WorkspaceName>,
+        monitor_name: MonitorName,
+    },
+    ActiveWindowChanged {
+        address: WindowAddress,
+    },
+    WindowTitleChanged {
+        address: WindowAddress,
+        title: WindowTitle,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -30,8 +66,16 @@ pub enum PointerEvent {
     Scroll { axis: u32, amount: f64 },
 }
 
-pub type PointerSender = tokio::sync::broadcast::Sender<(crate::shared::primitives::ModuleId, crate::shared::primitives::MonitorId, PointerEvent)>;
-pub type PointerReceiver = tokio::sync::broadcast::Receiver<(crate::shared::primitives::ModuleId, crate::shared::primitives::MonitorId, PointerEvent)>;
+pub type PointerSender = tokio::sync::broadcast::Sender<(
+    crate::shared::primitives::ModuleId,
+    crate::shared::primitives::MonitorId,
+    PointerEvent,
+)>;
+pub type PointerReceiver = tokio::sync::broadcast::Receiver<(
+    crate::shared::primitives::ModuleId,
+    crate::shared::primitives::MonitorId,
+    PointerEvent,
+)>;
 
 #[cfg(test)]
 mod tests {

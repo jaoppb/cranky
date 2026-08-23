@@ -231,7 +231,6 @@ impl From<String> for AppletActionName {
     }
 }
 
-
 impl From<AppletActionName> for String {
     fn from(action: AppletActionName) -> Self {
         action.as_str().to_string()
@@ -291,16 +290,9 @@ impl From<AppletCategory> for String {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum AppletIcon {
-    Both {
-        name: IconName,
-        image: IconImage,
-    },
-    NameOnly {
-        name: IconName,
-    },
-    ImageOnly {
-        image: IconImage,
-    },
+    Both { name: IconName, image: IconImage },
+    NameOnly { name: IconName },
+    ImageOnly { image: IconImage },
 }
 
 impl AppletIcon {
@@ -716,9 +708,18 @@ mod tests {
 
     #[test]
     fn test_applet_action_name() {
-        assert_eq!(AppletActionName::parse_str("Primary"), AppletActionName::Primary);
-        assert_eq!(AppletActionName::parse_str("ContextMenu"), AppletActionName::ContextMenu);
-        assert_eq!(AppletActionName::parse_str("Custom"), AppletActionName::Other("Custom".into()));
+        assert_eq!(
+            AppletActionName::parse_str("Primary"),
+            AppletActionName::Primary
+        );
+        assert_eq!(
+            AppletActionName::parse_str("ContextMenu"),
+            AppletActionName::ContextMenu
+        );
+        assert_eq!(
+            AppletActionName::parse_str("Custom"),
+            AppletActionName::Other("Custom".into())
+        );
         assert_eq!(AppletActionName::Primary.as_str(), "Primary");
         let s: String = AppletActionName::ContextMenu.into();
         assert_eq!(s, "ContextMenu");
@@ -726,9 +727,18 @@ mod tests {
 
     #[test]
     fn test_applet_category() {
-        assert_eq!(AppletCategory::parse_str("ApplicationStatus"), AppletCategory::ApplicationStatus);
-        assert_eq!(AppletCategory::parse_str("Communications"), AppletCategory::Communications);
-        assert_eq!(AppletCategory::parse_str("UnknownCat"), AppletCategory::Other("UnknownCat".into()));
+        assert_eq!(
+            AppletCategory::parse_str("ApplicationStatus"),
+            AppletCategory::ApplicationStatus
+        );
+        assert_eq!(
+            AppletCategory::parse_str("Communications"),
+            AppletCategory::Communications
+        );
+        assert_eq!(
+            AppletCategory::parse_str("UnknownCat"),
+            AppletCategory::Other("UnknownCat".into())
+        );
         assert_eq!(AppletCategory::Hardware.as_str(), "Hardware");
     }
 
@@ -866,5 +876,3 @@ mod tests {
         );
     }
 }
-
-

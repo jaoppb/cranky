@@ -27,17 +27,40 @@ impl BuiltinModules {
     const BUILTINS: &[(&'static str, &'static str)] = &[
         ("hour.lua", include_str!("../../assets/widgets/hour.lua")),
         ("hour.rhai", include_str!("../../assets/widgets/hour.rhai")),
-        ("workspace.lua", include_str!("../../assets/widgets/workspace.lua")),
-        ("workspace.rhai", include_str!("../../assets/widgets/workspace.rhai")),
-        ("applet.lua", include_str!("../../assets/widgets/applet.lua")),
-        ("applet.rhai", include_str!("../../assets/widgets/applet.rhai")),
-        ("metrics.lua", include_str!("../../assets/widgets/metrics.lua")),
-        ("metrics.rhai", include_str!("../../assets/widgets/metrics.rhai")),
+        (
+            "workspace.lua",
+            include_str!("../../assets/widgets/workspace.lua"),
+        ),
+        (
+            "workspace.rhai",
+            include_str!("../../assets/widgets/workspace.rhai"),
+        ),
+        (
+            "applet.lua",
+            include_str!("../../assets/widgets/applet.lua"),
+        ),
+        (
+            "applet.rhai",
+            include_str!("../../assets/widgets/applet.rhai"),
+        ),
+        (
+            "metrics.lua",
+            include_str!("../../assets/widgets/metrics.lua"),
+        ),
+        (
+            "metrics.rhai",
+            include_str!("../../assets/widgets/metrics.rhai"),
+        ),
         ("mpris.lua", include_str!("../../assets/widgets/mpris.lua")),
-        ("mpris.rhai", include_str!("../../assets/widgets/mpris.rhai")),
+        (
+            "mpris.rhai",
+            include_str!("../../assets/widgets/mpris.rhai"),
+        ),
     ];
 
-    pub fn ensure_builtins(app_env: &crate::shared::env::domain::AppEnvironment) -> Result<PathBuf, BuiltinError> {
+    pub fn ensure_builtins(
+        app_env: &crate::shared::env::domain::AppEnvironment,
+    ) -> Result<PathBuf, BuiltinError> {
         let home = app_env.home().as_path();
         let dir = PathBuf::from(home).join(".local/share/cranky/modules");
 
@@ -73,29 +96,34 @@ impl BuiltinModules {
 
         let engines = Self::registered_engines();
 
-        let target_engines: Vec<&dyn crate::shared::scripting::ports::ScriptEnginePort> = match selection {
-            crate::shared::config::domain::EngineSelection::Auto => {
-                engines.iter().map(|e| e.as_ref()).collect()
-            }
-            crate::shared::config::domain::EngineSelection::Explicit(id) => {
-                let matching: Vec<_> = engines
-                    .iter()
-                    .map(|e| e.as_ref())
-                    .filter(|e| &e.id() == id)
-                    .collect();
-                if matching.is_empty() {
-                    return Err(BuiltinError::UnsupportedEngine {
-                        engine: id.as_str().to_string(),
-                        module_name: name.clone(),
-                    });
+        let target_engines: Vec<&dyn crate::shared::scripting::ports::ScriptEnginePort> =
+            match selection {
+                crate::shared::config::domain::EngineSelection::Auto => {
+                    engines.iter().map(|e| e.as_ref()).collect()
                 }
-                matching
-            }
-        };
+                crate::shared::config::domain::EngineSelection::Explicit(id) => {
+                    let matching: Vec<_> = engines
+                        .iter()
+                        .map(|e| e.as_ref())
+                        .filter(|e| &e.id() == id)
+                        .collect();
+                    if matching.is_empty() {
+                        return Err(BuiltinError::UnsupportedEngine {
+                            engine: id.as_str().to_string(),
+                            module_name: name.clone(),
+                        });
+                    }
+                    matching
+                }
+            };
 
         for dir in &[&user_dir, &shadow_dir] {
             for engine in &target_engines {
-                let path = dir.join(format!("{}.{}", name.as_str(), engine.file_extension().as_str()));
+                let path = dir.join(format!(
+                    "{}.{}",
+                    name.as_str(),
+                    engine.file_extension().as_str()
+                ));
                 if let Ok(source) = fs::read_to_string(&path)
                     && let Ok(module) = engine.load_module(name.as_str(), &source)
                 {
@@ -159,7 +187,9 @@ mod tests {
 
     fn get_test_env() -> crate::shared::env::domain::AppEnvironment {
         crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()))),
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from(
+                std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()),
+            )),
             crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/")),
             crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/")),
             crate::shared::env::domain::RustLog::new(String::new()),
@@ -186,9 +216,13 @@ mod tests {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let applet_mod = BuiltinModules::find_module(&ModuleName::new("applet"), &selection, &env).unwrap();
-        let mut metrics_mod = BuiltinModules::find_module(&ModuleName::new("metrics"), &selection, &env).unwrap();
-        let hub = crate::shared::events::signals::SignalHub::new(crate::shared::config::domain::Config::default());
+        let applet_mod =
+            BuiltinModules::find_module(&ModuleName::new("applet"), &selection, &env).unwrap();
+        let mut metrics_mod =
+            BuiltinModules::find_module(&ModuleName::new("metrics"), &selection, &env).unwrap();
+        let hub = crate::shared::events::signals::SignalHub::new(
+            crate::shared::config::domain::Config::default(),
+        );
         let metrics_state = crate::features::metrics::domain::MetricsState::new(
             crate::features::metrics::domain::CreateMetricsCommand::new(
                 crate::features::metrics::domain::CpuUsage::new(50.0),
@@ -209,7 +243,10 @@ mod tests {
 
         let _ = applet_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
         let metrics_node = metrics_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-        assert!(matches!(metrics_node, crate::features::layout_engine::domain::LayoutNode::Flex { .. }));
+        assert!(matches!(
+            metrics_node,
+            crate::features::layout_engine::domain::LayoutNode::Flex { .. }
+        ));
     }
 
     #[test]
@@ -217,15 +254,30 @@ mod tests {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let mut hour_mod = BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env).unwrap();
+        let mut hour_mod =
+            BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env).unwrap();
         let mut options = std::collections::HashMap::new();
-        options.insert("format".to_string(), serde_json::Value::String("%H:%M".to_string()));
-        hour_mod.init(
-            &crate::shared::config::domain::ModuleConfig::new(ModuleName::new("hour"), true, selection.clone(), options),
-            &crate::shared::config::domain::Config::default(),
-        ).unwrap();
-        let hub = crate::shared::events::signals::SignalHub::new(crate::shared::config::domain::Config::default());
-        let test_time = chrono::DateTime::parse_from_rfc3339("2026-07-28T14:30:45+00:00").unwrap().with_timezone(&chrono::Local);
+        options.insert(
+            "format".to_string(),
+            serde_json::Value::String("%H:%M".to_string()),
+        );
+        hour_mod
+            .init(
+                &crate::shared::config::domain::ModuleConfig::new(
+                    ModuleName::new("hour"),
+                    true,
+                    selection.clone(),
+                    options,
+                ),
+                &crate::shared::config::domain::Config::default(),
+            )
+            .unwrap();
+        let hub = crate::shared::events::signals::SignalHub::new(
+            crate::shared::config::domain::Config::default(),
+        );
+        let test_time = chrono::DateTime::parse_from_rfc3339("2026-07-28T14:30:45+00:00")
+            .unwrap()
+            .with_timezone(&chrono::Local);
         hub.time_tx().send(test_time).unwrap();
         hour_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
         let node = hour_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
@@ -241,7 +293,8 @@ mod tests {
     fn test_find_module_default_prioritizes_lua() {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
-        let module = BuiltinModules::find_module(&ModuleName::new("hour"), &EngineSelection::Auto, &env);
+        let module =
+            BuiltinModules::find_module(&ModuleName::new("hour"), &EngineSelection::Auto, &env);
         assert!(module.is_ok());
     }
 
@@ -284,9 +337,13 @@ mod tests {
     fn test_find_module_not_found() {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
-        let err = BuiltinModules::find_module(&ModuleName::new("nonexistent_module_test"), &EngineSelection::Auto, &env)
-            .err()
-            .expect("Expected error");
+        let err = BuiltinModules::find_module(
+            &ModuleName::new("nonexistent_module_test"),
+            &EngineSelection::Auto,
+            &env,
+        )
+        .err()
+        .expect("Expected error");
         assert_eq!(
             err,
             BuiltinError::ModuleNotFound {
@@ -301,9 +358,13 @@ mod tests {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let err = BuiltinModules::find_module(&ModuleName::new("nonexistent_module_test"), &selection, &env)
-            .err()
-            .expect("Expected error");
+        let err = BuiltinModules::find_module(
+            &ModuleName::new("nonexistent_module_test"),
+            &selection,
+            &env,
+        )
+        .err()
+        .expect("Expected error");
         assert_eq!(
             err,
             BuiltinError::ModuleNotFound {
@@ -342,4 +403,3 @@ mod tests {
         );
     }
 }
-

@@ -1,16 +1,15 @@
 let player_map = #{};
 let player_list = [];
 let active_idx = 0;
-let text_color = "#c0caf5";
-let accent_color = "#7aa2f7";
 
 fn init() {
-    if "text_color" in config { text_color = config.text_color; }
-    if "accent_color" in config { accent_color = config.accent_color; }
 }
 
-fn subscriptions() {
-    return ["mpris"];
+fn metadata() {
+    #{
+        subscriptions: ["mpris"],
+        styles: ["mpris"]
+    }
 }
 
 fn refresh() {
@@ -71,33 +70,25 @@ fn next_player_name() {
     return get_player_display_name(idx);
 }
 
-fn create_button(icon, click_action, tooltip_text, color) {
+fn create_button(icon, click_action, tooltip_text, class_name) {
     let ttip = ();
     if tooltip_text != () {
         ttip = #{
             type: "flex",
-            background: "#1e1e2eff",
-            radius: 4,
-            style: #{ padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 } },
+            class: "tooltip",
             children: [
-                #{ type: "text", text: tooltip_text, color: "#ffffff" }
+                #{ type: "text", text: tooltip_text }
             ]
         };
     }
 
     return #{
         type: "flex",
-        style: #{ 
-            justify: "center", 
-            align_items: "center", 
-            padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 } 
-        },
-        background: "#313244",
-        radius: 4.0,
+        class: class_name,
         on_click: click_action,
         tooltip: ttip,
         children: [
-            #{ type: "text", text: icon, color: color }
+            #{ type: "text", text: icon }
         ]
     };
 }
@@ -105,7 +96,7 @@ fn create_button(icon, click_action, tooltip_text, color) {
 fn render(monitor) {
     let p_res = get_active_player();
     if p_res == () {
-        return #{ type: "flex", children: [] };
+        return #{ type: "flex", class: "container", children: [] };
     }
     
     let p = p_res[0];
@@ -137,26 +128,26 @@ fn render(monitor) {
     // Player cycling: left arrow
     if player_list.len() > 1 {
         let prev_name = prev_player_name();
-        children.push(create_button("󰅁", #{ ScriptCall: "cycle_prev" }, prev_name, text_color));
+        children.push(create_button("󰅁", #{ ScriptCall: "cycle_prev" }, prev_name, "btn-cycle"));
     }
 
     // Prev Track button
-    children.push(create_button("󰒮", #{ Exec: "playerctl --player=" + bus_name + " previous" }, "Previous Track", text_color));
+    children.push(create_button("󰒮", #{ Exec: "playerctl --player=" + bus_name + " previous" }, "Previous Track", "btn-prev"));
 
     // Play/Pause button
     let status_icon = "󰐊";
     if is_playing { status_icon = "󰏤"; }
     let play_pause_ttip = "Play";
     if is_playing { play_pause_ttip = "Pause"; }
-    children.push(create_button(status_icon, #{ Exec: "playerctl --player=" + bus_name + " play-pause" }, play_pause_ttip, accent_color));
+    children.push(create_button(status_icon, #{ Exec: "playerctl --player=" + bus_name + " play-pause" }, play_pause_ttip, "btn-play"));
 
     // Next Track button
-    children.push(create_button("󰒭", #{ Exec: "playerctl --player=" + bus_name + " next" }, "Next Track", text_color));
+    children.push(create_button("󰒭", #{ Exec: "playerctl --player=" + bus_name + " next" }, "Next Track", "btn-next"));
 
     // Player cycling: right arrow
     if player_list.len() > 1 {
         let nxt = next_player_name();
-        children.push(create_button("󰅂", #{ ScriptCall: "cycle_next" }, nxt, text_color));
+        children.push(create_button("󰅂", #{ ScriptCall: "cycle_next" }, nxt, "btn-cycle"));
     }
 
     let max_width = 30;
@@ -176,29 +167,25 @@ fn render(monitor) {
     // Track info
     children.push(#{
         type: "flex",
-        style: #{ justify: "center", align_items: "center", padding: #{ top: 4.0, bottom: 4.0, left: 8.0, right: 8.0 } },
-        background: "#1e1e2e",
-        radius: 4.0,
+        class: "track-info",
         tooltip: #{
             type: "flex",
-            background: "#1e1e2eff",
-            radius: 4,
-            style: #{ padding: #{ top: 8.0, bottom: 8.0, left: 12.0, right: 12.0 }, gap: 4.0, direction: "column" },
+            class: "tooltip",
             children: [
-                #{ type: "text", text: "Title: " + title, color: "#ffffff" },
-                #{ type: "text", text: "Artist: " + artist_disp, color: text_color },
-                #{ type: "text", text: "Status: " + p.status, color: text_color },
-                #{ type: "text", text: "Player: " + player_disp, color: accent_color }
+                #{ type: "text", class: "title", text: "Title: " + title },
+                #{ type: "text", class: "artist", text: "Artist: " + artist_disp },
+                #{ type: "text", class: "status", text: "Status: " + p.status },
+                #{ type: "text", class: "player", text: "Player: " + player_disp }
             ]
         },
         children: [
-            #{ type: "text", text: truncated_text, color: text_color }
+            #{ type: "text", text: truncated_text }
         ]
     });
 
     return #{
         type: "flex",
-        style: #{ gap: 6.0, align_items: "center" },
+        class: "container",
         children: children,
     };
 }

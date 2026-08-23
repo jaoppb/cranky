@@ -7,8 +7,14 @@ pub enum WindowManagerError {
 }
 
 pub type WindowManagerState = (
-    std::collections::BTreeMap<crate::features::workspaces::domain::WorkspaceId, crate::features::workspaces::domain::Workspace>,
-    std::collections::BTreeMap<crate::features::workspaces::domain::MonitorName, crate::features::workspaces::domain::Monitor>,
+    std::collections::BTreeMap<
+        crate::features::workspaces::domain::WorkspaceId,
+        crate::features::workspaces::domain::Workspace,
+    >,
+    std::collections::BTreeMap<
+        crate::features::workspaces::domain::MonitorName,
+        crate::features::workspaces::domain::Monitor,
+    >,
     Option<crate::features::workspaces::domain::MonitorName>,
 );
 

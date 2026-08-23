@@ -41,15 +41,15 @@ impl Workspace {
     pub fn new(id: WorkspaceId, name: WorkspaceName, monitor: Option<MonitorName>) -> Self {
         Self { id, name, monitor }
     }
-    
+
     pub fn id(&self) -> &WorkspaceId {
         &self.id
     }
-    
+
     pub fn monitor(&self) -> Option<&MonitorName> {
         self.monitor.as_ref()
     }
-    
+
     pub fn set_monitor(&mut self, monitor: MonitorName) {
         self.monitor = Some(monitor);
     }
@@ -78,15 +78,15 @@ impl Monitor {
     pub fn name(&self) -> &MonitorName {
         &self.name
     }
-    
+
     pub fn active_workspace_id(&self) -> &WorkspaceId {
         &self.active_workspace_id
     }
-    
+
     pub fn set_active_workspace(&mut self, id: WorkspaceId) {
         self.active_workspace_id = id;
     }
-    
+
     pub fn set_special_workspace(&mut self, id: Option<WorkspaceId>) {
         self.special_workspace_id = id;
     }
@@ -120,11 +120,7 @@ mod tests {
 
     #[test]
     fn test_workspace_operations() {
-        let mut ws = Workspace::new(
-            WorkspaceId::new(1),
-            WorkspaceName::new("1"),
-            None,
-        );
+        let mut ws = Workspace::new(WorkspaceId::new(1), WorkspaceName::new("1"), None);
         assert_eq!(*ws.id(), WorkspaceId::new(1));
         assert_eq!(ws.monitor(), None);
 
@@ -134,11 +130,7 @@ mod tests {
 
     #[test]
     fn test_monitor_operations() {
-        let mut monitor = Monitor::new(
-            MonitorName::new("DP-1"),
-            WorkspaceId::new(1),
-            None,
-        );
+        let mut monitor = Monitor::new(MonitorName::new("DP-1"), WorkspaceId::new(1), None);
         assert_eq!(monitor.name(), &MonitorName::new("DP-1"));
         assert_eq!(*monitor.active_workspace_id(), WorkspaceId::new(1));
 
@@ -149,4 +141,3 @@ mod tests {
         assert_eq!(monitor.special_workspace_id(), Some(&WorkspaceId::new(3)));
     }
 }
-

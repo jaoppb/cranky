@@ -1,7 +1,7 @@
+use crate::app::commands::AppCommand;
+use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::Size;
-use crate::shared::config::domain::{FontFamily, FontSize, BorderRadius};
-use crate::app::commands::AppCommand;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
@@ -55,7 +55,9 @@ pub struct Gap {
 }
 
 impl Gap {
-    pub fn new(value: f64) -> Self { Self { value } }
+    pub fn new(value: f64) -> Self {
+        Self { value }
+    }
     pub fn value(&self) -> f64 {
         self.value
     }
@@ -75,7 +77,12 @@ pub struct BoxMargin {
 
 impl BoxMargin {
     pub fn new(top: f64, bottom: f64, left: f64, right: f64) -> Self {
-        Self { top, bottom, left, right }
+        Self {
+            top,
+            bottom,
+            left,
+            right,
+        }
     }
 }
 
@@ -117,13 +124,27 @@ impl FlexStyle {
         self.padding = padding;
         self
     }
-    pub fn direction(&self) -> FlexDirection { self.direction }
-    pub fn justify(&self) -> JustifyContent { self.justify }
-    pub fn align_items(&self) -> AlignItems { self.align_items }
-    pub fn padding(&self) -> &BoxMargin { &self.padding }
-    pub fn margin(&self) -> &BoxMargin { &self.margin }
-    pub fn gap(&self) -> Option<&Gap> { self.gap.as_ref() }
-    pub fn position(&self) -> PositionType { self.position }
+    pub fn direction(&self) -> FlexDirection {
+        self.direction
+    }
+    pub fn justify(&self) -> JustifyContent {
+        self.justify
+    }
+    pub fn align_items(&self) -> AlignItems {
+        self.align_items
+    }
+    pub fn padding(&self) -> &BoxMargin {
+        &self.padding
+    }
+    pub fn margin(&self) -> &BoxMargin {
+        &self.margin
+    }
+    pub fn gap(&self) -> Option<&Gap> {
+        self.gap.as_ref()
+    }
+    pub fn position(&self) -> PositionType {
+        self.position
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -141,6 +162,11 @@ impl TextContent {
     }
 }
 
+use crate::features::styling::domain::{
+    ClassNameList, ComputedStyle, ElementId, ElementQuery, Orientation, ProgressValue,
+};
+use crate::features::styling::ports::StyleResolverPort;
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type")]
 pub enum LayoutNode {
@@ -149,11 +175,9 @@ pub enum LayoutNode {
         #[serde(default)]
         children: Vec<LayoutNode>,
         #[serde(default)]
-        style: FlexStyle,
+        class: Option<ClassNameList>,
         #[serde(default)]
-        background: Option<DrawingColor>,
-        #[serde(default)]
-        radius: Option<BorderRadius>,
+        id: Option<ElementId>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
         #[serde(default)]
@@ -162,9 +186,25 @@ pub enum LayoutNode {
     #[serde(rename = "text")]
     Text {
         text: TextContent,
-        color: DrawingColor,
-        font: Option<FontFamily>,
-        size: Option<FontSize>,
+        #[serde(default)]
+        class: Option<ClassNameList>,
+        #[serde(default)]
+        id: Option<ElementId>,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        #[serde(default)]
+        tooltip: Option<Box<LayoutNode>>,
+    },
+    #[serde(rename = "progress")]
+    Progress {
+        #[serde(default)]
+        value: ProgressValue,
+        #[serde(default)]
+        orientation: Orientation,
+        #[serde(default)]
+        class: Option<ClassNameList>,
+        #[serde(default)]
+        id: Option<ElementId>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
         #[serde(default)]
@@ -172,9 +212,10 @@ pub enum LayoutNode {
     },
     #[serde(rename = "rect")]
     Rect {
-        size: Size,
-        color: DrawingColor,
-        radius: Option<BorderRadius>,
+        #[serde(default)]
+        class: Option<ClassNameList>,
+        #[serde(default)]
+        id: Option<ElementId>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
         #[serde(default)]
@@ -182,12 +223,209 @@ pub enum LayoutNode {
     },
     #[serde(rename = "image")]
     Image {
-        size: Size,
         #[serde(with = "serde_bytes")]
         data: Vec<u8>,
         pixel_size: Size,
         #[serde(default)]
+        class: Option<ClassNameList>,
+        #[serde(default)]
+        id: Option<ElementId>,
+        #[serde(default)]
         tooltip: Option<Box<LayoutNode>>,
+    },
+}
+
+impl LayoutNode {
+    pub fn resolve_styles(
+        &self,
+        resolver: &dyn StyleResolverPort,
+        parent: Option<&ElementQuery>,
+    ) -> StyledNode {
+        match self {
+            Self::Flex {
+                children,
+                class,
+                id,
+                on_click,
+                on_hover,
+                tooltip,
+            } => {
+                let empty_classes = ClassNameList::default();
+                let classes_slice = class
+                    .as_ref()
+                    .map(|c| c.as_slice())
+                    .unwrap_or(empty_classes.as_slice());
+                let query = ElementQuery::new("flex", id.as_ref(), classes_slice, &[], parent);
+                let style = resolver.resolve_style(&query);
+                let styled_children = children
+                    .iter()
+                    .map(|child| child.resolve_styles(resolver, Some(&query)))
+                    .collect();
+                let styled_tooltip = tooltip
+                    .as_ref()
+                    .map(|t| Box::new(t.resolve_styles(resolver, None)));
+
+                StyledNode::Flex {
+                    children: styled_children,
+                    style,
+                    on_click: on_click.clone(),
+                    on_hover: on_hover.clone(),
+                    tooltip: styled_tooltip,
+                }
+            }
+            Self::Text {
+                text,
+                class,
+                id,
+                on_click,
+                on_hover,
+                tooltip,
+            } => {
+                let empty_classes = ClassNameList::default();
+                let classes_slice = class
+                    .as_ref()
+                    .map(|c| c.as_slice())
+                    .unwrap_or(empty_classes.as_slice());
+                let query = ElementQuery::new("text", id.as_ref(), classes_slice, &[], parent);
+                let style = resolver.resolve_style(&query);
+                let styled_tooltip = tooltip
+                    .as_ref()
+                    .map(|t| Box::new(t.resolve_styles(resolver, None)));
+                StyledNode::Text {
+                    text: text.clone(),
+                    style,
+                    on_click: on_click.clone(),
+                    on_hover: on_hover.clone(),
+                    tooltip: styled_tooltip,
+                }
+            }
+            Self::Progress {
+                value,
+                orientation,
+                class,
+                id,
+                on_click,
+                on_hover,
+                tooltip,
+            } => {
+                let empty_classes = ClassNameList::default();
+                let classes_slice = class
+                    .as_ref()
+                    .map(|c| c.as_slice())
+                    .unwrap_or(empty_classes.as_slice());
+                let query = ElementQuery::new("progress", id.as_ref(), classes_slice, &[], parent);
+                let style = resolver.resolve_style(&query);
+                let styled_tooltip = tooltip
+                    .as_ref()
+                    .map(|t| Box::new(t.resolve_styles(resolver, None)));
+                StyledNode::Progress {
+                    value: *value,
+                    orientation: *orientation,
+                    style,
+                    on_click: on_click.clone(),
+                    on_hover: on_hover.clone(),
+                    tooltip: styled_tooltip,
+                }
+            }
+            Self::Rect {
+                class,
+                id,
+                on_click,
+                on_hover,
+                tooltip,
+            } => {
+                let empty_classes = ClassNameList::default();
+                let classes_slice = class
+                    .as_ref()
+                    .map(|c| c.as_slice())
+                    .unwrap_or(empty_classes.as_slice());
+                let query = ElementQuery::new("rect", id.as_ref(), classes_slice, &[], parent);
+                let style = resolver.resolve_style(&query);
+                let styled_tooltip = tooltip
+                    .as_ref()
+                    .map(|t| Box::new(t.resolve_styles(resolver, None)));
+                StyledNode::Rect {
+                    style,
+                    on_click: on_click.clone(),
+                    on_hover: on_hover.clone(),
+                    tooltip: styled_tooltip,
+                }
+            }
+            Self::Image {
+                data,
+                pixel_size,
+                class,
+                id,
+                tooltip,
+            } => {
+                let empty_classes = ClassNameList::default();
+                let classes_slice = class
+                    .as_ref()
+                    .map(|c| c.as_slice())
+                    .unwrap_or(empty_classes.as_slice());
+                let query = ElementQuery::new("image", id.as_ref(), classes_slice, &[], parent);
+                let style = resolver.resolve_style(&query);
+                let styled_tooltip = tooltip
+                    .as_ref()
+                    .map(|t| Box::new(t.resolve_styles(resolver, None)));
+                StyledNode::Image {
+                    data: data.clone(),
+                    pixel_size: *pixel_size,
+                    style,
+                    tooltip: styled_tooltip,
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum StyledNode {
+    Flex {
+        children: Vec<StyledNode>,
+        style: ComputedStyle,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<StyledNode>>,
+    },
+    Text {
+        text: TextContent,
+        style: ComputedStyle,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<StyledNode>>,
+    },
+    Progress {
+        value: ProgressValue,
+        orientation: Orientation,
+        style: ComputedStyle,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<StyledNode>>,
+    },
+    Rect {
+        style: ComputedStyle,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<StyledNode>>,
+    },
+    Image {
+        data: Vec<u8>,
+        pixel_size: Size,
+        style: ComputedStyle,
+        tooltip: Option<Box<StyledNode>>,
+    },
+}
+
+impl StyledNode {
+    pub fn style(&self) -> &ComputedStyle {
+        match self {
+            Self::Flex { style, .. } => style,
+            Self::Text { style, .. } => style,
+            Self::Progress { style, .. } => style,
+            Self::Rect { style, .. } => style,
+            Self::Image { style, .. } => style,
+        }
     }
 }
 
@@ -202,36 +440,41 @@ pub enum RenderNode {
     Flex {
         rect: Rect,
         children: Vec<RenderNode>,
-        background: Option<DrawingColor>,
-        radius: Option<BorderRadius>,
+        style: ComputedStyle,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<LayoutNode>>,
+        tooltip: Option<Box<StyledNode>>,
     },
     Text {
         rect: Rect,
         text: TextContent,
-        color: DrawingColor,
-        font: Option<FontFamily>,
-        size: Option<FontSize>,
+        style: ComputedStyle,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<LayoutNode>>,
+        tooltip: Option<Box<StyledNode>>,
+    },
+    Progress {
+        rect: Rect,
+        value: ProgressValue,
+        orientation: Orientation,
+        style: ComputedStyle,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<StyledNode>>,
     },
     Rect {
         rect: Rect,
-        color: DrawingColor,
-        radius: Option<BorderRadius>,
+        style: ComputedStyle,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<LayoutNode>>,
+        tooltip: Option<Box<StyledNode>>,
     },
     Image {
         rect: Rect,
         data: Vec<u8>,
         pixel_size: Size,
-        tooltip: Option<Box<LayoutNode>>,
-    }
+        tooltip: Option<Box<StyledNode>>,
+    },
 }
 
 impl RenderNode {
@@ -239,6 +482,7 @@ impl RenderNode {
         match self {
             Self::Flex { rect, .. } => *rect,
             Self::Text { rect, .. } => *rect,
+            Self::Progress { rect, .. } => *rect,
             Self::Rect { rect, .. } => *rect,
             Self::Image { rect, .. } => *rect,
         }
@@ -248,6 +492,7 @@ impl RenderNode {
         match self {
             Self::Text { on_click, .. } => on_click.as_ref(),
             Self::Flex { on_click, .. } => on_click.as_ref(),
+            Self::Progress { on_click, .. } => on_click.as_ref(),
             Self::Rect { on_click, .. } => on_click.as_ref(),
             _ => None,
         }
@@ -257,6 +502,7 @@ impl RenderNode {
         match self {
             Self::Text { on_hover, .. } => on_hover.as_ref(),
             Self::Flex { on_hover, .. } => on_hover.as_ref(),
+            Self::Progress { on_hover, .. } => on_hover.as_ref(),
             Self::Rect { on_hover, .. } => on_hover.as_ref(),
             _ => None,
         }
@@ -268,9 +514,17 @@ impl RenderNode {
         path
     }
 
-    fn hit_test_internal<'a>(&'a self, pos: crate::shared::primitives::geometry::Position, path: &mut Vec<&'a RenderNode>) {
+    fn hit_test_internal<'a>(
+        &'a self,
+        pos: crate::shared::primitives::geometry::Position,
+        path: &mut Vec<&'a RenderNode>,
+    ) {
         let r = self.rect();
-        if pos.x() >= r.x() && pos.x() < r.x() + r.width() as i32 && pos.y() >= r.y() && pos.y() < r.y() + r.height() as i32 {
+        if pos.x() >= r.x()
+            && pos.x() < r.x() + r.width() as i32
+            && pos.y() >= r.y()
+            && pos.y() < r.y() + r.height() as i32
+        {
             path.push(self);
             if let Self::Flex { children, .. } = self {
                 for child in children {
@@ -284,59 +538,182 @@ impl RenderNode {
         }
     }
 
-    pub fn tooltip(&self) -> Option<&LayoutNode> {
+    pub fn tooltip(&self) -> Option<&StyledNode> {
         match self {
             RenderNode::Flex { tooltip, .. } => tooltip.as_deref(),
             RenderNode::Text { tooltip, .. } => tooltip.as_deref(),
+            RenderNode::Progress { tooltip, .. } => tooltip.as_deref(),
             RenderNode::Rect { tooltip, .. } => tooltip.as_deref(),
             RenderNode::Image { tooltip, .. } => tooltip.as_deref(),
         }
     }
 
-    pub fn render_to_canvas(&self, canvas: &mut dyn crate::shared::rendering::ports::canvas::Canvas) {
+    pub fn render_to_canvas(
+        &self,
+        canvas: &mut dyn crate::shared::rendering::ports::canvas::Canvas,
+    ) {
         use crate::shared::primitives::geometry::LogicalPx;
         match self {
-            Self::Flex { rect, children, background, radius, .. } => {
-                if let Some(bg) = background {
+            Self::Flex {
+                rect,
+                children,
+                style,
+                ..
+            } => {
+                if let Some(bg) = style.background() {
                     canvas.draw_rect(
                         LogicalPx::new(rect.x() as f32),
                         LogicalPx::new(rect.y() as f32),
                         LogicalPx::new(rect.width() as f32),
                         LogicalPx::new(rect.height() as f32),
                         bg.clone(),
-                        LogicalPx::new(radius.map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                    );
+                }
+                if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
+                    canvas.draw_border(
+                        crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
+                        crate::shared::primitives::geometry::Size::new(rect.width(), rect.height()),
+                        color.clone(),
+                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(size.value()),
                     );
                 }
                 for child in children {
                     child.render_to_canvas(canvas);
                 }
             }
-            Self::Rect { rect, color, radius, .. } => {
-                canvas.draw_rect(
-                    LogicalPx::new(rect.x() as f32),
-                    LogicalPx::new(rect.y() as f32),
-                    LogicalPx::new(rect.width() as f32),
-                    LogicalPx::new(rect.height() as f32),
-                    color.clone(),
-                    LogicalPx::new(radius.map(|r| r.value()).unwrap_or(0.0)),
-                );
+            Self::Progress {
+                rect,
+                value,
+                orientation,
+                style,
+                ..
+            } => {
+                let r = LogicalPx::new(style.border_radius().map(|rad| rad.value()).unwrap_or(0.0));
+                if let Some(bg) = style.background() {
+                    canvas.draw_rect(
+                        LogicalPx::new(rect.x() as f32),
+                        LogicalPx::new(rect.y() as f32),
+                        LogicalPx::new(rect.width() as f32),
+                        LogicalPx::new(rect.height() as f32),
+                        bg.clone(),
+                        r,
+                    );
+                }
+                if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
+                    canvas.draw_border(
+                        crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
+                        crate::shared::primitives::geometry::Size::new(rect.width(), rect.height()),
+                        color.clone(),
+                        r,
+                        LogicalPx::new(size.value()),
+                    );
+                }
+                let fill_color = style.accent_color().or_else(|| style.color());
+                if let Some(fill) = fill_color {
+                    let clamped = value.value().clamp(0.0, 1.0);
+                    match orientation {
+                        Orientation::Horizontal => {
+                            let fill_w = (rect.width() as f32 * clamped).round();
+                            if fill_w > 0.0 {
+                                canvas.draw_rect(
+                                    LogicalPx::new(rect.x() as f32),
+                                    LogicalPx::new(rect.y() as f32),
+                                    LogicalPx::new(fill_w),
+                                    LogicalPx::new(rect.height() as f32),
+                                    fill.clone(),
+                                    r,
+                                );
+                            }
+                        }
+                        Orientation::Vertical => {
+                            let fill_h = (rect.height() as f32 * clamped).round();
+                            let fill_y = rect.y() as f32 + (rect.height() as f32 - fill_h);
+                            if fill_h > 0.0 {
+                                canvas.draw_rect(
+                                    LogicalPx::new(rect.x() as f32),
+                                    LogicalPx::new(fill_y),
+                                    LogicalPx::new(rect.width() as f32),
+                                    LogicalPx::new(fill_h),
+                                    fill.clone(),
+                                    r,
+                                );
+                            }
+                        }
+                    }
+                }
             }
-            Self::Text { rect, text, color, font, size, .. } => {
+            Self::Rect { rect, style, .. } => {
+                let bg = style.background().or_else(|| style.color());
+                if let Some(c) = bg {
+                    canvas.draw_rect(
+                        LogicalPx::new(rect.x() as f32),
+                        LogicalPx::new(rect.y() as f32),
+                        LogicalPx::new(rect.width() as f32),
+                        LogicalPx::new(rect.height() as f32),
+                        c.clone(),
+                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                    );
+                }
+                if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
+                    canvas.draw_border(
+                        crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
+                        crate::shared::primitives::geometry::Size::new(rect.width(), rect.height()),
+                        color.clone(),
+                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(size.value()),
+                    );
+                }
+            }
+            Self::Text {
+                rect, text, style, ..
+            } => {
+                if let Some(bg) = style.background() {
+                    canvas.draw_rect(
+                        LogicalPx::new(rect.x() as f32),
+                        LogicalPx::new(rect.y() as f32),
+                        LogicalPx::new(rect.width() as f32),
+                        LogicalPx::new(rect.height() as f32),
+                        bg.clone(),
+                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                    );
+                }
+                if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
+                    canvas.draw_border(
+                        crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
+                        crate::shared::primitives::geometry::Size::new(rect.width(), rect.height()),
+                        color.clone(),
+                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(size.value()),
+                    );
+                }
+                let text_color = style.color().cloned().unwrap_or_else(|| {
+                    DrawingColor::Solid(crate::shared::primitives::color::Color::new(
+                        255, 255, 255, 255,
+                    ))
+                });
                 canvas.draw_text(
                     text.as_str(),
-                    font.as_ref(),
-                    *size,
-                    color.clone(),
+                    style.font_family(),
+                    style.font_size(),
+                    text_color,
                     crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
                 );
             }
-            Self::Image { rect, data, pixel_size, tooltip: _ } => {
-                let logical_size = crate::shared::primitives::geometry::Size::new(rect.width(), rect.height());
+            Self::Image {
+                rect,
+                data,
+                pixel_size,
+                tooltip: _,
+            } => {
+                let logical_size =
+                    crate::shared::primitives::geometry::Size::new(rect.width(), rect.height());
                 canvas.draw_image(
                     data,
                     *pixel_size,
                     logical_size,
-                    crate::shared::primitives::geometry::Position::new(rect.x(), rect.y())
+                    crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
                 );
             }
         }
@@ -346,15 +723,20 @@ impl RenderNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::primitives::geometry::Position;
     use crate::shared::primitives::color::Color;
+    use crate::shared::primitives::geometry::Position;
 
     #[test]
     fn test_gap_and_margins() {
         let gap = Gap { value: 10.0 };
         assert_eq!(gap.value(), 10.0);
 
-        let margin = BoxMargin { top: 1.0, bottom: 2.0, left: 3.0, right: 4.0 };
+        let margin = BoxMargin {
+            top: 1.0,
+            bottom: 2.0,
+            left: 3.0,
+            right: 4.0,
+        };
         assert_eq!(margin.top(), 1.0);
         assert_eq!(margin.bottom(), 2.0);
         assert_eq!(margin.left(), 3.0);
@@ -368,7 +750,12 @@ mod tests {
             justify: JustifyContent::Center,
             align_items: AlignItems::Stretch,
             position: PositionType::Absolute,
-            padding: BoxMargin { top: 1.0, bottom: 1.0, left: 1.0, right: 1.0 },
+            padding: BoxMargin {
+                top: 1.0,
+                bottom: 1.0,
+                left: 1.0,
+                right: 1.0,
+            },
             margin: BoxMargin::default(),
             gap: Some(Gap { value: 5.0 }),
         };
@@ -393,8 +780,7 @@ mod tests {
         let rect = Rect::new(Position::new(0, 0), Size::new(10, 10));
         let node = RenderNode::Rect {
             rect,
-            color: DrawingColor::Solid(Color::new(0, 0, 0, 255)),
-            radius: None,
+            style: ComputedStyle::default(),
             on_click: None,
             on_hover: None,
             tooltip: None,
@@ -408,11 +794,10 @@ mod tests {
     fn test_hit_test() {
         let rect1 = Rect::new(Position::new(0, 0), Size::new(100, 100));
         let rect2 = Rect::new(Position::new(10, 10), Size::new(50, 50));
-        
+
         let child_node = RenderNode::Rect {
             rect: rect2,
-            color: DrawingColor::Solid(Color::new(255, 0, 0, 255)),
-            radius: None,
+            style: ComputedStyle::default(),
             on_click: None,
             on_hover: None,
             tooltip: None,
@@ -421,8 +806,7 @@ mod tests {
         let parent_node = RenderNode::Flex {
             rect: rect1,
             children: vec![child_node.clone()],
-            background: None,
-            radius: None,
+            style: ComputedStyle::default(),
             on_click: None,
             on_hover: None,
             tooltip: None,
@@ -443,53 +827,71 @@ mod tests {
     #[test]
     fn test_render_to_canvas() {
         use crate::shared::rendering::ports::canvas::MockCanvas;
-        
+
         let mut canvas = MockCanvas::new();
         canvas.expect_draw_rect().times(1).return_const(());
-        
+
+        let mut rect_style = ComputedStyle::default();
+        rect_style.set_background(DrawingColor::Solid(Color::new(255, 255, 255, 255)));
         let rect = RenderNode::Rect {
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
-            color: DrawingColor::Solid(Color::new(255, 255, 255, 255)),
-            radius: None,
+            style: rect_style,
             on_click: None,
             on_hover: None,
             tooltip: None,
         };
-        
+
         rect.render_to_canvas(&mut canvas);
-        
+
         let mut canvas = MockCanvas::new();
         canvas.expect_draw_rect().times(1).return_const(());
+        let mut flex_style = ComputedStyle::default();
+        flex_style.set_background(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         let flex = RenderNode::Flex {
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             children: vec![],
-            background: Some(DrawingColor::Solid(Color::new(0, 0, 0, 255))),
-            radius: None,
+            style: flex_style,
             on_click: None,
             on_hover: None,
             tooltip: None,
         };
         flex.render_to_canvas(&mut canvas);
-        
+
         let mut canvas = MockCanvas::new();
         canvas.expect_draw_text().times(1).return_const(());
+        let mut text_style = ComputedStyle::default();
+        text_style.set_color(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         let text = RenderNode::Text {
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             text: TextContent::new("test".into()),
-            color: DrawingColor::Solid(Color::new(0, 0, 0, 255)),
-            font: None,
-            size: None,
+            style: text_style,
             on_click: None,
             on_hover: None,
             tooltip: None,
         };
         text.render_to_canvas(&mut canvas);
-        
+
+        let mut canvas = MockCanvas::new();
+        canvas.expect_draw_rect().times(2).return_const(());
+        let mut prog_style = ComputedStyle::default();
+        prog_style.set_background(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
+        prog_style.set_accent_color(DrawingColor::Solid(Color::new(255, 0, 0, 255)));
+        let progress = RenderNode::Progress {
+            rect: Rect::new(Position::new(0, 0), Size::new(100, 10)),
+            value: ProgressValue::new(0.5).unwrap(),
+            orientation: Orientation::Horizontal,
+            style: prog_style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+        };
+        progress.render_to_canvas(&mut canvas);
+
         let mut canvas = MockCanvas::new();
         canvas.expect_draw_image().times(1).return_const(());
         let image = RenderNode::Image {
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
-            data: vec![0,0,0,0],
+            data: vec![0, 0, 0, 0],
             pixel_size: Size::new(1, 1),
             tooltip: None,
         };

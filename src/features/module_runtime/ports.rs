@@ -1,10 +1,7 @@
 use crate::app::commands::AppCommand;
 use crate::shared::config::domain::{Config, ModuleConfig};
 use crate::shared::events::signals::{SignalHub, SignalKind};
-use crate::shared::primitives::{
-    ModuleId, MonitorId,
-    geometry::Rect,
-};
+use crate::shared::primitives::{ModuleId, MonitorId, geometry::Rect};
 use crate::shared::wayland::ports::DynSurfaceManager;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -25,7 +22,8 @@ pub enum RegistryLoadError {
     #[error("Failed to initialize module '{module_name}': {source}")]
     ModuleInit {
         module_name: crate::shared::primitives::ModuleName,
-        #[source] source: ModuleInitError,
+        #[source]
+        source: ModuleInitError,
     },
     #[error("Module not found: {0}")]
     ModuleNotFound(crate::shared::primitives::ModuleName),
@@ -49,17 +47,23 @@ pub trait LayoutSender: Send + Sync {
 pub trait AnyModulePort: Send + Sync {
     fn init(&mut self, config: &ModuleConfig, full_config: &Config) -> Result<(), ModuleInitError>;
     fn subscriptions(&self) -> &[SignalKind];
+    fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName];
     fn refresh(&mut self, hub: &SignalHub, changed_signals: &[SignalKind]);
     fn render(&self, monitor: &MonitorId) -> crate::features::layout_engine::domain::LayoutNode;
-    
+
     /// Invoke a named function on the script. Used by ScriptCall click actions.
     /// Returns Ok(()) if the function exists and ran successfully.
-    fn call_function(&mut self, name: &crate::shared::primitives::FunctionName) -> Result<(), ModuleInitError>;
+    fn call_function(
+        &mut self,
+        name: &crate::shared::primitives::FunctionName,
+    ) -> Result<(), ModuleInitError>;
 }
 
 #[async_trait]
 #[cfg_attr(test, mockall::automock)]
-pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>: Send + Sync {
+pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>:
+    Send + Sync
+{
     fn load(&mut self, config: &Config) -> Result<(), RegistryLoadError>;
     fn spawn_all(
         &mut self,
@@ -83,7 +87,15 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
     fn center_modules(&self) -> &[ModuleId];
     fn right_modules(&self) -> &[ModuleId];
 
+    fn modules_using_style(
+        &self,
+        sheet: &crate::features::styling::domain::StyleSheetName,
+    ) -> Vec<crate::shared::primitives::ModuleName>;
+
     fn clear(&mut self);
 
-    async fn register_dbus_subscriptions(&self, dbus: &mut crate::shared::dbus::subscription_manager::DbusSubscriptionManager);
+    async fn register_dbus_subscriptions(
+        &self,
+        dbus: &mut crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
+    );
 }

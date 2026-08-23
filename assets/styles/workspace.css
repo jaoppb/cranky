@@ -1,0 +1,27 @@
+.container {
+    gap: 6px;
+    align-items: center;
+}
+
+.item {
+    padding: 4px 8px;
+    border-radius: 4px;
+    background-color: transparent;
+    color: #7aa2f7;
+    justify-content: center;
+    align-items: center;
+}
+
+.item.active {
+    background-color: #3b4261;
+    color: #ffffff;
+}
+
+.item.active.focused {
+    background-color: #565f89;
+    color: #ffffff;
+}
+
+.item:hover {
+    background-color: #414868;
+}

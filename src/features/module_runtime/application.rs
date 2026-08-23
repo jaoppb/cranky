@@ -1,11 +1,11 @@
 use crate::app::commands::AppCommand;
-use crate::shared::primitives::render::RenderBuffer;
+use crate::features::module_runtime::ports::AnyModulePort;
 use crate::shared::events::signals::SignalHub;
+use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{
     MonitorId,
     geometry::{Rect, Scale, Size},
 };
-use crate::features::module_runtime::ports::AnyModulePort;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -70,7 +70,9 @@ pub struct ModuleActor<F: crate::shared::rendering::ports::canvas::CanvasFactory
     ctx: ModuleContext,
     sizes: std::collections::HashMap<MonitorId, Size>,
     canvas_factory: std::sync::Arc<std::sync::Mutex<F>>,
-    render_trees: std::collections::HashMap<MonitorId, crate::features::layout_engine::domain::RenderNode>,
+    render_trees:
+        std::collections::HashMap<MonitorId, crate::features::layout_engine::domain::RenderNode>,
+    style_resolver: std::sync::Arc<dyn crate::features::styling::ports::StyleResolverPort>,
 }
 
 impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
@@ -78,6 +80,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
         port: Box<dyn AnyModulePort>,
         ctx: ModuleContext,
         canvas_factory: std::sync::Arc<std::sync::Mutex<F>>,
+        style_resolver: std::sync::Arc<dyn crate::features::styling::ports::StyleResolverPort>,
     ) -> Self {
         Self {
             port,
@@ -85,6 +88,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
             sizes: std::collections::HashMap::new(),
             canvas_factory,
             render_trees: std::collections::HashMap::new(),
+            style_resolver,
         }
     }
 
@@ -92,41 +96,79 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
         tokio::task::spawn_blocking(move || {
             let rt = tokio::runtime::Handle::current();
 
+            use crate::shared::events::signals::SignalKind;
             use futures_util::stream::{SelectAll, StreamExt};
             use tokio_stream::wrappers::WatchStream;
-            use crate::shared::events::signals::SignalKind;
 
             let mut events_stream = SelectAll::new();
             let subs = self.port.subscriptions();
 
             if subs.contains(&SignalKind::Time) {
-                events_stream.push(WatchStream::new(self.ctx.hub().time_rx()).map(|_| SignalKind::Time).boxed());
+                events_stream.push(
+                    WatchStream::new(self.ctx.hub().time_rx())
+                        .map(|_| SignalKind::Time)
+                        .boxed(),
+                );
             }
             if subs.contains(&SignalKind::Hyprland) {
-                events_stream.push(WatchStream::new(self.ctx.hub().hyprland_rx()).map(|_| SignalKind::Hyprland).boxed());
+                events_stream.push(
+                    WatchStream::new(self.ctx.hub().hyprland_rx())
+                        .map(|_| SignalKind::Hyprland)
+                        .boxed(),
+                );
             }
             if subs.contains(&SignalKind::Applets) {
-                events_stream.push(WatchStream::new(self.ctx.hub().applets_rx()).map(|_| SignalKind::Applets).boxed());
+                events_stream.push(
+                    WatchStream::new(self.ctx.hub().applets_rx())
+                        .map(|_| SignalKind::Applets)
+                        .boxed(),
+                );
             }
             if subs.contains(&SignalKind::Metrics) {
-                events_stream.push(WatchStream::new(self.ctx.hub().metrics_rx()).map(|_| SignalKind::Metrics).boxed());
+                events_stream.push(
+                    WatchStream::new(self.ctx.hub().metrics_rx())
+                        .map(|_| SignalKind::Metrics)
+                        .boxed(),
+                );
             }
             if subs.contains(&SignalKind::Mpris) {
-                events_stream.push(WatchStream::new(self.ctx.hub().mpris_rx()).map(|_| SignalKind::Mpris).boxed());
+                events_stream.push(
+                    WatchStream::new(self.ctx.hub().mpris_rx())
+                        .map(|_| SignalKind::Mpris)
+                        .boxed(),
+                );
             }
             if subs.iter().any(|s| matches!(s, SignalKind::DBus(_))) {
-                events_stream.push(WatchStream::new(self.ctx.hub().dbus_rx()).map(|_| SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))).boxed());
+                events_stream.push(
+                    WatchStream::new(self.ctx.hub().dbus_rx())
+                        .map(|_| {
+                            SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(
+                                crate::shared::dbus::domain::BusType::Session,
+                                None,
+                                None,
+                                None,
+                                None,
+                            ))
+                        })
+                        .boxed(),
+                );
             }
 
-            let mut layout_engines: std::collections::HashMap<MonitorId, Box<dyn crate::features::layout_engine::ports::LayoutEnginePort>> = std::collections::HashMap::new();
+            let mut layout_engines: std::collections::HashMap<
+                MonitorId,
+                Box<dyn crate::features::layout_engine::ports::LayoutEnginePort>,
+            > = std::collections::HashMap::new();
 
             // Initial refresh
             let initial_sigs = self.port.subscriptions().to_vec();
             self.port.refresh(self.ctx.hub(), &initial_sigs);
             self.measure_and_render_all(&mut layout_engines);
 
-            let mut last_tooltip: Option<crate::features::layout_engine::domain::LayoutNode> = None;
-            let mut last_pointer_pos: Option<(MonitorId, crate::shared::primitives::geometry::Position)> = None;
+            let mut last_tooltip: Option<crate::features::layout_engine::domain::StyledNode> = None;
+            let mut last_pointer_pos: Option<(
+                MonitorId,
+                crate::shared::primitives::geometry::Position,
+            )> = None;
 
             loop {
                 // Determine what woke us up
@@ -205,7 +247,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                                                         tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_hover command");
                                                         self.ctx.command_tx().send_command(cmd.clone());
                                                     }
-                                                        
+
                                                     let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
                                                     if hit_tooltip != last_tooltip {
                                                         tracing::debug!(
@@ -277,9 +319,15 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                     if hit_tooltip != last_tooltip {
                         tracing::debug!(module = %self.ctx.id(), changed = true, has_tooltip = hit_tooltip.is_some(), "Tooltip state changed after render");
                         if let Some(layout) = &hit_tooltip {
-                            self.ctx.command_tx().send_command(crate::app::commands::AppCommand::ShowTooltip { layout: Box::new(layout.clone()) });
+                            self.ctx.command_tx().send_command(
+                                crate::app::commands::AppCommand::ShowTooltip {
+                                    layout: Box::new(layout.clone()),
+                                },
+                            );
                         } else {
-                            self.ctx.command_tx().send_command(crate::app::commands::AppCommand::HideTooltip);
+                            self.ctx
+                                .command_tx()
+                                .send_command(crate::app::commands::AppCommand::HideTooltip);
                         }
                         last_tooltip = hit_tooltip;
                     }
@@ -291,13 +339,17 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
     #[tracing::instrument(level = "debug", skip(self, layout_engines), fields(module = %self.ctx.id()))]
     fn measure_and_render_all(
         &mut self,
-        layout_engines: &mut std::collections::HashMap<MonitorId, Box<dyn crate::features::layout_engine::ports::LayoutEnginePort>>
+        layout_engines: &mut std::collections::HashMap<
+            MonitorId,
+            Box<dyn crate::features::layout_engine::ports::LayoutEnginePort>,
+        >,
     ) {
         let t0 = std::time::Instant::now();
         let layouts: std::collections::HashMap<MonitorId, Rect> =
             self.ctx.rxs_mut().0.borrow().clone();
 
-        let mut all_monitors: std::collections::HashSet<MonitorId> = std::collections::HashSet::new();
+        let mut all_monitors: std::collections::HashSet<MonitorId> =
+            std::collections::HashSet::new();
         for m in self.ctx.hub().hyprland_rx().borrow().monitors().values() {
             all_monitors.insert(MonitorId::new(m.name().as_str()));
         }
@@ -308,6 +360,8 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
 
         for monitor_id in monitors {
             let layout_node = self.port.render(&monitor_id);
+            tracing::trace!(module = %self.ctx.id(), monitor = %monitor_id, "Resolving styles for module layout node");
+            let styled_node = layout_node.resolve_styles(self.style_resolver.as_ref(), None);
 
             // Measure
             let config = self.ctx.hub().config_rx().borrow().clone();
@@ -321,23 +375,30 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                     default_font_family.clone(),
                     default_font_size,
                 );
-                
+
                 let engine = layout_engines.entry(monitor_id.clone()).or_insert_with(|| {
-                    Box::new(crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new())
+                    Box::new(
+                        crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new(),
+                    )
                 });
-                
-                engine.calculate_layout(layout_node, &mut measurer, crate::shared::primitives::geometry::Position::new(0, 0))
+
+                engine.calculate_layout(
+                    styled_node,
+                    &mut measurer,
+                    crate::shared::primitives::geometry::Position::new(0, 0),
+                )
             };
-            
+
             let render_node = match render_node_res {
                 Ok(node) => node,
                 Err(e) => {
-                    eprintln!("Module layout failed: {}", e);
+                    tracing::error!(module = %self.ctx.id(), monitor = %monitor_id, err = ?e, "Module layout calculation failed");
                     continue;
                 }
             };
 
-            self.render_trees.insert(monitor_id.clone(), render_node.clone());
+            self.render_trees
+                .insert(monitor_id.clone(), render_node.clone());
 
             let size = *render_node.rect().size();
 
@@ -348,8 +409,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                 .unwrap_or(Size::new(0, 0));
             if size != old_size {
                 self.sizes.insert(monitor_id.clone(), size);
-                self
-                    .ctx
+                self.ctx
                     .command_tx()
                     .send_command(AppCommand::ModuleSizeChanged(
                         monitor_id.clone(),
@@ -383,7 +443,8 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                 let sm = self.ctx.surface_manager().clone();
                 let mod_id = self.ctx.id();
                 let mon_id = monitor_id.clone();
-                let position = crate::shared::primitives::geometry::Position::new(bounds.x(), bounds.y());
+                let position =
+                    crate::shared::primitives::geometry::Position::new(bounds.x(), bounds.y());
                 rt.block_on(async move {
                     sm.submit_buffer(mod_id, mon_id, position, buffer).await;
                 });
@@ -402,9 +463,9 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::config::domain::Config;
     use crate::features::module_runtime::ports::CommandSender;
-    
+    use crate::shared::config::domain::Config;
+
     struct MockCommandSender;
     impl CommandSender for MockCommandSender {
         fn send_command(&self, _cmd: AppCommand) {}
@@ -413,7 +474,14 @@ mod tests {
     struct MockSurfaceManager;
     #[async_trait::async_trait]
     impl crate::shared::wayland::ports::SurfaceManagerPort for MockSurfaceManager {
-        async fn submit_buffer(&self, _mod_id: crate::shared::primitives::ModuleId, _mon_id: MonitorId, _pos: crate::shared::primitives::geometry::Position, _buf: RenderBuffer) {}
+        async fn submit_buffer(
+            &self,
+            _mod_id: crate::shared::primitives::ModuleId,
+            _mon_id: MonitorId,
+            _pos: crate::shared::primitives::geometry::Position,
+            _buf: RenderBuffer,
+        ) {
+        }
     }
 
     struct TestCommandSender {
@@ -426,7 +494,7 @@ mod tests {
     }
 
     struct MockCanvasFactory;
-    
+
     impl crate::shared::rendering::ports::canvas::CanvasFactory for MockCanvasFactory {
         fn create_canvas<'a>(
             &'a mut self,
@@ -438,7 +506,7 @@ mod tests {
         ) -> impl crate::shared::rendering::ports::canvas::Canvas + 'a {
             MockCanvas
         }
-        
+
         fn create_text_measurer<'a>(
             &'a mut self,
             _scale: Scale,
@@ -448,18 +516,55 @@ mod tests {
             MockMeasurer
         }
     }
-    
+
     struct MockCanvas;
     impl crate::shared::rendering::ports::canvas::Canvas for MockCanvas {
-        fn draw_rect(&mut self, _x: crate::shared::primitives::geometry::LogicalPx, _y: crate::shared::primitives::geometry::LogicalPx, _w: crate::shared::primitives::geometry::LogicalPx, _h: crate::shared::primitives::geometry::LogicalPx, _color: crate::shared::primitives::color::DrawingColor, _radius: crate::shared::primitives::geometry::LogicalPx) {}
-        fn draw_border(&mut self, _pos: crate::shared::primitives::geometry::Position, _size: crate::shared::primitives::geometry::Size, _color: crate::shared::primitives::color::DrawingColor, _radius: crate::shared::primitives::geometry::LogicalPx, _border_size: crate::shared::primitives::geometry::LogicalPx) {}
-        fn draw_text(&mut self, _text: &str, _font_family: Option<&crate::shared::config::domain::FontFamily>, _font_size: Option<crate::shared::config::domain::FontSize>, _color: crate::shared::primitives::color::DrawingColor, _pos: crate::shared::primitives::geometry::Position) {}
-        fn draw_image(&mut self, _image_data: &[u8], _pixel_size: crate::shared::primitives::geometry::Size, _logical_size: crate::shared::primitives::geometry::Size, _pos: crate::shared::primitives::geometry::Position) {}
+        fn draw_rect(
+            &mut self,
+            _x: crate::shared::primitives::geometry::LogicalPx,
+            _y: crate::shared::primitives::geometry::LogicalPx,
+            _w: crate::shared::primitives::geometry::LogicalPx,
+            _h: crate::shared::primitives::geometry::LogicalPx,
+            _color: crate::shared::primitives::color::DrawingColor,
+            _radius: crate::shared::primitives::geometry::LogicalPx,
+        ) {
+        }
+        fn draw_border(
+            &mut self,
+            _pos: crate::shared::primitives::geometry::Position,
+            _size: crate::shared::primitives::geometry::Size,
+            _color: crate::shared::primitives::color::DrawingColor,
+            _radius: crate::shared::primitives::geometry::LogicalPx,
+            _border_size: crate::shared::primitives::geometry::LogicalPx,
+        ) {
+        }
+        fn draw_text(
+            &mut self,
+            _text: &str,
+            _font_family: Option<&crate::shared::config::domain::FontFamily>,
+            _font_size: Option<crate::shared::config::domain::FontSize>,
+            _color: crate::shared::primitives::color::DrawingColor,
+            _pos: crate::shared::primitives::geometry::Position,
+        ) {
+        }
+        fn draw_image(
+            &mut self,
+            _image_data: &[u8],
+            _pixel_size: crate::shared::primitives::geometry::Size,
+            _logical_size: crate::shared::primitives::geometry::Size,
+            _pos: crate::shared::primitives::geometry::Position,
+        ) {
+        }
     }
-    
+
     struct MockMeasurer;
     impl crate::features::layout_engine::domain::TextMeasurer for MockMeasurer {
-        fn measure(&mut self, _text: &str, _font_family: Option<&crate::shared::config::domain::FontFamily>, _font_size: Option<crate::shared::config::domain::FontSize>) -> Size {
+        fn measure(
+            &mut self,
+            _text: &str,
+            _font_family: Option<&crate::shared::config::domain::FontFamily>,
+            _font_size: Option<crate::shared::config::domain::FontSize>,
+        ) -> Size {
             Size::new(10, 10)
         }
     }
@@ -468,24 +573,42 @@ mod tests {
         render_node: crate::features::layout_engine::domain::LayoutNode,
         subs: Vec<crate::shared::events::signals::SignalKind>,
     }
-    
+
     impl AnyModulePort for MockAnyModulePort {
-        fn init(&mut self, _config: &crate::shared::config::domain::ModuleConfig, _full_config: &crate::shared::config::domain::Config) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+        fn init(
+            &mut self,
+            _config: &crate::shared::config::domain::ModuleConfig,
+            _full_config: &crate::shared::config::domain::Config,
+        ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
             Ok(())
         }
-        
+
         fn subscriptions(&self) -> &[crate::shared::events::signals::SignalKind] {
             &self.subs
         }
-        
-        fn refresh(&mut self, _hub: &SignalHub, _signals: &[crate::shared::events::signals::SignalKind]) {
+
+        fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName] {
+            &[]
         }
-        
-        fn render(&self, _monitor: &MonitorId) -> crate::features::layout_engine::domain::LayoutNode {
+
+        fn refresh(
+            &mut self,
+            _hub: &SignalHub,
+            _signals: &[crate::shared::events::signals::SignalKind],
+        ) {
+        }
+
+        fn render(
+            &self,
+            _monitor: &MonitorId,
+        ) -> crate::features::layout_engine::domain::LayoutNode {
             self.render_node.clone()
         }
 
-        fn call_function(&mut self, _name: &crate::shared::primitives::FunctionName) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+        fn call_function(
+            &mut self,
+            _name: &crate::shared::primitives::FunctionName,
+        ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
             Ok(())
         }
     }
@@ -501,7 +624,7 @@ mod tests {
         let mut ctx = ModuleContext::new(id, hub.clone(), sm.clone(), cmd_tx, layout_rx);
         assert_eq!(ctx.id(), id);
         assert_eq!(Arc::as_ptr(ctx.hub()), Arc::as_ptr(&hub));
-        
+
         let (rx1, _rx2) = ctx.rxs_mut();
         let _ = rx1.borrow();
     }
@@ -509,11 +632,11 @@ mod tests {
     #[tokio::test]
     async fn test_module_actor_measure_and_render_all() {
         use crate::shared::primitives::geometry::Rect;
-        
+
         let id = crate::shared::primitives::ModuleId::new(1);
         let config = Config::default();
         let hub = Arc::new(SignalHub::new(config));
-        
+
         {
             let mut monitors = std::collections::BTreeMap::new();
             monitors.insert(
@@ -524,65 +647,94 @@ mod tests {
                     None,
                 ),
             );
-            let mut h_state = crate::shared::events::signals::HyprlandState::new(
+            let h_state = crate::shared::events::signals::HyprlandState::new(
                 std::collections::BTreeMap::new(),
                 monitors,
-                Some(crate::features::workspaces::domain::MonitorName::new("DP-1"))
+                Some(crate::features::workspaces::domain::MonitorName::new(
+                    "DP-1",
+                )),
             );
-            h_state.apply_event(&crate::shared::events::core::WindowManagerEvent::MonitorFocused {
-                monitor_name: crate::features::workspaces::domain::MonitorName::new("DP-1"),
-                workspace_id: crate::features::workspaces::domain::WorkspaceId::new(1),
-            });
             hub.hyprland_tx().send(h_state).unwrap();
         }
 
         let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
         let sender: Arc<dyn CommandSender> = Arc::new(TestCommandSender { tx: cmd_tx });
-        
+
         let (layout_tx, layout_rx) = watch::channel(HashMap::new());
         let ctx = ModuleContext::new(id, hub.clone(), sm.clone(), sender, layout_rx);
-        
+
         let port = Box::new(MockAnyModulePort {
             render_node: crate::features::layout_engine::domain::LayoutNode::Rect {
-                size: crate::shared::primitives::geometry::Size::new(100, 20),
-                color: crate::shared::primitives::color::DrawingColor::parse("#000000").unwrap(),
-                radius: None,
+                class: None,
+                id: None,
                 on_click: None,
                 on_hover: None,
                 tooltip: None,
             },
-            subs: vec![crate::shared::events::signals::SignalKind::Time, crate::shared::events::signals::SignalKind::Hyprland, crate::shared::events::signals::SignalKind::Applets, crate::shared::events::signals::SignalKind::Metrics, crate::shared::events::signals::SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))],
+            subs: vec![
+                crate::shared::events::signals::SignalKind::Time,
+                crate::shared::events::signals::SignalKind::Hyprland,
+                crate::shared::events::signals::SignalKind::Applets,
+                crate::shared::events::signals::SignalKind::Metrics,
+                crate::shared::events::signals::SignalKind::DBus(
+                    crate::shared::dbus::domain::DBusSubscription::new(
+                        crate::shared::dbus::domain::BusType::Session,
+                        None,
+                        None,
+                        None,
+                        None,
+                    ),
+                ),
+            ],
         });
-        
-        let mut actor = ModuleActor::new(port, ctx, Arc::new(std::sync::Mutex::new(MockCanvasFactory)));
-        
+
+        let resolver = Arc::new(
+            crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
+        );
+        let mut actor = ModuleActor::new(
+            port,
+            ctx,
+            Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
+            resolver,
+        );
+
         let mut actor = tokio::task::spawn_blocking(move || {
             let mut layout_engines = HashMap::new();
             actor.measure_and_render_all(&mut layout_engines);
             actor
-        }).await.unwrap();
-        
+        })
+        .await
+        .unwrap();
+
         let cmd = cmd_rx.try_recv().expect("Should send size changed command");
         match cmd {
             AppCommand::ModuleSizeChanged(mon, mod_id, size) => {
                 assert_eq!(mon.as_str(), "DP-1");
                 assert_eq!(mod_id, id);
-                assert_eq!(size.width(), 100);
-                assert_eq!(size.height(), 20);
+                assert_eq!(size.width(), 10);
+                assert_eq!(size.height(), 10);
             }
             _ => panic!("Unexpected command"),
         }
-        
+
         let mut layouts = HashMap::new();
-        layouts.insert(MonitorId::new("DP-1"), Rect::new(crate::shared::primitives::geometry::Position::new(0, 0), crate::shared::primitives::geometry::Size::new(100, 20)));
+        layouts.insert(
+            MonitorId::new("DP-1"),
+            Rect::new(
+                crate::shared::primitives::geometry::Position::new(0, 0),
+                crate::shared::primitives::geometry::Size::new(10, 10),
+            ),
+        );
         layout_tx.send(layouts).unwrap();
-        
+
         let _ = tokio::task::spawn_blocking(move || {
             let mut layout_engines = HashMap::new();
             actor.measure_and_render_all(&mut layout_engines);
             actor
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
         assert!(cmd_rx.try_recv().is_err());
     }
 
@@ -590,16 +742,15 @@ mod tests {
     async fn test_module_actor_lifecycle() {
         let id = crate::shared::primitives::ModuleId::new(2);
         let hub = Arc::new(SignalHub::new(Config::default()));
-        
+
         let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
         let sender: Arc<dyn CommandSender> = Arc::new(MockCommandSender);
         let (layout_tx, layout_rx) = watch::channel(HashMap::new());
         let ctx = ModuleContext::new(id, hub.clone(), sm, sender, layout_rx);
-        
+
         let click_node = crate::features::layout_engine::domain::LayoutNode::Rect {
-            size: crate::shared::primitives::geometry::Size::new(100, 100),
-            color: crate::shared::primitives::color::DrawingColor::parse("#000000").unwrap(),
-            radius: None,
+            class: None,
+            id: None,
             on_click: Some(crate::app::commands::AppCommand::RequestRender),
             on_hover: Some(crate::app::commands::AppCommand::RequestRender),
             tooltip: None,
@@ -607,90 +758,168 @@ mod tests {
 
         let port = Box::new(MockAnyModulePort {
             render_node: click_node,
-            subs: vec![crate::shared::events::signals::SignalKind::Time, crate::shared::events::signals::SignalKind::Hyprland, crate::shared::events::signals::SignalKind::Applets, crate::shared::events::signals::SignalKind::Metrics, crate::shared::events::signals::SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))],
+            subs: vec![
+                crate::shared::events::signals::SignalKind::Time,
+                crate::shared::events::signals::SignalKind::Hyprland,
+                crate::shared::events::signals::SignalKind::Applets,
+                crate::shared::events::signals::SignalKind::Metrics,
+                crate::shared::events::signals::SignalKind::DBus(
+                    crate::shared::dbus::domain::DBusSubscription::new(
+                        crate::shared::dbus::domain::BusType::Session,
+                        None,
+                        None,
+                        None,
+                        None,
+                    ),
+                ),
+            ],
         });
-        
-        let mut actor = ModuleActor::new(port, ctx, Arc::new(std::sync::Mutex::new(MockCanvasFactory)));
+
+        let resolver = Arc::new(
+            crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
+        );
+        let mut actor = ModuleActor::new(
+            port,
+            ctx,
+            Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
+            resolver,
+        );
         // Pre-populate render_trees for hit testing
-        actor.render_trees.insert(MonitorId::new("DP-1"), crate::features::layout_engine::domain::RenderNode::Rect {
-            rect: crate::shared::primitives::geometry::Rect::new(crate::shared::primitives::geometry::Position::new(0, 0), crate::shared::primitives::geometry::Size::new(100, 100)),
-            color: crate::shared::primitives::color::DrawingColor::parse("#000000").unwrap(),
-            radius: None,
-            on_click: Some(AppCommand::RequestRender),
-            on_hover: Some(AppCommand::RequestRender),
-            tooltip: None,
-        });
-        
+        actor.render_trees.insert(
+            MonitorId::new("DP-1"),
+            crate::features::layout_engine::domain::RenderNode::Rect {
+                rect: crate::shared::primitives::geometry::Rect::new(
+                    crate::shared::primitives::geometry::Position::new(0, 0),
+                    crate::shared::primitives::geometry::Size::new(100, 100),
+                ),
+                style: crate::features::styling::domain::ComputedStyle::default(),
+                on_click: Some(AppCommand::RequestRender),
+                on_hover: Some(AppCommand::RequestRender),
+                tooltip: None,
+            },
+        );
+
         actor.spawn();
-        
+
         hub.time_tx().send(chrono::Local::now()).unwrap();
-        hub.applets_tx().send(crate::features::applets::domain::AppletsState::default()).unwrap();
-        hub.hyprland_tx().send(crate::shared::events::signals::HyprlandState::new(std::collections::BTreeMap::new(), std::collections::BTreeMap::new(), None)).unwrap();
-        
-        let _ = hub.pointer_tx().send((id, MonitorId::new("DP-1"), crate::shared::events::core::PointerEvent::Click { x: 50.0, y: 50.0, button: 1 }));
-        let _ = hub.pointer_tx().send((id, MonitorId::new("DP-1"), crate::shared::events::core::PointerEvent::PointerMotion { x: 50.0, y: 50.0 }));
+        hub.applets_tx()
+            .send(crate::features::applets::domain::AppletsState::default())
+            .unwrap();
+        hub.hyprland_tx()
+            .send(crate::shared::events::signals::HyprlandState::new(
+                std::collections::BTreeMap::new(),
+                std::collections::BTreeMap::new(),
+                None,
+            ))
+            .unwrap();
+
+        let _ = hub.pointer_tx().send((
+            id,
+            MonitorId::new("DP-1"),
+            crate::shared::events::core::PointerEvent::Click {
+                x: 50.0,
+                y: 50.0,
+                button: 1,
+            },
+        ));
+        let _ = hub.pointer_tx().send((
+            id,
+            MonitorId::new("DP-1"),
+            crate::shared::events::core::PointerEvent::PointerMotion { x: 50.0, y: 50.0 },
+        ));
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        
+
         drop(layout_tx);
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     #[tokio::test]
     async fn test_module_actor_renders_unknown_hyprland_monitor_from_layout() {
         use crate::shared::primitives::geometry::Rect;
-        
+
         let id = crate::shared::primitives::ModuleId::new(1);
         let config = Config::default();
         let hub = Arc::new(SignalHub::new(config));
-        
+
         // 1. Hyprland state is empty (no monitors)
         let h_state = crate::shared::events::signals::HyprlandState::new(
             std::collections::BTreeMap::new(),
             std::collections::BTreeMap::new(),
-            None
+            None,
         );
         hub.hyprland_tx().send(h_state).unwrap();
 
         let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
         let sender: Arc<dyn CommandSender> = Arc::new(TestCommandSender { tx: cmd_tx });
-        
+
         let (layout_tx, layout_rx) = watch::channel(HashMap::new());
         let ctx = ModuleContext::new(id, hub.clone(), sm.clone(), sender, layout_rx);
-        
+
         let port = Box::new(MockAnyModulePort {
             render_node: crate::features::layout_engine::domain::LayoutNode::Rect {
-                size: crate::shared::primitives::geometry::Size::new(100, 20),
-                color: crate::shared::primitives::color::DrawingColor::parse("#000000").unwrap(),
-                radius: None,
+                class: None,
+                id: None,
                 on_click: None,
                 on_hover: None,
                 tooltip: None,
             },
-            subs: vec![crate::shared::events::signals::SignalKind::Time, crate::shared::events::signals::SignalKind::Hyprland, crate::shared::events::signals::SignalKind::Applets, crate::shared::events::signals::SignalKind::Metrics, crate::shared::events::signals::SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(crate::shared::dbus::domain::BusType::Session, None, None, None, None))],
+            subs: vec![
+                crate::shared::events::signals::SignalKind::Time,
+                crate::shared::events::signals::SignalKind::Hyprland,
+                crate::shared::events::signals::SignalKind::Applets,
+                crate::shared::events::signals::SignalKind::Metrics,
+                crate::shared::events::signals::SignalKind::DBus(
+                    crate::shared::dbus::domain::DBusSubscription::new(
+                        crate::shared::dbus::domain::BusType::Session,
+                        None,
+                        None,
+                        None,
+                        None,
+                    ),
+                ),
+            ],
         });
-        
-        let mut actor = ModuleActor::new(port, ctx, Arc::new(std::sync::Mutex::new(MockCanvasFactory)));
-        
+
+        let resolver = Arc::new(
+            crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
+        );
+        let mut actor = ModuleActor::new(
+            port,
+            ctx,
+            Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
+            resolver,
+        );
+
         // 2. Wayland sends layout update for DP-2
         let mut layouts = HashMap::new();
-        layouts.insert(MonitorId::new("DP-2"), Rect::new(crate::shared::primitives::geometry::Position::new(0, 0), crate::shared::primitives::geometry::Size::new(100, 20)));
+        layouts.insert(
+            MonitorId::new("DP-2"),
+            Rect::new(
+                crate::shared::primitives::geometry::Position::new(0, 0),
+                crate::shared::primitives::geometry::Size::new(10, 10),
+            ),
+        );
         layout_tx.send(layouts).unwrap();
-        
+
         let _ = tokio::task::spawn_blocking(move || {
             let mut layout_engines = HashMap::new();
             // 3. This should process DP-2 because it's in the layouts map, even though hyprland state is empty!
             actor.measure_and_render_all(&mut layout_engines);
             actor
-        }).await.unwrap();
-        
+        })
+        .await
+        .unwrap();
+
         // 4. Verify the actor processed the monitor and emitted a size changed command
-        let cmd = cmd_rx.try_recv().expect("Should send size changed command for DP-2");
+        let cmd = cmd_rx
+            .try_recv()
+            .expect("Should send size changed command for DP-2");
         match cmd {
             AppCommand::ModuleSizeChanged(mon, mod_id, size) => {
                 assert_eq!(mon.as_str(), "DP-2");
                 assert_eq!(mod_id, id);
-                assert_eq!(size.width(), 100);
+                assert_eq!(size.width(), 10);
             }
             _ => panic!("Unexpected command"),
         }

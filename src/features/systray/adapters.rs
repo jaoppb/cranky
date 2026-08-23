@@ -1,6 +1,6 @@
 use crate::features::applets::domain::{AppletItem, AppletStatus, AppletsState};
-use crate::shared::events::signals::SignalHub;
 use crate::features::systray::ports::{SniPort, SniPortError};
+use crate::shared::events::signals::SignalHub;
 use async_trait::async_trait;
 
 use freedesktop_icons::lookup;
@@ -77,7 +77,11 @@ enum SniEvent {
 }
 
 impl SniEvent {
-    async fn apply<'a>(self, applet: AppletItem, proxy: &StatusNotifierItemProxy<'a>) -> AppletItem {
+    async fn apply<'a>(
+        self,
+        applet: AppletItem,
+        proxy: &StatusNotifierItemProxy<'a>,
+    ) -> AppletItem {
         match self {
             SniEvent::Title => {
                 let title = proxy.title().await.unwrap_or_default();
@@ -104,7 +108,8 @@ impl SniEvent {
                     icon_theme_path,
                     icon_pixmap.as_ref().map(|p| !p.is_empty()).unwrap_or(false)
                 );
-                let icon_image = resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
+                let icon_image =
+                    resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
                 let icon = crate::features::applets::domain::AppletIcon::new(
                     icon_name.map(crate::features::applets::domain::IconName::new),
                     icon_image,
@@ -116,7 +121,8 @@ impl SniEvent {
                 let icon_theme_path = proxy.attention_icon_theme_path().await.ok();
                 let icon_pixmap = proxy.attention_icon_pixmap().await.ok();
                 tracing::info!("SniEvent::AttentionIcon: updated attention icon");
-                let icon_image = resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
+                let icon_image =
+                    resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
                 let icon = crate::features::applets::domain::AppletIcon::new(
                     icon_name.map(crate::features::applets::domain::IconName::new),
                     icon_image,
@@ -145,12 +151,14 @@ impl SniEvent {
             SniEvent::Menu => {
                 let mut applet = applet;
                 if let Ok(menu_path) = proxy.menu().await {
-                    applet = applet.with_menu_path(Some(crate::features::applets::domain::ObjectPath::new(
-                        menu_path.as_str(),
-                    )));
+                    applet = applet.with_menu_path(Some(
+                        crate::features::applets::domain::ObjectPath::new(menu_path.as_str()),
+                    ));
                 }
                 if let Ok(item_is_menu_val) = proxy.item_is_menu().await {
-                    applet = applet.with_item_is_menu(crate::features::applets::domain::ItemIsMenu::new(item_is_menu_val));
+                    applet = applet.with_item_is_menu(
+                        crate::features::applets::domain::ItemIsMenu::new(item_is_menu_val),
+                    );
                 }
                 tracing::info!("SniEvent::Menu: updated menu");
                 applet
@@ -234,8 +242,7 @@ async fn resolve_icon(
             }
 
             if let Some(icon_path) = found_path
-                && let Some((w, h, bytes)) =
-                    crate::utils::load_icon_rgba(&icon_path, 24, max_scale)
+                && let Some((w, h, bytes)) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale)
             {
                 icon_image = Some(crate::features::applets::domain::IconImage::new(
                     bytes,
@@ -363,7 +370,9 @@ impl Watcher {
             .to_string()
     }
 
-    fn parse_raw_tooltip(v: zbus::zvariant::OwnedValue) -> Option<crate::features::applets::domain::AppletTooltip> {
+    fn parse_raw_tooltip(
+        v: zbus::zvariant::OwnedValue,
+    ) -> Option<crate::features::applets::domain::AppletTooltip> {
         if let Ok((icon_name, pixmap, title, description)) = RawTooltip::try_from(v) {
             let icon_name_opt = if icon_name.is_empty() {
                 None
@@ -377,8 +386,12 @@ impl Watcher {
             );
             Some(crate::features::applets::domain::AppletTooltip::new(
                 tooltip_icon,
-                crate::features::applets::domain::AppletTooltipTitle::new(Self::clean_sni_text(&title)),
-                crate::features::applets::domain::AppletTooltipDescription::new(Self::clean_sni_text(&description)),
+                crate::features::applets::domain::AppletTooltipTitle::new(Self::clean_sni_text(
+                    &title,
+                )),
+                crate::features::applets::domain::AppletTooltipDescription::new(
+                    Self::clean_sni_text(&description),
+                ),
             ))
         } else {
             None
@@ -404,17 +417,19 @@ impl Watcher {
         {
             Ok(p) => p,
             Err(_) => {
-                return AppletItem::new(crate::features::applets::domain::CreateAppletCommand::new(
-                    crate::features::applets::domain::AppletId::new(id.clone()),
-                    crate::features::applets::domain::Destination::new(dest.clone()),
-                    crate::features::applets::domain::ObjectPath::new(path_str.clone()),
-                    crate::features::applets::domain::Title::new(String::new()),
-                    AppletStatus::Unknown,
-                    None,
-                    None,
-                    crate::features::applets::domain::AppletCategory::ApplicationStatus,
-                    crate::features::applets::domain::ItemIsMenu::new(false),
-                ));
+                return AppletItem::new(
+                    crate::features::applets::domain::CreateAppletCommand::new(
+                        crate::features::applets::domain::AppletId::new(id.clone()),
+                        crate::features::applets::domain::Destination::new(dest.clone()),
+                        crate::features::applets::domain::ObjectPath::new(path_str.clone()),
+                        crate::features::applets::domain::Title::new(String::new()),
+                        AppletStatus::Unknown,
+                        None,
+                        None,
+                        crate::features::applets::domain::AppletCategory::ApplicationStatus,
+                        crate::features::applets::domain::ItemIsMenu::new(false),
+                    ),
+                );
             }
         };
 
@@ -437,8 +452,7 @@ impl Watcher {
             .remove("Category")
             .and_then(|v| v.try_into().ok())
             .unwrap_or_default();
-        let item_id: Option<String> =
-            all_props.remove("Id").and_then(|v| v.try_into().ok());
+        let item_id: Option<String> = all_props.remove("Id").and_then(|v| v.try_into().ok());
         let window_id: Option<u32> = all_props
             .remove("WindowId")
             .and_then(|v| v.try_into().ok())
@@ -484,7 +498,8 @@ impl Watcher {
         let icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>> = all_props
             .remove("IconPixmap")
             .and_then(|v| v.try_into().ok());
-        let icon_image = resolve_icon(icon_name.clone(), icon_theme_path.clone(), icon_pixmap).await;
+        let icon_image =
+            resolve_icon(icon_name.clone(), icon_theme_path.clone(), icon_pixmap).await;
         let icon = crate::features::applets::domain::AppletIcon::new(
             icon_name.map(crate::features::applets::domain::IconName::new),
             icon_image,
@@ -619,10 +634,15 @@ impl Watcher {
 
         tokio::spawn(async move {
             use tokio_stream::StreamExt;
-            let mut events = new_title.map(|_| SniEvent::Title)
-                .merge(new_status.map(|sig| SniEvent::Status(
-                    sig.args().map(|a| a.status().to_string()).unwrap_or_default()
-                )))
+            let mut events = new_title
+                .map(|_| SniEvent::Title)
+                .merge(new_status.map(|sig| {
+                    SniEvent::Status(
+                        sig.args()
+                            .map(|a| a.status().to_string())
+                            .unwrap_or_default(),
+                    )
+                }))
                 .merge(new_icon.map(|_| SniEvent::Icon))
                 .merge(new_path.map(|_| SniEvent::ThemePath))
                 .merge(new_attention_icon.map(|_| SniEvent::AttentionIcon))
@@ -634,16 +654,22 @@ impl Watcher {
                 tracing::info!("Received SNI event {:?} for applet {}", event, id_clone);
                 let current_applet = {
                     let lock = items_clone.read().await;
-                    lock.get(&crate::features::applets::domain::AppletId::new(&id_clone)).cloned()
+                    lock.get(&crate::features::applets::domain::AppletId::new(&id_clone))
+                        .cloned()
                 };
-                
-                let Some(applet) = current_applet else { break; };
+
+                let Some(applet) = current_applet else {
+                    break;
+                };
 
                 let updated_applet = event.apply(applet, &proxy).await;
 
                 {
                     let mut lock = items_clone.write().await;
-                    lock.insert(crate::features::applets::domain::AppletId::new(&id_clone), updated_applet);
+                    lock.insert(
+                        crate::features::applets::domain::AppletId::new(&id_clone),
+                        updated_applet,
+                    );
                 }
                 Self::publish_state(&items_clone, &hub_clone).await;
             }
@@ -694,7 +720,10 @@ impl Watcher {
         removed
     }
 
-    async fn publish_state(items: &Arc<RwLock<BTreeMap<crate::features::applets::domain::AppletId, AppletItem>>>, hub: &Arc<SignalHub>) {
+    async fn publish_state(
+        items: &Arc<RwLock<BTreeMap<crate::features::applets::domain::AppletId, AppletItem>>>,
+        hub: &Arc<SignalHub>,
+    ) {
         let lock = items.read().await;
         let state = AppletsState::new(lock.clone());
         let _ = hub.applets_tx().send(state);
@@ -742,8 +771,7 @@ impl SniPort for SniAdapter {
                             .map(|n| n.as_str().is_empty())
                             .unwrap_or(true);
                     if is_unowned {
-                        Watcher::remove_by_destination(&items_clone, &hub_clone, args.name())
-                            .await;
+                        Watcher::remove_by_destination(&items_clone, &hub_clone, args.name()).await;
                     }
                 }
             }
@@ -804,7 +832,11 @@ impl SniPort for SniAdapter {
             )
             .await
             .map_err(|e: zbus::Error| {
-                error!("trigger_action: Failed to create D-Bus proxy for {}: {}", id.as_str(), e);
+                error!(
+                    "trigger_action: Failed to create D-Bus proxy for {}: {}",
+                    id.as_str(),
+                    e
+                );
                 SniPortError::ActionFailed {
                     id: id.as_str().to_string(),
                     error: e.to_string(),
@@ -816,20 +848,37 @@ impl SniPort for SniAdapter {
             match action.as_str() {
                 "Primary" => {
                     if applet.item_is_menu().value() {
-                        info!("trigger_action: item_is_menu=true, calling ContextMenu({}, {}) on D-Bus", x, y);
+                        info!(
+                            "trigger_action: item_is_menu=true, calling ContextMenu({}, {}) on D-Bus",
+                            x, y
+                        );
                         match proxy.call_method("ContextMenu", &(x, y)).await {
                             Ok(_) => info!("trigger_action: ContextMenu({}, {}) succeeded", x, y),
-                            Err(e) => error!("trigger_action: ContextMenu({}, {}) failed: {}", x, y, e),
+                            Err(e) => {
+                                error!("trigger_action: ContextMenu({}, {}) failed: {}", x, y, e)
+                            }
                         }
                     } else {
-                        info!("trigger_action: item_is_menu=false, calling Activate({}, {}) on D-Bus", x, y);
+                        info!(
+                            "trigger_action: item_is_menu=false, calling Activate({}, {}) on D-Bus",
+                            x, y
+                        );
                         match proxy.call_method("Activate", &(x, y)).await {
                             Ok(_) => info!("trigger_action: Activate({}, {}) succeeded", x, y),
                             Err(e) => {
-                                warn!("trigger_action: Activate({}, {}) failed: {}, attempting SecondaryActivate({}, {})", x, y, e, x, y);
+                                warn!(
+                                    "trigger_action: Activate({}, {}) failed: {}, attempting SecondaryActivate({}, {})",
+                                    x, y, e, x, y
+                                );
                                 match proxy.call_method("SecondaryActivate", &(x, y)).await {
-                                    Ok(_) => info!("trigger_action: SecondaryActivate({}, {}) succeeded", x, y),
-                                    Err(e2) => error!("trigger_action: SecondaryActivate({}, {}) failed: {}", x, y, e2),
+                                    Ok(_) => info!(
+                                        "trigger_action: SecondaryActivate({}, {}) succeeded",
+                                        x, y
+                                    ),
+                                    Err(e2) => error!(
+                                        "trigger_action: SecondaryActivate({}, {}) failed: {}",
+                                        x, y, e2
+                                    ),
                                 }
                             }
                         }
@@ -843,10 +892,16 @@ impl SniPort for SniAdapter {
                     }
                 }
                 "SecondaryActivate" => {
-                    info!("trigger_action: Calling SecondaryActivate({}, {}) on D-Bus", x, y);
+                    info!(
+                        "trigger_action: Calling SecondaryActivate({}, {}) on D-Bus",
+                        x, y
+                    );
                     match proxy.call_method("SecondaryActivate", &(x, y)).await {
                         Ok(_) => info!("trigger_action: SecondaryActivate({}, {}) succeeded", x, y),
-                        Err(e) => error!("trigger_action: SecondaryActivate({}, {}) failed: {}", x, y, e),
+                        Err(e) => error!(
+                            "trigger_action: SecondaryActivate({}, {}) failed: {}",
+                            x, y, e
+                        ),
                     }
                 }
                 "ContextMenu" => {
@@ -890,10 +945,18 @@ impl SniPort for SniAdapter {
             }
         } else {
             if lock.is_none() {
-                error!("trigger_action: No D-Bus connection available when trying to trigger action '{}' on {}", action.as_str(), id.as_str());
+                error!(
+                    "trigger_action: No D-Bus connection available when trying to trigger action '{}' on {}",
+                    action.as_str(),
+                    id.as_str()
+                );
             }
             if items_lock.get(id).is_none() {
-                error!("trigger_action: Applet ID '{}' not found in registry when trying to trigger action '{}'", id.as_str(), action.as_str());
+                error!(
+                    "trigger_action: Applet ID '{}' not found in registry when trying to trigger action '{}'",
+                    id.as_str(),
+                    action.as_str()
+                );
             }
         }
         Ok(())
@@ -1028,4 +1091,3 @@ mod tests {
         assert_eq!(tooltip.description().as_str(), "Description\nLine 2");
     }
 }
-

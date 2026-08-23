@@ -119,8 +119,6 @@ impl Config {
     pub fn metrics(&self) -> &crate::features::metrics::domain::MetricsConfig {
         &self.metrics
     }
-
-
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -159,14 +157,30 @@ impl TooltipConfig {
         }
     }
 
-    pub fn background(&self) -> &DrawingColor { &self.background }
-    pub fn border_color(&self) -> &DrawingColor { &self.border_color }
-    pub fn text_color(&self) -> &DrawingColor { &self.text_color }
-    pub fn font(&self) -> Option<&FontFamily> { self.font.as_ref() }
-    pub fn size(&self) -> Option<FontSize> { self.size }
-    pub fn radius(&self) -> BorderRadius { self.radius }
-    pub fn border_width(&self) -> BorderSize { self.border_width }
-    pub fn padding(&self) -> PaddingOffset { self.padding }
+    pub fn background(&self) -> &DrawingColor {
+        &self.background
+    }
+    pub fn border_color(&self) -> &DrawingColor {
+        &self.border_color
+    }
+    pub fn text_color(&self) -> &DrawingColor {
+        &self.text_color
+    }
+    pub fn font(&self) -> Option<&FontFamily> {
+        self.font.as_ref()
+    }
+    pub fn size(&self) -> Option<FontSize> {
+        self.size
+    }
+    pub fn radius(&self) -> BorderRadius {
+        self.radius
+    }
+    pub fn border_width(&self) -> BorderSize {
+        self.border_width
+    }
+    pub fn padding(&self) -> PaddingOffset {
+        self.padding
+    }
 }
 
 impl Default for TooltipConfig {
@@ -193,7 +207,9 @@ impl Default for RenderingMode {
 impl Default for BarConfig {
     fn default() -> Self {
         Self {
-            background: DrawingColor::Solid(crate::shared::primitives::color::Color::new(0, 0, 0, 255)),
+            background: DrawingColor::Solid(crate::shared::primitives::color::Color::new(
+                0, 0, 0, 255,
+            )),
             height: BarHeight::new(30),
             vertical_alignment: VerticalAlignment::default(),
             border: BorderConfig::default(),
@@ -309,16 +325,36 @@ impl CreateBarConfigCommand {
         }
     }
 
-    pub fn background(&self) -> &DrawingColor { &self.background }
-    pub fn height(&self) -> BarHeight { self.height }
-    pub fn vertical_alignment(&self) -> VerticalAlignment { self.vertical_alignment }
-    pub fn border(&self) -> &BorderConfig { &self.border }
-    pub fn margin(&self) -> &MarginConfig { &self.margin }
-    pub fn padding(&self) -> &PaddingConfig { &self.padding }
-    pub fn module_gap(&self) -> ModuleGap { self.module_gap }
-    pub fn font_family(&self) -> &FontFamily { &self.font_family }
-    pub fn font_size(&self) -> FontSize { self.font_size }
-    pub fn unfocused(&self) -> Option<&PartialBarConfig> { self.unfocused.as_ref() }
+    pub fn background(&self) -> &DrawingColor {
+        &self.background
+    }
+    pub fn height(&self) -> BarHeight {
+        self.height
+    }
+    pub fn vertical_alignment(&self) -> VerticalAlignment {
+        self.vertical_alignment
+    }
+    pub fn border(&self) -> &BorderConfig {
+        &self.border
+    }
+    pub fn margin(&self) -> &MarginConfig {
+        &self.margin
+    }
+    pub fn padding(&self) -> &PaddingConfig {
+        &self.padding
+    }
+    pub fn module_gap(&self) -> ModuleGap {
+        self.module_gap
+    }
+    pub fn font_family(&self) -> &FontFamily {
+        &self.font_family
+    }
+    pub fn font_size(&self) -> FontSize {
+        self.font_size
+    }
+    pub fn unfocused(&self) -> Option<&PartialBarConfig> {
+        self.unfocused.as_ref()
+    }
 }
 
 impl BarConfig {
@@ -800,7 +836,6 @@ pub struct PartialBarConfig {
     font_size: Option<FontSize>,
 }
 
-
 pub struct CreatePartialBarConfigCommand {
     background: Option<DrawingColor>,
     height: Option<BarHeight>,
@@ -839,15 +874,33 @@ impl CreatePartialBarConfigCommand {
         }
     }
 
-    pub fn background(&self) -> Option<&DrawingColor> { self.background.as_ref() }
-    pub fn height(&self) -> Option<BarHeight> { self.height }
-    pub fn vertical_alignment(&self) -> Option<VerticalAlignment> { self.vertical_alignment }
-    pub fn border(&self) -> Option<&PartialBorderConfig> { self.border.as_ref() }
-    pub fn margin(&self) -> Option<&PartialMarginConfig> { self.margin.as_ref() }
-    pub fn padding(&self) -> Option<&PartialPaddingConfig> { self.padding.as_ref() }
-    pub fn module_gap(&self) -> Option<ModuleGap> { self.module_gap }
-    pub fn font_family(&self) -> Option<&FontFamily> { self.font_family.as_ref() }
-    pub fn font_size(&self) -> Option<FontSize> { self.font_size }
+    pub fn background(&self) -> Option<&DrawingColor> {
+        self.background.as_ref()
+    }
+    pub fn height(&self) -> Option<BarHeight> {
+        self.height
+    }
+    pub fn vertical_alignment(&self) -> Option<VerticalAlignment> {
+        self.vertical_alignment
+    }
+    pub fn border(&self) -> Option<&PartialBorderConfig> {
+        self.border.as_ref()
+    }
+    pub fn margin(&self) -> Option<&PartialMarginConfig> {
+        self.margin.as_ref()
+    }
+    pub fn padding(&self) -> Option<&PartialPaddingConfig> {
+        self.padding.as_ref()
+    }
+    pub fn module_gap(&self) -> Option<ModuleGap> {
+        self.module_gap
+    }
+    pub fn font_family(&self) -> Option<&FontFamily> {
+        self.font_family.as_ref()
+    }
+    pub fn font_size(&self) -> Option<FontSize> {
+        self.font_size
+    }
 }
 
 impl PartialBarConfig {
@@ -1012,7 +1065,10 @@ mod tests {
         let explicit = EngineSelection::Explicit(EngineId::new("rhai"));
         let cfg = ModuleConfig::new("hour".into(), true, explicit.clone(), HashMap::new());
         assert_eq!(cfg.engine(), &explicit);
-        assert_eq!(cfg.engine().as_explicit().map(|id| id.as_str()), Some("rhai"));
+        assert_eq!(
+            cfg.engine().as_explicit().map(|id| id.as_str()),
+            Some("rhai")
+        );
         assert!(!cfg.engine().is_auto());
         assert_eq!(cfg.name(), "hour");
         assert!(cfg.is_enabled());

@@ -68,7 +68,13 @@ fn safe_borrowed_fd_from_file(file: &File) -> BorrowedFd<'_> {
 }
 
 impl ShmBuffer {
-    pub fn new<S>(shm_proxy: &WlShm, width: u32, height: u32, qh: &QueueHandle<S>, xdg_runtime_dir: &std::path::Path) -> Result<Self>
+    pub fn new<S>(
+        shm_proxy: &WlShm,
+        width: u32,
+        height: u32,
+        qh: &QueueHandle<S>,
+        xdg_runtime_dir: &std::path::Path,
+    ) -> Result<Self>
     where
         S: wayland_client::Dispatch<wayland_client::protocol::wl_shm_pool::WlShmPool, ()>
             + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, ()>

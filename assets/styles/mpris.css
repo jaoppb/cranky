@@ -1,0 +1,40 @@
+.container {
+    gap: 6px;
+    align-items: center;
+}
+
+.btn, .btn-play, .btn-prev, .btn-next, .btn-cycle {
+    padding: 2px 6px;
+    border-radius: 4px;
+    background-color: #313244;
+    color: #c0caf5;
+    justify-content: center;
+    align-items: center;
+}
+
+.btn:hover, .btn-play:hover, .btn-prev:hover, .btn-next:hover, .btn-cycle:hover {
+    background-color: #414868;
+}
+
+.btn-play {
+    color: #7aa2f7;
+}
+
+.track-info {
+    padding: 2px 8px;
+    border-radius: 4px;
+    background-color: #1e1e2e;
+    color: #c0caf5;
+    justify-content: center;
+    align-items: center;
+}
+
+.title {
+    font-size: 13px;
+    color: #7dcfff;
+}
+
+.artist {
+    font-size: 12px;
+    color: #9ece6a;
+}

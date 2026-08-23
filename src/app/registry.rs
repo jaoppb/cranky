@@ -15,6 +15,13 @@ use std::collections::HashMap;
 
 use crate::app::builtins;
 
+use crate::features::styling::adapters::fs_loader::{CompositeStyleResolver, FsStyleLoader};
+use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
+use crate::features::styling::domain::StyleSheetName;
+use crate::features::styling::ports::CssParserPort;
+use crate::features::styling::ports::{ParsedStyleSheetPort, StyleLoaderPort, StyleResolverPort};
+use std::collections::HashSet;
+
 pub struct ModuleRegistry {
     modules: HashMap<ModuleId, Box<dyn AnyModulePort>>,
     module_configs: HashMap<ModuleId, ModuleConfig>,
@@ -22,11 +29,15 @@ pub struct ModuleRegistry {
     center_modules: Vec<ModuleId>,
     right_modules: Vec<ModuleId>,
     dbus_subscriptions: Vec<crate::shared::dbus::domain::DBusSubscription>,
+    style_to_modules: HashMap<StyleSheetName, HashSet<crate::shared::primitives::ModuleName>>,
     app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
 }
 
 impl ModuleRegistry {
     pub fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
+        let loader = FsStyleLoader::new(app_env.clone());
+        let _ = loader.ensure_builtin_styles();
+
         Self {
             modules: HashMap::new(),
             module_configs: HashMap::new(),
@@ -34,8 +45,48 @@ impl ModuleRegistry {
             center_modules: Vec::new(),
             right_modules: Vec::new(),
             dbus_subscriptions: Vec::new(),
+            style_to_modules: HashMap::new(),
             app_env,
         }
+    }
+
+    pub fn modules_using_style(
+        &self,
+        sheet: &StyleSheetName,
+    ) -> Vec<crate::shared::primitives::ModuleName> {
+        self.style_to_modules
+            .get(sheet)
+            .map(|set| set.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    pub fn create_style_resolver_for_module(
+        &self,
+        styles: &[StyleSheetName],
+    ) -> std::sync::Arc<dyn StyleResolverPort> {
+        let loader = FsStyleLoader::new(self.app_env.clone());
+        let parser = LightningCssAdapter::new();
+        let mut parsed_sheets: Vec<Box<dyn ParsedStyleSheetPort>> = Vec::new();
+
+        tracing::debug!(requested_styles = ?styles.iter().map(|s| s.as_str()).collect::<Vec<_>>(), "Creating composite style resolver for module");
+
+        // 1. Always load base.css first if available
+        if let Ok(base_name) = StyleSheetName::new("base")
+            && let Ok(base_css) = loader.load_stylesheet(&base_name)
+                && let Ok(sheet) = parser.parse_stylesheet(base_name, &base_css) {
+                    parsed_sheets.push(sheet);
+                }
+
+        // 2. Load module stylesheets
+        for style_name in styles {
+            if style_name.as_str() != "base"
+                && let Ok(css) = loader.load_stylesheet(style_name)
+                    && let Ok(sheet) = parser.parse_stylesheet(style_name.clone(), &css) {
+                        parsed_sheets.push(sheet);
+                    }
+        }
+
+        std::sync::Arc::new(CompositeStyleResolver::new(parsed_sheets))
     }
 
     fn load_section(
@@ -44,8 +95,8 @@ impl ModuleRegistry {
         full_config: &crate::shared::config::domain::Config,
         next_id: &mut u32,
     ) -> Result<Vec<ModuleId>, crate::features::module_runtime::ports::RegistryLoadError> {
-        use crate::features::module_runtime::ports::RegistryLoadError;
         use crate::app::builtins::BuiltinError;
+        use crate::features::module_runtime::ports::RegistryLoadError;
 
         configs
             .iter()
@@ -54,12 +105,24 @@ impl ModuleRegistry {
                 let id = ModuleId::new(*next_id);
                 *next_id += 1;
 
-                let mut module = builtins::BuiltinModules::find_module(config.name(), config.engine(), &self.app_env)
-                    .map_err(|e| match e {
-                        BuiltinError::ModuleNotFound { module_name, .. } => RegistryLoadError::ModuleNotFound(module_name),
-                        BuiltinError::UnsupportedEngine { engine, module_name } => RegistryLoadError::UnsupportedEngine { engine, module_name },
-                        BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
-                    })?;
+                let mut module = builtins::BuiltinModules::find_module(
+                    config.name(),
+                    config.engine(),
+                    &self.app_env,
+                )
+                .map_err(|e| match e {
+                    BuiltinError::ModuleNotFound { module_name, .. } => {
+                        RegistryLoadError::ModuleNotFound(module_name)
+                    }
+                    BuiltinError::UnsupportedEngine {
+                        engine,
+                        module_name,
+                    } => RegistryLoadError::UnsupportedEngine {
+                        engine,
+                        module_name,
+                    },
+                    BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
+                })?;
 
                 module
                     .init(config, full_config)
@@ -72,6 +135,21 @@ impl ModuleRegistry {
                     if let crate::shared::events::signals::SignalKind::DBus(sub) = kind {
                         self.dbus_subscriptions.push(sub.clone());
                     }
+                }
+
+                let mod_styles = module.styles();
+                tracing::debug!(
+                    module = %config.name().as_str(),
+                    id = %id,
+                    styles = ?mod_styles.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                    "Registered module style dependencies"
+                );
+
+                for style_name in mod_styles {
+                    self.style_to_modules
+                        .entry(style_name.clone())
+                        .or_default()
+                        .insert(config.name().clone());
                 }
 
                 self.module_configs.insert(id, config.clone());
@@ -119,17 +197,17 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
         &self.right_modules
     }
 
-    fn load(&mut self, config: &crate::shared::config::domain::Config) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
+    fn load(
+        &mut self,
+        config: &crate::shared::config::domain::Config,
+    ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
         self.modules.clear();
         self.dbus_subscriptions.clear();
         let mut next_id = 0;
 
-        self.left_modules = self
-            .load_section(config.modules().left(), config, &mut next_id)?;
-        self.center_modules = self
-            .load_section(config.modules().center(), config, &mut next_id)?;
-        self.right_modules = self
-            .load_section(config.modules().right(), config, &mut next_id)?;
+        self.left_modules = self.load_section(config.modules().left(), config, &mut next_id)?;
+        self.center_modules = self.load_section(config.modules().center(), config, &mut next_id)?;
+        self.right_modules = self.load_section(config.modules().right(), config, &mut next_id)?;
 
         Ok(())
     }
@@ -162,10 +240,13 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
                 layout_rx,
             );
 
+            let style_resolver = self.create_style_resolver_for_module(module.styles());
+
             crate::features::module_runtime::application::ModuleActor::new(
                 module,
                 ctx,
                 canvas_factory.clone(),
+                style_resolver,
             )
             .spawn();
         }
@@ -181,30 +262,60 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
         surface_manager: crate::shared::wayland::ports::DynSurfaceManager,
         command_tx: std::sync::Arc<dyn crate::features::module_runtime::ports::CommandSender>,
         canvas_factory: std::sync::Arc<std::sync::Mutex<Fact>>,
-    ) -> Result<std::collections::HashMap<ModuleId, Box<dyn crate::features::module_runtime::ports::LayoutSender>>, crate::features::module_runtime::ports::RegistryLoadError> {
-        use crate::features::module_runtime::ports::RegistryLoadError;
+    ) -> Result<
+        std::collections::HashMap<
+            ModuleId,
+            Box<dyn crate::features::module_runtime::ports::LayoutSender>,
+        >,
+        crate::features::module_runtime::ports::RegistryLoadError,
+    > {
         use crate::app::builtins::BuiltinError;
+        use crate::features::module_runtime::ports::RegistryLoadError;
 
-        let mut new_senders: std::collections::HashMap<ModuleId, Box<dyn crate::features::module_runtime::ports::LayoutSender>> = std::collections::HashMap::new();
-        let target_ids: Vec<ModuleId> = self.module_configs.iter()
+        let mut new_senders: std::collections::HashMap<
+            ModuleId,
+            Box<dyn crate::features::module_runtime::ports::LayoutSender>,
+        > = std::collections::HashMap::new();
+        let target_ids: Vec<ModuleId> = self
+            .module_configs
+            .iter()
             .filter(|(_, cfg)| cfg.name() == name)
             .map(|(id, _)| *id)
             .collect();
 
         for id in target_ids {
             let cfg = self.module_configs.get(&id).unwrap();
-            let mut module = builtins::BuiltinModules::find_module(cfg.name(), cfg.engine(), &self.app_env)
-                .map_err(|e| match e {
-                    BuiltinError::ModuleNotFound { module_name, .. } => RegistryLoadError::ModuleNotFound(module_name),
-                    BuiltinError::UnsupportedEngine { engine, module_name } => RegistryLoadError::UnsupportedEngine { engine, module_name },
-                    BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
-                })?;
+            let mut module =
+                builtins::BuiltinModules::find_module(cfg.name(), cfg.engine(), &self.app_env)
+                    .map_err(|e| match e {
+                        BuiltinError::ModuleNotFound { module_name, .. } => {
+                            RegistryLoadError::ModuleNotFound(module_name)
+                        }
+                        BuiltinError::UnsupportedEngine {
+                            engine,
+                            module_name,
+                        } => RegistryLoadError::UnsupportedEngine {
+                            engine,
+                            module_name,
+                        },
+                        BuiltinError::Env(e) | BuiltinError::Io(e) => {
+                            RegistryLoadError::Internal(e)
+                        }
+                    })?;
 
-            module.init(cfg, config)
+            module
+                .init(cfg, config)
                 .map_err(|e| RegistryLoadError::ModuleInit {
                     module_name: cfg.name().clone(),
                     source: e,
                 })?;
+
+            for style_name in module.styles() {
+                self.style_to_modules
+                    .entry(style_name.clone())
+                    .or_default()
+                    .insert(cfg.name().clone());
+            }
 
             let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
             new_senders.insert(id, Box::new(WatchLayoutSender { tx: layout_tx }));
@@ -217,15 +328,25 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
                 layout_rx,
             );
 
+            let style_resolver = self.create_style_resolver_for_module(module.styles());
+
             crate::features::module_runtime::application::ModuleActor::new(
                 module,
                 ctx,
                 canvas_factory.clone(),
+                style_resolver,
             )
             .spawn();
         }
 
         Ok(new_senders)
+    }
+
+    fn modules_using_style(
+        &self,
+        sheet: &StyleSheetName,
+    ) -> Vec<crate::shared::primitives::ModuleName> {
+        self.modules_using_style(sheet)
     }
 
     fn clear(&mut self) {
@@ -235,6 +356,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
         self.center_modules.clear();
         self.right_modules.clear();
         self.dbus_subscriptions.clear();
+        self.style_to_modules.clear();
     }
 
     async fn register_dbus_subscriptions(
@@ -347,7 +469,10 @@ mod tests {
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
         >::load(&mut registry, &config);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), crate::features::module_runtime::ports::RegistryLoadError::ModuleNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            crate::features::module_runtime::ports::RegistryLoadError::ModuleNotFound(_)
+        ));
     }
 
     #[test]
@@ -407,9 +532,14 @@ mod tests {
         >::load(&mut registry, &config)
         .unwrap();
 
-        let hub = std::sync::Arc::new(crate::shared::events::signals::SignalHub::new(config.clone()));
+        let hub = std::sync::Arc::new(crate::shared::events::signals::SignalHub::new(
+            config.clone(),
+        ));
         let mock_conn = crate::shared::dbus::ports::MockDbusConnectionPort::new();
-        let mut mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(std::sync::Arc::new(mock_conn), &hub);
+        let mut mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
+            std::sync::Arc::new(mock_conn),
+            &hub,
+        );
         crate::features::module_runtime::ports::ModuleRegistryPort::<
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
         >::register_dbus_subscriptions(&registry, &mut mock_dbus)

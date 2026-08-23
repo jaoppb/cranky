@@ -1,6 +1,6 @@
-use crate::shared::config::domain::{EngineId, FileExtension};
 use crate::app::registry::ModuleError;
 use crate::features::module_runtime::ports::AnyModulePort;
+use crate::shared::config::domain::{EngineId, FileExtension};
 
 pub trait ScriptEnginePort: Send + Sync {
     fn id(&self) -> EngineId;

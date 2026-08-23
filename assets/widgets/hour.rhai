@@ -1,22 +1,17 @@
 let format_str = "%H:%M:%S";
 let time_str = "";
-let text_color = "#c0caf5";
-let font_val = ();
-let size_val = ();
-let tooltip_val = ();
 let on_click_val = ();
 
 fn init() {
     if "format" in config { format_str = config["format"]; }
-    if "color" in config { text_color = config["color"]; }
-    if "font" in config { font_val = config["font"]; }
-    if "size" in config { size_val = config["size"]; }
-    if "tooltip" in config { tooltip_val = config["tooltip"]; }
     if "on_click" in config { on_click_val = #{ Exec: config["on_click"] }; }
 }
 
-fn subscriptions() {
-    ["time"]
+fn metadata() {
+    #{
+        subscriptions: ["time"],
+        styles: ["hour"]
+    }
 }
 
 fn refresh() {
@@ -61,12 +56,9 @@ fn refresh() {
 fn render(monitor_id) {
     let node = #{
         type: "text",
-        text: time_str,
-        color: text_color
+        class: "time",
+        text: time_str
     };
-    if font_val != () { node.font = font_val; }
-    if size_val != () { node.size = size_val; }
-    if tooltip_val != () { node.tooltip = tooltip_val; }
     if on_click_val != () { node.on_click = on_click_val; }
     node
 }

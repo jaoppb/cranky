@@ -3,15 +3,15 @@ use crate::shared::wayland::ports::DisplayServerPort;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::wayland::ports::DisplayServerError;
 
-use crate::shared::rendering::adapters::tiny_skia::TinySkiaCosmicCanvas;
-use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::primitives::geometry::{LogicalPx, Scale};
+use crate::shared::rendering::adapters::tiny_skia::TinySkiaCosmicCanvas;
 use crate::shared::rendering::ports::canvas::Canvas;
-use tiny_skia::PixmapMut;
+use crate::shared::wayland::adapters::shm::ShmBuffer;
 use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
+use tiny_skia::PixmapMut;
 use tokio::io::unix::AsyncFd;
-use tracing::{info, debug, info_span};
+use tracing::{debug, info, info_span};
 
 use cosmic_text::{FontSystem, SwashCache};
 use std::collections::HashMap;
@@ -38,8 +38,8 @@ use wayland_protocols::xdg::shell::client::{
     xdg_wm_base::XdgWmBase,
 };
 use wayland_protocols_wlr::layer_shell::v1::client::{
-    zwlr_layer_shell_v1::{ZwlrLayerShellV1, Layer}, 
-    zwlr_layer_surface_v1::{self, ZwlrLayerSurfaceV1, Anchor},
+    zwlr_layer_shell_v1::{Layer, ZwlrLayerShellV1},
+    zwlr_layer_surface_v1::{self, Anchor, ZwlrLayerSurfaceV1},
 };
 
 use crate::shared::wayland::ports::SurfaceManagerPort;
@@ -73,15 +73,33 @@ impl SurfaceCommand {
         }
     }
 
-    pub fn module_id(&self) -> crate::shared::primitives::ModuleId { self.module_id }
-    pub fn monitor_id(&self) -> &crate::shared::primitives::MonitorId { &self.monitor_id }
-    pub fn position(&self) -> crate::shared::primitives::geometry::Position { self.position }
-    pub fn buffer(&self) -> &crate::shared::primitives::render::RenderBuffer { &self.buffer }
+    pub fn module_id(&self) -> crate::shared::primitives::ModuleId {
+        self.module_id
+    }
+    pub fn monitor_id(&self) -> &crate::shared::primitives::MonitorId {
+        &self.monitor_id
+    }
+    pub fn position(&self) -> crate::shared::primitives::geometry::Position {
+        self.position
+    }
+    pub fn buffer(&self) -> &crate::shared::primitives::render::RenderBuffer {
+        &self.buffer
+    }
 }
 
 #[derive(Clone)]
 pub struct WaylandSurfaceManager {
-    pending_surfaces: Arc<Mutex<HashMap<(crate::shared::primitives::ModuleId, crate::shared::primitives::MonitorId), SurfaceCommand>>>,
+    pending_surfaces: Arc<
+        Mutex<
+            HashMap<
+                (
+                    crate::shared::primitives::ModuleId,
+                    crate::shared::primitives::MonitorId,
+                ),
+                SurfaceCommand,
+            >,
+        >,
+    >,
     notify_tx: tokio::sync::mpsc::Sender<()>,
 }
 
@@ -98,12 +116,7 @@ impl SurfaceManagerPort for WaylandSurfaceManager {
             let mut map = self.pending_surfaces.lock().unwrap();
             map.insert(
                 (module_id, monitor_id.clone()),
-                SurfaceCommand::new(
-                    module_id,
-                    monitor_id,
-                    position,
-                    buffer,
-                ),
+                SurfaceCommand::new(module_id, monitor_id, position, buffer),
             );
         }
         let _ = self.notify_tx.try_send(());
@@ -115,7 +128,17 @@ pub struct WaylandAdapter {
     event_queue: EventQueue<WaylandState>,
     state: WaylandState,
     async_fd: AsyncFd<WaylandFd>,
-    pending_surfaces: Arc<Mutex<HashMap<(crate::shared::primitives::ModuleId, crate::shared::primitives::MonitorId), SurfaceCommand>>>,
+    pending_surfaces: Arc<
+        Mutex<
+            HashMap<
+                (
+                    crate::shared::primitives::ModuleId,
+                    crate::shared::primitives::MonitorId,
+                ),
+                SurfaceCommand,
+            >,
+        >,
+    >,
     notify_rx: tokio::sync::mpsc::Receiver<()>,
     config_rx: tokio::sync::watch::Receiver<crate::shared::config::domain::Config>,
 }
@@ -134,7 +157,13 @@ pub struct WaylandState {
 
     command_tx: tokio::sync::mpsc::Sender<crate::app::commands::AppCommand>,
 
-    surface_to_id: HashMap<WlSurface, (crate::shared::primitives::ModuleId, crate::shared::primitives::MonitorId)>,
+    surface_to_id: HashMap<
+        WlSurface,
+        (
+            crate::shared::primitives::ModuleId,
+            crate::shared::primitives::MonitorId,
+        ),
+    >,
     pointer_surface: Option<WlSurface>,
     pointer_pos: (f64, f64),
 
@@ -150,7 +179,7 @@ struct TooltipSurface {
     xdg_popup: XdgPopup,
     shm_buffer: ShmBuffer,
     size: crate::shared::primitives::geometry::Size,
-    layout: crate::features::layout_engine::domain::LayoutNode,
+    layout: crate::features::layout_engine::domain::StyledNode,
     reposition_token: u32,
 }
 
@@ -361,7 +390,10 @@ impl DisplayServerPort for WaylandAdapter {
         self.render_all_outputs(read_model, layout_senders, &qh)
     }
 
-    fn show_tooltip(&mut self, layout: crate::features::layout_engine::domain::LayoutNode) -> Result<(), DisplayServerError> {
+    fn show_tooltip(
+        &mut self,
+        layout: crate::features::layout_engine::domain::StyledNode,
+    ) -> Result<(), DisplayServerError> {
         tracing::debug!("Requested show_tooltip");
         if let Some(tooltip) = &self.state.tooltip
             && tooltip.layout == layout
@@ -433,7 +465,9 @@ impl DisplayServerPort for WaylandAdapter {
         }
 
         if output_name.is_empty() {
-            tracing::debug!("show_tooltip skipped: output_name is empty (parent_surface not found in bars)");
+            tracing::debug!(
+                "show_tooltip skipped: output_name is empty (parent_surface not found in bars)"
+            );
             return Ok(());
         }
 
@@ -453,27 +487,39 @@ impl DisplayServerPort for WaylandAdapter {
         let scale = Scale::new(bar_scale as f32);
 
         let (text_w, text_h, render_node) = {
-            let mut measurer = crate::shared::rendering::adapters::tiny_skia::CosmicTextMeasurer::new(
-                &mut state.font_system,
-                scale,
-                font_family.clone(),
-                font_size,
-            );
-            
+            let mut measurer =
+                crate::shared::rendering::adapters::tiny_skia::CosmicTextMeasurer::new(
+                    &mut state.font_system,
+                    scale,
+                    font_family.clone(),
+                    font_size,
+                );
+
             use crate::features::layout_engine::ports::LayoutEnginePort;
-            let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
-            if let Ok(render_node) = engine.calculate_layout(layout.clone(), &mut measurer, crate::shared::primitives::geometry::Position::new(0, 0)) {
+            let mut engine =
+                crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
+            if let Ok(render_node) = engine.calculate_layout(
+                layout.clone(),
+                &mut measurer,
+                crate::shared::primitives::geometry::Position::new(0, 0),
+            ) {
                 let rect = render_node.rect();
                 (rect.width() as i32, rect.height() as i32, render_node)
             } else {
-                (1, 1, crate::features::layout_engine::domain::RenderNode::Rect {
-                    rect: crate::shared::primitives::geometry::Rect::new(crate::shared::primitives::geometry::Position::new(0, 0), crate::shared::primitives::geometry::Size::new(1, 1)),
-                    color: crate::shared::primitives::color::DrawingColor::Solid(crate::shared::primitives::color::Color::new(0, 0, 0, 255)),
-                    radius: None,
-                    on_click: None,
-                    on_hover: None,
-                    tooltip: None,
-                })
+                (
+                    1,
+                    1,
+                    crate::features::layout_engine::domain::RenderNode::Rect {
+                        rect: crate::shared::primitives::geometry::Rect::new(
+                            crate::shared::primitives::geometry::Position::new(0, 0),
+                            crate::shared::primitives::geometry::Size::new(1, 1),
+                        ),
+                        style: crate::features::styling::domain::ComputedStyle::default(),
+                        on_click: None,
+                        on_hover: None,
+                        tooltip: None,
+                    },
+                )
             }
         };
 
@@ -499,15 +545,25 @@ impl DisplayServerPort for WaylandAdapter {
                     render_node.render_to_canvas(&mut actual_canvas);
                 }
                 tooltip.layout = layout;
-                tooltip.surface.attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
-                tooltip.surface.damage_buffer(0, 0, width as i32, height as i32);
+                tooltip
+                    .surface
+                    .attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
+                tooltip
+                    .surface
+                    .damage_buffer(0, 0, width as i32, height as i32);
                 tooltip.surface.commit();
                 tracing::debug!(size = ?new_size, "Redrew tooltip in-place (same Size VO)");
                 return Ok(());
             } else {
                 let qh = self.event_queue.handle();
-                let mut new_shm_buffer = ShmBuffer::new(shm, width, height, &qh, state.app_env.xdg_runtime_dir().as_path())
-                    .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
+                let mut new_shm_buffer = ShmBuffer::new(
+                    shm,
+                    width,
+                    height,
+                    &qh,
+                    state.app_env.xdg_runtime_dir().as_path(),
+                )
+                .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
                 let data = new_shm_buffer.mmap_mut();
                 if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(data, width, height) {
                     let mut actual_canvas = TinySkiaCosmicCanvas::new(
@@ -523,21 +579,31 @@ impl DisplayServerPort for WaylandAdapter {
                 let positioner = xdg_wm_base.create_positioner(&qh, ());
                 positioner.set_size(width as i32, height as i32);
                 positioner.set_anchor_rect(pointer_x as i32, bar_height as i32, 1, 1);
-                positioner.set_anchor(wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom);
-                positioner.set_gravity(wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::Bottom);
+                positioner.set_anchor(
+                    wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom,
+                );
+                positioner.set_gravity(
+                    wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::Bottom,
+                );
                 positioner.set_constraint_adjustment(
                     wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideX |
                     wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideY |
                     wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::FlipY
                 );
                 tooltip.reposition_token = tooltip.reposition_token.wrapping_add(1);
-                tooltip.xdg_popup.reposition(&positioner, tooltip.reposition_token);
+                tooltip
+                    .xdg_popup
+                    .reposition(&positioner, tooltip.reposition_token);
                 positioner.destroy();
                 tooltip.shm_buffer = new_shm_buffer;
                 tooltip.size = new_size;
                 tooltip.layout = layout;
-                tooltip.surface.attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
-                tooltip.surface.damage_buffer(0, 0, width as i32, height as i32);
+                tooltip
+                    .surface
+                    .attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
+                tooltip
+                    .surface
+                    .damage_buffer(0, 0, width as i32, height as i32);
                 tooltip.surface.commit();
                 tracing::debug!(size = ?new_size, token = tooltip.reposition_token, "Redrew and repositioned tooltip in-place (new Size VO)");
                 return Ok(());
@@ -545,8 +611,14 @@ impl DisplayServerPort for WaylandAdapter {
         }
 
         let qh = self.event_queue.handle();
-        let mut shm_buffer = ShmBuffer::new(shm, width, height, &qh, state.app_env.xdg_runtime_dir().as_path())
-            .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
+        let mut shm_buffer = ShmBuffer::new(
+            shm,
+            width,
+            height,
+            &qh,
+            state.app_env.xdg_runtime_dir().as_path(),
+        )
+        .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
 
         {
             let data = shm_buffer.mmap_mut();
@@ -559,7 +631,7 @@ impl DisplayServerPort for WaylandAdapter {
                     font_family.clone(),
                     font_size,
                 );
-                
+
                 render_node.render_to_canvas(&mut actual_canvas);
             }
         }
@@ -580,7 +652,13 @@ impl DisplayServerPort for WaylandAdapter {
         let surface = compositor.create_surface(&qh, ());
         let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &qh, ());
         let xdg_popup = xdg_surface.get_popup(None, &positioner, &qh, ());
-        tracing::debug!(width, height, pointer_x, bar_height, "Creating tooltip surface");
+        tracing::debug!(
+            width,
+            height,
+            pointer_x,
+            bar_height,
+            "Creating tooltip surface"
+        );
 
         bar_layer_surface.get_popup(&xdg_popup);
 
@@ -613,7 +691,7 @@ impl DisplayServerPort for WaylandAdapter {
 }
 
 impl WaylandAdapter {
-        fn handle_surface_command(&mut self, cmd: SurfaceCommand) -> Result<(), DisplayServerError> {
+    fn handle_surface_command(&mut self, cmd: SurfaceCommand) -> Result<(), DisplayServerError> {
         let qh = self.event_queue.handle();
 
         let Some(compositor) = self.state.compositor.as_ref() else {
@@ -640,25 +718,34 @@ impl WaylandAdapter {
         let height = cmd.buffer().height().max(1);
 
         let mut new_surface_to_register = None;
-        let ms = bar.module_surfaces.entry(cmd.module_id()).or_insert_with(|| {
-            let surface = compositor.create_surface(&qh, ());
-            let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, &qh, ());
-            subsurface.set_desync();
+        let ms = bar
+            .module_surfaces
+            .entry(cmd.module_id())
+            .or_insert_with(|| {
+                let surface = compositor.create_surface(&qh, ());
+                let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, &qh, ());
+                subsurface.set_desync();
 
-            let shm_buffer =
-                ShmBuffer::new(shm, width, height, &qh, self.state.app_env.xdg_runtime_dir().as_path()).expect("Failed to create SHM buffer");
+                let shm_buffer = ShmBuffer::new(
+                    shm,
+                    width,
+                    height,
+                    &qh,
+                    self.state.app_env.xdg_runtime_dir().as_path(),
+                )
+                .expect("Failed to create SHM buffer");
 
-            new_surface_to_register = Some(surface.clone());
+                new_surface_to_register = Some(surface.clone());
 
-            ModuleSurface {
-                surface,
-                subsurface,
-                shm_buffer,
-                size: *cmd.buffer().size(),
-                x: 0,
-                y: 0,
-            }
-        });
+                ModuleSurface {
+                    surface,
+                    subsurface,
+                    shm_buffer,
+                    size: *cmd.buffer().size(),
+                    x: 0,
+                    y: 0,
+                }
+            });
 
         if let Some(surface) = new_surface_to_register {
             self.state
@@ -667,13 +754,20 @@ impl WaylandAdapter {
         }
 
         if ms.size != *cmd.buffer().size() {
-            ms.shm_buffer = ShmBuffer::new(shm, width, height, &qh, self.state.app_env.xdg_runtime_dir().as_path())
-                .expect("Failed to recreate SHM buffer for resize");
+            ms.shm_buffer = ShmBuffer::new(
+                shm,
+                width,
+                height,
+                &qh,
+                self.state.app_env.xdg_runtime_dir().as_path(),
+            )
+            .expect("Failed to recreate SHM buffer for resize");
             ms.size = *cmd.buffer().size();
         }
-        
+
         if ms.x != cmd.position().x() || ms.y != cmd.position().y() {
-            ms.subsurface.set_position(cmd.position().x(), cmd.position().y());
+            ms.subsurface
+                .set_position(cmd.position().x(), cmd.position().y());
             ms.x = cmd.position().x();
             ms.y = cmd.position().y();
         }
@@ -687,22 +781,23 @@ impl WaylandAdapter {
             .attach(Some(ms.shm_buffer.current_buffer()), 0, 0);
         ms.surface.damage_buffer(0, 0, width as i32, height as i32);
         ms.surface.commit();
-        
-        // Always commit the parent surface to ensure the compositor applies the subsurface 
-        // update, working around bugs in some compositors (like Hyprland/wlroots) where 
+
+        // Always commit the parent surface to ensure the compositor applies the subsurface
+        // update, working around bugs in some compositors (like Hyprland/wlroots) where
         // subsurface desync mode is ignored for layer shell surfaces.
         bar.surface.commit();
 
         ms.shm_buffer.swap_buffers();
-        
-        self.state
-            .surface_to_id
-            .insert(ms.surface.clone(), (cmd.module_id(), cmd.monitor_id().clone()));
+
+        self.state.surface_to_id.insert(
+            ms.surface.clone(),
+            (cmd.module_id(), cmd.monitor_id().clone()),
+        );
 
         Ok(())
     }
 
-        fn render_all_outputs(
+    fn render_all_outputs(
         &mut self,
         read_model: &crate::app::state::AppReadModel,
         layout_senders: &std::collections::HashMap<
@@ -745,7 +840,10 @@ impl WaylandAdapter {
 
         let mut all_layouts_by_module: std::collections::HashMap<
             crate::shared::primitives::ModuleId,
-            std::collections::HashMap<crate::shared::primitives::MonitorId, crate::shared::primitives::geometry::Rect>,
+            std::collections::HashMap<
+                crate::shared::primitives::MonitorId,
+                crate::shared::primitives::geometry::Rect,
+            >,
         > = std::collections::HashMap::new();
 
         for bar in bars {
@@ -762,7 +860,8 @@ impl WaylandAdapter {
             let physical_height = height * scale as u32;
 
             let pixmap_data = bar.shm_buffer.mmap_mut();
-            let Some(mut pixmap) = PixmapMut::from_bytes(pixmap_data, physical_width, physical_height)
+            let Some(mut pixmap) =
+                PixmapMut::from_bytes(pixmap_data, physical_width, physical_height)
             else {
                 tracing::error!("Failed to create pixmap for bar {}", bar.output_name);
                 continue;
@@ -774,7 +873,6 @@ impl WaylandAdapter {
                 .focused_monitor()
                 .is_some_and(|name| name.as_str() == bar.output_name);
 
-
             let mut bar_config = read_model.config().bar().clone();
             if !is_focused {
                 bar_config = bar_config.as_unfocused();
@@ -784,7 +882,8 @@ impl WaylandAdapter {
             let border_config = bar_config.border();
 
             // Check if hot-reload of height or margin is needed
-            if bar.config_height != bar_config.height().value() || bar.config_margin != *bar_config.margin()
+            if bar.config_height != bar_config.height().value()
+                || bar.config_margin != *bar_config.margin()
             {
                 debug!(
                     "Hot-reloading bar height/margin for output: {}",
@@ -830,7 +929,19 @@ impl WaylandAdapter {
                 config_bg,
                 LogicalPx::new(border_config.radius().value()),
             );
-            bar_canvas.draw_border(crate::shared::primitives::geometry::Position::new(half_border as i32, half_border as i32), crate::shared::primitives::geometry::Size::new((width as f32 - border_size) as u32, (height as f32 - border_size) as u32), border_config.color().clone(), LogicalPx::new(border_config.radius().value()), LogicalPx::new(border_size));
+            bar_canvas.draw_border(
+                crate::shared::primitives::geometry::Position::new(
+                    half_border as i32,
+                    half_border as i32,
+                ),
+                crate::shared::primitives::geometry::Size::new(
+                    (width as f32 - border_size) as u32,
+                    (height as f32 - border_size) as u32,
+                ),
+                border_config.color().clone(),
+                LogicalPx::new(border_config.radius().value()),
+                LogicalPx::new(border_size),
+            );
 
             // Calculate layout
             let monitor_id = crate::shared::primitives::MonitorId::new(&bar.output_name);
@@ -851,7 +962,6 @@ impl WaylandAdapter {
                     .insert(monitor_id.clone(), *layout.bounds());
             }
 
-
             // However, the display server must still position the subsurfaces correctly on the screen!
             for layout in layouts {
                 let module_id = layout.id();
@@ -867,14 +977,19 @@ impl WaylandAdapter {
 
                         let width = bounds.width().max(1);
                         let height = bounds.height().max(1);
-                        let shm_buffer =
-                            match crate::shared::wayland::adapters::shm::ShmBuffer::new(shm, width, height, qh, self.state.app_env.xdg_runtime_dir().as_path()) {
-                                Ok(b) => b,
-                                Err(e) => {
-                                    tracing::error!("Failed to create shm buffer: {}", e);
-                                    continue;
-                                }
-                            };
+                        let shm_buffer = match crate::shared::wayland::adapters::shm::ShmBuffer::new(
+                            shm,
+                            width,
+                            height,
+                            qh,
+                            self.state.app_env.xdg_runtime_dir().as_path(),
+                        ) {
+                            Ok(b) => b,
+                            Err(e) => {
+                                tracing::error!("Failed to create shm buffer: {}", e);
+                                continue;
+                            }
+                        };
 
                         v.insert(ModuleSurface {
                             surface,
@@ -915,11 +1030,10 @@ impl WaylandAdapter {
         let _ = self.connection.flush();
         Ok(())
     }
-
 }
 
 impl WaylandState {
-        fn create_bar(
+    fn create_bar(
         &mut self,
         output: &WlOutput,
         qh: &QueueHandle<Self>,
@@ -947,7 +1061,9 @@ impl WaylandState {
         let margin = bar_config.margin();
         info!(
             "Creating bar for output: {} (height: {}, scale: {})",
-            output_name, bar_height.value(), output_scale
+            output_name,
+            bar_height.value(),
+            output_scale
         );
 
         let compositor = self
@@ -987,8 +1103,9 @@ impl WaylandState {
             margin.bottom().value(),
             margin.left().value(),
         );
-        layer_surface
-            .set_exclusive_zone(bar_height.value() as i32 + margin.top().value() + margin.bottom().value());
+        layer_surface.set_exclusive_zone(
+            bar_height.value() as i32 + margin.top().value() + margin.bottom().value(),
+        );
         surface.set_buffer_scale(output_scale);
         surface.commit();
 
@@ -997,8 +1114,9 @@ impl WaylandState {
             1920,
             bar_height.value(),
             qh,
-            self.app_env.xdg_runtime_dir().as_path()
-        ).expect("Failed to create SHM buffer");
+            self.app_env.xdg_runtime_dir().as_path(),
+        )
+        .expect("Failed to create SHM buffer");
 
         self.bars.push(WaylandBar {
             output_name,
@@ -1016,7 +1134,6 @@ impl WaylandState {
 
         Ok(())
     }
-
 }
 
 impl Dispatch<WlRegistry, ()> for WaylandState {
@@ -1033,32 +1150,34 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                 name,
                 interface,
                 version,
-            } => {
-                match interface.as_str() {
-                    "wl_compositor" => state.compositor = Some(proxy.bind(name, version, qh, ())),
-                    "wl_shm" => state.shm = Some(proxy.bind(name, version, qh, ())),
-                    "zwlr_layer_shell_v1" => {
-                        state.layer_shell = Some(proxy.bind(name, version, qh, ()))
-                    }
-                    "xdg_wm_base" => state.xdg_wm_base = Some(proxy.bind(name, u32::min(version, 5), qh, ())),
-                    "wl_subcompositor" => state.subcompositor = Some(proxy.bind(name, version, qh, ())),
-                    "wl_output" => {
-                        let output: WlOutput = proxy.bind(name, version, qh, ());
-                        state.outputs.push(WaylandOutputInfo {
-                            global_id: name,
-                            output,
-                            name: String::new(),
-                            scale: 1,
-                        });
-                    }
-                    "wl_seat" => state.seat = Some(proxy.bind(name, version, qh, ())),
-                    _ => {}
+            } => match interface.as_str() {
+                "wl_compositor" => state.compositor = Some(proxy.bind(name, version, qh, ())),
+                "wl_shm" => state.shm = Some(proxy.bind(name, version, qh, ())),
+                "zwlr_layer_shell_v1" => {
+                    state.layer_shell = Some(proxy.bind(name, version, qh, ()))
                 }
-            }
+                "xdg_wm_base" => {
+                    state.xdg_wm_base = Some(proxy.bind(name, u32::min(version, 5), qh, ()))
+                }
+                "wl_subcompositor" => state.subcompositor = Some(proxy.bind(name, version, qh, ())),
+                "wl_output" => {
+                    let output: WlOutput = proxy.bind(name, version, qh, ());
+                    state.outputs.push(WaylandOutputInfo {
+                        global_id: name,
+                        output,
+                        name: String::new(),
+                        scale: 1,
+                    });
+                }
+                "wl_seat" => state.seat = Some(proxy.bind(name, version, qh, ())),
+                _ => {}
+            },
             wl_registry::Event::GlobalRemove { name } => {
                 if let Some(pos) = state.outputs.iter().position(|o| o.global_id == name) {
                     let info = state.outputs.remove(pos);
-                    if let Some(bar_pos) = state.bars.iter().position(|b| b.output_name == info.name) {
+                    if let Some(bar_pos) =
+                        state.bars.iter().position(|b| b.output_name == info.name)
+                    {
                         let mut bar = state.bars.remove(bar_pos);
                         for (_, ms) in bar.module_surfaces.drain() {
                             ms.subsurface.destroy();
@@ -1068,10 +1187,12 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                         bar.surface.destroy();
                     }
                     info.output.release();
-                    
+
                     let tx = state.command_tx.clone();
                     tokio::spawn(async move {
-                        let _ = tx.send(crate::app::commands::AppCommand::RequestRender).await;
+                        let _ = tx
+                            .send(crate::app::commands::AppCommand::RequestRender)
+                            .await;
                     });
                 }
             }
@@ -1186,10 +1307,11 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 state.pointer_pos = (surface_x, surface_y);
                 if let Some((id, mon_id)) = state.surface_to_id.get(&surface) {
                     tracing::debug!(module = %id, monitor = %mon_id, "Forwarding PointerEnter");
-                    let _ = state
-                        .hub
-                        .pointer_tx()
-                        .send((*id, mon_id.clone(), PointerEvent::PointerEnter));
+                    let _ = state.hub.pointer_tx().send((
+                        *id,
+                        mon_id.clone(),
+                        PointerEvent::PointerEnter,
+                    ));
                 }
             }
             wl_pointer::Event::Leave { surface: _, .. } => {
@@ -1198,10 +1320,11 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                     && let Some((id, mon_id)) = state.surface_to_id.get(&surface)
                 {
                     tracing::debug!(module = %id, monitor = %mon_id, "Forwarding PointerLeave");
-                    let _ = state
-                        .hub
-                        .pointer_tx()
-                        .send((*id, mon_id.clone(), PointerEvent::PointerLeave));
+                    let _ = state.hub.pointer_tx().send((
+                        *id,
+                        mon_id.clone(),
+                        PointerEvent::PointerLeave,
+                    ));
                 }
             }
             wl_pointer::Event::Motion {
@@ -1323,7 +1446,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
                             physical_width,
                             physical_height,
                             qh,
-                            state.app_env.xdg_runtime_dir().as_path()
+                            state.app_env.xdg_runtime_dir().as_path(),
                         ) {
                             bar.shm_buffer = new_shm;
                         }
@@ -1455,11 +1578,6 @@ impl Dispatch<WlSubsurface, ()> for WaylandState {
     }
 }
 
-
-
-
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1487,10 +1605,24 @@ mod tests {
             crate::shared::primitives::geometry::Size::new(10, 10),
         );
 
-        manager.submit_buffer(module_id, monitor_id.clone(), crate::shared::primitives::geometry::Position::new(0, 0), buffer).await;
+        manager
+            .submit_buffer(
+                module_id,
+                monitor_id.clone(),
+                crate::shared::primitives::geometry::Position::new(0, 0),
+                buffer,
+            )
+            .await;
 
-        notify_rx.recv().await.expect("Failed to receive notification");
-        let cmd = pending_surfaces.lock().unwrap().remove(&(module_id, monitor_id)).expect("Failed to find command");
+        notify_rx
+            .recv()
+            .await
+            .expect("Failed to receive notification");
+        let cmd = pending_surfaces
+            .lock()
+            .unwrap()
+            .remove(&(module_id, monitor_id))
+            .expect("Failed to find command");
         assert_eq!(cmd.module_id(), module_id);
         assert_eq!(cmd.monitor_id.as_str(), "DP-1");
         assert_eq!(cmd.buffer().size().width(), 10);
@@ -1516,13 +1648,32 @@ mod tests {
             crate::shared::primitives::geometry::Size::new(20, 20),
         );
 
-        manager.submit_buffer(module_id, monitor_id.clone(), crate::shared::primitives::geometry::Position::new(0, 0), buffer1).await;
-        manager.submit_buffer(module_id, monitor_id.clone(), crate::shared::primitives::geometry::Position::new(0, 0), buffer2).await;
+        manager
+            .submit_buffer(
+                module_id,
+                monitor_id.clone(),
+                crate::shared::primitives::geometry::Position::new(0, 0),
+                buffer1,
+            )
+            .await;
+        manager
+            .submit_buffer(
+                module_id,
+                monitor_id.clone(),
+                crate::shared::primitives::geometry::Position::new(0, 0),
+                buffer2,
+            )
+            .await;
 
-        notify_rx.recv().await.expect("Failed to receive notification");
+        notify_rx
+            .recv()
+            .await
+            .expect("Failed to receive notification");
         let mut map = pending_surfaces.lock().unwrap();
         assert_eq!(map.len(), 1);
-        let cmd = map.remove(&(module_id, monitor_id)).expect("Failed to find command");
+        let cmd = map
+            .remove(&(module_id, monitor_id))
+            .expect("Failed to find command");
         assert_eq!(cmd.buffer().size().width(), 20);
     }
 
@@ -1571,7 +1722,9 @@ mod tests {
             None,
         ));
         let state = WaylandState {
-            hub: Arc::new(SignalHub::new(crate::shared::config::domain::Config::default())),
+            hub: Arc::new(SignalHub::new(
+                crate::shared::config::domain::Config::default(),
+            )),
             compositor: None,
             shm: None,
             layer_shell: None,

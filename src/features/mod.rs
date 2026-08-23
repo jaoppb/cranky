@@ -1,7 +1,8 @@
 pub mod applets;
-pub mod metrics;
-pub mod systray;
-pub mod workspaces;
 pub mod layout_engine;
+pub mod metrics;
 pub mod module_runtime;
 pub mod mpris;
+pub mod styling;
+pub mod systray;
+pub mod workspaces;

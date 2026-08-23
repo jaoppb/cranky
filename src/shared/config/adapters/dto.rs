@@ -1,4 +1,4 @@
-use crate::shared::config::domain as domain;
+use crate::shared::config::domain;
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::rendering::ports::font::FontValidatorPort;
 use serde::Deserialize;
@@ -448,17 +448,20 @@ pub struct PartialBarConfigDto {
 
 impl PartialBarConfigDto {
     pub fn into_domain(self) -> domain::PartialBarConfig {
-        domain::PartialBarConfig::new(crate::shared::config::domain::CreatePartialBarConfigCommand::new(
-            self.background,
-            self.height.map(crate::shared::primitives::geometry::BarHeight::new),
-            self.vertical_alignment.map(|v| v.into_domain()),
-            self.border.map(|b| b.into_domain()),
-            self.margin.map(|m| m.into_domain()),
-            self.padding.map(|p| p.into_domain()),
-            self.module_gap.map(domain::ModuleGap::new),
-            self.font_family.map(domain::FontFamily::new),
-            self.font_size.map(domain::FontSize::new),
-        ))
+        domain::PartialBarConfig::new(
+            crate::shared::config::domain::CreatePartialBarConfigCommand::new(
+                self.background,
+                self.height
+                    .map(crate::shared::primitives::geometry::BarHeight::new),
+                self.vertical_alignment.map(|v| v.into_domain()),
+                self.border.map(|b| b.into_domain()),
+                self.margin.map(|m| m.into_domain()),
+                self.padding.map(|p| p.into_domain()),
+                self.module_gap.map(domain::ModuleGap::new),
+                self.font_family.map(domain::FontFamily::new),
+                self.font_size.map(domain::FontSize::new),
+            ),
+        )
     }
 }
 
@@ -478,14 +481,30 @@ impl TooltipConfigDto {
     pub fn into_domain(self) -> domain::TooltipConfig {
         let default = domain::TooltipConfig::default();
         domain::TooltipConfig::new(
-            self.background.and_then(|c| DrawingColor::parse(&c).ok()).unwrap_or_else(|| default.background().clone()),
-            self.border_color.and_then(|c| DrawingColor::parse(&c).ok()).unwrap_or_else(|| default.border_color().clone()),
-            self.text_color.and_then(|c| DrawingColor::parse(&c).ok()).unwrap_or_else(|| default.text_color().clone()),
-            self.font.map(domain::FontFamily::new).or_else(|| default.font().cloned()),
-            self.size.map(domain::FontSize::new).or_else(|| default.size()),
-            self.radius.map(domain::BorderRadius::new).unwrap_or_else(|| default.radius()),
-            self.border_width.map(domain::BorderSize::new).unwrap_or_else(|| default.border_width()),
-            self.padding.map(domain::PaddingOffset::new).unwrap_or_else(|| default.padding()),
+            self.background
+                .and_then(|c| DrawingColor::parse(&c).ok())
+                .unwrap_or_else(|| default.background().clone()),
+            self.border_color
+                .and_then(|c| DrawingColor::parse(&c).ok())
+                .unwrap_or_else(|| default.border_color().clone()),
+            self.text_color
+                .and_then(|c| DrawingColor::parse(&c).ok())
+                .unwrap_or_else(|| default.text_color().clone()),
+            self.font
+                .map(domain::FontFamily::new)
+                .or_else(|| default.font().cloned()),
+            self.size
+                .map(domain::FontSize::new)
+                .or_else(|| default.size()),
+            self.radius
+                .map(domain::BorderRadius::new)
+                .unwrap_or_else(|| default.radius()),
+            self.border_width
+                .map(domain::BorderSize::new)
+                .unwrap_or_else(|| default.border_width()),
+            self.padding
+                .map(domain::PaddingOffset::new)
+                .unwrap_or_else(|| default.padding()),
         )
     }
 }
@@ -542,7 +561,9 @@ mod tests {
 
     #[test]
     fn test_rendering_mode_dto() {
-        let mode1 = RenderingModeDto::Immediate { fps_limit: Some(60) };
+        let mode1 = RenderingModeDto::Immediate {
+            fps_limit: Some(60),
+        };
         if let domain::RenderingMode::Immediate { fps_limit } = mode1.into_domain() {
             assert_eq!(fps_limit, Some(60));
         } else {

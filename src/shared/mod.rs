@@ -1,9 +1,9 @@
-pub mod wayland;
-pub mod dbus;
-pub mod scripting;
-pub mod rendering;
 pub mod config;
-pub mod events;
+pub mod dbus;
 pub mod env;
+pub mod events;
+pub mod rendering;
+pub mod scripting;
+pub mod wayland;
 
 pub mod primitives;

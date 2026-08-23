@@ -1,0 +1,37 @@
+.container {
+    gap: 6px;
+    align-items: center;
+}
+
+.item {
+    gap: 4px;
+    align-items: center;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.item:hover {
+    background-color: #292e42;
+}
+
+.icon {
+    width: 24px;
+    height: 24px;
+}
+
+.icon-placeholder {
+    width: 24px;
+    height: 24px;
+    background-color: #c0caf5;
+    border-radius: 2px;
+}
+
+.title {
+    font-size: 12px;
+    color: #c0caf5;
+}
+
+.empty {
+    font-size: 12px;
+    color: #565f89;
+}

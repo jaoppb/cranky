@@ -114,31 +114,45 @@ impl MetricsConfig {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CpuUsage(f32);
 impl CpuUsage {
-    pub fn new(val: f32) -> Self { Self(val) }
+    pub fn new(val: f32) -> Self {
+        Self(val)
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryBytes(u64);
 impl MemoryBytes {
-    pub fn new(val: u64) -> Self { Self(val) }
+    pub fn new(val: u64) -> Self {
+        Self(val)
+    }
     #[cfg(test)]
-    pub fn value(&self) -> u64 { self.0 }
+    pub fn value(&self) -> u64 {
+        self.0
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkSpeed(u64);
 impl NetworkSpeed {
-    pub fn new(val: u64) -> Self { Self(val) }
+    pub fn new(val: u64) -> Self {
+        Self(val)
+    }
     #[cfg(test)]
-    pub fn value(&self) -> u64 { self.0 }
+    pub fn value(&self) -> u64 {
+        self.0
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Temperature(f32);
 impl Temperature {
-    pub fn new(val: f32) -> Self { Self(val) }
+    pub fn new(val: f32) -> Self {
+        Self(val)
+    }
     #[cfg(test)]
-    pub fn value(&self) -> f32 { self.0 }
+    pub fn value(&self) -> f32 {
+        self.0
+    }
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -198,7 +212,6 @@ pub struct MetricsState {
     temperature: Temperature,
     config: MetricsConfig,
 }
-
 
 pub struct CreateMetricsCommand {
     cpu_usage: CpuUsage,
@@ -327,17 +340,27 @@ impl MetricsState {
             ),
         }
     }
-    
+
     #[cfg(test)]
-    pub fn memory_total(&self) -> &MemoryBytes { &self.memory_total }
+    pub fn memory_total(&self) -> &MemoryBytes {
+        &self.memory_total
+    }
     #[cfg(test)]
-    pub fn disks(&self) -> &[DiskMetric] { &self.disks }
+    pub fn disks(&self) -> &[DiskMetric] {
+        &self.disks
+    }
     #[cfg(test)]
-    pub fn network_tx(&self) -> &NetworkSpeed { &self.network_tx }
+    pub fn network_tx(&self) -> &NetworkSpeed {
+        &self.network_tx
+    }
     #[cfg(test)]
-    pub fn network_rx(&self) -> &NetworkSpeed { &self.network_rx }
+    pub fn network_rx(&self) -> &NetworkSpeed {
+        &self.network_rx
+    }
     #[cfg(test)]
-    pub fn temperature(&self) -> &Temperature { &self.temperature }
+    pub fn temperature(&self) -> &Temperature {
+        &self.temperature
+    }
 }
 
 #[cfg(test)]
@@ -380,12 +403,8 @@ mod tests {
 
     #[test]
     fn test_normalize_cpu_usage_disabled() {
-        let (norm_global, norm_per_core) = MetricsState::normalize_cpu_usage(
-            &CpuMode::Disabled,
-            25.0,
-            4.0,
-            vec![100.0, 0.0],
-        );
+        let (norm_global, norm_per_core) =
+            MetricsState::normalize_cpu_usage(&CpuMode::Disabled, 25.0, 4.0, vec![100.0, 0.0]);
         assert_eq!(norm_global, CpuUsage::new(0.0));
         assert_eq!(norm_per_core, vec![CpuUsage::new(0.0), CpuUsage::new(0.0)]);
     }

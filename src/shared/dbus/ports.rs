@@ -49,10 +49,7 @@ pub trait DbusConnectionPort: Send + Sync {
     ) -> Result<PropertyChangedStream, DbusConnectionError>;
 
     /// List all currently owned bus names.
-    async fn list_names(
-        &self,
-        bus: BusType,
-    ) -> Result<Vec<Destination>, DbusConnectionError>;
+    async fn list_names(&self, bus: BusType) -> Result<Vec<Destination>, DbusConnectionError>;
 
     /// Subscribe to `NameOwnerChanged` signals for tracking bus name appearance/disappearance.
     async fn subscribe_name_changes(

@@ -58,12 +58,7 @@ impl crate::shared::rendering::ports::canvas::CanvasFactory for TinySkiaCanvasFa
         font_family: FontFamily,
         font_size: FontSize,
     ) -> impl crate::features::layout_engine::domain::TextMeasurer + 'a {
-        CosmicTextMeasurer::new(
-            &mut self.font_system,
-            scale,
-            font_family,
-            font_size,
-        )
+        CosmicTextMeasurer::new(&mut self.font_system, scale, font_family, font_size)
     }
 }
 
@@ -290,8 +285,6 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
             }
         }
     }
-
-
 
     fn draw_text(
         &mut self,
@@ -529,8 +522,11 @@ impl<'a> crate::features::layout_engine::domain::TextMeasurer for CosmicTextMeas
         use crate::shared::primitives::geometry::PhysicalPx;
         let w = PhysicalPx::new(physical_width).apply_inverse_scale(&self.scale);
         let h = PhysicalPx::new(physical_height).apply_inverse_scale(&self.scale);
-        
-        crate::shared::primitives::geometry::Size::new(w.value().ceil() as u32, h.value().ceil() as u32)
+
+        crate::shared::primitives::geometry::Size::new(
+            w.value().ceil() as u32,
+            h.value().ceil() as u32,
+        )
     }
 }
 
@@ -699,7 +695,10 @@ mod tests {
             LogicalPx::new(10.0),
             LogicalPx::new(80.0),
             LogicalPx::new(80.0),
-            DrawingColor::Gradient(vec![Color::new(255, 0, 0, 255), Color::new(0, 255, 0, 255)], 45.0),
+            DrawingColor::Gradient(
+                vec![Color::new(255, 0, 0, 255), Color::new(0, 255, 0, 255)],
+                45.0,
+            ),
             LogicalPx::new(20.0), // With radius
         );
     }
@@ -723,7 +722,10 @@ mod tests {
             "gradient text",
             None,
             None,
-            DrawingColor::Gradient(vec![Color::new(255, 0, 0, 255), Color::new(0, 255, 0, 255)], 0.0),
+            DrawingColor::Gradient(
+                vec![Color::new(255, 0, 0, 255), Color::new(0, 255, 0, 255)],
+                0.0,
+            ),
             Position::new(10, 10),
         );
     }
@@ -744,8 +746,7 @@ mod tests {
         );
 
         let image_data = vec![
-            255, 0, 0, 255,   0, 255, 0, 255,
-            0, 0, 255, 255,   255, 255, 0, 255,
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 0, 255,
         ];
 
         canvas.draw_image(

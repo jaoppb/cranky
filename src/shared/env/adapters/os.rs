@@ -21,8 +21,8 @@ impl Default for OsEnvironmentAdapter {
 
 impl EnvironmentPort for OsEnvironmentAdapter {
     fn read_environment(&self) -> Result<AppEnvironment, EnvironmentError> {
-        let home = env::var("HOME")
-            .map_err(|_| EnvironmentError::MissingVariable("HOME".to_string()))?;
+        let home =
+            env::var("HOME").map_err(|_| EnvironmentError::MissingVariable("HOME".to_string()))?;
         let home_path = PathBuf::from(&home);
 
         let xdg_cache_home = env::var("XDG_CACHE_HOME")
@@ -31,7 +31,7 @@ impl EnvironmentPort for OsEnvironmentAdapter {
 
         let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR")
             .map_err(|_| EnvironmentError::MissingVariable("XDG_RUNTIME_DIR".to_string()))?;
-        
+
         let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| "cranky=info".to_string());
 
         let hyprland_instance_signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").ok();

@@ -31,7 +31,7 @@ impl SysinfoAdapter {
                     &mut components,
                     &config,
                 );
-                
+
                 if hub.metrics_tx().send(state).is_err() {
                     // Receiver dropped
                     break;
@@ -39,11 +39,12 @@ impl SysinfoAdapter {
 
                 tokio::time::sleep(std::time::Duration::from_millis(
                     config.update_interval_ms().value(),
-                )).await;
+                ))
+                .await;
             }
         });
     }
-    
+
     pub fn gather_metrics(
         sys: &mut System,
         networks: &mut Networks,
@@ -62,17 +63,15 @@ impl SysinfoAdapter {
         let global_cpu = sys.global_cpu_usage();
 
         let per_core_raw: Vec<f32> = sys.cpus().iter().map(|c| c.cpu_usage()).collect();
-        let (cpu_usage, per_core) = MetricsState::normalize_cpu_usage(
-            config.cpu(),
-            global_cpu,
-            nproc,
-            per_core_raw,
-        );
+        let (cpu_usage, per_core) =
+            MetricsState::normalize_cpu_usage(config.cpu(), global_cpu, nproc, per_core_raw);
 
         // Network
         let mut network_tx: u64 = 0;
         let mut network_rx: u64 = 0;
-        if config.network().is_some() && config.network() != Some(&crate::features::metrics::domain::NetworkMode::Disabled) {
+        if config.network().is_some()
+            && config.network() != Some(&crate::features::metrics::domain::NetworkMode::Disabled)
+        {
             for (_interface_name, data) in networks.iter() {
                 network_tx += data.transmitted();
                 network_rx += data.received();
@@ -81,7 +80,9 @@ impl SysinfoAdapter {
 
         // Disks
         let mut disk_metrics = Vec::new();
-        if config.disk().is_some() && config.disk() != Some(&crate::features::metrics::domain::DiskMode::Disabled) {
+        if config.disk().is_some()
+            && config.disk() != Some(&crate::features::metrics::domain::DiskMode::Disabled)
+        {
             for disk in disks.iter() {
                 disk_metrics.push(DiskMetric::new(
                     crate::features::metrics::domain::DiskName::new(disk.name().to_string_lossy()),
@@ -99,7 +100,10 @@ impl SysinfoAdapter {
 
         // Temperature
         let mut temp = 0.0;
-        if config.temperature().is_some() && config.temperature() != Some(&crate::features::metrics::domain::TemperatureMode::Disabled) {
+        if config.temperature().is_some()
+            && config.temperature()
+                != Some(&crate::features::metrics::domain::TemperatureMode::Disabled)
+        {
             let mut count = 0;
             for component in components.iter() {
                 if let Some(t) = component.temperature() {
@@ -145,71 +149,93 @@ mod tests {
         let mut networks = Networks::new_with_refreshed_list();
         let mut disks = Disks::new_with_refreshed_list();
         let mut components = Components::new_with_refreshed_list();
-        
+
         let config: MetricsConfig = serde_json::from_value(serde_json::json!({
             "cpu": "percentage_0_100",
             "network": "tx_rx",
             "disk": "percentual",
             "temperature": "celsius",
             "update_interval_ms": 100
-        })).unwrap();
-        
-        let state = SysinfoAdapter::gather_metrics(&mut sys, &mut networks, &mut disks, &mut components, &config);
-        
+        }))
+        .unwrap();
+
+        let state = SysinfoAdapter::gather_metrics(
+            &mut sys,
+            &mut networks,
+            &mut disks,
+            &mut components,
+            &config,
+        );
+
         assert!(state.memory_total().value() > 0);
     }
-    
+
     #[test]
     fn test_sysinfo_adapter_gather_metrics_all_disabled() {
         let mut sys = System::new_all();
         let mut networks = Networks::new_with_refreshed_list();
         let mut disks = Disks::new_with_refreshed_list();
         let mut components = Components::new_with_refreshed_list();
-        
+
         let config: MetricsConfig = serde_json::from_value(serde_json::json!({
             "cpu": "disabled",
             "network": "disabled",
             "disk": "disabled",
             "temperature": "disabled",
             "update_interval_ms": 100
-        })).unwrap();
-        
-        let state = SysinfoAdapter::gather_metrics(&mut sys, &mut networks, &mut disks, &mut components, &config);
-        
+        }))
+        .unwrap();
+
+        let state = SysinfoAdapter::gather_metrics(
+            &mut sys,
+            &mut networks,
+            &mut disks,
+            &mut components,
+            &config,
+        );
+
         assert_eq!(state.network_tx().value(), 0);
         assert_eq!(state.network_rx().value(), 0);
         assert!(state.disks().is_empty());
         assert_eq!(state.temperature().value(), 0.0);
     }
-    
+
     #[test]
     fn test_sysinfo_adapter_gather_metrics_fahrenheit() {
         let mut sys = System::new_all();
         let mut networks = Networks::new_with_refreshed_list();
         let mut disks = Disks::new_with_refreshed_list();
         let mut components = Components::new_with_refreshed_list();
-        
+
         let config: MetricsConfig = serde_json::from_value(serde_json::json!({
             "temperature": "fahrenheit",
             "update_interval_ms": 100
-        })).unwrap();
-        
-        let state = SysinfoAdapter::gather_metrics(&mut sys, &mut networks, &mut disks, &mut components, &config);
+        }))
+        .unwrap();
+
+        let state = SysinfoAdapter::gather_metrics(
+            &mut sys,
+            &mut networks,
+            &mut disks,
+            &mut components,
+            &config,
+        );
         // It might be 32.0 if no components, or > 32.0 if components exist
         assert!(state.temperature().value() >= 32.0 || state.temperature().value() == 0.0);
     }
-    
+
     #[tokio::test]
     async fn test_sysinfo_adapter_start() {
         let config: MetricsConfig = serde_json::from_value(serde_json::json!({
             "update_interval_ms": 10
-        })).unwrap();
+        }))
+        .unwrap();
         let hub = Arc::new(SignalHub::new(Config::default()));
         let mut rx = hub.metrics_rx().clone();
-        
+
         let adapter = SysinfoAdapter::new(config, hub);
         adapter.start().await;
-        
+
         // Wait for first update
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         let state = rx.borrow_and_update().clone();

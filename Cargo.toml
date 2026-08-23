@@ -50,6 +50,7 @@ tracing-appender = "0.2.5"
 futures-util = "0.3.32"
 taffy = "0.12"
 futures = "0.3.34"
+lightningcss = "1.0.0-alpha.63"
 
 [dev-dependencies]
 mockall = "0.14"

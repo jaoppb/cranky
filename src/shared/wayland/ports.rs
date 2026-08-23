@@ -1,6 +1,6 @@
+use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};
-use crate::shared::primitives::geometry::Position;
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -8,7 +8,13 @@ use std::sync::Arc;
 #[cfg_attr(test, mockall::automock)]
 pub trait SurfaceManagerPort: Send + Sync {
     /// Submit a rendered buffer for a specific module on a specific monitor.
-    async fn submit_buffer(&self, module_id: ModuleId, monitor_id: MonitorId, position: Position, buffer: RenderBuffer);
+    async fn submit_buffer(
+        &self,
+        module_id: ModuleId,
+        monitor_id: MonitorId,
+        position: Position,
+        buffer: RenderBuffer,
+    );
 }
 
 pub type DynSurfaceManager = Arc<dyn SurfaceManagerPort>;
@@ -40,6 +46,9 @@ pub trait DisplayServerPort: Send + Sync {
             Box<dyn crate::features::module_runtime::ports::LayoutSender>,
         >,
     ) -> Result<(), DisplayServerError>;
-    fn show_tooltip(&mut self, layout: crate::features::layout_engine::domain::LayoutNode) -> Result<(), DisplayServerError>;
+    fn show_tooltip(
+        &mut self,
+        layout: crate::features::layout_engine::domain::StyledNode,
+    ) -> Result<(), DisplayServerError>;
     fn hide_tooltip(&mut self) -> Result<(), DisplayServerError>;
 }

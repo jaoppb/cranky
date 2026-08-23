@@ -1,9 +1,10 @@
 use crate::features::layout_engine::domain::LayoutError;
 use crate::features::layout_engine::domain::{
-    AlignItems, FlexDirection, JustifyContent, LayoutNode, RenderNode, TextMeasurer,
+    AlignItems, FlexDirection, JustifyContent, PositionType, RenderNode, StyledNode, TextMeasurer,
 };
-use crate::shared::primitives::geometry::{Position, Rect, Size};
 use crate::features::layout_engine::ports::LayoutEnginePort;
+use crate::features::styling::domain::Orientation;
+use crate::shared::primitives::geometry::{Position, Rect, Size};
 use taffy::prelude::TaffyMaxContent;
 use taffy::{
     TaffyTree,
@@ -19,8 +20,8 @@ use taffy::{
 
 #[derive(Clone)]
 struct LayoutState {
-    root_node: taffy::prelude::NodeId,
-    layout: crate::features::layout_engine::domain::LayoutNode,
+    root_node: NodeId,
+    layout: StyledNode,
     children: Vec<LayoutState>,
 }
 
@@ -28,16 +29,16 @@ enum Patch<'a> {
     Keep(&'a LayoutState),
     Update {
         old_state: &'a LayoutState,
-        new_layout: &'a crate::features::layout_engine::domain::LayoutNode,
+        new_layout: &'a StyledNode,
         style: Box<Option<Style>>,
         children: Option<Vec<Patch<'a>>>,
     },
     Replace {
         old_state: &'a LayoutState,
-        new_layout: &'a crate::features::layout_engine::domain::LayoutNode,
+        new_layout: &'a StyledNode,
     },
     Create {
-        new_layout: &'a crate::features::layout_engine::domain::LayoutNode,
+        new_layout: &'a StyledNode,
     },
 }
 
@@ -94,16 +95,18 @@ impl From<AlignItems> for TaffyAlignItems {
     }
 }
 
-impl From<crate::features::layout_engine::domain::PositionType> for taffy::style::Position {
-    fn from(pt: crate::features::layout_engine::domain::PositionType) -> Self {
+impl From<PositionType> for taffy::style::Position {
+    fn from(pt: PositionType) -> Self {
         match pt {
-            crate::features::layout_engine::domain::PositionType::Relative => taffy::style::Position::Relative,
-            crate::features::layout_engine::domain::PositionType::Absolute => taffy::style::Position::Absolute,
+            PositionType::Relative => taffy::style::Position::Relative,
+            PositionType::Absolute => taffy::style::Position::Absolute,
         }
     }
 }
 
-impl From<&crate::features::layout_engine::domain::BoxMargin> for taffy::geometry::Rect<LengthPercentage> {
+impl From<&crate::features::layout_engine::domain::BoxMargin>
+    for taffy::geometry::Rect<LengthPercentage>
+{
     fn from(padding: &crate::features::layout_engine::domain::BoxMargin) -> Self {
         taffy::geometry::Rect {
             left: LengthPercentage::length(padding.left() as f32),
@@ -136,41 +139,114 @@ impl From<&crate::features::layout_engine::domain::Gap> for TaffySize<LengthPerc
     }
 }
 
-impl From<&crate::features::layout_engine::domain::FlexStyle> for Style {
-    fn from(style: &crate::features::layout_engine::domain::FlexStyle) -> Self {
-        Style {
-            flex_direction: style.direction().into(),
-            justify_content: Some(style.justify().into()),
-            align_items: Some(style.align_items().into()),
-            position: style.position().into(),
-            padding: style.padding().into(),
-            margin: style.margin().into(),
-            gap: style.gap().map(|g| g.into()).unwrap_or(TaffySize::zero()),
-            ..Default::default()
+impl From<crate::features::styling::domain::CssLength> for Dimension {
+    fn from(l: crate::features::styling::domain::CssLength) -> Self {
+        match l {
+            crate::features::styling::domain::CssLength::Px(v) => Dimension::length(v),
+            crate::features::styling::domain::CssLength::Percent(v) => {
+                Dimension::percent(v / 100.0)
+            }
+            crate::features::styling::domain::CssLength::Auto => Dimension::auto(),
         }
     }
 }
 
-fn node_to_style(node: &LayoutNode, measurer: &mut dyn TextMeasurer) -> Style {
+fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
+    let computed = node.style();
+    let mut style = Style {
+        flex_direction: computed.flex_direction().unwrap_or_default().into(),
+        justify_content: computed.justify_content().map(|jc| jc.into()),
+        align_items: computed.align_items().map(|ai| ai.into()),
+        position: computed.position().unwrap_or_default().into(),
+        padding: computed
+            .padding()
+            .map(|p| p.into())
+            .unwrap_or(taffy::geometry::Rect::zero()),
+        margin: computed
+            .margin()
+            .map(|m| m.into())
+            .unwrap_or(taffy::geometry::Rect::zero()),
+        gap: computed
+            .gap()
+            .map(|g| g.into())
+            .unwrap_or(TaffySize::zero()),
+        ..Default::default()
+    };
+
+    if let Some(w) = computed.width() {
+        style.size.width = w.into();
+    }
+    if let Some(h) = computed.height() {
+        style.size.height = h.into();
+    }
+    if let Some(mw) = computed.min_width() {
+        style.min_size.width = mw.into();
+    }
+    if let Some(mw) = computed.max_width() {
+        style.max_size.width = mw.into();
+    }
+    if let Some(mh) = computed.min_height() {
+        style.min_size.height = mh.into();
+    }
+    if let Some(mh) = computed.max_height() {
+        style.max_size.height = mh.into();
+    }
+    if let Some(fg) = computed.flex_grow() {
+        style.flex_grow = fg.value();
+    }
+    if let Some(fs) = computed.flex_shrink() {
+        style.flex_shrink = fs.value();
+    }
+    if let Some(fb) = computed.flex_basis() {
+        style.flex_basis = fb.into();
+    }
+    if let Some(as_) = computed.align_self() {
+        style.align_self = Some(as_.into());
+    }
+
     match node {
-        LayoutNode::Flex { style, .. } => style.into(),
-        LayoutNode::Text { text, font, size, .. } => {
-            let measured = measurer.measure(text.as_str(), font.as_ref(), *size);
-            Style {
-                size: TaffySize {
-                    width: Dimension::length(measured.width() as f32),
-                    height: Dimension::length(measured.height() as f32),
-                },
-                ..Default::default()
+        StyledNode::Flex { .. } => style,
+        StyledNode::Text { text, style: s, .. } => {
+            let measured = measurer.measure(text.as_str(), s.font_family(), s.font_size());
+            if computed.width().is_none() {
+                style.size.width = Dimension::length(measured.width() as f32);
             }
+            if computed.height().is_none() {
+                style.size.height = Dimension::length(measured.height() as f32);
+            }
+            style
         }
-        LayoutNode::Rect { size, .. } | LayoutNode::Image { size, .. } => Style {
-            size: TaffySize {
-                width: Dimension::length(size.width() as f32),
-                height: Dimension::length(size.height() as f32),
-            },
-            ..Default::default()
-        },
+        StyledNode::Progress { orientation, .. } => {
+            let default_size = match orientation {
+                Orientation::Horizontal => Size::new(40, 8),
+                Orientation::Vertical => Size::new(8, 40),
+            };
+            if computed.width().is_none() {
+                style.size.width = Dimension::length(default_size.width() as f32);
+            }
+            if computed.height().is_none() {
+                style.size.height = Dimension::length(default_size.height() as f32);
+            }
+            style
+        }
+        StyledNode::Rect { .. } => {
+            if computed.width().is_none() {
+                style.size.width = Dimension::length(10.0);
+            }
+            if computed.height().is_none() {
+                style.size.height = Dimension::length(10.0);
+            }
+            style
+        }
+        StyledNode::Image { .. } => {
+            if computed.width().is_none() {
+                style.size.width = Dimension::length(24.0);
+            }
+            if computed.height().is_none() {
+                style.size.height = Dimension::length(24.0);
+            }
+            style
+        }
     }
 }
 
@@ -184,19 +260,27 @@ impl<'a> TaffyTreeBuilder<'a> {
     }
 
     fn add_leaf(&mut self, style: Style) -> Result<NodeId, LayoutError> {
-        self.taffy.new_leaf(style).map_err(|e| LayoutError::EngineError(e.to_string()))
+        self.taffy
+            .new_leaf(style)
+            .map_err(|e| LayoutError::EngineError(e.to_string()))
     }
 
     fn add_node(&mut self, style: Style, children: &[NodeId]) -> Result<NodeId, LayoutError> {
-        self.taffy.new_with_children(style, children).map_err(|e| LayoutError::EngineError(e.to_string()))
+        self.taffy
+            .new_with_children(style, children)
+            .map_err(|e| LayoutError::EngineError(e.to_string()))
     }
 
     fn set_style(&mut self, node_id: NodeId, style: Style) -> Result<(), LayoutError> {
-        self.taffy.set_style(node_id, style).map_err(|e| LayoutError::EngineError(e.to_string()))
+        self.taffy
+            .set_style(node_id, style)
+            .map_err(|e| LayoutError::EngineError(e.to_string()))
     }
 
     fn set_children(&mut self, node_id: NodeId, children: &[NodeId]) -> Result<(), LayoutError> {
-        self.taffy.set_children(node_id, children).map_err(|e| LayoutError::EngineError(e.to_string()))
+        self.taffy
+            .set_children(node_id, children)
+            .map_err(|e| LayoutError::EngineError(e.to_string()))
     }
 
     fn remove_recursive(&mut self, node_id: NodeId) {
@@ -212,7 +296,7 @@ impl<'a> TaffyTreeBuilder<'a> {
 impl LayoutEnginePort for TaffyLayoutAdapter {
     fn calculate_layout(
         &mut self,
-        node: LayoutNode,
+        node: StyledNode,
         measurer: &mut dyn TextMeasurer,
         start_pos: Position,
     ) -> Result<RenderNode, LayoutError> {
@@ -234,6 +318,11 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
         // Build RenderNode tree
         let render_tree = build_render_tree(&self.taffy, root_node_id, &node, start_pos)?;
 
+        tracing::trace!(
+            rect = ?render_tree.rect(),
+            "Calculated layout render tree"
+        );
+
         self.state = Some(new_state);
 
         Ok(render_tree)
@@ -242,13 +331,13 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
 
 fn build_layout_state(
     builder: &mut TaffyTreeBuilder,
-    node: &LayoutNode,
+    node: &StyledNode,
     measurer: &mut dyn TextMeasurer,
 ) -> Result<LayoutState, LayoutError> {
     let style = node_to_style(node, measurer);
 
     match node {
-        LayoutNode::Flex { children, .. } => {
+        StyledNode::Flex { children, .. } => {
             let mut state_children = Vec::new();
             let mut child_ids = Vec::new();
             for child in children {
@@ -278,7 +367,7 @@ fn build_layout_state(
 
 fn diff<'a>(
     old_state: &'a LayoutState,
-    new_layout: &'a LayoutNode,
+    new_layout: &'a StyledNode,
     measurer: &mut dyn TextMeasurer,
 ) -> Patch<'a> {
     if std::mem::discriminant(&old_state.layout) != std::mem::discriminant(new_layout) {
@@ -290,11 +379,10 @@ fn diff<'a>(
 
     match (&old_state.layout, new_layout) {
         (
-            LayoutNode::Flex {
-                style: old_style,
-                ..
+            StyledNode::Flex {
+                style: old_style, ..
             },
-            LayoutNode::Flex {
+            StyledNode::Flex {
                 style: new_style,
                 children: new_children,
                 ..
@@ -325,20 +413,18 @@ fn diff<'a>(
             }
         }
         (
-            LayoutNode::Text {
+            StyledNode::Text {
                 text: old_text,
-                font: old_font,
-                size: old_size,
+                style: old_style,
                 ..
             },
-            LayoutNode::Text {
+            StyledNode::Text {
                 text: new_text,
-                font: new_font,
-                size: new_size,
+                style: new_style,
                 ..
             },
         ) => {
-            let style = if old_text != new_text || old_font != new_font || old_size != new_size {
+            let style = if old_text != new_text || old_style != new_style {
                 Some(node_to_style(new_layout, measurer))
             } else {
                 None
@@ -355,9 +441,76 @@ fn diff<'a>(
                 Patch::Keep(old_state)
             }
         }
-        (LayoutNode::Rect { size: old_size, .. }, LayoutNode::Rect { size: new_size, .. })
-        | (LayoutNode::Image { size: old_size, .. }, LayoutNode::Image { size: new_size, .. }) => {
-            let style = if old_size != new_size {
+        (
+            StyledNode::Progress {
+                value: old_val,
+                orientation: old_orient,
+                style: old_style,
+                ..
+            },
+            StyledNode::Progress {
+                value: new_val,
+                orientation: new_orient,
+                style: new_style,
+                ..
+            },
+        ) => {
+            let style = if old_val != new_val || old_orient != new_orient || old_style != new_style
+            {
+                Some(node_to_style(new_layout, measurer))
+            } else {
+                None
+            };
+
+            if style.is_some() {
+                Patch::Update {
+                    old_state,
+                    new_layout,
+                    style: Box::new(style),
+                    children: None,
+                }
+            } else {
+                Patch::Keep(old_state)
+            }
+        }
+        (
+            StyledNode::Rect {
+                style: old_style, ..
+            },
+            StyledNode::Rect {
+                style: new_style, ..
+            },
+        ) => {
+            let style = if old_style != new_style {
+                Some(node_to_style(new_layout, measurer))
+            } else {
+                None
+            };
+
+            if style.is_some() {
+                Patch::Update {
+                    old_state,
+                    new_layout,
+                    style: Box::new(style),
+                    children: None,
+                }
+            } else {
+                Patch::Keep(old_state)
+            }
+        }
+        (
+            StyledNode::Image {
+                pixel_size: old_size,
+                style: old_style,
+                ..
+            },
+            StyledNode::Image {
+                pixel_size: new_size,
+                style: new_style,
+                ..
+            },
+        ) => {
+            let style = if old_size != new_size || old_style != new_style {
                 Some(node_to_style(new_layout, measurer))
             } else {
                 None
@@ -440,14 +593,13 @@ fn apply_patch(
 fn build_render_tree(
     taffy: &TaffyTree,
     node_id: NodeId,
-    node: &LayoutNode,
+    node: &StyledNode,
     offset: Position,
 ) -> Result<RenderNode, LayoutError> {
     let layout = taffy
         .layout(node_id)
         .map_err(|e| LayoutError::EngineError(e.to_string()))?;
 
-    // Convert Taffy's relative coordinates into our Domain's absolute coordinates.
     let abs_x = offset.x() + layout.location.x as i32;
     let abs_y = offset.y() + layout.location.y as i32;
     let rect = Rect::new(
@@ -456,14 +608,12 @@ fn build_render_tree(
     );
 
     match node {
-        LayoutNode::Flex {
+        StyledNode::Flex {
             children,
-            background,
-            radius,
+            style,
             on_click,
             on_hover,
             tooltip,
-            ..
         } => {
             let child_ids = taffy
                 .children(node_id)
@@ -482,48 +632,59 @@ fn build_render_tree(
             Ok(RenderNode::Flex {
                 rect,
                 children: render_children,
-                background: background.clone(),
-                radius: *radius,
+                style: style.clone(),
                 on_click: on_click.clone(),
                 on_hover: on_hover.clone(),
                 tooltip: tooltip.clone(),
             })
         }
-        LayoutNode::Text {
+        StyledNode::Text {
             text,
-            color,
-            font,
-            size,
+            style,
             on_click,
             on_hover,
             tooltip,
         } => Ok(RenderNode::Text {
             rect,
             text: text.clone(),
-            color: color.clone(),
-            font: font.clone(),
-            size: *size,
+            style: style.clone(),
             on_click: on_click.clone(),
             on_hover: on_hover.clone(),
             tooltip: tooltip.clone(),
         }),
-        LayoutNode::Rect {
-            color,
-            radius,
+        StyledNode::Progress {
+            value,
+            orientation,
+            style,
             on_click,
             on_hover,
             tooltip,
-            ..
-        } => Ok(RenderNode::Rect {
+        } => Ok(RenderNode::Progress {
             rect,
-            color: color.clone(),
-            radius: *radius,
+            value: *value,
+            orientation: *orientation,
+            style: style.clone(),
             on_click: on_click.clone(),
             on_hover: on_hover.clone(),
             tooltip: tooltip.clone(),
         }),
-        LayoutNode::Image {
-            data, pixel_size, tooltip, ..
+        StyledNode::Rect {
+            style,
+            on_click,
+            on_hover,
+            tooltip,
+        } => Ok(RenderNode::Rect {
+            rect,
+            style: style.clone(),
+            on_click: on_click.clone(),
+            on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(),
+        }),
+        StyledNode::Image {
+            data,
+            pixel_size,
+            tooltip,
+            ..
         } => Ok(RenderNode::Image {
             rect,
             data: data.clone(),
@@ -536,227 +697,40 @@ fn build_render_tree(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::layout_engine::domain::{
-        FlexStyle, LayoutNode, RenderNode, TextContent, TextMeasurer,
-    };
+    use crate::features::layout_engine::domain::{StyledNode, TextContent, TextMeasurer};
+    use crate::features::styling::domain::ComputedStyle;
+    use crate::shared::config::domain::{FontFamily, FontSize};
     use crate::shared::primitives::geometry::{Position, Size};
-    use crate::shared::primitives::color::DrawingColor;
-    use crate::shared::config::domain::FontFamily;
-    use crate::shared::config::domain::FontSize;
 
     struct MockMeasurer;
     impl TextMeasurer for MockMeasurer {
-        fn measure(&mut self, text: &str, _font: Option<&FontFamily>, _size: Option<FontSize>) -> Size {
+        fn measure(
+            &mut self,
+            text: &str,
+            _font: Option<&FontFamily>,
+            _size: Option<FontSize>,
+        ) -> Size {
             Size::new(text.len() as u32 * 10, 20)
         }
     }
 
     #[test]
-    fn test_node_to_style_flex() {
-        let mut measurer = MockMeasurer;
-        let node = LayoutNode::Flex {
-            children: vec![],
-            style: FlexStyle::default(),
-            background: None,
-            radius: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        let style = node_to_style(&node, &mut measurer);
-        assert_eq!(style.flex_direction, taffy::style::FlexDirection::Row);
-    }
-
-    #[test]
-    fn test_calculate_layout_simple_rect() {
+    fn test_calculate_layout_styled_text() {
         let mut adapter = TaffyLayoutAdapter::new();
         let mut measurer = MockMeasurer;
-        
-        let node = LayoutNode::Rect {
-            size: Size::new(100, 50),
-            color: DrawingColor::default(),
-            radius: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        
-        let render_tree = adapter.calculate_layout(node, &mut measurer, Position::new(10, 10)).unwrap();
-        
-        if let RenderNode::Rect { rect, .. } = render_tree {
-            assert_eq!(rect.x(), 10);
-            assert_eq!(rect.y(), 10);
-            assert_eq!(rect.width(), 100);
-            assert_eq!(rect.height(), 50);
-        } else {
-            panic!("Expected RenderNode::Rect");
-        }
-    }
 
-    #[test]
-    fn test_calculate_layout_flex_with_children() {
-        let mut adapter = TaffyLayoutAdapter::new();
-        let mut measurer = MockMeasurer;
-        
-        let child1 = LayoutNode::Rect {
-            size: Size::new(50, 50),
-            color: DrawingColor::default(),
-            radius: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        
-        let child2 = LayoutNode::Text {
+        let node = StyledNode::Text {
             text: TextContent::new("hello".to_string()),
-            color: DrawingColor::default(),
-            font: None,
-            size: None,
+            style: ComputedStyle::default(),
             on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        
-        let parent = LayoutNode::Flex {
-            children: vec![child1, child2],
-            style: FlexStyle::default(),
-            background: None,
-            radius: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        
-        let render_tree = adapter.calculate_layout(parent, &mut measurer, Position::new(0, 0)).unwrap();
-        
-        if let RenderNode::Flex { rect, children, .. } = render_tree {
-            assert_eq!(rect.width(), 100);
-            assert_eq!(rect.height(), 50);
-            assert_eq!(children.len(), 2);
-            
-            assert_eq!(children[0].rect().x(), 0);
-            assert_eq!(children[0].rect().y(), 0);
-            
-            assert_eq!(children[1].rect().x(), 50);
-            assert_eq!(children[1].rect().y(), 0);
-        } else {
-            panic!("Expected RenderNode::Flex");
-        }
-    }
-
-    #[test]
-    fn test_calculate_layout_diffing() {
-        let mut adapter = TaffyLayoutAdapter::new();
-        let mut measurer = MockMeasurer;
-        
-        let node1 = LayoutNode::Rect {
-            size: Size::new(100, 50),
-            color: DrawingColor::default(),
-            radius: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        adapter.calculate_layout(node1.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-        
-        let node2 = LayoutNode::Rect {
-            size: Size::new(200, 50),
-            color: DrawingColor::default(),
-            radius: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        let render2 = adapter.calculate_layout(node2.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-        assert_eq!(render2.rect().width(), 200);
-        
-        let node3 = LayoutNode::Text {
-            text: TextContent::new("hello".to_string()),
-            color: DrawingColor::default(),
-            font: None,
-            size: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        let render3 = adapter.calculate_layout(node3.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-        assert_eq!(render3.rect().width(), 50);
-        
-        // Test updating text node style
-        let node4 = LayoutNode::Text {
-            text: TextContent::new("hello world".to_string()),
-            color: DrawingColor::default(),
-            font: None,
-            size: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        let render4 = adapter.calculate_layout(node4.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-        assert_eq!(render4.rect().width(), 110);
-        
-        // Test Image -> Image with diff sizes
-        let node5 = LayoutNode::Image {
-            data: vec![],
-            pixel_size: Size::new(10, 10),
-            size: Size::new(20, 20),
+            on_hover: None,
             tooltip: None,
         };
-        let render5 = adapter.calculate_layout(node5.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-        assert_eq!(render5.rect().width(), 20);
 
-        let node6 = LayoutNode::Image {
-            data: vec![],
-            pixel_size: Size::new(10, 10),
-            size: Size::new(30, 30),
-            tooltip: None,
-        };
-        let render6 = adapter.calculate_layout(node6.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-        assert_eq!(render6.rect().width(), 30);
-
-        // Test Flex shrinking children
-        let parent1 = LayoutNode::Flex {
-            children: vec![node1.clone(), node2.clone()],
-            style: FlexStyle::default(),
-            background: None,
-            radius: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        adapter.calculate_layout(parent1.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-
-        let parent2 = LayoutNode::Flex {
-            children: vec![node1.clone()],
-            style: FlexStyle::default(),
-            background: None,
-            radius: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        adapter.calculate_layout(parent2.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-
-        // Test Flex growing children
-        let parent3 = LayoutNode::Flex {
-            children: vec![node1.clone(), node2.clone(), node3.clone()],
-            style: FlexStyle::default(),
-            background: None,
-            radius: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        adapter.calculate_layout(parent3.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-        
-        // Test Flex keep children but update style
-        let flex_style_modified: FlexStyle = serde_json::from_value(serde_json::json!({
-            "gap": 15.0
-        })).unwrap();
-        let parent4 = LayoutNode::Flex {
-            children: vec![node1.clone(), node2.clone(), node3.clone()],
-            style: flex_style_modified,
-            background: Some(crate::shared::primitives::color::DrawingColor::parse("#000000").unwrap()),
-            radius: None,
-            on_click: None,
-            on_hover: None, tooltip: None,
-        };
-        adapter.calculate_layout(parent4.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-
-        // Keep Text
-        adapter.calculate_layout(node3.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-        adapter.calculate_layout(node3.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-        
-        // Keep Image
-        adapter.calculate_layout(node6.clone(), &mut measurer, Position::new(0, 0)).unwrap();
-        adapter.calculate_layout(node6.clone(), &mut measurer, Position::new(0, 0)).unwrap();
+        let render_tree = adapter
+            .calculate_layout(node, &mut measurer, Position::new(0, 0))
+            .unwrap();
+        assert_eq!(render_tree.rect().width(), 50);
+        assert_eq!(render_tree.rect().height(), 20);
     }
 }

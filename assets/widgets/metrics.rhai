@@ -9,22 +9,14 @@ let state = #{
     config: ()
 };
 
-let text_color = "#cccccc";
-let bg_color = "#313244";
-let bar_width = 50;
-let bar_height = 6;
-let bar_radius = 3.0;
-
 fn init() {
-    if "text_color" in config { text_color = config.text_color; }
-    if "bg_color" in config { bg_color = config.bg_color; }
-    if "bar_width" in config { bar_width = config.bar_width.to_int(); }
-    if "bar_height" in config { bar_height = config.bar_height.to_int(); }
-    if "bar_radius" in config { bar_radius = config.bar_radius.to_float(); }
 }
 
-fn subscriptions() {
-    ["metrics"]
+fn metadata() {
+    #{
+        subscriptions: ["metrics"],
+        styles: ["metrics"]
+    }
 }
 
 fn refresh() {
@@ -52,13 +44,13 @@ fn format_bytes(bytes) {
     rounded.to_string() + " " + units[i]
 }
 
-fn get_color(percent) {
+fn get_progress_class(percent) {
     if percent < 50.0 {
-        return "#a6e3a1";
+        return "progress";
     } else if percent < 80.0 {
-        return "#f9e2af";
+        return "progress warning";
     } else {
-        return "#f38ba8";
+        return "progress critical";
     }
 }
 
@@ -122,12 +114,12 @@ fn get_widgets(s, cfg) {
 
 fn render(monitor_id) {
     if state.config == () {
-        return #{ type: "flex", children: [] };
+        return #{ type: "flex", class: "container", children: [] };
     }
     
     let widgets = get_widgets(state, config);
     if widgets.len() == 0 {
-        return #{ type: "flex", children: [] };
+        return #{ type: "flex", class: "container", children: [] };
     }
 
     let children = [];
@@ -136,62 +128,38 @@ fn render(monitor_id) {
         let widget_children = [];
         widget_children.push(#{
             type: "text",
+            class: "label",
             text: w.label,
-            color: text_color
         });
 
         if w.type == "bar" {
             let percent = w.value;
             if percent > 100.0 { percent = 100.0; }
             if percent < 0.0 { percent = 0.0; }
-            let fg_width = ((percent / 100.0) * bar_width.to_float()).to_int();
-            let fg_color = get_color(percent);
-            let bar_children = [];
-            bar_children.push(#{
-                type: "rect",
-                size: #{ width: bar_width, height: bar_height },
-                color: bg_color,
-                radius: bar_radius
-            });
-
-            if fg_width > 0 {
-                bar_children.push(#{
-                    type: "flex",
-                    style: #{ position: "absolute" },
-                    children: [
-                        #{
-                            type: "rect",
-                            size: #{ width: fg_width, height: bar_height },
-                            color: fg_color,
-                            radius: bar_radius
-                        }
-                    ]
-                });
-            }
-
             widget_children.push(#{
-                type: "flex",
-                style: #{ align_items: "center" },
-                children: bar_children
+                type: "progress",
+                class: get_progress_class(percent),
+                value: percent / 100.0,
+                orientation: "horizontal"
             });
         } else if w.type == "text" {
             widget_children.push(#{
                 type: "text",
+                class: "value",
                 text: w.text,
-                color: text_color
             });
         }
 
         children.push(#{
             type: "flex",
-            style: #{ gap: 5.0, align_items: "center" },
+            class: "item",
             children: widget_children
         });
     }
 
     #{
         type: "flex",
-        style: #{ gap: 15.0, align_items: "center" },
+        class: "container",
         children: children
     }
 }
