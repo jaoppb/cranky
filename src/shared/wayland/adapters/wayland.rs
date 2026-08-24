@@ -5,7 +5,7 @@ use crate::shared::wayland::ports::DisplayServerError;
 
 use crate::shared::primitives::geometry::Scale;
 use crate::shared::rendering::adapters::tiny_skia::TinySkiaCosmicCanvas;
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::adapters::shm::{BufferUserData, ShmBuffer};
 use async_trait::async_trait;
 use cosmic_text::{FontSystem, SwashCache};
 use std::collections::HashMap;
@@ -567,6 +567,7 @@ impl DisplayServerPort for WaylandAdapter {
                     .surface
                     .damage_buffer(0, 0, width as i32, height as i32);
                 tooltip.surface.commit();
+                tooltip.shm_buffer.swap_buffers();
                 tracing::debug!(size = ?new_size, "Redrew tooltip in-place (same Size VO)");
                 return Ok(());
             } else {
@@ -620,6 +621,7 @@ impl DisplayServerPort for WaylandAdapter {
                     .surface
                     .damage_buffer(0, 0, width as i32, height as i32);
                 tooltip.surface.commit();
+                tooltip.shm_buffer.swap_buffers();
                 tracing::debug!(size = ?new_size, token = tooltip.reposition_token, "Redrew and repositioned tooltip in-place (new Size VO)");
                 return Ok(());
             }
@@ -1375,15 +1377,19 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
         }
     }
 }
-impl Dispatch<WlBuffer, ()> for WaylandState {
+impl Dispatch<WlBuffer, BufferUserData> for WaylandState {
     fn event(
         _: &mut Self,
         _: &WlBuffer,
-        _: wayland_client::protocol::wl_buffer::Event,
-        _: &(),
+        event: wayland_client::protocol::wl_buffer::Event,
+        data: &BufferUserData,
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        if let wayland_client::protocol::wl_buffer::Event::Release = event {
+            data.set_busy(false);
+            tracing::trace!("WlBuffer released by compositor");
+        }
     }
 }
 
@@ -1430,6 +1436,7 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
                     tooltip.size.height() as i32,
                 );
                 tooltip.surface.commit();
+                tooltip.shm_buffer.swap_buffers();
             } else {
                 tracing::debug!("Configure event for unknown xdg_surface");
             }

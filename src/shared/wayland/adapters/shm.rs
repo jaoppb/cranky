@@ -31,12 +31,58 @@ impl MmappedShm {
     }
 }
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+#[derive(Clone, Debug)]
+pub struct BufferUserData {
+    busy: Arc<AtomicBool>,
+}
+
+impl BufferUserData {
+    pub fn new(busy: Arc<AtomicBool>) -> Self {
+        Self { busy }
+    }
+
+    pub fn is_busy(&self) -> bool {
+        self.busy.load(Ordering::Acquire)
+    }
+
+    pub fn set_busy(&self, busy: bool) {
+        self.busy.store(busy, Ordering::Release);
+    }
+}
+
+pub struct BufferSlot {
+    buffer: wayland_client::protocol::wl_buffer::WlBuffer,
+    busy: Arc<AtomicBool>,
+}
+
+impl BufferSlot {
+    pub fn new(buffer: wayland_client::protocol::wl_buffer::WlBuffer, busy: Arc<AtomicBool>) -> Self {
+        Self { buffer, busy }
+    }
+
+    pub fn buffer(&self) -> &wayland_client::protocol::wl_buffer::WlBuffer {
+        &self.buffer
+    }
+
+    pub fn is_busy(&self) -> bool {
+        self.busy.load(Ordering::Acquire)
+    }
+
+    pub fn set_busy(&self, busy: bool) {
+        self.busy.store(busy, Ordering::Release);
+    }
+}
+
 pub struct ShmBuffer {
     shm: MmappedShm,
     pool: WlShmPool,
     width: u32,
     height: u32,
-    buffer: wayland_client::protocol::wl_buffer::WlBuffer,
+    slots: [BufferSlot; 2],
+    back_index: usize,
 }
 
 fn create_shm_file(size: usize, xdg_runtime_dir: &std::path::Path) -> Result<File> {
@@ -77,42 +123,70 @@ impl ShmBuffer {
     ) -> Result<Self>
     where
         S: wayland_client::Dispatch<wayland_client::protocol::wl_shm_pool::WlShmPool, ()>
-            + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, ()>
+            + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, BufferUserData>
             + 'static,
     {
         let frame_size = (width * height * 4) as usize;
-        let file = create_shm_file(frame_size, xdg_runtime_dir)?;
+        let total_size = frame_size * 2;
+        let file = create_shm_file(total_size, xdg_runtime_dir)?;
 
         let mmap = safe_mmap_file(&file)?;
         let fd = safe_borrowed_fd_from_file(&file);
-        let pool = shm_proxy.create_pool(fd, frame_size as i32, qh, ());
+        let pool = shm_proxy.create_pool(fd, total_size as i32, qh, ());
 
-        let buffer = pool.create_buffer(
+        let busy_0 = Arc::new(AtomicBool::new(false));
+        let user_data_0 = BufferUserData::new(busy_0.clone());
+        let buffer_0 = pool.create_buffer(
             0,
             width as i32,
             height as i32,
             (width * 4) as i32,
             wayland_client::protocol::wl_shm::Format::Argb8888,
             qh,
-            (),
+            user_data_0,
         );
+
+        let busy_1 = Arc::new(AtomicBool::new(false));
+        let user_data_1 = BufferUserData::new(busy_1.clone());
+        let buffer_1 = pool.create_buffer(
+            frame_size as i32,
+            width as i32,
+            height as i32,
+            (width * 4) as i32,
+            wayland_client::protocol::wl_shm::Format::Argb8888,
+            qh,
+            user_data_1,
+        );
+
+        let slots = [
+            BufferSlot::new(buffer_0, busy_0),
+            BufferSlot::new(buffer_1, busy_1),
+        ];
 
         Ok(Self {
             shm: MmappedShm { mmap },
             pool,
             width,
             height,
-            buffer,
+            slots,
+            back_index: 0,
         })
     }
 
     pub fn mmap_mut(&mut self) -> &mut [u8] {
         let frame_size = (self.width * self.height * 4) as usize;
-        &mut self.shm.mmap_mut()[..frame_size]
+        let offset = self.back_index * frame_size;
+        if self.slots[self.back_index].is_busy() {
+            tracing::debug!(
+                slot = self.back_index,
+                "Target back buffer is still marked busy by compositor; writing anyway"
+            );
+        }
+        &mut self.shm.mmap_mut()[offset..offset + frame_size]
     }
 
     pub fn current_buffer(&self) -> &wayland_client::protocol::wl_buffer::WlBuffer {
-        &self.buffer
+        self.slots[self.back_index].buffer()
     }
 
     pub fn width(&self) -> u32 {
@@ -124,18 +198,20 @@ impl ShmBuffer {
     }
 
     pub fn swap_buffers(&mut self) {
-        // No-op for now, single buffer implementation
+        self.slots[self.back_index].set_busy(true);
+        self.back_index = 1 - self.back_index;
     }
 }
 
 impl Drop for ShmBuffer {
     fn drop(&mut self) {
-        self.buffer.destroy();
+        for slot in &self.slots {
+            slot.buffer.destroy();
+        }
         self.pool.destroy();
     }
 }
 
-#[cfg(test)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,5 +247,54 @@ mod tests {
     fn test_create_shm_file_error() {
         let res = create_shm_file(usize::MAX, Path::new("/tmp"));
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_buffer_user_data_and_busy_state() {
+        let busy = Arc::new(AtomicBool::new(false));
+        let user_data = BufferUserData::new(busy.clone());
+
+        assert!(!user_data.is_busy());
+        assert!(!busy.load(Ordering::SeqCst));
+
+        user_data.set_busy(true);
+        assert!(user_data.is_busy());
+        assert!(busy.load(Ordering::SeqCst));
+
+        let cloned_data = user_data.clone();
+        assert!(cloned_data.is_busy());
+
+        user_data.set_busy(false);
+        assert!(!user_data.is_busy());
+        assert!(!cloned_data.is_busy());
+    }
+
+    #[test]
+    fn test_double_buffering_memory_slicing_simulation() {
+        let tmp = Path::new("/tmp");
+        let width = 10u32;
+        let height = 10u32;
+        let frame_size = (width * height * 4) as usize;
+        let total_size = frame_size * 2;
+
+        let mut shm = MmappedShm::new(total_size, tmp).unwrap();
+        assert_eq!(shm.size(), total_size);
+
+        // Slot 0 write
+        let back_index_0 = 0;
+        let offset_0 = back_index_0 * frame_size;
+        let slot_0 = &mut shm.mmap_mut()[offset_0..offset_0 + frame_size];
+        slot_0.fill(0xAA);
+
+        // Slot 1 write
+        let back_index_1 = 1;
+        let offset_1 = back_index_1 * frame_size;
+        let slot_1 = &mut shm.mmap_mut()[offset_1..offset_1 + frame_size];
+        slot_1.fill(0xBB);
+
+        // Verify slot 0 and slot 1 do not overlap or overwrite each other
+        let full = shm.mmap_mut();
+        assert!(full[..frame_size].iter().all(|&b| b == 0xAA));
+        assert!(full[frame_size..total_size].iter().all(|&b| b == 0xBB));
     }
 }
