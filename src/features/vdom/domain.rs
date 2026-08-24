@@ -5,7 +5,7 @@ use crate::features::styling::domain::{
 };
 use crate::features::styling::ports::StyleResolverPort;
 use crate::shared::primitives::geometry::Size;
-use crate::shared::primitives::{ModuleInstanceId, ModuleKey, ModuleName, ModuleOptions};
+use crate::shared::primitives::{BinaryData, ModuleInstanceId, ModuleKey, ModuleName, ModuleOptions};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -182,8 +182,7 @@ pub enum VNodeKind {
     Rect,
     #[serde(rename = "image")]
     Image {
-        #[serde(with = "serde_bytes")]
-        data: Vec<u8>,
+        data: BinaryData,
         pixel_size: Size,
     },
     #[serde(rename = "module")]
@@ -298,7 +297,7 @@ impl VNode {
     }
 
     pub fn new_image(
-        data: Vec<u8>,
+        data: impl Into<BinaryData>,
         pixel_size: Size,
         class: Option<ClassNameList>,
         id: Option<ElementId>,
@@ -312,7 +311,10 @@ impl VNode {
             on_click: None,
             on_hover: None,
             tooltip,
-            kind: VNodeKind::Image { data, pixel_size },
+            kind: VNodeKind::Image {
+                data: data.into(),
+                pixel_size,
+            },
         }
     }
 
@@ -521,7 +523,7 @@ pub enum Patch {
     },
     UpdateImage {
         node_id: NodeId,
-        new_data: Vec<u8>,
+        new_data: BinaryData,
         new_pixel_size: Size,
     },
     UpdateModule {
@@ -718,5 +720,19 @@ mod tests {
         let res = DiffResult::unchanged();
         assert!(res.is_unchanged());
         assert_eq!(res.patch(), &Patch::NoChange);
+    }
+
+    #[test]
+    fn test_vnode_image_debug_omission() {
+        let node = VNode::new_image(
+            vec![1, 2, 3, 4, 5, 6, 7, 8],
+            Size::new(2, 1),
+            None,
+            None,
+            None,
+        );
+        let debug_str = format!("{:?}", node);
+        assert!(debug_str.contains("<Binary Data (8 bytes)>"));
+        assert!(!debug_str.contains("1, 2, 3, 4"));
     }
 }

@@ -2,7 +2,7 @@ use crate::app::commands::AppCommand;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::Size;
-use crate::shared::primitives::{ChildModuleLayout, ModuleKey, ModuleOptions};
+use crate::shared::primitives::{BinaryData, ChildModuleLayout, ModuleKey, ModuleOptions};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
@@ -183,7 +183,7 @@ pub enum StyledNode {
         tooltip: Option<Box<StyledNode>>,
     },
     Image {
-        data: Vec<u8>,
+        data: BinaryData,
         pixel_size: Size,
         style: ComputedStyle,
         tooltip: Option<Box<StyledNode>>,
@@ -256,7 +256,7 @@ pub enum RenderNode {
     },
     Image {
         rect: Rect,
-        data: Vec<u8>,
+        data: BinaryData,
         pixel_size: Size,
         tooltip: Option<Box<StyledNode>>,
     },
@@ -731,7 +731,7 @@ mod tests {
         canvas.expect_draw_image().times(1).return_const(());
         let image = RenderNode::Image {
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
-            data: vec![0, 0, 0, 0],
+            data: BinaryData::new(vec![0, 0, 0, 0]),
             pixel_size: Size::new(1, 1),
             tooltip: None,
         };

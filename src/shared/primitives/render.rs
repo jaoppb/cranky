@@ -1,14 +1,18 @@
+use crate::shared::primitives::binary::BinaryData;
 use crate::shared::primitives::geometry::Size;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderBuffer {
-    data: Vec<u8>,
+    data: BinaryData,
     size: Size,
 }
 
 impl RenderBuffer {
-    pub fn new(data: Vec<u8>, size: Size) -> Self {
-        Self { data, size }
+    pub fn new(data: impl Into<BinaryData>, size: Size) -> Self {
+        Self {
+            data: data.into(),
+            size,
+        }
     }
 
     pub fn size(&self) -> &Size {

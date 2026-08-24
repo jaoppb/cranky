@@ -1,6 +1,9 @@
+pub mod binary;
 pub mod color;
 pub mod geometry;
 pub mod render;
+
+pub use binary::BinaryData;
 
 use crate::shared::primitives::geometry::{Rect, Size};
 use serde::{Deserialize, Serialize};

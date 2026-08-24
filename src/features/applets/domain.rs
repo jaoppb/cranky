@@ -84,17 +84,20 @@ impl IconName {
 }
 
 use crate::shared::primitives::geometry::Size;
+use crate::shared::primitives::BinaryData;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct IconImage {
-    #[serde(with = "serde_bytes")]
-    data: Vec<u8>,
+    data: BinaryData,
     size: Size,
 }
 
 impl IconImage {
-    pub fn new(data: Vec<u8>, size: Size) -> Self {
-        Self { data, size }
+    pub fn new(data: impl Into<BinaryData>, size: Size) -> Self {
+        Self {
+            data: data.into(),
+            size,
+        }
     }
     #[cfg(test)]
     pub fn data(&self) -> &[u8] {
@@ -695,6 +698,15 @@ mod tests {
         let img = IconImage::new(vec![0], size);
         assert_eq!(img.size(), &size);
         assert_eq!(img.data(), &[0]);
+    }
+
+    #[test]
+    fn test_icon_image_debug_omission() {
+        let size = crate::shared::primitives::geometry::Size::new(16, 16);
+        let img = IconImage::new(vec![255; 16 * 16 * 4], size);
+        let debug_str = format!("{:?}", img);
+        assert!(debug_str.contains("<Binary Data (1024 bytes)>"));
+        assert!(!debug_str.contains("255, 255"));
     }
 
     #[test]
