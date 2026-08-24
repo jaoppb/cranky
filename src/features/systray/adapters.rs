@@ -85,7 +85,7 @@ impl SniEvent {
         match self {
             SniEvent::Title => {
                 let title = proxy.title().await.unwrap_or_default();
-                tracing::info!("SniEvent::Title: updated title to '{}'", title);
+                tracing::trace!("SniEvent::Title: updated title to '{}'", title);
                 applet.with_title(title)
             }
             SniEvent::Status(status_str) => {
@@ -95,14 +95,14 @@ impl SniEvent {
                     "NeedsAttention" => AppletStatus::NeedsAttention,
                     _ => AppletStatus::Unknown,
                 };
-                tracing::info!("SniEvent::Status: updated status to {:?}", status);
+                tracing::trace!("SniEvent::Status: updated status to {:?}", status);
                 applet.with_status(status)
             }
             SniEvent::Icon | SniEvent::ThemePath => {
                 let icon_name = proxy.icon_name().await.ok();
                 let icon_theme_path = proxy.icon_theme_path().await.ok();
                 let icon_pixmap = proxy.icon_pixmap().await.ok();
-                tracing::info!(
+                tracing::trace!(
                     "SniEvent::Icon/ThemePath: updated icon_name={:?}, theme_path={:?}, has_pixmap={}",
                     icon_name,
                     icon_theme_path,
@@ -120,7 +120,7 @@ impl SniEvent {
                 let icon_name = proxy.attention_icon_name().await.ok();
                 let icon_theme_path = proxy.attention_icon_theme_path().await.ok();
                 let icon_pixmap = proxy.attention_icon_pixmap().await.ok();
-                tracing::info!("SniEvent::AttentionIcon: updated attention icon");
+                tracing::trace!("SniEvent::AttentionIcon: updated attention icon");
                 let icon_image =
                     resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
                 let icon = crate::features::applets::domain::AppletIcon::new(
@@ -132,7 +132,7 @@ impl SniEvent {
             SniEvent::OverlayIcon => {
                 let icon_name = proxy.overlay_icon_name().await.ok();
                 let icon_pixmap = proxy.overlay_icon_pixmap().await.ok();
-                tracing::info!("SniEvent::OverlayIcon: updated overlay icon");
+                tracing::trace!("SniEvent::OverlayIcon: updated overlay icon");
                 let icon_image = resolve_icon(icon_name.clone(), None, icon_pixmap).await;
                 let icon = crate::features::applets::domain::AppletIcon::new(
                     icon_name.map(crate::features::applets::domain::IconName::new),
@@ -145,7 +145,7 @@ impl SniEvent {
                     Ok(val) => Watcher::parse_raw_tooltip(val),
                     Err(_) => None,
                 };
-                tracing::info!("SniEvent::ToolTip: updated tooltip");
+                tracing::trace!("SniEvent::ToolTip: updated tooltip");
                 applet.with_tooltip(tooltip)
             }
             SniEvent::Menu => {
@@ -160,7 +160,7 @@ impl SniEvent {
                         crate::features::applets::domain::ItemIsMenu::new(item_is_menu_val),
                     );
                 }
-                tracing::info!("SniEvent::Menu: updated menu");
+                tracing::trace!("SniEvent::Menu: updated menu");
                 applet
             }
         }
@@ -597,7 +597,7 @@ impl Watcher {
         }
         Self::publish_state(&items, &hub).await;
 
-        tracing::info!("Setting up SNI signal streams for {}", id);
+        tracing::debug!("Setting up SNI signal streams for {}", id);
         let Ok(new_title) = proxy.receive_new_title().await else {
             tracing::error!("Failed to subscribe to new_title for {}", id);
             return Ok(());
@@ -631,7 +631,7 @@ impl Watcher {
             return Ok(());
         };
 
-        tracing::info!("Successfully subscribed to all SNI signals for {}", id);
+        tracing::debug!("Successfully subscribed to all SNI signals for {}", id);
 
         let items_clone = items.clone();
         let hub_clone = hub.clone();
@@ -656,7 +656,7 @@ impl Watcher {
                 .merge(new_menu.map(|_| SniEvent::Menu));
 
             while let Some(event) = events.next().await {
-                tracing::info!("Received SNI event {:?} for applet {}", event, id_clone);
+                tracing::trace!("Received SNI event {:?} for applet {}", event, id_clone);
                 let current_applet = {
                     let lock = items_clone.read().await;
                     lock.get(&crate::features::applets::domain::AppletId::new(&id_clone))
@@ -679,7 +679,7 @@ impl Watcher {
                 Self::publish_state(&items_clone, &hub_clone).await;
             }
 
-            tracing::info!("Applet {} loop terminated, cleaning up state", id_clone);
+            tracing::debug!("Applet {} loop terminated, cleaning up state", id_clone);
             {
                 let mut lock = items_clone.write().await;
                 lock.remove(&crate::features::applets::domain::AppletId::new(&id_clone));
@@ -710,7 +710,7 @@ impl Watcher {
                 .collect();
 
             for key in keys_to_remove {
-                tracing::info!(
+                tracing::debug!(
                     "Removing SNI applet {} because D-Bus name {} disconnected",
                     key.as_str(),
                     destination
@@ -820,7 +820,7 @@ impl SniPort for SniAdapter {
         let items_lock = self.items.read().await;
 
         if let (Some(conn), Some(applet)) = (lock.as_ref(), items_lock.get(id)) {
-            info!(
+            debug!(
                 "trigger_action: Applet found [id={}, dest={}, path={}, item_is_menu={}], routing action '{}' at pos {:?}",
                 id.as_str(),
                 applet.destination().as_str(),
@@ -853,30 +853,30 @@ impl SniPort for SniAdapter {
             match action.as_str() {
                 "Primary" => {
                     if applet.item_is_menu().value() {
-                        info!(
+                        debug!(
                             "trigger_action: item_is_menu=true, calling ContextMenu({}, {}) on D-Bus",
                             x, y
                         );
                         match proxy.call_method("ContextMenu", &(x, y)).await {
-                            Ok(_) => info!("trigger_action: ContextMenu({}, {}) succeeded", x, y),
+                            Ok(_) => debug!("trigger_action: ContextMenu({}, {}) succeeded", x, y),
                             Err(e) => {
                                 error!("trigger_action: ContextMenu({}, {}) failed: {}", x, y, e)
                             }
                         }
                     } else {
-                        info!(
+                        debug!(
                             "trigger_action: item_is_menu=false, calling Activate({}, {}) on D-Bus",
                             x, y
                         );
                         match proxy.call_method("Activate", &(x, y)).await {
-                            Ok(_) => info!("trigger_action: Activate({}, {}) succeeded", x, y),
+                            Ok(_) => debug!("trigger_action: Activate({}, {}) succeeded", x, y),
                             Err(e) => {
                                 warn!(
                                     "trigger_action: Activate({}, {}) failed: {}, attempting SecondaryActivate({}, {})",
                                     x, y, e, x, y
                                 );
                                 match proxy.call_method("SecondaryActivate", &(x, y)).await {
-                                    Ok(_) => info!(
+                                    Ok(_) => debug!(
                                         "trigger_action: SecondaryActivate({}, {}) succeeded",
                                         x, y
                                     ),
@@ -890,19 +890,19 @@ impl SniPort for SniAdapter {
                     }
                 }
                 "Activate" => {
-                    info!("trigger_action: Calling Activate({}, {}) on D-Bus", x, y);
+                    debug!("trigger_action: Calling Activate({}, {}) on D-Bus", x, y);
                     match proxy.call_method("Activate", &(x, y)).await {
-                        Ok(_) => info!("trigger_action: Activate({}, {}) succeeded", x, y),
+                        Ok(_) => debug!("trigger_action: Activate({}, {}) succeeded", x, y),
                         Err(e) => error!("trigger_action: Activate({}, {}) failed: {}", x, y, e),
                     }
                 }
                 "SecondaryActivate" => {
-                    info!(
+                    debug!(
                         "trigger_action: Calling SecondaryActivate({}, {}) on D-Bus",
                         x, y
                     );
                     match proxy.call_method("SecondaryActivate", &(x, y)).await {
-                        Ok(_) => info!("trigger_action: SecondaryActivate({}, {}) succeeded", x, y),
+                        Ok(_) => debug!("trigger_action: SecondaryActivate({}, {}) succeeded", x, y),
                         Err(e) => error!(
                             "trigger_action: SecondaryActivate({}, {}) failed: {}",
                             x, y, e
@@ -910,37 +910,37 @@ impl SniPort for SniAdapter {
                     }
                 }
                 "ContextMenu" => {
-                    info!("trigger_action: Calling ContextMenu({}, {}) on D-Bus", x, y);
+                    debug!("trigger_action: Calling ContextMenu({}, {}) on D-Bus", x, y);
                     match proxy.call_method("ContextMenu", &(x, y)).await {
-                        Ok(_) => info!("trigger_action: ContextMenu({}, {}) succeeded", x, y),
+                        Ok(_) => debug!("trigger_action: ContextMenu({}, {}) succeeded", x, y),
                         Err(e) => error!("trigger_action: ContextMenu({}, {}) failed: {}", x, y, e),
                     }
                 }
                 "ScrollUp" => {
-                    info!("trigger_action: Calling Scroll(-1, 'vertical') on D-Bus");
+                    debug!("trigger_action: Calling Scroll(-1, 'vertical') on D-Bus");
                     match proxy.call_method("Scroll", &(-1, "vertical")).await {
-                        Ok(_) => info!("trigger_action: Scroll(-1, 'vertical') succeeded"),
+                        Ok(_) => debug!("trigger_action: Scroll(-1, 'vertical') succeeded"),
                         Err(e) => error!("trigger_action: Scroll(-1, 'vertical') failed: {}", e),
                     }
                 }
                 "ScrollDown" => {
-                    info!("trigger_action: Calling Scroll(1, 'vertical') on D-Bus");
+                    debug!("trigger_action: Calling Scroll(1, 'vertical') on D-Bus");
                     match proxy.call_method("Scroll", &(1, "vertical")).await {
-                        Ok(_) => info!("trigger_action: Scroll(1, 'vertical') succeeded"),
+                        Ok(_) => debug!("trigger_action: Scroll(1, 'vertical') succeeded"),
                         Err(e) => error!("trigger_action: Scroll(1, 'vertical') failed: {}", e),
                     }
                 }
                 "ScrollLeft" => {
-                    info!("trigger_action: Calling Scroll(-1, 'horizontal') on D-Bus");
+                    debug!("trigger_action: Calling Scroll(-1, 'horizontal') on D-Bus");
                     match proxy.call_method("Scroll", &(-1, "horizontal")).await {
-                        Ok(_) => info!("trigger_action: Scroll(-1, 'horizontal') succeeded"),
+                        Ok(_) => debug!("trigger_action: Scroll(-1, 'horizontal') succeeded"),
                         Err(e) => error!("trigger_action: Scroll(-1, 'horizontal') failed: {}", e),
                     }
                 }
                 "ScrollRight" => {
-                    info!("trigger_action: Calling Scroll(1, 'horizontal') on D-Bus");
+                    debug!("trigger_action: Calling Scroll(1, 'horizontal') on D-Bus");
                     match proxy.call_method("Scroll", &(1, "horizontal")).await {
-                        Ok(_) => info!("trigger_action: Scroll(1, 'horizontal') succeeded"),
+                        Ok(_) => debug!("trigger_action: Scroll(1, 'horizontal') succeeded"),
                         Err(e) => error!("trigger_action: Scroll(1, 'horizontal') failed: {}", e),
                     }
                 }

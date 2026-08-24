@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use tokio::sync::mpsc;
-use tracing::{error, info};
+use tracing::{debug, error};
 use zbus::Connection;
 
 use crate::shared::dbus::domain::*;
@@ -35,13 +35,13 @@ impl ZbusConnectionAdapter<Disconnected> {
     pub async fn connect(
         mut self,
     ) -> Result<ZbusConnectionAdapter<Connected>, DbusConnectionError> {
-        info!("Connecting to DBus Session Bus...");
+        debug!("Connecting to DBus Session Bus...");
         match Connection::session().await {
             Ok(conn) => self.session_conn = Some(conn),
             Err(e) => error!("Failed to connect to Session Bus: {}", e),
         }
 
-        info!("Connecting to DBus System Bus...");
+        debug!("Connecting to DBus System Bus...");
         match Connection::system().await {
             Ok(conn) => self.system_conn = Some(conn),
             Err(e) => error!("Failed to connect to System Bus: {}", e),

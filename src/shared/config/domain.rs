@@ -1,5 +1,6 @@
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::BarHeight;
+use crate::shared::primitives::{ModuleName, ModuleOptions};
 use std::collections::HashMap;
 
 use serde::Deserialize;
@@ -84,7 +85,7 @@ impl PaddingOffset {
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Config {
-    bar: BarConfig,
+    root: RootConfig,
     modules: ModulesConfig,
     rendering: RenderingMode,
     metrics: crate::features::metrics::domain::MetricsConfig,
@@ -93,14 +94,14 @@ pub struct Config {
 
 impl Config {
     pub fn new(
-        bar: BarConfig,
+        root: RootConfig,
         modules: ModulesConfig,
         rendering: RenderingMode,
         metrics: crate::features::metrics::domain::MetricsConfig,
         tooltip: TooltipConfig,
     ) -> Self {
         Self {
-            bar,
+            root,
             modules,
             rendering,
             metrics,
@@ -108,8 +109,8 @@ impl Config {
         }
     }
 
-    pub fn bar(&self) -> &BarConfig {
-        &self.bar
+    pub fn root(&self) -> &RootConfig {
+        &self.root
     }
 
     pub fn modules(&self) -> &ModulesConfig {
@@ -204,48 +205,6 @@ impl Default for RenderingMode {
     }
 }
 
-impl Default for BarConfig {
-    fn default() -> Self {
-        Self {
-            background: DrawingColor::Solid(crate::shared::primitives::color::Color::new(
-                0, 0, 0, 255,
-            )),
-            height: BarHeight::new(30),
-            vertical_alignment: VerticalAlignment::default(),
-            border: BorderConfig::default(),
-            margin: MarginConfig::default(),
-            padding: PaddingConfig::default(),
-            module_gap: ModuleGap::default(),
-            font_family: FontFamily::new("".to_string()),
-            font_size: FontSize::new(14.0),
-            unfocused: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct ModuleGap(u32);
-
-impl ModuleGap {
-    pub fn new(val: u32) -> Self {
-        Self(val)
-    }
-
-    pub fn value(&self) -> u32 {
-        self.0
-    }
-}
-
-impl Default for BorderConfig {
-    fn default() -> Self {
-        Self {
-            size: BorderSize::new(0.0),
-            color: DrawingColor::Solid(crate::shared::primitives::color::Color::new(0, 0, 0, 255)),
-            radius: BorderRadius::new(0.0),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RenderingMode {
     Immediate { fps_limit: Option<u32> },
@@ -271,62 +230,45 @@ pub enum VerticalAlignment {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct BarConfig {
-    background: DrawingColor,
+pub struct RootConfig {
+    name: ModuleName,
     height: BarHeight,
     vertical_alignment: VerticalAlignment,
-    border: BorderConfig,
     margin: MarginConfig,
-    padding: PaddingConfig,
-    module_gap: ModuleGap,
-    font_family: FontFamily,
-    font_size: FontSize,
-    unfocused: Option<PartialBarConfig>,
+    unfocused: Option<PartialRootConfig>,
+    options: ModuleOptions,
 }
 
-pub struct CreateBarConfigCommand {
-    background: DrawingColor,
+pub struct CreateRootConfigCommand {
+    name: ModuleName,
     height: BarHeight,
     vertical_alignment: VerticalAlignment,
-    border: BorderConfig,
     margin: MarginConfig,
-    padding: PaddingConfig,
-    module_gap: ModuleGap,
-    font_family: FontFamily,
-    font_size: FontSize,
-    unfocused: Option<PartialBarConfig>,
+    unfocused: Option<PartialRootConfig>,
+    options: ModuleOptions,
 }
 
-impl CreateBarConfigCommand {
-    #[allow(clippy::too_many_arguments)]
+impl CreateRootConfigCommand {
     pub fn new(
-        background: DrawingColor,
+        name: ModuleName,
         height: BarHeight,
         vertical_alignment: VerticalAlignment,
-        border: BorderConfig,
         margin: MarginConfig,
-        padding: PaddingConfig,
-        module_gap: ModuleGap,
-        font_family: FontFamily,
-        font_size: FontSize,
-        unfocused: Option<PartialBarConfig>,
+        unfocused: Option<PartialRootConfig>,
+        options: ModuleOptions,
     ) -> Self {
         Self {
-            background,
+            name,
             height,
             vertical_alignment,
-            border,
             margin,
-            padding,
-            module_gap,
-            font_family,
-            font_size,
             unfocused,
+            options,
         }
     }
 
-    pub fn background(&self) -> &DrawingColor {
-        &self.background
+    pub fn name(&self) -> &ModuleName {
+        &self.name
     }
     pub fn height(&self) -> BarHeight {
         self.height
@@ -334,47 +276,44 @@ impl CreateBarConfigCommand {
     pub fn vertical_alignment(&self) -> VerticalAlignment {
         self.vertical_alignment
     }
-    pub fn border(&self) -> &BorderConfig {
-        &self.border
-    }
     pub fn margin(&self) -> &MarginConfig {
         &self.margin
     }
-    pub fn padding(&self) -> &PaddingConfig {
-        &self.padding
-    }
-    pub fn module_gap(&self) -> ModuleGap {
-        self.module_gap
-    }
-    pub fn font_family(&self) -> &FontFamily {
-        &self.font_family
-    }
-    pub fn font_size(&self) -> FontSize {
-        self.font_size
-    }
-    pub fn unfocused(&self) -> Option<&PartialBarConfig> {
+    pub fn unfocused(&self) -> Option<&PartialRootConfig> {
         self.unfocused.as_ref()
+    }
+    pub fn options(&self) -> &ModuleOptions {
+        &self.options
     }
 }
 
-impl BarConfig {
-    pub fn new(cmd: CreateBarConfigCommand) -> Self {
+impl Default for RootConfig {
+    fn default() -> Self {
         Self {
-            background: cmd.background().clone(),
+            name: ModuleName::new("bar"),
+            height: BarHeight::new(30),
+            vertical_alignment: VerticalAlignment::default(),
+            margin: MarginConfig::default(),
+            unfocused: None,
+            options: ModuleOptions::default(),
+        }
+    }
+}
+
+impl RootConfig {
+    pub fn new(cmd: CreateRootConfigCommand) -> Self {
+        Self {
+            name: cmd.name().clone(),
             height: cmd.height(),
             vertical_alignment: cmd.vertical_alignment(),
-            border: cmd.border().clone(),
             margin: cmd.margin().clone(),
-            padding: cmd.padding().clone(),
-            module_gap: cmd.module_gap(),
-            font_family: cmd.font_family().clone(),
-            font_size: cmd.font_size(),
             unfocused: cmd.unfocused().cloned(),
+            options: cmd.options().clone(),
         }
     }
 
-    pub fn background(&self) -> &DrawingColor {
-        &self.background
+    pub fn name(&self) -> &ModuleName {
+        &self.name
     }
 
     pub fn height(&self) -> BarHeight {
@@ -386,52 +325,22 @@ impl BarConfig {
         self.vertical_alignment
     }
 
-    pub fn border(&self) -> &BorderConfig {
-        &self.border
-    }
-
     pub fn margin(&self) -> &MarginConfig {
         &self.margin
     }
 
-    pub fn padding(&self) -> &PaddingConfig {
-        &self.padding
+    pub fn options(&self) -> &ModuleOptions {
+        &self.options
     }
 
-    pub fn module_gap(&self) -> ModuleGap {
-        self.module_gap
-    }
-
-    pub fn font_family(&self) -> &FontFamily {
-        &self.font_family
-    }
-
-    pub fn font_size(&self) -> FontSize {
-        self.font_size
-    }
-
-    pub fn as_unfocused(&self) -> BarConfig {
+    pub fn as_unfocused(&self) -> RootConfig {
         let mut base = self.clone();
         if let Some(unfocused) = &self.unfocused {
-            if let Some(bg) = unfocused.background() {
-                base.background = bg.clone();
-            }
             if let Some(h) = unfocused.height() {
                 base.height = h;
             }
             if let Some(va) = unfocused.vertical_alignment() {
                 base.vertical_alignment = va;
-            }
-            if let Some(pb) = unfocused.border() {
-                if let Some(s) = pb.size() {
-                    base.border.size = s;
-                }
-                if let Some(c) = pb.color() {
-                    base.border.color = c.clone();
-                }
-                if let Some(r) = pb.radius() {
-                    base.border.radius = r;
-                }
             }
             if let Some(pm) = unfocused.margin() {
                 if let Some(t) = pm.top() {
@@ -446,29 +355,6 @@ impl BarConfig {
                 if let Some(r) = pm.right() {
                     base.margin.right = r;
                 }
-            }
-            if let Some(pp) = unfocused.padding() {
-                if let Some(t) = pp.top() {
-                    base.padding.top = t;
-                }
-                if let Some(b) = pp.bottom() {
-                    base.padding.bottom = b;
-                }
-                if let Some(l) = pp.left() {
-                    base.padding.left = l;
-                }
-                if let Some(r) = pp.right() {
-                    base.padding.right = r;
-                }
-            }
-            if let Some(gap) = unfocused.module_gap() {
-                base.module_gap = gap;
-            }
-            if let Some(ff) = unfocused.font_family() {
-                base.font_family = ff.clone();
-            }
-            if let Some(fs) = unfocused.font_size() {
-                base.font_size = fs;
             }
         }
         base
@@ -515,105 +401,22 @@ impl MarginConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct PaddingConfig {
-    top: PaddingOffset,
-    bottom: PaddingOffset,
-    left: PaddingOffset,
-    right: PaddingOffset,
-}
-
-impl PaddingConfig {
-    pub fn new(
-        top: PaddingOffset,
-        bottom: PaddingOffset,
-        left: PaddingOffset,
-        right: PaddingOffset,
-    ) -> Self {
-        Self {
-            top,
-            bottom,
-            left,
-            right,
-        }
-    }
-
-    pub fn top(&self) -> PaddingOffset {
-        self.top
-    }
-
-    pub fn bottom(&self) -> PaddingOffset {
-        self.bottom
-    }
-
-    pub fn left(&self) -> PaddingOffset {
-        self.left
-    }
-
-    pub fn right(&self) -> PaddingOffset {
-        self.right
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct BorderConfig {
-    size: BorderSize,
-    color: DrawingColor,
-    radius: BorderRadius,
-}
-
-impl BorderConfig {
-    pub fn new(size: BorderSize, color: DrawingColor, radius: BorderRadius) -> Self {
-        Self {
-            size,
-            color,
-            radius,
-        }
-    }
-
-    pub fn size(&self) -> BorderSize {
-        self.size
-    }
-
-    pub fn color(&self) -> &DrawingColor {
-        &self.color
-    }
-
-    pub fn radius(&self) -> BorderRadius {
-        self.radius
-    }
-}
-
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ModulesConfig {
-    left: Vec<ModuleConfig>,
-    center: Vec<ModuleConfig>,
-    right: Vec<ModuleConfig>,
+    modules: HashMap<ModuleName, ModuleConfig>,
 }
 
 impl ModulesConfig {
-    pub fn new(
-        left: Vec<ModuleConfig>,
-        center: Vec<ModuleConfig>,
-        right: Vec<ModuleConfig>,
-    ) -> Self {
-        Self {
-            left,
-            center,
-            right,
-        }
+    pub fn new(modules: HashMap<ModuleName, ModuleConfig>) -> Self {
+        Self { modules }
     }
 
-    pub fn left(&self) -> &[ModuleConfig] {
-        &self.left
+    pub fn get(&self, name: &ModuleName) -> Option<&ModuleConfig> {
+        self.modules.get(name)
     }
 
-    pub fn center(&self) -> &[ModuleConfig] {
-        &self.center
-    }
-
-    pub fn right(&self) -> &[ModuleConfig] {
-        &self.right
+    pub fn modules(&self) -> &HashMap<ModuleName, ModuleConfig> {
+        &self.modules
     }
 }
 
@@ -676,14 +479,12 @@ impl EngineSelection {
     }
 }
 
-use crate::shared::primitives::ModuleName;
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleConfig {
     name: ModuleName,
     enable: bool,
     engine: EngineSelection,
-    options: HashMap<String, serde_json::Value>,
+    options: ModuleOptions,
 }
 
 impl ModuleConfig {
@@ -691,7 +492,7 @@ impl ModuleConfig {
         name: ModuleName,
         enable: bool,
         engine: EngineSelection,
-        options: HashMap<String, serde_json::Value>,
+        options: ModuleOptions,
     ) -> Self {
         Self {
             name,
@@ -713,7 +514,7 @@ impl ModuleConfig {
         &self.engine
     }
 
-    pub fn options(&self) -> &HashMap<String, serde_json::Value> {
+    pub fn options(&self) -> &ModuleOptions {
         &self.options
     }
 }
@@ -756,195 +557,59 @@ impl PartialMarginConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct PartialPaddingConfig {
-    top: Option<PaddingOffset>,
-    bottom: Option<PaddingOffset>,
-    left: Option<PaddingOffset>,
-    right: Option<PaddingOffset>,
-}
-
-impl PartialPaddingConfig {
-    pub fn new(
-        top: Option<PaddingOffset>,
-        bottom: Option<PaddingOffset>,
-        left: Option<PaddingOffset>,
-        right: Option<PaddingOffset>,
-    ) -> Self {
-        Self {
-            top,
-            bottom,
-            left,
-            right,
-        }
-    }
-
-    pub fn top(&self) -> Option<PaddingOffset> {
-        self.top
-    }
-    pub fn bottom(&self) -> Option<PaddingOffset> {
-        self.bottom
-    }
-    pub fn left(&self) -> Option<PaddingOffset> {
-        self.left
-    }
-    pub fn right(&self) -> Option<PaddingOffset> {
-        self.right
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct PartialBorderConfig {
-    size: Option<BorderSize>,
-    color: Option<DrawingColor>,
-    radius: Option<BorderRadius>,
-}
-
-impl PartialBorderConfig {
-    pub fn new(
-        size: Option<BorderSize>,
-        color: Option<DrawingColor>,
-        radius: Option<BorderRadius>,
-    ) -> Self {
-        Self {
-            size,
-            color,
-            radius,
-        }
-    }
-
-    pub fn size(&self) -> Option<BorderSize> {
-        self.size
-    }
-    pub fn color(&self) -> Option<&DrawingColor> {
-        self.color.as_ref()
-    }
-    pub fn radius(&self) -> Option<BorderRadius> {
-        self.radius
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct PartialBarConfig {
-    background: Option<DrawingColor>,
+pub struct PartialRootConfig {
     height: Option<BarHeight>,
     vertical_alignment: Option<VerticalAlignment>,
-    border: Option<PartialBorderConfig>,
     margin: Option<PartialMarginConfig>,
-    padding: Option<PartialPaddingConfig>,
-    module_gap: Option<ModuleGap>,
-    font_family: Option<FontFamily>,
-    font_size: Option<FontSize>,
 }
 
-pub struct CreatePartialBarConfigCommand {
-    background: Option<DrawingColor>,
+pub struct CreatePartialRootConfigCommand {
     height: Option<BarHeight>,
     vertical_alignment: Option<VerticalAlignment>,
-    border: Option<PartialBorderConfig>,
     margin: Option<PartialMarginConfig>,
-    padding: Option<PartialPaddingConfig>,
-    module_gap: Option<ModuleGap>,
-    font_family: Option<FontFamily>,
-    font_size: Option<FontSize>,
 }
 
-impl CreatePartialBarConfigCommand {
-    #[allow(clippy::too_many_arguments)]
+impl CreatePartialRootConfigCommand {
     pub fn new(
-        background: Option<DrawingColor>,
         height: Option<BarHeight>,
         vertical_alignment: Option<VerticalAlignment>,
-        border: Option<PartialBorderConfig>,
         margin: Option<PartialMarginConfig>,
-        padding: Option<PartialPaddingConfig>,
-        module_gap: Option<ModuleGap>,
-        font_family: Option<FontFamily>,
-        font_size: Option<FontSize>,
     ) -> Self {
         Self {
-            background,
             height,
             vertical_alignment,
-            border,
             margin,
-            padding,
-            module_gap,
-            font_family,
-            font_size,
         }
     }
 
-    pub fn background(&self) -> Option<&DrawingColor> {
-        self.background.as_ref()
-    }
     pub fn height(&self) -> Option<BarHeight> {
         self.height
     }
     pub fn vertical_alignment(&self) -> Option<VerticalAlignment> {
         self.vertical_alignment
     }
-    pub fn border(&self) -> Option<&PartialBorderConfig> {
-        self.border.as_ref()
-    }
     pub fn margin(&self) -> Option<&PartialMarginConfig> {
         self.margin.as_ref()
-    }
-    pub fn padding(&self) -> Option<&PartialPaddingConfig> {
-        self.padding.as_ref()
-    }
-    pub fn module_gap(&self) -> Option<ModuleGap> {
-        self.module_gap
-    }
-    pub fn font_family(&self) -> Option<&FontFamily> {
-        self.font_family.as_ref()
-    }
-    pub fn font_size(&self) -> Option<FontSize> {
-        self.font_size
     }
 }
 
-impl PartialBarConfig {
-    pub fn new(cmd: CreatePartialBarConfigCommand) -> Self {
+impl PartialRootConfig {
+    pub fn new(cmd: CreatePartialRootConfigCommand) -> Self {
         Self {
-            background: cmd.background().cloned(),
             height: cmd.height(),
             vertical_alignment: cmd.vertical_alignment(),
-            border: cmd.border().cloned(),
             margin: cmd.margin().cloned(),
-            padding: cmd.padding().cloned(),
-            module_gap: cmd.module_gap(),
-            font_family: cmd.font_family().cloned(),
-            font_size: cmd.font_size(),
         }
     }
 
-    pub fn background(&self) -> Option<&DrawingColor> {
-        self.background.as_ref()
-    }
     pub fn height(&self) -> Option<BarHeight> {
         self.height
     }
     pub fn vertical_alignment(&self) -> Option<VerticalAlignment> {
         self.vertical_alignment
     }
-    pub fn border(&self) -> Option<&PartialBorderConfig> {
-        self.border.as_ref()
-    }
     pub fn margin(&self) -> Option<&PartialMarginConfig> {
         self.margin.as_ref()
-    }
-    pub fn padding(&self) -> Option<&PartialPaddingConfig> {
-        self.padding.as_ref()
-    }
-
-    pub fn module_gap(&self) -> Option<ModuleGap> {
-        self.module_gap
-    }
-    pub fn font_family(&self) -> Option<&FontFamily> {
-        self.font_family.as_ref()
-    }
-    pub fn font_size(&self) -> Option<FontSize> {
-        self.font_size
     }
 }
 
@@ -962,24 +627,6 @@ mod tests {
     fn test_font_size() {
         let s = FontSize::new(12.5);
         assert_eq!(s.value(), 12.5);
-    }
-
-    #[test]
-    fn test_border_size() {
-        let s = BorderSize::new(2.0);
-        assert_eq!(s.value(), 2.0);
-    }
-
-    #[test]
-    fn test_border_radius() {
-        let r = BorderRadius::new(5.0);
-        assert_eq!(r.value(), 5.0);
-    }
-
-    #[test]
-    fn test_padding_offset() {
-        let p = PaddingOffset::new(10);
-        assert_eq!(p.value(), 10);
     }
 
     #[test]
@@ -1003,67 +650,57 @@ mod tests {
     }
 
     #[test]
-    fn test_padding_config() {
-        let p = PaddingConfig::new(
-            PaddingOffset::new(1),
-            PaddingOffset::new(2),
-            PaddingOffset::new(3),
-            PaddingOffset::new(4),
-        );
-        assert_eq!(p.top().value(), 1);
-        assert_eq!(p.bottom().value(), 2);
-        assert_eq!(p.left().value(), 3);
-        assert_eq!(p.right().value(), 4);
-    }
+    fn test_root_config_defaults() {
+        let root = RootConfig::default();
+        assert_eq!(root.name().as_str(), "bar");
+        assert_eq!(root.height().value(), 30);
+        assert_eq!(root.vertical_alignment(), VerticalAlignment::Center);
 
-    #[test]
-    fn test_border_config() {
-        let c = DrawingColor::parse("#ff0000").unwrap();
-        let b = BorderConfig::new(BorderSize::new(2.0), c.clone(), BorderRadius::new(4.0));
-        assert_eq!(b.size().value(), 2.0);
-        assert_eq!(b.color(), &c);
-        assert_eq!(b.radius().value(), 4.0);
-    }
-
-    #[test]
-    fn test_bar_config_defaults() {
-        let bar = BarConfig::default();
-        assert_eq!(bar.height().value(), 30);
-        assert_eq!(bar.vertical_alignment(), VerticalAlignment::Center);
-        assert_eq!(bar.font_family().as_str(), "");
-        assert_eq!(bar.font_size().value(), 14.0);
-
-        let unfocused = bar.as_unfocused();
+        let unfocused = root.as_unfocused();
         assert_eq!(unfocused.height().value(), 30);
     }
 
     #[test]
-    fn test_module_position() {
-        let left = vec![ModuleConfig::new(
+    fn test_modules_config() {
+        let mut modules_map = HashMap::new();
+        modules_map.insert(
             ModuleName::new("time"),
-            true,
-            EngineSelection::Auto,
-            HashMap::new(),
-        )];
-        let modules = ModulesConfig::new(left, vec![], vec![]);
+            ModuleConfig::new(
+                ModuleName::new("time"),
+                true,
+                EngineSelection::Auto,
+                ModuleOptions::default(),
+            ),
+        );
+        let modules = ModulesConfig::new(modules_map);
 
         let config = Config::new(
-            BarConfig::default(),
+            RootConfig::default(),
             modules,
             RenderingMode::default(),
             crate::features::metrics::domain::MetricsConfig::default(),
             TooltipConfig::default(),
         );
-        assert_eq!(config.modules().left().len(), 1);
-        assert_eq!(config.modules().left()[0].name(), "time");
-        assert_eq!(config.modules().center().len(), 0);
-        assert_eq!(config.modules().right().len(), 0);
+        assert!(config.modules().get(&ModuleName::new("time")).is_some());
+        assert_eq!(
+            config
+                .modules()
+                .get(&ModuleName::new("time"))
+                .unwrap()
+                .name(),
+            "time"
+        );
     }
 
     #[test]
     fn test_module_config_engine() {
         let explicit = EngineSelection::Explicit(EngineId::new("rhai"));
-        let cfg = ModuleConfig::new("hour".into(), true, explicit.clone(), HashMap::new());
+        let cfg = ModuleConfig::new(
+            "hour".into(),
+            true,
+            explicit.clone(),
+            ModuleOptions::default(),
+        );
         assert_eq!(cfg.engine(), &explicit);
         assert_eq!(
             cfg.engine().as_explicit().map(|id| id.as_str()),

@@ -115,6 +115,14 @@ impl ShmBuffer {
         &self.buffer
     }
 
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
     pub fn swap_buffers(&mut self) {
         // No-op for now, single buffer implementation
     }

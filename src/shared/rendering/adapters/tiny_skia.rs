@@ -230,36 +230,39 @@ impl<'a> Canvas for TinySkiaCosmicCanvas<'a> {
         let y = LogicalPx::new(position.y() as f32);
         let width = LogicalPx::new(size.width() as f32);
         let height = LogicalPx::new(size.height() as f32);
-        let size = border_size;
         let physical_x = x.apply_scale(&self.scale).value();
         let physical_y = y.apply_scale(&self.scale).value();
         let physical_w = width.apply_scale(&self.scale).value();
         let physical_h = height.apply_scale(&self.scale).value();
+        let stroke_w = border_size.apply_scale(&self.scale).value();
+
+        if stroke_w <= 0.0 {
+            return;
+        }
 
         if let Some(physical_rect) = Rect::from_xywh(physical_x, physical_y, physical_w, physical_h)
         {
             let paint = self.get_paint(color, physical_rect);
             let stroke = Stroke {
-                width: size.apply_scale(&self.scale).value(),
+                width: stroke_w,
                 miter_limit: 4.0,
                 line_cap: LineCap::Butt,
                 line_join: LineJoin::Miter,
                 dash: None,
             };
 
-            let r = radius
-                .apply_scale(&self.scale)
-                .value()
-                .min(physical_rect.width() / 2.0)
-                .min(physical_rect.height() / 2.0);
-            let mut pb = PathBuilder::new();
+            let half_stroke = stroke_w / 2.0;
             let (x, y, w, h) = (
-                physical_rect.left(),
-                physical_rect.top(),
-                physical_rect.width(),
-                physical_rect.height(),
+                physical_rect.left() + half_stroke,
+                physical_rect.top() + half_stroke,
+                (physical_rect.width() - stroke_w).max(0.0),
+                (physical_rect.height() - stroke_w).max(0.0),
             );
 
+            let max_r = (w / 2.0).min(h / 2.0);
+            let r = (radius.apply_scale(&self.scale).value() - half_stroke).clamp(0.0, max_r);
+
+            let mut pb = PathBuilder::new();
             if r <= 0.0 {
                 pb.move_to(x, y);
                 pb.line_to(x + w, y);
@@ -649,30 +652,41 @@ mod tests {
         let mut font_system = FontSystem::new();
         let mut swash_cache = SwashCache::new();
 
-        let mut canvas = TinySkiaCosmicCanvas::new(
-            pixmap.as_mut(),
-            &mut font_system,
-            &mut swash_cache,
-            Scale::new(1.0),
-            FontFamily::new("sans-serif".to_string()),
-            FontSize::new(14.0),
-        );
+        {
+            let mut canvas = TinySkiaCosmicCanvas::new(
+                pixmap.as_mut(),
+                &mut font_system,
+                &mut swash_cache,
+                Scale::new(1.0),
+                FontFamily::new("sans-serif".to_string()),
+                FontSize::new(14.0),
+            );
 
-        canvas.draw_border(
-            Position::new(10, 10),
-            Size::new(80, 80),
-            DrawingColor::Solid(Color::new(0, 255, 0, 255)),
-            LogicalPx::new(0.0), // No radius
-            LogicalPx::new(2.0),
-        );
+            canvas.draw_border(
+                Position::new(0, 0),
+                Size::new(20, 20),
+                DrawingColor::Solid(Color::new(0, 255, 0, 255)),
+                LogicalPx::new(0.0), // No radius
+                LogicalPx::new(2.0),
+            );
 
-        canvas.draw_border(
-            Position::new(20, 20),
-            Size::new(60, 60),
-            DrawingColor::Solid(Color::new(0, 0, 255, 255)),
-            LogicalPx::new(10.0), // With radius
-            LogicalPx::new(2.0),
-        );
+            canvas.draw_border(
+                Position::new(20, 20),
+                Size::new(60, 60),
+                DrawingColor::Solid(Color::new(0, 0, 255, 255)),
+                LogicalPx::new(10.0), // With radius
+                LogicalPx::new(2.0),
+            );
+        }
+
+        // Top-left outer corner must be filled (green)
+        let p0 = pixmap.pixel(0, 0).unwrap();
+        assert_eq!(p0.green(), 255);
+        assert_eq!(p0.alpha(), 255);
+
+        // Interior should be transparent
+        let p_inside = pixmap.pixel(10, 10).unwrap();
+        assert_eq!(p_inside.alpha(), 0);
     }
 
     #[test]

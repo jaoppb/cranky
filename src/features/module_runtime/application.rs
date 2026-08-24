@@ -13,6 +13,8 @@ use tokio::sync::watch;
 
 pub struct ModuleContext {
     id: crate::shared::primitives::ModuleId,
+    parent_id: Option<crate::shared::primitives::ModuleId>,
+    instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
     hub: Arc<SignalHub>,
     surface_manager: DynSurfaceManager,
     command_tx: Arc<dyn crate::features::module_runtime::ports::CommandSender>,
@@ -31,6 +33,8 @@ impl ModuleContext {
         let pointer_rx = hub.pointer_rx();
         Self {
             id,
+            parent_id: None,
+            instance_id: None,
             hub,
             surface_manager,
             command_tx,
@@ -39,8 +43,29 @@ impl ModuleContext {
         }
     }
 
+    pub fn with_parent(mut self, parent_id: Option<crate::shared::primitives::ModuleId>) -> Self {
+        self.parent_id = parent_id;
+        self
+    }
+
+    pub fn with_instance_id(
+        mut self,
+        instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
+    ) -> Self {
+        self.instance_id = instance_id;
+        self
+    }
+
     pub fn id(&self) -> crate::shared::primitives::ModuleId {
         self.id
+    }
+
+    pub fn parent_id(&self) -> Option<crate::shared::primitives::ModuleId> {
+        self.parent_id
+    }
+
+    pub fn instance_id(&self) -> Option<&crate::shared::primitives::ModuleInstanceId> {
+        self.instance_id.as_ref()
     }
 
     pub fn hub(&self) -> &Arc<SignalHub> {
@@ -65,6 +90,32 @@ impl ModuleContext {
     }
 }
 
+struct ModuleSizeMeasurer<'a, M: crate::features::layout_engine::domain::TextMeasurer> {
+    inner: M,
+    child_sizes: Option<&'a crate::shared::primitives::ChildSizesMap>,
+}
+
+impl<'a, M: crate::features::layout_engine::domain::TextMeasurer>
+    crate::features::layout_engine::domain::TextMeasurer for ModuleSizeMeasurer<'a, M>
+{
+    fn measure(
+        &mut self,
+        text: &str,
+        font: Option<&crate::shared::config::domain::FontFamily>,
+        size: Option<crate::shared::config::domain::FontSize>,
+    ) -> Size {
+        self.inner.measure(text, font, size)
+    }
+
+    fn measure_module(&self, key: &crate::shared::primitives::ModuleKey) -> Option<Size> {
+        let size = self
+            .child_sizes
+            .and_then(|sizes| sizes.get_by_name_or_key(key.name(), key.instance_id()).copied());
+        tracing::trace!(?key, ?size, has_child_sizes = self.child_sizes.is_some(), "measure_module called");
+        size
+    }
+}
+
 pub struct ModuleActor<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> {
     port: Box<dyn AnyModulePort>,
     ctx: ModuleContext,
@@ -76,6 +127,10 @@ pub struct ModuleActor<F: crate::shared::rendering::ports::canvas::CanvasFactory
     vdom_trees: std::collections::HashMap<MonitorId, crate::features::vdom::domain::VNode>,
     vdom_diff: std::sync::Arc<dyn crate::features::vdom::ports::VdomDiffPort>,
     style_resolver: std::sync::Arc<dyn crate::features::styling::ports::StyleResolverPort>,
+    last_child_sizes: std::collections::HashMap<
+        MonitorId,
+        Option<crate::shared::primitives::ChildSizesMap>,
+    >,
 }
 
 impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
@@ -96,6 +151,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
             vdom_trees: std::collections::HashMap::new(),
             vdom_diff,
             style_resolver,
+            last_child_sizes: std::collections::HashMap::new(),
         }
     }
 
@@ -108,7 +164,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
             use tokio_stream::wrappers::WatchStream;
 
             let mut events_stream = SelectAll::new();
-            let subs = self.port.subscriptions();
+            let subs = self.port.subscriptions().to_vec();
 
             if subs.contains(&SignalKind::Time) {
                 events_stream.push(
@@ -176,6 +232,7 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                 MonitorId,
                 crate::shared::primitives::geometry::Position,
             )> = None;
+            let mut module_sizes_rx = self.ctx.hub().module_sizes_rx();
 
             loop {
                 // Determine what woke us up
@@ -195,9 +252,18 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                                 changed_signals.insert(sig2);
                             }
                         }
+                        res = module_sizes_rx.changed() => {
+                            if res.is_err() {
+                                return false;
+                            }
+                        }
                         res = layout_rx.changed() => {
                             if res.is_err() {
                                 return false; // layout_rx dropped, we should exit
+                            }
+                            changed = true;
+                            for sub in &subs {
+                                changed_signals.insert(sub.clone());
                             }
                         }
                         res = input_rx.recv() => {
@@ -363,6 +429,9 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
         for m in layouts.keys() {
             all_monitors.insert(m.clone());
         }
+        for m in self.ctx.hub().module_sizes_rx().borrow().keys() {
+            all_monitors.insert(m.clone());
+        }
         let monitors: Vec<MonitorId> = all_monitors.into_iter().collect();
 
         for monitor_id in monitors {
@@ -374,26 +443,35 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
             let current_bounds = layouts.get(&monitor_id).copied();
             let bounds_changed = current_bounds != self.rendered_bounds.get(&monitor_id).copied();
 
+            let module_sizes_guard = self.ctx.hub().module_sizes_rx().borrow().clone();
+            let current_child_sizes = module_sizes_guard.get(&monitor_id).cloned();
+            let child_sizes_changed = self.last_child_sizes.get(&monitor_id) != Some(&current_child_sizes);
+
             if diff_result.is_unchanged()
                 && !bounds_changed
+                && !child_sizes_changed
                 && self.render_trees.contains_key(&monitor_id)
             {
                 tracing::trace!(
                     module = %self.ctx.id(),
                     monitor = %monitor_id,
-                    "VDOM and bounds unchanged; skipping style resolution, layout, and canvas render"
+                    "VDOM, bounds, and child sizes unchanged; skipping style resolution, layout, and canvas render"
                 );
                 continue;
             }
 
-            let render_node = if !diff_result.is_unchanged()
-                || !self.render_trees.contains_key(&monitor_id)
-            {
+            let bounds_changed = self.rendered_bounds.get(&monitor_id) != current_bounds.as_ref();
+            let vdom_dirty = !diff_result.is_unchanged() || !self.render_trees.contains_key(&monitor_id);
+
+            let render_node = if vdom_dirty || bounds_changed || child_sizes_changed {
+                self.last_child_sizes.insert(monitor_id.clone(), current_child_sizes.clone());
                 tracing::trace!(
                     module = %self.ctx.id(),
                     monitor = %monitor_id,
-                    patch = ?diff_result.patch(),
-                    "VDOM dirty; updating cached tree and calculating layout"
+                    vdom_dirty,
+                    bounds_changed,
+                    child_sizes_changed,
+                    "Updating layout for module"
                 );
 
                 self.vdom_trees.insert(monitor_id.clone(), new_vdom.clone());
@@ -401,18 +479,27 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                 tracing::trace!(module = %self.ctx.id(), monitor = %monitor_id, "Resolving styles for module VNode");
                 let styled_node = new_vdom.resolve_styles(self.style_resolver.as_ref(), None);
 
-                // Measure
-                let config = self.ctx.hub().config_rx().borrow().clone();
-                let default_font_family = config.bar().font_family().clone();
-                let default_font_size = config.bar().font_size();
+                let default_font_family = crate::shared::config::domain::FontFamily::new("".to_string());
+                let default_font_size = crate::shared::config::domain::FontSize::new(14.0);
+
+                let available_size = current_bounds
+                    .filter(|b| b.width() > 0 && b.height() > 0)
+                    .map(|b| *b.size());
+
+                let module_sizes_guard = self.ctx.hub().module_sizes_rx().borrow().clone();
+                let current_child_sizes = module_sizes_guard.get(&monitor_id);
 
                 let render_node_res = {
                     let mut factory = self.canvas_factory.lock().unwrap();
-                    let mut measurer = factory.create_text_measurer(
+                    let measurer_inner = factory.create_text_measurer(
                         Scale::new(1.0),
                         default_font_family.clone(),
                         default_font_size,
                     );
+                    let mut measurer = ModuleSizeMeasurer {
+                        inner: measurer_inner,
+                        child_sizes: current_child_sizes,
+                    };
 
                     let engine = layout_engines.entry(monitor_id.clone()).or_insert_with(|| {
                         Box::new(
@@ -420,10 +507,11 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                         )
                     });
 
-                    engine.calculate_layout(
+                    engine.calculate_layout_with_constraints(
                         styled_node,
                         &mut measurer,
                         crate::shared::primitives::geometry::Position::new(0, 0),
+                        available_size,
                     )
                 };
 
@@ -434,6 +522,17 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                         continue;
                     }
                 };
+
+                let child_layouts = render_node.collect_module_layouts();
+                if !child_layouts.is_empty() {
+                    self.ctx
+                        .command_tx()
+                        .send_command(AppCommand::ContainerLayoutsCalculated {
+                            parent_id: self.ctx.id(),
+                            monitor_id: monitor_id.clone(),
+                            layouts: child_layouts,
+                        });
+                }
 
                 self.render_trees
                     .insert(monitor_id.clone(), render_node.clone());
@@ -447,6 +546,13 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                     .unwrap_or(Size::new(0, 0));
                 if size != old_size {
                     self.sizes.insert(monitor_id.clone(), size);
+                    tracing::trace!(
+                        module = %self.ctx.id(),
+                        monitor = %monitor_id,
+                        ?size,
+                        ?old_size,
+                        "ModuleSizeChanged emitted"
+                    );
                     self.ctx
                         .command_tx()
                         .send_command(AppCommand::ModuleSizeChanged(
@@ -457,11 +563,6 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                 }
                 render_node
             } else {
-                tracing::trace!(
-                    module = %self.ctx.id(),
-                    monitor = %monitor_id,
-                    "VDOM unchanged but bounds changed; using cached layout to re-render canvas"
-                );
                 self.render_trees.get(&monitor_id).unwrap().clone()
             };
 
@@ -470,9 +571,8 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                 && bounds.width() > 0
                 && bounds.height() > 0
             {
-                let config = self.ctx.hub().config_rx().borrow().clone();
-                let default_font_family = config.bar().font_family().clone();
-                let default_font_size = config.bar().font_size();
+                let default_font_family = crate::shared::config::domain::FontFamily::new("".to_string());
+                let default_font_size = crate::shared::config::domain::FontSize::new(14.0);
 
                 let w = bounds.width();
                 let h = bounds.height();
@@ -493,11 +593,21 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                 let rt = tokio::runtime::Handle::current();
                 let sm = self.ctx.surface_manager().clone();
                 let mod_id = self.ctx.id();
+                let parent_id = self.ctx.parent_id();
                 let mon_id = monitor_id.clone();
                 let position =
                     crate::shared::primitives::geometry::Position::new(bounds.x(), bounds.y());
+                tracing::trace!(
+                    module = %mod_id,
+                    ?parent_id,
+                    monitor = %mon_id,
+                    ?position,
+                    size = ?bounds.size(),
+                    "Submitting module buffer to surface manager"
+                );
                 rt.block_on(async move {
-                    sm.submit_buffer(mod_id, mon_id, position, buffer).await;
+                    sm.submit_child_buffer(mod_id, parent_id, mon_id, position, buffer)
+                        .await;
                 });
                 self.rendered_bounds.insert(monitor_id.clone(), bounds);
             }
@@ -1040,5 +1150,126 @@ mod tests {
         actor.measure_and_render_all(&mut layout_engines);
         assert!(actor.vdom_trees.contains_key(&MonitorId::new("DP-1")));
         assert!(actor.render_trees.contains_key(&MonitorId::new("DP-1")));
+    }
+
+    #[tokio::test]
+    async fn test_container_module_emits_container_layouts_calculated() {
+        let id = crate::shared::primitives::ModuleId::new(0); // Root bar
+        let hub = Arc::new(SignalHub::new(Config::default()));
+
+        // 1. Send monitor into Hyprland state
+        {
+            let mut monitors = std::collections::BTreeMap::new();
+            monitors.insert(
+                crate::features::workspaces::domain::MonitorName::new("DP-1"),
+                crate::features::workspaces::domain::Monitor::new(
+                    crate::features::workspaces::domain::MonitorName::new("DP-1"),
+                    crate::features::workspaces::domain::WorkspaceId::new(1),
+                    None,
+                ),
+            );
+            let h_state = crate::shared::events::signals::HyprlandState::new(
+                std::collections::BTreeMap::new(),
+                monitors,
+                Some(crate::features::workspaces::domain::MonitorName::new("DP-1")),
+            );
+            hub.hyprland_tx().send(h_state).unwrap();
+        }
+
+        // 2. Report child module size (hour: 80x24) in hub.module_sizes
+        {
+            let mut sizes_map = HashMap::new();
+            let mut mon_map = crate::shared::primitives::ChildSizesMap::new();
+            mon_map.insert(
+                crate::shared::primitives::ModuleKey::from_name(
+                    crate::shared::primitives::ModuleName::new("hour"),
+                ),
+                crate::shared::primitives::geometry::Size::new(80, 24),
+            );
+            sizes_map.insert(MonitorId::new("DP-1"), mon_map);
+            hub.module_sizes_tx().send(sizes_map).unwrap();
+        }
+
+        let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
+        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
+        let sender: Arc<dyn CommandSender> = Arc::new(TestCommandSender { tx: cmd_tx });
+        let (layout_tx, layout_rx) = watch::channel(HashMap::new());
+        let ctx = ModuleContext::new(id, hub.clone(), sm, sender, layout_rx);
+
+        // Container VNode has a child module "hour"
+        let child_node = crate::features::vdom::domain::VNode::new_module(
+            crate::shared::primitives::ModuleName::new("hour"),
+            None,
+            crate::shared::primitives::ModuleOptions::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let root_node = crate::features::vdom::domain::VNode::new_flex(
+            vec![child_node],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let port = Box::new(MockAnyModulePort {
+            render_node: root_node,
+            subs: vec![],
+        });
+
+        let resolver = Arc::new(
+            crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
+        );
+        let diff_adapter = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
+        let mut actor = ModuleActor::new(
+            port,
+            ctx,
+            Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
+            resolver,
+            diff_adapter,
+        );
+
+        // Send full bounds for DP-1 to bar (1920x30)
+        let mut layouts = HashMap::new();
+        layouts.insert(
+            MonitorId::new("DP-1"),
+            Rect::new(
+                crate::shared::primitives::geometry::Position::new(0, 0),
+                crate::shared::primitives::geometry::Size::new(1920, 30),
+            ),
+        );
+        layout_tx.send(layouts).unwrap();
+
+        let _ = tokio::task::spawn_blocking(move || {
+            let mut layout_engines = HashMap::new();
+            actor.measure_and_render_all(&mut layout_engines);
+            actor
+        })
+        .await
+        .unwrap();
+
+        // Verify that AppCommand::ContainerLayoutsCalculated was emitted with measured hour bounds
+        let mut found_container_layouts = false;
+        while let Ok(cmd) = cmd_rx.try_recv() {
+            if let AppCommand::ContainerLayoutsCalculated {
+                parent_id,
+                monitor_id,
+                layouts,
+            } = cmd
+            {
+                assert_eq!(parent_id, id);
+                assert_eq!(monitor_id.as_str(), "DP-1");
+                assert_eq!(layouts.len(), 1);
+                assert_eq!(layouts[0].key().name().as_str(), "hour");
+                assert_eq!(layouts[0].bounds().width(), 80);
+                assert_eq!(layouts[0].bounds().height(), 24);
+                found_container_layouts = true;
+            }
+        }
+        assert!(found_container_layouts, "Should emit ContainerLayoutsCalculated");
     }
 }

@@ -43,24 +43,19 @@ fn init_tracing(env: &AppEnvironment) -> tracing_appender::non_blocking::WorkerG
     );
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let env_filter = tracing_subscriber::EnvFilter::from_default_env()
-        .add_directive(env.rust_log().as_str().parse().unwrap());
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(env.rust_log().as_str()));
 
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
 
     tracing_subscriber::registry()
         .with(env_filter)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stdout)
-                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE),
-        )
+        .with(tracing_subscriber::fmt::layer().with_writer(std::io::stdout))
         .with(
             tracing_subscriber::fmt::layer()
                 .with_writer(non_blocking)
-                .with_ansi(false)
-                .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE),
+                .with_ansi(false),
         )
         .init();
 

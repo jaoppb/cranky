@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::StreamExt;
-use tracing::{info, warn};
+use tracing::warn;
 
 use crate::features::mpris::domain::*;
 use crate::shared::dbus::domain::{BusType, DBusValue, Destination, Interface, Path};
@@ -22,7 +22,7 @@ impl ZbusMprisAdapter {
     }
 
     pub async fn start_watching(&mut self) -> Result<(), DbusConnectionError> {
-        info!("Starting MPRIS watcher...");
+        tracing::debug!("Starting MPRIS watcher...");
         self.load_initial_players().await?;
         self.watch_name_changes().await?;
         Ok(())
@@ -97,7 +97,7 @@ impl ZbusMprisAdapter {
         if mpris_state.active_player.is_none() {
             mpris_state.active_player = Some(player_name.clone());
         }
-        tracing::info!("Found MPRIS player: {}", player_name.as_str());
+        tracing::debug!("Found MPRIS player: {}", player_name.as_str());
         let _ = self.mpris_tx.send(mpris_state);
     }
 
@@ -201,11 +201,11 @@ impl ZbusMprisAdapter {
                             if mpris_state.active_player.is_none() {
                                 mpris_state.active_player = Some(PlayerName::new(&player_name));
                             }
-                            tracing::info!("Found new MPRIS player: {}", player_name);
+                            tracing::debug!("Found new MPRIS player: {}", player_name);
                             let _ = tx.send(mpris_state);
                         }
                     } else if event.is_gone() {
-                        tracing::info!("MPRIS player gone: {}", player_name);
+                        tracing::debug!("MPRIS player gone: {}", player_name);
                         let mut mpris_state = tx.borrow().clone();
                         mpris_state.players.remove(&player_name);
                         if let Some(active) = &mpris_state.active_player

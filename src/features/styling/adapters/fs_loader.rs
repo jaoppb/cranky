@@ -34,6 +34,7 @@ pub struct FsStyleLoader {
 impl FsStyleLoader {
     pub const BUILTIN_STYLES: &[(&'static str, &'static str)] = &[
         ("base", include_str!("../../../../assets/styles/base.css")),
+        ("bar", include_str!("../../../../assets/styles/bar.css")),
         ("hour", include_str!("../../../../assets/styles/hour.css")),
         (
             "workspace",
@@ -73,7 +74,7 @@ impl StyleLoaderPort for FsStyleLoader {
         for (name, content) in Self::BUILTIN_STYLES {
             let path = dir.join(format!("{}.css", name));
             if !path.exists() || fs::read_to_string(&path).ok().as_deref() != Some(*content) {
-                tracing::info!(path = ?path, stylesheet = %name, "Writing built-in stylesheet to disk");
+                tracing::debug!(path = ?path, stylesheet = %name, "Writing built-in stylesheet to disk");
                 let _ = fs::write(&path, content);
             }
         }
@@ -131,7 +132,7 @@ impl StyleLoaderPort for FsStyleLoader {
             {
                 for path in event.paths {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        tracing::info!("Stylesheet modified: {:?}", path);
+                        tracing::debug!("Stylesheet modified: {:?}", path);
                         if let Ok(sheet_name) = StyleSheetName::new(stem) {
                             command_tx.send_command(crate::app::commands::AppCommand::ReloadStyle(
                                 sheet_name,

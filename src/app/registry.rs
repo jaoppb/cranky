@@ -10,7 +10,7 @@ pub enum ModuleError {
     Internal { message: String },
 }
 
-use crate::shared::primitives::ModuleId;
+use crate::shared::primitives::{DynamicValue, ModuleId, ModuleOptions};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -26,9 +26,10 @@ use std::collections::HashSet;
 pub struct ModuleRegistry {
     modules: HashMap<ModuleId, Box<dyn AnyModulePort>>,
     module_configs: HashMap<ModuleId, ModuleConfig>,
-    left_modules: Vec<ModuleId>,
-    center_modules: Vec<ModuleId>,
-    right_modules: Vec<ModuleId>,
+    root_module: Option<ModuleId>,
+    module_ids: Vec<ModuleId>,
+    module_names: HashMap<ModuleId, crate::shared::primitives::ModuleName>,
+    name_to_ids: HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>,
     dbus_subscriptions: Vec<crate::shared::dbus::domain::DBusSubscription>,
     style_to_modules: HashMap<StyleSheetName, HashSet<crate::shared::primitives::ModuleName>>,
     app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
@@ -42,13 +43,25 @@ impl ModuleRegistry {
         Self {
             modules: HashMap::new(),
             module_configs: HashMap::new(),
-            left_modules: Vec::new(),
-            center_modules: Vec::new(),
-            right_modules: Vec::new(),
+            root_module: None,
+            module_ids: Vec::new(),
+            module_names: HashMap::new(),
+            name_to_ids: HashMap::new(),
             dbus_subscriptions: Vec::new(),
             style_to_modules: HashMap::new(),
             app_env,
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.modules.clear();
+        self.module_configs.clear();
+        self.root_module = None;
+        self.module_ids.clear();
+        self.module_names.clear();
+        self.name_to_ids.clear();
+        self.dbus_subscriptions.clear();
+        self.style_to_modules.clear();
     }
 
     pub fn modules_using_style(
@@ -92,84 +105,99 @@ impl ModuleRegistry {
         std::sync::Arc::new(CompositeStyleResolver::new(parsed_sheets))
     }
 
-    fn load_section(
+    fn load_single_module(
         &mut self,
-        configs: &[ModuleConfig],
+        config: &ModuleConfig,
         full_config: &crate::shared::config::domain::Config,
         next_id: &mut u32,
-    ) -> Result<Vec<ModuleId>, crate::features::module_runtime::ports::RegistryLoadError> {
+    ) -> Result<ModuleId, crate::features::module_runtime::ports::RegistryLoadError> {
         use crate::app::builtins::BuiltinError;
         use crate::features::module_runtime::ports::RegistryLoadError;
 
-        configs
-            .iter()
-            .filter(|c| c.is_enabled())
-            .map(|config| {
-                let id = ModuleId::new(*next_id);
-                *next_id += 1;
+        let id = ModuleId::new(*next_id);
+        *next_id += 1;
 
-                let mut module = builtins::BuiltinModules::find_module(
-                    config.name(),
-                    config.engine(),
-                    &self.app_env,
-                )
-                .map_err(|e| match e {
-                    BuiltinError::ModuleNotFound { module_name, .. } => {
-                        RegistryLoadError::ModuleNotFound(module_name)
-                    }
-                    BuiltinError::UnsupportedEngine {
-                        engine,
-                        module_name,
-                    } => RegistryLoadError::UnsupportedEngine {
-                        engine,
-                        module_name,
-                    },
-                    BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
-                })?;
+        let mut module = builtins::BuiltinModules::find_module(
+            config.name(),
+            config.engine(),
+            &self.app_env,
+        )
+        .map_err(|e| match e {
+            BuiltinError::ModuleNotFound { module_name, .. } => {
+                RegistryLoadError::ModuleNotFound(module_name)
+            }
+            BuiltinError::UnsupportedEngine {
+                engine,
+                module_name,
+            } => RegistryLoadError::UnsupportedEngine {
+                engine,
+                module_name,
+            },
+            BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
+        })?;
 
-                module
-                    .init(config, full_config)
-                    .map_err(|e| RegistryLoadError::ModuleInit {
-                        module_name: config.name().clone(),
-                        source: e,
-                    })?;
+        module
+            .init(config, full_config)
+            .map_err(|e| RegistryLoadError::ModuleInit {
+                module_name: config.name().clone(),
+                source: e,
+            })?;
 
-                for kind in module.subscriptions() {
-                    if let crate::shared::events::signals::SignalKind::DBus(sub) = kind {
-                        self.dbus_subscriptions.push(sub.clone());
-                    }
-                }
+        for kind in module.subscriptions() {
+            if let crate::shared::events::signals::SignalKind::DBus(sub) = kind {
+                self.dbus_subscriptions.push(sub.clone());
+            }
+        }
 
-                let mod_styles = module.styles();
-                tracing::debug!(
-                    module = %config.name().as_str(),
-                    id = %id,
-                    styles = ?mod_styles.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
-                    "Registered module style dependencies"
-                );
+        let mod_styles = module.styles();
+        tracing::debug!(
+            module = %config.name().as_str(),
+            id = %id,
+            styles = ?mod_styles.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            "Registered module style dependencies"
+        );
 
-                for style_name in mod_styles {
-                    self.style_to_modules
-                        .entry(style_name.clone())
-                        .or_default()
-                        .insert(config.name().clone());
-                }
+        for style_name in mod_styles {
+            self.style_to_modules
+                .entry(style_name.clone())
+                .or_default()
+                .insert(config.name().clone());
+        }
 
-                self.module_configs.insert(id, config.clone());
-                self.modules.insert(id, module);
-                Ok(id)
-            })
-            .collect()
+        self.module_configs.insert(id, config.clone());
+        self.module_names.insert(id, config.name().clone());
+        self.name_to_ids
+            .entry(config.name().clone())
+            .or_default()
+            .push(id);
+        self.module_ids.push(id);
+        self.modules.insert(id, module);
+
+        Ok(id)
     }
 }
 
-struct WatchLayoutSender {
+pub(crate) struct WatchLayoutSender {
     tx: tokio::sync::watch::Sender<
         std::collections::HashMap<
             crate::shared::primitives::MonitorId,
             crate::shared::primitives::geometry::Rect,
         >,
     >,
+}
+
+#[cfg(test)]
+impl WatchLayoutSender {
+    pub fn new(
+        tx: tokio::sync::watch::Sender<
+            std::collections::HashMap<
+                crate::shared::primitives::MonitorId,
+                crate::shared::primitives::geometry::Rect,
+            >,
+        >,
+    ) -> Self {
+        Self { tx }
+    }
 }
 
 impl crate::features::module_runtime::ports::LayoutSender for WatchLayoutSender {
@@ -188,29 +216,69 @@ impl crate::features::module_runtime::ports::LayoutSender for WatchLayoutSender 
 impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
     ModuleRegistryPort<Fact> for ModuleRegistry
 {
-    fn left_modules(&self) -> &[ModuleId] {
-        &self.left_modules
+    fn root_module(&self) -> Option<ModuleId> {
+        self.root_module
     }
 
-    fn center_modules(&self) -> &[ModuleId] {
-        &self.center_modules
+    fn module_ids(&self) -> &[ModuleId] {
+        &self.module_ids
     }
 
-    fn right_modules(&self) -> &[ModuleId] {
-        &self.right_modules
+    fn module_names(&self) -> &HashMap<ModuleId, crate::shared::primitives::ModuleName> {
+        &self.module_names
+    }
+
+    fn name_to_ids(&self) -> &HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>> {
+        &self.name_to_ids
     }
 
     fn load(
         &mut self,
         config: &crate::shared::config::domain::Config,
     ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
-        self.modules.clear();
-        self.dbus_subscriptions.clear();
+        self.clear();
         let mut next_id = 0;
 
-        self.left_modules = self.load_section(config.modules().left(), config, &mut next_id)?;
-        self.center_modules = self.load_section(config.modules().center(), config, &mut next_id)?;
-        self.right_modules = self.load_section(config.modules().right(), config, &mut next_id)?;
+        // 1. Load the root module (default "bar")
+        let root_name = config.root().name();
+        let root_cfg = config.modules().get(root_name).cloned().unwrap_or_else(|| {
+            ModuleConfig::new(
+                root_name.clone(),
+                true,
+                crate::shared::config::domain::EngineSelection::Auto,
+                config.root().options().clone(),
+            )
+        });
+        let root_id = self.load_single_module(&root_cfg, config, &mut next_id)?;
+        self.root_module = Some(root_id);
+
+        // 2. Load all configured child modules
+        for mod_cfg in config.modules().modules().values() {
+            if mod_cfg.is_enabled() && mod_cfg.name() != root_name {
+                let _ = self.load_single_module(mod_cfg, config, &mut next_id)?;
+            }
+        }
+
+        // 3. Also load any modules referenced in root options (left, center, right)
+        let check_sections = ["left", "center", "right"];
+        for sec in check_sections {
+            if let Some(DynamicValue::Array(arr)) = config.root().options().get(sec) {
+                for item in arr {
+                    if let Some(name_str) = item.as_str() {
+                        let mod_name = crate::shared::primitives::ModuleName::new(name_str);
+                        if !self.name_to_ids.contains_key(&mod_name) {
+                            let auto_cfg = ModuleConfig::new(
+                                mod_name.clone(),
+                                true,
+                                crate::shared::config::domain::EngineSelection::Auto,
+                                ModuleOptions::default(),
+                            );
+                            let _ = self.load_single_module(&auto_cfg, config, &mut next_id)?;
+                        }
+                    }
+                }
+            }
+        }
 
         Ok(())
     }
@@ -235,13 +303,20 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
                 tokio::sync::watch::channel(std::collections::HashMap::new());
             layout_senders.insert(id, Box::new(WatchLayoutSender { tx: layout_tx }));
 
+            let parent_id = if Some(id) == self.root_module {
+                None
+            } else {
+                self.root_module
+            };
+
             let ctx = crate::features::module_runtime::application::ModuleContext::new(
                 id,
                 hub.clone(),
                 surface_manager.clone(),
                 command_tx.clone(),
                 layout_rx,
-            );
+            )
+            .with_parent(parent_id);
 
             let style_resolver = self.create_style_resolver_for_module(module.styles());
 
@@ -360,13 +435,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
     }
 
     fn clear(&mut self) {
-        self.modules.clear();
-        self.module_configs.clear();
-        self.left_modules.clear();
-        self.center_modules.clear();
-        self.right_modules.clear();
-        self.dbus_subscriptions.clear();
-        self.style_to_modules.clear();
+        self.clear();
     }
 
     async fn register_dbus_subscriptions(
@@ -405,11 +474,9 @@ mod tests {
         ));
         let mut registry = ModuleRegistry::new(app_env);
         let toml_str = r##"
-            [bar]
-            [modules]
-            left = [{ name = "hour", enable = true }]
-            center = []
-            right = []
+            [root]
+            name = "bar"
+            left = ["hour"]
         "##;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
@@ -421,9 +488,15 @@ mod tests {
         assert_eq!(
             crate::features::module_runtime::ports::ModuleRegistryPort::<
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-            >::left_modules(&registry)
+            >::module_ids(&registry)
             .len(),
-            1
+            2
+        );
+        assert!(
+            crate::features::module_runtime::ports::ModuleRegistryPort::<
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
+            >::root_module(&registry)
+            .is_some()
         );
     }
 
@@ -466,11 +539,9 @@ mod tests {
         ));
         let mut registry = ModuleRegistry::new(app_env);
         let toml_str = r##"
-            [bar]
-            [modules]
-            left = [{ name = "nonexistent", enable = true }]
-            center = []
-            right = []
+            [root]
+            name = "bar"
+            left = ["nonexistent"]
         "##;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
@@ -496,11 +567,9 @@ mod tests {
         ));
         let mut registry = ModuleRegistry::new(app_env);
         let toml_str = r##"
-            [bar]
-            [modules]
-            left = [{ name = "hour", enable = true }]
-            center = []
-            right = []
+            [root]
+            name = "bar"
+            left = ["hour"]
         "##;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
@@ -514,7 +583,7 @@ mod tests {
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
         >::clear(&mut registry);
 
-        assert!(registry.left_modules.is_empty());
+        assert!(registry.module_ids.is_empty());
         assert!(registry.modules.is_empty());
     }
 
@@ -529,11 +598,9 @@ mod tests {
         ));
         let mut registry = ModuleRegistry::new(app_env);
         let toml_str = r##"
-            [bar]
-            [modules]
-            left = [{ name = "hour", enable = true }]
-            center = []
-            right = []
+            [root]
+            name = "bar"
+            left = ["hour"]
         "##;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
@@ -567,11 +634,9 @@ mod tests {
         ));
         let mut registry = ModuleRegistry::new(app_env);
         let toml_str = r##"
-            [bar]
-            [modules]
-            left = [{ name = "hour", enable = true }]
-            center = []
-            right = []
+            [root]
+            name = "bar"
+            left = ["hour"]
         "##;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
@@ -603,7 +668,7 @@ mod tests {
             canvas_factory,
         );
 
-        assert_eq!(senders.len(), 1);
+        assert_eq!(senders.len(), 2); // bar + hour
         assert!(registry.modules.is_empty());
     }
 }

@@ -172,6 +172,9 @@ impl HyprlandState {
     }
 }
 
+pub type ModuleSizesMap =
+    std::collections::HashMap<crate::shared::primitives::MonitorId, crate::shared::primitives::ChildSizesMap>;
+
 pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
     hyprland: (watch::Sender<HyprlandState>, watch::Receiver<HyprlandState>),
@@ -193,6 +196,7 @@ pub struct SignalHub {
         watch::Sender<crate::features::mpris::domain::MprisState>,
         watch::Receiver<crate::features::mpris::domain::MprisState>,
     ),
+    module_sizes: (watch::Sender<ModuleSizesMap>, watch::Receiver<ModuleSizesMap>),
 }
 
 impl SignalHub {
@@ -209,6 +213,7 @@ impl SignalHub {
         let metrics = watch::channel(crate::features::metrics::domain::MetricsState::default());
         let mpris = watch::channel(crate::features::mpris::domain::MprisState::default());
         let pointer = tokio::sync::broadcast::channel(32);
+        let module_sizes = watch::channel(std::collections::HashMap::new());
 
         Self {
             config,
@@ -219,7 +224,16 @@ impl SignalHub {
             metrics,
             pointer,
             mpris,
+            module_sizes,
         }
+    }
+
+    pub fn module_sizes_tx(&self) -> watch::Sender<ModuleSizesMap> {
+        self.module_sizes.0.clone()
+    }
+
+    pub fn module_sizes_rx(&self) -> watch::Receiver<ModuleSizesMap> {
+        self.module_sizes.1.clone()
     }
 
     pub fn mpris_tx(&self) -> watch::Sender<crate::features::mpris::domain::MprisState> {

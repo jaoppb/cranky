@@ -47,10 +47,12 @@ impl ModuleLayout {
 
 pub struct AppReadModel {
     config: Config,
-    left_modules: Vec<ModuleId>,
-    center_modules: Vec<ModuleId>,
-    right_modules: Vec<ModuleId>,
+    root_module: Option<ModuleId>,
+    module_ids: Vec<ModuleId>,
+    module_names: HashMap<ModuleId, crate::shared::primitives::ModuleName>,
+    name_to_ids: HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>,
     module_sizes: HashMap<MonitorId, HashMap<ModuleId, Size>>,
+    computed_layouts: HashMap<MonitorId, HashMap<ModuleId, Rect>>,
 }
 
 impl AppReadModel {
@@ -58,23 +60,41 @@ impl AppReadModel {
         &self.config
     }
 
+    pub fn root_module(&self) -> Option<ModuleId> {
+        self.root_module
+    }
+
     pub fn calculate_layout(
         &self,
         monitor: &MonitorId,
         bar_width: BarWidth,
-        bar_config: &crate::shared::config::domain::BarConfig,
+        root_config: &crate::shared::config::domain::RootConfig,
     ) -> Vec<ModuleLayout> {
         let mut layouts = Vec::new();
-        let bar_height = bar_config.height();
-        let border_size = bar_config.border().size().value();
-        let padding = bar_config.padding();
+        let bar_height = root_config.height();
+        let available_height = bar_height.value() as f32;
 
-        let inner_left = border_size + padding.left().value() as f32;
-        let inner_right = border_size + padding.right().value() as f32;
-        let inner_top = border_size + padding.top().value() as f32;
-        let inner_bottom = border_size + padding.bottom().value() as f32;
+        if let Some(root_id) = self.root_module {
+            layouts.push(ModuleLayout {
+                id: root_id,
+                bounds: Rect::new(
+                    Position::new(0, 0),
+                    Size::new(bar_width.value(), bar_height.value()),
+                ),
+            });
+        }
 
-        let available_height = bar_height.value() as f32 - inner_top - inner_bottom;
+        if let Some(mon_layouts) = self.computed_layouts.get(monitor) {
+            for (&mod_id, &bounds) in mon_layouts {
+                if Some(mod_id) != self.root_module {
+                    layouts.push(ModuleLayout {
+                        id: mod_id,
+                        bounds,
+                    });
+                }
+            }
+            return layouts;
+        }
 
         let get_size = |id: &ModuleId| {
             self.module_sizes
@@ -84,13 +104,35 @@ impl AppReadModel {
                 .unwrap_or(Size::new(0, 0))
         };
 
-        let gap = self.config.bar().module_gap().value() as f32;
+        let gap = 8.0f32;
+        let padding_h = 8.0f32;
+
+        let get_module_ids = |key: &str| -> Vec<ModuleId> {
+            let mut ids = Vec::new();
+            if let Some(crate::shared::primitives::DynamicValue::Array(arr)) =
+                root_config.options().get(key)
+            {
+                for v in arr {
+                    if let Some(name_str) = v.as_str() {
+                        let mod_name = crate::shared::primitives::ModuleName::new(name_str);
+                        if let Some(mod_ids) = self.name_to_ids.get(&mod_name) {
+                            ids.extend(mod_ids.iter().copied());
+                        }
+                    }
+                }
+            }
+            ids
+        };
+
+        let left_ids = get_module_ids("left");
+        let center_ids = get_module_ids("center");
+        let right_ids = get_module_ids("right");
 
         // Calculate left modules
-        let mut left_x = inner_left;
-        for &id in &self.left_modules {
+        let mut left_x = padding_h;
+        for id in left_ids {
             let size = get_size(&id);
-            let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
+            let y = (available_height - size.height() as f32).max(0.0) / 2.0;
             layouts.push(ModuleLayout {
                 id,
                 bounds: Rect::new(Position::new(left_x as i32, y as i32), size),
@@ -99,12 +141,12 @@ impl AppReadModel {
         }
 
         // Calculate right modules
-        let mut right_x = bar_width.value() as f32 - inner_right;
+        let mut right_x = bar_width.value() as f32 - padding_h;
         let mut right_layouts = Vec::new();
-        for &id in self.right_modules.iter().rev() {
+        for id in right_ids.into_iter().rev() {
             let size = get_size(&id);
             right_x -= size.width() as f32;
-            let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
+            let y = (available_height - size.height() as f32).max(0.0) / 2.0;
             right_layouts.push(ModuleLayout {
                 id,
                 bounds: Rect::new(Position::new(right_x as i32, y as i32), size),
@@ -116,7 +158,7 @@ impl AppReadModel {
         // Calculate center modules
         let mut center_width = 0.0;
         let mut center_sizes = Vec::new();
-        for &id in &self.center_modules {
+        for id in center_ids {
             let size = get_size(&id);
             center_width += size.width() as f32;
             center_sizes.push((id, size));
@@ -127,7 +169,7 @@ impl AppReadModel {
 
         let mut center_x = (bar_width.value() as f32 - center_width) / 2.0;
         for (id, size) in center_sizes {
-            let y = inner_top + (available_height - size.height() as f32).max(0.0) / 2.0;
+            let y = (available_height - size.height() as f32).max(0.0) / 2.0;
             layouts.push(ModuleLayout {
                 id,
                 bounds: Rect::new(Position::new(center_x as i32, y as i32), size),
@@ -157,7 +199,9 @@ pub struct CrankyApp<
 struct MpscCommandSender(mpsc::Sender<AppCommand>);
 impl crate::features::module_runtime::ports::CommandSender for MpscCommandSender {
     fn send_command(&self, cmd: AppCommand) {
-        let _ = self.0.try_send(cmd);
+        if let Err(e) = self.0.try_send(cmd) {
+            tracing::error!(?e, "MpscCommandSender failed to send command");
+        }
     }
 }
 
@@ -177,9 +221,10 @@ impl<
     ) -> Result<Self, AppError> {
         registry.load(&config).map_err(AppError::Module)?;
 
-        let left_modules = registry.left_modules().to_vec();
-        let center_modules = registry.center_modules().to_vec();
-        let right_modules = registry.right_modules().to_vec();
+        let root_module = registry.root_module();
+        let module_ids = registry.module_ids().to_vec();
+        let module_names = registry.module_names().clone();
+        let name_to_ids = registry.name_to_ids().clone();
         let command_tx_arc = Arc::new(MpscCommandSender(command_tx.clone()));
         let layout_senders = registry.spawn_all(
             hub.clone(),
@@ -190,10 +235,12 @@ impl<
 
         let read_model = AppReadModel {
             config,
-            left_modules,
-            center_modules,
-            right_modules,
+            root_module,
+            module_ids,
+            module_names,
+            name_to_ids,
             module_sizes: HashMap::new(),
+            computed_layouts: HashMap::new(),
         };
 
         Ok(Self {
@@ -235,7 +282,53 @@ impl<
                     loop {
                         process_count += 1;
                         match command {
+                            AppCommand::ContainerLayoutsCalculated {
+                                parent_id: _,
+                                monitor_id,
+                                layouts,
+                            } => {
+                                for child_layout in layouts {
+                                    if let Some(ids) =
+                                        self.read_model.name_to_ids.get(child_layout.key().name())
+                                        && let Some(&child_id) = ids.first()
+                                    {
+                                        self.read_model
+                                            .computed_layouts
+                                            .entry(monitor_id.clone())
+                                            .or_default()
+                                            .insert(child_id, *child_layout.bounds());
 
+                                        tracing::trace!(
+                                            child = %child_id,
+                                            monitor = %monitor_id,
+                                            bounds = ?child_layout.bounds(),
+                                            "Updating computed_layouts for child module"
+                                        );
+                                        if let Some(sender) = self.layout_senders.get(&child_id) {
+                                            let mut child_monitors = HashMap::new();
+                                            for (mon, mod_map) in &self.read_model.computed_layouts {
+                                                if let Some(&bounds) = mod_map.get(&child_id) {
+                                                    child_monitors.insert(mon.clone(), bounds);
+                                                }
+                                            }
+                                            sender.send_layout(child_monitors);
+                                        }
+                                    }
+                                }
+                                needs_render = true;
+                            }
+                            AppCommand::ChildModuleSizeChanged {
+                                parent_id: _,
+                                child_key,
+                                monitor_id,
+                                size,
+                            } => {
+                                let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
+                                let mon_entry = sizes_map.entry(monitor_id.clone()).or_default();
+                                mon_entry.insert(child_key, size);
+                                let _ = self.hub.module_sizes_tx().send(sizes_map);
+                                needs_render = true;
+                            }
                             AppCommand::RequestRender => {
                                 needs_render = true;
                             },
@@ -284,11 +377,7 @@ impl<
                                 tracing::info!("Reloading style: {}", sheet_name.as_str());
                                 if sheet_name.as_str() == "base" {
                                     tracing::debug!("Base stylesheet changed; reloading all active modules");
-                                    let all_modules: Vec<_> = self.read_model.config.modules().left().iter()
-                                        .chain(self.read_model.config.modules().center().iter())
-                                        .chain(self.read_model.config.modules().right().iter())
-                                        .map(|c| c.name().clone())
-                                        .collect();
+                                    let all_modules: Vec<_> = self.read_model.module_names.values().cloned().collect();
                                     for mod_name in all_modules {
                                         if let Ok(new_senders) = self.registry.reload_module(&mod_name, &self.read_model.config, self.hub.clone(), self.surface_manager.clone(), Arc::new(MpscCommandSender(self.command_tx_clone.clone())), self.canvas_factory.clone()) {
                                             for (id, sender) in new_senders {
@@ -348,9 +437,10 @@ impl<
                     if let Err(e) = self.registry.load(&self.read_model.config) {
                         error!("Failed to reload registry on config change: {}", e);
                     } else {
-                        self.read_model.left_modules = self.registry.left_modules().to_vec();
-                        self.read_model.center_modules = self.registry.center_modules().to_vec();
-                        self.read_model.right_modules = self.registry.right_modules().to_vec();
+                        self.read_model.root_module = self.registry.root_module();
+                        self.read_model.module_ids = self.registry.module_ids().to_vec();
+                        self.read_model.module_names = self.registry.module_names().clone();
+                        self.read_model.name_to_ids = self.registry.name_to_ids().clone();
                         self.layout_senders = self.registry.spawn_all(
                             self.hub.clone(),
                             self.surface_manager.clone(),
@@ -375,11 +465,23 @@ impl<
     }
 
     pub fn handle_size_changed(&mut self, monitor_id: MonitorId, module_id: ModuleId, size: Size) {
+        let name = self.read_model.module_names.get(&module_id).cloned();
+        tracing::trace!(monitor = %monitor_id, module = %module_id, ?size, ?name, "handle_size_changed called");
         self.read_model
             .module_sizes
             .entry(monitor_id.clone())
             .or_default()
             .insert(module_id, size);
+
+        if let Some(name) = name {
+            let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
+            let mon_entry = sizes_map.entry(monitor_id.clone()).or_default();
+            mon_entry.insert(
+                crate::shared::primitives::ModuleKey::new(name, None),
+                size,
+            );
+            let _ = self.hub.module_sizes_tx().send(sizes_map);
+        }
     }
 }
 
@@ -405,13 +507,14 @@ mod tests {
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
         >::new();
         mock_registry.expect_load().returning(|_| Ok(()));
-        mock_registry.expect_left_modules().return_const(Vec::new());
+        mock_registry.expect_root_module().return_const(None);
+        mock_registry.expect_module_ids().return_const(Vec::new());
         mock_registry
-            .expect_center_modules()
-            .return_const(Vec::new());
+            .expect_module_names()
+            .return_const(HashMap::new());
         mock_registry
-            .expect_right_modules()
-            .return_const(Vec::new());
+            .expect_name_to_ids()
+            .return_const(HashMap::new());
         mock_registry
             .expect_spawn_all()
             .returning(|_, _, _, _| HashMap::new());
@@ -437,8 +540,7 @@ mod tests {
     async fn test_app_run_exit_on_display_error() {
         let config = Config::default();
         let hub = Arc::new(SignalHub::new(config.clone()));
-        let (_, command_rx) = mpsc::channel(32);
-        let (command_tx, _) = mpsc::channel(32);
+        let (command_tx, command_rx) = mpsc::channel(32);
 
         let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
 
@@ -446,19 +548,21 @@ mod tests {
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
         >::new();
         mock_registry.expect_load().returning(|_| Ok(()));
-        mock_registry.expect_left_modules().return_const(Vec::new());
+        mock_registry.expect_root_module().return_const(None);
+        mock_registry.expect_module_ids().return_const(Vec::new());
         mock_registry
-            .expect_center_modules()
-            .return_const(Vec::new());
+            .expect_module_names()
+            .return_const(HashMap::new());
         mock_registry
-            .expect_right_modules()
-            .return_const(Vec::new());
+            .expect_name_to_ids()
+            .return_const(HashMap::new());
         mock_registry
             .expect_spawn_all()
             .returning(|_, _, _, _| HashMap::new());
         mock_registry
             .expect_register_dbus_subscriptions()
             .returning(|_| Box::pin(std::future::ready(())));
+        mock_registry.expect_clear().returning(|| ());
 
         let canvas_factory = Arc::new(std::sync::Mutex::new(
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
@@ -468,7 +572,7 @@ mod tests {
             hub.clone(),
             config,
             command_rx,
-            command_tx,
+            command_tx.clone(),
             surface_manager,
             canvas_factory,
             Box::new(mock_registry),
@@ -496,49 +600,60 @@ mod tests {
 
     #[test]
     fn test_calculate_layout_unfocused() {
-        let unfocused = crate::shared::config::domain::PartialBarConfig::new(
-            crate::shared::config::domain::CreatePartialBarConfigCommand::new(
-                None,
+        let unfocused = crate::shared::config::domain::PartialRootConfig::new(
+            crate::shared::config::domain::CreatePartialRootConfigCommand::new(
                 Some(crate::shared::primitives::geometry::BarHeight::new(20)),
-                None,
-                None,
-                None,
-                None,
-                None,
                 None,
                 None,
             ),
         );
-        let default_config = crate::shared::config::domain::BarConfig::default();
-        // We need to inject the unfocused config. Since fields are private, we construct a full BarConfig:
-        let bar_config = crate::shared::config::domain::BarConfig::new(
-            crate::shared::config::domain::CreateBarConfigCommand::new(
-                default_config.background().clone(),
+        let mut opts_map = HashMap::new();
+        opts_map.insert(
+            "center".to_string(),
+            crate::shared::primitives::DynamicValue::Array(vec![
+                crate::shared::primitives::DynamicValue::String("hour".to_string()),
+            ]),
+        );
+        let opts = crate::shared::primitives::ModuleOptions::new(opts_map);
+
+        let root_config = crate::shared::config::domain::RootConfig::new(
+            crate::shared::config::domain::CreateRootConfigCommand::new(
+                crate::shared::primitives::ModuleName::new("bar"),
                 crate::shared::primitives::geometry::BarHeight::new(30),
-                default_config.vertical_alignment(),
-                default_config.border().clone(),
-                default_config.margin().clone(),
-                default_config.padding().clone(),
-                default_config.module_gap(),
-                default_config.font_family().clone(),
-                default_config.font_size(),
+                crate::shared::config::domain::VerticalAlignment::Center,
+                crate::shared::config::domain::MarginConfig::default(),
                 Some(unfocused),
+                opts,
             ),
         );
 
         let config = Config::new(
-            bar_config.clone(),
+            root_config.clone(),
             crate::shared::config::domain::ModulesConfig::default(),
             crate::shared::config::domain::RenderingMode::default(),
             crate::features::metrics::domain::MetricsConfig::default(),
             crate::shared::config::domain::TooltipConfig::default(),
         );
 
+        let mut name_to_ids = HashMap::new();
+        name_to_ids.insert(
+            crate::shared::primitives::ModuleName::new("hour"),
+            vec![crate::shared::primitives::ModuleId::new(1)],
+        );
+
         let read_model = AppReadModel {
             config: config.clone(),
-            left_modules: vec![],
-            center_modules: vec![crate::shared::primitives::ModuleId::new(1)],
-            right_modules: vec![],
+            root_module: None,
+            module_ids: vec![crate::shared::primitives::ModuleId::new(1)],
+            module_names: {
+                let mut m = HashMap::new();
+                m.insert(
+                    crate::shared::primitives::ModuleId::new(1),
+                    crate::shared::primitives::ModuleName::new("hour"),
+                );
+                m
+            },
+            name_to_ids,
             module_sizes: {
                 let mut m = HashMap::new();
                 let mut s = HashMap::new();
@@ -549,13 +664,14 @@ mod tests {
                 m.insert(MonitorId::new("DP-1"), s);
                 m
             },
+            computed_layouts: HashMap::new(),
         };
 
         let monitor_1 = MonitorId::new("DP-1");
 
         // 1. Calculate with focused config
         let layouts_focused =
-            read_model.calculate_layout(&monitor_1, BarWidth::new(1920), config.bar());
+            read_model.calculate_layout(&monitor_1, BarWidth::new(1920), config.root());
         assert_eq!(layouts_focused.len(), 1);
         let layout_focused = &layouts_focused[0];
 
@@ -563,9 +679,9 @@ mod tests {
         assert_eq!(layout_focused.bounds().position().y(), 10);
 
         // 2. Calculate with unfocused config
-        let unfocused_bar = config.bar().as_unfocused();
+        let unfocused_root = config.root().as_unfocused();
         let layouts_unfocused =
-            read_model.calculate_layout(&monitor_1, BarWidth::new(1920), &unfocused_bar);
+            read_model.calculate_layout(&monitor_1, BarWidth::new(1920), &unfocused_root);
         assert_eq!(layouts_unfocused.len(), 1);
         let layout_unfocused = &layouts_unfocused[0];
 
@@ -589,13 +705,63 @@ mod tests {
 
     #[test]
     fn test_calculate_layout_left_right() {
-        let config = Config::default();
+        let mut opts_map = HashMap::new();
+        opts_map.insert(
+            "left".to_string(),
+            crate::shared::primitives::DynamicValue::Array(vec![
+                crate::shared::primitives::DynamicValue::String("m1".to_string()),
+                crate::shared::primitives::DynamicValue::String("m2".to_string()),
+            ]),
+        );
+        opts_map.insert(
+            "right".to_string(),
+            crate::shared::primitives::DynamicValue::Array(vec![
+                crate::shared::primitives::DynamicValue::String("m3".to_string()),
+            ]),
+        );
+        let opts = crate::shared::primitives::ModuleOptions::new(opts_map);
+
+        let root_config = crate::shared::config::domain::RootConfig::new(
+            crate::shared::config::domain::CreateRootConfigCommand::new(
+                crate::shared::primitives::ModuleName::new("bar"),
+                crate::shared::primitives::geometry::BarHeight::new(30),
+                crate::shared::config::domain::VerticalAlignment::Center,
+                crate::shared::config::domain::MarginConfig::default(),
+                None,
+                opts,
+            ),
+        );
+
+        let config = Config::new(
+            root_config,
+            crate::shared::config::domain::ModulesConfig::default(),
+            crate::shared::config::domain::RenderingMode::default(),
+            crate::features::metrics::domain::MetricsConfig::default(),
+            crate::shared::config::domain::TooltipConfig::default(),
+        );
+
+        let mut name_to_ids = HashMap::new();
+        name_to_ids.insert(
+            crate::shared::primitives::ModuleName::new("m1"),
+            vec![ModuleId::new(1)],
+        );
+        name_to_ids.insert(
+            crate::shared::primitives::ModuleName::new("m2"),
+            vec![ModuleId::new(2)],
+        );
+        name_to_ids.insert(
+            crate::shared::primitives::ModuleName::new("m3"),
+            vec![ModuleId::new(3)],
+        );
+
         let mut read_model = AppReadModel {
             config: config.clone(),
-            left_modules: vec![ModuleId::new(1), ModuleId::new(2)],
-            center_modules: vec![],
-            right_modules: vec![ModuleId::new(3)],
+            root_module: None,
+            module_ids: vec![ModuleId::new(1), ModuleId::new(2), ModuleId::new(3)],
+            module_names: HashMap::new(),
+            name_to_ids,
             module_sizes: HashMap::new(),
+            computed_layouts: HashMap::new(),
         };
 
         let mut sizes = HashMap::new();
@@ -607,19 +773,20 @@ mod tests {
             .insert(MonitorId::new("DP-1"), sizes);
 
         let layouts =
-            read_model.calculate_layout(&MonitorId::new("DP-1"), BarWidth::new(1920), config.bar());
+            read_model.calculate_layout(&MonitorId::new("DP-1"), BarWidth::new(1920), config.root());
         assert_eq!(layouts.len(), 3);
 
-        let gap = config.bar().module_gap().value() as i32;
+        let gap = 8;
+        let padding_h = 8;
 
         let l1 = layouts.iter().find(|l| l.id() == ModuleId::new(1)).unwrap();
-        assert_eq!(l1.bounds().x(), 0);
+        assert_eq!(l1.bounds().x(), padding_h);
 
         let l2 = layouts.iter().find(|l| l.id() == ModuleId::new(2)).unwrap();
-        assert_eq!(l2.bounds().x(), 100 + gap);
+        assert_eq!(l2.bounds().x(), padding_h + 100 + gap);
 
         let l3 = layouts.iter().find(|l| l.id() == ModuleId::new(3)).unwrap();
-        assert_eq!(l3.bounds().x(), 1920 - 80);
+        assert_eq!(l3.bounds().x(), 1920 - padding_h - 80);
     }
 
     #[tokio::test]
@@ -634,13 +801,14 @@ mod tests {
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
         >::new();
         mock_registry.expect_load().returning(|_| Ok(()));
-        mock_registry.expect_left_modules().return_const(Vec::new());
+        mock_registry.expect_root_module().return_const(None);
+        mock_registry.expect_module_ids().return_const(Vec::new());
         mock_registry
-            .expect_center_modules()
-            .return_const(Vec::new());
+            .expect_module_names()
+            .return_const(HashMap::new());
         mock_registry
-            .expect_right_modules()
-            .return_const(Vec::new());
+            .expect_name_to_ids()
+            .return_const(HashMap::new());
         mock_registry
             .expect_spawn_all()
             .returning(|_, _, _, _| HashMap::new());
@@ -736,5 +904,126 @@ mod tests {
 
         let result = app.run(mock_display, mock_dbus, mock_sni).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_container_layouts_calculated_preserves_multi_monitors() {
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let (command_tx, command_rx) = mpsc::channel(32);
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
+
+        let mut mock_registry = MockModuleRegistryPort::<
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
+        >::new();
+        mock_registry.expect_load().returning(|_| Ok(()));
+        mock_registry.expect_root_module().return_const(Some(ModuleId::new(0)));
+        mock_registry.expect_module_ids().return_const(vec![ModuleId::new(0), ModuleId::new(1)]);
+        let mut names = HashMap::new();
+        names.insert(ModuleId::new(0), crate::shared::primitives::ModuleName::new("bar"));
+        names.insert(ModuleId::new(1), crate::shared::primitives::ModuleName::new("hour"));
+        mock_registry.expect_module_names().return_const(names);
+        let mut name_to_ids = HashMap::new();
+        name_to_ids.insert(crate::shared::primitives::ModuleName::new("bar"), vec![ModuleId::new(0)]);
+        name_to_ids.insert(crate::shared::primitives::ModuleName::new("hour"), vec![ModuleId::new(1)]);
+        mock_registry.expect_name_to_ids().return_const(name_to_ids);
+        
+        let (layout_tx_0, _layout_rx_0) = tokio::sync::watch::channel(HashMap::new());
+        let (layout_tx_1, mut layout_rx_1) = tokio::sync::watch::channel(HashMap::new());
+        let mut senders: HashMap<ModuleId, Box<dyn crate::features::module_runtime::ports::LayoutSender>> = HashMap::new();
+        senders.insert(ModuleId::new(0), Box::new(crate::app::registry::WatchLayoutSender::new(layout_tx_0)));
+        senders.insert(ModuleId::new(1), Box::new(crate::app::registry::WatchLayoutSender::new(layout_tx_1)));
+
+        mock_registry.expect_spawn_all().return_once(|_, _, _, _| senders);
+        mock_registry.expect_register_dbus_subscriptions().returning(|_| Box::pin(std::future::ready(())));
+        mock_registry.expect_clear().returning(|| ());
+
+        let canvas_factory = Arc::new(std::sync::Mutex::new(
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
+        ));
+
+        let mut app = CrankyApp::new(
+            hub.clone(),
+            config,
+            command_rx,
+            command_tx.clone(),
+            surface_manager,
+            canvas_factory,
+            Box::new(mock_registry),
+        )
+        .unwrap();
+
+        // 1. Send ContainerLayoutsCalculated for DP-1
+        command_tx
+            .send(AppCommand::ContainerLayoutsCalculated {
+                parent_id: ModuleId::new(0),
+                monitor_id: MonitorId::new("DP-1"),
+                layouts: vec![crate::shared::primitives::ChildModuleLayout::new(
+                    crate::shared::primitives::ModuleKey::from_name(crate::shared::primitives::ModuleName::new("hour")),
+                    Rect::new(Position::new(100, 0), Size::new(80, 24)),
+                )],
+            })
+            .await
+            .unwrap();
+
+        // 2. Send ContainerLayoutsCalculated for DP-2
+        command_tx
+            .send(AppCommand::ContainerLayoutsCalculated {
+                parent_id: ModuleId::new(0),
+                monitor_id: MonitorId::new("DP-2"),
+                layouts: vec![crate::shared::primitives::ChildModuleLayout::new(
+                    crate::shared::primitives::ModuleKey::from_name(crate::shared::primitives::ModuleName::new("hour")),
+                    Rect::new(Position::new(150, 0), Size::new(80, 24)),
+                )],
+            })
+            .await
+            .unwrap();
+
+        let mut mock_display = MockDisplayServerPort::new();
+        mock_display.expect_flush().returning(|| Ok(()));
+        let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
+        mock_display.expect_wait_for_events().returning(move || {
+            let mut stop_rx = stop_rx.clone();
+            Box::pin(async move {
+                let _ = stop_rx.changed().await;
+                Err(crate::shared::wayland::ports::DisplayServerError::Internal("Done".to_string()))
+            })
+        });
+        mock_display.expect_dispatch_pending().returning(|| Ok(()));
+        mock_display.expect_render_all().returning(|_, _| Ok(()));
+        mock_display.expect_show_tooltip().returning(|_| Ok(()));
+        mock_display.expect_hide_tooltip().returning(|| Ok(()));
+
+        let mock_conn = crate::shared::dbus::ports::MockDbusConnectionPort::new();
+        let mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
+            std::sync::Arc::new(mock_conn),
+            &hub,
+        );
+        let mut mock_sni = crate::features::systray::ports::MockSniPort::new();
+        mock_sni.expect_trigger_action().returning(|_, _, _| Ok(()));
+
+        // Run app in background task and verify layout_rx_1 gets both DP-1 and DP-2
+        let app_handle = tokio::spawn(async move {
+            let _ = app.run(mock_display, mock_dbus, mock_sni).await;
+        });
+
+        // Wait for layout_rx_1 to see both DP-1 and DP-2
+        let mut attempts = 0;
+        loop {
+            layout_rx_1.changed().await.unwrap();
+            let current = layout_rx_1.borrow().clone();
+            if current.contains_key(&MonitorId::new("DP-1")) && current.contains_key(&MonitorId::new("DP-2")) {
+                assert_eq!(current.get(&MonitorId::new("DP-1")).unwrap().x(), 100);
+                assert_eq!(current.get(&MonitorId::new("DP-2")).unwrap().x(), 150);
+                break;
+            }
+            attempts += 1;
+            if attempts > 10 {
+                panic!("Did not receive both DP-1 and DP-2 bounds in child layout_rx");
+            }
+        }
+
+        let _ = stop_tx.send(true);
+        let _ = app_handle.await;
     }
 }

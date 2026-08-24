@@ -5,6 +5,7 @@ use crate::features::styling::domain::{
 };
 use crate::features::styling::ports::StyleResolverPort;
 use crate::shared::primitives::geometry::Size;
+use crate::shared::primitives::{ModuleInstanceId, ModuleKey, ModuleName, ModuleOptions};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -88,6 +89,7 @@ pub enum NodeTag {
     Progress,
     Rect,
     Image,
+    Module,
 }
 
 impl NodeTag {
@@ -98,6 +100,7 @@ impl NodeTag {
             Self::Progress => "progress",
             Self::Rect => "rect",
             Self::Image => "image",
+            Self::Module => "module",
         }
     }
 
@@ -182,6 +185,14 @@ pub enum VNodeKind {
         #[serde(with = "serde_bytes")]
         data: Vec<u8>,
         pixel_size: Size,
+    },
+    #[serde(rename = "module")]
+    Module {
+        name: ModuleName,
+        #[serde(default)]
+        instance_id: Option<ModuleInstanceId>,
+        #[serde(default)]
+        options: ModuleOptions,
     },
 }
 
@@ -305,6 +316,33 @@ impl VNode {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_module(
+        name: ModuleName,
+        instance_id: Option<ModuleInstanceId>,
+        options: ModuleOptions,
+        class: Option<ClassNameList>,
+        id: Option<ElementId>,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<VNode>>,
+    ) -> Self {
+        Self {
+            node_id: NodeId::new(),
+            key: None,
+            id,
+            class,
+            on_click,
+            on_hover,
+            tooltip,
+            kind: VNodeKind::Module {
+                name,
+                instance_id,
+                options,
+            },
+        }
+    }
+
     pub fn node_id(&self) -> NodeId {
         self.node_id
     }
@@ -350,6 +388,7 @@ impl VNode {
             VNodeKind::Progress { .. } => NodeTag::Progress,
             VNodeKind::Rect => NodeTag::Rect,
             VNodeKind::Image { .. } => NodeTag::Image,
+            VNodeKind::Module { .. } => NodeTag::Module,
         }
     }
 
@@ -440,6 +479,18 @@ impl VNode {
                 style,
                 tooltip: styled_tooltip,
             },
+            VNodeKind::Module {
+                name,
+                instance_id,
+                options,
+            } => StyledNode::Module {
+                key: ModuleKey::new(name.clone(), instance_id.clone()),
+                options: options.clone(),
+                style,
+                on_click: self.on_click.clone(),
+                on_hover: self.on_hover.clone(),
+                tooltip: styled_tooltip,
+            },
         }
     }
 }
@@ -472,6 +523,12 @@ pub enum Patch {
         node_id: NodeId,
         new_data: Vec<u8>,
         new_pixel_size: Size,
+    },
+    UpdateModule {
+        node_id: NodeId,
+        new_name: ModuleName,
+        new_instance_id: Option<ModuleInstanceId>,
+        new_options: ModuleOptions,
     },
     UpdateChildren {
         node_id: NodeId,
@@ -534,6 +591,7 @@ impl DiffResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_node_id_creation_and_uniqueness() {
@@ -617,6 +675,42 @@ mod tests {
 
         let node: VNode = serde_json::from_str(&json).expect("Deserialization failed");
         assert_ne!(node.node_id().to_string(), fake_uuid);
+    }
+
+    #[test]
+    fn test_vnode_module_serde_and_constructor() {
+        let mut opts_map = HashMap::new();
+        opts_map.insert("format".to_string(), crate::shared::primitives::DynamicValue::from("%H:%M"));
+        let opts = ModuleOptions::new(opts_map);
+        let module_node = VNode::new_module(
+            ModuleName::new("hour"),
+            Some(ModuleInstanceId::new("h1")),
+            opts,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert_eq!(module_node.tag(), NodeTag::Module);
+
+        let json = r#"{
+            "type": "module",
+            "name": "hour",
+            "instance_id": "h1",
+            "options": {
+                "format": "%H:%M:%S"
+            }
+        }"#;
+        let deserialized: VNode = serde_json::from_str(json).expect("Deserialization failed");
+        assert_eq!(deserialized.tag(), NodeTag::Module);
+        if let VNodeKind::Module { name, instance_id, options } = deserialized.kind() {
+            assert_eq!(name.as_str(), "hour");
+            assert_eq!(instance_id.as_ref().map(|id| id.as_str()), Some("h1"));
+            assert_eq!(options.get("format").and_then(|v| v.as_str()), Some("%H:%M:%S"));
+        } else {
+            panic!("Expected VNodeKind::Module");
+        }
     }
 
     #[test]

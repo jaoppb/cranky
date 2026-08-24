@@ -249,20 +249,20 @@ impl AnyModulePort for LuaModule {
         let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
         let globals = lua.globals();
 
-        let bar_config = full_config.bar();
+        let root_config = full_config.root();
 
-        // Expose bar config
-        let bar_config_table = lua
+        // Expose root config
+        let root_config_table = lua
             .create_table()
             .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
-        bar_config_table
-            .set("font_family", bar_config.font_family().as_str())
+        root_config_table
+            .set("name", root_config.name().as_str())
             .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
-        bar_config_table
-            .set("font_size", bar_config.font_size().value())
+        root_config_table
+            .set("height", root_config.height().value())
             .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
         globals
-            .set("bar_config", bar_config_table)
+            .set("root_config", root_config_table)
             .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
 
         // Expose module config options using mlua's serde support
@@ -403,8 +403,6 @@ mod tests {
     use crate::shared::config::domain::ModuleConfig;
     use crate::shared::primitives::MonitorId;
 
-    use std::collections::HashMap;
-
     #[test]
     fn test_applet_missing_icon_regression() {
         let mut module = LuaModule::built_in("applet").expect("Failed to load applet module");
@@ -412,7 +410,7 @@ mod tests {
             "applet".into(),
             true,
             crate::shared::config::domain::EngineSelection::Auto,
-            HashMap::new(),
+            crate::shared::primitives::ModuleOptions::default(),
         );
         let config = crate::shared::config::domain::Config::default();
 
@@ -469,7 +467,7 @@ mod tests {
             "applet".into(),
             true,
             crate::shared::config::domain::EngineSelection::Auto,
-            HashMap::new(),
+            crate::shared::primitives::ModuleOptions::default(),
         );
         let config = crate::shared::config::domain::Config::default();
         module.init(&module_config, &config).expect("Init failed");

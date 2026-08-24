@@ -15,6 +15,19 @@ pub trait SurfaceManagerPort: Send + Sync {
         position: Position,
         buffer: RenderBuffer,
     );
+
+    /// Submit a rendered buffer with optional parent module ID for nested subsurfaces.
+    async fn submit_child_buffer(
+        &self,
+        module_id: ModuleId,
+        parent_id: Option<ModuleId>,
+        monitor_id: MonitorId,
+        position: Position,
+        buffer: RenderBuffer,
+    ) {
+        let _ = parent_id;
+        self.submit_buffer(module_id, monitor_id, position, buffer).await;
+    }
 }
 
 pub type DynSurfaceManager = Arc<dyn SurfaceManagerPort>;

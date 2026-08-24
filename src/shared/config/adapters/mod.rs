@@ -139,7 +139,7 @@ mod tests {
 
         // Should fallback to include_str!
         let config = adapter.load_initial().unwrap();
-        assert_eq!(config.bar().height().value(), 40); // config.toml height is 40
+        assert_eq!(config.root().height().value(), 40); // config.toml height is 40
     }
 
     #[test]
@@ -206,7 +206,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        std::fs::write(&file_path, "bar = { height = 50 }").unwrap();
+        std::fs::write(&file_path, "root = { height = 50 }").unwrap();
 
         let adapter = ConfigAdapter::with_path(file_path.clone(), MockValidator);
         let hub = Arc::new(SignalHub::new(Config::default()));
@@ -218,7 +218,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         // Modify file
-        std::fs::write(&file_path, "bar = { height = 60 }").unwrap();
+        std::fs::write(&file_path, "root = { height = 60 }").unwrap();
 
         // Wait for event to propagate
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;

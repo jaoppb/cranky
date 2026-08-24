@@ -4,9 +4,10 @@ use crate::shared::rendering::ports::font::FontValidatorPort;
 use serde::Deserialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct ConfigDto {
-    bar: BarConfigDto,
+    #[serde(default)]
+    root: RootConfigDto,
     #[serde(default)]
     modules: ModulesConfigDto,
     #[serde(default)]
@@ -18,69 +19,93 @@ pub struct ConfigDto {
 }
 
 impl ConfigDto {
-    pub fn into_domain<V: FontValidatorPort>(self, validator: &V) -> domain::Config {
-        let bar = self.bar.into_domain(validator);
+    pub fn into_domain<V: FontValidatorPort>(self, _validator: &V) -> domain::Config {
+        let root = self.root.into_domain();
         let modules = self.modules.into_domain();
         let rendering = self.rendering.into_domain();
         let tooltip = self.tooltip.into_domain();
 
-        domain::Config::new(bar, modules, rendering, self.metrics, tooltip)
+        domain::Config::new(root, modules, rendering, self.metrics, tooltip)
     }
 }
+
 #[derive(Debug, Deserialize)]
-pub struct BarConfigDto {
-    #[serde(default)]
-    font_family: Option<String>,
-    #[serde(default)]
-    font_size: Option<f32>,
-    #[serde(default = "default_background")]
-    background: DrawingColor,
+pub struct RootConfigDto {
+    #[serde(default = "default_root_name")]
+    name: String,
     #[serde(default = "default_height")]
     height: u32,
     #[serde(default)]
     vertical_alignment: VerticalAlignmentDto,
     #[serde(default)]
-    border: BorderConfigDto,
-    #[serde(default)]
     margin: MarginConfigDto,
     #[serde(default)]
-    padding: PaddingConfigDto,
-    #[serde(default)]
-    module_gap: u32,
-    #[serde(default)]
-    unfocused: Option<PartialBarConfigDto>,
+    unfocused: Option<PartialRootConfigDto>,
+    #[serde(flatten)]
+    options: HashMap<String, serde_json::Value>,
 }
 
-impl BarConfigDto {
-    pub fn into_domain<V: FontValidatorPort>(self, validator: &V) -> domain::BarConfig {
-        let font_family = self
-            .font_family
-            .filter(|f| validator.is_valid_family(f))
-            .unwrap_or_default();
-
-        let font_size = self.font_size.unwrap_or(14.0);
-
-        domain::BarConfig::new(crate::shared::config::domain::CreateBarConfigCommand::new(
-            self.background,
-            crate::shared::primitives::geometry::BarHeight::new(self.height),
-            self.vertical_alignment.into_domain(),
-            self.border.into_domain(),
-            self.margin.into_domain(),
-            self.padding.into_domain(),
-            domain::ModuleGap::new(self.module_gap),
-            domain::FontFamily::new(font_family),
-            domain::FontSize::new(font_size),
-            self.unfocused.map(|u| u.into_domain()),
-        ))
-    }
-}
-
-fn default_background() -> DrawingColor {
-    DrawingColor::Solid(crate::shared::primitives::color::Color::new(0, 0, 0, 255))
+fn default_root_name() -> String {
+    "bar".to_string()
 }
 
 fn default_height() -> u32 {
     30
+}
+
+impl Default for RootConfigDto {
+    fn default() -> Self {
+        Self {
+            name: default_root_name(),
+            height: default_height(),
+            vertical_alignment: VerticalAlignmentDto::default(),
+            margin: MarginConfigDto::default(),
+            unfocused: None,
+            options: HashMap::new(),
+        }
+    }
+}
+
+fn json_value_to_dynamic(v: serde_json::Value) -> crate::shared::primitives::DynamicValue {
+    match v {
+        serde_json::Value::Null => crate::shared::primitives::DynamicValue::Null,
+        serde_json::Value::Bool(b) => crate::shared::primitives::DynamicValue::Bool(b),
+        serde_json::Value::Number(n) => {
+            crate::shared::primitives::DynamicValue::Number(n.as_f64().unwrap_or(0.0))
+        }
+        serde_json::Value::String(s) => crate::shared::primitives::DynamicValue::String(s),
+        serde_json::Value::Array(arr) => crate::shared::primitives::DynamicValue::Array(
+            arr.into_iter().map(json_value_to_dynamic).collect(),
+        ),
+        serde_json::Value::Object(map) => crate::shared::primitives::DynamicValue::Map(
+            map.into_iter()
+                .map(|(k, v)| (k, json_value_to_dynamic(v)))
+                .collect(),
+        ),
+    }
+}
+
+fn json_map_to_options(
+    map: HashMap<String, serde_json::Value>,
+) -> crate::shared::primitives::ModuleOptions {
+    crate::shared::primitives::ModuleOptions::new(
+        map.into_iter()
+            .map(|(k, v)| (k, json_value_to_dynamic(v)))
+            .collect(),
+    )
+}
+
+impl RootConfigDto {
+    pub fn into_domain(self) -> domain::RootConfig {
+        domain::RootConfig::new(crate::shared::config::domain::CreateRootConfigCommand::new(
+            crate::shared::primitives::ModuleName::new(self.name),
+            crate::shared::primitives::geometry::BarHeight::new(self.height),
+            self.vertical_alignment.into_domain(),
+            self.margin.into_domain(),
+            self.unfocused.map(|u| u.into_domain()),
+            json_map_to_options(self.options),
+        ))
+    }
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -154,119 +179,62 @@ impl MarginConfigDto {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-pub enum PaddingConfigDto {
-    All(u32),
-    Fields {
-        top: Option<u32>,
-        bottom: Option<u32>,
-        left: Option<u32>,
-        right: Option<u32>,
-        horizontal: Option<u32>,
-        vertical: Option<u32>,
-    },
-}
-
-impl Default for PaddingConfigDto {
-    fn default() -> Self {
-        Self::All(0)
-    }
-}
-
-impl PaddingConfigDto {
-    pub fn into_domain(self) -> domain::PaddingConfig {
-        match self {
-            Self::All(val) => domain::PaddingConfig::new(
-                domain::PaddingOffset::new(val),
-                domain::PaddingOffset::new(val),
-                domain::PaddingOffset::new(val),
-                domain::PaddingOffset::new(val),
-            ),
-            Self::Fields {
-                top,
-                bottom,
-                left,
-                right,
-                horizontal,
-                vertical,
-            } => {
-                let t = top.or(vertical).unwrap_or(0);
-                let b = bottom.or(vertical).unwrap_or(0);
-                let l = left.or(horizontal).unwrap_or(0);
-                let r = right.or(horizontal).unwrap_or(0);
-                domain::PaddingConfig::new(
-                    domain::PaddingOffset::new(t),
-                    domain::PaddingOffset::new(b),
-                    domain::PaddingOffset::new(l),
-                    domain::PaddingOffset::new(r),
-                )
-            }
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Default)]
-pub struct BorderConfigDto {
-    #[serde(default)]
-    size: f32,
-    #[serde(default = "default_border_color")]
-    color: DrawingColor,
-    #[serde(default)]
-    radius: f32,
-}
-
-impl BorderConfigDto {
-    pub fn into_domain(self) -> domain::BorderConfig {
-        domain::BorderConfig::new(
-            domain::BorderSize::new(self.size),
-            self.color,
-            domain::BorderRadius::new(self.radius),
-        )
-    }
-}
-
-fn default_border_color() -> DrawingColor {
-    DrawingColor::Solid(crate::shared::primitives::color::Color::new(0, 0, 0, 255))
-}
-
 #[derive(Debug, Deserialize, Default)]
 pub struct ModulesConfigDto {
-    #[serde(default)]
-    left: Vec<ModuleConfigDto>,
-    #[serde(default)]
-    center: Vec<ModuleConfigDto>,
-    #[serde(default)]
-    right: Vec<ModuleConfigDto>,
+    #[serde(flatten)]
+    modules: HashMap<String, ModuleEntryDto>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum ModuleEntryDto {
+    Detailed {
+        #[serde(default = "default_true")]
+        enable: bool,
+        #[serde(default)]
+        engine: Option<String>,
+        #[serde(flatten)]
+        options: HashMap<String, serde_json::Value>,
+    },
+    OptionsOnly(HashMap<String, serde_json::Value>),
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl ModulesConfigDto {
     pub fn into_domain(self) -> domain::ModulesConfig {
-        domain::ModulesConfig::new(
-            self.left.into_iter().map(|m| m.into_domain()).collect(),
-            self.center.into_iter().map(|m| m.into_domain()).collect(),
-            self.right.into_iter().map(|m| m.into_domain()).collect(),
-        )
-    }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ModuleConfigDto {
-    name: crate::shared::primitives::ModuleName,
-    enable: bool,
-    #[serde(default)]
-    engine: Option<String>,
-    #[serde(flatten)]
-    options: HashMap<String, serde_json::Value>,
-}
-
-impl ModuleConfigDto {
-    pub fn into_domain(self) -> domain::ModuleConfig {
-        let selection = match self.engine {
-            Some(e) => domain::EngineSelection::Explicit(domain::EngineId::new(e)),
-            None => domain::EngineSelection::Auto,
-        };
-        domain::ModuleConfig::new(self.name, self.enable, selection, self.options)
+        let mut map = HashMap::new();
+        for (name_str, entry) in self.modules {
+            let mod_name = crate::shared::primitives::ModuleName::new(name_str);
+            let mod_cfg = match entry {
+                ModuleEntryDto::Detailed {
+                    enable,
+                    engine,
+                    options,
+                } => {
+                    let selection = match engine {
+                        Some(e) => domain::EngineSelection::Explicit(domain::EngineId::new(e)),
+                        None => domain::EngineSelection::Auto,
+                    };
+                    domain::ModuleConfig::new(
+                        mod_name.clone(),
+                        enable,
+                        selection,
+                        json_map_to_options(options),
+                    )
+                }
+                ModuleEntryDto::OptionsOnly(options) => domain::ModuleConfig::new(
+                    mod_name.clone(),
+                    true,
+                    domain::EngineSelection::Auto,
+                    json_map_to_options(options),
+                ),
+            };
+            map.insert(mod_name, mod_cfg);
+        }
+        domain::ModulesConfig::new(map)
     }
 }
 
@@ -362,104 +330,24 @@ impl PartialMarginConfigDto {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
-pub enum PartialPaddingConfigDto {
-    All(u32),
-    Fields {
-        top: Option<u32>,
-        bottom: Option<u32>,
-        left: Option<u32>,
-        right: Option<u32>,
-        horizontal: Option<u32>,
-        vertical: Option<u32>,
-    },
-}
-
-impl Default for PartialPaddingConfigDto {
-    fn default() -> Self {
-        Self::Fields {
-            top: None,
-            bottom: None,
-            left: None,
-            right: None,
-            horizontal: None,
-            vertical: None,
-        }
-    }
-}
-
-impl PartialPaddingConfigDto {
-    pub fn into_domain(self) -> domain::PartialPaddingConfig {
-        match self {
-            Self::All(val) => domain::PartialPaddingConfig::new(
-                Some(domain::PaddingOffset::new(val)),
-                Some(domain::PaddingOffset::new(val)),
-                Some(domain::PaddingOffset::new(val)),
-                Some(domain::PaddingOffset::new(val)),
-            ),
-            Self::Fields {
-                top,
-                bottom,
-                left,
-                right,
-                horizontal,
-                vertical,
-            } => {
-                let t = top.or(vertical).map(domain::PaddingOffset::new);
-                let b = bottom.or(vertical).map(domain::PaddingOffset::new);
-                let l = left.or(horizontal).map(domain::PaddingOffset::new);
-                let r = right.or(horizontal).map(domain::PaddingOffset::new);
-                domain::PartialPaddingConfig::new(t, b, l, r)
-            }
-        }
-    }
-}
-
 #[derive(Debug, Deserialize, Default)]
-pub struct PartialBorderConfigDto {
-    size: Option<f32>,
-    color: Option<DrawingColor>,
-    radius: Option<f32>,
-}
-
-impl PartialBorderConfigDto {
-    pub fn into_domain(self) -> domain::PartialBorderConfig {
-        domain::PartialBorderConfig::new(
-            self.size.map(domain::BorderSize::new),
-            self.color,
-            self.radius.map(domain::BorderRadius::new),
-        )
-    }
-}
-
-#[derive(Debug, Deserialize, Default)]
-pub struct PartialBarConfigDto {
-    font_family: Option<String>,
-    font_size: Option<f32>,
-    background: Option<DrawingColor>,
+pub struct PartialRootConfigDto {
+    #[serde(default)]
     height: Option<u32>,
+    #[serde(default)]
     vertical_alignment: Option<VerticalAlignmentDto>,
-    border: Option<PartialBorderConfigDto>,
+    #[serde(default)]
     margin: Option<PartialMarginConfigDto>,
-    padding: Option<PartialPaddingConfigDto>,
-    module_gap: Option<u32>,
 }
 
-impl PartialBarConfigDto {
-    pub fn into_domain(self) -> domain::PartialBarConfig {
-        domain::PartialBarConfig::new(
-            crate::shared::config::domain::CreatePartialBarConfigCommand::new(
-                self.background,
+impl PartialRootConfigDto {
+    pub fn into_domain(self) -> domain::PartialRootConfig {
+        domain::PartialRootConfig::new(
+            crate::shared::config::domain::CreatePartialRootConfigCommand::new(
                 self.height
                     .map(crate::shared::primitives::geometry::BarHeight::new),
                 self.vertical_alignment.map(|v| v.into_domain()),
-                self.border.map(|b| b.into_domain()),
                 self.margin.map(|m| m.into_domain()),
-                self.padding.map(|p| p.into_domain()),
-                self.module_gap.map(domain::ModuleGap::new),
-                self.font_family.map(domain::FontFamily::new),
-                self.font_size.map(domain::FontSize::new),
             ),
         )
     }
@@ -513,8 +401,6 @@ impl TooltipConfigDto {
 mod tests {
     use super::*;
 
-    // MockValidator removed
-
     #[test]
     fn test_margin_dto_all() {
         let dto = MarginConfigDto::All(10);
@@ -528,23 +414,6 @@ mod tests {
     #[test]
     fn test_margin_dto_fields() {
         let dto = MarginConfigDto::Fields {
-            top: Some(5),
-            bottom: None,
-            left: None,
-            right: None,
-            horizontal: Some(10),
-            vertical: Some(20),
-        };
-        let domain = dto.into_domain();
-        assert_eq!(domain.top().value(), 5);
-        assert_eq!(domain.bottom().value(), 20);
-        assert_eq!(domain.left().value(), 10);
-        assert_eq!(domain.right().value(), 10);
-    }
-
-    #[test]
-    fn test_padding_dto_fields() {
-        let dto = PaddingConfigDto::Fields {
             top: Some(5),
             bottom: None,
             left: None,
@@ -576,5 +445,45 @@ mod tests {
         } else {
             panic!("Expected Timebased");
         }
+    }
+
+    #[test]
+    fn test_root_config_dto() {
+        let toml_str = r#"
+            name = "bar"
+            height = 36
+            margin = 5
+            [options]
+            foo = "bar"
+        "#;
+        let dto: RootConfigDto = toml::from_str(toml_str).unwrap();
+        let domain = dto.into_domain();
+        assert_eq!(domain.name().as_str(), "bar");
+        assert_eq!(domain.height().value(), 36);
+        assert_eq!(domain.margin().top().value(), 5);
+    }
+
+    #[test]
+    fn test_modules_config_dto() {
+        let toml_str = r#"
+            [hour]
+            format = "%H:%M:%S"
+
+            [workspace]
+            enable = true
+            engine = "rhai"
+            border_radius = 4.0
+        "#;
+        let dto: ModulesConfigDto = toml::from_str(toml_str).unwrap();
+        let domain = dto.into_domain();
+        let hour = domain.get(&crate::shared::primitives::ModuleName::new("hour")).unwrap();
+        assert_eq!(
+            hour.options().get("format").and_then(|v| v.as_str()),
+            Some("%H:%M:%S")
+        );
+
+        let ws = domain.get(&crate::shared::primitives::ModuleName::new("workspace")).unwrap();
+        assert!(ws.is_enabled());
+        assert_eq!(ws.engine().as_explicit().unwrap().as_str(), "rhai");
     }
 }

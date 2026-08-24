@@ -96,6 +96,32 @@ impl DefaultVdomDiffAdapter {
             }
             (VNodeKind::Rect, VNodeKind::Rect) => Patch::NoChange,
             (
+                VNodeKind::Module {
+                    name: old_name,
+                    instance_id: old_instance_id,
+                    options: old_options,
+                },
+                VNodeKind::Module {
+                    name: new_name,
+                    instance_id: new_instance_id,
+                    options: new_options,
+                },
+            ) => {
+                if old_name != new_name
+                    || old_instance_id != new_instance_id
+                    || old_options != new_options
+                {
+                    Patch::UpdateModule {
+                        node_id: old_node.node_id(),
+                        new_name: new_name.clone(),
+                        new_instance_id: new_instance_id.clone(),
+                        new_options: new_options.clone(),
+                    }
+                } else {
+                    Patch::NoChange
+                }
+            }
+            (
                 VNodeKind::Flex {
                     children: old_children,
                 },
@@ -475,5 +501,41 @@ mod tests {
             }
             _ => panic!("Expected UpdateChildren patch with Insert"),
         }
+    }
+
+    #[test]
+    fn test_diff_module_node_change() {
+        use crate::shared::primitives::{DynamicValue, ModuleOptions};
+
+        let adapter = DefaultVdomDiffAdapter::new();
+        let m1 = VNode::new_module(
+            crate::shared::primitives::ModuleName::new("hour"),
+            None,
+            ModuleOptions::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let mut opts_map = HashMap::new();
+        opts_map.insert("format".to_string(), DynamicValue::from("%H:%M"));
+        let m2 = VNode::new_module(
+            crate::shared::primitives::ModuleName::new("hour"),
+            None,
+            ModuleOptions::new(opts_map),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let unchanged = adapter.diff(Some(&m1), &m1);
+        assert!(unchanged.is_unchanged());
+
+        let changed = adapter.diff(Some(&m1), &m2);
+        assert!(!changed.is_unchanged());
+        assert!(matches!(changed.patch(), Patch::UpdateModule { .. }));
     }
 }

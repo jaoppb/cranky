@@ -25,6 +25,8 @@ pub struct BuiltinModules;
 
 impl BuiltinModules {
     const BUILTINS: &[(&'static str, &'static str)] = &[
+        ("bar.lua", include_str!("../../assets/widgets/bar.lua")),
+        ("bar.rhai", include_str!("../../assets/widgets/bar.rhai")),
         ("hour.lua", include_str!("../../assets/widgets/hour.lua")),
         ("hour.rhai", include_str!("../../assets/widgets/hour.rhai")),
         (
@@ -159,7 +161,7 @@ impl BuiltinModules {
             {
                 for path in event.paths {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        tracing::info!("Script modified: {:?}", path);
+                        tracing::debug!("Script modified: {:?}", path);
                         command_tx.send_command(crate::app::commands::AppCommand::ReloadModule(
                             crate::shared::primitives::ModuleName::new(stem),
                         ));
@@ -256,11 +258,12 @@ mod tests {
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
         let mut hour_mod =
             BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env).unwrap();
-        let mut options = std::collections::HashMap::new();
-        options.insert(
+        let mut options_map = std::collections::HashMap::new();
+        options_map.insert(
             "format".to_string(),
-            serde_json::Value::String("%H:%M".to_string()),
+            crate::shared::primitives::DynamicValue::String("%H:%M".to_string()),
         );
+        let options = crate::shared::primitives::ModuleOptions::new(options_map);
         hour_mod
             .init(
                 &crate::shared::config::domain::ModuleConfig::new(

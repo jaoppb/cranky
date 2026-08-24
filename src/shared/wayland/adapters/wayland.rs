@@ -3,18 +3,15 @@ use crate::shared::wayland::ports::DisplayServerPort;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::wayland::ports::DisplayServerError;
 
-use crate::shared::primitives::geometry::{LogicalPx, Scale};
+use crate::shared::primitives::geometry::Scale;
 use crate::shared::rendering::adapters::tiny_skia::TinySkiaCosmicCanvas;
-use crate::shared::rendering::ports::canvas::Canvas;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex};
-use tiny_skia::PixmapMut;
-use tokio::io::unix::AsyncFd;
-use tracing::{debug, info, info_span};
-
 use cosmic_text::{FontSystem, SwashCache};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use tokio::io::unix::AsyncFd;
+use tracing::{debug, info_span};
 use std::os::unix::io::{AsFd, AsRawFd, RawFd};
 use wayland_client::{
     Connection, Dispatch, EventQueue, QueueHandle,
@@ -53,6 +50,7 @@ impl AsRawFd for WaylandFd {
 
 pub struct SurfaceCommand {
     module_id: crate::shared::primitives::ModuleId,
+    parent_id: Option<crate::shared::primitives::ModuleId>,
     monitor_id: crate::shared::primitives::MonitorId,
     position: crate::shared::primitives::geometry::Position,
     buffer: crate::shared::primitives::render::RenderBuffer,
@@ -61,12 +59,14 @@ pub struct SurfaceCommand {
 impl SurfaceCommand {
     pub fn new(
         module_id: crate::shared::primitives::ModuleId,
+        parent_id: Option<crate::shared::primitives::ModuleId>,
         monitor_id: crate::shared::primitives::MonitorId,
         position: crate::shared::primitives::geometry::Position,
         buffer: crate::shared::primitives::render::RenderBuffer,
     ) -> Self {
         Self {
             module_id,
+            parent_id,
             monitor_id,
             position,
             buffer,
@@ -75,6 +75,9 @@ impl SurfaceCommand {
 
     pub fn module_id(&self) -> crate::shared::primitives::ModuleId {
         self.module_id
+    }
+    pub fn parent_id(&self) -> Option<crate::shared::primitives::ModuleId> {
+        self.parent_id
     }
     pub fn monitor_id(&self) -> &crate::shared::primitives::MonitorId {
         &self.monitor_id
@@ -112,11 +115,23 @@ impl SurfaceManagerPort for WaylandSurfaceManager {
         position: crate::shared::primitives::geometry::Position,
         buffer: crate::shared::primitives::render::RenderBuffer,
     ) {
+        self.submit_child_buffer(module_id, None, monitor_id, position, buffer)
+            .await;
+    }
+
+    async fn submit_child_buffer(
+        &self,
+        module_id: crate::shared::primitives::ModuleId,
+        parent_id: Option<crate::shared::primitives::ModuleId>,
+        monitor_id: crate::shared::primitives::MonitorId,
+        position: crate::shared::primitives::geometry::Position,
+        buffer: crate::shared::primitives::render::RenderBuffer,
+    ) {
         {
             let mut map = self.pending_surfaces.lock().unwrap();
             map.insert(
                 (module_id, monitor_id.clone()),
-                SurfaceCommand::new(module_id, monitor_id, position, buffer),
+                SurfaceCommand::new(module_id, parent_id, monitor_id, position, buffer),
             );
         }
         let _ = self.notify_tx.try_send(());
@@ -332,7 +347,7 @@ impl DisplayServerPort for WaylandAdapter {
     fn dispatch_pending(&mut self) -> Result<(), DisplayServerError> {
         if self.config_rx.has_changed().unwrap_or(false) {
             let _ = self.config_rx.borrow_and_update();
-            tracing::info!("WaylandAdapter detected config change, recreating bars...");
+            tracing::debug!("WaylandAdapter detected config change, recreating bars...");
             self.state.bars.clear(); // Drop existing bars
             self.state.surface_to_id.clear();
 
@@ -716,83 +731,118 @@ impl WaylandAdapter {
 
         let width = cmd.buffer().width().max(1);
         let height = cmd.buffer().height().max(1);
+        let src_data = cmd.buffer().data();
 
-        let mut new_surface_to_register = None;
-        let ms = bar
-            .module_surfaces
-            .entry(cmd.module_id())
-            .or_insert_with(|| {
-                let surface = compositor.create_surface(&qh, ());
-                let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, &qh, ());
-                subsurface.set_desync();
+        tracing::trace!(
+            module = %cmd.module_id(),
+            parent = ?cmd.parent_id(),
+            monitor = %cmd.monitor_id(),
+            pos = ?cmd.position(),
+            width,
+            height,
+            "Wayland handle_surface_command executing"
+        );
 
-                let shm_buffer = ShmBuffer::new(
+        if cmd.parent_id().is_none() {
+            // Root module rendering directly to the base layer surface (bar.surface)
+            if bar.shm_buffer.width() != width || bar.shm_buffer.height() != height {
+                bar.shm_buffer = ShmBuffer::new(
                     shm,
                     width,
                     height,
                     &qh,
                     self.state.app_env.xdg_runtime_dir().as_path(),
                 )
-                .expect("Failed to create SHM buffer");
+                .expect("Failed to recreate SHM buffer for root bar");
+            }
 
-                new_surface_to_register = Some(surface.clone());
+            let data = bar.shm_buffer.mmap_mut();
+            let len = std::cmp::min(data.len(), src_data.len());
+            data[..len].copy_from_slice(&src_data[..len]);
 
-                ModuleSurface {
-                    surface,
-                    subsurface,
-                    shm_buffer,
-                    size: *cmd.buffer().size(),
-                    x: 0,
-                    y: 0,
-                }
-            });
+            bar.surface
+                .attach(Some(bar.shm_buffer.current_buffer()), 0, 0);
+            bar.surface.damage_buffer(0, 0, width as i32, height as i32);
+            bar.surface.commit();
+            bar.shm_buffer.swap_buffers();
 
-        if let Some(surface) = new_surface_to_register {
             self.state
                 .surface_to_id
-                .insert(surface, (cmd.module_id(), cmd.monitor_id().clone()));
+                .insert(bar.surface.clone(), (cmd.module_id(), cmd.monitor_id().clone()));
+        } else {
+            // Child module rendering to a subsurface parented to bar.surface
+            let mut new_surface_to_register = None;
+            let ms = bar
+                .module_surfaces
+                .entry(cmd.module_id())
+                .or_insert_with(|| {
+                    let surface = compositor.create_surface(&qh, ());
+                    let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, &qh, ());
+                    subsurface.set_desync();
+
+                    let shm_buffer = ShmBuffer::new(
+                        shm,
+                        width,
+                        height,
+                        &qh,
+                        self.state.app_env.xdg_runtime_dir().as_path(),
+                    )
+                    .expect("Failed to create SHM buffer");
+
+                    new_surface_to_register = Some(surface.clone());
+
+                    ModuleSurface {
+                        surface,
+                        subsurface,
+                        shm_buffer,
+                        size: *cmd.buffer().size(),
+                        x: 0,
+                        y: 0,
+                    }
+                });
+
+            if let Some(surface) = new_surface_to_register {
+                self.state
+                    .surface_to_id
+                    .insert(surface, (cmd.module_id(), cmd.monitor_id().clone()));
+            }
+
+            if ms.size != *cmd.buffer().size() {
+                ms.shm_buffer = ShmBuffer::new(
+                    shm,
+                    width,
+                    height,
+                    &qh,
+                    self.state.app_env.xdg_runtime_dir().as_path(),
+                )
+                .expect("Failed to recreate SHM buffer for resize");
+                ms.size = *cmd.buffer().size();
+            }
+
+            if ms.x != cmd.position().x() || ms.y != cmd.position().y() {
+                ms.subsurface
+                    .set_position(cmd.position().x(), cmd.position().y());
+                ms.x = cmd.position().x();
+                ms.y = cmd.position().y();
+            }
+
+            let data = ms.shm_buffer.mmap_mut();
+            let len = std::cmp::min(data.len(), src_data.len());
+            data[..len].copy_from_slice(&src_data[..len]);
+
+            ms.surface
+                .attach(Some(ms.shm_buffer.current_buffer()), 0, 0);
+            ms.surface.damage_buffer(0, 0, width as i32, height as i32);
+            ms.surface.commit();
+
+            bar.surface.commit();
+
+            ms.shm_buffer.swap_buffers();
+
+            self.state
+                .surface_to_id
+                .insert(ms.surface.clone(), (cmd.module_id(), cmd.monitor_id().clone()));
         }
-
-        if ms.size != *cmd.buffer().size() {
-            ms.shm_buffer = ShmBuffer::new(
-                shm,
-                width,
-                height,
-                &qh,
-                self.state.app_env.xdg_runtime_dir().as_path(),
-            )
-            .expect("Failed to recreate SHM buffer for resize");
-            ms.size = *cmd.buffer().size();
-        }
-
-        if ms.x != cmd.position().x() || ms.y != cmd.position().y() {
-            ms.subsurface
-                .set_position(cmd.position().x(), cmd.position().y());
-            ms.x = cmd.position().x();
-            ms.y = cmd.position().y();
-        }
-
-        let data = ms.shm_buffer.mmap_mut();
-        let src_data = cmd.buffer().data();
-        let len = std::cmp::min(data.len(), src_data.len());
-        data[..len].copy_from_slice(&src_data[..len]);
-
-        ms.surface
-            .attach(Some(ms.shm_buffer.current_buffer()), 0, 0);
-        ms.surface.damage_buffer(0, 0, width as i32, height as i32);
-        ms.surface.commit();
-
-        // Always commit the parent surface to ensure the compositor applies the subsurface
-        // update, working around bugs in some compositors (like Hyprland/wlroots) where
-        // subsurface desync mode is ignored for layer shell surfaces.
-        bar.surface.commit();
-
-        ms.shm_buffer.swap_buffers();
-
-        self.state.surface_to_id.insert(
-            ms.surface.clone(),
-            (cmd.module_id(), cmd.monitor_id().clone()),
-        );
 
         Ok(())
     }
@@ -804,19 +854,13 @@ impl WaylandAdapter {
             crate::shared::primitives::ModuleId,
             Box<dyn crate::features::module_runtime::ports::LayoutSender>,
         >,
-        qh: &QueueHandle<WaylandState>,
+        _qh: &QueueHandle<WaylandState>,
     ) -> Result<(), DisplayServerError> {
         let span = info_span!("render_all_outputs");
         let _enter = span.enter();
 
         let WaylandState {
             ref mut bars,
-            ref mut font_system,
-            ref mut swash_cache,
-            ref compositor,
-            ref subcompositor,
-            ref shm,
-            ref mut surface_to_id,
             ..
         } = self.state;
 
@@ -824,19 +868,6 @@ impl WaylandAdapter {
             debug!("No bars available for rendering.");
             return Ok(());
         }
-
-        let Some(compositor) = compositor.as_ref() else {
-            tracing::error!("Compositor not bound");
-            return Ok(());
-        };
-        let Some(subcompositor) = subcompositor.as_ref() else {
-            tracing::error!("Subcompositor not bound");
-            return Ok(());
-        };
-        let Some(shm) = shm.as_ref() else {
-            tracing::error!("SHM not bound");
-            return Ok(());
-        };
 
         let mut all_layouts_by_module: std::collections::HashMap<
             crate::shared::primitives::ModuleId,
@@ -851,21 +882,7 @@ impl WaylandAdapter {
                 debug!("Skipping render for unconfigured bar: {}", bar.output_name);
                 continue;
             }
-            debug!(
-                "Rendering bar for output: {} (size: {}x{}, scale: {})",
-                bar.output_name, bar.width, bar.height, bar.scale
-            );
-            let (width, height, scale) = (bar.width, bar.height, bar.scale);
-            let physical_width = width * scale as u32;
-            let physical_height = height * scale as u32;
-
-            let pixmap_data = bar.shm_buffer.mmap_mut();
-            let Some(mut pixmap) =
-                PixmapMut::from_bytes(pixmap_data, physical_width, physical_height)
-            else {
-                tracing::error!("Failed to create pixmap for bar {}", bar.output_name);
-                continue;
-            };
+            let width = bar.width;
 
             let hypr_rx = self.state.hub.hyprland_rx();
             let hyprland_state = hypr_rx.borrow();
@@ -873,26 +890,23 @@ impl WaylandAdapter {
                 .focused_monitor()
                 .is_some_and(|name| name.as_str() == bar.output_name);
 
-            let mut bar_config = read_model.config().bar().clone();
+            let mut root_config = read_model.config().root().clone();
             if !is_focused {
-                bar_config = bar_config.as_unfocused();
+                root_config = root_config.as_unfocused();
             }
 
-            let config_bg = bar_config.background().clone();
-            let border_config = bar_config.border();
-
             // Check if hot-reload of height or margin is needed
-            if bar.config_height != bar_config.height().value()
-                || bar.config_margin != *bar_config.margin()
+            if bar.config_height != root_config.height().value()
+                || bar.config_margin != *root_config.margin()
             {
                 debug!(
                     "Hot-reloading bar height/margin for output: {}",
                     bar.output_name
                 );
-                bar.config_height = bar_config.height().value();
-                bar.config_margin = bar_config.margin().clone();
+                bar.config_height = root_config.height().value();
+                bar.config_margin = root_config.margin().clone();
 
-                let margin = bar_config.margin();
+                let margin = root_config.margin();
                 bar.layer_surface.set_size(0, bar.config_height);
                 bar.layer_surface.set_margin(
                     margin.top().value(),
@@ -904,126 +918,26 @@ impl WaylandAdapter {
                     bar.config_height as i32 + margin.top().value() + margin.bottom().value(),
                 );
                 bar.surface.commit();
-
-                // Note: The actual resize will happen asynchronously via the Configure event.
-                // We proceed with the current size for this frame to avoid visual glitches.
             }
 
-            pixmap.fill(tiny_skia::Color::TRANSPARENT);
-            let mut bar_canvas = TinySkiaCosmicCanvas::new(
-                pixmap,
-                font_system,
-                swash_cache,
-                Scale::new(scale as f32),
-                bar_config.font_family().clone(),
-                bar_config.font_size(),
-            );
-            let border_size = border_config.size().value();
-            let half_border = border_size / 2.0;
-
-            bar_canvas.draw_rect(
-                LogicalPx::new(0.0),
-                LogicalPx::new(0.0),
-                LogicalPx::new(width as f32),
-                LogicalPx::new(height as f32),
-                config_bg,
-                LogicalPx::new(border_config.radius().value()),
-            );
-            bar_canvas.draw_border(
-                crate::shared::primitives::geometry::Position::new(
-                    half_border as i32,
-                    half_border as i32,
-                ),
-                crate::shared::primitives::geometry::Size::new(
-                    (width as f32 - border_size) as u32,
-                    (height as f32 - border_size) as u32,
-                ),
-                border_config.color().clone(),
-                LogicalPx::new(border_config.radius().value()),
-                LogicalPx::new(border_size),
-            );
-
-            // Calculate layout
+            // Provide root bar bounds to the root module
             let monitor_id = crate::shared::primitives::MonitorId::new(&bar.output_name);
-            // Note: We no longer iterate over layouts to render modules directly.
-            // Layout is broadcasted via app.calculate_layout, and module actors render themselves
-            // asynchronously and submit their buffers to the Wayland adapter via the SurfaceManager.
-            let layouts = read_model.calculate_layout(
-                &monitor_id,
-                crate::shared::primitives::geometry::BarWidth::new(width),
-                &bar_config,
-            );
-
-            // Collect layout bounds to modules for this monitor
-            for layout in &layouts {
+            if let Some(root_id) = read_model.root_module() {
+                let bar_rect = crate::shared::primitives::geometry::Rect::new(
+                    crate::shared::primitives::geometry::Position::new(0, 0),
+                    crate::shared::primitives::geometry::Size::new(width, bar.config_height),
+                );
                 all_layouts_by_module
-                    .entry(layout.id())
+                    .entry(root_id)
                     .or_default()
-                    .insert(monitor_id.clone(), *layout.bounds());
+                    .insert(monitor_id, bar_rect);
             }
-
-            // However, the display server must still position the subsurfaces correctly on the screen!
-            for layout in layouts {
-                let module_id = layout.id();
-                let bounds = layout.bounds();
-
-                let ms = match bar.module_surfaces.entry(module_id) {
-                    std::collections::hash_map::Entry::Occupied(o) => o.into_mut(),
-                    std::collections::hash_map::Entry::Vacant(v) => {
-                        let surface = compositor.create_surface(qh, ());
-                        let subsurface =
-                            subcompositor.get_subsurface(&surface, &bar.surface, qh, ());
-                        subsurface.set_desync();
-
-                        let width = bounds.width().max(1);
-                        let height = bounds.height().max(1);
-                        let shm_buffer = match crate::shared::wayland::adapters::shm::ShmBuffer::new(
-                            shm,
-                            width,
-                            height,
-                            qh,
-                            self.state.app_env.xdg_runtime_dir().as_path(),
-                        ) {
-                            Ok(b) => b,
-                            Err(e) => {
-                                tracing::error!("Failed to create shm buffer: {}", e);
-                                continue;
-                            }
-                        };
-
-                        v.insert(ModuleSurface {
-                            surface,
-                            subsurface,
-                            shm_buffer,
-                            size: *bounds.size(),
-                            x: bounds.x(),
-                            y: bounds.y(),
-                        })
-                    }
-                };
-
-                surface_to_id.insert(ms.surface.clone(), (module_id, monitor_id.clone()));
-
-                ms.x = bounds.x();
-                ms.y = bounds.y();
-                ms.subsurface.set_position(bounds.x(), bounds.y());
-            }
-
-            let buffer = bar.shm_buffer.current_buffer();
-
-            bar.surface.set_buffer_scale(scale);
-            bar.surface.attach(Some(buffer), 0, 0);
-            bar.surface.damage(0, 0, width as i32, height as i32);
-            bar.surface.commit();
-            bar.shm_buffer.swap_buffers();
         }
 
-        // Broadcast layout bounds to modules for ALL active monitors
+        // Broadcast root layout bounds to the root module for ALL active monitors
         for (id, sender) in layout_senders {
             if let Some(rects) = all_layouts_by_module.get(id) {
                 sender.send_layout(rects.clone());
-            } else {
-                sender.send_layout(std::collections::HashMap::new());
             }
         }
 
@@ -1056,10 +970,10 @@ impl WaylandState {
             return Ok(());
         }
 
-        let bar_config = self.hub.config_rx().borrow().bar().clone();
-        let bar_height = bar_config.height();
-        let margin = bar_config.margin();
-        info!(
+        let root_config = self.hub.config_rx().borrow().root().clone();
+        let bar_height = root_config.height();
+        let margin = root_config.margin();
+        debug!(
             "Creating bar for output: {} (height: {}, scale: {})",
             output_name,
             bar_height.value(),
@@ -1106,7 +1020,6 @@ impl WaylandState {
         layer_surface.set_exclusive_zone(
             bar_height.value() as i32 + margin.top().value() + margin.bottom().value(),
         );
-        surface.set_buffer_scale(output_scale);
         surface.commit();
 
         let shm_buffer = ShmBuffer::new(
@@ -1437,14 +1350,12 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
                     bar.height = height;
 
                     if old_width != width || old_height != height {
-                        debug!("Bar resized to {}x{} (scale: {})", width, height, bar.scale);
-                        let physical_width = width * bar.scale as u32;
-                        let physical_height = height * bar.scale as u32;
+                        debug!("Bar resized to {}x{}", width, height);
 
                         if let Ok(new_shm) = ShmBuffer::new(
                             state.shm.as_ref().expect("SHM bound"),
-                            physical_width,
-                            physical_height,
+                            width,
+                            height,
                             qh,
                             state.app_env.xdg_runtime_dir().as_path(),
                         ) {
@@ -1687,6 +1598,7 @@ mod tests {
         );
         let cmd = SurfaceCommand::new(
             module_id,
+            None,
             monitor_id.clone(),
             crate::shared::primitives::geometry::Position::new(0, 0),
             buffer,
@@ -1820,6 +1732,7 @@ mod tests {
 
         let cmd = SurfaceCommand::new(
             crate::shared::primitives::ModuleId::new(1),
+            None,
             crate::shared::primitives::MonitorId::new("test"),
             crate::shared::primitives::geometry::Position::new(0, 0),
             crate::shared::primitives::render::RenderBuffer::new(

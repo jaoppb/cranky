@@ -156,21 +156,21 @@ impl AnyModulePort for RhaiModule {
     ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
         use crate::features::module_runtime::ports::ModuleInitError;
 
-        let bar_config = full_config.bar();
+        let root_config = full_config.root();
         let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
         let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
 
-        // Expose bar config
-        let mut bar_map = rhai::Map::new();
-        bar_map.insert(
-            "font_family".into(),
-            Dynamic::from(bar_config.font_family().as_str().to_string()),
+        // Expose root config
+        let mut root_map = rhai::Map::new();
+        root_map.insert(
+            "name".into(),
+            Dynamic::from(root_config.name().as_str().to_string()),
         );
-        bar_map.insert(
-            "font_size".into(),
-            Dynamic::from(bar_config.font_size().value()),
+        root_map.insert(
+            "height".into(),
+            Dynamic::from(root_config.height().value() as i64),
         );
-        scope.set_or_push("bar_config", bar_map);
+        scope.set_or_push("root_config", root_map);
 
         // Expose module config options
         let options_json = serde_json::to_string(config.options())
@@ -364,7 +364,7 @@ mod tests {
             "test_life".into(),
             true,
             crate::shared::config::domain::EngineSelection::Auto,
-            std::collections::HashMap::new(),
+            crate::shared::primitives::ModuleOptions::default(),
         );
         let config = crate::shared::config::domain::Config::default();
         assert!(module.init(&mod_config, &config).is_ok());

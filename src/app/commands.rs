@@ -15,6 +15,18 @@ pub enum AppCommand {
         crate::shared::primitives::ModuleId,
         crate::shared::primitives::geometry::Size,
     ),
+    ChildModuleSizeChanged {
+        parent_id: crate::shared::primitives::ModuleId,
+        child_key: crate::shared::primitives::ModuleKey,
+        monitor_id: crate::shared::primitives::MonitorId,
+        size: crate::shared::primitives::geometry::Size,
+    },
+    #[serde(skip_deserializing)]
+    ContainerLayoutsCalculated {
+        parent_id: crate::shared::primitives::ModuleId,
+        monitor_id: crate::shared::primitives::MonitorId,
+        layouts: Vec<crate::shared::primitives::ChildModuleLayout>,
+    },
     #[serde(skip_deserializing)]
     ShowTooltip {
         layout: Box<crate::features::layout_engine::domain::StyledNode>,

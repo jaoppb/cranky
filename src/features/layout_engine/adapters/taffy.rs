@@ -247,6 +247,17 @@ fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
             }
             style
         }
+        StyledNode::Module { key, .. } => {
+            if let Some(size) = measurer.measure_module(key) {
+                if computed.width().is_none() {
+                    style.size.width = Dimension::length(size.width() as f32);
+                }
+                if computed.height().is_none() {
+                    style.size.height = Dimension::length(size.height() as f32);
+                }
+            }
+            style
+        }
     }
 }
 
@@ -294,11 +305,12 @@ impl<'a> TaffyTreeBuilder<'a> {
 }
 
 impl LayoutEnginePort for TaffyLayoutAdapter {
-    fn calculate_layout(
+    fn calculate_layout_with_constraints(
         &mut self,
         node: StyledNode,
         measurer: &mut dyn TextMeasurer,
         start_pos: Position,
+        available_size: Option<Size>,
     ) -> Result<RenderNode, LayoutError> {
         let mut builder = TaffyTreeBuilder::new(&mut self.taffy);
         let new_state = if let Some(state) = &self.state {
@@ -310,9 +322,17 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
 
         let root_node_id = new_state.root_node;
 
+        let available_space = match available_size {
+            Some(size) => taffy::geometry::Size {
+                width: taffy::style::AvailableSpace::Definite(size.width() as f32),
+                height: taffy::style::AvailableSpace::Definite(size.height() as f32),
+            },
+            None => taffy::geometry::Size::MAX_CONTENT,
+        };
+
         // Compute layout
         self.taffy
-            .compute_layout(root_node_id, taffy::geometry::Size::MAX_CONTENT)
+            .compute_layout(root_node_id, available_space)
             .map_err(|e| LayoutError::EngineError(e.to_string()))?;
 
         // Build RenderNode tree
@@ -527,6 +547,18 @@ fn diff<'a>(
                 Patch::Keep(old_state)
             }
         }
+        (
+            StyledNode::Module { .. },
+            StyledNode::Module { .. },
+        ) => {
+            let style = node_to_style(new_layout, measurer);
+            Patch::Update {
+                old_state,
+                new_layout,
+                style: Box::new(Some(style)),
+                children: None,
+            }
+        }
         _ => unreachable!(),
     }
 }
@@ -691,6 +723,21 @@ fn build_render_tree(
             pixel_size: *pixel_size,
             tooltip: tooltip.clone(),
         }),
+        StyledNode::Module {
+            key,
+            style,
+            on_click,
+            on_hover,
+            tooltip,
+            ..
+        } => Ok(RenderNode::Module {
+            rect,
+            key: key.clone(),
+            style: style.clone(),
+            on_click: on_click.clone(),
+            on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(),
+        }),
     }
 }
 
@@ -701,6 +748,7 @@ mod tests {
     use crate::features::styling::domain::ComputedStyle;
     use crate::shared::config::domain::{FontFamily, FontSize};
     use crate::shared::primitives::geometry::{Position, Size};
+    use crate::shared::primitives::{ModuleKey, ModuleName, ModuleOptions};
 
     struct MockMeasurer;
     impl TextMeasurer for MockMeasurer {
@@ -711,6 +759,14 @@ mod tests {
             _size: Option<FontSize>,
         ) -> Size {
             Size::new(text.len() as u32 * 10, 20)
+        }
+
+        fn measure_module(&self, key: &ModuleKey) -> Option<Size> {
+            if key.name() == "workspace" {
+                Some(Size::new(150, 28))
+            } else {
+                None
+            }
         }
     }
 
@@ -732,5 +788,87 @@ mod tests {
             .unwrap();
         assert_eq!(render_tree.rect().width(), 50);
         assert_eq!(render_tree.rect().height(), 20);
+    }
+
+    #[test]
+    fn test_calculate_layout_styled_module_with_custom_size() {
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+
+        let mut style = ComputedStyle::default();
+        style.set_width(crate::features::styling::domain::CssLength::Px(120.0));
+        style.set_height(crate::features::styling::domain::CssLength::Px(30.0));
+
+        let node = StyledNode::Module {
+            key: ModuleKey::from_name(ModuleName::new("custom_mod")),
+            options: ModuleOptions::default(),
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+        };
+
+        let render_tree = adapter
+            .calculate_layout(node, &mut measurer, Position::new(10, 5))
+            .unwrap();
+        assert_eq!(render_tree.rect().x(), 10);
+        assert_eq!(render_tree.rect().y(), 5);
+        assert_eq!(render_tree.rect().width(), 120);
+        assert_eq!(render_tree.rect().height(), 30);
+    }
+
+    #[test]
+    fn test_calculate_layout_styled_module_with_measured_size() {
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+
+        let node = StyledNode::Module {
+            key: ModuleKey::from_name(ModuleName::new("workspace")),
+            options: ModuleOptions::default(),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+        };
+
+        let render_tree = adapter
+            .calculate_layout(node, &mut measurer, Position::new(0, 0))
+            .unwrap();
+        assert_eq!(render_tree.rect().width(), 150);
+        assert_eq!(render_tree.rect().height(), 28);
+    }
+
+    #[test]
+    fn test_nested_container_module_collect_layouts() {
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+
+        let child1 = StyledNode::Module {
+            key: ModuleKey::from_name(ModuleName::new("workspace")),
+            options: ModuleOptions::default(),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+        };
+
+        let mut root_style = ComputedStyle::default();
+        root_style.set_padding(crate::features::layout_engine::domain::BoxMargin::new(0.0, 0.0, 16.0, 16.0));
+        let root = StyledNode::Flex {
+            children: vec![child1],
+            style: root_style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+        };
+
+        let render_tree = adapter
+            .calculate_layout(root, &mut measurer, Position::new(0, 0))
+            .unwrap();
+        
+        let layouts = render_tree.collect_module_layouts();
+        assert_eq!(layouts.len(), 1);
+        assert_eq!(layouts[0].key().name().as_str(), "workspace");
+        assert_eq!(layouts[0].bounds().x(), 16);
     }
 }

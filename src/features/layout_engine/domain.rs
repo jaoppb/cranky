@@ -2,6 +2,7 @@ use crate::app::commands::AppCommand;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::Size;
+use crate::shared::primitives::{ChildModuleLayout, ModuleKey, ModuleOptions};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
@@ -187,6 +188,14 @@ pub enum StyledNode {
         style: ComputedStyle,
         tooltip: Option<Box<StyledNode>>,
     },
+    Module {
+        key: ModuleKey,
+        options: ModuleOptions,
+        style: ComputedStyle,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<StyledNode>>,
+    },
 }
 
 impl StyledNode {
@@ -197,12 +206,16 @@ impl StyledNode {
             Self::Progress { style, .. } => style,
             Self::Rect { style, .. } => style,
             Self::Image { style, .. } => style,
+            Self::Module { style, .. } => style,
         }
     }
 }
 
 pub trait TextMeasurer: Send + Sync {
     fn measure(&mut self, text: &str, font: Option<&FontFamily>, size: Option<FontSize>) -> Size;
+    fn measure_module(&self, _key: &ModuleKey) -> Option<Size> {
+        None
+    }
 }
 
 use crate::shared::primitives::geometry::Rect;
@@ -247,6 +260,36 @@ pub enum RenderNode {
         pixel_size: Size,
         tooltip: Option<Box<StyledNode>>,
     },
+    Module {
+        rect: Rect,
+        key: ModuleKey,
+        style: ComputedStyle,
+        on_click: Option<AppCommand>,
+        on_hover: Option<AppCommand>,
+        tooltip: Option<Box<StyledNode>>,
+    },
+}
+
+impl RenderNode {
+    pub fn collect_module_layouts(&self) -> Vec<ChildModuleLayout> {
+        let mut layouts = Vec::new();
+        self.collect_module_layouts_recursive(&mut layouts);
+        layouts
+    }
+
+    fn collect_module_layouts_recursive(&self, out: &mut Vec<ChildModuleLayout>) {
+        match self {
+            Self::Flex { children, .. } => {
+                for child in children {
+                    child.collect_module_layouts_recursive(out);
+                }
+            }
+            Self::Module { rect, key, .. } => {
+                out.push(ChildModuleLayout::new(key.clone(), *rect));
+            }
+            _ => {}
+        }
+    }
 }
 
 impl RenderNode {
@@ -257,6 +300,7 @@ impl RenderNode {
             Self::Progress { rect, .. } => *rect,
             Self::Rect { rect, .. } => *rect,
             Self::Image { rect, .. } => *rect,
+            Self::Module { rect, .. } => *rect,
         }
     }
 
@@ -266,6 +310,7 @@ impl RenderNode {
             Self::Flex { on_click, .. } => on_click.as_ref(),
             Self::Progress { on_click, .. } => on_click.as_ref(),
             Self::Rect { on_click, .. } => on_click.as_ref(),
+            Self::Module { on_click, .. } => on_click.as_ref(),
             _ => None,
         }
     }
@@ -276,6 +321,7 @@ impl RenderNode {
             Self::Flex { on_hover, .. } => on_hover.as_ref(),
             Self::Progress { on_hover, .. } => on_hover.as_ref(),
             Self::Rect { on_hover, .. } => on_hover.as_ref(),
+            Self::Module { on_hover, .. } => on_hover.as_ref(),
             _ => None,
         }
     }
@@ -317,6 +363,7 @@ impl RenderNode {
             RenderNode::Progress { tooltip, .. } => tooltip.as_deref(),
             RenderNode::Rect { tooltip, .. } => tooltip.as_deref(),
             RenderNode::Image { tooltip, .. } => tooltip.as_deref(),
+            RenderNode::Module { tooltip, .. } => tooltip.as_deref(),
         }
     }
 
@@ -487,6 +534,27 @@ impl RenderNode {
                     logical_size,
                     crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
                 );
+            }
+            Self::Module { rect, style, .. } => {
+                if let Some(bg) = style.background() {
+                    canvas.draw_rect(
+                        LogicalPx::new(rect.x() as f32),
+                        LogicalPx::new(rect.y() as f32),
+                        LogicalPx::new(rect.width() as f32),
+                        LogicalPx::new(rect.height() as f32),
+                        bg.clone(),
+                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                    );
+                }
+                if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
+                    canvas.draw_border(
+                        crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
+                        crate::shared::primitives::geometry::Size::new(rect.width(), rect.height()),
+                        color.clone(),
+                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(size.value()),
+                    );
+                }
             }
         }
     }

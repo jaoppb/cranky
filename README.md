@@ -43,43 +43,41 @@ The binary will be available at `target/release/cranky`.
 Cranky looks for its configuration file at `~/.config/cranky/config.toml`.
 
 ```toml
-[bar]
-background = "#1a1b26"
+[root]
+name = "bar"
 height = 40
+left = ["workspace"]
+center = ["hour"]
+right = ["metrics", "applet"]
 
-[bar.margin]
+[root.margin]
 top = 8
 bottom = -8
 left = 8
 right = 8
 
-[bar.border]
-size = 2
-color = "#7aa2f7"
-radius = 8.0
+[render]
+mode = "immediate"
+fps_limit = 30
 
-[rendering]
-mode = "timebased"
-duration_ms = 100
-# mode = "immediate"
-# fps_limit = 60
-# Omit fps_limit for unlimited FPS in immediate mode.
+[modules.workspace]
+border_radius = 4.0
+active = { background_color = "#565f89" }
 
-[[modules.left]]
-name = "workspace"
-enable = true
+[modules.hour]
+format = "%H:%M:%S %d/%m/%Y"
 
-[[modules.right]]
-name = "applet"
-enable = true
+[modules.metrics]
+network = false
+temperature = false
+
+[modules.applet]
 show_icons = true
 show_titles = false
-icon_size = 16
-# icon_theme = "Papirus-Dark"
+icon_size = 22
 
-[[modules.right]]
-name = "hour"
-enable = true
+[modules.mpris]
+show_icon = true
 ```
 
 ## 🏗 Architecture

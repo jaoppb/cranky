@@ -1,51 +1,48 @@
-[bar]
-background = "#1a1b26"
-text_color = "#c0caf5"
-font_family = "JetBrainsMono Nerd Font"
-font_size = 14.0
+# Cranky Configuration Example
+
+[root]
+name = "bar"
 height = 40
-padding.horizontal = 8
-module_gap = 8
+left = ["workspace"]
+center = ["hour"]
+right = ["metrics", "applet"]
 
-[render]
-mode = "immediate"
-fps_limit = 30
-
-[bar.unfocused.border]
-color = "#565f89"
-
-[bar.margin]
+[root.margin]
 top = 8
 bottom = -8
 left = 8
 right = 8
 
-[bar.border]
-size = 2.0
-color = "#7aa2f7 #bb9af7 45deg"
-radius = 8.0
+[render]
+mode = "immediate"
+fps_limit = 30
 
-[[modules.left]]
-name = "workspace"
-enable = true
+[metrics]
+update_interval_ms = 1000
+cpu_mode = "gauge"
+memory_mode = "gauge"
+disks_mode = "gauge"
+network_mode = "text"
+temperature_mode = "text"
+temp_fahrenheit = false
+
+[modules.workspace]
 border_radius = 4.0
 active = { background_color = "#565f89" }
 
-[[modules.center]]
-name = "hour"
-enable = true
+[modules.hour]
 format = "%H:%M:%S %d/%m/%Y"
 
-[[modules.right]]
-name = "metrics"
-update_interval_ms = 100
-enable = true
+[modules.metrics]
 network = false
 temperature = false
 
-[[modules.right]]
-name = "applet"
-enable = true
+[modules.applet]
 show_icons = true
 show_titles = false
 icon_size = 22
+
+[modules.mpris]
+show_icon = true
+
+

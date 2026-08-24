@@ -10,11 +10,19 @@ a **Reactive System** (using Tokio channels and a Signal Hub).
 
 ### Directory Structure
 
-Cranky strictly follows **Feature-Sliced Design (FSD)** combined with Clean Architecture principles.
+Cranky strictly follows **Feature-Sliced Design (FSD)** combined with Clean
+Architecture principles.
 
-- `src/features/`: Contains domain-specific vertical slices (e.g., `applets`, `layout_engine`, `metrics`, `systray`, `workspaces`, `module_runtime`). Each feature encapsulates its own `domain`, `ports`, and `adapters` related to that business capability.
-- `src/shared/`: Unifies cross-cutting concerns, generic infrastructure, and primitive types shared across features (e.g., `config`, `dbus`, `events`, `primitives`, `rendering`, `scripting`, `wayland`).
-- `src/app/`: The application entry point and composition layer. It initializes the system, registers actors/builtins, and manages the global state and module registry.
+- `src/features/`: Contains domain-specific vertical slices (e.g., `applets`,
+  `layout_engine`, `metrics`, `systray`, `workspaces`, `module_runtime`). Each
+  feature encapsulates its own `domain`, `ports`, and `adapters` related to that
+  business capability.
+- `src/shared/`: Unifies cross-cutting concerns, generic infrastructure, and
+  primitive types shared across features (e.g., `config`, `dbus`, `events`,
+  `primitives`, `rendering`, `scripting`, `wayland`).
+- `src/app/`: The application entry point and composition layer. It initializes
+  the system, registers actors/builtins, and manages the global state and module
+  registry.
 
 ### The Module System
 
@@ -45,6 +53,10 @@ When modifying the codebase, adhere strictly to these principles:
 6. **Read Before You Write:** Check exports, shared utilities, and caller
    functions before introducing new logic. Avoid silent conflicts; if two
    patterns contradict, pick the better-tested one and explain why.
+7. **Styling & CSS Conventions:** Do not prefix CSS classes with the module
+   name. Styles are scoped per module (e.g. use `.container`, `.item`, `.label`,
+   `.root`, `.left`, `.center`, `.right`, rather than `.bar-left`,
+   `.workspace-item`, etc.).
 
 ## 🧪 Testing Requirements
 

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::StreamExt;
-use tracing::info;
+use tracing::debug;
 
 use crate::shared::dbus::domain::{DBusState, DBusSubscription};
 use crate::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
@@ -33,7 +33,7 @@ impl DbusSubscriptionManager {
                 .conn
                 .subscribe_properties_changed(sub.bus(), dest, path)
                 .await?;
-            info!("Subscribed to DBus PropertiesChanged on {:?}", path);
+            debug!("Subscribed to DBus PropertiesChanged on {:?}", path);
             let path_str = path.as_str().to_string();
             tokio::spawn(async move {
                 while let Some((iface, changed_props)) = stream.next().await {
@@ -55,7 +55,7 @@ impl DbusSubscriptionManager {
 
         // Otherwise, generic signal
         let mut stream = self.conn.subscribe_signal(sub).await?;
-        info!("Subscribed to generic DBus signal");
+        debug!("Subscribed to generic DBus signal");
         tokio::spawn(async move {
             while let Some((path, member, value)) = stream.next().await {
                 tracing::debug!(
