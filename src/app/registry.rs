@@ -143,10 +143,8 @@ impl ModuleRegistry {
                 source: e,
             })?;
 
-        for kind in module.subscriptions() {
-            if let crate::shared::events::signals::SignalKind::DBus(sub) = kind {
-                self.dbus_subscriptions.push(sub.clone());
-            }
+        for sub in module.dbus_subscriptions() {
+            self.dbus_subscriptions.push(sub.clone());
         }
 
         let mod_styles = module.styles();

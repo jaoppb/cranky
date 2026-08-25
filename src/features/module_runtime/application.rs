@@ -137,136 +137,16 @@ impl<F: CanvasFactory + 'static> ModuleActor<F> {
 mod tests {
     use super::*;
     use crate::app::commands::AppCommand;
-    use crate::features::module_runtime::ports::ModuleInitError;
+    use crate::features::module_runtime::test_support::{
+        ChannelCommandSender, MockCanvasFactory, MockCommandSender, MockSurfaceManager,
+        TestModulePort,
+    };
+    use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
     use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
     use crate::features::vdom::domain::VNode;
-    use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
-    use crate::shared::config::domain::{Config, ModuleConfig};
+    use crate::shared::config::domain::Config;
     use crate::shared::events::signals::{HyprlandState, SignalKind};
-    use crate::shared::primitives::geometry::{Position, Scale, Size};
-    use crate::shared::primitives::render::RenderBuffer;
-    use crate::shared::primitives::FunctionName;
-
-    struct MockCommandSender;
-    impl CommandSender for MockCommandSender {
-        fn send_command(&self, _cmd: AppCommand) {}
-    }
-
-    struct MockSurfaceManager;
-    #[async_trait::async_trait]
-    impl crate::shared::wayland::ports::SurfaceManagerPort for MockSurfaceManager {
-        async fn submit_buffer(
-            &self,
-            _mod_id: ModuleId,
-            _mon_id: MonitorId,
-            _pos: Position,
-            _buf: RenderBuffer,
-        ) {}
-    }
-
-    struct ChannelCommandSender {
-        tx: std::sync::mpsc::Sender<AppCommand>,
-    }
-    impl CommandSender for ChannelCommandSender {
-        fn send_command(&self, cmd: AppCommand) {
-            let _ = self.tx.send(cmd);
-        }
-    }
-
-    struct MockCanvasFactory;
-    impl CanvasFactory for MockCanvasFactory {
-        fn create_canvas<'a>(
-            &'a mut self,
-            _data: &'a mut [u8],
-            _size: Size,
-            _scale: Scale,
-            _font_family: crate::shared::config::domain::FontFamily,
-            _font_size: crate::shared::config::domain::FontSize,
-        ) -> impl crate::shared::rendering::ports::canvas::Canvas + 'a {
-            MockCanvas
-        }
-
-        fn create_text_measurer<'a>(
-            &'a mut self,
-            _scale: Scale,
-            _font_family: crate::shared::config::domain::FontFamily,
-            _font_size: crate::shared::config::domain::FontSize,
-        ) -> impl crate::features::layout_engine::domain::TextMeasurer + 'a {
-            MockMeasurer
-        }
-    }
-
-    struct MockCanvas;
-    impl crate::shared::rendering::ports::canvas::Canvas for MockCanvas {
-        fn draw_rect(
-            &mut self,
-            _x: crate::shared::primitives::geometry::LogicalPx,
-            _y: crate::shared::primitives::geometry::LogicalPx,
-            _w: crate::shared::primitives::geometry::LogicalPx,
-            _h: crate::shared::primitives::geometry::LogicalPx,
-            _color: crate::shared::primitives::color::DrawingColor,
-            _radius: crate::shared::primitives::geometry::LogicalPx,
-        ) {}
-        fn draw_border(
-            &mut self,
-            _pos: Position,
-            _size: Size,
-            _color: crate::shared::primitives::color::DrawingColor,
-            _radius: crate::shared::primitives::geometry::LogicalPx,
-            _border_size: crate::shared::primitives::geometry::LogicalPx,
-        ) {}
-        fn draw_text(
-            &mut self,
-            _text: &str,
-            _font_family: Option<&crate::shared::config::domain::FontFamily>,
-            _font_size: Option<crate::shared::config::domain::FontSize>,
-            _color: crate::shared::primitives::color::DrawingColor,
-            _pos: Position,
-        ) {}
-        fn draw_image(
-            &mut self,
-            _image_data: &[u8],
-            _pixel_size: Size,
-            _logical_size: Size,
-            _pos: Position,
-        ) {}
-    }
-
-    struct MockMeasurer;
-    impl crate::features::layout_engine::domain::TextMeasurer for MockMeasurer {
-        fn measure(
-            &mut self,
-            _text: &str,
-            _font_family: Option<&crate::shared::config::domain::FontFamily>,
-            _font_size: Option<crate::shared::config::domain::FontSize>,
-        ) -> Size {
-            Size::new(10, 10)
-        }
-    }
-
-    struct TestModulePort {
-        render_node: VNode,
-        subs: Vec<SignalKind>,
-    }
-
-    impl AnyModulePort for TestModulePort {
-        fn init(&mut self, _config: &ModuleConfig, _full_config: &Config) -> Result<(), ModuleInitError> {
-            Ok(())
-        }
-        fn subscriptions(&self) -> &[SignalKind] {
-            &self.subs
-        }
-        fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName] {
-            &[]
-        }
-        fn refresh(&mut self, _hub: &SignalHub, _signals: &[SignalKind]) {}
-        fn render(&self, _monitor: &MonitorId) -> VNode {
-            self.render_node.clone()
-        }
-        fn call_function(&mut self, _name: &FunctionName) -> Result<(), ModuleInitError> {
-            Ok(())
-        }
-    }
+    use crate::shared::primitives::geometry::{Position, Size};
 
     struct TestFixture {
         pub hub: Arc<SignalHub>,
@@ -341,10 +221,7 @@ mod tests {
             let (layout_tx, layout_rx) = watch::channel(HashMap::new());
 
             let ctx = ModuleContext::new(self.id, hub.clone(), sm, sender, layout_rx);
-            let port = Box::new(TestModulePort {
-                render_node: self.vnode,
-                subs: self.subs,
-            });
+            let port = Box::new(TestModulePort::with_subs(self.vnode, self.subs));
 
             let resolver = Arc::new(CompositeStyleResolver::new(vec![]));
             let diff_adapter = Arc::new(DefaultVdomDiffAdapter::new());

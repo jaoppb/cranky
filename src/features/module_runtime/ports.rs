@@ -47,6 +47,9 @@ pub trait LayoutSender: Send + Sync {
 pub trait AnyModulePort: Send + Sync {
     fn init(&mut self, config: &ModuleConfig, full_config: &Config) -> Result<(), ModuleInitError>;
     fn subscriptions(&self) -> &[SignalKind];
+    fn dbus_subscriptions(&self) -> &[crate::shared::dbus::domain::DBusSubscription] {
+        &[]
+    }
     fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName];
     fn refresh(&mut self, hub: &SignalHub, changed_signals: &[SignalKind]);
     fn render(&self, monitor: &MonitorId) -> crate::features::vdom::domain::VNode;

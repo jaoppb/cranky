@@ -14,6 +14,7 @@ pub struct RhaiModule {
     ast: AST,
     name: String,
     cached_subs: Vec<SignalKind>,
+    cached_dbus_subs: Vec<crate::shared::dbus::domain::DBusSubscription>,
     cached_styles: Vec<crate::features::styling::domain::StyleSheetName>,
 }
 
@@ -51,6 +52,7 @@ impl RhaiModule {
             ast,
             name,
             cached_subs: Vec::new(),
+            cached_dbus_subs: Vec::new(),
             cached_styles: Vec::new(),
         })
     }
@@ -62,9 +64,11 @@ impl RhaiModule {
         module_name: &str,
     ) -> (
         Vec<SignalKind>,
+        Vec<crate::shared::dbus::domain::DBusSubscription>,
         Vec<crate::features::styling::domain::StyleSheetName>,
     ) {
         let mut subs = Vec::new();
+        let mut dbus_subs = Vec::new();
         let mut styles = Vec::new();
 
         if let Ok(meta) = engine.call_fn::<rhai::Map>(scope, ast, "metadata", ()) {
@@ -72,7 +76,7 @@ impl RhaiModule {
                 .get("subscriptions")
                 .and_then(|v| v.clone().try_cast::<rhai::Array>())
             {
-                Self::parse_subscriptions_array(&subs_arr, &mut subs);
+                Self::parse_subscriptions_array(&subs_arr, &mut subs, &mut dbus_subs);
             }
             if let Some(styles_arr) = meta
                 .get("styles")
@@ -89,7 +93,7 @@ impl RhaiModule {
             }
         } else if let Ok(subs_arr) = engine.call_fn::<rhai::Array>(scope, ast, "subscriptions", ())
         {
-            Self::parse_subscriptions_array(&subs_arr, &mut subs);
+            Self::parse_subscriptions_array(&subs_arr, &mut subs, &mut dbus_subs);
         }
 
         if styles.is_empty()
@@ -99,10 +103,14 @@ impl RhaiModule {
             styles.push(default_sheet);
         }
 
-        (subs, styles)
+        (subs, dbus_subs, styles)
     }
 
-    fn parse_subscriptions_array(subs: &rhai::Array, result: &mut Vec<SignalKind>) {
+    fn parse_subscriptions_array(
+        subs: &rhai::Array,
+        result: &mut Vec<SignalKind>,
+        dbus_subs: &mut Vec<crate::shared::dbus::domain::DBusSubscription>,
+    ) {
         for sub in subs {
             if let Some(s) = sub.clone().try_cast::<String>() {
                 match s.as_str() {
@@ -126,22 +134,21 @@ impl RhaiModule {
                 } else {
                     crate::shared::dbus::domain::BusType::Session
                 };
-                result.push(SignalKind::DBus(
-                    crate::shared::dbus::domain::DBusSubscription::new(
-                        bus,
-                        map.get("destination")
-                            .and_then(|v| v.clone().try_cast::<String>())
-                            .map(crate::shared::dbus::domain::Destination::new),
-                        map.get("path")
-                            .and_then(|v| v.clone().try_cast::<String>())
-                            .map(crate::shared::dbus::domain::Path::new),
-                        map.get("interface")
-                            .and_then(|v| v.clone().try_cast::<String>())
-                            .map(crate::shared::dbus::domain::Interface::new),
-                        map.get("member")
-                            .and_then(|v| v.clone().try_cast::<String>())
-                            .map(crate::shared::dbus::domain::Member::new),
-                    ),
+                result.push(SignalKind::DBus);
+                dbus_subs.push(crate::shared::dbus::domain::DBusSubscription::new(
+                    bus,
+                    map.get("destination")
+                        .and_then(|v| v.clone().try_cast::<String>())
+                        .map(crate::shared::dbus::domain::Destination::new),
+                    map.get("path")
+                        .and_then(|v| v.clone().try_cast::<String>())
+                        .map(crate::shared::dbus::domain::Path::new),
+                    map.get("interface")
+                        .and_then(|v| v.clone().try_cast::<String>())
+                        .map(crate::shared::dbus::domain::Interface::new),
+                    map.get("member")
+                        .and_then(|v| v.clone().try_cast::<String>())
+                        .map(crate::shared::dbus::domain::Member::new),
                 ));
             }
         }
@@ -183,8 +190,9 @@ impl AnyModulePort for RhaiModule {
         // Call init if it exists
         let _ = engine.call_fn::<()>(&mut scope, &self.ast, "init", ());
 
-        let (subs, styles) = Self::evaluate_metadata(&engine, &mut scope, &self.ast, &self.name);
+        let (subs, dbus_subs, styles) = Self::evaluate_metadata(&engine, &mut scope, &self.ast, &self.name);
         self.cached_subs = subs;
+        self.cached_dbus_subs = dbus_subs;
         self.cached_styles = styles;
 
         Ok(())
@@ -192,6 +200,10 @@ impl AnyModulePort for RhaiModule {
 
     fn subscriptions(&self) -> &[SignalKind] {
         &self.cached_subs
+    }
+
+    fn dbus_subscriptions(&self) -> &[crate::shared::dbus::domain::DBusSubscription] {
+        &self.cached_dbus_subs
     }
 
     fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName] {
@@ -246,7 +258,7 @@ impl AnyModulePort for RhaiModule {
 
         let mut dbus_handled = false;
         for signal in changed {
-            if let SignalKind::DBus(_) = signal
+            if let SignalKind::DBus = signal
                 && !dbus_handled
             {
                 let dbus_state = hub.dbus_rx().borrow().clone();

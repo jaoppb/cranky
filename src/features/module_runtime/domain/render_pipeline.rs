@@ -106,63 +106,51 @@ impl<'a, M: TextMeasurer> TextMeasurer for ModuleSizeMeasurer<'a, M> {
     }
 }
 
-pub struct ProcessMonitorContext<'a, F: CanvasFactory> {
-    port: &'a dyn AnyModulePort,
-    vdom_diff: &'a dyn VdomDiffPort,
-    style_resolver: &'a dyn StyleResolverPort,
-    current_bounds: Option<Rect>,
-    current_child_sizes: Option<&'a ChildSizesMap>,
-    canvas_factory: &'a mut F,
-    layout_engine: &'a mut dyn LayoutEnginePort,
+pub struct LayoutContext<'a, F: CanvasFactory> {
+    pub style_resolver: &'a dyn StyleResolverPort,
+    pub current_bounds: Option<Rect>,
+    pub current_child_sizes: Option<&'a ChildSizesMap>,
+    pub canvas_factory: &'a mut F,
+    pub layout_engine: &'a mut dyn LayoutEnginePort,
 }
 
-impl<'a, F: CanvasFactory> ProcessMonitorContext<'a, F> {
+#[derive(Debug, Clone, PartialEq)]
+pub struct PipelineDiff {
+    new_vdom: VNode,
+    vdom_dirty: bool,
+    bounds_changed: bool,
+    child_sizes_changed: bool,
+}
+
+impl PipelineDiff {
     pub fn new(
-        port: &'a dyn AnyModulePort,
-        vdom_diff: &'a dyn VdomDiffPort,
-        style_resolver: &'a dyn StyleResolverPort,
-        current_bounds: Option<Rect>,
-        current_child_sizes: Option<&'a ChildSizesMap>,
-        canvas_factory: &'a mut F,
-        layout_engine: &'a mut dyn LayoutEnginePort,
+        new_vdom: VNode,
+        vdom_dirty: bool,
+        bounds_changed: bool,
+        child_sizes_changed: bool,
     ) -> Self {
         Self {
-            port,
-            vdom_diff,
-            style_resolver,
-            current_bounds,
-            current_child_sizes,
-            canvas_factory,
-            layout_engine,
+            new_vdom,
+            vdom_dirty,
+            bounds_changed,
+            child_sizes_changed,
         }
     }
 
-    pub fn port(&self) -> &dyn AnyModulePort {
-        self.port
+    pub fn new_vdom(&self) -> &VNode {
+        &self.new_vdom
     }
 
-    pub fn vdom_diff(&self) -> &dyn VdomDiffPort {
-        self.vdom_diff
+    pub fn vdom_dirty(&self) -> bool {
+        self.vdom_dirty
     }
 
-    pub fn style_resolver(&self) -> &dyn StyleResolverPort {
-        self.style_resolver
+    pub fn bounds_changed(&self) -> bool {
+        self.bounds_changed
     }
 
-    pub fn current_bounds(&self) -> Option<Rect> {
-        self.current_bounds
-    }
-
-    pub fn current_child_sizes(&self) -> Option<&ChildSizesMap> {
-        self.current_child_sizes
-    }
-
-    pub fn canvas_factory_mut(&mut self) -> &mut F {
-        self.canvas_factory
-    }
-
-    pub fn layout_engine_mut(&mut self) -> &mut dyn LayoutEnginePort {
-        self.layout_engine
+    pub fn child_sizes_changed(&self) -> bool {
+        self.child_sizes_changed
     }
 }
 
@@ -200,21 +188,14 @@ impl RenderPipeline {
         &self.last_child_sizes
     }
 
-    pub fn process_monitor<F: CanvasFactory>(
-        &mut self,
+    pub fn diff(
+        &self,
         monitor_id: &MonitorId,
-        ctx: ProcessMonitorContext<'_, F>,
-    ) -> Option<RenderOutcome> {
-        let ProcessMonitorContext {
-            port,
-            vdom_diff,
-            style_resolver,
-            current_bounds,
-            current_child_sizes,
-            canvas_factory,
-            layout_engine,
-        } = ctx;
-
+        port: &dyn AnyModulePort,
+        vdom_diff: &dyn VdomDiffPort,
+        current_bounds: Option<Rect>,
+        current_child_sizes: Option<&ChildSizesMap>,
+    ) -> Option<PipelineDiff> {
         let new_vdom = port.render(monitor_id);
         let diff_result = vdom_diff.diff(self.vdom_trees.get(monitor_id), &new_vdom);
 
@@ -238,41 +219,57 @@ impl RenderPipeline {
         let vdom_dirty =
             !diff_result.is_unchanged() || !self.render_trees.contains_key(monitor_id);
 
+        Some(PipelineDiff::new(
+            new_vdom,
+            vdom_dirty,
+            bounds_changed,
+            child_sizes_changed,
+        ))
+    }
+
+    pub fn layout<F: CanvasFactory>(
+        &mut self,
+        monitor_id: &MonitorId,
+        diff: PipelineDiff,
+        ctx: &mut LayoutContext<'_, F>,
+    ) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>)> {
+        let current_child_sizes_owned = ctx.current_child_sizes.cloned();
         let mut size_change = None;
         let mut child_layouts = Vec::new();
 
-        let render_node = if vdom_dirty || bounds_changed || child_sizes_changed {
+        let render_node = if diff.vdom_dirty || diff.bounds_changed || diff.child_sizes_changed {
             self.last_child_sizes
                 .insert(monitor_id.clone(), current_child_sizes_owned);
             tracing::trace!(
                 monitor = %monitor_id,
-                vdom_dirty,
-                bounds_changed,
-                child_sizes_changed,
+                vdom_dirty = diff.vdom_dirty,
+                bounds_changed = diff.bounds_changed,
+                child_sizes_changed = diff.child_sizes_changed,
                 "Updating layout for module"
             );
 
             self.vdom_trees
-                .insert(monitor_id.clone(), new_vdom.clone());
+                .insert(monitor_id.clone(), diff.new_vdom.clone());
 
             tracing::trace!(monitor = %monitor_id, "Resolving styles for module VNode");
-            let styled_node = new_vdom.resolve_styles(style_resolver, None);
+            let styled_node = diff.new_vdom.resolve_styles(ctx.style_resolver, None);
 
             let default_font_family = FontFamily::new("".to_string());
             let default_font_size = FontSize::new(14.0);
 
-            let available_size = current_bounds
+            let available_size = ctx
+                .current_bounds
                 .filter(|b| b.width() > 0 && b.height() > 0)
                 .map(|b| *b.size());
 
-            let measurer_inner = canvas_factory.create_text_measurer(
+            let measurer_inner = ctx.canvas_factory.create_text_measurer(
                 Scale::new(1.0),
                 default_font_family,
                 default_font_size,
             );
-            let mut measurer = ModuleSizeMeasurer::new(measurer_inner, current_child_sizes);
+            let mut measurer = ModuleSizeMeasurer::new(measurer_inner, ctx.current_child_sizes);
 
-            let render_node_res = layout_engine.calculate_layout_with_constraints(
+            let render_node_res = ctx.layout_engine.calculate_layout_with_constraints(
                 styled_node,
                 &mut measurer,
                 Position::new(0, 0),
@@ -312,37 +309,72 @@ impl RenderPipeline {
 
             render_node
         } else {
-            self.render_trees.get(monitor_id).unwrap().clone()
+            self.render_trees.get(monitor_id)?.clone()
         };
 
-        let mut buffer = None;
+        Some((render_node, size_change, child_layouts))
+    }
 
-        if let Some(bounds) = current_bounds
-            && bounds.width() > 0
-            && bounds.height() > 0
+    pub fn paint<F: CanvasFactory>(
+        &mut self,
+        monitor_id: &MonitorId,
+        render_node: &RenderNode,
+        current_bounds: Option<Rect>,
+        canvas_factory: &mut F,
+    ) -> Option<(RenderBuffer, Position)> {
+        let bounds = current_bounds.filter(|b| b.width() > 0 && b.height() > 0)?;
+
+        let default_font_family = FontFamily::new("".to_string());
+        let default_font_size = FontSize::new(14.0);
+
+        let w = bounds.width();
+        let h = bounds.height();
+        let mut data = vec![0u8; (w * h * 4) as usize];
         {
-            let default_font_family = FontFamily::new("".to_string());
-            let default_font_size = FontSize::new(14.0);
-
-            let w = bounds.width();
-            let h = bounds.height();
-            let mut data = vec![0u8; (w * h * 4) as usize];
-            {
-                let mut canvas = canvas_factory.create_canvas(
-                    &mut data,
-                    *bounds.size(),
-                    Scale::new(1.0),
-                    default_font_family,
-                    default_font_size,
-                );
-                render_node.render_to_canvas(&mut canvas);
-            }
-
-            let render_buf = RenderBuffer::new(data, *bounds.size());
-            let position = Position::new(bounds.x(), bounds.y());
-            self.rendered_bounds.insert(monitor_id.clone(), bounds);
-            buffer = Some((render_buf, position));
+            let mut canvas = canvas_factory.create_canvas(
+                &mut data,
+                *bounds.size(),
+                Scale::new(1.0),
+                default_font_family,
+                default_font_size,
+            );
+            render_node.render_to_canvas(&mut canvas);
         }
+
+        let render_buf = RenderBuffer::new(data, *bounds.size());
+        let position = Position::new(bounds.x(), bounds.y());
+        self.rendered_bounds.insert(monitor_id.clone(), bounds);
+        Some((render_buf, position))
+    }
+
+    pub fn process_monitor<F: CanvasFactory>(
+        &mut self,
+        monitor_id: &MonitorId,
+        port: &dyn AnyModulePort,
+        vdom_diff: &dyn VdomDiffPort,
+        mut ctx: LayoutContext<'_, F>,
+    ) -> Option<RenderOutcome> {
+        let diff = self.diff(
+            monitor_id,
+            port,
+            vdom_diff,
+            ctx.current_bounds,
+            ctx.current_child_sizes,
+        )?;
+
+        let current_bounds = ctx.current_bounds;
+        let (render_node, size_change, child_layouts) = self.layout(
+            monitor_id,
+            diff,
+            &mut ctx,
+        )?;
+
+        let buffer = self.paint(
+            monitor_id,
+            &render_node,
+            current_bounds,
+            ctx.canvas_factory,
+        );
 
         Some(RenderOutcome::new(
             size_change,
@@ -356,126 +388,75 @@ impl RenderPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::module_runtime::ports::ModuleInitError;
+    use crate::features::module_runtime::test_support::{MockCanvasFactory, TestModulePort};
+    use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
     use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
     use crate::features::vdom::domain::VNode;
-    use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
-    use crate::shared::config::domain::{Config, ModuleConfig};
-    use crate::shared::events::signals::{SignalHub, SignalKind};
-    use crate::shared::primitives::FunctionName;
 
-    struct TestModulePort {
-        node: VNode,
-    }
+    #[test]
+    fn test_pipeline_diff_and_layout_phases() {
+        let mut pipeline = RenderPipeline::new();
+        let mon = MonitorId::new("DP-1");
+        let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
+        let diff_adapter = DefaultVdomDiffAdapter::new();
+        let resolver = CompositeStyleResolver::new(vec![]);
+        let mut factory = MockCanvasFactory;
+        let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
 
-    impl AnyModulePort for TestModulePort {
-        fn init(&mut self, _config: &ModuleConfig, _full: &Config) -> Result<(), ModuleInitError> {
-            Ok(())
-        }
-        fn subscriptions(&self) -> &[SignalKind] {
-            &[]
-        }
-        fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName] {
-            &[]
-        }
-        fn refresh(&mut self, _hub: &SignalHub, _signals: &[SignalKind]) {}
-        fn render(&self, _monitor: &MonitorId) -> VNode {
-            self.node.clone()
-        }
-        fn call_function(&mut self, _name: &FunctionName) -> Result<(), ModuleInitError> {
-            Ok(())
-        }
-    }
+        // 1. Diff Phase
+        let diff = pipeline.diff(&mon, &port, &diff_adapter, None, None);
+        assert!(diff.is_some());
+        let diff = diff.unwrap();
+        assert!(diff.vdom_dirty());
 
-    struct MockCanvasFactory;
+        // 2. Layout Phase
+        let mut ctx = LayoutContext {
+            style_resolver: &resolver,
+            current_bounds: None,
+            current_child_sizes: None,
+            canvas_factory: &mut factory,
+            layout_engine: &mut engine,
+        };
+        let layout_res = pipeline.layout(&mon, diff, &mut ctx);
+        assert!(layout_res.is_some());
+        let (node, size_change, child_layouts) = layout_res.unwrap();
+        assert_eq!(
+            size_change,
+            Some(SizeChange::new(Size::new(0, 0), Size::new(10, 10)))
+        );
+        assert!(child_layouts.is_empty());
+        assert_eq!(*node.rect().size(), Size::new(10, 10));
 
-    impl CanvasFactory for MockCanvasFactory {
-        fn create_canvas<'a>(
-            &'a mut self,
-            _data: &'a mut [u8],
-            _size: Size,
-            _scale: Scale,
-            _font_family: FontFamily,
-            _font_size: FontSize,
-        ) -> impl crate::shared::rendering::ports::canvas::Canvas + 'a {
-            MockCanvas
-        }
+        // 3. Paint Phase without bounds returns None
+        let paint_res = pipeline.paint(&mon, &node, None, &mut factory);
+        assert!(paint_res.is_none());
 
-        fn create_text_measurer<'a>(
-            &'a mut self,
-            _scale: Scale,
-            _font_family: FontFamily,
-            _font_size: FontSize,
-        ) -> impl TextMeasurer + 'a {
-            MockMeasurer
-        }
-    }
-
-    struct MockCanvas;
-    impl crate::shared::rendering::ports::canvas::Canvas for MockCanvas {
-        fn draw_rect(
-            &mut self,
-            _x: crate::shared::primitives::geometry::LogicalPx,
-            _y: crate::shared::primitives::geometry::LogicalPx,
-            _w: crate::shared::primitives::geometry::LogicalPx,
-            _h: crate::shared::primitives::geometry::LogicalPx,
-            _color: crate::shared::primitives::color::DrawingColor,
-            _radius: crate::shared::primitives::geometry::LogicalPx,
-        ) {}
-        fn draw_border(
-            &mut self,
-            _pos: Position,
-            _size: Size,
-            _color: crate::shared::primitives::color::DrawingColor,
-            _radius: crate::shared::primitives::geometry::LogicalPx,
-            _border_size: crate::shared::primitives::geometry::LogicalPx,
-        ) {}
-        fn draw_text(
-            &mut self,
-            _text: &str,
-            _font_family: Option<&FontFamily>,
-            _font_size: Option<FontSize>,
-            _color: crate::shared::primitives::color::DrawingColor,
-            _pos: Position,
-        ) {}
-        fn draw_image(
-            &mut self,
-            _image_data: &[u8],
-            _pixel_size: Size,
-            _logical_size: Size,
-            _pos: Position,
-        ) {}
-    }
-
-    struct MockMeasurer;
-    impl TextMeasurer for MockMeasurer {
-        fn measure(&mut self, _text: &str, _font: Option<&FontFamily>, _size: Option<FontSize>) -> Size {
-            Size::new(10, 10)
-        }
+        // 4. Paint Phase with valid bounds returns buffer
+        let bounds = Rect::new(Position::new(0, 0), Size::new(10, 10));
+        let paint_res = pipeline.paint(&mon, &node, Some(bounds), &mut factory);
+        assert!(paint_res.is_some());
+        let (_buf, pos) = paint_res.unwrap();
+        assert_eq!(pos, Position::new(0, 0));
     }
 
     #[test]
     fn test_process_monitor_initial_render_and_size_change() {
         let mut pipeline = RenderPipeline::new();
         let mon = MonitorId::new("DP-1");
-        let port = TestModulePort {
-            node: VNode::new_rect(None, None, None, None, None),
-        };
+        let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
         let diff = DefaultVdomDiffAdapter::new();
         let resolver = CompositeStyleResolver::new(vec![]);
         let mut factory = MockCanvasFactory;
         let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
 
-        let ctx = ProcessMonitorContext::new(
-            &port,
-            &diff,
-            &resolver,
-            None,
-            None,
-            &mut factory,
-            &mut engine,
-        );
-        let outcome = pipeline.process_monitor(&mon, ctx);
+        let ctx = LayoutContext {
+            style_resolver: &resolver,
+            current_bounds: None,
+            current_child_sizes: None,
+            canvas_factory: &mut factory,
+            layout_engine: &mut engine,
+        };
+        let outcome = pipeline.process_monitor(&mon, &port, &diff, ctx);
 
         assert!(outcome.is_some());
         let outcome = outcome.unwrap();
@@ -492,37 +473,31 @@ mod tests {
     fn test_process_monitor_unchanged_returns_none() {
         let mut pipeline = RenderPipeline::new();
         let mon = MonitorId::new("DP-1");
-        let port = TestModulePort {
-            node: VNode::new_rect(None, None, None, None, None),
-        };
+        let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
         let diff = DefaultVdomDiffAdapter::new();
         let resolver = CompositeStyleResolver::new(vec![]);
         let mut factory = MockCanvasFactory;
         let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
 
-        let ctx1 = ProcessMonitorContext::new(
-            &port,
-            &diff,
-            &resolver,
-            None,
-            None,
-            &mut factory,
-            &mut engine,
-        );
-        let outcome1 = pipeline.process_monitor(&mon, ctx1);
+        let ctx1 = LayoutContext {
+            style_resolver: &resolver,
+            current_bounds: None,
+            current_child_sizes: None,
+            canvas_factory: &mut factory,
+            layout_engine: &mut engine,
+        };
+        let outcome1 = pipeline.process_monitor(&mon, &port, &diff, ctx1);
         assert!(outcome1.is_some());
 
         // Second run with no changes should return None (early exit)
-        let ctx2 = ProcessMonitorContext::new(
-            &port,
-            &diff,
-            &resolver,
-            None,
-            None,
-            &mut factory,
-            &mut engine,
-        );
-        let outcome2 = pipeline.process_monitor(&mon, ctx2);
+        let ctx2 = LayoutContext {
+            style_resolver: &resolver,
+            current_bounds: None,
+            current_child_sizes: None,
+            canvas_factory: &mut factory,
+            layout_engine: &mut engine,
+        };
+        let outcome2 = pipeline.process_monitor(&mon, &port, &diff, ctx2);
         assert!(outcome2.is_none());
     }
 }

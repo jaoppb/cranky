@@ -8,12 +8,22 @@ use crate::features::module_runtime::domain::{
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::ports::VdomDiffPort;
+use crate::shared::events::signals::SignalKind;
 use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::MonitorId;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use futures_util::StreamExt;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum EventLoopEvent {
+    Signals(Vec<SignalKind>),
+    ModuleSizesChanged,
+    LayoutChanged,
+    Pointer(MonitorId, crate::shared::events::core::PointerEvent),
+    Shutdown,
+}
 
 pub struct EventLoop<F: CanvasFactory + 'static> {
     port: Box<dyn AnyModulePort>,
@@ -64,11 +74,118 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         )
     }
 
-    pub fn run(mut self) {
+    pub fn poll_next_event(
+        &mut self,
+        events_stream: &mut futures_util::stream::SelectAll<
+            futures_util::stream::BoxStream<'static, SignalKind>,
+        >,
+        module_sizes_rx: &mut tokio::sync::watch::Receiver<
+            HashMap<MonitorId, crate::shared::primitives::ChildSizesMap>,
+        >,
+    ) -> EventLoopEvent {
         let rt = tokio::runtime::Handle::current();
+        rt.block_on(async {
+            let ctx_id = self.ctx.id();
+            let (layout_rx, input_rx) = self.ctx.rxs_mut();
+
+            tokio::select! {
+                Some(sig) = events_stream.next(), if !events_stream.is_empty() => {
+                    let mut changed_signals = HashSet::new();
+                    changed_signals.insert(sig);
+                    while let Some(Some(sig2)) = futures_util::FutureExt::now_or_never(events_stream.next()) {
+                        changed_signals.insert(sig2);
+                    }
+                    EventLoopEvent::Signals(changed_signals.into_iter().collect())
+                }
+                res = module_sizes_rx.changed() => {
+                    if res.is_err() {
+                        EventLoopEvent::Shutdown
+                    } else {
+                        EventLoopEvent::ModuleSizesChanged
+                    }
+                }
+                res = layout_rx.changed() => {
+                    if res.is_err() {
+                        EventLoopEvent::Shutdown
+                    } else {
+                        EventLoopEvent::LayoutChanged
+                    }
+                }
+                res = input_rx.recv() => {
+                    match res {
+                        Ok((target_id, monitor_id, event)) => {
+                            if target_id == ctx_id {
+                                EventLoopEvent::Pointer(monitor_id, event)
+                            } else {
+                                EventLoopEvent::Signals(Vec::new())
+                            }
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            tracing::warn!(module = %ctx_id, lagged = n, "ModuleActor input_rx lagged, skipped messages");
+                            EventLoopEvent::Signals(Vec::new())
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                            tracing::debug!(module = %ctx_id, "ModuleActor input_rx closed");
+                            EventLoopEvent::Shutdown
+                        }
+                    }
+                }
+            }
+        })
+    }
+
+    pub fn handle_pointer_event(
+        &mut self,
+        monitor_id: &MonitorId,
+        event: &crate::shared::events::core::PointerEvent,
+    ) {
+        let ctx_id = self.ctx.id();
+        tracing::debug!(
+            module = %ctx_id,
+            monitor = %monitor_id,
+            event = ?event,
+            "Received pointer event in module actor"
+        );
+        if let Some(render_tree) = self.render_pipeline.render_trees().get(monitor_id) {
+            let actions = self
+                .pointer_handler
+                .handle_event(event, monitor_id, render_tree);
+            let mut changed = false;
+            for action in actions {
+                match action {
+                    PointerAction::CallFunction(func_name) => {
+                        if let Err(e) = self.port.call_function(&func_name) {
+                            tracing::error!(
+                                module = %ctx_id,
+                                func = %func_name,
+                                "ScriptCall failed: {}",
+                                e
+                            );
+                        } else {
+                            changed = true;
+                        }
+                    }
+                    PointerAction::SendCommand(cmd) => {
+                        self.ctx.command_tx().send_command(cmd);
+                    }
+                }
+            }
+            if changed {
+                let subs = self.port.subscriptions().to_vec();
+                self.port.refresh(self.ctx.hub(), &subs);
+            }
+        } else {
+            tracing::warn!(
+                module = %ctx_id,
+                monitor = %monitor_id,
+                "Received pointer event but no render tree found for monitor"
+            );
+        }
+    }
+
+    pub fn run(mut self) {
         let subs = self.port.subscriptions().to_vec();
         let mut events_stream = self.ctx.hub().subscribe_streams(&subs);
-
         let mut layout_engines: HashMap<MonitorId, Box<dyn LayoutEnginePort>> = HashMap::new();
 
         // Initial refresh & render
@@ -78,91 +195,22 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         let mut module_sizes_rx = self.ctx.hub().module_sizes_rx();
 
         loop {
-            let mut changed = false;
-            let mut changed_signals = HashSet::new();
+            let event = self.poll_next_event(&mut events_stream, &mut module_sizes_rx);
 
-            let should_continue = rt.block_on(async {
-                let ctx_id = self.ctx.id();
-                let (layout_rx, input_rx) = self.ctx.rxs_mut();
-
-                tokio::select! {
-                    Some(sig) = events_stream.next(), if !events_stream.is_empty() => {
-                        changed = true;
-                        changed_signals.insert(sig);
-                        while let Some(Some(sig2)) = futures_util::FutureExt::now_or_never(events_stream.next()) {
-                            changed_signals.insert(sig2);
-                        }
-                    }
-                    res = module_sizes_rx.changed() => {
-                        if res.is_err() {
-                            return false;
-                        }
-                    }
-                    res = layout_rx.changed() => {
-                        if res.is_err() {
-                            return false;
-                        }
-                        changed = true;
-                        for sub in &subs {
-                            changed_signals.insert(sub.clone());
-                        }
-                    }
-                    res = input_rx.recv() => {
-                        match res {
-                            Ok((target_id, monitor_id, event)) => {
-                                if target_id == ctx_id {
-                                    tracing::debug!(
-                                        module = %ctx_id,
-                                        monitor = %monitor_id,
-                                        event = ?event,
-                                        "Received pointer event in module actor"
-                                    );
-                                    if let Some(render_tree) = self.render_pipeline.render_trees().get(&monitor_id) {
-                                        let actions = self.pointer_handler.handle_event(&event, &monitor_id, render_tree);
-                                        for action in actions {
-                                            match action {
-                                                PointerAction::CallFunction(func_name) => {
-                                                    if let Err(e) = self.port.call_function(&func_name) {
-                                                        tracing::error!(module = %ctx_id, func = %func_name, "ScriptCall failed: {}", e);
-                                                    } else {
-                                                        changed = true;
-                                                    }
-                                                }
-                                                PointerAction::SendCommand(cmd) => {
-                                                    self.ctx.command_tx().send_command(cmd);
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        tracing::warn!(
-                                            module = %ctx_id,
-                                            monitor = %monitor_id,
-                                            "Received pointer event but no render tree found for monitor"
-                                        );
-                                    }
-                                }
-                            }
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                                tracing::warn!(module = %ctx_id, lagged = n, "ModuleActor input_rx lagged, skipped messages");
-                            }
-                            Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                                tracing::debug!(module = %ctx_id, "ModuleActor input_rx closed");
-                                return false;
-                            }
-                        }
+            match event {
+                EventLoopEvent::Shutdown => break,
+                EventLoopEvent::Signals(sigs) => {
+                    if !sigs.is_empty() {
+                        self.port.refresh(self.ctx.hub(), &sigs);
                     }
                 }
-
-                true
-            });
-
-            if !should_continue {
-                break;
-            }
-
-            if changed {
-                let sigs: Vec<_> = changed_signals.into_iter().collect();
-                self.port.refresh(self.ctx.hub(), &sigs);
+                EventLoopEvent::ModuleSizesChanged => {}
+                EventLoopEvent::LayoutChanged => {
+                    self.port.refresh(self.ctx.hub(), &subs);
+                }
+                EventLoopEvent::Pointer(monitor_id, event) => {
+                    self.handle_pointer_event(&monitor_id, &event);
+                }
             }
 
             self.render_all_monitors(&mut layout_engines);
@@ -178,14 +226,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, layout_engines), fields(module = %self.ctx.id()))]
-    pub fn render_all_monitors(
-        &mut self,
-        layout_engines: &mut HashMap<MonitorId, Box<dyn LayoutEnginePort>>,
-    ) {
-        let t0 = std::time::Instant::now();
-        let layouts: HashMap<MonitorId, Rect> = self.ctx.rxs_mut().0.borrow().clone();
-
+    pub fn discover_monitors(&self, layouts: &HashMap<MonitorId, Rect>) -> Vec<MonitorId> {
         let mut all_monitors: HashSet<MonitorId> = HashSet::new();
         for m in self.ctx.hub().hyprland_rx().borrow().monitors().values() {
             all_monitors.insert(MonitorId::new(m.name().as_str()));
@@ -196,7 +237,55 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         for m in self.ctx.hub().module_sizes_rx().borrow().keys() {
             all_monitors.insert(m.clone());
         }
-        let monitors: Vec<MonitorId> = all_monitors.into_iter().collect();
+        all_monitors.into_iter().collect()
+    }
+
+    pub fn dispatch_render_outcome(
+        &mut self,
+        monitor_id: &MonitorId,
+        outcome: crate::features::module_runtime::domain::RenderOutcome,
+    ) {
+        if !outcome.child_layouts().is_empty() {
+            self.ctx
+                .command_tx()
+                .send_command(AppCommand::ContainerLayoutsCalculated {
+                    parent_id: self.ctx.id(),
+                    monitor_id: monitor_id.clone(),
+                    layouts: outcome.child_layouts().to_vec(),
+                });
+        }
+
+        if let Some(size_change) = outcome.size_change() {
+            self.ctx
+                .command_tx()
+                .send_command(AppCommand::ModuleSizeChanged(
+                    monitor_id.clone(),
+                    self.ctx.id(),
+                    size_change.new_size(),
+                ));
+        }
+
+        if let Some((buffer, position)) = outcome.into_buffer() {
+            let sm = self.ctx.surface_manager().clone();
+            let mod_id = self.ctx.id();
+            let parent_id = self.ctx.parent_id();
+            let mon_id = monitor_id.clone();
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async move {
+                sm.submit_child_buffer(mod_id, parent_id, mon_id, position, buffer)
+                    .await;
+            });
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, layout_engines), fields(module = %self.ctx.id()))]
+    pub fn render_all_monitors(
+        &mut self,
+        layout_engines: &mut HashMap<MonitorId, Box<dyn LayoutEnginePort>>,
+    ) {
+        let t0 = std::time::Instant::now();
+        let layouts: HashMap<MonitorId, Rect> = self.ctx.rxs_mut().0.borrow().clone();
+        let monitors = self.discover_monitors(&layouts);
 
         for monitor_id in monitors {
             let current_bounds = layouts.get(&monitor_id).copied();
@@ -209,50 +298,23 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
 
             let outcome = {
                 let mut factory = self.canvas_factory.lock().unwrap();
-                let ctx = crate::features::module_runtime::domain::ProcessMonitorContext::new(
-                    self.port.as_ref(),
-                    self.vdom_diff.as_ref(),
-                    self.style_resolver.as_ref(),
+                let layout_ctx = crate::features::module_runtime::domain::LayoutContext {
+                    style_resolver: self.style_resolver.as_ref(),
                     current_bounds,
                     current_child_sizes,
-                    &mut *factory,
-                    engine.as_mut(),
-                );
-                self.render_pipeline.process_monitor(&monitor_id, ctx)
+                    canvas_factory: &mut *factory,
+                    layout_engine: engine.as_mut(),
+                };
+                self.render_pipeline.process_monitor(
+                    &monitor_id,
+                    self.port.as_ref(),
+                    self.vdom_diff.as_ref(),
+                    layout_ctx,
+                )
             };
 
             if let Some(outcome) = outcome {
-                if !outcome.child_layouts().is_empty() {
-                    self.ctx
-                        .command_tx()
-                        .send_command(AppCommand::ContainerLayoutsCalculated {
-                            parent_id: self.ctx.id(),
-                            monitor_id: monitor_id.clone(),
-                            layouts: outcome.child_layouts().to_vec(),
-                        });
-                }
-
-                if let Some(size_change) = outcome.size_change() {
-                    self.ctx
-                        .command_tx()
-                        .send_command(AppCommand::ModuleSizeChanged(
-                            monitor_id.clone(),
-                            self.ctx.id(),
-                            size_change.new_size(),
-                        ));
-                }
-
-                if let Some((buffer, position)) = outcome.into_buffer() {
-                    let sm = self.ctx.surface_manager().clone();
-                    let mod_id = self.ctx.id();
-                    let parent_id = self.ctx.parent_id();
-                    let mon_id = monitor_id.clone();
-                    let rt = tokio::runtime::Handle::current();
-                    rt.block_on(async move {
-                        sm.submit_child_buffer(mod_id, parent_id, mon_id, position, buffer)
-                            .await;
-                    });
-                }
+                self.dispatch_render_outcome(&monitor_id, outcome);
             }
         }
 
@@ -262,5 +324,102 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
             duration_micros = t0.elapsed().as_micros(),
             "Module UI updated"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::module_runtime::test_support::{
+        MockCanvasFactory, MockCommandSender, MockSurfaceManager, TestModulePort,
+    };
+    use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
+    use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
+    use crate::features::vdom::domain::VNode;
+    use crate::shared::config::domain::Config;
+    use crate::shared::events::signals::SignalHub;
+    use crate::shared::primitives::geometry::{Position, Size};
+    use crate::shared::primitives::ModuleId;
+
+    #[test]
+    fn test_discover_monitors_aggregates_sources() {
+        let id = ModuleId::new(1);
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let sm = Arc::new(MockSurfaceManager);
+        let cmd = Arc::new(MockCommandSender);
+        let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
+        let ctx = ModuleContext::new(id, hub.clone(), sm, cmd, rx);
+
+        let event_loop = EventLoop::new(
+            Box::new(TestModulePort::new(VNode::new_rect(
+                None, None, None, None, None,
+            ))),
+            ctx,
+            PointerHandler::new(),
+            RenderPipeline::new(),
+            Arc::new(Mutex::new(MockCanvasFactory)),
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        );
+
+        let mut layouts = HashMap::new();
+        layouts.insert(
+            MonitorId::new("DP-1"),
+            Rect::new(Position::new(0, 0), Size::new(100, 30)),
+        );
+
+        let monitors = event_loop.discover_monitors(&layouts);
+        assert!(monitors.contains(&MonitorId::new("DP-1")));
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_render_outcome_sends_commands() {
+        use crate::features::module_runtime::domain::SizeChange;
+        use crate::features::module_runtime::test_support::ChannelCommandSender;
+
+        let id = ModuleId::new(1);
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let sm = Arc::new(MockSurfaceManager);
+        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
+        let cmd = Arc::new(ChannelCommandSender::new(cmd_tx));
+        let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
+        let ctx = ModuleContext::new(id, hub.clone(), sm, cmd, rx);
+
+        let mut event_loop = EventLoop::new(
+            Box::new(TestModulePort::new(VNode::new_rect(
+                None, None, None, None, None,
+            ))),
+            ctx,
+            PointerHandler::new(),
+            RenderPipeline::new(),
+            Arc::new(Mutex::new(MockCanvasFactory)),
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        );
+
+        let outcome = crate::features::module_runtime::domain::RenderOutcome::new(
+            Some(SizeChange::new(Size::new(0, 0), Size::new(50, 20))),
+            vec![],
+            crate::features::layout_engine::domain::RenderNode::Rect {
+                rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
+                style: Default::default(),
+                on_click: None,
+                on_hover: None,
+                tooltip: None,
+            },
+            None,
+        );
+
+        event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), outcome);
+
+        let received = cmd_rx.try_recv().expect("Should have sent ModuleSizeChanged");
+        match received {
+            AppCommand::ModuleSizeChanged(mon, mod_id, size) => {
+                assert_eq!(mon.as_str(), "DP-1");
+                assert_eq!(mod_id, id);
+                assert_eq!(size, Size::new(50, 20));
+            }
+            _ => panic!("Unexpected command"),
+        }
     }
 }

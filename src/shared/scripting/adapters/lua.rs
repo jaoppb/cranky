@@ -52,7 +52,7 @@ impl LuaStateSynchronizer {
                         globals.set("hyprland", val)?;
                     }
                 }
-                SignalKind::DBus(_) if !dbus_handled => {
+                SignalKind::DBus if !dbus_handled => {
                     let dbus_state = hub.dbus_rx().borrow().clone();
                     if let Ok(val) = lua.to_value(&dbus_state.properties()) {
                         globals.set("dbus", val)?;
@@ -119,6 +119,7 @@ pub struct LuaModule {
     source: String,
     name: String,
     cached_subs: Vec<SignalKind>,
+    cached_dbus_subs: Vec<DBusSubscription>,
     cached_styles: Vec<crate::features::styling::domain::StyleSheetName>,
 }
 
@@ -129,6 +130,7 @@ impl LuaModule {
             source,
             name,
             cached_subs: Vec::new(),
+            cached_dbus_subs: Vec::new(),
             cached_styles: Vec::new(),
         }
     }
@@ -143,10 +145,12 @@ impl LuaModule {
         module_name: &str,
     ) -> (
         Vec<SignalKind>,
+        Vec<DBusSubscription>,
         Vec<crate::features::styling::domain::StyleSheetName>,
     ) {
         let globals = lua.globals();
         let mut subs = Vec::new();
+        let mut dbus_subs = Vec::new();
         let mut styles = Vec::new();
 
         if let Ok(meta_fn) = globals.get::<Function>("metadata")
@@ -156,7 +160,7 @@ impl LuaModule {
             if let Ok(subs_val) = t.get::<mlua::Value>("subscriptions")
                 && let mlua::Value::Table(subs_table) = subs_val
             {
-                Self::parse_subscriptions_table(&subs_table, &mut subs);
+                Self::parse_subscriptions_table(&subs_table, &mut subs, &mut dbus_subs);
             }
 
             if let Ok(styles_val) = t.get::<mlua::Value>("styles")
@@ -176,7 +180,7 @@ impl LuaModule {
             && let Ok(result) = subs_fn.call::<mlua::Value>(())
             && let mlua::Value::Table(t) = result
         {
-            Self::parse_subscriptions_table(&t, &mut subs);
+            Self::parse_subscriptions_table(&t, &mut subs, &mut dbus_subs);
         }
 
         if styles.is_empty()
@@ -186,10 +190,14 @@ impl LuaModule {
             styles.push(default_sheet);
         }
 
-        (subs, styles)
+        (subs, dbus_subs, styles)
     }
 
-    fn parse_subscriptions_table(t: &mlua::Table, subs: &mut Vec<SignalKind>) {
+    fn parse_subscriptions_table(
+        t: &mlua::Table,
+        subs: &mut Vec<SignalKind>,
+        dbus_subs: &mut Vec<DBusSubscription>,
+    ) {
         for (_, val) in t.pairs::<mlua::Value, mlua::Value>().flatten() {
             if let mlua::Value::String(s) = &val {
                 if let Ok(s_str) = s.to_str() {
@@ -214,7 +222,8 @@ impl LuaModule {
                 } else {
                     BusType::Session
                 };
-                subs.push(SignalKind::DBus(DBusSubscription::new(
+                subs.push(SignalKind::DBus);
+                dbus_subs.push(DBusSubscription::new(
                     bus,
                     dbus_sub
                         .get::<String>("destination")
@@ -232,7 +241,7 @@ impl LuaModule {
                         .get::<String>("member")
                         .ok()
                         .map(crate::shared::dbus::domain::Member::new),
-                )));
+                ));
             }
         }
     }
@@ -288,8 +297,9 @@ impl AnyModulePort for LuaModule {
             })?;
         }
 
-        let (subs, styles) = Self::evaluate_metadata(&lua, &self.name);
+        let (subs, dbus_subs, styles) = Self::evaluate_metadata(&lua, &self.name);
         self.cached_subs = subs;
+        self.cached_dbus_subs = dbus_subs;
         self.cached_styles = styles;
 
         Ok(())
@@ -297,6 +307,10 @@ impl AnyModulePort for LuaModule {
 
     fn subscriptions(&self) -> &[SignalKind] {
         &self.cached_subs
+    }
+
+    fn dbus_subscriptions(&self) -> &[DBusSubscription] {
+        &self.cached_dbus_subs
     }
 
     fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName] {

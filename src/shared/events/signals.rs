@@ -4,13 +4,13 @@ use crate::shared::config::domain::Config;
 use tokio::sync::watch;
 
 use crate::features::systray::domain::SystrayState;
-use crate::shared::dbus::domain::{DBusState, DBusSubscription};
+use crate::shared::dbus::domain::DBusState;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SignalKind {
     Time,
     Hyprland,
-    DBus(DBusSubscription),
+    DBus,
     Systray,
     Metrics,
     Mpris,
@@ -299,64 +299,46 @@ impl SignalHub {
         self.pointer.0.subscribe()
     }
 
+    pub fn signal_to_stream(
+        &self,
+        kind: &SignalKind,
+    ) -> futures_util::stream::BoxStream<'static, SignalKind> {
+        use futures_util::StreamExt;
+        use tokio_stream::wrappers::WatchStream;
+
+        match kind {
+            SignalKind::Time => WatchStream::new(self.time_rx())
+                .map(|_| SignalKind::Time)
+                .boxed(),
+            SignalKind::Hyprland => WatchStream::new(self.hyprland_rx())
+                .map(|_| SignalKind::Hyprland)
+                .boxed(),
+            SignalKind::Systray => WatchStream::new(self.systray_rx())
+                .map(|_| SignalKind::Systray)
+                .boxed(),
+            SignalKind::Metrics => WatchStream::new(self.metrics_rx())
+                .map(|_| SignalKind::Metrics)
+                .boxed(),
+            SignalKind::Mpris => WatchStream::new(self.mpris_rx())
+                .map(|_| SignalKind::Mpris)
+                .boxed(),
+            SignalKind::DBus => WatchStream::new(self.dbus_rx())
+                .map(|_| SignalKind::DBus)
+                .boxed(),
+        }
+    }
+
     pub fn subscribe_streams(
         &self,
         subs: &[SignalKind],
     ) -> futures_util::stream::SelectAll<futures_util::stream::BoxStream<'static, SignalKind>> {
-        use futures_util::StreamExt;
-        use tokio_stream::wrappers::WatchStream;
-
         let mut events_stream = futures_util::stream::SelectAll::new();
+        let mut seen = std::collections::HashSet::new();
 
-        if subs.contains(&SignalKind::Time) {
-            events_stream.push(
-                WatchStream::new(self.time_rx())
-                    .map(|_| SignalKind::Time)
-                    .boxed(),
-            );
-        }
-        if subs.contains(&SignalKind::Hyprland) {
-            events_stream.push(
-                WatchStream::new(self.hyprland_rx())
-                    .map(|_| SignalKind::Hyprland)
-                    .boxed(),
-            );
-        }
-        if subs.contains(&SignalKind::Systray) {
-            events_stream.push(
-                WatchStream::new(self.systray_rx())
-                    .map(|_| SignalKind::Systray)
-                    .boxed(),
-            );
-        }
-        if subs.contains(&SignalKind::Metrics) {
-            events_stream.push(
-                WatchStream::new(self.metrics_rx())
-                    .map(|_| SignalKind::Metrics)
-                    .boxed(),
-            );
-        }
-        if subs.contains(&SignalKind::Mpris) {
-            events_stream.push(
-                WatchStream::new(self.mpris_rx())
-                    .map(|_| SignalKind::Mpris)
-                    .boxed(),
-            );
-        }
-        if subs.iter().any(|s| matches!(s, SignalKind::DBus(_))) {
-            events_stream.push(
-                WatchStream::new(self.dbus_rx())
-                    .map(|_| {
-                        SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(
-                            crate::shared::dbus::domain::BusType::Session,
-                            None,
-                            None,
-                            None,
-                            None,
-                        ))
-                    })
-                    .boxed(),
-            );
+        for kind in subs {
+            if seen.insert(kind) {
+                events_stream.push(self.signal_to_stream(kind));
+            }
         }
 
         events_stream
@@ -578,7 +560,12 @@ mod tests {
         use futures_util::StreamExt;
 
         let hub = SignalHub::new(Config::default());
-        let subs = vec![SignalKind::Time, SignalKind::Systray];
+        let subs = vec![
+            SignalKind::Time,
+            SignalKind::Systray,
+            SignalKind::DBus,
+            SignalKind::Time, // Duplicate should be ignored
+        ];
         let mut stream = hub.subscribe_streams(&subs);
 
         // Initial values are yielded by WatchStreams
@@ -586,10 +573,33 @@ mod tests {
         assert!(first.is_some());
         let second = stream.next().await;
         assert!(second.is_some());
+        let third = stream.next().await;
+        assert!(third.is_some());
 
         // Subsequent trigger yields signal
         hub.time_tx().send(chrono::Local::now()).unwrap();
         let sig = stream.next().await;
         assert_eq!(sig, Some(SignalKind::Time));
+    }
+
+    #[tokio::test]
+    async fn test_signal_to_stream_all_kinds() {
+        use futures_util::StreamExt;
+
+        let hub = SignalHub::new(Config::default());
+        let kinds = [
+            SignalKind::Time,
+            SignalKind::Hyprland,
+            SignalKind::DBus,
+            SignalKind::Systray,
+            SignalKind::Metrics,
+            SignalKind::Mpris,
+        ];
+
+        for kind in kinds {
+            let mut stream = hub.signal_to_stream(&kind);
+            let initial = stream.next().await;
+            assert_eq!(initial, Some(kind));
+        }
     }
 }
