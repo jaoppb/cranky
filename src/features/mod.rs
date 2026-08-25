@@ -1,4 +1,3 @@
-pub mod applets;
 pub mod layout_engine;
 pub mod metrics;
 pub mod module_runtime;

@@ -48,7 +48,7 @@ name = "bar"
 height = 40
 left = ["workspace"]
 center = ["hour"]
-right = ["metrics", "applet"]
+right = ["metrics", "systray"]
 
 [root.margin]
 top = 8
@@ -71,7 +71,7 @@ format = "%H:%M:%S %d/%m/%Y"
 network = false
 temperature = false
 
-[modules.applet]
+[modules.systray]
 show_icons = true
 show_titles = false
 icon_size = 22
@@ -85,7 +85,7 @@ show_icon = true
 Cranky is split into two main components:
 
 1. **Core Service:** Handles monitor discovery, Wayland surface management, configuration hot-reloading, and the module registry.
-2. **Module System:** An "addon-like" trait-based system where each module (`workspace`, `applet`, `hour`, etc.) implements a standard lifecycle: `init`, `update`, `measure`, and `render`.
+2. **Module System:** An "addon-like" trait-based system where each module (`workspace`, `systray`, `hour`, etc.) implements a standard lifecycle: `init`, `update`, `measure`, and `render`.
 
 ## 🧪 Development
 

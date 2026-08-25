@@ -13,7 +13,7 @@ a **Reactive System** (using Tokio channels and a Signal Hub).
 Cranky strictly follows **Feature-Sliced Design (FSD)** combined with Clean
 Architecture principles.
 
-- `src/features/`: Contains domain-specific vertical slices (e.g., `applets`,
+- `src/features/`: Contains domain-specific vertical slices (e.g.,
   `layout_engine`, `metrics`, `systray`, `workspaces`, `module_runtime`). Each
   feature encapsulates its own `domain`, `ports`, and `adapters` related to that
   business capability.
@@ -26,7 +26,7 @@ Architecture principles.
 
 ### The Module System
 
-Cranky is entirely modular. Every visual element (`workspace`, `hour`, `applet`,
+Cranky is entirely modular. Every visual element (`workspace`, `hour`, `systray`,
 `metrics`) is an isolated module.
 
 - **Scripting:** Built-in modules are written in either **Lua** or **Rhai**. The

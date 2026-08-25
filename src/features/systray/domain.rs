@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum AppletStatus {
+pub enum SystrayStatus {
     Active,
     Passive,
     NeedsAttention,
@@ -10,9 +10,9 @@ pub enum AppletStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(transparent)]
-pub struct AppletId(String);
+pub struct SystrayId(String);
 
-impl AppletId {
+impl SystrayId {
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }
@@ -21,13 +21,13 @@ impl AppletId {
     }
 }
 
-impl From<&str> for AppletId {
+impl From<&str> for SystrayId {
     fn from(s: &str) -> Self {
         Self::new(s)
     }
 }
 
-impl From<String> for AppletId {
+impl From<String> for SystrayId {
     fn from(s: String) -> Self {
         Self::new(s)
     }
@@ -152,9 +152,9 @@ impl ItemIsMenu {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
-pub struct AppletTooltipTitle(String);
+pub struct SystrayTooltipTitle(String);
 
-impl AppletTooltipTitle {
+impl SystrayTooltipTitle {
     pub fn new(title: impl Into<String>) -> Self {
         Self(title.into())
     }
@@ -166,9 +166,9 @@ impl AppletTooltipTitle {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
-pub struct AppletTooltipDescription(String);
+pub struct SystrayTooltipDescription(String);
 
-impl AppletTooltipDescription {
+impl SystrayTooltipDescription {
     pub fn new(desc: impl Into<String>) -> Self {
         Self(desc.into())
     }
@@ -180,7 +180,7 @@ impl AppletTooltipDescription {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(try_from = "String", into = "String")]
-pub enum AppletActionName {
+pub enum SystrayActionName {
     Primary,
     ContextMenu,
     Activate,
@@ -192,7 +192,7 @@ pub enum AppletActionName {
     Other(String),
 }
 
-impl AppletActionName {
+impl SystrayActionName {
     pub fn parse_str(s: &str) -> Self {
         match s {
             "Primary" => Self::Primary,
@@ -222,27 +222,27 @@ impl AppletActionName {
     }
 }
 
-impl From<&str> for AppletActionName {
+impl From<&str> for SystrayActionName {
     fn from(s: &str) -> Self {
         Self::parse_str(s)
     }
 }
 
-impl From<String> for AppletActionName {
+impl From<String> for SystrayActionName {
     fn from(s: String) -> Self {
         Self::parse_str(&s)
     }
 }
 
-impl From<AppletActionName> for String {
-    fn from(action: AppletActionName) -> Self {
+impl From<SystrayActionName> for String {
+    fn from(action: SystrayActionName) -> Self {
         action.as_str().to_string()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "String", into = "String")]
-pub enum AppletCategory {
+pub enum SystrayCategory {
     ApplicationStatus,
     Communications,
     SystemServices,
@@ -250,7 +250,7 @@ pub enum AppletCategory {
     Other(String),
 }
 
-impl AppletCategory {
+impl SystrayCategory {
     pub fn parse_str(s: &str) -> Self {
         match s {
             "ApplicationStatus" => Self::ApplicationStatus,
@@ -272,33 +272,33 @@ impl AppletCategory {
     }
 }
 
-impl From<&str> for AppletCategory {
+impl From<&str> for SystrayCategory {
     fn from(s: &str) -> Self {
         Self::parse_str(s)
     }
 }
 
-impl From<String> for AppletCategory {
+impl From<String> for SystrayCategory {
     fn from(s: String) -> Self {
         Self::parse_str(&s)
     }
 }
 
-impl From<AppletCategory> for String {
-    fn from(cat: AppletCategory) -> Self {
+impl From<SystrayCategory> for String {
+    fn from(cat: SystrayCategory) -> Self {
         cat.as_str().to_string()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
-pub enum AppletIcon {
+pub enum SystrayIcon {
     Both { name: IconName, image: IconImage },
     NameOnly { name: IconName },
     ImageOnly { image: IconImage },
 }
 
-impl AppletIcon {
+impl SystrayIcon {
     pub fn new(name: Option<IconName>, image: Option<IconImage>) -> Option<Self> {
         match (name, image) {
             (Some(name), Some(image)) => Some(Self::Both { name, image }),
@@ -326,17 +326,17 @@ impl AppletIcon {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct AppletTooltip {
-    icon: Option<AppletIcon>,
-    title: AppletTooltipTitle,
-    description: AppletTooltipDescription,
+pub struct SystrayTooltip {
+    icon: Option<SystrayIcon>,
+    title: SystrayTooltipTitle,
+    description: SystrayTooltipDescription,
 }
 
-impl AppletTooltip {
+impl SystrayTooltip {
     pub fn new(
-        icon: Option<AppletIcon>,
-        title: AppletTooltipTitle,
-        description: AppletTooltipDescription,
+        icon: Option<SystrayIcon>,
+        title: SystrayTooltipTitle,
+        description: SystrayTooltipDescription,
     ) -> Self {
         Self {
             icon,
@@ -346,67 +346,67 @@ impl AppletTooltip {
     }
 
     #[cfg(test)]
-    pub fn icon(&self) -> Option<&AppletIcon> {
+    pub fn icon(&self) -> Option<&SystrayIcon> {
         self.icon.as_ref()
     }
 
     #[cfg(test)]
-    pub fn title(&self) -> &AppletTooltipTitle {
+    pub fn title(&self) -> &SystrayTooltipTitle {
         &self.title
     }
 
     #[cfg(test)]
-    pub fn description(&self) -> &AppletTooltipDescription {
+    pub fn description(&self) -> &SystrayTooltipDescription {
         &self.description
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct AppletItem {
-    id: AppletId,
+pub struct SystrayItem {
+    id: SystrayId,
     destination: Destination,
     path: ObjectPath,
     title: Title,
-    status: AppletStatus,
-    icon: Option<AppletIcon>,
+    status: SystrayStatus,
+    icon: Option<SystrayIcon>,
     menu_path: Option<ObjectPath>,
     item_id: Option<ItemId>,
-    category: AppletCategory,
+    category: SystrayCategory,
     window_id: Option<WindowId>,
     item_is_menu: ItemIsMenu,
-    attention_icon: Option<AppletIcon>,
-    overlay_icon: Option<AppletIcon>,
-    tooltip: Option<AppletTooltip>,
+    attention_icon: Option<SystrayIcon>,
+    overlay_icon: Option<SystrayIcon>,
+    tooltip: Option<SystrayTooltip>,
 }
 
-pub struct CreateAppletCommand {
-    id: AppletId,
+pub struct CreateSystrayItemCommand {
+    id: SystrayId,
     destination: Destination,
     path: ObjectPath,
     title: Title,
-    status: AppletStatus,
-    icon: Option<AppletIcon>,
+    status: SystrayStatus,
+    icon: Option<SystrayIcon>,
     menu_path: Option<ObjectPath>,
     item_id: Option<ItemId>,
-    category: AppletCategory,
+    category: SystrayCategory,
     window_id: Option<WindowId>,
     item_is_menu: ItemIsMenu,
-    attention_icon: Option<AppletIcon>,
-    overlay_icon: Option<AppletIcon>,
-    tooltip: Option<AppletTooltip>,
+    attention_icon: Option<SystrayIcon>,
+    overlay_icon: Option<SystrayIcon>,
+    tooltip: Option<SystrayTooltip>,
 }
 
-impl CreateAppletCommand {
+impl CreateSystrayItemCommand {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        id: AppletId,
+        id: SystrayId,
         destination: Destination,
         path: ObjectPath,
         title: Title,
-        status: AppletStatus,
-        icon: Option<AppletIcon>,
+        status: SystrayStatus,
+        icon: Option<SystrayIcon>,
         menu_path: Option<ObjectPath>,
-        category: AppletCategory,
+        category: SystrayCategory,
         item_is_menu: ItemIsMenu,
     ) -> Self {
         Self {
@@ -437,23 +437,23 @@ impl CreateAppletCommand {
         self
     }
 
-    pub fn with_attention_icon(mut self, attention_icon: Option<AppletIcon>) -> Self {
+    pub fn with_attention_icon(mut self, attention_icon: Option<SystrayIcon>) -> Self {
         self.attention_icon = attention_icon;
         self
     }
 
-    pub fn with_overlay_icon(mut self, overlay_icon: Option<AppletIcon>) -> Self {
+    pub fn with_overlay_icon(mut self, overlay_icon: Option<SystrayIcon>) -> Self {
         self.overlay_icon = overlay_icon;
         self
     }
 
-    pub fn with_tooltip(mut self, tooltip: Option<AppletTooltip>) -> Self {
+    pub fn with_tooltip(mut self, tooltip: Option<SystrayTooltip>) -> Self {
         self.tooltip = tooltip;
         self
     }
 
     #[cfg(test)]
-    pub fn id(&self) -> &AppletId {
+    pub fn id(&self) -> &SystrayId {
         &self.id
     }
     #[cfg(test)]
@@ -469,11 +469,11 @@ impl CreateAppletCommand {
         &self.title
     }
     #[cfg(test)]
-    pub fn status(&self) -> &AppletStatus {
+    pub fn status(&self) -> &SystrayStatus {
         &self.status
     }
     #[cfg(test)]
-    pub fn icon(&self) -> Option<&AppletIcon> {
+    pub fn icon(&self) -> Option<&SystrayIcon> {
         self.icon.as_ref()
     }
     #[cfg(test)]
@@ -485,7 +485,7 @@ impl CreateAppletCommand {
         self.item_id.as_ref()
     }
     #[cfg(test)]
-    pub fn category(&self) -> &AppletCategory {
+    pub fn category(&self) -> &SystrayCategory {
         &self.category
     }
     #[cfg(test)]
@@ -497,21 +497,21 @@ impl CreateAppletCommand {
         self.item_is_menu
     }
     #[cfg(test)]
-    pub fn attention_icon(&self) -> Option<&AppletIcon> {
+    pub fn attention_icon(&self) -> Option<&SystrayIcon> {
         self.attention_icon.as_ref()
     }
     #[cfg(test)]
-    pub fn overlay_icon(&self) -> Option<&AppletIcon> {
+    pub fn overlay_icon(&self) -> Option<&SystrayIcon> {
         self.overlay_icon.as_ref()
     }
     #[cfg(test)]
-    pub fn tooltip(&self) -> Option<&AppletTooltip> {
+    pub fn tooltip(&self) -> Option<&SystrayTooltip> {
         self.tooltip.as_ref()
     }
 }
 
-impl AppletItem {
-    pub fn new(cmd: CreateAppletCommand) -> Self {
+impl SystrayItem {
+    pub fn new(cmd: CreateSystrayItemCommand) -> Self {
         Self {
             id: cmd.id,
             destination: cmd.destination,
@@ -535,12 +535,12 @@ impl AppletItem {
         self
     }
 
-    pub fn with_status(mut self, status: AppletStatus) -> Self {
+    pub fn with_status(mut self, status: SystrayStatus) -> Self {
         self.status = status;
         self
     }
 
-    pub fn with_icon(mut self, icon: Option<AppletIcon>) -> Self {
+    pub fn with_icon(mut self, icon: Option<SystrayIcon>) -> Self {
         self.icon = icon;
         self
     }
@@ -555,22 +555,22 @@ impl AppletItem {
         self
     }
 
-    pub fn with_attention_icon(mut self, attention_icon: Option<AppletIcon>) -> Self {
+    pub fn with_attention_icon(mut self, attention_icon: Option<SystrayIcon>) -> Self {
         self.attention_icon = attention_icon;
         self
     }
 
-    pub fn with_overlay_icon(mut self, overlay_icon: Option<AppletIcon>) -> Self {
+    pub fn with_overlay_icon(mut self, overlay_icon: Option<SystrayIcon>) -> Self {
         self.overlay_icon = overlay_icon;
         self
     }
 
-    pub fn with_tooltip(mut self, tooltip: Option<AppletTooltip>) -> Self {
+    pub fn with_tooltip(mut self, tooltip: Option<SystrayTooltip>) -> Self {
         self.tooltip = tooltip;
         self
     }
 
-    pub fn id(&self) -> &AppletId {
+    pub fn id(&self) -> &SystrayId {
         &self.id
     }
 
@@ -588,12 +588,12 @@ impl AppletItem {
     }
 
     #[cfg(test)]
-    pub fn status(&self) -> &AppletStatus {
+    pub fn status(&self) -> &SystrayStatus {
         &self.status
     }
 
     #[cfg(test)]
-    pub fn icon(&self) -> Option<&AppletIcon> {
+    pub fn icon(&self) -> Option<&SystrayIcon> {
         self.icon.as_ref()
     }
 
@@ -608,7 +608,7 @@ impl AppletItem {
     }
 
     #[cfg(test)]
-    pub fn category(&self) -> &AppletCategory {
+    pub fn category(&self) -> &SystrayCategory {
         &self.category
     }
 
@@ -622,47 +622,47 @@ impl AppletItem {
     }
 
     #[cfg(test)]
-    pub fn attention_icon(&self) -> Option<&AppletIcon> {
+    pub fn attention_icon(&self) -> Option<&SystrayIcon> {
         self.attention_icon.as_ref()
     }
 
     #[cfg(test)]
-    pub fn overlay_icon(&self) -> Option<&AppletIcon> {
+    pub fn overlay_icon(&self) -> Option<&SystrayIcon> {
         self.overlay_icon.as_ref()
     }
 
     #[cfg(test)]
-    pub fn tooltip(&self) -> Option<&AppletTooltip> {
+    pub fn tooltip(&self) -> Option<&SystrayTooltip> {
         self.tooltip.as_ref()
     }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct AppletsState {
-    items: std::collections::BTreeMap<AppletId, AppletItem>,
+pub struct SystrayState {
+    items: std::collections::BTreeMap<SystrayId, SystrayItem>,
 }
 
-impl serde::Serialize for AppletsState {
+impl serde::Serialize for SystrayState {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("AppletsState", 1)?;
-        let items: Vec<&AppletItem> = self.items.values().collect();
+        let mut state = serializer.serialize_struct("SystrayState", 1)?;
+        let items: Vec<&SystrayItem> = self.items.values().collect();
         state.serialize_field("items", &items)?;
         state.end()
     }
 }
 
-impl<'de> serde::Deserialize<'de> for AppletsState {
+impl<'de> serde::Deserialize<'de> for SystrayState {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         #[derive(serde::Deserialize)]
         struct Helper {
-            items: Vec<AppletItem>,
+            items: Vec<SystrayItem>,
         }
         let helper = Helper::deserialize(deserializer)?;
         let mut items = std::collections::BTreeMap::new();
@@ -673,12 +673,12 @@ impl<'de> serde::Deserialize<'de> for AppletsState {
     }
 }
 
-impl AppletsState {
-    pub fn new(items: std::collections::BTreeMap<AppletId, AppletItem>) -> Self {
+impl SystrayState {
+    pub fn new(items: std::collections::BTreeMap<SystrayId, SystrayItem>) -> Self {
         Self { items }
     }
 
-    pub fn items(&self) -> &std::collections::BTreeMap<AppletId, AppletItem> {
+    pub fn items(&self) -> &std::collections::BTreeMap<SystrayId, SystrayItem> {
         &self.items
     }
 }
@@ -688,8 +688,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_applet_types() {
-        assert_eq!(AppletId::new("id").as_str(), "id");
+    fn test_systray_types() {
+        assert_eq!(SystrayId::new("id").as_str(), "id");
         assert_eq!(Destination::new("dest").as_str(), "dest");
         assert_eq!(ObjectPath::new("/path").as_str(), "/path");
         assert_eq!(Title::new("title"), Title("title".into()));
@@ -714,95 +714,95 @@ mod tests {
         assert_eq!(ItemId::new("item1").as_str(), "item1");
         assert_eq!(WindowId::new(42).value(), 42);
         assert!(ItemIsMenu::new(true).value());
-        assert_eq!(AppletTooltipTitle::new("T").as_str(), "T");
-        assert_eq!(AppletTooltipDescription::new("D").as_str(), "D");
+        assert_eq!(SystrayTooltipTitle::new("T").as_str(), "T");
+        assert_eq!(SystrayTooltipDescription::new("D").as_str(), "D");
     }
 
     #[test]
-    fn test_applet_action_name() {
+    fn test_systray_action_name() {
         assert_eq!(
-            AppletActionName::parse_str("Primary"),
-            AppletActionName::Primary
+            SystrayActionName::parse_str("Primary"),
+            SystrayActionName::Primary
         );
         assert_eq!(
-            AppletActionName::parse_str("ContextMenu"),
-            AppletActionName::ContextMenu
+            SystrayActionName::parse_str("ContextMenu"),
+            SystrayActionName::ContextMenu
         );
         assert_eq!(
-            AppletActionName::parse_str("Custom"),
-            AppletActionName::Other("Custom".into())
+            SystrayActionName::parse_str("Custom"),
+            SystrayActionName::Other("Custom".into())
         );
-        assert_eq!(AppletActionName::Primary.as_str(), "Primary");
-        let s: String = AppletActionName::ContextMenu.into();
+        assert_eq!(SystrayActionName::Primary.as_str(), "Primary");
+        let s: String = SystrayActionName::ContextMenu.into();
         assert_eq!(s, "ContextMenu");
     }
 
     #[test]
-    fn test_applet_category() {
+    fn test_systray_category() {
         assert_eq!(
-            AppletCategory::parse_str("ApplicationStatus"),
-            AppletCategory::ApplicationStatus
+            SystrayCategory::parse_str("ApplicationStatus"),
+            SystrayCategory::ApplicationStatus
         );
         assert_eq!(
-            AppletCategory::parse_str("Communications"),
-            AppletCategory::Communications
+            SystrayCategory::parse_str("Communications"),
+            SystrayCategory::Communications
         );
         assert_eq!(
-            AppletCategory::parse_str("UnknownCat"),
-            AppletCategory::Other("UnknownCat".into())
+            SystrayCategory::parse_str("UnknownCat"),
+            SystrayCategory::Other("UnknownCat".into())
         );
-        assert_eq!(AppletCategory::Hardware.as_str(), "Hardware");
+        assert_eq!(SystrayCategory::Hardware.as_str(), "Hardware");
     }
 
     #[test]
-    fn test_applet_icon_wrapper() {
+    fn test_systray_icon_wrapper() {
         let name = Some(IconName::new("telegram"));
         let img = Some(IconImage::new(vec![1, 2, 3, 4], Size::new(1, 1)));
-        let icon_both = AppletIcon::new(name.clone(), img.clone()).unwrap();
+        let icon_both = SystrayIcon::new(name.clone(), img.clone()).unwrap();
         assert_eq!(icon_both.name(), name.as_ref());
         assert_eq!(icon_both.image(), img.as_ref());
 
-        let icon_name = AppletIcon::new(name.clone(), None).unwrap();
+        let icon_name = SystrayIcon::new(name.clone(), None).unwrap();
         assert_eq!(icon_name.name(), name.as_ref());
         assert!(icon_name.image().is_none());
 
-        let icon_img = AppletIcon::new(None, img.clone()).unwrap();
+        let icon_img = SystrayIcon::new(None, img.clone()).unwrap();
         assert!(icon_img.name().is_none());
         assert_eq!(icon_img.image(), img.as_ref());
 
-        assert!(AppletIcon::new(None, None).is_none());
+        assert!(SystrayIcon::new(None, None).is_none());
     }
 
     #[test]
-    fn test_applet_tooltip() {
-        let title = AppletTooltipTitle::new("T");
-        let desc = AppletTooltipDescription::new("D");
-        let tooltip = AppletTooltip::new(None, title.clone(), desc.clone());
+    fn test_systray_tooltip() {
+        let title = SystrayTooltipTitle::new("T");
+        let desc = SystrayTooltipDescription::new("D");
+        let tooltip = SystrayTooltip::new(None, title.clone(), desc.clone());
         assert!(tooltip.icon().is_none());
         assert_eq!(tooltip.title(), &title);
         assert_eq!(tooltip.description(), &desc);
     }
 
     #[test]
-    fn test_applet_item() {
-        let icon = AppletIcon::new(Some(IconName::new("app-icon")), None);
-        let att_icon = AppletIcon::new(Some(IconName::new("att-icon")), None);
-        let ovr_icon = AppletIcon::new(Some(IconName::new("ovr-icon")), None);
-        let tip = AppletTooltip::new(
+    fn test_systray_item() {
+        let icon = SystrayIcon::new(Some(IconName::new("app-icon")), None);
+        let att_icon = SystrayIcon::new(Some(IconName::new("att-icon")), None);
+        let ovr_icon = SystrayIcon::new(Some(IconName::new("ovr-icon")), None);
+        let tip = SystrayTooltip::new(
             None,
-            AppletTooltipTitle::new("Tip"),
-            AppletTooltipDescription::new("Desc"),
+            SystrayTooltipTitle::new("Tip"),
+            SystrayTooltipDescription::new("Desc"),
         );
 
-        let cmd = CreateAppletCommand::new(
-            AppletId::new("1"),
+        let cmd = CreateSystrayItemCommand::new(
+            SystrayId::new("1"),
             Destination::new("dest"),
             ObjectPath::new("/"),
             Title::new("t"),
-            AppletStatus::Active,
+            SystrayStatus::Active,
             icon.clone(),
             Some(ObjectPath::new("/menu")),
-            AppletCategory::ApplicationStatus,
+            SystrayCategory::ApplicationStatus,
             ItemIsMenu::new(true),
         )
         .with_item_id(Some(ItemId::new("telegram")))
@@ -811,28 +811,28 @@ mod tests {
         .with_overlay_icon(ovr_icon.clone())
         .with_tooltip(Some(tip.clone()));
 
-        assert_eq!(cmd.id(), &AppletId::new("1"));
+        assert_eq!(cmd.id(), &SystrayId::new("1"));
         assert_eq!(cmd.destination(), &Destination::new("dest"));
         assert_eq!(cmd.path(), &ObjectPath::new("/"));
         assert_eq!(cmd.title(), &Title::new("t"));
-        assert_eq!(cmd.status(), &AppletStatus::Active);
+        assert_eq!(cmd.status(), &SystrayStatus::Active);
         assert_eq!(cmd.icon(), icon.as_ref());
         assert_eq!(cmd.menu_path(), Some(&ObjectPath::new("/menu")));
         assert_eq!(cmd.item_id(), Some(&ItemId::new("telegram")));
-        assert_eq!(cmd.category(), &AppletCategory::ApplicationStatus);
+        assert_eq!(cmd.category(), &SystrayCategory::ApplicationStatus);
         assert_eq!(cmd.window_id(), Some(WindowId::new(1234)));
         assert_eq!(cmd.item_is_menu(), ItemIsMenu::new(true));
         assert_eq!(cmd.attention_icon(), att_icon.as_ref());
         assert_eq!(cmd.overlay_icon(), ovr_icon.as_ref());
         assert_eq!(cmd.tooltip(), Some(&tip));
 
-        let item = AppletItem::new(cmd);
-        assert_eq!(item.id(), &AppletId::new("1"));
+        let item = SystrayItem::new(cmd);
+        assert_eq!(item.id(), &SystrayId::new("1"));
         assert_eq!(item.destination(), &Destination::new("dest"));
         assert_eq!(item.path(), &ObjectPath::new("/"));
         assert_eq!(item.item_id(), Some(&ItemId::new("telegram")));
         assert_eq!(item.window_id(), Some(WindowId::new(1234)));
-        assert_eq!(item.category(), &AppletCategory::ApplicationStatus);
+        assert_eq!(item.category(), &SystrayCategory::ApplicationStatus);
         assert_eq!(item.icon(), icon.as_ref());
         assert_eq!(item.item_is_menu(), ItemIsMenu::new(true));
         assert_eq!(item.attention_icon(), att_icon.as_ref());
@@ -841,13 +841,13 @@ mod tests {
 
         let updated = item
             .with_title("t2".into())
-            .with_status(AppletStatus::Passive)
+            .with_status(SystrayStatus::Passive)
             .with_menu_path(Some(ObjectPath::new("/menu2")))
             .with_attention_icon(None)
             .with_overlay_icon(None)
             .with_tooltip(None);
         assert_eq!(updated.title(), &Title::new("t2"));
-        assert_eq!(updated.status(), &AppletStatus::Passive);
+        assert_eq!(updated.status(), &SystrayStatus::Passive);
         assert_eq!(updated.menu_path(), Some(&ObjectPath::new("/menu2")));
         assert_eq!(updated.attention_icon(), None);
         assert_eq!(updated.overlay_icon(), None);
@@ -855,36 +855,36 @@ mod tests {
     }
 
     #[test]
-    fn test_applets_state_serde() {
+    fn test_systray_state_serde() {
         let mut items = std::collections::BTreeMap::new();
-        let cmd = CreateAppletCommand::new(
-            AppletId::new("test_id"),
+        let cmd = CreateSystrayItemCommand::new(
+            SystrayId::new("test_id"),
             Destination::new("test_dest"),
             ObjectPath::new("/test"),
             Title::new("test_title"),
-            AppletStatus::Active,
-            Some(AppletIcon::new(Some(IconName::new("test_icon")), None).unwrap()),
+            SystrayStatus::Active,
+            Some(SystrayIcon::new(Some(IconName::new("test_icon")), None).unwrap()),
             None,
-            AppletCategory::Communications,
+            SystrayCategory::Communications,
             ItemIsMenu::new(true),
         )
         .with_item_id(Some(ItemId::new("test_item_id")))
         .with_window_id(Some(WindowId::new(101)))
-        .with_tooltip(Some(AppletTooltip::new(
+        .with_tooltip(Some(SystrayTooltip::new(
             None,
-            AppletTooltipTitle::new("Tooltip Title"),
-            AppletTooltipDescription::new("Tooltip Desc"),
+            SystrayTooltipTitle::new("Tooltip Title"),
+            SystrayTooltipDescription::new("Tooltip Desc"),
         )));
 
-        items.insert(AppletId::new("test_id"), AppletItem::new(cmd));
-        let state = AppletsState::new(items);
+        items.insert(SystrayId::new("test_id"), SystrayItem::new(cmd));
+        let state = SystrayState::new(items);
 
         let json = serde_json::to_string(&state).unwrap();
-        let decoded: AppletsState = serde_json::from_str(&json).unwrap();
+        let decoded: SystrayState = serde_json::from_str(&json).unwrap();
         assert_eq!(state.items().len(), decoded.items().len());
         assert_eq!(
-            decoded.items().get(&AppletId::new("test_id")),
-            state.items().get(&AppletId::new("test_id"))
+            decoded.items().get(&SystrayId::new("test_id")),
+            state.items().get(&SystrayId::new("test_id"))
         );
     }
 }

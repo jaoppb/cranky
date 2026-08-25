@@ -3,7 +3,7 @@ use crate::shared::config::domain::Config;
 
 use tokio::sync::watch;
 
-use crate::features::applets::domain::AppletsState;
+use crate::features::systray::domain::SystrayState;
 use crate::shared::dbus::domain::{DBusState, DBusSubscription};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -11,7 +11,7 @@ pub enum SignalKind {
     Time,
     Hyprland,
     DBus(DBusSubscription),
-    Applets,
+    Systray,
     Metrics,
     Mpris,
 }
@@ -183,7 +183,7 @@ pub struct SignalHub {
         watch::Receiver<chrono::DateTime<chrono::Local>>,
     ),
     dbus: (watch::Sender<DBusState>, watch::Receiver<DBusState>),
-    applets: (watch::Sender<AppletsState>, watch::Receiver<AppletsState>),
+    systray: (watch::Sender<SystrayState>, watch::Receiver<SystrayState>),
     metrics: (
         watch::Sender<crate::features::metrics::domain::MetricsState>,
         watch::Receiver<crate::features::metrics::domain::MetricsState>,
@@ -209,7 +209,7 @@ impl SignalHub {
         ));
         let time = watch::channel(chrono::Local::now());
         let dbus = watch::channel(DBusState::default());
-        let applets = watch::channel(AppletsState::default());
+        let systray = watch::channel(SystrayState::default());
         let metrics = watch::channel(crate::features::metrics::domain::MetricsState::default());
         let mpris = watch::channel(crate::features::mpris::domain::MprisState::default());
         let pointer = tokio::sync::broadcast::channel(32);
@@ -220,7 +220,7 @@ impl SignalHub {
             hyprland,
             time,
             dbus,
-            applets,
+            systray,
             metrics,
             pointer,
             mpris,
@@ -276,12 +276,12 @@ impl SignalHub {
         self.dbus.1.clone()
     }
 
-    pub fn applets_tx(&self) -> watch::Sender<AppletsState> {
-        self.applets.0.clone()
+    pub fn systray_tx(&self) -> watch::Sender<SystrayState> {
+        self.systray.0.clone()
     }
 
-    pub fn applets_rx(&self) -> watch::Receiver<AppletsState> {
-        self.applets.1.clone()
+    pub fn systray_rx(&self) -> watch::Receiver<SystrayState> {
+        self.systray.1.clone()
     }
 
     pub fn metrics_tx(&self) -> watch::Sender<crate::features::metrics::domain::MetricsState> {
@@ -486,10 +486,10 @@ mod tests {
         dbus_tx.send(DBusState::default()).unwrap();
         assert!(dbus_rx.changed().await.is_ok());
 
-        let applets_tx = hub.applets_tx();
-        let mut applets_rx = hub.applets_rx();
-        applets_tx.send(AppletsState::default()).unwrap();
-        assert!(applets_rx.changed().await.is_ok());
+        let systray_tx = hub.systray_tx();
+        let mut systray_rx = hub.systray_rx();
+        systray_tx.send(SystrayState::default()).unwrap();
+        assert!(systray_rx.changed().await.is_ok());
 
         let metrics_tx = hub.metrics_tx();
         let mut metrics_rx = hub.metrics_rx();

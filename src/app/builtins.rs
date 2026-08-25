@@ -38,12 +38,12 @@ impl BuiltinModules {
             include_str!("../../assets/widgets/workspace.rhai"),
         ),
         (
-            "applet.lua",
-            include_str!("../../assets/widgets/applet.lua"),
+            "systray.lua",
+            include_str!("../../assets/widgets/systray.lua"),
         ),
         (
-            "applet.rhai",
-            include_str!("../../assets/widgets/applet.rhai"),
+            "systray.rhai",
+            include_str!("../../assets/widgets/systray.rhai"),
         ),
         (
             "metrics.lua",
@@ -207,19 +207,19 @@ mod tests {
         assert!(dir.join("hour.lua").exists());
         assert!(dir.join("workspace.rhai").exists());
         assert!(dir.join("workspace.lua").exists());
-        assert!(dir.join("applet.lua").exists());
-        assert!(dir.join("applet.rhai").exists());
+        assert!(dir.join("systray.lua").exists());
+        assert!(dir.join("systray.rhai").exists());
         assert!(dir.join("metrics.lua").exists());
         assert!(dir.join("metrics.rhai").exists());
     }
 
     #[test]
-    fn test_find_module_applet_and_metrics_rhai() {
+    fn test_find_module_systray_and_metrics_rhai() {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let applet_mod =
-            BuiltinModules::find_module(&ModuleName::new("applet"), &selection, &env).unwrap();
+        let systray_mod =
+            BuiltinModules::find_module(&ModuleName::new("systray"), &selection, &env).unwrap();
         let mut metrics_mod =
             BuiltinModules::find_module(&ModuleName::new("metrics"), &selection, &env).unwrap();
         let hub = crate::shared::events::signals::SignalHub::new(
@@ -243,7 +243,7 @@ mod tests {
         hub.metrics_tx().send(metrics_state).unwrap();
         metrics_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Metrics]);
 
-        let _ = applet_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+        let _ = systray_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
         let metrics_node = metrics_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
         assert_eq!(
             metrics_node.tag(),

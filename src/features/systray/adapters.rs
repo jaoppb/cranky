@@ -1,4 +1,4 @@
-use crate::features::applets::domain::{AppletItem, AppletStatus, AppletsState};
+use crate::features::systray::domain::{SystrayItem, SystrayState, SystrayStatus};
 use crate::features::systray::ports::{SniPort, SniPortError};
 use crate::shared::events::signals::SignalHub;
 use async_trait::async_trait;
@@ -79,24 +79,24 @@ enum SniEvent {
 impl SniEvent {
     async fn apply<'a>(
         self,
-        applet: AppletItem,
+        item: SystrayItem,
         proxy: &StatusNotifierItemProxy<'a>,
-    ) -> AppletItem {
+    ) -> SystrayItem {
         match self {
             SniEvent::Title => {
                 let title = proxy.title().await.unwrap_or_default();
                 tracing::trace!("SniEvent::Title: updated title to '{}'", title);
-                applet.with_title(title)
+                item.with_title(title)
             }
             SniEvent::Status(status_str) => {
                 let status = match status_str.as_str() {
-                    "Active" => AppletStatus::Active,
-                    "Passive" => AppletStatus::Passive,
-                    "NeedsAttention" => AppletStatus::NeedsAttention,
-                    _ => AppletStatus::Unknown,
+                    "Active" => SystrayStatus::Active,
+                    "Passive" => SystrayStatus::Passive,
+                    "NeedsAttention" => SystrayStatus::NeedsAttention,
+                    _ => SystrayStatus::Unknown,
                 };
                 tracing::trace!("SniEvent::Status: updated status to {:?}", status);
-                applet.with_status(status)
+                item.with_status(status)
             }
             SniEvent::Icon | SniEvent::ThemePath => {
                 let icon_name = proxy.icon_name().await.ok();
@@ -110,11 +110,11 @@ impl SniEvent {
                 );
                 let icon_image =
                     resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
-                let icon = crate::features::applets::domain::AppletIcon::new(
-                    icon_name.map(crate::features::applets::domain::IconName::new),
+                let icon = crate::features::systray::domain::SystrayIcon::new(
+                    icon_name.map(crate::features::systray::domain::IconName::new),
                     icon_image,
                 );
-                applet.with_icon(icon)
+                item.with_icon(icon)
             }
             SniEvent::AttentionIcon => {
                 let icon_name = proxy.attention_icon_name().await.ok();
@@ -123,22 +123,22 @@ impl SniEvent {
                 tracing::trace!("SniEvent::AttentionIcon: updated attention icon");
                 let icon_image =
                     resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
-                let icon = crate::features::applets::domain::AppletIcon::new(
-                    icon_name.map(crate::features::applets::domain::IconName::new),
+                let icon = crate::features::systray::domain::SystrayIcon::new(
+                    icon_name.map(crate::features::systray::domain::IconName::new),
                     icon_image,
                 );
-                applet.with_attention_icon(icon)
+                item.with_attention_icon(icon)
             }
             SniEvent::OverlayIcon => {
                 let icon_name = proxy.overlay_icon_name().await.ok();
                 let icon_pixmap = proxy.overlay_icon_pixmap().await.ok();
                 tracing::trace!("SniEvent::OverlayIcon: updated overlay icon");
                 let icon_image = resolve_icon(icon_name.clone(), None, icon_pixmap).await;
-                let icon = crate::features::applets::domain::AppletIcon::new(
-                    icon_name.map(crate::features::applets::domain::IconName::new),
+                let icon = crate::features::systray::domain::SystrayIcon::new(
+                    icon_name.map(crate::features::systray::domain::IconName::new),
                     icon_image,
                 );
-                applet.with_overlay_icon(icon)
+                item.with_overlay_icon(icon)
             }
             SniEvent::ToolTip => {
                 let tooltip = match proxy.tool_tip().await {
@@ -146,22 +146,22 @@ impl SniEvent {
                     Err(_) => None,
                 };
                 tracing::trace!("SniEvent::ToolTip: updated tooltip");
-                applet.with_tooltip(tooltip)
+                item.with_tooltip(tooltip)
             }
             SniEvent::Menu => {
-                let mut applet = applet;
+                let mut item = item;
                 if let Ok(menu_path) = proxy.menu().await {
-                    applet = applet.with_menu_path(Some(
-                        crate::features::applets::domain::ObjectPath::new(menu_path.as_str()),
+                    item = item.with_menu_path(Some(
+                        crate::features::systray::domain::ObjectPath::new(menu_path.as_str()),
                     ));
                 }
                 if let Ok(item_is_menu_val) = proxy.item_is_menu().await {
-                    applet = applet.with_item_is_menu(
-                        crate::features::applets::domain::ItemIsMenu::new(item_is_menu_val),
+                    item = item.with_item_is_menu(
+                        crate::features::systray::domain::ItemIsMenu::new(item_is_menu_val),
                     );
                 }
                 tracing::trace!("SniEvent::Menu: updated menu");
-                applet
+                item
             }
         }
     }
@@ -170,7 +170,7 @@ impl SniEvent {
 fn resolve_pixmap_data(
     pixmaps: &[(i32, i32, Vec<u8>)],
     max_scale: f32,
-) -> Option<crate::features::applets::domain::IconImage> {
+) -> Option<crate::features::systray::domain::IconImage> {
     if pixmaps.is_empty() {
         return None;
     }
@@ -201,7 +201,7 @@ fn resolve_pixmap_data(
                 rgba_data.push(b);
                 rgba_data.push(a);
             }
-            return Some(crate::features::applets::domain::IconImage::new(
+            return Some(crate::features::systray::domain::IconImage::new(
                 rgba_data,
                 crate::shared::primitives::geometry::Size::new(w, h),
             ));
@@ -214,7 +214,7 @@ async fn resolve_icon(
     icon_name: Option<String>,
     icon_theme_path: Option<String>,
     icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>>,
-) -> Option<crate::features::applets::domain::IconImage> {
+) -> Option<crate::features::systray::domain::IconImage> {
     let max_scale = 3.0f32; // Default to 3.0 for sharp scaling on any screen
     let icon_name_clone = icon_name.clone();
     let (_, icon_image) = tokio::task::spawn_blocking(move || {
@@ -249,7 +249,7 @@ async fn resolve_icon(
             if let Some(icon_path) = found_path
                 && let Some((w, h, bytes)) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale)
             {
-                icon_image = Some(crate::features::applets::domain::IconImage::new(
+                icon_image = Some(crate::features::systray::domain::IconImage::new(
                     bytes,
                     crate::shared::primitives::geometry::Size::new(w, h),
                 ));
@@ -279,11 +279,11 @@ async fn resolve_icon(
 pub struct SniAdapter {
     hub: Arc<SignalHub>,
     conn: Arc<tokio::sync::Mutex<Option<Connection>>>,
-    items: Arc<RwLock<BTreeMap<crate::features::applets::domain::AppletId, AppletItem>>>,
+    items: Arc<RwLock<BTreeMap<crate::features::systray::domain::SystrayId, SystrayItem>>>,
 }
 
 struct Watcher {
-    items: Arc<RwLock<BTreeMap<crate::features::applets::domain::AppletId, AppletItem>>>,
+    items: Arc<RwLock<BTreeMap<crate::features::systray::domain::SystrayId, SystrayItem>>>,
     hub: Arc<SignalHub>,
     conn: Connection,
     runtime: tokio::runtime::Handle,
@@ -377,7 +377,7 @@ impl Watcher {
 
     fn parse_raw_tooltip(
         v: zbus::zvariant::OwnedValue,
-    ) -> Option<crate::features::applets::domain::AppletTooltip> {
+    ) -> Option<crate::features::systray::domain::SystrayTooltip> {
         if let Ok((icon_name, pixmap, title, description)) = RawTooltip::try_from(v) {
             let icon_name_opt = if icon_name.is_empty() {
                 None
@@ -385,16 +385,16 @@ impl Watcher {
                 Some(icon_name)
             };
             let icon_img_opt = resolve_pixmap_data(&pixmap, 3.0);
-            let tooltip_icon = crate::features::applets::domain::AppletIcon::new(
-                icon_name_opt.map(crate::features::applets::domain::IconName::new),
+            let tooltip_icon = crate::features::systray::domain::SystrayIcon::new(
+                icon_name_opt.map(crate::features::systray::domain::IconName::new),
                 icon_img_opt,
             );
-            Some(crate::features::applets::domain::AppletTooltip::new(
+            Some(crate::features::systray::domain::SystrayTooltip::new(
                 tooltip_icon,
-                crate::features::applets::domain::AppletTooltipTitle::new(Self::clean_sni_text(
+                crate::features::systray::domain::SystrayTooltipTitle::new(Self::clean_sni_text(
                     &title,
                 )),
-                crate::features::applets::domain::AppletTooltipDescription::new(
+                crate::features::systray::domain::SystrayTooltipDescription::new(
                     Self::clean_sni_text(&description),
                 ),
             ))
@@ -403,12 +403,12 @@ impl Watcher {
         }
     }
 
-    async fn fetch_applet_item(
+    async fn fetch_systray_item(
         conn: &Connection,
         id: String,
         dest: String,
         path_str: String,
-    ) -> AppletItem {
+    ) -> SystrayItem {
         let iface = InterfaceName::try_from("org.kde.StatusNotifierItem").unwrap();
         let path = ObjectPath::try_from(path_str.as_str()).unwrap();
 
@@ -422,17 +422,17 @@ impl Watcher {
         {
             Ok(p) => p,
             Err(_) => {
-                return AppletItem::new(
-                    crate::features::applets::domain::CreateAppletCommand::new(
-                        crate::features::applets::domain::AppletId::new(id.clone()),
-                        crate::features::applets::domain::Destination::new(dest.clone()),
-                        crate::features::applets::domain::ObjectPath::new(path_str.clone()),
-                        crate::features::applets::domain::Title::new(String::new()),
-                        AppletStatus::Unknown,
+                return SystrayItem::new(
+                    crate::features::systray::domain::CreateSystrayItemCommand::new(
+                        crate::features::systray::domain::SystrayId::new(id.clone()),
+                        crate::features::systray::domain::Destination::new(dest.clone()),
+                        crate::features::systray::domain::ObjectPath::new(path_str.clone()),
+                        crate::features::systray::domain::Title::new(String::new()),
+                        SystrayStatus::Unknown,
                         None,
                         None,
-                        crate::features::applets::domain::AppletCategory::ApplicationStatus,
-                        crate::features::applets::domain::ItemIsMenu::new(false),
+                        crate::features::systray::domain::SystrayCategory::ApplicationStatus,
+                        crate::features::systray::domain::ItemIsMenu::new(false),
                     ),
                 );
             }
@@ -494,10 +494,10 @@ impl Watcher {
         );
 
         let status = match status_str.as_str() {
-            "Active" => AppletStatus::Active,
-            "Passive" => AppletStatus::Passive,
-            "NeedsAttention" => AppletStatus::NeedsAttention,
-            _ => AppletStatus::Unknown,
+            "Active" => SystrayStatus::Active,
+            "Passive" => SystrayStatus::Passive,
+            "NeedsAttention" => SystrayStatus::NeedsAttention,
+            _ => SystrayStatus::Unknown,
         };
 
         let icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>> = all_props
@@ -505,8 +505,8 @@ impl Watcher {
             .and_then(|v| v.try_into().ok());
         let icon_image =
             resolve_icon(icon_name.clone(), icon_theme_path.clone(), icon_pixmap).await;
-        let icon = crate::features::applets::domain::AppletIcon::new(
-            icon_name.map(crate::features::applets::domain::IconName::new),
+        let icon = crate::features::systray::domain::SystrayIcon::new(
+            icon_name.map(crate::features::systray::domain::IconName::new),
             icon_image,
         );
 
@@ -525,8 +525,8 @@ impl Watcher {
             attention_icon_pixmap,
         )
         .await;
-        let attention_icon = crate::features::applets::domain::AppletIcon::new(
-            attention_icon_name.map(crate::features::applets::domain::IconName::new),
+        let attention_icon = crate::features::systray::domain::SystrayIcon::new(
+            attention_icon_name.map(crate::features::systray::domain::IconName::new),
             attention_icon_image,
         );
 
@@ -542,40 +542,40 @@ impl Watcher {
             overlay_icon_pixmap,
         )
         .await;
-        let overlay_icon = crate::features::applets::domain::AppletIcon::new(
-            overlay_icon_name.map(crate::features::applets::domain::IconName::new),
+        let overlay_icon = crate::features::systray::domain::SystrayIcon::new(
+            overlay_icon_name.map(crate::features::systray::domain::IconName::new),
             overlay_icon_image,
         );
 
-        let tooltip: Option<crate::features::applets::domain::AppletTooltip> = all_props
+        let tooltip: Option<crate::features::systray::domain::SystrayTooltip> = all_props
             .remove("ToolTip")
             .or_else(|| all_props.remove("Tooltip"))
             .and_then(Self::parse_raw_tooltip);
 
-        let cmd = crate::features::applets::domain::CreateAppletCommand::new(
-            crate::features::applets::domain::AppletId::new(id),
-            crate::features::applets::domain::Destination::new(dest),
-            crate::features::applets::domain::ObjectPath::new(path_str),
-            crate::features::applets::domain::Title::new(title),
+        let cmd = crate::features::systray::domain::CreateSystrayItemCommand::new(
+            crate::features::systray::domain::SystrayId::new(id),
+            crate::features::systray::domain::Destination::new(dest),
+            crate::features::systray::domain::ObjectPath::new(path_str),
+            crate::features::systray::domain::Title::new(title),
             status,
             icon,
-            menu_path_str.map(crate::features::applets::domain::ObjectPath::new),
-            crate::features::applets::domain::AppletCategory::parse_str(&category_str),
-            crate::features::applets::domain::ItemIsMenu::new(item_is_menu_val),
+            menu_path_str.map(crate::features::systray::domain::ObjectPath::new),
+            crate::features::systray::domain::SystrayCategory::parse_str(&category_str),
+            crate::features::systray::domain::ItemIsMenu::new(item_is_menu_val),
         )
-        .with_item_id(item_id.map(crate::features::applets::domain::ItemId::new))
-        .with_window_id(window_id.map(crate::features::applets::domain::WindowId::new))
+        .with_item_id(item_id.map(crate::features::systray::domain::ItemId::new))
+        .with_window_id(window_id.map(crate::features::systray::domain::WindowId::new))
         .with_attention_icon(attention_icon)
         .with_overlay_icon(overlay_icon)
         .with_tooltip(tooltip);
 
-        AppletItem::new(cmd)
+        SystrayItem::new(cmd)
     }
 
     #[tracing::instrument(skip(conn, items, hub))]
     async fn track_item(
         conn: Connection,
-        items: Arc<RwLock<BTreeMap<crate::features::applets::domain::AppletId, AppletItem>>>,
+        items: Arc<RwLock<BTreeMap<crate::features::systray::domain::SystrayId, SystrayItem>>>,
         hub: Arc<SignalHub>,
         dest: String,
         path_str: String,
@@ -588,12 +588,12 @@ impl Watcher {
             .build()
             .await?;
 
-        let applet =
-            Self::fetch_applet_item(&conn, id.clone(), dest.clone(), path_str.clone()).await;
+        let item =
+            Self::fetch_systray_item(&conn, id.clone(), dest.clone(), path_str.clone()).await;
 
         {
             let mut lock = items.write().await;
-            lock.insert(crate::features::applets::domain::AppletId::new(&id), applet);
+            lock.insert(crate::features::systray::domain::SystrayId::new(&id), item);
         }
         Self::publish_state(&items, &hub).await;
 
@@ -656,33 +656,33 @@ impl Watcher {
                 .merge(new_menu.map(|_| SniEvent::Menu));
 
             while let Some(event) = events.next().await {
-                tracing::trace!("Received SNI event {:?} for applet {}", event, id_clone);
-                let current_applet = {
+                tracing::trace!("Received SNI event {:?} for systray item {}", event, id_clone);
+                let current_item = {
                     let lock = items_clone.read().await;
-                    lock.get(&crate::features::applets::domain::AppletId::new(&id_clone))
+                    lock.get(&crate::features::systray::domain::SystrayId::new(&id_clone))
                         .cloned()
                 };
 
-                let Some(applet) = current_applet else {
+                let Some(item) = current_item else {
                     break;
                 };
 
-                let updated_applet = event.apply(applet, &proxy).await;
+                let updated_item = event.apply(item, &proxy).await;
 
                 {
                     let mut lock = items_clone.write().await;
                     lock.insert(
-                        crate::features::applets::domain::AppletId::new(&id_clone),
-                        updated_applet,
+                        crate::features::systray::domain::SystrayId::new(&id_clone),
+                        updated_item,
                     );
                 }
                 Self::publish_state(&items_clone, &hub_clone).await;
             }
 
-            tracing::debug!("Applet {} loop terminated, cleaning up state", id_clone);
+            tracing::debug!("Systray item {} loop terminated, cleaning up state", id_clone);
             {
                 let mut lock = items_clone.write().await;
-                lock.remove(&crate::features::applets::domain::AppletId::new(&id_clone));
+                lock.remove(&crate::features::systray::domain::SystrayId::new(&id_clone));
             }
             Self::publish_state(&items_clone, &hub_clone).await;
         });
@@ -691,7 +691,7 @@ impl Watcher {
     }
 
     async fn remove_by_destination(
-        items: &Arc<RwLock<BTreeMap<crate::features::applets::domain::AppletId, AppletItem>>>,
+        items: &Arc<RwLock<BTreeMap<crate::features::systray::domain::SystrayId, SystrayItem>>>,
         hub: &Arc<SignalHub>,
         destination: &str,
     ) -> bool {
@@ -711,7 +711,7 @@ impl Watcher {
 
             for key in keys_to_remove {
                 tracing::debug!(
-                    "Removing SNI applet {} because D-Bus name {} disconnected",
+                    "Removing SNI systray item {} because D-Bus name {} disconnected",
                     key.as_str(),
                     destination
                 );
@@ -726,12 +726,12 @@ impl Watcher {
     }
 
     async fn publish_state(
-        items: &Arc<RwLock<BTreeMap<crate::features::applets::domain::AppletId, AppletItem>>>,
+        items: &Arc<RwLock<BTreeMap<crate::features::systray::domain::SystrayId, SystrayItem>>>,
         hub: &Arc<SignalHub>,
     ) {
         let lock = items.read().await;
-        let state = AppletsState::new(lock.clone());
-        let _ = hub.applets_tx().send(state);
+        let state = SystrayState::new(lock.clone());
+        let _ = hub.systray_tx().send(state);
     }
 }
 
@@ -812,27 +812,27 @@ impl SniPort for SniAdapter {
     #[tracing::instrument(skip(self))]
     async fn trigger_action(
         &self,
-        id: &crate::features::applets::domain::AppletId,
-        action: &crate::features::applets::domain::AppletActionName,
+        id: &crate::features::systray::domain::SystrayId,
+        action: &crate::features::systray::domain::SystrayActionName,
         pos: Option<crate::shared::primitives::geometry::Position>,
     ) -> Result<(), SniPortError> {
         let lock = self.conn.lock().await;
         let items_lock = self.items.read().await;
 
-        if let (Some(conn), Some(applet)) = (lock.as_ref(), items_lock.get(id)) {
+        if let (Some(conn), Some(item)) = (lock.as_ref(), items_lock.get(id)) {
             debug!(
-                "trigger_action: Applet found [id={}, dest={}, path={}, item_is_menu={}], routing action '{}' at pos {:?}",
+                "trigger_action: Systray item found [id={}, dest={}, path={}, item_is_menu={}], routing action '{}' at pos {:?}",
                 id.as_str(),
-                applet.destination().as_str(),
-                applet.path().as_str(),
-                applet.item_is_menu().value(),
+                item.destination().as_str(),
+                item.path().as_str(),
+                item.item_is_menu().value(),
                 action.as_str(),
                 pos
             );
             let proxy = zbus::Proxy::new(
                 conn,
-                applet.destination().as_str().to_string(),
-                applet.path().as_str().to_string(),
+                item.destination().as_str().to_string(),
+                item.path().as_str().to_string(),
                 "org.kde.StatusNotifierItem",
             )
             .await
@@ -852,7 +852,7 @@ impl SniPort for SniAdapter {
 
             match action.as_str() {
                 "Primary" => {
-                    if applet.item_is_menu().value() {
+                    if item.item_is_menu().value() {
                         debug!(
                             "trigger_action: item_is_menu=true, calling ContextMenu({}, {}) on D-Bus",
                             x, y
@@ -874,7 +874,7 @@ impl SniPort for SniAdapter {
                                 warn!(
                                     "trigger_action: Activate({}, {}) failed: {}, attempting SecondaryActivate({}, {})",
                                     x, y, e, x, y
-                                );
+                                    );
                                 match proxy.call_method("SecondaryActivate", &(x, y)).await {
                                     Ok(_) => debug!(
                                         "trigger_action: SecondaryActivate({}, {}) succeeded",
@@ -958,7 +958,7 @@ impl SniPort for SniAdapter {
             }
             if items_lock.get(id).is_none() {
                 error!(
-                    "trigger_action: Applet ID '{}' not found in registry when trying to trigger action '{}'",
+                    "trigger_action: Systray item ID '{}' not found in registry when trying to trigger action '{}'",
                     id.as_str(),
                     action.as_str()
                 );
@@ -971,8 +971,9 @@ impl SniPort for SniAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::applets::domain::{
-        AppletCategory, AppletId, CreateAppletCommand, Destination, ItemIsMenu, ObjectPath, Title,
+    use crate::features::systray::domain::{
+        CreateSystrayItemCommand, Destination, ItemIsMenu, ObjectPath, SystrayCategory, SystrayId,
+        Title,
     };
     use crate::shared::config::domain::Config;
 
@@ -981,43 +982,43 @@ mod tests {
         let hub = Arc::new(SignalHub::new(Config::default()));
         let mut map = BTreeMap::new();
 
-        let item1 = AppletItem::new(CreateAppletCommand::new(
-            AppletId::new("app1"),
+        let item1 = SystrayItem::new(CreateSystrayItemCommand::new(
+            SystrayId::new("app1"),
             Destination::new(":1.42"),
             ObjectPath::new("/StatusNotifierItem"),
             Title::new("App 1"),
-            AppletStatus::Active,
+            SystrayStatus::Active,
             None,
             None,
-            AppletCategory::ApplicationStatus,
+            SystrayCategory::ApplicationStatus,
             ItemIsMenu::new(false),
         ));
-        let item2 = AppletItem::new(CreateAppletCommand::new(
-            AppletId::new("app2"),
+        let item2 = SystrayItem::new(CreateSystrayItemCommand::new(
+            SystrayId::new("app2"),
             Destination::new(":1.42"),
             ObjectPath::new("/StatusNotifierItem2"),
             Title::new("App 1 secondary"),
-            AppletStatus::Active,
+            SystrayStatus::Active,
             None,
             None,
-            AppletCategory::ApplicationStatus,
+            SystrayCategory::ApplicationStatus,
             ItemIsMenu::new(false),
         ));
-        let item3 = AppletItem::new(CreateAppletCommand::new(
-            AppletId::new("app3"),
+        let item3 = SystrayItem::new(CreateSystrayItemCommand::new(
+            SystrayId::new("app3"),
             Destination::new(":1.43"),
             ObjectPath::new("/StatusNotifierItem"),
             Title::new("App 2"),
-            AppletStatus::Active,
+            SystrayStatus::Active,
             None,
             None,
-            AppletCategory::ApplicationStatus,
+            SystrayCategory::ApplicationStatus,
             ItemIsMenu::new(false),
         ));
 
-        map.insert(AppletId::new("app1"), item1);
-        map.insert(AppletId::new("app2"), item2);
-        map.insert(AppletId::new("app3"), item3);
+        map.insert(SystrayId::new("app1"), item1);
+        map.insert(SystrayId::new("app2"), item2);
+        map.insert(SystrayId::new("app3"), item3);
 
         let items = Arc::new(RwLock::new(map));
 
@@ -1026,13 +1027,13 @@ mod tests {
 
         let lock = items.read().await;
         assert_eq!(lock.len(), 1);
-        assert!(lock.contains_key(&AppletId::new("app3")));
-        assert!(!lock.contains_key(&AppletId::new("app1")));
-        assert!(!lock.contains_key(&AppletId::new("app2")));
+        assert!(lock.contains_key(&SystrayId::new("app3")));
+        assert!(!lock.contains_key(&SystrayId::new("app1")));
+        assert!(!lock.contains_key(&SystrayId::new("app2")));
 
-        let state = hub.applets_rx().borrow().clone();
+        let state = hub.systray_rx().borrow().clone();
         assert_eq!(state.items().len(), 1);
-        assert!(state.items().contains_key(&AppletId::new("app3")));
+        assert!(state.items().contains_key(&SystrayId::new("app3")));
     }
 
     #[tokio::test]
@@ -1040,18 +1041,18 @@ mod tests {
         let hub = Arc::new(SignalHub::new(Config::default()));
         let mut map = BTreeMap::new();
 
-        let item = AppletItem::new(CreateAppletCommand::new(
-            AppletId::new("app1"),
+        let item = SystrayItem::new(CreateSystrayItemCommand::new(
+            SystrayId::new("app1"),
             Destination::new(":1.42"),
             ObjectPath::new("/StatusNotifierItem"),
             Title::new("App 1"),
-            AppletStatus::Active,
+            SystrayStatus::Active,
             None,
             None,
-            AppletCategory::ApplicationStatus,
+            SystrayCategory::ApplicationStatus,
             ItemIsMenu::new(false),
         ));
-        map.insert(AppletId::new("app1"), item);
+        map.insert(SystrayId::new("app1"), item);
 
         let items = Arc::new(RwLock::new(map));
 

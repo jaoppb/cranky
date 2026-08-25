@@ -4,9 +4,9 @@ use serde::Deserialize;
 pub enum AppCommand {
     RequestRender,
     Exec(String),
-    AppletAction {
-        id: crate::features::applets::domain::AppletId,
-        action: crate::features::applets::domain::AppletActionName,
+    SystrayAction {
+        id: crate::features::systray::domain::SystrayId,
+        action: crate::features::systray::domain::SystrayActionName,
         #[serde(default)]
         pos: Option<crate::shared::primitives::geometry::Position>,
     },
@@ -42,39 +42,39 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_app_command_applet_action_deserialization_without_pos() {
-        let json = r#"{"AppletAction": {"id": "test_applet", "action": "Primary"}}"#;
+    fn test_app_command_systray_action_deserialization_without_pos() {
+        let json = r#"{"SystrayAction": {"id": "test_systray", "action": "Primary"}}"#;
         let cmd: AppCommand = serde_json::from_str(json).unwrap();
         match cmd {
-            AppCommand::AppletAction { id, action, pos } => {
-                assert_eq!(id.as_str(), "test_applet");
+            AppCommand::SystrayAction { id, action, pos } => {
+                assert_eq!(id.as_str(), "test_systray");
                 assert_eq!(
                     action,
-                    crate::features::applets::domain::AppletActionName::Primary
+                    crate::features::systray::domain::SystrayActionName::Primary
                 );
                 assert!(pos.is_none());
             }
-            _ => panic!("Expected AppletAction"),
+            _ => panic!("Expected SystrayAction"),
         }
     }
 
     #[test]
-    fn test_app_command_applet_action_deserialization_with_pos() {
-        let json = r#"{"AppletAction": {"id": "test_applet", "action": "ContextMenu", "pos": {"x": 100, "y": 200}}}"#;
+    fn test_app_command_systray_action_deserialization_with_pos() {
+        let json = r#"{"SystrayAction": {"id": "test_systray", "action": "ContextMenu", "pos": {"x": 100, "y": 200}}}"#;
         let cmd: AppCommand = serde_json::from_str(json).unwrap();
         match cmd {
-            AppCommand::AppletAction { id, action, pos } => {
-                assert_eq!(id.as_str(), "test_applet");
+            AppCommand::SystrayAction { id, action, pos } => {
+                assert_eq!(id.as_str(), "test_systray");
                 assert_eq!(
                     action,
-                    crate::features::applets::domain::AppletActionName::ContextMenu
+                    crate::features::systray::domain::SystrayActionName::ContextMenu
                 );
                 assert_eq!(
                     pos,
                     Some(crate::shared::primitives::geometry::Position::new(100, 200))
                 );
             }
-            _ => panic!("Expected AppletAction"),
+            _ => panic!("Expected SystrayAction"),
         }
     }
 }

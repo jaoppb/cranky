@@ -336,8 +336,8 @@ impl<
                                 tracing::debug!("Executing shell command: {}", cmd);
                                 let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
                             },
-                            AppCommand::AppletAction { id, action, pos } => {
-                                tracing::debug!(?id, ?action, ?pos, "Received AppCommand::AppletAction, triggering SNI action");
+                            AppCommand::SystrayAction { id, action, pos } => {
+                                tracing::debug!(?id, ?action, ?pos, "Received AppCommand::SystrayAction, triggering SNI action");
                                 match sni.trigger_action(&id, &action, pos).await {
                                     Ok(_) => tracing::debug!(?id, ?action, "SNI trigger_action succeeded"),
                                     Err(e) => tracing::error!(?id, ?action, err = ?e, "SNI trigger_action failed"),
@@ -884,7 +884,7 @@ mod tests {
             .unwrap();
         command_tx.send(AppCommand::HideTooltip).await.unwrap();
         command_tx
-            .send(AppCommand::AppletAction {
+            .send(AppCommand::SystrayAction {
                 id: "a".into(),
                 action: "b".into(),
                 pos: None,

@@ -45,8 +45,8 @@ impl FsStyleLoader {
             include_str!("../../../../assets/styles/metrics.css"),
         ),
         (
-            "applet",
-            include_str!("../../../../assets/styles/applet.css"),
+            "systray",
+            include_str!("../../../../assets/styles/systray.css"),
         ),
         ("mpris", include_str!("../../../../assets/styles/mpris.css")),
     ];

@@ -1,7 +1,7 @@
 local show_titles = true
 local show_icons = true
 local max_items = 6
-local empty_label = "applet: none"
+local empty_label = "systray: none"
 
 local items = {}
 
@@ -22,13 +22,13 @@ end
 
 function metadata()
 	return {
-		subscriptions = { "applets" },
-		styles = { "applet" },
+		subscriptions = { "systray" },
+		styles = { "systray" },
 	}
 end
 
 function refresh()
-	items = applets or {}
+	items = systray or {}
 end
 
 function render(monitor)
@@ -41,7 +41,7 @@ function render(monitor)
 				type = "flex",
 				class = "tooltip",
 				children = {
-					{ type = "text", text = "No applets are currently active" },
+					{ type = "text", text = "No systray items are currently active" },
 				},
 			},
 		}
@@ -103,12 +103,12 @@ function render(monitor)
 			})
 		end
 
-		local applet_node = {
+		local item_node = {
 			type = "flex",
 			class = "item",
 			children = item_children,
 			on_click = {
-				AppletAction = {
+				SystrayAction = {
 					id = item.id,
 					action = "Primary",
 				},
@@ -119,7 +119,7 @@ function render(monitor)
 				children = tooltip_children,
 			},
 		}
-		table.insert(children, applet_node)
+		table.insert(children, item_node)
 	end
 
 	return {

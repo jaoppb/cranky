@@ -35,7 +35,7 @@ impl RhaiModule {
         scope.push("bar_config", rhai::Map::new());
         scope.push("current_time", rhai::Dynamic::UNIT);
         scope.push("hyprland", rhai::Dynamic::UNIT);
-        scope.push("applets", rhai::Dynamic::UNIT);
+        scope.push("systray", rhai::Dynamic::UNIT);
         scope.push("metrics", rhai::Dynamic::UNIT);
         scope.push("dbus", rhai::Dynamic::UNIT);
 
@@ -108,7 +108,7 @@ impl RhaiModule {
                 match s.as_str() {
                     "time" => result.push(SignalKind::Time),
                     "hyprland" => result.push(SignalKind::Hyprland),
-                    "applets" => result.push(SignalKind::Applets),
+                    "systray" => result.push(SignalKind::Systray),
                     "metrics" => result.push(SignalKind::Metrics),
                     "mpris" => result.push(SignalKind::Mpris),
                     _ => {}
@@ -216,13 +216,13 @@ impl AnyModulePort for RhaiModule {
             }
         }
 
-        if changed.contains(&SignalKind::Applets) {
-            let applets = hub.applets_rx().borrow().clone();
-            let items = applets.items().values().collect::<Vec<_>>();
-            if let Ok(applets_json) = serde_json::to_string(&items)
-                && let Ok(applets_rhai) = engine.parse_json(&applets_json, true)
+        if changed.contains(&SignalKind::Systray) {
+            let systray = hub.systray_rx().borrow().clone();
+            let items = systray.items().values().collect::<Vec<_>>();
+            if let Ok(systray_json) = serde_json::to_string(&items)
+                && let Ok(systray_rhai) = engine.parse_json(&systray_json, true)
             {
-                scope.set_or_push("applets", applets_rhai);
+                scope.set_or_push("systray", systray_rhai);
             }
         }
 

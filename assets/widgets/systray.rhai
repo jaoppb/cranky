@@ -1,7 +1,7 @@
 let show_titles = true;
 let show_icons = true;
 let max_items = 6;
-let empty_label = "applet: none";
+let empty_label = "systray: none";
 
 let items = [];
 
@@ -14,14 +14,14 @@ fn init() {
 
 fn metadata() {
     #{
-        subscriptions: ["applets"],
-        styles: ["applet"]
+        subscriptions: ["systray"],
+        styles: ["systray"]
     }
 }
 
 fn refresh() {
-    if applets != () {
-        items = applets;
+    if systray != () {
+        items = systray;
     } else {
         items = [];
     }
@@ -37,7 +37,7 @@ fn render(monitor_id) {
                 type: "flex",
                 class: "tooltip",
                 children: [
-                    #{ type: "text", text: "No applets are currently active" }
+                    #{ type: "text", text: "No systray items are currently active" }
                 ]
             }
         };
@@ -115,12 +115,12 @@ fn render(monitor_id) {
             tooltip_children.push(#{ type: "text", class: "tooltip-title", text: fallback });
         }
         
-        let applet_node = #{
+        let item_node = #{
             type: "flex",
             class: "item",
             children: item_children,
             on_click: #{
-                AppletAction: #{
+                SystrayAction: #{
                     id: item.id,
                     action: "Primary"
                 }
@@ -131,7 +131,7 @@ fn render(monitor_id) {
                 children: tooltip_children
             }
         };
-        children.push(applet_node);
+        children.push(item_node);
     }
     
     #{

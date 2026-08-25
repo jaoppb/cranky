@@ -910,7 +910,7 @@ mod tests {
             }
         "#;
         let parsed = parser
-            .parse_stylesheet(StyleSheetName::new("applet").unwrap(), css)
+            .parse_stylesheet(StyleSheetName::new("systray").unwrap(), css)
             .unwrap();
         let resolver =
             crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![

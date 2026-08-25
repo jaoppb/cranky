@@ -26,7 +26,7 @@ impl LuaScriptLoader {
             "workspace" => {
                 Some(include_str!("../../../../assets/widgets/workspace.lua").to_string())
             }
-            "applet" => Some(include_str!("../../../../assets/widgets/applet.lua").to_string()),
+            "systray" => Some(include_str!("../../../../assets/widgets/systray.lua").to_string()),
             "metrics" => Some(include_str!("../../../../assets/widgets/metrics.lua").to_string()),
             _ => None,
         }
@@ -59,23 +59,23 @@ impl LuaStateSynchronizer {
                     }
                     dbus_handled = true;
                 }
-                SignalKind::Applets => {
+                SignalKind::Systray => {
                     let t0 = std::time::Instant::now();
-                    let applets = hub.applets_rx().borrow().clone();
-                    let items = applets.items().values().collect::<Vec<_>>();
+                    let systray = hub.systray_rx().borrow().clone();
+                    let items = systray.items().values().collect::<Vec<_>>();
                     let item_count = items.len();
-                    tracing::debug!(item_count, "Serializing applets to Lua");
+                    tracing::debug!(item_count, "Serializing systray to Lua");
                     match lua.to_value(&items) {
                         Ok(val) => {
-                            globals.set("applets", val)?;
+                            globals.set("systray", val)?;
                             tracing::debug!(
                                 item_count,
                                 duration_ms = t0.elapsed().as_millis(),
                                 duration_micros = t0.elapsed().as_micros(),
-                                "Successfully serialized applets to Lua"
+                                "Successfully serialized systray to Lua"
                             );
                         }
-                        Err(e) => tracing::error!(err = ?e, "Failed to serialize applets to Lua"),
+                        Err(e) => tracing::error!(err = ?e, "Failed to serialize systray to Lua"),
                     }
                 }
                 SignalKind::Metrics => {
@@ -196,7 +196,7 @@ impl LuaModule {
                     match s_str.as_ref() {
                         "time" => subs.push(SignalKind::Time),
                         "hyprland" => subs.push(SignalKind::Hyprland),
-                        "applets" => subs.push(SignalKind::Applets),
+                        "systray" => subs.push(SignalKind::Systray),
                         "metrics" => subs.push(SignalKind::Metrics),
                         "mpris" => subs.push(SignalKind::Mpris),
                         _ => {}
@@ -397,17 +397,17 @@ impl AnyModulePort for LuaModule {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::applets::domain::{
-        AppletId, AppletItem, AppletStatus, AppletsState, Destination, ObjectPath, Title,
+    use crate::features::systray::domain::{
+        Destination, ObjectPath, SystrayId, SystrayItem, SystrayState, SystrayStatus, Title,
     };
     use crate::shared::config::domain::ModuleConfig;
     use crate::shared::primitives::MonitorId;
 
     #[test]
-    fn test_applet_missing_icon_regression() {
-        let mut module = LuaModule::built_in("applet").expect("Failed to load applet module");
+    fn test_systray_missing_icon_regression() {
+        let mut module = LuaModule::built_in("systray").expect("Failed to load systray module");
         let module_config = ModuleConfig::new(
-            "applet".into(),
+            "systray".into(),
             true,
             crate::shared::config::domain::EngineSelection::Auto,
             crate::shared::primitives::ModuleOptions::default(),
@@ -417,21 +417,21 @@ mod tests {
         module.init(&module_config, &config).expect("Init failed");
 
         let hub = SignalHub::new(crate::shared::config::domain::Config::default());
-        let item = AppletItem::new(crate::features::applets::domain::CreateAppletCommand::new(
-            AppletId::new("test_applet"),
+        let item = SystrayItem::new(crate::features::systray::domain::CreateSystrayItemCommand::new(
+            SystrayId::new("test_systray"),
             Destination::new("dest"),
             ObjectPath::new("/path"),
-            Title::new("Test Applet"),
-            AppletStatus::Active,
+            Title::new("Test Systray"),
+            SystrayStatus::Active,
             None,
             None,
-            crate::features::applets::domain::AppletCategory::ApplicationStatus,
-            crate::features::applets::domain::ItemIsMenu::new(false),
+            crate::features::systray::domain::SystrayCategory::ApplicationStatus,
+            crate::features::systray::domain::ItemIsMenu::new(false),
         ));
 
         let mut map = std::collections::BTreeMap::new();
         map.insert(item.id().clone(), item);
-        hub.applets_tx().send(AppletsState::new(map)).unwrap();
+        hub.systray_tx().send(SystrayState::new(map)).unwrap();
 
         let subs = module.subscriptions().to_vec();
         module.refresh(&hub, &subs);
@@ -439,32 +439,32 @@ mod tests {
         let layout = module.render(&MonitorId::new("DP-1"));
         println!("{:#?}", layout);
 
-        // Assert it returns a flex with a single child (the applet)
+        // Assert it returns a flex with a single child (the systray item)
         assert_eq!(layout.tag(), crate::features::vdom::domain::NodeTag::Flex);
         assert_eq!(layout.children().len(), 1);
-        let applet_node = &layout.children()[0];
+        let item_node = &layout.children()[0];
 
-        // The applet node itself should be a flex containing a rect (icon) and text (title)
+        // The item node itself should be a flex containing a rect (icon) and text (title)
         assert_eq!(
-            applet_node.tag(),
+            item_node.tag(),
             crate::features::vdom::domain::NodeTag::Flex
         );
-        assert_eq!(applet_node.children().len(), 2);
+        assert_eq!(item_node.children().len(), 2);
         assert_eq!(
-            applet_node.children()[0].tag(),
+            item_node.children()[0].tag(),
             crate::features::vdom::domain::NodeTag::Rect
         );
         assert_eq!(
-            applet_node.children()[1].tag(),
+            item_node.children()[1].tag(),
             crate::features::vdom::domain::NodeTag::Text
         );
     }
 
     #[test]
-    fn test_applet_with_icon_renders_image() {
-        let mut module = LuaModule::built_in("applet").expect("Failed to load applet module");
+    fn test_systray_with_icon_renders_image() {
+        let mut module = LuaModule::built_in("systray").expect("Failed to load systray module");
         let module_config = ModuleConfig::new(
-            "applet".into(),
+            "systray".into(),
             true,
             crate::shared::config::domain::EngineSelection::Auto,
             crate::shared::primitives::ModuleOptions::default(),
@@ -473,30 +473,30 @@ mod tests {
         module.init(&module_config, &config).expect("Init failed");
 
         let hub = SignalHub::new(crate::shared::config::domain::Config::default());
-        let icon_img = crate::features::applets::domain::IconImage::new(
+        let icon_img = crate::features::systray::domain::IconImage::new(
             vec![255; 16 * 16 * 4],
             crate::shared::primitives::geometry::Size::new(16, 16),
         );
-        let icon = crate::features::applets::domain::AppletIcon::new(
-            Some(crate::features::applets::domain::IconName::new("test-icon")),
+        let icon = crate::features::systray::domain::SystrayIcon::new(
+            Some(crate::features::systray::domain::IconName::new("test-icon")),
             Some(icon_img),
         );
 
-        let item = AppletItem::new(crate::features::applets::domain::CreateAppletCommand::new(
-            AppletId::new("test_applet"),
+        let item = SystrayItem::new(crate::features::systray::domain::CreateSystrayItemCommand::new(
+            SystrayId::new("test_systray"),
             Destination::new("dest"),
             ObjectPath::new("/path"),
-            Title::new("Test Applet"),
-            AppletStatus::Active,
+            Title::new("Test Systray"),
+            SystrayStatus::Active,
             icon,
             None,
-            crate::features::applets::domain::AppletCategory::ApplicationStatus,
-            crate::features::applets::domain::ItemIsMenu::new(false),
+            crate::features::systray::domain::SystrayCategory::ApplicationStatus,
+            crate::features::systray::domain::ItemIsMenu::new(false),
         ));
 
         let mut map = std::collections::BTreeMap::new();
         map.insert(item.id().clone(), item);
-        hub.applets_tx().send(AppletsState::new(map)).unwrap();
+        hub.systray_tx().send(SystrayState::new(map)).unwrap();
 
         let subs = module.subscriptions().to_vec();
         module.refresh(&hub, &subs);
@@ -504,18 +504,18 @@ mod tests {
         let layout = module.render(&MonitorId::new("DP-1"));
         assert_eq!(layout.tag(), crate::features::vdom::domain::NodeTag::Flex);
         assert_eq!(layout.children().len(), 1);
-        let applet_node = &layout.children()[0];
+        let item_node = &layout.children()[0];
         assert_eq!(
-            applet_node.tag(),
+            item_node.tag(),
             crate::features::vdom::domain::NodeTag::Flex
         );
-        assert_eq!(applet_node.children().len(), 2);
+        assert_eq!(item_node.children().len(), 2);
         assert_eq!(
-            applet_node.children()[0].tag(),
+            item_node.children()[0].tag(),
             crate::features::vdom::domain::NodeTag::Image
         );
         assert_eq!(
-            applet_node.children()[1].tag(),
+            item_node.children()[1].tag(),
             crate::features::vdom::domain::NodeTag::Text
         );
     }

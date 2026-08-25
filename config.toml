@@ -5,7 +5,7 @@ name = "bar"
 height = 40
 left = ["workspace"]
 center = ["hour"]
-right = ["metrics", "applet"]
+right = ["metrics", "systray"]
 
 [root.margin]
 top = 8
@@ -37,7 +37,7 @@ format = "%H:%M:%S %d/%m/%Y"
 network = false
 temperature = false
 
-[modules.applet]
+[modules.systray]
 show_icons = true
 show_titles = false
 icon_size = 22

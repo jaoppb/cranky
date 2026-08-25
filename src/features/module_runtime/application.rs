@@ -180,10 +180,10 @@ impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> Module
                         .boxed(),
                 );
             }
-            if subs.contains(&SignalKind::Applets) {
+            if subs.contains(&SignalKind::Systray) {
                 events_stream.push(
-                    WatchStream::new(self.ctx.hub().applets_rx())
-                        .map(|_| SignalKind::Applets)
+                    WatchStream::new(self.ctx.hub().systray_rx())
+                        .map(|_| SignalKind::Systray)
                         .boxed(),
                 );
             }
@@ -830,7 +830,7 @@ mod tests {
             subs: vec![
                 crate::shared::events::signals::SignalKind::Time,
                 crate::shared::events::signals::SignalKind::Hyprland,
-                crate::shared::events::signals::SignalKind::Applets,
+                crate::shared::events::signals::SignalKind::Systray,
                 crate::shared::events::signals::SignalKind::Metrics,
                 crate::shared::events::signals::SignalKind::DBus(
                     crate::shared::dbus::domain::DBusSubscription::new(
@@ -918,7 +918,7 @@ mod tests {
             subs: vec![
                 crate::shared::events::signals::SignalKind::Time,
                 crate::shared::events::signals::SignalKind::Hyprland,
-                crate::shared::events::signals::SignalKind::Applets,
+                crate::shared::events::signals::SignalKind::Systray,
                 crate::shared::events::signals::SignalKind::Metrics,
                 crate::shared::events::signals::SignalKind::DBus(
                     crate::shared::dbus::domain::DBusSubscription::new(
@@ -961,8 +961,8 @@ mod tests {
         actor.spawn();
 
         hub.time_tx().send(chrono::Local::now()).unwrap();
-        hub.applets_tx()
-            .send(crate::features::applets::domain::AppletsState::default())
+        hub.systray_tx()
+            .send(crate::features::systray::domain::SystrayState::default())
             .unwrap();
         hub.hyprland_tx()
             .send(crate::shared::events::signals::HyprlandState::new(
@@ -1023,7 +1023,7 @@ mod tests {
             subs: vec![
                 crate::shared::events::signals::SignalKind::Time,
                 crate::shared::events::signals::SignalKind::Hyprland,
-                crate::shared::events::signals::SignalKind::Applets,
+                crate::shared::events::signals::SignalKind::Systray,
                 crate::shared::events::signals::SignalKind::Metrics,
                 crate::shared::events::signals::SignalKind::DBus(
                     crate::shared::dbus::domain::DBusSubscription::new(
