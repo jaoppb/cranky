@@ -1,40 +1,40 @@
-use crate::app::commands::AppCommand;
-use crate::features::module_runtime::ports::AnyModulePort;
-use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::primitives::{
-    MonitorId,
-    geometry::{Rect, Scale, Size},
+use crate::features::module_runtime::adapters::EventLoop;
+use crate::features::module_runtime::domain::{
+    ModuleIdentity, PointerHandler, RenderPipeline,
 };
+use crate::features::module_runtime::ports::{AnyModulePort, CommandSender};
+use crate::features::styling::ports::StyleResolverPort;
+use crate::features::vdom::ports::VdomDiffPort;
+use crate::shared::events::signals::SignalHub;
+use crate::shared::primitives::{
+    ModuleId, ModuleInstanceId, MonitorId, geometry::Rect,
+};
+use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
 
 pub struct ModuleContext {
-    id: crate::shared::primitives::ModuleId,
-    parent_id: Option<crate::shared::primitives::ModuleId>,
-    instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
+    identity: ModuleIdentity,
     hub: Arc<SignalHub>,
     surface_manager: DynSurfaceManager,
-    command_tx: Arc<dyn crate::features::module_runtime::ports::CommandSender>,
+    command_tx: Arc<dyn CommandSender>,
     layout_rx: watch::Receiver<HashMap<MonitorId, Rect>>,
     pointer_rx: crate::shared::events::core::PointerReceiver,
 }
 
 impl ModuleContext {
     pub fn new(
-        id: crate::shared::primitives::ModuleId,
+        id: ModuleId,
         hub: Arc<SignalHub>,
         surface_manager: DynSurfaceManager,
-        command_tx: Arc<dyn crate::features::module_runtime::ports::CommandSender>,
+        command_tx: Arc<dyn CommandSender>,
         layout_rx: watch::Receiver<HashMap<MonitorId, Rect>>,
     ) -> Self {
         let pointer_rx = hub.pointer_rx();
         Self {
-            id,
-            parent_id: None,
-            instance_id: None,
+            identity: ModuleIdentity::new(id),
             hub,
             surface_manager,
             command_tx,
@@ -43,29 +43,30 @@ impl ModuleContext {
         }
     }
 
-    pub fn with_parent(mut self, parent_id: Option<crate::shared::primitives::ModuleId>) -> Self {
-        self.parent_id = parent_id;
+    pub fn with_parent(mut self, parent_id: Option<ModuleId>) -> Self {
+        self.identity = self.identity.with_parent(parent_id);
         self
     }
 
-    pub fn with_instance_id(
-        mut self,
-        instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
-    ) -> Self {
-        self.instance_id = instance_id;
+    pub fn with_instance_id(mut self, instance_id: Option<ModuleInstanceId>) -> Self {
+        self.identity = self.identity.with_instance_id(instance_id);
         self
     }
 
-    pub fn id(&self) -> crate::shared::primitives::ModuleId {
-        self.id
+    pub fn identity(&self) -> &ModuleIdentity {
+        &self.identity
     }
 
-    pub fn parent_id(&self) -> Option<crate::shared::primitives::ModuleId> {
-        self.parent_id
+    pub fn id(&self) -> ModuleId {
+        self.identity.id()
     }
 
-    pub fn instance_id(&self) -> Option<&crate::shared::primitives::ModuleInstanceId> {
-        self.instance_id.as_ref()
+    pub fn parent_id(&self) -> Option<ModuleId> {
+        self.identity.parent_id()
+    }
+
+    pub fn instance_id(&self) -> Option<&ModuleInstanceId> {
+        self.identity.instance_id()
     }
 
     pub fn hub(&self) -> &Arc<SignalHub> {
@@ -76,7 +77,7 @@ impl ModuleContext {
         &self.surface_manager
     }
 
-    pub fn command_tx(&self) -> &dyn crate::features::module_runtime::ports::CommandSender {
+    pub fn command_tx(&self) -> &dyn CommandSender {
         self.command_tx.as_ref()
     }
 
@@ -90,543 +91,61 @@ impl ModuleContext {
     }
 }
 
-struct ModuleSizeMeasurer<'a, M: crate::features::layout_engine::domain::TextMeasurer> {
-    inner: M,
-    child_sizes: Option<&'a crate::shared::primitives::ChildSizesMap>,
-}
-
-impl<'a, M: crate::features::layout_engine::domain::TextMeasurer>
-    crate::features::layout_engine::domain::TextMeasurer for ModuleSizeMeasurer<'a, M>
-{
-    fn measure(
-        &mut self,
-        text: &str,
-        font: Option<&crate::shared::config::domain::FontFamily>,
-        size: Option<crate::shared::config::domain::FontSize>,
-    ) -> Size {
-        self.inner.measure(text, font, size)
-    }
-
-    fn measure_module(&self, key: &crate::shared::primitives::ModuleKey) -> Option<Size> {
-        let size = self
-            .child_sizes
-            .and_then(|sizes| sizes.get_by_name_or_key(key.name(), key.instance_id()).copied());
-        tracing::trace!(?key, ?size, has_child_sizes = self.child_sizes.is_some(), "measure_module called");
-        size
-    }
-}
-
-pub struct ModuleActor<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> {
+pub struct ModuleActor<F: CanvasFactory + 'static> {
     port: Box<dyn AnyModulePort>,
     ctx: ModuleContext,
-    sizes: std::collections::HashMap<MonitorId, Size>,
-    rendered_bounds: std::collections::HashMap<MonitorId, Rect>,
-    canvas_factory: std::sync::Arc<std::sync::Mutex<F>>,
-    render_trees:
-        std::collections::HashMap<MonitorId, crate::features::layout_engine::domain::RenderNode>,
-    vdom_trees: std::collections::HashMap<MonitorId, crate::features::vdom::domain::VNode>,
-    vdom_diff: std::sync::Arc<dyn crate::features::vdom::ports::VdomDiffPort>,
-    style_resolver: std::sync::Arc<dyn crate::features::styling::ports::StyleResolverPort>,
-    last_child_sizes: std::collections::HashMap<
-        MonitorId,
-        Option<crate::shared::primitives::ChildSizesMap>,
-    >,
+    canvas_factory: Arc<Mutex<F>>,
+    style_resolver: Arc<dyn StyleResolverPort>,
+    vdom_diff: Arc<dyn VdomDiffPort>,
 }
 
-impl<F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static> ModuleActor<F> {
+impl<F: CanvasFactory + 'static> ModuleActor<F> {
     pub fn new(
         port: Box<dyn AnyModulePort>,
         ctx: ModuleContext,
-        canvas_factory: std::sync::Arc<std::sync::Mutex<F>>,
-        style_resolver: std::sync::Arc<dyn crate::features::styling::ports::StyleResolverPort>,
-        vdom_diff: std::sync::Arc<dyn crate::features::vdom::ports::VdomDiffPort>,
+        canvas_factory: Arc<Mutex<F>>,
+        style_resolver: Arc<dyn StyleResolverPort>,
+        vdom_diff: Arc<dyn VdomDiffPort>,
     ) -> Self {
         Self {
             port,
             ctx,
-            sizes: std::collections::HashMap::new(),
-            rendered_bounds: std::collections::HashMap::new(),
             canvas_factory,
-            render_trees: std::collections::HashMap::new(),
-            vdom_trees: std::collections::HashMap::new(),
-            vdom_diff,
             style_resolver,
-            last_child_sizes: std::collections::HashMap::new(),
+            vdom_diff,
         }
     }
 
-    pub fn spawn(mut self) {
-        tokio::task::spawn_blocking(move || {
-            let rt = tokio::runtime::Handle::current();
-
-            use crate::shared::events::signals::SignalKind;
-            use futures_util::stream::{SelectAll, StreamExt};
-            use tokio_stream::wrappers::WatchStream;
-
-            let mut events_stream = SelectAll::new();
-            let subs = self.port.subscriptions().to_vec();
-
-            if subs.contains(&SignalKind::Time) {
-                events_stream.push(
-                    WatchStream::new(self.ctx.hub().time_rx())
-                        .map(|_| SignalKind::Time)
-                        .boxed(),
-                );
-            }
-            if subs.contains(&SignalKind::Hyprland) {
-                events_stream.push(
-                    WatchStream::new(self.ctx.hub().hyprland_rx())
-                        .map(|_| SignalKind::Hyprland)
-                        .boxed(),
-                );
-            }
-            if subs.contains(&SignalKind::Systray) {
-                events_stream.push(
-                    WatchStream::new(self.ctx.hub().systray_rx())
-                        .map(|_| SignalKind::Systray)
-                        .boxed(),
-                );
-            }
-            if subs.contains(&SignalKind::Metrics) {
-                events_stream.push(
-                    WatchStream::new(self.ctx.hub().metrics_rx())
-                        .map(|_| SignalKind::Metrics)
-                        .boxed(),
-                );
-            }
-            if subs.contains(&SignalKind::Mpris) {
-                events_stream.push(
-                    WatchStream::new(self.ctx.hub().mpris_rx())
-                        .map(|_| SignalKind::Mpris)
-                        .boxed(),
-                );
-            }
-            if subs.iter().any(|s| matches!(s, SignalKind::DBus(_))) {
-                events_stream.push(
-                    WatchStream::new(self.ctx.hub().dbus_rx())
-                        .map(|_| {
-                            SignalKind::DBus(crate::shared::dbus::domain::DBusSubscription::new(
-                                crate::shared::dbus::domain::BusType::Session,
-                                None,
-                                None,
-                                None,
-                                None,
-                            ))
-                        })
-                        .boxed(),
-                );
-            }
-
-            let mut layout_engines: std::collections::HashMap<
-                MonitorId,
-                Box<dyn crate::features::layout_engine::ports::LayoutEnginePort>,
-            > = std::collections::HashMap::new();
-
-            // Initial refresh
-            let initial_sigs = self.port.subscriptions().to_vec();
-            self.port.refresh(self.ctx.hub(), &initial_sigs);
-            self.measure_and_render_all(&mut layout_engines);
-
-            let mut last_tooltip: Option<crate::features::layout_engine::domain::StyledNode> = None;
-            let mut last_pointer_pos: Option<(
-                MonitorId,
-                crate::shared::primitives::geometry::Position,
-            )> = None;
-            let mut module_sizes_rx = self.ctx.hub().module_sizes_rx();
-
-            loop {
-                // Determine what woke us up
-                let mut changed = false;
-                let mut changed_signals = std::collections::HashSet::new();
-
-                let should_continue = rt.block_on(async {
-                    let ctx_id = self.ctx.id();
-                    let (layout_rx, input_rx) = self.ctx.rxs_mut();
-
-                    tokio::select! {
-                        Some(sig) = events_stream.next(), if !events_stream.is_empty() => {
-                            changed = true;
-                            changed_signals.insert(sig);
-                            // Drain any immediately pending events from the select_all stream to debounce
-                            while let Some(Some(sig2)) = futures_util::FutureExt::now_or_never(events_stream.next()) {
-                                changed_signals.insert(sig2);
-                            }
-                        }
-                        res = module_sizes_rx.changed() => {
-                            if res.is_err() {
-                                return false;
-                            }
-                        }
-                        res = layout_rx.changed() => {
-                            if res.is_err() {
-                                return false; // layout_rx dropped, we should exit
-                            }
-                            changed = true;
-                            for sub in &subs {
-                                changed_signals.insert(sub.clone());
-                            }
-                        }
-                        res = input_rx.recv() => {
-                            match res {
-                                Ok((target_id, monitor_id, event)) => {
-                                    if target_id == ctx_id {
-                                        tracing::debug!(module = %ctx_id, monitor = %monitor_id, event = ?event, "Received pointer event in module actor");
-                                        if let Some(render_tree) = self.render_trees.get(&monitor_id) {
-                                            use crate::shared::primitives::geometry::Position;
-                                            use crate::shared::events::core::PointerEvent;
-                                            match event {
-                                                PointerEvent::Click { x, y, .. } => {
-                                                    let pos = Position::new(x as i32, y as i32);
-                                                    last_pointer_pos = Some((monitor_id.clone(), pos));
-                                                    let hit = render_tree.hit_test(pos);
-                                                    let hit_cmd = hit.iter().rev().find_map(|n| n.on_click());
-                                                    tracing::debug!(
-                                                        module = %ctx_id,
-                                                        monitor = %monitor_id,
-                                                        pos = ?pos,
-                                                        hit_nodes = hit.len(),
-                                                        has_on_click = hit_cmd.is_some(),
-                                                        "Hit test for Click"
-                                                    );
-                                                    if let Some(cmd) = hit_cmd {
-                                                        tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_click command");
-                                                        if let crate::app::commands::AppCommand::ScriptCall(func_name) = &cmd {
-                                                            if let Err(e) = self.port.call_function(func_name) {
-                                                                tracing::error!(module = %ctx_id, func = %func_name, "ScriptCall failed: {}", e);
-                                                            } else {
-                                                                changed = true;
-                                                            }
-                                                        } else {
-                                                            self.ctx.command_tx().send_command(cmd.clone());
-                                                        }
-                                                    } else {
-                                                        tracing::debug!(module = %ctx_id, "No on_click command found in hit tree");
-                                                    }
-                                                },
-                                                PointerEvent::PointerMotion { x, y } => {
-                                                    let pos = Position::new(x as i32, y as i32);
-                                                    last_pointer_pos = Some((monitor_id.clone(), pos));
-                                                    let hit = render_tree.hit_test(pos);
-                                                    let hit_cmd = hit.iter().rev().find_map(|n| n.on_hover());
-                                                    tracing::debug!(
-                                                        module = %ctx_id,
-                                                        monitor = %monitor_id,
-                                                        pos = ?pos,
-                                                        hit_nodes = hit.len(),
-                                                        has_on_hover = hit_cmd.is_some(),
-                                                        "Hit test for PointerMotion"
-                                                    );
-                                                    if let Some(cmd) = hit_cmd {
-                                                        tracing::debug!(module = %ctx_id, cmd = ?cmd, "Sending on_hover command");
-                                                        self.ctx.command_tx().send_command(cmd.clone());
-                                                    }
-
-                                                    let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
-                                                    if hit_tooltip != last_tooltip {
-                                                        tracing::debug!(
-                                                            module = %ctx_id,
-                                                            monitor = %monitor_id,
-                                                            changed = true,
-                                                            has_tooltip = hit_tooltip.is_some(),
-                                                            "Tooltip state changed"
-                                                        );
-                                                        if let Some(layout) = &hit_tooltip {
-                                                            tracing::debug!(module = %ctx_id, ?layout, "Sending ShowTooltip command");
-                                                            self.ctx.command_tx().send_command(crate::app::commands::AppCommand::ShowTooltip { layout: Box::new(layout.clone()) });
-                                                        } else {
-                                                            tracing::debug!(module = %ctx_id, "Sending HideTooltip command");
-                                                            self.ctx.command_tx().send_command(crate::app::commands::AppCommand::HideTooltip);
-                                                        }
-                                                        last_tooltip = hit_tooltip;
-                                                    }
-                                                },
-                                                PointerEvent::PointerEnter => {
-                                                    tracing::debug!(module = %ctx_id, "Pointer entered module bounds");
-                                                },
-                                                PointerEvent::PointerLeave => {
-                                                    tracing::debug!(module = %ctx_id, "Pointer left module bounds");
-                                                    last_pointer_pos = None;
-                                                    if last_tooltip.is_some() {
-                                                        tracing::debug!(module = %ctx_id, "Hiding tooltip due to pointer leave");
-                                                        self.ctx.command_tx().send_command(crate::app::commands::AppCommand::HideTooltip);
-                                                        last_tooltip = None;
-                                                    }
-                                                },
-                                                _ => {}
-                                            }
-                                        } else {
-                                            tracing::warn!(module = %ctx_id, monitor = %monitor_id, "Received pointer event but no render tree found for monitor");
-                                        }
-                                    }
-                                }
-                                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                                    tracing::warn!(module = %ctx_id, lagged = n, "ModuleActor input_rx lagged, skipped messages");
-                                }
-                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                                    tracing::debug!(module = %ctx_id, "ModuleActor input_rx closed");
-                                    return false;
-                                }
-                            }
-                        }
-                    }
-
-                    true
-                });
-
-                if !should_continue {
-                    break;
-                }
-
-                if changed {
-                    let sigs: Vec<_> = changed_signals.into_iter().collect();
-                    self.port.refresh(self.ctx.hub(), &sigs);
-                }
-
-                self.measure_and_render_all(&mut layout_engines);
-
-                if let Some((monitor_id, pos)) = &last_pointer_pos
-                    && let Some(render_tree) = self.render_trees.get(monitor_id)
-                {
-                    let hit = render_tree.hit_test(*pos);
-                    let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
-                    if hit_tooltip != last_tooltip {
-                        tracing::debug!(module = %self.ctx.id(), changed = true, has_tooltip = hit_tooltip.is_some(), "Tooltip state changed after render");
-                        if let Some(layout) = &hit_tooltip {
-                            self.ctx.command_tx().send_command(
-                                crate::app::commands::AppCommand::ShowTooltip {
-                                    layout: Box::new(layout.clone()),
-                                },
-                            );
-                        } else {
-                            self.ctx
-                                .command_tx()
-                                .send_command(crate::app::commands::AppCommand::HideTooltip);
-                        }
-                        last_tooltip = hit_tooltip;
-                    }
-                }
-            }
-        });
-    }
-
-    #[tracing::instrument(level = "debug", skip(self, layout_engines), fields(module = %self.ctx.id()))]
-    fn measure_and_render_all(
-        &mut self,
-        layout_engines: &mut std::collections::HashMap<
-            MonitorId,
-            Box<dyn crate::features::layout_engine::ports::LayoutEnginePort>,
-        >,
-    ) {
-        let t0 = std::time::Instant::now();
-        let layouts: std::collections::HashMap<MonitorId, Rect> =
-            self.ctx.rxs_mut().0.borrow().clone();
-
-        let mut all_monitors: std::collections::HashSet<MonitorId> =
-            std::collections::HashSet::new();
-        for m in self.ctx.hub().hyprland_rx().borrow().monitors().values() {
-            all_monitors.insert(MonitorId::new(m.name().as_str()));
-        }
-        for m in layouts.keys() {
-            all_monitors.insert(m.clone());
-        }
-        for m in self.ctx.hub().module_sizes_rx().borrow().keys() {
-            all_monitors.insert(m.clone());
-        }
-        let monitors: Vec<MonitorId> = all_monitors.into_iter().collect();
-
-        for monitor_id in monitors {
-            let new_vdom = self.port.render(&monitor_id);
-            let diff_result = self
-                .vdom_diff
-                .diff(self.vdom_trees.get(&monitor_id), &new_vdom);
-
-            let current_bounds = layouts.get(&monitor_id).copied();
-            let bounds_changed = current_bounds != self.rendered_bounds.get(&monitor_id).copied();
-
-            let module_sizes_guard = self.ctx.hub().module_sizes_rx().borrow().clone();
-            let current_child_sizes = module_sizes_guard.get(&monitor_id).cloned();
-            let child_sizes_changed = self.last_child_sizes.get(&monitor_id) != Some(&current_child_sizes);
-
-            if diff_result.is_unchanged()
-                && !bounds_changed
-                && !child_sizes_changed
-                && self.render_trees.contains_key(&monitor_id)
-            {
-                tracing::trace!(
-                    module = %self.ctx.id(),
-                    monitor = %monitor_id,
-                    "VDOM, bounds, and child sizes unchanged; skipping style resolution, layout, and canvas render"
-                );
-                continue;
-            }
-
-            let bounds_changed = self.rendered_bounds.get(&monitor_id) != current_bounds.as_ref();
-            let vdom_dirty = !diff_result.is_unchanged() || !self.render_trees.contains_key(&monitor_id);
-
-            let render_node = if vdom_dirty || bounds_changed || child_sizes_changed {
-                self.last_child_sizes.insert(monitor_id.clone(), current_child_sizes.clone());
-                tracing::trace!(
-                    module = %self.ctx.id(),
-                    monitor = %monitor_id,
-                    vdom_dirty,
-                    bounds_changed,
-                    child_sizes_changed,
-                    "Updating layout for module"
-                );
-
-                self.vdom_trees.insert(monitor_id.clone(), new_vdom.clone());
-
-                tracing::trace!(module = %self.ctx.id(), monitor = %monitor_id, "Resolving styles for module VNode");
-                let styled_node = new_vdom.resolve_styles(self.style_resolver.as_ref(), None);
-
-                let default_font_family = crate::shared::config::domain::FontFamily::new("".to_string());
-                let default_font_size = crate::shared::config::domain::FontSize::new(14.0);
-
-                let available_size = current_bounds
-                    .filter(|b| b.width() > 0 && b.height() > 0)
-                    .map(|b| *b.size());
-
-                let module_sizes_guard = self.ctx.hub().module_sizes_rx().borrow().clone();
-                let current_child_sizes = module_sizes_guard.get(&monitor_id);
-
-                let render_node_res = {
-                    let mut factory = self.canvas_factory.lock().unwrap();
-                    let measurer_inner = factory.create_text_measurer(
-                        Scale::new(1.0),
-                        default_font_family.clone(),
-                        default_font_size,
-                    );
-                    let mut measurer = ModuleSizeMeasurer {
-                        inner: measurer_inner,
-                        child_sizes: current_child_sizes,
-                    };
-
-                    let engine = layout_engines.entry(monitor_id.clone()).or_insert_with(|| {
-                        Box::new(
-                            crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new(),
-                        )
-                    });
-
-                    engine.calculate_layout_with_constraints(
-                        styled_node,
-                        &mut measurer,
-                        crate::shared::primitives::geometry::Position::new(0, 0),
-                        available_size,
-                    )
-                };
-
-                let render_node = match render_node_res {
-                    Ok(node) => node,
-                    Err(e) => {
-                        tracing::error!(module = %self.ctx.id(), monitor = %monitor_id, err = ?e, "Module layout calculation failed");
-                        continue;
-                    }
-                };
-
-                let child_layouts = render_node.collect_module_layouts();
-                if !child_layouts.is_empty() {
-                    self.ctx
-                        .command_tx()
-                        .send_command(AppCommand::ContainerLayoutsCalculated {
-                            parent_id: self.ctx.id(),
-                            monitor_id: monitor_id.clone(),
-                            layouts: child_layouts,
-                        });
-                }
-
-                self.render_trees
-                    .insert(monitor_id.clone(), render_node.clone());
-
-                let size = *render_node.rect().size();
-
-                let old_size = self
-                    .sizes
-                    .get(&monitor_id)
-                    .copied()
-                    .unwrap_or(Size::new(0, 0));
-                if size != old_size {
-                    self.sizes.insert(monitor_id.clone(), size);
-                    tracing::trace!(
-                        module = %self.ctx.id(),
-                        monitor = %monitor_id,
-                        ?size,
-                        ?old_size,
-                        "ModuleSizeChanged emitted"
-                    );
-                    self.ctx
-                        .command_tx()
-                        .send_command(AppCommand::ModuleSizeChanged(
-                            monitor_id.clone(),
-                            self.ctx.id(),
-                            size,
-                        ));
-                }
-                render_node
-            } else {
-                self.render_trees.get(&monitor_id).unwrap().clone()
-            };
-
-            // Render if we have bounds
-            if let Some(bounds) = current_bounds
-                && bounds.width() > 0
-                && bounds.height() > 0
-            {
-                let default_font_family = crate::shared::config::domain::FontFamily::new("".to_string());
-                let default_font_size = crate::shared::config::domain::FontSize::new(14.0);
-
-                let w = bounds.width();
-                let h = bounds.height();
-                let mut data = vec![0u8; (w * h * 4) as usize];
-                {
-                    let mut factory = self.canvas_factory.lock().unwrap();
-                    let mut canvas = factory.create_canvas(
-                        &mut data,
-                        *bounds.size(),
-                        Scale::new(1.0),
-                        default_font_family,
-                        default_font_size,
-                    );
-                    render_node.render_to_canvas(&mut canvas);
-                }
-
-                let buffer = RenderBuffer::new(data, *bounds.size());
-                let rt = tokio::runtime::Handle::current();
-                let sm = self.ctx.surface_manager().clone();
-                let mod_id = self.ctx.id();
-                let parent_id = self.ctx.parent_id();
-                let mon_id = monitor_id.clone();
-                let position =
-                    crate::shared::primitives::geometry::Position::new(bounds.x(), bounds.y());
-                tracing::trace!(
-                    module = %mod_id,
-                    ?parent_id,
-                    monitor = %mon_id,
-                    ?position,
-                    size = ?bounds.size(),
-                    "Submitting module buffer to surface manager"
-                );
-                rt.block_on(async move {
-                    sm.submit_child_buffer(mod_id, parent_id, mon_id, position, buffer)
-                        .await;
-                });
-                self.rendered_bounds.insert(monitor_id.clone(), bounds);
-            }
-        }
-
-        tracing::debug!(
-            module = %self.ctx.id(),
-            duration_ms = t0.elapsed().as_millis(),
-            duration_micros = t0.elapsed().as_micros(),
-            "Module UI updated"
+    pub fn spawn(self) {
+        let event_loop = EventLoop::new(
+            self.port,
+            self.ctx,
+            PointerHandler::new(),
+            RenderPipeline::new(),
+            self.canvas_factory,
+            self.style_resolver,
+            self.vdom_diff,
         );
+
+        tokio::task::spawn_blocking(move || {
+            event_loop.run();
+        });
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::module_runtime::ports::CommandSender;
-    use crate::shared::config::domain::Config;
+    use crate::app::commands::AppCommand;
+    use crate::features::module_runtime::ports::ModuleInitError;
+    use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
+    use crate::features::vdom::domain::VNode;
+    use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
+    use crate::shared::config::domain::{Config, ModuleConfig};
+    use crate::shared::events::signals::{HyprlandState, SignalKind};
+    use crate::shared::primitives::geometry::{Position, Scale, Size};
+    use crate::shared::primitives::render::RenderBuffer;
+    use crate::shared::primitives::FunctionName;
 
     struct MockCommandSender;
     impl CommandSender for MockCommandSender {
@@ -638,26 +157,24 @@ mod tests {
     impl crate::shared::wayland::ports::SurfaceManagerPort for MockSurfaceManager {
         async fn submit_buffer(
             &self,
-            _mod_id: crate::shared::primitives::ModuleId,
+            _mod_id: ModuleId,
             _mon_id: MonitorId,
-            _pos: crate::shared::primitives::geometry::Position,
+            _pos: Position,
             _buf: RenderBuffer,
-        ) {
-        }
+        ) {}
     }
 
-    struct TestCommandSender {
+    struct ChannelCommandSender {
         tx: std::sync::mpsc::Sender<AppCommand>,
     }
-    impl CommandSender for TestCommandSender {
+    impl CommandSender for ChannelCommandSender {
         fn send_command(&self, cmd: AppCommand) {
             let _ = self.tx.send(cmd);
         }
     }
 
     struct MockCanvasFactory;
-
-    impl crate::shared::rendering::ports::canvas::CanvasFactory for MockCanvasFactory {
+    impl CanvasFactory for MockCanvasFactory {
         fn create_canvas<'a>(
             &'a mut self,
             _data: &'a mut [u8],
@@ -689,34 +206,30 @@ mod tests {
             _h: crate::shared::primitives::geometry::LogicalPx,
             _color: crate::shared::primitives::color::DrawingColor,
             _radius: crate::shared::primitives::geometry::LogicalPx,
-        ) {
-        }
+        ) {}
         fn draw_border(
             &mut self,
-            _pos: crate::shared::primitives::geometry::Position,
-            _size: crate::shared::primitives::geometry::Size,
+            _pos: Position,
+            _size: Size,
             _color: crate::shared::primitives::color::DrawingColor,
             _radius: crate::shared::primitives::geometry::LogicalPx,
             _border_size: crate::shared::primitives::geometry::LogicalPx,
-        ) {
-        }
+        ) {}
         fn draw_text(
             &mut self,
             _text: &str,
             _font_family: Option<&crate::shared::config::domain::FontFamily>,
             _font_size: Option<crate::shared::config::domain::FontSize>,
             _color: crate::shared::primitives::color::DrawingColor,
-            _pos: crate::shared::primitives::geometry::Position,
-        ) {
-        }
+            _pos: Position,
+        ) {}
         fn draw_image(
             &mut self,
             _image_data: &[u8],
-            _pixel_size: crate::shared::primitives::geometry::Size,
-            _logical_size: crate::shared::primitives::geometry::Size,
-            _pos: crate::shared::primitives::geometry::Position,
-        ) {
-        }
+            _pixel_size: Size,
+            _logical_size: Size,
+            _pos: Position,
+        ) {}
     }
 
     struct MockMeasurer;
@@ -731,57 +244,146 @@ mod tests {
         }
     }
 
-    struct MockAnyModulePort {
-        render_node: crate::features::vdom::domain::VNode,
-        subs: Vec<crate::shared::events::signals::SignalKind>,
+    struct TestModulePort {
+        render_node: VNode,
+        subs: Vec<SignalKind>,
     }
 
-    impl AnyModulePort for MockAnyModulePort {
-        fn init(
-            &mut self,
-            _config: &crate::shared::config::domain::ModuleConfig,
-            _full_config: &crate::shared::config::domain::Config,
-        ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+    impl AnyModulePort for TestModulePort {
+        fn init(&mut self, _config: &ModuleConfig, _full_config: &Config) -> Result<(), ModuleInitError> {
             Ok(())
         }
-
-        fn subscriptions(&self) -> &[crate::shared::events::signals::SignalKind] {
+        fn subscriptions(&self) -> &[SignalKind] {
             &self.subs
         }
-
         fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName] {
             &[]
         }
-
-        fn refresh(
-            &mut self,
-            _hub: &SignalHub,
-            _signals: &[crate::shared::events::signals::SignalKind],
-        ) {
-        }
-
-        fn render(&self, _monitor: &MonitorId) -> crate::features::vdom::domain::VNode {
+        fn refresh(&mut self, _hub: &SignalHub, _signals: &[SignalKind]) {}
+        fn render(&self, _monitor: &MonitorId) -> VNode {
             self.render_node.clone()
         }
-
-        fn call_function(
-            &mut self,
-            _name: &crate::shared::primitives::FunctionName,
-        ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
+        fn call_function(&mut self, _name: &FunctionName) -> Result<(), ModuleInitError> {
             Ok(())
+        }
+    }
+
+    struct TestFixture {
+        pub hub: Arc<SignalHub>,
+        pub cmd_rx: std::sync::mpsc::Receiver<AppCommand>,
+        pub layout_tx: watch::Sender<HashMap<MonitorId, Rect>>,
+        pub event_loop: EventLoop<MockCanvasFactory>,
+    }
+
+    struct TestFixtureBuilder {
+        id: ModuleId,
+        monitors: Vec<&'static str>,
+        subs: Vec<SignalKind>,
+        vnode: VNode,
+    }
+
+    impl TestFixtureBuilder {
+        fn new(id: ModuleId) -> Self {
+            Self {
+                id,
+                monitors: Vec::new(),
+                subs: Vec::new(),
+                vnode: VNode::new_rect(None, None, None, None, None),
+            }
+        }
+
+        fn with_monitors(mut self, monitors: &[&'static str]) -> Self {
+            self.monitors = monitors.to_vec();
+            self
+        }
+
+        fn with_subs(mut self, subs: Vec<SignalKind>) -> Self {
+            self.subs = subs;
+            self
+        }
+
+        fn with_vnode(mut self, vnode: VNode) -> Self {
+            self.vnode = vnode;
+            self
+        }
+
+        fn build(self) -> TestFixture {
+            let hub = Arc::new(SignalHub::new(Config::default()));
+
+            if !self.monitors.is_empty() {
+                let mut monitors_map = std::collections::BTreeMap::new();
+                for m in &self.monitors {
+                    let name = crate::features::workspaces::domain::MonitorName::new(*m);
+                    monitors_map.insert(
+                        name.clone(),
+                        crate::features::workspaces::domain::Monitor::new(
+                            name,
+                            crate::features::workspaces::domain::WorkspaceId::new(1),
+                            None,
+                        ),
+                    );
+                }
+                let focused = self
+                    .monitors
+                    .first()
+                    .map(|m| crate::features::workspaces::domain::MonitorName::new(*m));
+                let h_state = HyprlandState::new(
+                    std::collections::BTreeMap::new(),
+                    monitors_map,
+                    focused,
+                );
+                hub.hyprland_tx().send(h_state).unwrap();
+            }
+
+            let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
+            let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
+            let sender: Arc<dyn CommandSender> = Arc::new(ChannelCommandSender { tx: cmd_tx });
+            let (layout_tx, layout_rx) = watch::channel(HashMap::new());
+
+            let ctx = ModuleContext::new(self.id, hub.clone(), sm, sender, layout_rx);
+            let port = Box::new(TestModulePort {
+                render_node: self.vnode,
+                subs: self.subs,
+            });
+
+            let resolver = Arc::new(CompositeStyleResolver::new(vec![]));
+            let diff_adapter = Arc::new(DefaultVdomDiffAdapter::new());
+            let canvas_factory = Arc::new(Mutex::new(MockCanvasFactory));
+
+            let event_loop = EventLoop::new(
+                port,
+                ctx,
+                PointerHandler::new(),
+                RenderPipeline::new(),
+                canvas_factory,
+                resolver,
+                diff_adapter,
+            );
+
+            TestFixture {
+                hub,
+                cmd_rx,
+                layout_tx,
+                event_loop,
+            }
         }
     }
 
     #[test]
     fn test_module_context_accessors() {
-        let id = crate::shared::primitives::ModuleId::new(1);
+        let id = ModuleId::new(1);
         let hub = Arc::new(SignalHub::new(Config::default()));
         let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
         let cmd_tx: Arc<dyn CommandSender> = Arc::new(MockCommandSender);
         let (_layout_tx, layout_rx) = watch::channel(HashMap::new());
 
-        let mut ctx = ModuleContext::new(id, hub.clone(), sm.clone(), cmd_tx, layout_rx);
+        let mut ctx = ModuleContext::new(id, hub.clone(), sm, cmd_tx, layout_rx)
+            .with_parent(Some(ModuleId::new(99)))
+            .with_instance_id(Some(ModuleInstanceId::new("inst-1")));
+
         assert_eq!(ctx.id(), id);
+        assert_eq!(ctx.parent_id(), Some(ModuleId::new(99)));
+        assert_eq!(ctx.instance_id(), Some(&ModuleInstanceId::new("inst-1")));
         assert_eq!(Arc::as_ptr(ctx.hub()), Arc::as_ptr(&hub));
 
         let (rx1, _rx2) = ctx.rxs_mut();
@@ -790,81 +392,27 @@ mod tests {
 
     #[tokio::test]
     async fn test_module_actor_measure_and_render_all() {
-        use crate::shared::primitives::geometry::Rect;
+        let id = ModuleId::new(1);
+        let fixture = TestFixtureBuilder::new(id)
+            .with_monitors(&["DP-1"])
+            .with_subs(vec![
+                SignalKind::Time,
+                SignalKind::Hyprland,
+                SignalKind::Systray,
+                SignalKind::Metrics,
+            ])
+            .build();
 
-        let id = crate::shared::primitives::ModuleId::new(1);
-        let config = Config::default();
-        let hub = Arc::new(SignalHub::new(config));
-
-        {
-            let mut monitors = std::collections::BTreeMap::new();
-            monitors.insert(
-                crate::features::workspaces::domain::MonitorName::new("DP-1"),
-                crate::features::workspaces::domain::Monitor::new(
-                    crate::features::workspaces::domain::MonitorName::new("DP-1"),
-                    crate::features::workspaces::domain::WorkspaceId::new(1),
-                    None,
-                ),
-            );
-            let h_state = crate::shared::events::signals::HyprlandState::new(
-                std::collections::BTreeMap::new(),
-                monitors,
-                Some(crate::features::workspaces::domain::MonitorName::new(
-                    "DP-1",
-                )),
-            );
-            hub.hyprland_tx().send(h_state).unwrap();
-        }
-
-        let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
-        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
-        let sender: Arc<dyn CommandSender> = Arc::new(TestCommandSender { tx: cmd_tx });
-
-        let (layout_tx, layout_rx) = watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub.clone(), sm.clone(), sender, layout_rx);
-
-        let port = Box::new(MockAnyModulePort {
-            render_node: crate::features::vdom::domain::VNode::new_rect(
-                None, None, None, None, None,
-            ),
-            subs: vec![
-                crate::shared::events::signals::SignalKind::Time,
-                crate::shared::events::signals::SignalKind::Hyprland,
-                crate::shared::events::signals::SignalKind::Systray,
-                crate::shared::events::signals::SignalKind::Metrics,
-                crate::shared::events::signals::SignalKind::DBus(
-                    crate::shared::dbus::domain::DBusSubscription::new(
-                        crate::shared::dbus::domain::BusType::Session,
-                        None,
-                        None,
-                        None,
-                        None,
-                    ),
-                ),
-            ],
-        });
-
-        let resolver = Arc::new(
-            crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
-        );
-        let diff_adapter = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
-        let mut actor = ModuleActor::new(
-            port,
-            ctx,
-            Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
-            resolver,
-            diff_adapter,
-        );
-
-        let mut actor = tokio::task::spawn_blocking(move || {
+        let mut event_loop = fixture.event_loop;
+        let mut event_loop = tokio::task::spawn_blocking(move || {
             let mut layout_engines = HashMap::new();
-            actor.measure_and_render_all(&mut layout_engines);
-            actor
+            event_loop.render_all_monitors(&mut layout_engines);
+            event_loop
         })
         .await
         .unwrap();
 
-        let cmd = cmd_rx.try_recv().expect("Should send size changed command");
+        let cmd = fixture.cmd_rx.try_recv().expect("Should send size changed command");
         match cmd {
             AppCommand::ModuleSizeChanged(mon, mod_id, size) => {
                 assert_eq!(mon.as_str(), "DP-1");
@@ -878,199 +426,91 @@ mod tests {
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-1"),
-            Rect::new(
-                crate::shared::primitives::geometry::Position::new(0, 0),
-                crate::shared::primitives::geometry::Size::new(10, 10),
-            ),
+            Rect::new(Position::new(0, 0), Size::new(10, 10)),
         );
-        layout_tx.send(layouts).unwrap();
+        fixture.layout_tx.send(layouts).unwrap();
 
         let _ = tokio::task::spawn_blocking(move || {
             let mut layout_engines = HashMap::new();
-            actor.measure_and_render_all(&mut layout_engines);
-            actor
+            event_loop.render_all_monitors(&mut layout_engines);
+            event_loop
         })
         .await
         .unwrap();
-        assert!(cmd_rx.try_recv().is_err());
+        assert!(fixture.cmd_rx.try_recv().is_err());
     }
 
     #[tokio::test]
     async fn test_module_actor_lifecycle() {
-        let id = crate::shared::primitives::ModuleId::new(2);
-        let hub = Arc::new(SignalHub::new(Config::default()));
-
-        let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
-        let sender: Arc<dyn CommandSender> = Arc::new(MockCommandSender);
-        let (layout_tx, layout_rx) = watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub.clone(), sm, sender, layout_rx);
-
-        let click_node = crate::features::vdom::domain::VNode::new_rect(
+        let id = ModuleId::new(2);
+        let click_node = VNode::new_rect(
             None,
             None,
-            Some(crate::app::commands::AppCommand::RequestRender),
-            Some(crate::app::commands::AppCommand::RequestRender),
+            Some(AppCommand::RequestRender),
+            Some(AppCommand::RequestRender),
             None,
         );
 
-        let port = Box::new(MockAnyModulePort {
-            render_node: click_node,
-            subs: vec![
-                crate::shared::events::signals::SignalKind::Time,
-                crate::shared::events::signals::SignalKind::Hyprland,
-                crate::shared::events::signals::SignalKind::Systray,
-                crate::shared::events::signals::SignalKind::Metrics,
-                crate::shared::events::signals::SignalKind::DBus(
-                    crate::shared::dbus::domain::DBusSubscription::new(
-                        crate::shared::dbus::domain::BusType::Session,
-                        None,
-                        None,
-                        None,
-                        None,
-                    ),
-                ),
-            ],
-        });
+        let fixture = TestFixtureBuilder::new(id)
+            .with_monitors(&["DP-1"])
+            .with_subs(vec![
+                SignalKind::Time,
+                SignalKind::Hyprland,
+                SignalKind::Systray,
+                SignalKind::Metrics,
+            ])
+            .with_vnode(click_node)
+            .build();
 
-        let resolver = Arc::new(
-            crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
-        );
-        let diff_adapter = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
-        let mut actor = ModuleActor::new(
-            port,
-            ctx,
-            Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
-            resolver,
-            diff_adapter,
-        );
-        // Pre-populate render_trees for hit testing
-        actor.render_trees.insert(
-            MonitorId::new("DP-1"),
-            crate::features::layout_engine::domain::RenderNode::Rect {
-                rect: crate::shared::primitives::geometry::Rect::new(
-                    crate::shared::primitives::geometry::Position::new(0, 0),
-                    crate::shared::primitives::geometry::Size::new(100, 100),
-                ),
-                style: crate::features::styling::domain::ComputedStyle::default(),
-                on_click: Some(AppCommand::RequestRender),
-                on_hover: Some(AppCommand::RequestRender),
-                tooltip: None,
-            },
-        );
-
+        let actor = fixture.event_loop.into_actor();
         actor.spawn();
 
-        hub.time_tx().send(chrono::Local::now()).unwrap();
-        hub.systray_tx()
+        fixture.hub.time_tx().send(chrono::Local::now()).unwrap();
+        fixture
+            .hub
+            .systray_tx()
             .send(crate::features::systray::domain::SystrayState::default())
             .unwrap();
-        hub.hyprland_tx()
-            .send(crate::shared::events::signals::HyprlandState::new(
-                std::collections::BTreeMap::new(),
-                std::collections::BTreeMap::new(),
-                None,
-            ))
-            .unwrap();
 
-        let _ = hub.pointer_tx().send((
+        let _ = fixture.hub.pointer_tx().send((
             id,
             MonitorId::new("DP-1"),
             crate::shared::events::core::PointerEvent::Click {
-                x: 50.0,
-                y: 50.0,
+                x: 5.0,
+                y: 5.0,
                 button: 1,
             },
-        ));
-        let _ = hub.pointer_tx().send((
-            id,
-            MonitorId::new("DP-1"),
-            crate::shared::events::core::PointerEvent::PointerMotion { x: 50.0, y: 50.0 },
         ));
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        drop(layout_tx);
+        drop(fixture.layout_tx);
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
     #[tokio::test]
     async fn test_module_actor_renders_unknown_hyprland_monitor_from_layout() {
-        use crate::shared::primitives::geometry::Rect;
+        let id = ModuleId::new(1);
+        let fixture = TestFixtureBuilder::new(id).build();
 
-        let id = crate::shared::primitives::ModuleId::new(1);
-        let config = Config::default();
-        let hub = Arc::new(SignalHub::new(config));
-
-        // 1. Hyprland state is empty (no monitors)
-        let h_state = crate::shared::events::signals::HyprlandState::new(
-            std::collections::BTreeMap::new(),
-            std::collections::BTreeMap::new(),
-            None,
-        );
-        hub.hyprland_tx().send(h_state).unwrap();
-
-        let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
-        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
-        let sender: Arc<dyn CommandSender> = Arc::new(TestCommandSender { tx: cmd_tx });
-
-        let (layout_tx, layout_rx) = watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub.clone(), sm.clone(), sender, layout_rx);
-
-        let port = Box::new(MockAnyModulePort {
-            render_node: crate::features::vdom::domain::VNode::new_rect(
-                None, None, None, None, None,
-            ),
-            subs: vec![
-                crate::shared::events::signals::SignalKind::Time,
-                crate::shared::events::signals::SignalKind::Hyprland,
-                crate::shared::events::signals::SignalKind::Systray,
-                crate::shared::events::signals::SignalKind::Metrics,
-                crate::shared::events::signals::SignalKind::DBus(
-                    crate::shared::dbus::domain::DBusSubscription::new(
-                        crate::shared::dbus::domain::BusType::Session,
-                        None,
-                        None,
-                        None,
-                        None,
-                    ),
-                ),
-            ],
-        });
-
-        let resolver = Arc::new(
-            crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
-        );
-        let diff_adapter = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
-        let mut actor = ModuleActor::new(
-            port,
-            ctx,
-            Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
-            resolver,
-            diff_adapter,
-        );
-
-        // 2. Wayland sends layout update for DP-2
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-2"),
-            Rect::new(
-                crate::shared::primitives::geometry::Position::new(0, 0),
-                crate::shared::primitives::geometry::Size::new(10, 10),
-            ),
+            Rect::new(Position::new(0, 0), Size::new(10, 10)),
         );
-        layout_tx.send(layouts).unwrap();
+        fixture.layout_tx.send(layouts).unwrap();
 
+        let mut event_loop = fixture.event_loop;
         let _ = tokio::task::spawn_blocking(move || {
             let mut layout_engines = HashMap::new();
-            // 3. This should process DP-2 because it's in the layouts map, even though hyprland state is empty!
-            actor.measure_and_render_all(&mut layout_engines);
-            actor
+            event_loop.render_all_monitors(&mut layout_engines);
+            event_loop
         })
         .await
         .unwrap();
 
-        // 4. Verify the actor processed the monitor and emitted a size changed command
-        let cmd = cmd_rx
+        let cmd = fixture
+            .cmd_rx
             .try_recv()
             .expect("Should send size changed command for DP-2");
         match cmd {
@@ -1085,36 +525,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_module_actor_skips_pipeline_when_vdom_unchanged() {
-        let id = crate::shared::primitives::ModuleId::new(1);
-        let hub = Arc::new(SignalHub::new(Config::default()));
-
-        {
-            let mut monitors = std::collections::BTreeMap::new();
-            monitors.insert(
-                crate::features::workspaces::domain::MonitorName::new("DP-1"),
-                crate::features::workspaces::domain::Monitor::new(
-                    crate::features::workspaces::domain::MonitorName::new("DP-1"),
-                    crate::features::workspaces::domain::WorkspaceId::new(1),
-                    None,
-                ),
-            );
-            let h_state = crate::shared::events::signals::HyprlandState::new(
-                std::collections::BTreeMap::new(),
-                monitors,
-                Some(crate::features::workspaces::domain::MonitorName::new(
-                    "DP-1",
-                )),
-            );
-            hub.hyprland_tx().send(h_state).unwrap();
-        }
-
-        let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
-        let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
-        let sender: Arc<dyn CommandSender> = Arc::new(TestCommandSender { tx: cmd_tx });
-        let (_layout_tx, layout_rx) = watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub.clone(), sm, sender, layout_rx);
-
-        let node = crate::features::vdom::domain::VNode::new_text(
+        let id = ModuleId::new(1);
+        let node = VNode::new_text(
             crate::features::vdom::domain::TextContent::new("unchanged".to_string()),
             None,
             None,
@@ -1123,81 +535,40 @@ mod tests {
             None,
         );
 
-        let port = Box::new(MockAnyModulePort {
-            render_node: node.clone(),
-            subs: vec![],
-        });
+        let fixture = TestFixtureBuilder::new(id)
+            .with_monitors(&["DP-1"])
+            .with_vnode(node)
+            .build();
 
-        let resolver = Arc::new(
-            crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
-        );
-        let diff_adapter = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
-        let mut actor = ModuleActor::new(
-            port,
-            ctx,
-            Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
-            resolver,
-            diff_adapter,
-        );
+        let mut event_loop = fixture.event_loop;
+        let mut event_loop = tokio::task::spawn_blocking(move || {
+            let mut layout_engines = HashMap::new();
+            event_loop.render_all_monitors(&mut layout_engines);
+            event_loop
+        })
+        .await
+        .unwrap();
 
-        let mut layout_engines = HashMap::new();
-        // First run computes layout and caches VNode
-        actor.measure_and_render_all(&mut layout_engines);
-        assert!(actor.vdom_trees.contains_key(&MonitorId::new("DP-1")));
-        assert!(actor.render_trees.contains_key(&MonitorId::new("DP-1")));
+        assert!(event_loop.render_pipeline().vdom_trees().contains_key(&MonitorId::new("DP-1")));
+        assert!(event_loop.render_pipeline().render_trees().contains_key(&MonitorId::new("DP-1")));
 
-        // Second run with identical VDOM triggers early continue in loop (render_trees preserved)
-        actor.measure_and_render_all(&mut layout_engines);
-        assert!(actor.vdom_trees.contains_key(&MonitorId::new("DP-1")));
-        assert!(actor.render_trees.contains_key(&MonitorId::new("DP-1")));
+        // Second run with identical VDOM triggers early continue
+        let event_loop = tokio::task::spawn_blocking(move || {
+            let mut layout_engines = HashMap::new();
+            event_loop.render_all_monitors(&mut layout_engines);
+            event_loop
+        })
+        .await
+        .unwrap();
+
+        assert!(event_loop.render_pipeline().vdom_trees().contains_key(&MonitorId::new("DP-1")));
+        assert!(event_loop.render_pipeline().render_trees().contains_key(&MonitorId::new("DP-1")));
     }
 
     #[tokio::test]
     async fn test_container_module_emits_container_layouts_calculated() {
-        let id = crate::shared::primitives::ModuleId::new(0); // Root bar
-        let hub = Arc::new(SignalHub::new(Config::default()));
-
-        // 1. Send monitor into Hyprland state
-        {
-            let mut monitors = std::collections::BTreeMap::new();
-            monitors.insert(
-                crate::features::workspaces::domain::MonitorName::new("DP-1"),
-                crate::features::workspaces::domain::Monitor::new(
-                    crate::features::workspaces::domain::MonitorName::new("DP-1"),
-                    crate::features::workspaces::domain::WorkspaceId::new(1),
-                    None,
-                ),
-            );
-            let h_state = crate::shared::events::signals::HyprlandState::new(
-                std::collections::BTreeMap::new(),
-                monitors,
-                Some(crate::features::workspaces::domain::MonitorName::new("DP-1")),
-            );
-            hub.hyprland_tx().send(h_state).unwrap();
-        }
-
-        // 2. Report child module size (hour: 80x24) in hub.module_sizes
-        {
-            let mut sizes_map = HashMap::new();
-            let mut mon_map = crate::shared::primitives::ChildSizesMap::new();
-            mon_map.insert(
-                crate::shared::primitives::ModuleKey::from_name(
-                    crate::shared::primitives::ModuleName::new("hour"),
-                ),
-                crate::shared::primitives::geometry::Size::new(80, 24),
-            );
-            sizes_map.insert(MonitorId::new("DP-1"), mon_map);
-            hub.module_sizes_tx().send(sizes_map).unwrap();
-        }
-
-        let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
-        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
-        let sender: Arc<dyn CommandSender> = Arc::new(TestCommandSender { tx: cmd_tx });
-        let (layout_tx, layout_rx) = watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub.clone(), sm, sender, layout_rx);
-
-        // Container VNode has a child module "hour"
-        let child_node = crate::features::vdom::domain::VNode::new_module(
+        let id = ModuleId::new(0);
+        let child_node = VNode::new_module(
             crate::shared::primitives::ModuleName::new("hour"),
             None,
             crate::shared::primitives::ModuleOptions::default(),
@@ -1207,54 +578,43 @@ mod tests {
             None,
             None,
         );
-        let root_node = crate::features::vdom::domain::VNode::new_flex(
-            vec![child_node],
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let root_node = VNode::new_flex(vec![child_node], None, None, None, None, None);
 
-        let port = Box::new(MockAnyModulePort {
-            render_node: root_node,
-            subs: vec![],
-        });
+        let fixture = TestFixtureBuilder::new(id)
+            .with_monitors(&["DP-1"])
+            .with_vnode(root_node)
+            .build();
 
-        let resolver = Arc::new(
-            crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(vec![]),
+        // Report child module size in hub
+        let mut sizes_map = HashMap::new();
+        let mut mon_map = crate::shared::primitives::ChildSizesMap::new();
+        mon_map.insert(
+            crate::shared::primitives::ModuleKey::from_name(
+                crate::shared::primitives::ModuleName::new("hour"),
+            ),
+            Size::new(80, 24),
         );
-        let diff_adapter = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
-        let mut actor = ModuleActor::new(
-            port,
-            ctx,
-            Arc::new(std::sync::Mutex::new(MockCanvasFactory)),
-            resolver,
-            diff_adapter,
-        );
+        sizes_map.insert(MonitorId::new("DP-1"), mon_map);
+        fixture.hub.module_sizes_tx().send(sizes_map).unwrap();
 
-        // Send full bounds for DP-1 to bar (1920x30)
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-1"),
-            Rect::new(
-                crate::shared::primitives::geometry::Position::new(0, 0),
-                crate::shared::primitives::geometry::Size::new(1920, 30),
-            ),
+            Rect::new(Position::new(0, 0), Size::new(1920, 30)),
         );
-        layout_tx.send(layouts).unwrap();
+        fixture.layout_tx.send(layouts).unwrap();
 
+        let mut event_loop = fixture.event_loop;
         let _ = tokio::task::spawn_blocking(move || {
             let mut layout_engines = HashMap::new();
-            actor.measure_and_render_all(&mut layout_engines);
-            actor
+            event_loop.render_all_monitors(&mut layout_engines);
+            event_loop
         })
         .await
         .unwrap();
 
-        // Verify that AppCommand::ContainerLayoutsCalculated was emitted with measured hour bounds
         let mut found_container_layouts = false;
-        while let Ok(cmd) = cmd_rx.try_recv() {
+        while let Ok(cmd) = fixture.cmd_rx.try_recv() {
             if let AppCommand::ContainerLayoutsCalculated {
                 parent_id,
                 monitor_id,
