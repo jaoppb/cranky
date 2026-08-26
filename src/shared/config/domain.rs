@@ -5,14 +5,16 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct FontFamily(String);
 
 impl FontFamily {
-    pub fn new(family: String) -> Self {
+    #[must_use]
+    pub const fn new(family: String) -> Self {
         Self(family)
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -22,11 +24,13 @@ impl FontFamily {
 pub struct FontSize(f32);
 
 impl FontSize {
-    pub fn new(size: f32) -> Self {
+    #[must_use]
+    pub const fn new(size: f32) -> Self {
         Self(size)
     }
 
-    pub fn value(&self) -> f32 {
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
@@ -35,11 +39,13 @@ impl FontSize {
 pub struct BorderSize(f32);
 
 impl BorderSize {
-    pub fn new(size: f32) -> Self {
+    #[must_use]
+    pub const fn new(size: f32) -> Self {
         Self(size)
     }
 
-    pub fn value(&self) -> f32 {
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
@@ -48,37 +54,43 @@ impl BorderSize {
 pub struct BorderRadius(f32);
 
 impl BorderRadius {
-    pub fn new(radius: f32) -> Self {
+    #[must_use]
+    pub const fn new(radius: f32) -> Self {
         Self(radius)
     }
 
-    pub fn value(&self) -> f32 {
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct MarginOffset(i32);
 
 impl MarginOffset {
-    pub fn new(offset: i32) -> Self {
+    #[must_use]
+    pub const fn new(offset: i32) -> Self {
         Self(offset)
     }
 
-    pub fn value(&self) -> i32 {
+    #[must_use]
+    pub const fn value(&self) -> i32 {
         self.0
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PaddingOffset(u32);
 
 impl PaddingOffset {
-    pub fn new(offset: u32) -> Self {
+    #[must_use]
+    pub const fn new(offset: u32) -> Self {
         Self(offset)
     }
 
-    pub fn value(&self) -> u32 {
+    #[must_use]
+    pub const fn value(&self) -> u32 {
         self.0
     }
 }
@@ -93,7 +105,8 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         root: RootConfig,
         modules: ModulesConfig,
         rendering: RenderingMode,
@@ -109,15 +122,18 @@ impl Config {
         }
     }
 
-    pub fn root(&self) -> &RootConfig {
+    #[must_use]
+    pub const fn root(&self) -> &RootConfig {
         &self.root
     }
 
-    pub fn modules(&self) -> &ModulesConfig {
+    #[must_use]
+    pub const fn modules(&self) -> &ModulesConfig {
         &self.modules
     }
 
-    pub fn metrics(&self) -> &crate::features::metrics::domain::MetricsConfig {
+    #[must_use]
+    pub const fn metrics(&self) -> &crate::features::metrics::domain::MetricsConfig {
         &self.metrics
     }
 }
@@ -136,7 +152,8 @@ pub struct TooltipConfig {
 
 impl TooltipConfig {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         background: DrawingColor,
         border_color: DrawingColor,
         text_color: DrawingColor,
@@ -158,28 +175,36 @@ impl TooltipConfig {
         }
     }
 
-    pub fn background(&self) -> &DrawingColor {
+    #[must_use]
+    pub const fn background(&self) -> &DrawingColor {
         &self.background
     }
-    pub fn border_color(&self) -> &DrawingColor {
+    #[must_use]
+    pub const fn border_color(&self) -> &DrawingColor {
         &self.border_color
     }
-    pub fn text_color(&self) -> &DrawingColor {
+    #[must_use]
+    pub const fn text_color(&self) -> &DrawingColor {
         &self.text_color
     }
-    pub fn font(&self) -> Option<&FontFamily> {
+    #[must_use]
+    pub const fn font(&self) -> Option<&FontFamily> {
         self.font.as_ref()
     }
-    pub fn size(&self) -> Option<FontSize> {
+    #[must_use]
+    pub const fn size(&self) -> Option<FontSize> {
         self.size
     }
-    pub fn radius(&self) -> BorderRadius {
+    #[must_use]
+    pub const fn radius(&self) -> BorderRadius {
         self.radius
     }
-    pub fn border_width(&self) -> BorderSize {
+    #[must_use]
+    pub const fn border_width(&self) -> BorderSize {
         self.border_width
     }
-    pub fn padding(&self) -> PaddingOffset {
+    #[must_use]
+    pub const fn padding(&self) -> PaddingOffset {
         self.padding
     }
 }
@@ -187,9 +212,15 @@ impl TooltipConfig {
 impl Default for TooltipConfig {
     fn default() -> Self {
         Self {
-            background: DrawingColor::parse("#1e1e2e").unwrap(),
-            border_color: DrawingColor::parse("#c0caf5").unwrap(),
-            text_color: DrawingColor::parse("#c0caf5").unwrap(),
+            background: DrawingColor::Solid(crate::shared::primitives::color::Color::new(
+                0x1e, 0x1e, 0x2e, 255,
+            )),
+            border_color: DrawingColor::Solid(crate::shared::primitives::color::Color::new(
+                0xc0, 0xca, 0xf5, 255,
+            )),
+            text_color: DrawingColor::Solid(crate::shared::primitives::color::Color::new(
+                0xc0, 0xca, 0xf5, 255,
+            )),
             font: Some(FontFamily::new("Inter".to_string())),
             size: Some(FontSize::new(12.0)),
             radius: BorderRadius::new(4.0),
@@ -212,11 +243,13 @@ pub enum RenderingMode {
 }
 
 impl RenderingMode {
-    pub fn new_immediate(fps_limit: Option<u32>) -> Self {
+    #[must_use]
+    pub const fn new_immediate(fps_limit: Option<u32>) -> Self {
         Self::Immediate { fps_limit }
     }
 
-    pub fn new_timebased(duration_ms: u64) -> Self {
+    #[must_use]
+    pub const fn new_timebased(duration_ms: u64) -> Self {
         Self::Timebased { duration_ms }
     }
 }
@@ -249,7 +282,8 @@ pub struct CreateRootConfigCommand {
 }
 
 impl CreateRootConfigCommand {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         name: ModuleName,
         height: BarHeight,
         vertical_alignment: VerticalAlignment,
@@ -267,22 +301,28 @@ impl CreateRootConfigCommand {
         }
     }
 
-    pub fn name(&self) -> &ModuleName {
+    #[must_use]
+    pub const fn name(&self) -> &ModuleName {
         &self.name
     }
-    pub fn height(&self) -> BarHeight {
+    #[must_use]
+    pub const fn height(&self) -> BarHeight {
         self.height
     }
-    pub fn vertical_alignment(&self) -> VerticalAlignment {
+    #[must_use]
+    pub const fn vertical_alignment(&self) -> VerticalAlignment {
         self.vertical_alignment
     }
-    pub fn margin(&self) -> &MarginConfig {
+    #[must_use]
+    pub const fn margin(&self) -> &MarginConfig {
         &self.margin
     }
-    pub fn unfocused(&self) -> Option<&PartialRootConfig> {
+    #[must_use]
+    pub const fn unfocused(&self) -> Option<&PartialRootConfig> {
         self.unfocused.as_ref()
     }
-    pub fn options(&self) -> &ModuleOptions {
+    #[must_use]
+    pub const fn options(&self) -> &ModuleOptions {
         &self.options
     }
 }
@@ -301,6 +341,8 @@ impl Default for RootConfig {
 }
 
 impl RootConfig {
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
     pub fn new(cmd: CreateRootConfigCommand) -> Self {
         Self {
             name: cmd.name().clone(),
@@ -312,28 +354,34 @@ impl RootConfig {
         }
     }
 
-    pub fn name(&self) -> &ModuleName {
+    #[must_use]
+    pub const fn name(&self) -> &ModuleName {
         &self.name
     }
 
-    pub fn height(&self) -> BarHeight {
+    #[must_use]
+    pub const fn height(&self) -> BarHeight {
         self.height
     }
 
     #[cfg(test)]
-    pub fn vertical_alignment(&self) -> VerticalAlignment {
+    #[must_use]
+    pub const fn vertical_alignment(&self) -> VerticalAlignment {
         self.vertical_alignment
     }
 
-    pub fn margin(&self) -> &MarginConfig {
+    #[must_use]
+    pub const fn margin(&self) -> &MarginConfig {
         &self.margin
     }
 
-    pub fn options(&self) -> &ModuleOptions {
+    #[must_use]
+    pub const fn options(&self) -> &ModuleOptions {
         &self.options
     }
 
-    pub fn as_unfocused(&self) -> RootConfig {
+    #[must_use]
+    pub fn as_unfocused(&self) -> Self {
         let mut base = self.clone();
         if let Some(unfocused) = &self.unfocused {
             if let Some(h) = unfocused.height() {
@@ -361,7 +409,7 @@ impl RootConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct MarginConfig {
     top: MarginOffset,
     bottom: MarginOffset,
@@ -370,7 +418,8 @@ pub struct MarginConfig {
 }
 
 impl MarginConfig {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         top: MarginOffset,
         bottom: MarginOffset,
         left: MarginOffset,
@@ -384,19 +433,23 @@ impl MarginConfig {
         }
     }
 
-    pub fn top(&self) -> MarginOffset {
+    #[must_use]
+    pub const fn top(&self) -> MarginOffset {
         self.top
     }
 
-    pub fn bottom(&self) -> MarginOffset {
+    #[must_use]
+    pub const fn bottom(&self) -> MarginOffset {
         self.bottom
     }
 
-    pub fn left(&self) -> MarginOffset {
+    #[must_use]
+    pub const fn left(&self) -> MarginOffset {
         self.left
     }
 
-    pub fn right(&self) -> MarginOffset {
+    #[must_use]
+    pub const fn right(&self) -> MarginOffset {
         self.right
     }
 }
@@ -407,15 +460,18 @@ pub struct ModulesConfig {
 }
 
 impl ModulesConfig {
-    pub fn new(modules: HashMap<ModuleName, ModuleConfig>) -> Self {
+    #[must_use]
+    pub const fn new(modules: HashMap<ModuleName, ModuleConfig>) -> Self {
         Self { modules }
     }
 
+    #[must_use]
     pub fn get(&self, name: &ModuleName) -> Option<&ModuleConfig> {
         self.modules.get(name)
     }
 
-    pub fn modules(&self) -> &HashMap<ModuleName, ModuleConfig> {
+    #[must_use]
+    pub const fn modules(&self) -> &HashMap<ModuleName, ModuleConfig> {
         &self.modules
     }
 }
@@ -424,10 +480,12 @@ impl ModulesConfig {
 pub struct EngineId(String);
 
 impl EngineId {
+    #[must_use]
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -443,10 +501,12 @@ impl std::fmt::Display for EngineId {
 pub struct FileExtension(String);
 
 impl FileExtension {
+    #[must_use]
     pub fn new(ext: impl Into<String>) -> Self {
         Self(ext.into())
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -467,11 +527,13 @@ pub enum EngineSelection {
 
 impl EngineSelection {
     #[cfg(test)]
-    pub fn is_auto(&self) -> bool {
+    #[must_use]
+    pub const fn is_auto(&self) -> bool {
         matches!(self, Self::Auto)
     }
 
-    pub fn as_explicit(&self) -> Option<&EngineId> {
+    #[must_use]
+    pub const fn as_explicit(&self) -> Option<&EngineId> {
         match self {
             Self::Explicit(id) => Some(id),
             Self::Auto => None,
@@ -488,7 +550,8 @@ pub struct ModuleConfig {
 }
 
 impl ModuleConfig {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         name: ModuleName,
         enable: bool,
         engine: EngineSelection,
@@ -502,24 +565,28 @@ impl ModuleConfig {
         }
     }
 
-    pub fn name(&self) -> &ModuleName {
+    #[must_use]
+    pub const fn name(&self) -> &ModuleName {
         &self.name
     }
 
-    pub fn is_enabled(&self) -> bool {
+    #[must_use]
+    pub const fn is_enabled(&self) -> bool {
         self.enable
     }
 
-    pub fn engine(&self) -> &EngineSelection {
+    #[must_use]
+    pub const fn engine(&self) -> &EngineSelection {
         &self.engine
     }
 
-    pub fn options(&self) -> &ModuleOptions {
+    #[must_use]
+    pub const fn options(&self) -> &ModuleOptions {
         &self.options
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PartialMarginConfig {
     top: Option<MarginOffset>,
     bottom: Option<MarginOffset>,
@@ -528,7 +595,8 @@ pub struct PartialMarginConfig {
 }
 
 impl PartialMarginConfig {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         top: Option<MarginOffset>,
         bottom: Option<MarginOffset>,
         left: Option<MarginOffset>,
@@ -542,21 +610,25 @@ impl PartialMarginConfig {
         }
     }
 
-    pub fn top(&self) -> Option<MarginOffset> {
+    #[must_use]
+    pub const fn top(&self) -> Option<MarginOffset> {
         self.top
     }
-    pub fn bottom(&self) -> Option<MarginOffset> {
+    #[must_use]
+    pub const fn bottom(&self) -> Option<MarginOffset> {
         self.bottom
     }
-    pub fn left(&self) -> Option<MarginOffset> {
+    #[must_use]
+    pub const fn left(&self) -> Option<MarginOffset> {
         self.left
     }
-    pub fn right(&self) -> Option<MarginOffset> {
+    #[must_use]
+    pub const fn right(&self) -> Option<MarginOffset> {
         self.right
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PartialRootConfig {
     height: Option<BarHeight>,
     vertical_alignment: Option<VerticalAlignment>,
@@ -570,7 +642,8 @@ pub struct CreatePartialRootConfigCommand {
 }
 
 impl CreatePartialRootConfigCommand {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         height: Option<BarHeight>,
         vertical_alignment: Option<VerticalAlignment>,
         margin: Option<PartialMarginConfig>,
@@ -582,18 +655,23 @@ impl CreatePartialRootConfigCommand {
         }
     }
 
-    pub fn height(&self) -> Option<BarHeight> {
+    #[must_use]
+    pub const fn height(&self) -> Option<BarHeight> {
         self.height
     }
-    pub fn vertical_alignment(&self) -> Option<VerticalAlignment> {
+    #[must_use]
+    pub const fn vertical_alignment(&self) -> Option<VerticalAlignment> {
         self.vertical_alignment
     }
-    pub fn margin(&self) -> Option<&PartialMarginConfig> {
+    #[must_use]
+    pub const fn margin(&self) -> Option<&PartialMarginConfig> {
         self.margin.as_ref()
     }
 }
 
 impl PartialRootConfig {
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
     pub fn new(cmd: CreatePartialRootConfigCommand) -> Self {
         Self {
             height: cmd.height(),
@@ -602,13 +680,16 @@ impl PartialRootConfig {
         }
     }
 
-    pub fn height(&self) -> Option<BarHeight> {
+    #[must_use]
+    pub const fn height(&self) -> Option<BarHeight> {
         self.height
     }
-    pub fn vertical_alignment(&self) -> Option<VerticalAlignment> {
+    #[must_use]
+    pub const fn vertical_alignment(&self) -> Option<VerticalAlignment> {
         self.vertical_alignment
     }
-    pub fn margin(&self) -> Option<&PartialMarginConfig> {
+    #[must_use]
+    pub const fn margin(&self) -> Option<&PartialMarginConfig> {
         self.margin.as_ref()
     }
 }
@@ -626,7 +707,7 @@ mod tests {
     #[test]
     fn test_font_size() {
         let s = FontSize::new(12.5);
-        assert_eq!(s.value(), 12.5);
+        assert!((s.value() - 12.5).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -703,7 +784,7 @@ mod tests {
         );
         assert_eq!(cfg.engine(), &explicit);
         assert_eq!(
-            cfg.engine().as_explicit().map(|id| id.as_str()),
+            cfg.engine().as_explicit().map(super::EngineId::as_str),
             Some("rhai")
         );
         assert!(!cfg.engine().is_auto());

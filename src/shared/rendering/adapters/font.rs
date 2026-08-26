@@ -6,6 +6,7 @@ pub struct CosmicFontValidatorAdapter {
 }
 
 impl CosmicFontValidatorAdapter {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             font_system: FontSystem::new(),
@@ -19,12 +20,13 @@ impl FontValidatorPort for CosmicFontValidatorAdapter {
             return true;
         }
 
+        let family_lower = family.to_lowercase();
         // cosmic-text uses its own Family enum for matches,
         // but we can query the internal database for exact family name matches.
         self.font_system.db().faces().any(|face| {
             face.families
                 .iter()
-                .any(|(f, _)| f.to_lowercase() == family.to_lowercase())
+                .any(|(f, _)| f.to_lowercase() == family_lower)
         })
     }
 }

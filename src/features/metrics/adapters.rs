@@ -9,10 +9,12 @@ pub struct SysinfoAdapter {
 }
 
 impl SysinfoAdapter {
-    pub fn new(config: MetricsConfig, hub: Arc<SignalHub>) -> Self {
+    #[must_use]
+    pub const fn new(config: MetricsConfig, hub: Arc<SignalHub>) -> Self {
         Self { config, hub }
     }
 
+    #[allow(clippy::unused_async)]
     pub async fn start(&self) {
         let config = self.config.clone();
         let hub = self.hub.clone();
@@ -45,6 +47,7 @@ impl SysinfoAdapter {
         });
     }
 
+    #[must_use]
     pub fn gather_metrics(
         sys: &mut System,
         networks: &mut Networks,
@@ -59,10 +62,10 @@ impl SysinfoAdapter {
         components.refresh(true);
 
         // CPU
-        let nproc = sys.cpus().len() as f32;
+        let nproc = f32::from(u16::try_from(sys.cpus().len()).unwrap_or(1));
         let global_cpu = sys.global_cpu_usage();
 
-        let per_core_raw: Vec<f32> = sys.cpus().iter().map(|c| c.cpu_usage()).collect();
+        let per_core_raw: Vec<f32> = sys.cpus().iter().map(sysinfo::Cpu::cpu_usage).collect();
         let (cpu_usage, per_core) =
             MetricsState::normalize_cpu_usage(config.cpu(), global_cpu, nproc, per_core_raw);
 
@@ -73,8 +76,8 @@ impl SysinfoAdapter {
             && config.network() != Some(&crate::features::metrics::domain::NetworkMode::Disabled)
         {
             for (_interface_name, data) in networks.iter() {
-                network_tx += data.transmitted();
-                network_rx += data.received();
+                network_tx = network_tx.saturating_add(data.transmitted());
+                network_rx = network_rx.saturating_add(data.received());
             }
         }
 
@@ -104,15 +107,15 @@ impl SysinfoAdapter {
             && config.temperature()
                 != Some(&crate::features::metrics::domain::TemperatureMode::Disabled)
         {
-            let mut count = 0;
+            let mut count: u16 = 0;
             for component in components.iter() {
                 if let Some(t) = component.temperature() {
                     temp += t;
-                    count += 1;
+                    count = count.saturating_add(1);
                 }
             }
             if count > 0 {
-                temp /= count as f32;
+                temp /= f32::from(count);
             }
 
             if config.temperature()
@@ -197,7 +200,7 @@ mod tests {
         assert_eq!(state.network_tx().value(), 0);
         assert_eq!(state.network_rx().value(), 0);
         assert!(state.disks().is_empty());
-        assert_eq!(state.temperature().value(), 0.0);
+        assert!(state.temperature().value().abs() < f32::EPSILON);
     }
 
     #[test]

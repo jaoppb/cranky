@@ -3,10 +3,13 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HomeDir(PathBuf);
 impl HomeDir {
-    pub fn new(path: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(path: PathBuf) -> Self {
         Self(path)
     }
-    pub fn as_path(&self) -> &PathBuf {
+
+    #[must_use]
+    pub const fn as_path(&self) -> &PathBuf {
         &self.0
     }
 }
@@ -14,10 +17,13 @@ impl HomeDir {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XdgCacheHome(PathBuf);
 impl XdgCacheHome {
-    pub fn new(path: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(path: PathBuf) -> Self {
         Self(path)
     }
-    pub fn as_path(&self) -> &PathBuf {
+
+    #[must_use]
+    pub const fn as_path(&self) -> &PathBuf {
         &self.0
     }
 }
@@ -25,10 +31,13 @@ impl XdgCacheHome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XdgRuntimeDir(PathBuf);
 impl XdgRuntimeDir {
-    pub fn new(path: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(path: PathBuf) -> Self {
         Self(path)
     }
-    pub fn as_path(&self) -> &PathBuf {
+
+    #[must_use]
+    pub const fn as_path(&self) -> &PathBuf {
         &self.0
     }
 }
@@ -36,9 +45,12 @@ impl XdgRuntimeDir {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RustLog(String);
 impl RustLog {
-    pub fn new(log: String) -> Self {
+    #[must_use]
+    pub const fn new(log: String) -> Self {
         Self(log)
     }
+
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -47,9 +59,12 @@ impl RustLog {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HyprlandInstanceSignature(String);
 impl HyprlandInstanceSignature {
-    pub fn new(sig: String) -> Self {
+    #[must_use]
+    pub const fn new(sig: String) -> Self {
         Self(sig)
     }
+
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -65,7 +80,8 @@ pub struct AppEnvironment {
 }
 
 impl AppEnvironment {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         home: HomeDir,
         xdg_cache_home: XdgCacheHome,
         xdg_runtime_dir: XdgRuntimeDir,
@@ -81,19 +97,28 @@ impl AppEnvironment {
         }
     }
 
-    pub fn home(&self) -> &HomeDir {
+    #[must_use]
+    pub const fn home(&self) -> &HomeDir {
         &self.home
     }
-    pub fn xdg_cache_home(&self) -> &XdgCacheHome {
+
+    #[must_use]
+    pub const fn xdg_cache_home(&self) -> &XdgCacheHome {
         &self.xdg_cache_home
     }
-    pub fn xdg_runtime_dir(&self) -> &XdgRuntimeDir {
+
+    #[must_use]
+    pub const fn xdg_runtime_dir(&self) -> &XdgRuntimeDir {
         &self.xdg_runtime_dir
     }
-    pub fn rust_log(&self) -> &RustLog {
+
+    #[must_use]
+    pub const fn rust_log(&self) -> &RustLog {
         &self.rust_log
     }
-    pub fn hyprland_instance_signature(&self) -> Option<&HyprlandInstanceSignature> {
+
+    #[must_use]
+    pub const fn hyprland_instance_signature(&self) -> Option<&HyprlandInstanceSignature> {
         self.hyprland_instance_signature.as_ref()
     }
 }

@@ -13,8 +13,25 @@ pub enum HyprError {
 
 #[cfg_attr(test, mockall::automock)]
 pub trait HyprlandProvider: Send + Sync {
+    /// Queries the monitors from Hyprland.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HyprError`] if the IPC communication fails.
     fn query_monitors(&self) -> Result<String, HyprError>;
+
+    /// Queries the workspaces from Hyprland.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HyprError`] if the IPC communication fails.
     fn query_workspaces(&self) -> Result<String, HyprError>;
+
+    /// Opens a stream to listen to Hyprland socket events.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`HyprError`] if opening the event socket fails.
     fn listen_events(&self) -> Result<UnixStream, HyprError>;
 }
 
@@ -23,7 +40,8 @@ pub struct RealHyprlandProvider {
 }
 
 impl RealHyprlandProvider {
-    pub fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
+    #[must_use]
+    pub const fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
         Self { app_env }
     }
 }
@@ -84,12 +102,12 @@ mod tests {
     fn test_hypr_error_display() {
         let err = HyprError::NoInstance;
         assert_eq!(
-            format!("{}", err),
+            format!("{err}"),
             "Hyprland instance signature not found. Is Hyprland running?"
         );
 
         let err = HyprError::Io(std::io::Error::other("test"));
-        assert!(format!("{}", err).contains("IO error: test"));
+        assert!(format!("{err}").contains("IO error: test"));
     }
 
     #[test]

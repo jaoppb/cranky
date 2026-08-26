@@ -19,6 +19,9 @@ pub struct RhaiModule {
 }
 
 impl RhaiModule {
+    /// # Errors
+    ///
+    /// Returns `ModuleError::Internal` if compiling or evaluating the script fails.
     pub fn new(name: String, source: &str) -> Result<Self, ModuleError> {
         let mut engine = Engine::new();
         engine.set_max_expr_depths(0, 0);
@@ -28,7 +31,7 @@ impl RhaiModule {
         });
 
         let ast = engine.compile(source).map_err(|e| ModuleError::Internal {
-            message: format!("Failed to compile Rhai script {}: {}", name, e),
+            message: format!("Failed to compile Rhai script {name}: {e}"),
         })?;
 
         let mut scope = Scope::new();
@@ -42,7 +45,7 @@ impl RhaiModule {
 
         if let Err(e) = engine.run_ast_with_scope(&mut scope, &ast) {
             return Err(ModuleError::Internal {
-                message: format!("Failed to initialize Rhai script scope {}: {}", name, e),
+                message: format!("Failed to initialize Rhai script scope {name}: {e}"),
             });
         }
 
@@ -156,6 +159,7 @@ impl RhaiModule {
 }
 
 impl AnyModulePort for RhaiModule {
+    #[allow(clippy::significant_drop_tightening)]
     fn init(
         &mut self,
         config: &ModuleConfig,
@@ -164,8 +168,8 @@ impl AnyModulePort for RhaiModule {
         use crate::features::module_runtime::ports::ModuleInitError;
 
         let root_config = full_config.root();
-        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
-        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
+        let mut scope = self.scope.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let engine = self.engine.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         // Expose root config
         let mut root_map = rhai::Map::new();
@@ -175,7 +179,7 @@ impl AnyModulePort for RhaiModule {
         );
         root_map.insert(
             "height".into(),
-            Dynamic::from(root_config.height().value() as i64),
+            Dynamic::from(i64::from(root_config.height().value())),
         );
         scope.set_or_push("root_config", root_map);
 
@@ -210,9 +214,10 @@ impl AnyModulePort for RhaiModule {
         &self.cached_styles
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
-        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
-        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
+        let mut scope = self.scope.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let engine = self.engine.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         if changed.contains(&SignalKind::Time) {
             let time = *hub.time_rx().borrow();
@@ -258,7 +263,7 @@ impl AnyModulePort for RhaiModule {
 
         let mut dbus_handled = false;
         for signal in changed {
-            if let SignalKind::DBus = signal
+            if matches!(signal, SignalKind::DBus)
                 && !dbus_handled
             {
                 let dbus_state = hub.dbus_rx().borrow().clone();
@@ -272,13 +277,14 @@ impl AnyModulePort for RhaiModule {
         }
 
         if let Err(e) = engine.call_fn::<()>(&mut scope, &self.ast, "refresh", ()) {
-            tracing::error!("Rhai refresh error: {}", e);
+            tracing::error!("Rhai refresh error: {e}");
         }
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     fn render(&self, monitor: &MonitorId) -> crate::features::vdom::domain::VNode {
-        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
-        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
+        let mut scope = self.scope.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let engine = self.engine.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let monitor_id = monitor.as_str().to_string();
 
         match engine.call_fn::<rhai::Dynamic>(&mut scope, &self.ast, "render", (monitor_id,)) {
@@ -287,8 +293,7 @@ impl AnyModulePort for RhaiModule {
                     Ok(node) => node,
                     Err(e) => {
                         tracing::error!(
-                            "Failed to deserialize render output in rhai module: {}",
-                            e
+                            "Failed to deserialize render output in rhai module: {e}"
                         );
                         crate::features::vdom::domain::VNode::new_flex(
                             vec![],
@@ -302,23 +307,24 @@ impl AnyModulePort for RhaiModule {
                 }
             }
             Err(e) => {
-                tracing::warn!("Module render error in rhai: {}", e);
+                tracing::warn!("Module render error in rhai: {e}");
                 crate::features::vdom::domain::VNode::new_flex(vec![], None, None, None, None, None)
             }
         }
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     fn call_function(
         &mut self,
         name: &crate::shared::primitives::FunctionName,
     ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
-        let mut scope = self.scope.lock().unwrap_or_else(|e| e.into_inner());
-        let engine = self.engine.lock().unwrap_or_else(|e| e.into_inner());
+        let mut scope = self.scope.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let engine = self.engine.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         match engine.call_fn::<()>(&mut scope, &self.ast, name.as_str(), ()) {
             Ok(()) => Ok(()),
             Err(e) => {
-                tracing::error!("Function call '{}' failed: {}", name.as_str(), e);
+                tracing::error!("Function call '{}' failed: {e}", name.as_str());
                 Err(
                     crate::features::module_runtime::ports::ModuleInitError::ScriptError(
                         e.to_string(),

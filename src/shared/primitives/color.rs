@@ -1,7 +1,7 @@
 use serde::{Deserialize, Deserializer};
 use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum ColorError {
     #[error("Empty color string")]
     Empty,
@@ -22,20 +22,25 @@ pub struct Color {
 }
 
 impl Color {
-    pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
+    #[must_use]
+    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
     }
 
-    pub fn r(&self) -> u8 {
+    #[must_use]
+    pub const fn r(&self) -> u8 {
         self.r
     }
-    pub fn g(&self) -> u8 {
+    #[must_use]
+    pub const fn g(&self) -> u8 {
         self.g
     }
-    pub fn b(&self) -> u8 {
+    #[must_use]
+    pub const fn b(&self) -> u8 {
         self.b
     }
-    pub fn a(&self) -> u8 {
+    #[must_use]
+    pub const fn a(&self) -> u8 {
         self.a
     }
 }
@@ -48,7 +53,7 @@ pub enum DrawingColor {
 
 impl Default for DrawingColor {
     fn default() -> Self {
-        DrawingColor::Solid(Color::new(0, 0, 0, 255))
+        Self::Solid(Color::new(0, 0, 0, 255))
     }
 }
 
@@ -58,11 +63,16 @@ impl<'de> Deserialize<'de> for DrawingColor {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        DrawingColor::parse(&s).map_err(serde::de::Error::custom)
+        Self::parse(&s).map_err(serde::de::Error::custom)
     }
 }
 
 impl DrawingColor {
+    /// Parses a drawing color from a string.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ColorError` if input is empty, no colors found, invalid format, or invalid angle.
     pub fn parse(input: &str) -> Result<Self, ColorError> {
         let input = input.trim();
         if input.is_empty() {
@@ -80,13 +90,12 @@ impl DrawingColor {
         for (i, token) in tokens.iter().enumerate() {
             if let Some(c) = parse_single_color(token) {
                 colors.push(c);
-            } else if i == tokens.len() - 1 && tokens.len() > 1 {
+            } else if i == tokens.len().saturating_sub(1) && tokens.len() > 1 {
                 let angle_str = token.strip_suffix("deg").unwrap_or(token);
-                if let Ok(a) = angle_str.parse::<f32>() {
-                    angle = a;
-                } else {
+                let Ok(a) = angle_str.parse::<f32>() else {
                     return Err(ColorError::InvalidAngle(token.clone()));
-                }
+                };
+                angle = a;
             } else {
                 return Err(ColorError::InvalidFormat(token.clone()));
             }
@@ -97,9 +106,11 @@ impl DrawingColor {
         }
 
         if colors.len() > 1 {
-            Ok(DrawingColor::Gradient(colors, angle))
+            Ok(Self::Gradient(colors, angle))
+        } else if let Some(color) = colors.into_iter().next() {
+            Ok(Self::Solid(color))
         } else {
-            Ok(DrawingColor::Solid(colors[0]))
+            Err(ColorError::NoColors(input.to_string()))
         }
     }
 }
@@ -107,14 +118,14 @@ impl DrawingColor {
 fn tokenize(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current_token = String::new();
-    let mut in_parens = 0;
+    let mut in_parens: u32 = 0;
 
     for c in input.chars() {
         if c == '(' {
-            in_parens += 1;
+            in_parens = in_parens.saturating_add(1);
             current_token.push(c);
         } else if c == ')' {
-            in_parens -= 1;
+            in_parens = in_parens.saturating_sub(1);
             current_token.push(c);
         } else if c.is_whitespace() && in_parens == 0 {
             if !current_token.is_empty() {
@@ -139,77 +150,84 @@ fn parse_single_color(s: &str) -> Option<Color> {
         .or_else(|| parse_hex(s))
 }
 
+#[allow(clippy::many_single_char_names)]
 fn parse_rgba_hex(s: &str) -> Option<Color> {
-    if s.starts_with("rgba(") && s.ends_with(')') {
-        let content = &s[5..s.len() - 1];
-        if content.len() == 8 {
-            let r = u8::from_str_radix(&content[0..2], 16).ok()?;
-            let g = u8::from_str_radix(&content[2..4], 16).ok()?;
-            let b = u8::from_str_radix(&content[4..6], 16).ok()?;
-            let a = u8::from_str_radix(&content[6..8], 16).ok()?;
-            return Some(Color::new(r, g, b, a));
-        }
+    let content = s.strip_prefix("rgba(")?.strip_suffix(')')?;
+    if content.len() == 8 {
+        let r = u8::from_str_radix(content.get(0..2)?, 16).ok()?;
+        let g = u8::from_str_radix(content.get(2..4)?, 16).ok()?;
+        let b = u8::from_str_radix(content.get(4..6)?, 16).ok()?;
+        let a = u8::from_str_radix(content.get(6..8)?, 16).ok()?;
+        return Some(Color::new(r, g, b, a));
     }
     None
 }
 
 fn parse_rgb_hex(s: &str) -> Option<Color> {
-    if s.starts_with("rgb(") && s.ends_with(')') {
-        let content = &s[4..s.len() - 1];
-        if content.len() == 6 {
-            let r = u8::from_str_radix(&content[0..2], 16).ok()?;
-            let g = u8::from_str_radix(&content[2..4], 16).ok()?;
-            let b = u8::from_str_radix(&content[4..6], 16).ok()?;
-            return Some(Color::new(r, g, b, 255));
-        }
+    let content = s.strip_prefix("rgb(")?.strip_suffix(')')?;
+    if content.len() == 6 {
+        let r = u8::from_str_radix(content.get(0..2)?, 16).ok()?;
+        let g = u8::from_str_radix(content.get(2..4)?, 16).ok()?;
+        let b = u8::from_str_radix(content.get(4..6)?, 16).ok()?;
+        return Some(Color::new(r, g, b, 255));
     }
     None
 }
 
+#[allow(clippy::many_single_char_names)]
 fn parse_hex(s: &str) -> Option<Color> {
-    if s.starts_with('#') {
-        if s.len() == 7 {
-            let r = u8::from_str_radix(&s[1..3], 16).ok()?;
-            let g = u8::from_str_radix(&s[3..5], 16).ok()?;
-            let b = u8::from_str_radix(&s[5..7], 16).ok()?;
-            return Some(Color::new(r, g, b, 255));
-        } else if s.len() == 9 {
-            let r = u8::from_str_radix(&s[1..3], 16).ok()?;
-            let g = u8::from_str_radix(&s[3..5], 16).ok()?;
-            let b = u8::from_str_radix(&s[5..7], 16).ok()?;
-            let a = u8::from_str_radix(&s[7..9], 16).ok()?;
-            return Some(Color::new(r, g, b, a));
-        }
+    let hex = s.strip_prefix('#')?;
+    if hex.len() == 6 {
+        let r = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
+        let g = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
+        let b = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
+        Some(Color::new(r, g, b, 255))
+    } else if hex.len() == 8 {
+        let r = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
+        let g = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
+        let b = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
+        let a = u8::from_str_radix(hex.get(6..8)?, 16).ok()?;
+        Some(Color::new(r, g, b, a))
+    } else {
+        None
     }
-    None
 }
 
 fn parse_css_rgb(s: &str) -> Option<Color> {
-    if s.starts_with("rgb(") && s.ends_with(')') {
-        let content = &s[4..s.len() - 1];
-        let parts: Vec<&str> = content.split(',').map(str::trim).collect();
-        if parts.len() == 3 {
-            let r = parts[0].parse::<u8>().ok()?;
-            let g = parts[1].parse::<u8>().ok()?;
-            let b = parts[2].parse::<u8>().ok()?;
-            return Some(Color::new(r, g, b, 255));
-        }
+    let content = s.strip_prefix("rgb(")?.strip_suffix(')')?;
+    let mut parts = content.split(',').map(str::trim);
+    let r_str = parts.next()?;
+    let g_str = parts.next()?;
+    let b_str = parts.next()?;
+    if parts.next().is_none() {
+        let r = r_str.parse::<u8>().ok()?;
+        let g = g_str.parse::<u8>().ok()?;
+        let b = b_str.parse::<u8>().ok()?;
+        return Some(Color::new(r, g, b, 255));
     }
     None
 }
 
+#[allow(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::many_single_char_names
+)]
 fn parse_css_rgba(s: &str) -> Option<Color> {
-    if s.starts_with("rgba(") && s.ends_with(')') {
-        let content = &s[5..s.len() - 1];
-        let parts: Vec<&str> = content.split(',').map(str::trim).collect();
-        if parts.len() == 4 {
-            let r = parts[0].parse::<u8>().ok()?;
-            let g = parts[1].parse::<u8>().ok()?;
-            let b = parts[2].parse::<u8>().ok()?;
-            let a_f = parts[3].parse::<f32>().ok()?;
-            let a = (a_f * 255.0).round() as u8;
-            return Some(Color::new(r, g, b, a));
-        }
+    let content = s.strip_prefix("rgba(")?.strip_suffix(')')?;
+    let mut parts = content.split(',').map(str::trim);
+    let r_str = parts.next()?;
+    let g_str = parts.next()?;
+    let b_str = parts.next()?;
+    let a_str = parts.next()?;
+    if parts.next().is_none() {
+        let r = r_str.parse::<u8>().ok()?;
+        let g = g_str.parse::<u8>().ok()?;
+        let b = b_str.parse::<u8>().ok()?;
+        let a_f = a_str.parse::<f32>().ok()?;
+        let a = (a_f * 255.0).round() as u8;
+        return Some(Color::new(r, g, b, a));
     }
     None
 }
@@ -261,7 +279,7 @@ mod tests {
             assert_eq!(colors.len(), 2);
             assert_eq!(colors[0], Color::new(255, 0, 0, 255));
             assert_eq!(colors[1], Color::new(0, 255, 0, 255));
-            assert_eq!(angle, 90.0);
+            assert!((angle - 90.0).abs() < f32::EPSILON);
         } else {
             panic!("Expected gradient");
         }

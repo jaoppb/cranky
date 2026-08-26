@@ -15,17 +15,22 @@ pub struct MmappedShm {
 
 impl MmappedShm {
     #[cfg(test)]
+    /// # Errors
+    ///
+    /// Returns an I/O error if creating or memory-mapping the SHM file fails.
     pub fn new(size: usize, xdg_runtime_dir: &std::path::Path) -> Result<Self> {
         let file = create_shm_file(size, xdg_runtime_dir)?;
         let mmap = safe_mmap_file(&file)?;
         Ok(Self { mmap })
     }
 
+    #[must_use]
     pub fn mmap_mut(&mut self) -> &mut [u8] {
         &mut self.mmap
     }
 
     #[cfg(test)]
+    #[must_use]
     pub fn size(&self) -> usize {
         self.mmap.len()
     }
@@ -40,10 +45,12 @@ pub struct BufferUserData {
 }
 
 impl BufferUserData {
-    pub fn new(busy: Arc<AtomicBool>) -> Self {
+    #[must_use]
+    pub const fn new(busy: Arc<AtomicBool>) -> Self {
         Self { busy }
     }
 
+    #[must_use]
     pub fn is_busy(&self) -> bool {
         self.busy.load(Ordering::Acquire)
     }
@@ -59,14 +66,17 @@ pub struct BufferSlot {
 }
 
 impl BufferSlot {
-    pub fn new(buffer: wayland_client::protocol::wl_buffer::WlBuffer, busy: Arc<AtomicBool>) -> Self {
+    #[must_use]
+    pub const fn new(buffer: wayland_client::protocol::wl_buffer::WlBuffer, busy: Arc<AtomicBool>) -> Self {
         Self { buffer, busy }
     }
 
-    pub fn buffer(&self) -> &wayland_client::protocol::wl_buffer::WlBuffer {
+    #[must_use]
+    pub const fn buffer(&self) -> &wayland_client::protocol::wl_buffer::WlBuffer {
         &self.buffer
     }
 
+    #[must_use]
     pub fn is_busy(&self) -> bool {
         self.busy.load(Ordering::Acquire)
     }
@@ -88,7 +98,8 @@ pub struct ShmBuffer {
 fn create_shm_file(size: usize, xdg_runtime_dir: &std::path::Path) -> Result<File> {
     let mut path = xdg_runtime_dir.to_path_buf();
 
-    path.push(format!("cranky-shm-{}", uuid::Uuid::new_v4()));
+    let id = uuid::Uuid::new_v4();
+    path.push(format!("cranky-shm-{id}"));
 
     let file = File::options()
         .read(true)
@@ -99,7 +110,8 @@ fn create_shm_file(size: usize, xdg_runtime_dir: &std::path::Path) -> Result<Fil
 
     // Immediately unlink the file so it's only accessible via the FD
     let _ = std::fs::remove_file(&path);
-    file.set_len(size as u64)?;
+    let len = u64::try_from(size).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    file.set_len(len)?;
     Ok(file)
 }
 
@@ -114,6 +126,9 @@ fn safe_borrowed_fd_from_file(file: &File) -> BorrowedFd<'_> {
 }
 
 impl ShmBuffer {
+    /// # Errors
+    ///
+    /// Returns an I/O error if creating or mapping the SHM file fails.
     pub fn new<S>(
         shm_proxy: &WlShm,
         width: u32,
@@ -126,21 +141,25 @@ impl ShmBuffer {
             + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, BufferUserData>
             + 'static,
     {
-        let frame_size = (width * height * 4) as usize;
-        let total_size = frame_size * 2;
+        let frame_size = usize::try_from(width.saturating_mul(height).saturating_mul(4)).unwrap_or_default();
+        let total_size = frame_size.saturating_mul(2);
         let file = create_shm_file(total_size, xdg_runtime_dir)?;
 
         let mmap = safe_mmap_file(&file)?;
         let fd = safe_borrowed_fd_from_file(&file);
-        let pool = shm_proxy.create_pool(fd, total_size as i32, qh, ());
+        let pool = shm_proxy.create_pool(fd, i32::try_from(total_size).unwrap_or(i32::MAX), qh, ());
+
+        let width_i32 = i32::try_from(width).unwrap_or_default();
+        let height_i32 = i32::try_from(height).unwrap_or_default();
+        let stride_i32 = i32::try_from(width.saturating_mul(4)).unwrap_or_default();
 
         let busy_0 = Arc::new(AtomicBool::new(false));
         let user_data_0 = BufferUserData::new(busy_0.clone());
         let buffer_0 = pool.create_buffer(
             0,
-            width as i32,
-            height as i32,
-            (width * 4) as i32,
+            width_i32,
+            height_i32,
+            stride_i32,
             wayland_client::protocol::wl_shm::Format::Argb8888,
             qh,
             user_data_0,
@@ -149,10 +168,10 @@ impl ShmBuffer {
         let busy_1 = Arc::new(AtomicBool::new(false));
         let user_data_1 = BufferUserData::new(busy_1.clone());
         let buffer_1 = pool.create_buffer(
-            frame_size as i32,
-            width as i32,
-            height as i32,
-            (width * 4) as i32,
+            i32::try_from(frame_size).unwrap_or_default(),
+            width_i32,
+            height_i32,
+            stride_i32,
             wayland_client::protocol::wl_shm::Format::Argb8888,
             qh,
             user_data_1,
@@ -173,33 +192,47 @@ impl ShmBuffer {
         })
     }
 
+    #[must_use]
     pub fn mmap_mut(&mut self) -> &mut [u8] {
-        let frame_size = (self.width * self.height * 4) as usize;
-        let offset = self.back_index * frame_size;
-        if self.slots[self.back_index].is_busy() {
+        let frame_size = usize::try_from(self.width.saturating_mul(self.height).saturating_mul(4)).unwrap_or_default();
+        let offset = self.back_index.saturating_mul(frame_size);
+        if let Some(slot) = self.slots.get(self.back_index)
+            && slot.is_busy()
+        {
             tracing::debug!(
                 slot = self.back_index,
                 "Target back buffer is still marked busy by compositor; writing anyway"
             );
         }
-        &mut self.shm.mmap_mut()[offset..offset + frame_size]
+        let end = offset.saturating_add(frame_size);
+        self.shm
+            .mmap_mut()
+            .get_mut(offset..end)
+            .unwrap_or_default()
     }
 
+    #[must_use]
     pub fn current_buffer(&self) -> &wayland_client::protocol::wl_buffer::WlBuffer {
-        self.slots[self.back_index].buffer()
+        self.slots
+            .get(self.back_index)
+            .map_or_else(|| &self.slots[0].buffer, BufferSlot::buffer)
     }
 
-    pub fn width(&self) -> u32 {
+    #[must_use]
+    pub const fn width(&self) -> u32 {
         self.width
     }
 
-    pub fn height(&self) -> u32 {
+    #[must_use]
+    pub const fn height(&self) -> u32 {
         self.height
     }
 
     pub fn swap_buffers(&mut self) {
-        self.slots[self.back_index].set_busy(true);
-        self.back_index = 1 - self.back_index;
+        if let Some(slot) = self.slots.get(self.back_index) {
+            slot.set_busy(true);
+        }
+        self.back_index = 1usize.saturating_sub(self.back_index);
     }
 }
 
@@ -224,7 +257,8 @@ mod tests {
         // Test create_shm_file success
         let size = 1024;
         let file = create_shm_file(size, tmp).unwrap();
-        assert_eq!(file.metadata().unwrap().len(), size as u64);
+        let size_u64 = u64::try_from(size).unwrap();
+        assert_eq!(file.metadata().unwrap().len(), size_u64);
 
         // Test mmapped_shm_methods
         let size = 4096;
@@ -274,8 +308,8 @@ mod tests {
         let tmp = Path::new("/tmp");
         let width = 10u32;
         let height = 10u32;
-        let frame_size = (width * height * 4) as usize;
-        let total_size = frame_size * 2;
+        let frame_size = usize::try_from(width.saturating_mul(height).saturating_mul(4)).unwrap();
+        let total_size = frame_size.saturating_mul(2);
 
         let mut shm = MmappedShm::new(total_size, tmp).unwrap();
         assert_eq!(shm.size(), total_size);

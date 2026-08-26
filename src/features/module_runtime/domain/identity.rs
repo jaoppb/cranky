@@ -8,7 +8,8 @@ pub struct ModuleIdentity {
 }
 
 impl ModuleIdentity {
-    pub fn new(id: ModuleId) -> Self {
+    #[must_use]
+    pub const fn new(id: ModuleId) -> Self {
         Self {
             id,
             parent_id: None,
@@ -16,25 +17,30 @@ impl ModuleIdentity {
         }
     }
 
-    pub fn with_parent(mut self, parent_id: Option<ModuleId>) -> Self {
+    #[must_use]
+    pub const fn with_parent(mut self, parent_id: Option<ModuleId>) -> Self {
         self.parent_id = parent_id;
         self
     }
 
+    #[must_use]
     pub fn with_instance_id(mut self, instance_id: Option<ModuleInstanceId>) -> Self {
         self.instance_id = instance_id;
         self
     }
 
-    pub fn id(&self) -> ModuleId {
+    #[must_use]
+    pub const fn id(&self) -> ModuleId {
         self.id
     }
 
-    pub fn parent_id(&self) -> Option<ModuleId> {
+    #[must_use]
+    pub const fn parent_id(&self) -> Option<ModuleId> {
         self.parent_id
     }
 
-    pub fn instance_id(&self) -> Option<&ModuleInstanceId> {
+    #[must_use]
+    pub const fn instance_id(&self) -> Option<&ModuleInstanceId> {
         self.instance_id.as_ref()
     }
 }

@@ -43,45 +43,54 @@ impl ModuleContext {
         }
     }
 
+    #[must_use]
     pub fn with_parent(mut self, parent_id: Option<ModuleId>) -> Self {
         self.identity = self.identity.with_parent(parent_id);
         self
     }
 
+    #[must_use]
     pub fn with_instance_id(mut self, instance_id: Option<ModuleInstanceId>) -> Self {
         self.identity = self.identity.with_instance_id(instance_id);
         self
     }
 
-    pub fn identity(&self) -> &ModuleIdentity {
+    #[must_use]
+    pub const fn identity(&self) -> &ModuleIdentity {
         &self.identity
     }
 
-    pub fn id(&self) -> ModuleId {
+    #[must_use]
+    pub const fn id(&self) -> ModuleId {
         self.identity.id()
     }
 
-    pub fn parent_id(&self) -> Option<ModuleId> {
+    #[must_use]
+    pub const fn parent_id(&self) -> Option<ModuleId> {
         self.identity.parent_id()
     }
 
-    pub fn instance_id(&self) -> Option<&ModuleInstanceId> {
+    #[must_use]
+    pub const fn instance_id(&self) -> Option<&ModuleInstanceId> {
         self.identity.instance_id()
     }
 
-    pub fn hub(&self) -> &Arc<SignalHub> {
+    #[must_use]
+    pub const fn hub(&self) -> &Arc<SignalHub> {
         &self.hub
     }
 
-    pub fn surface_manager(&self) -> &DynSurfaceManager {
+    #[must_use]
+    pub const fn surface_manager(&self) -> &DynSurfaceManager {
         &self.surface_manager
     }
 
+    #[must_use]
     pub fn command_tx(&self) -> &dyn CommandSender {
         self.command_tx.as_ref()
     }
 
-    pub fn rxs_mut(
+    pub const fn rxs_mut(
         &mut self,
     ) -> (
         &mut watch::Receiver<HashMap<MonitorId, Rect>>,
@@ -100,6 +109,7 @@ pub struct ModuleActor<F: CanvasFactory + 'static> {
 }
 
 impl<F: CanvasFactory + 'static> ModuleActor<F> {
+    #[must_use]
     pub fn new(
         port: Box<dyn AnyModulePort>,
         ctx: ModuleContext,

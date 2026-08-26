@@ -8,7 +8,8 @@ use std::path::PathBuf;
 pub struct OsEnvironmentAdapter;
 
 impl OsEnvironmentAdapter {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -26,8 +27,7 @@ impl EnvironmentPort for OsEnvironmentAdapter {
         let home_path = PathBuf::from(&home);
 
         let xdg_cache_home = env::var("XDG_CACHE_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| home_path.join(".cache"));
+            .map_or_else(|_| home_path.join(".cache"), PathBuf::from);
 
         let xdg_runtime_dir = env::var("XDG_RUNTIME_DIR")
             .map_err(|_| EnvironmentError::MissingVariable("XDG_RUNTIME_DIR".to_string()))?;

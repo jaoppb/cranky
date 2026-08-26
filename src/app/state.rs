@@ -12,23 +12,13 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{error, info};
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum AppError {
-    Module(crate::features::module_runtime::ports::RegistryLoadError),
+    #[error("Module error: {0}")]
+    Module(#[from] crate::features::module_runtime::ports::RegistryLoadError),
+    #[error("Internal error: {message}")]
     Internal { message: String },
 }
-
-impl std::fmt::Display for AppError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Module(err) => write!(f, "Module error: {}", err)?,
-            Self::Internal { message } => write!(f, "Internal error: {}", message)?,
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for AppError {}
 
 pub struct ModuleLayout {
     id: ModuleId,
@@ -36,11 +26,13 @@ pub struct ModuleLayout {
 }
 
 impl ModuleLayout {
-    pub fn id(&self) -> crate::shared::primitives::ModuleId {
+    #[must_use]
+    pub const fn id(&self) -> crate::shared::primitives::ModuleId {
         self.id
     }
 
-    pub fn bounds(&self) -> &Rect {
+    #[must_use]
+    pub const fn bounds(&self) -> &Rect {
         &self.bounds
     }
 }
@@ -56,14 +48,22 @@ pub struct AppReadModel {
 }
 
 impl AppReadModel {
-    pub fn config(&self) -> &crate::shared::config::domain::Config {
+    #[must_use]
+    pub const fn config(&self) -> &crate::shared::config::domain::Config {
         &self.config
     }
 
-    pub fn root_module(&self) -> Option<ModuleId> {
+    #[must_use]
+    pub const fn root_module(&self) -> Option<ModuleId> {
         self.root_module
     }
 
+    #[allow(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation
+    )]
+    #[must_use]
     pub fn calculate_layout(
         &self,
         monitor: &MonitorId,
@@ -100,7 +100,7 @@ impl AppReadModel {
             self.module_sizes
                 .get(monitor)
                 .and_then(|m| m.get(id))
-                .cloned()
+                .copied()
                 .unwrap_or(Size::new(0, 0))
         };
 
@@ -164,7 +164,7 @@ impl AppReadModel {
             center_sizes.push((id, size));
         }
         if !center_sizes.is_empty() {
-            center_width += ((center_sizes.len() - 1) as f32) * gap;
+            center_width = ((center_sizes.len().saturating_sub(1)) as f32).mul_add(gap, center_width);
         }
 
         let mut center_x = (bar_width.value() as f32 - center_width) / 2.0;
@@ -210,6 +210,12 @@ impl<
     F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
 > CrankyApp<R, F>
 {
+    /// Creates a new [`CrankyApp`] instance and initializes modules from config.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AppError::Module`] if initial module loading fails.
+    #[allow(clippy::needless_pass_by_value)]
     pub fn new(
         hub: Arc<SignalHub>,
         config: Config,
@@ -255,6 +261,12 @@ impl<
         })
     }
 
+    /// Runs the main event loop, listening for display events, commands, and signals.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AppError::Internal`] if display server communication or event dispatching fails.
+    #[allow(clippy::too_many_lines)]
     pub async fn run(
         &mut self,
         mut display: impl DisplayServerPort,
@@ -278,9 +290,9 @@ impl<
                 }
                 Some(mut command) = self.command_rx.recv() => {
                     let mut needs_render = false;
-                    let mut process_count = 0;
+                    let mut process_count: usize = 0;
                     loop {
-                        process_count += 1;
+                        process_count = process_count.saturating_add(1);
                         match command {
                             AppCommand::ContainerLayoutsCalculated {
                                 parent_id: _,
@@ -333,13 +345,13 @@ impl<
                                 needs_render = true;
                             },
                             AppCommand::Exec(cmd) => {
-                                tracing::debug!("Executing shell command: {}", cmd);
+                                tracing::debug!("Executing shell command: {cmd}");
                                 let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
                             },
                             AppCommand::SystrayAction { id, action, pos } => {
                                 tracing::debug!(?id, ?action, ?pos, "Received AppCommand::SystrayAction, triggering SNI action");
                                 match sni.trigger_action(&id, &action, pos).await {
-                                    Ok(_) => tracing::debug!(?id, ?action, "SNI trigger_action succeeded"),
+                                    Ok(()) => tracing::debug!(?id, ?action, "SNI trigger_action succeeded"),
                                     Err(e) => tracing::error!(?id, ?action, err = ?e, "SNI trigger_action failed"),
                                 }
                             }
@@ -350,19 +362,19 @@ impl<
                             AppCommand::ShowTooltip { layout } => {
                                 tracing::debug!(?layout, "Received AppCommand::ShowTooltip, calling display.show_tooltip");
                                 match display.show_tooltip(*layout) {
-                                    Ok(_) => tracing::debug!("display.show_tooltip succeeded"),
+                                    Ok(()) => tracing::debug!("display.show_tooltip succeeded"),
                                     Err(e) => tracing::error!(err = ?e, "display.show_tooltip failed"),
                                 }
                             }
                             AppCommand::HideTooltip => {
                                 tracing::debug!("Received AppCommand::HideTooltip, calling display.hide_tooltip");
                                 match display.hide_tooltip() {
-                                    Ok(_) => tracing::debug!("display.hide_tooltip succeeded"),
+                                    Ok(()) => tracing::debug!("display.hide_tooltip succeeded"),
                                     Err(e) => tracing::error!(err = ?e, "display.hide_tooltip failed"),
                                 }
                             }
                             AppCommand::ReloadModule(name) => {
-                                tracing::info!("Reloading module: {}", name.as_str());
+                                tracing::info!("Reloading module: {name}");
                                 match self.registry.reload_module(&name, &self.read_model.config, self.hub.clone(), self.surface_manager.clone(), Arc::new(MpscCommandSender(self.command_tx_clone.clone())), self.canvas_factory.clone()) {
                                     Ok(new_senders) => {
                                         for (id, sender) in new_senders {
@@ -370,11 +382,11 @@ impl<
                                         }
                                         needs_render = true;
                                     }
-                                    Err(e) => tracing::error!("Failed to reload module {}: {}", name.as_str(), e),
+                                    Err(e) => tracing::error!("Failed to reload module {name}: {e}"),
                                 }
                             }
                             AppCommand::ReloadStyle(sheet_name) => {
-                                tracing::info!("Reloading style: {}", sheet_name.as_str());
+                                tracing::info!("Reloading style: {sheet_name}");
                                 if sheet_name.as_str() == "base" {
                                     tracing::debug!("Base stylesheet changed; reloading all active modules");
                                     let all_modules: Vec<_> = self.read_model.module_names.values().cloned().collect();
@@ -390,7 +402,7 @@ impl<
                                     let mods = self.registry.modules_using_style(&sheet_name);
                                     tracing::debug!(
                                         stylesheet = %sheet_name.as_str(),
-                                        dependent_modules = ?mods.iter().map(|m| m.as_str()).collect::<Vec<_>>(),
+                                        dependent_modules = ?mods.iter().map(super::super::shared::primitives::ModuleName::as_str).collect::<Vec<_>>(),
                                         "Reloading modules dependent on modified stylesheet"
                                     );
                                     for mod_name in mods {
@@ -401,7 +413,7 @@ impl<
                                                 }
                                                 needs_render = true;
                                             }
-                                            Err(e) => tracing::error!("Failed to reload module {}: {}", mod_name.as_str(), e),
+                                            Err(e) => tracing::error!("Failed to reload module {mod_name}: {e}"),
                                         }
                                     }
                                 }
@@ -427,7 +439,7 @@ impl<
                         let _ = display.render_all(&self.read_model, &self.layout_senders);
                     }
                 }
-                Ok(_) = config_rx.changed() => {
+                Ok(()) = config_rx.changed() => {
                     info!("Config hot-reload triggered in App");
                     let new_config = config_rx.borrow().clone();
                     self.read_model.config = new_config;
@@ -435,12 +447,12 @@ impl<
 
                     self.registry.clear();
                     if let Err(e) = self.registry.load(&self.read_model.config) {
-                        error!("Failed to reload registry on config change: {}", e);
+                        error!("Failed to reload registry on config change: {e}");
                     } else {
                         self.read_model.root_module = self.registry.root_module();
                         self.read_model.module_ids = self.registry.module_ids().to_vec();
-                        self.read_model.module_names = self.registry.module_names().clone();
-                        self.read_model.name_to_ids = self.registry.name_to_ids().clone();
+                        self.read_model.module_names.clone_from(self.registry.module_names());
+                        self.read_model.name_to_ids.clone_from(self.registry.name_to_ids());
                         self.layout_senders = self.registry.spawn_all(
                             self.hub.clone(),
                             self.surface_manager.clone(),
@@ -449,7 +461,7 @@ impl<
                         );
                     }
                 }
-                Ok(_) = hyprland_rx.changed() => {
+                Ok(()) = hyprland_rx.changed() => {
                     let state = hyprland_rx.borrow().clone();
                     let new_focused = state.focused_monitor()
                         .map(|n| n.as_str().to_string())
@@ -464,6 +476,7 @@ impl<
         }
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     pub fn handle_size_changed(&mut self, monitor_id: MonitorId, module_id: ModuleId, size: Size) {
         let name = self.read_model.module_names.get(&module_id).cloned();
         tracing::trace!(monitor = %monitor_id, module = %module_id, ?size, ?name, "handle_size_changed called");
@@ -475,7 +488,7 @@ impl<
 
         if let Some(name) = name {
             let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
-            let mon_entry = sizes_map.entry(monitor_id.clone()).or_default();
+            let mon_entry = sizes_map.entry(monitor_id).or_default();
             mon_entry.insert(
                 crate::shared::primitives::ModuleKey::new(name, None),
                 size,
@@ -487,6 +500,7 @@ impl<
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::similar_names)]
     use super::*;
     use crate::features::module_runtime::ports::MockModuleRegistryPort;
     use crate::shared::wayland::ports::MockDisplayServerPort;
@@ -628,7 +642,7 @@ mod tests {
         );
 
         let config = Config::new(
-            root_config.clone(),
+            root_config,
             crate::shared::config::domain::ModulesConfig::default(),
             crate::shared::config::domain::RenderingMode::default(),
             crate::features::metrics::domain::MetricsConfig::default(),
@@ -906,6 +920,7 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_container_layouts_calculated_preserves_multi_monitors() {
         let config = Config::default();
@@ -1018,9 +1033,10 @@ mod tests {
                 break;
             }
             attempts += 1;
-            if attempts > 10 {
-                panic!("Did not receive both DP-1 and DP-2 bounds in child layout_rx");
-            }
+            assert!(
+                attempts <= 10,
+                "Did not receive both DP-1 and DP-2 bounds in child layout_rx"
+            );
         }
 
         let _ = stop_tx.send(true);

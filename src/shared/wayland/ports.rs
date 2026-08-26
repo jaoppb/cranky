@@ -48,9 +48,24 @@ pub enum DisplayServerError {
 #[async_trait]
 #[cfg_attr(test, mockall::automock)]
 pub trait DisplayServerPort: Send + Sync {
+    /// # Errors
+    ///
+    /// Returns `DisplayServerError` if waiting for display events fails.
     async fn wait_for_events(&mut self) -> Result<(), DisplayServerError>;
+
+    /// # Errors
+    ///
+    /// Returns `DisplayServerError` if dispatching pending events fails.
     fn dispatch_pending(&mut self) -> Result<(), DisplayServerError>;
+
+    /// # Errors
+    ///
+    /// Returns `DisplayServerError` if flushing requests to the display server fails.
     fn flush(&mut self) -> Result<(), DisplayServerError>;
+
+    /// # Errors
+    ///
+    /// Returns `DisplayServerError` if rendering fails.
     fn render_all(
         &mut self,
         read_model: &crate::app::state::AppReadModel,
@@ -59,9 +74,17 @@ pub trait DisplayServerPort: Send + Sync {
             Box<dyn crate::features::module_runtime::ports::LayoutSender>,
         >,
     ) -> Result<(), DisplayServerError>;
+
+    /// # Errors
+    ///
+    /// Returns `DisplayServerError` if displaying the tooltip fails.
     fn show_tooltip(
         &mut self,
         layout: crate::features::layout_engine::domain::StyledNode,
     ) -> Result<(), DisplayServerError>;
+
+    /// # Errors
+    ///
+    /// Returns `DisplayServerError` if hiding the tooltip fails.
     fn hide_tooltip(&mut self) -> Result<(), DisplayServerError>;
 }

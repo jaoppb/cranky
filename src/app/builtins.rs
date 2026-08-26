@@ -60,11 +60,16 @@ impl BuiltinModules {
         ),
     ];
 
+    /// Ensures that all builtin module files exist in the local share directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BuiltinError::Io`] if creating directories or reading/writing files fails.
     pub fn ensure_builtins(
         app_env: &crate::shared::env::domain::AppEnvironment,
     ) -> Result<PathBuf, BuiltinError> {
         let home = app_env.home().as_path();
-        let dir = PathBuf::from(home).join(".local/share/cranky/modules");
+        let dir = home.join(".local/share/cranky/modules");
 
         fs::create_dir_all(&dir).map_err(|e| BuiltinError::Io(e.to_string()))?;
 
@@ -85,6 +90,13 @@ impl BuiltinModules {
         ]
     }
 
+    /// Finds and instantiates a module matching the given name and engine selection.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BuiltinError::UnsupportedEngine`] if the explicit engine is unknown,
+    /// [`BuiltinError::ModuleNotFound`] if no script matching the name and engine could be found or loaded,
+    /// or [`BuiltinError::Io`] on filesystem error.
     pub fn find_module(
         name: &crate::shared::primitives::ModuleName,
         selection: &crate::shared::config::domain::EngineSelection,
@@ -93,20 +105,20 @@ impl BuiltinModules {
         let _ = Self::ensure_builtins(app_env)?;
 
         let home = app_env.home().as_path();
-        let user_dir = PathBuf::from(home).join(".config/cranky/modules");
-        let shadow_dir = PathBuf::from(home).join(".local/share/cranky/modules");
+        let user_dir = home.join(".config/cranky/modules");
+        let shadow_dir = home.join(".local/share/cranky/modules");
 
         let engines = Self::registered_engines();
 
         let target_engines: Vec<&dyn crate::shared::scripting::ports::ScriptEnginePort> =
             match selection {
                 crate::shared::config::domain::EngineSelection::Auto => {
-                    engines.iter().map(|e| e.as_ref()).collect()
+                    engines.iter().map(AsRef::as_ref).collect()
                 }
                 crate::shared::config::domain::EngineSelection::Explicit(id) => {
                     let matching: Vec<_> = engines
                         .iter()
-                        .map(|e| e.as_ref())
+                        .map(AsRef::as_ref)
                         .filter(|e| &e.id() == id)
                         .collect();
                     if matching.is_empty() {
@@ -119,11 +131,10 @@ impl BuiltinModules {
                 }
             };
 
-        for dir in &[&user_dir, &shadow_dir] {
+        for dir in [&user_dir, &shadow_dir] {
             for engine in &target_engines {
                 let path = dir.join(format!(
-                    "{}.{}",
-                    name.as_str(),
+                    "{name}.{}",
                     engine.file_extension().as_str()
                 ));
                 if let Ok(source) = fs::read_to_string(&path)
@@ -134,10 +145,9 @@ impl BuiltinModules {
             }
         }
 
-        let engine_suffix = match selection.as_explicit() {
-            Some(id) => format!(" (engine: {})", id.as_str()),
-            None => "".to_string(),
-        };
+        let engine_suffix = selection
+            .as_explicit()
+            .map_or_else(String::new, |id| format!(" (engine: {})", id.as_str()));
 
         Err(BuiltinError::ModuleNotFound {
             module_name: name.clone(),
@@ -145,6 +155,11 @@ impl BuiltinModules {
         })
     }
 
+    /// Watches user and system module directories for changes and triggers reloads.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`BuiltinError::Io`] if creating the file watcher fails.
     pub fn watch_scripts(
         command_tx: std::sync::Arc<dyn crate::features::module_runtime::ports::CommandSender>,
         app_env: &crate::shared::env::domain::AppEnvironment,
@@ -152,8 +167,8 @@ impl BuiltinModules {
         use notify::{Event, RecursiveMode, Watcher};
 
         let home = app_env.home().as_path();
-        let user_dir = PathBuf::from(home).join(".config/cranky/modules");
-        let shadow_dir = PathBuf::from(home).join(".local/share/cranky/modules");
+        let user_dir = home.join(".config/cranky/modules");
+        let shadow_dir = home.join(".local/share/cranky/modules");
 
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
             if let Ok(event) = res
@@ -161,7 +176,7 @@ impl BuiltinModules {
             {
                 for path in event.paths {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        tracing::debug!("Script modified: {:?}", path);
+                        tracing::debug!("Script modified: {path:?}");
                         command_tx.send_command(crate::app::commands::AppCommand::ReloadModule(
                             crate::shared::primitives::ModuleName::new(stem),
                         ));
@@ -169,7 +184,7 @@ impl BuiltinModules {
                 }
             }
         })
-        .map_err(|e| BuiltinError::Io(format!("Failed to create watcher: {}", e)))?;
+        .map_err(|e| BuiltinError::Io(format!("Failed to create watcher: {e}")))?;
 
         if user_dir.exists() {
             let _ = watcher.watch(&user_dir, RecursiveMode::NonRecursive);
@@ -352,7 +367,7 @@ mod tests {
             err,
             BuiltinError::ModuleNotFound {
                 module_name: ModuleName::new("nonexistent_module_test"),
-                engine_suffix: "".to_string(),
+                engine_suffix: String::new(),
             }
         );
     }

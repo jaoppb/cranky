@@ -19,15 +19,18 @@ pub struct SizeChange {
 }
 
 impl SizeChange {
-    pub fn new(old: Size, new: Size) -> Self {
+    #[must_use]
+    pub const fn new(old: Size, new: Size) -> Self {
         Self { old, new }
     }
 
-    pub fn old(&self) -> Size {
+    #[must_use]
+    pub const fn old(&self) -> Size {
         self.old
     }
 
-    pub fn new_size(&self) -> Size {
+    #[must_use]
+    pub const fn new_size(&self) -> Size {
         self.new
     }
 }
@@ -41,7 +44,8 @@ pub struct RenderOutcome {
 }
 
 impl RenderOutcome {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         size_change: Option<SizeChange>,
         child_layouts: Vec<ChildModuleLayout>,
         render_tree: RenderNode,
@@ -55,22 +59,27 @@ impl RenderOutcome {
         }
     }
 
-    pub fn size_change(&self) -> Option<&SizeChange> {
+    #[must_use]
+    pub const fn size_change(&self) -> Option<&SizeChange> {
         self.size_change.as_ref()
     }
 
+    #[must_use]
     pub fn child_layouts(&self) -> &[ChildModuleLayout] {
         &self.child_layouts
     }
 
-    pub fn render_tree(&self) -> &RenderNode {
+    #[must_use]
+    pub const fn render_tree(&self) -> &RenderNode {
         &self.render_tree
     }
 
-    pub fn buffer(&self) -> Option<&(RenderBuffer, Position)> {
+    #[must_use]
+    pub const fn buffer(&self) -> Option<&(RenderBuffer, Position)> {
         self.buffer.as_ref()
     }
 
+    #[must_use]
     pub fn into_buffer(self) -> Option<(RenderBuffer, Position)> {
         self.buffer
     }
@@ -82,12 +91,13 @@ pub struct ModuleSizeMeasurer<'a, M: TextMeasurer> {
 }
 
 impl<'a, M: TextMeasurer> ModuleSizeMeasurer<'a, M> {
-    pub fn new(inner: M, child_sizes: Option<&'a ChildSizesMap>) -> Self {
+    #[must_use]
+    pub const fn new(inner: M, child_sizes: Option<&'a ChildSizesMap>) -> Self {
         Self { inner, child_sizes }
     }
 }
 
-impl<'a, M: TextMeasurer> TextMeasurer for ModuleSizeMeasurer<'a, M> {
+impl<M: TextMeasurer> TextMeasurer for ModuleSizeMeasurer<'_, M> {
     fn measure(
         &mut self,
         text: &str,
@@ -123,7 +133,8 @@ pub struct PipelineDiff {
 }
 
 impl PipelineDiff {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         new_vdom: VNode,
         vdom_dirty: bool,
         bounds_changed: bool,
@@ -137,19 +148,23 @@ impl PipelineDiff {
         }
     }
 
-    pub fn new_vdom(&self) -> &VNode {
+    #[must_use]
+    pub const fn new_vdom(&self) -> &VNode {
         &self.new_vdom
     }
 
-    pub fn vdom_dirty(&self) -> bool {
+    #[must_use]
+    pub const fn vdom_dirty(&self) -> bool {
         self.vdom_dirty
     }
 
-    pub fn bounds_changed(&self) -> bool {
+    #[must_use]
+    pub const fn bounds_changed(&self) -> bool {
         self.bounds_changed
     }
 
-    pub fn child_sizes_changed(&self) -> bool {
+    #[must_use]
+    pub const fn child_sizes_changed(&self) -> bool {
         self.child_sizes_changed
     }
 }
@@ -164,30 +179,37 @@ pub struct RenderPipeline {
 }
 
 impl RenderPipeline {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn sizes(&self) -> &HashMap<MonitorId, Size> {
+    #[must_use]
+    pub const fn sizes(&self) -> &HashMap<MonitorId, Size> {
         &self.sizes
     }
 
-    pub fn rendered_bounds(&self) -> &HashMap<MonitorId, Rect> {
+    #[must_use]
+    pub const fn rendered_bounds(&self) -> &HashMap<MonitorId, Rect> {
         &self.rendered_bounds
     }
 
-    pub fn render_trees(&self) -> &HashMap<MonitorId, RenderNode> {
+    #[must_use]
+    pub const fn render_trees(&self) -> &HashMap<MonitorId, RenderNode> {
         &self.render_trees
     }
 
-    pub fn vdom_trees(&self) -> &HashMap<MonitorId, VNode> {
+    #[must_use]
+    pub const fn vdom_trees(&self) -> &HashMap<MonitorId, VNode> {
         &self.vdom_trees
     }
 
-    pub fn last_child_sizes(&self) -> &HashMap<MonitorId, Option<ChildSizesMap>> {
+    #[must_use]
+    pub const fn last_child_sizes(&self) -> &HashMap<MonitorId, Option<ChildSizesMap>> {
         &self.last_child_sizes
     }
 
+    #[must_use]
     pub fn diff(
         &self,
         monitor_id: &MonitorId,
@@ -227,6 +249,7 @@ impl RenderPipeline {
         ))
     }
 
+    #[allow(clippy::needless_pass_by_value)]
     pub fn layout<F: CanvasFactory>(
         &mut self,
         monitor_id: &MonitorId,
@@ -254,7 +277,7 @@ impl RenderPipeline {
             tracing::trace!(monitor = %monitor_id, "Resolving styles for module VNode");
             let styled_node = diff.new_vdom.resolve_styles(ctx.style_resolver, None);
 
-            let default_font_family = FontFamily::new("".to_string());
+            let default_font_family = FontFamily::new(String::new());
             let default_font_size = FontSize::new(14.0);
 
             let available_size = ctx
@@ -324,12 +347,13 @@ impl RenderPipeline {
     ) -> Option<(RenderBuffer, Position)> {
         let bounds = current_bounds.filter(|b| b.width() > 0 && b.height() > 0)?;
 
-        let default_font_family = FontFamily::new("".to_string());
+        let default_font_family = FontFamily::new(String::new());
         let default_font_size = FontSize::new(14.0);
 
-        let w = bounds.width();
-        let h = bounds.height();
-        let mut data = vec![0u8; (w * h * 4) as usize];
+        let width = usize::try_from(bounds.width()).unwrap_or(0);
+        let height = usize::try_from(bounds.height()).unwrap_or(0);
+        let len = width.saturating_mul(height).saturating_mul(4);
+        let mut data = vec![0u8; len];
         {
             let mut canvas = canvas_factory.create_canvas(
                 &mut data,

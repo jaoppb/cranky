@@ -15,7 +15,7 @@ pub trait SniPort: Send + Sync {
     /// Initialize the SNI Host (and optionally the Watcher)
     async fn start(&mut self) -> Result<(), SniPortError>;
 
-    /// Trigger an action on a systray item (e.g. "Activate", "SecondaryActivate", "ContextMenu")
+    /// Trigger an action on a systray item (e.g. `Activate`, `SecondaryActivate`, `ContextMenu`)
     async fn trigger_action(
         &self,
         id: &crate::features::systray::domain::SystrayId,

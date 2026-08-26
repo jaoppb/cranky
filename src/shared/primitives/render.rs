@@ -8,6 +8,7 @@ pub struct RenderBuffer {
 }
 
 impl RenderBuffer {
+    #[must_use]
     pub fn new(data: impl Into<BinaryData>, size: Size) -> Self {
         Self {
             data: data.into(),
@@ -15,19 +16,23 @@ impl RenderBuffer {
         }
     }
 
-    pub fn size(&self) -> &Size {
+    #[must_use]
+    pub const fn size(&self) -> &Size {
         &self.size
     }
 
+    #[must_use]
     pub fn data(&self) -> &[u8] {
-        &self.data
+        self.data.as_slice()
     }
 
-    pub fn width(&self) -> u32 {
+    #[must_use]
+    pub const fn width(&self) -> u32 {
         self.size.width()
     }
 
-    pub fn height(&self) -> u32 {
+    #[must_use]
+    pub const fn height(&self) -> u32 {
         self.size.height()
     }
 }

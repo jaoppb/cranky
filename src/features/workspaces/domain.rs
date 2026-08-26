@@ -4,7 +4,8 @@ use serde::Serialize;
 pub struct WorkspaceId(i32);
 
 impl WorkspaceId {
-    pub fn new(id: i32) -> Self {
+    #[must_use]
+    pub const fn new(id: i32) -> Self {
         Self(id)
     }
 }
@@ -13,9 +14,11 @@ impl WorkspaceId {
 pub struct MonitorName(String);
 
 impl MonitorName {
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -25,12 +28,13 @@ impl MonitorName {
 pub struct WorkspaceName(String);
 
 impl WorkspaceName {
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Workspace {
     id: WorkspaceId,
     name: WorkspaceName,
@@ -38,15 +42,18 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn new(id: WorkspaceId, name: WorkspaceName, monitor: Option<MonitorName>) -> Self {
+    #[must_use]
+    pub const fn new(id: WorkspaceId, name: WorkspaceName, monitor: Option<MonitorName>) -> Self {
         Self { id, name, monitor }
     }
 
-    pub fn id(&self) -> &WorkspaceId {
+    #[must_use]
+    pub const fn id(&self) -> &WorkspaceId {
         &self.id
     }
 
-    pub fn monitor(&self) -> Option<&MonitorName> {
+    #[must_use]
+    pub const fn monitor(&self) -> Option<&MonitorName> {
         self.monitor.as_ref()
     }
 
@@ -55,7 +62,7 @@ impl Workspace {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Monitor {
     name: MonitorName,
     active_workspace_id: WorkspaceId,
@@ -63,7 +70,8 @@ pub struct Monitor {
 }
 
 impl Monitor {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         name: MonitorName,
         active_workspace_id: WorkspaceId,
         special_workspace_id: Option<WorkspaceId>,
@@ -75,23 +83,26 @@ impl Monitor {
         }
     }
 
-    pub fn name(&self) -> &MonitorName {
+    #[must_use]
+    pub const fn name(&self) -> &MonitorName {
         &self.name
     }
 
-    pub fn active_workspace_id(&self) -> &WorkspaceId {
+    #[must_use]
+    pub const fn active_workspace_id(&self) -> &WorkspaceId {
         &self.active_workspace_id
     }
 
-    pub fn set_active_workspace(&mut self, id: WorkspaceId) {
+    pub const fn set_active_workspace(&mut self, id: WorkspaceId) {
         self.active_workspace_id = id;
     }
 
-    pub fn set_special_workspace(&mut self, id: Option<WorkspaceId>) {
+    pub const fn set_special_workspace(&mut self, id: Option<WorkspaceId>) {
         self.special_workspace_id = id;
     }
 
-    pub fn special_workspace_id(&self) -> Option<&WorkspaceId> {
+    #[must_use]
+    pub const fn special_workspace_id(&self) -> Option<&WorkspaceId> {
         self.special_workspace_id.as_ref()
     }
 }

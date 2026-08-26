@@ -1,50 +1,58 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerName(String);
 impl PlayerName {
+    #[must_use]
     pub fn new(val: impl Into<String>) -> Self {
         Self(val.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrackName(String);
 impl TrackName {
+    #[must_use]
     pub fn new(val: impl Into<String>) -> Self {
         Self(val.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrackArtist(String);
 impl TrackArtist {
+    #[must_use]
     pub fn new(val: impl Into<String>) -> Self {
         Self(val.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AlbumArtUrl(String);
 impl AlbumArtUrl {
+    #[must_use]
     pub fn new(val: impl Into<String>) -> Self {
         Self(val.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PlaybackStatus {
     Playing,
@@ -53,7 +61,7 @@ pub enum PlaybackStatus {
     Unknown,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlayerState {
     name: PlayerName,
     status: PlaybackStatus,
@@ -63,7 +71,8 @@ pub struct PlayerState {
 }
 
 impl PlayerState {
-    pub fn new(name: PlayerName) -> Self {
+    #[must_use]
+    pub const fn new(name: PlayerName) -> Self {
         Self {
             name,
             status: PlaybackStatus::Unknown,
@@ -73,23 +82,28 @@ impl PlayerState {
         }
     }
 
-    pub fn name(&self) -> &PlayerName {
+    #[must_use]
+    pub const fn name(&self) -> &PlayerName {
         &self.name
     }
-    pub fn status(&self) -> &PlaybackStatus {
+    #[must_use]
+    pub const fn status(&self) -> &PlaybackStatus {
         &self.status
     }
-    pub fn track_name(&self) -> Option<&TrackName> {
+    #[must_use]
+    pub const fn track_name(&self) -> Option<&TrackName> {
         self.track_name.as_ref()
     }
-    pub fn artist(&self) -> Option<&TrackArtist> {
+    #[must_use]
+    pub const fn artist(&self) -> Option<&TrackArtist> {
         self.artist.as_ref()
     }
-    pub fn album_art(&self) -> Option<&AlbumArtUrl> {
+    #[must_use]
+    pub const fn album_art(&self) -> Option<&AlbumArtUrl> {
         self.album_art.as_ref()
     }
 
-    pub fn set_status(&mut self, status: PlaybackStatus) {
+    pub const fn set_status(&mut self, status: PlaybackStatus) {
         self.status = status;
     }
     pub fn set_track_name(&mut self, track_name: Option<TrackName>) {
@@ -103,13 +117,14 @@ impl PlayerState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct MprisState {
     pub active_player: Option<PlayerName>,
     pub players: std::collections::HashMap<String, PlayerState>, // Using String key because serde deserialize requires it for keys
 }
 
 impl MprisState {
+    #[must_use]
     pub fn active(&self) -> Option<&PlayerState> {
         self.active_player
             .as_ref()

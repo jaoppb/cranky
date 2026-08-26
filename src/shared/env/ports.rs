@@ -7,5 +7,10 @@ pub enum EnvironmentError {
 }
 
 pub trait EnvironmentPort: Send + Sync {
+    /// Reads the current application environment.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EnvironmentError::MissingVariable`] if a required environment variable is not set.
     fn read_environment(&self) -> Result<AppEnvironment, EnvironmentError>;
 }

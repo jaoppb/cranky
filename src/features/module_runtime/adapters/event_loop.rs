@@ -36,6 +36,7 @@ pub struct EventLoop<F: CanvasFactory + 'static> {
 }
 
 impl<F: CanvasFactory + 'static> EventLoop<F> {
+    #[must_use]
     pub fn new(
         port: Box<dyn AnyModulePort>,
         ctx: ModuleContext,
@@ -56,14 +57,16 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         }
     }
 
-    pub fn render_pipeline(&self) -> &RenderPipeline {
+    #[must_use]
+    pub const fn render_pipeline(&self) -> &RenderPipeline {
         &self.render_pipeline
     }
 
-    pub fn render_pipeline_mut(&mut self) -> &mut RenderPipeline {
+    pub const fn render_pipeline_mut(&mut self) -> &mut RenderPipeline {
         &mut self.render_pipeline
     }
 
+    #[must_use]
     pub fn into_actor(self) -> crate::features::module_runtime::application::ModuleActor<F> {
         crate::features::module_runtime::application::ModuleActor::new(
             self.port,
@@ -158,8 +161,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
                             tracing::error!(
                                 module = %ctx_id,
                                 func = %func_name,
-                                "ScriptCall failed: {}",
-                                e
+                                "ScriptCall failed: {e}"
                             );
                         } else {
                             changed = true;
@@ -226,6 +228,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         }
     }
 
+    #[must_use]
     pub fn discover_monitors(&self, layouts: &HashMap<MonitorId, Rect>) -> Vec<MonitorId> {
         let mut all_monitors: HashSet<MonitorId> = HashSet::new();
         for m in self.ctx.hub().hyprland_rx().borrow().monitors().values() {
@@ -267,12 +270,12 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
 
         if let Some((buffer, position)) = outcome.into_buffer() {
             let sm = self.ctx.surface_manager().clone();
-            let mod_id = self.ctx.id();
+            let module_id = self.ctx.id();
             let parent_id = self.ctx.parent_id();
-            let mon_id = monitor_id.clone();
+            let target_monitor_id = monitor_id.clone();
             let rt = tokio::runtime::Handle::current();
             rt.block_on(async move {
-                sm.submit_child_buffer(mod_id, parent_id, mon_id, position, buffer)
+                sm.submit_child_buffer(module_id, parent_id, target_monitor_id, position, buffer)
                     .await;
             });
         }
@@ -297,7 +300,9 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
                 .or_insert_with(|| Box::new(TaffyLayoutAdapter::new()));
 
             let outcome = {
-                let mut factory = self.canvas_factory.lock().unwrap();
+                let Ok(mut factory) = self.canvas_factory.lock() else {
+                    continue;
+                };
                 let layout_ctx = crate::features::module_runtime::domain::LayoutContext {
                     style_resolver: self.style_resolver.as_ref(),
                     current_bounds,
@@ -348,7 +353,7 @@ mod tests {
         let sm = Arc::new(MockSurfaceManager);
         let cmd = Arc::new(MockCommandSender);
         let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub.clone(), sm, cmd, rx);
+        let ctx = ModuleContext::new(id, hub, sm, cmd, rx);
 
         let event_loop = EventLoop::new(
             Box::new(TestModulePort::new(VNode::new_rect(
@@ -376,6 +381,7 @@ mod tests {
     async fn test_dispatch_render_outcome_sends_commands() {
         use crate::features::module_runtime::domain::SizeChange;
         use crate::features::module_runtime::test_support::ChannelCommandSender;
+        use crate::features::styling::domain::ComputedStyle;
 
         let id = ModuleId::new(1);
         let hub = Arc::new(SignalHub::new(Config::default()));
@@ -383,7 +389,7 @@ mod tests {
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
         let cmd = Arc::new(ChannelCommandSender::new(cmd_tx));
         let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub.clone(), sm, cmd, rx);
+        let ctx = ModuleContext::new(id, hub, sm, cmd, rx);
 
         let mut event_loop = EventLoop::new(
             Box::new(TestModulePort::new(VNode::new_rect(
@@ -402,7 +408,7 @@ mod tests {
             vec![],
             crate::features::layout_engine::domain::RenderNode::Rect {
                 rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
-                style: Default::default(),
+                style: ComputedStyle::default(),
                 on_click: None,
                 on_hover: None,
                 tooltip: None,

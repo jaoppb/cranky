@@ -3,6 +3,7 @@ use crate::features::workspaces::domain::{MonitorName, WorkspaceId, WorkspaceNam
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WindowAddress(String);
 impl WindowAddress {
+    #[must_use]
     pub fn new(addr: impl Into<String>) -> Self {
         Self(addr.into())
     }
@@ -11,12 +12,13 @@ impl WindowAddress {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WindowTitle(String);
 impl WindowTitle {
+    #[must_use]
     pub fn new(title: impl Into<String>) -> Self {
         Self(title.into())
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WindowManagerEvent {
     WorkspaceActivated {
         id: WorkspaceId,

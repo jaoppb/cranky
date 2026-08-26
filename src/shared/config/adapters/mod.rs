@@ -25,6 +25,8 @@ pub struct ConfigAdapter<V: FontValidatorPort + Send + Sync + 'static> {
 }
 
 impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
     pub fn new(
         validator: V,
         app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
@@ -37,6 +39,7 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
     }
 
     #[cfg(test)]
+    #[must_use]
     pub fn with_path(config_path: PathBuf, validator: V) -> Self {
         Self {
             config_path,
@@ -44,6 +47,11 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
         }
     }
 
+    /// Loads the initial configuration, falling back to the bundled placeholder if the file does not exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConfigAdapterError` if reading or parsing the configuration fails.
     pub fn load_initial(&self) -> Result<Config, ConfigAdapterError> {
         if self.config_path.exists() {
             self.load_from_path(&self.config_path)
@@ -59,7 +67,7 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
     fn load_from_path(&self, path: &Path) -> Result<Config, ConfigAdapterError> {
         let content =
             std::fs::read_to_string(path).map_err(|e| ConfigAdapterError::ConfigParseError {
-                reason: format!("IO error: {}", e),
+                reason: format!("IO error: {e}"),
             })?;
         self.load_from_str(&content)
     }
@@ -72,6 +80,12 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
         Ok(dto.into_domain(self.validator.as_ref()))
     }
 
+    /// Watches the configuration directory for updates and broadcasts them via the signal hub.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ConfigAdapterError` if creating or starting the filesystem watcher fails.
+    #[allow(clippy::needless_pass_by_value)]
     pub fn watch(&self, hub: Arc<SignalHub>) -> Result<Box<dyn Watcher>, ConfigAdapterError> {
         let config_tx = hub.config_tx();
         let path = self.config_path.clone();
@@ -91,18 +105,18 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
                                         let new_config = dto.into_domain(validator.as_ref());
                                         let _ = config_tx.send(new_config);
                                     }
-                                    Err(e) => error!("Failed to parse updated config: {}", e),
+                                    Err(e) => error!("Failed to parse updated config: {e}"),
                                 },
-                                Err(e) => error!("Failed to read updated config file: {}", e),
+                                Err(e) => error!("Failed to read updated config file: {e}"),
                             }
                         }
                     }
                 }
-                Err(e) => error!("Config watcher error: {:?}", e),
+                Err(e) => error!("Config watcher error: {e:?}"),
             }
         })
         .map_err(|e| ConfigAdapterError::Internal {
-            message: format!("Failed to create watcher: {}", e),
+            message: format!("Failed to create watcher: {e}"),
         })?;
 
         if let Some(parent) = self.config_path.parent()
@@ -111,7 +125,7 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
             watcher
                 .watch(parent, RecursiveMode::NonRecursive)
                 .map_err(|e| ConfigAdapterError::Internal {
-                    message: format!("Failed to start watching config dir: {}", e),
+                    message: format!("Failed to start watching config dir: {e}"),
                 })?;
         }
 

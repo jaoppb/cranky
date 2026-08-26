@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 
-/// Pure domain dynamic value representation without serde_json dependency
+/// Pure domain dynamic value representation without `serde_json` dependency
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DynamicValue {
@@ -18,42 +18,54 @@ pub enum DynamicValue {
     Bool(bool),
     Number(f64),
     String(String),
-    Array(Vec<DynamicValue>),
-    Map(HashMap<String, DynamicValue>),
+    Array(Vec<Self>),
+    Map(HashMap<String, Self>),
 }
 
 impl DynamicValue {
+    #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(s) => Some(s),
             _ => None,
         }
     }
-    pub fn as_bool(&self) -> Option<bool> {
+
+    #[must_use]
+    pub const fn as_bool(&self) -> Option<bool> {
         match self {
             Self::Bool(b) => Some(*b),
             _ => None,
         }
     }
-    pub fn as_f64(&self) -> Option<f64> {
+
+    #[must_use]
+    pub const fn as_f64(&self) -> Option<f64> {
         match self {
             Self::Number(n) => Some(*n),
             _ => None,
         }
     }
-    pub fn as_i64(&self) -> Option<i64> {
+
+    #[must_use]
+    #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+    pub const fn as_i64(&self) -> Option<i64> {
         match self {
             Self::Number(n) => Some(*n as i64),
             _ => None,
         }
     }
-    pub fn as_array(&self) -> Option<&[DynamicValue]> {
+
+    #[must_use]
+    pub fn as_array(&self) -> Option<&[Self]> {
         match self {
             Self::Array(arr) => Some(arr),
             _ => None,
         }
     }
-    pub fn as_map(&self) -> Option<&HashMap<String, DynamicValue>> {
+
+    #[must_use]
+    pub const fn as_map(&self) -> Option<&HashMap<String, Self>> {
         match self {
             Self::Map(m) => Some(m),
             _ => None,
@@ -86,19 +98,20 @@ impl From<f64> for DynamicValue {
 }
 
 impl From<i64> for DynamicValue {
+    #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
     fn from(n: i64) -> Self {
         Self::Number(n as f64)
     }
 }
 
-impl From<Vec<DynamicValue>> for DynamicValue {
-    fn from(arr: Vec<DynamicValue>) -> Self {
+impl From<Vec<Self>> for DynamicValue {
+    fn from(arr: Vec<Self>) -> Self {
         Self::Array(arr)
     }
 }
 
-impl From<HashMap<String, DynamicValue>> for DynamicValue {
-    fn from(map: HashMap<String, DynamicValue>) -> Self {
+impl From<HashMap<String, Self>> for DynamicValue {
+    fn from(map: HashMap<String, Self>) -> Self {
         Self::Map(map)
     }
 }
@@ -107,13 +120,17 @@ impl From<HashMap<String, DynamicValue>> for DynamicValue {
 pub struct ModuleId(u32);
 
 impl ModuleId {
-    pub fn new(id: u32) -> Self {
+    #[must_use]
+    pub const fn new(id: u32) -> Self {
         Self(id)
     }
-    pub fn value(&self) -> u32 {
+
+    #[must_use]
+    pub const fn value(&self) -> u32 {
         self.0
     }
 }
+
 impl fmt::Display for ModuleId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -124,13 +141,17 @@ impl fmt::Display for ModuleId {
 pub struct MonitorId(String);
 
 impl MonitorId {
+    #[must_use]
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }
+
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
 }
+
 impl fmt::Display for MonitorId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -141,10 +162,12 @@ impl fmt::Display for MonitorId {
 pub struct ModuleName(String);
 
 impl ModuleName {
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -185,9 +208,12 @@ impl fmt::Display for ModuleName {
 pub struct ModuleInstanceId(String);
 
 impl ModuleInstanceId {
+    #[must_use]
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }
+
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -219,10 +245,12 @@ pub struct ModuleKey {
 }
 
 impl ModuleKey {
-    pub fn new(name: ModuleName, instance_id: Option<ModuleInstanceId>) -> Self {
+    #[must_use]
+    pub const fn new(name: ModuleName, instance_id: Option<ModuleInstanceId>) -> Self {
         Self { name, instance_id }
     }
 
+    #[must_use]
     pub fn from_name(name: impl Into<ModuleName>) -> Self {
         Self {
             name: name.into(),
@@ -230,11 +258,13 @@ impl ModuleKey {
         }
     }
 
-    pub fn name(&self) -> &ModuleName {
+    #[must_use]
+    pub const fn name(&self) -> &ModuleName {
         &self.name
     }
 
-    pub fn instance_id(&self) -> Option<&ModuleInstanceId> {
+    #[must_use]
+    pub const fn instance_id(&self) -> Option<&ModuleInstanceId> {
         self.instance_id.as_ref()
     }
 }
@@ -242,7 +272,7 @@ impl ModuleKey {
 impl fmt::Display for ModuleKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(id) = &self.instance_id {
-            write!(f, "{}:{}", self.name, id)
+            write!(f, "{}:{id}", self.name)
         } else {
             write!(f, "{}", self.name)
         }
@@ -255,49 +285,57 @@ impl fmt::Display for ModuleKey {
 pub struct ModuleOptions(HashMap<String, DynamicValue>);
 
 impl ModuleOptions {
-    pub fn new(map: HashMap<String, DynamicValue>) -> Self {
+    #[must_use]
+    pub const fn new(map: HashMap<String, DynamicValue>) -> Self {
         Self(map)
     }
 
-    pub fn as_map(&self) -> &HashMap<String, DynamicValue> {
+    #[must_use]
+    pub const fn as_map(&self) -> &HashMap<String, DynamicValue> {
         &self.0
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    #[must_use]
     pub fn get(&self, key: &str) -> Option<&DynamicValue> {
         self.0.get(key)
     }
 }
 
 /// Strongly-typed layout descriptor for a child module in a container
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChildModuleLayout {
     key: ModuleKey,
     bounds: Rect,
 }
 
 impl ChildModuleLayout {
-    pub fn new(key: ModuleKey, bounds: Rect) -> Self {
+    #[must_use]
+    pub const fn new(key: ModuleKey, bounds: Rect) -> Self {
         Self { key, bounds }
     }
 
-    pub fn key(&self) -> &ModuleKey {
+    #[must_use]
+    pub const fn key(&self) -> &ModuleKey {
         &self.key
     }
 
-    pub fn bounds(&self) -> &Rect {
+    #[must_use]
+    pub const fn bounds(&self) -> &Rect {
         &self.bounds
     }
 }
 
 /// Strongly-typed map of child module sizes per monitor
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ChildSizesMap(HashMap<ModuleKey, Size>);
 
 impl ChildSizesMap {
+    #[must_use]
     pub fn new() -> Self {
         Self(HashMap::new())
     }
@@ -306,10 +344,12 @@ impl ChildSizesMap {
         self.0.insert(key, size);
     }
 
+    #[must_use]
     pub fn get(&self, key: &ModuleKey) -> Option<&Size> {
         self.0.get(key)
     }
 
+    #[must_use]
     pub fn get_by_name_or_key(
         &self,
         name: &ModuleName,
@@ -330,10 +370,12 @@ impl ChildSizesMap {
 pub struct FunctionName(String);
 
 impl FunctionName {
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -382,7 +424,7 @@ mod tests {
 
         let mut sizes = ChildSizesMap::new();
         sizes.insert(key1.clone(), Size::new(100, 30));
-        sizes.insert(key2.clone(), Size::new(80, 25));
+        sizes.insert(key2, Size::new(80, 25));
 
         assert_eq!(sizes.get(&key1), Some(&Size::new(100, 30)));
         assert_eq!(

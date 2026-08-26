@@ -14,6 +14,7 @@ pub mod test_utils;
 use crate::app::commands::AppCommand;
 use crate::app::state::CrankyApp;
 use crate::features::metrics::adapters::SysinfoAdapter;
+use crate::features::styling::ports::StyleLoaderPort;
 use crate::features::systray::adapters::SniAdapter;
 use crate::features::systray::ports::SniPort;
 use crate::features::workspaces::adapters::hyprland::HyprlandAdapter;
@@ -25,6 +26,8 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 use tracing::Instrument;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::shared::env::domain::AppEnvironment;
 use crate::shared::env::ports::EnvironmentPort;
@@ -38,16 +41,13 @@ impl crate::features::module_runtime::ports::CommandSender for MainCommandSender
 
 fn init_tracing(env: &AppEnvironment) -> tracing_appender::non_blocking::WorkerGuard {
     let file_appender = tracing_appender::rolling::daily(
-        env.xdg_cache_home().as_path().to_string_lossy().to_string() + "/cranky",
+        env.xdg_cache_home().as_path().join("cranky"),
         "cranky.log",
     );
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(env.rust_log().as_str()));
-
-    use tracing_subscriber::layer::SubscriberExt;
-    use tracing_subscriber::util::SubscriberInitExt;
 
     tracing_subscriber::registry()
         .with(env_filter)
@@ -75,21 +75,21 @@ async fn init_secondary_adapters(
     let conn_adapter = crate::shared::dbus::adapters::connection::ZbusConnectionAdapter::new()
         .connect()
         .await
-        .map_err(|e| format!("DBus connection required: {}", e))?;
+        .map_err(|e| format!("DBus connection required: {e}"))?;
     let conn: Arc<dyn crate::shared::dbus::ports::DbusConnectionPort> = Arc::new(conn_adapter);
 
     let dbus_manager =
         crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(conn.clone(), hub);
 
-    let mut mpris_adapter =
+    let mpris_adapter =
         crate::features::mpris::adapters::zbus::ZbusMprisAdapter::new(conn.clone(), hub);
     if let Err(e) = mpris_adapter.start_watching().await {
-        error!("Failed to start MPRIS watcher: {}", e);
+        error!("Failed to start MPRIS watcher: {e}");
     }
 
     let mut sni_adapter = SniAdapter::new(hub.clone());
     if let Err(e) = sni_adapter.start().await {
-        error!("Failed to start SNI Watcher: {:?}", e);
+        error!("Failed to start SNI Watcher: {e:?}");
     }
 
     let metrics_adapter = SysinfoAdapter::new(metrics_config.clone(), hub.clone());
@@ -98,7 +98,7 @@ async fn init_secondary_adapters(
     Ok((dbus_manager, sni_adapter))
 }
 
-fn spawn_background_tasks(hub: Arc<SignalHub>, hyprland_adapter: HyprlandAdapter) {
+fn spawn_background_tasks(hub: &Arc<SignalHub>, hyprland_adapter: HyprlandAdapter) {
     let hub_for_hypr = hub.clone();
     tokio::spawn(
         async move {
@@ -112,7 +112,8 @@ fn spawn_background_tasks(hub: Arc<SignalHub>, hyprland_adapter: HyprlandAdapter
         async move {
             loop {
                 let now = chrono::Local::now();
-                let ms_until_next_sec = 1000 - now.timestamp_subsec_millis() as u64;
+                let ms_until_next_sec =
+                    1000_u64.saturating_sub(u64::from(now.timestamp_subsec_millis()));
                 tokio::time::sleep(std::time::Duration::from_millis(ms_until_next_sec)).await;
                 let _ = hub_for_time.time_tx().send(chrono::Local::now());
             }
@@ -170,23 +171,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 4. Spawn background worker tasks
     let hyprland_adapter = HyprlandAdapter::new(app_env.clone());
-    spawn_background_tasks(hub.clone(), hyprland_adapter);
+    spawn_background_tasks(&hub, hyprland_adapter);
 
     let hub_for_config = hub.clone();
     let _config_watcher = config_adapter.watch(hub_for_config)?;
 
     let style_loader =
         crate::features::styling::adapters::fs_loader::FsStyleLoader::new(app_env.clone());
-    use crate::features::styling::ports::StyleLoaderPort;
     if let Err(e) = style_loader.ensure_builtin_styles() {
-        error!("Failed to deploy builtin styles: {}", e);
+        error!("Failed to deploy builtin styles: {e}");
     }
 
     let _style_watcher =
         match style_loader.watch_styles(Arc::new(MainCommandSender(command_tx.clone()))) {
             Ok(w) => Some(w),
             Err(e) => {
-                error!("Failed to watch style directories: {}", e);
+                error!("Failed to watch style directories: {e}");
                 None
             }
         };

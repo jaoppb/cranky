@@ -55,7 +55,8 @@ pub enum DiskMode {
 pub struct UpdateInterval(u64);
 
 impl UpdateInterval {
-    pub fn value(&self) -> u64 {
+    #[must_use]
+    pub const fn value(&self) -> u64 {
         self.0
     }
 }
@@ -75,7 +76,7 @@ pub struct MetricsConfig {
     update_interval_ms: UpdateInterval,
 }
 
-fn default_update_interval() -> UpdateInterval {
+const fn default_update_interval() -> UpdateInterval {
     UpdateInterval(1000)
 }
 
@@ -94,19 +95,24 @@ impl Default for MetricsConfig {
 }
 
 impl MetricsConfig {
-    pub fn cpu(&self) -> &CpuMode {
+    #[must_use]
+    pub const fn cpu(&self) -> &CpuMode {
         &self.cpu
     }
-    pub fn network(&self) -> Option<&NetworkMode> {
+    #[must_use]
+    pub const fn network(&self) -> Option<&NetworkMode> {
         self.network.as_ref()
     }
-    pub fn temperature(&self) -> Option<&TemperatureMode> {
+    #[must_use]
+    pub const fn temperature(&self) -> Option<&TemperatureMode> {
         self.temperature.as_ref()
     }
-    pub fn disk(&self) -> Option<&DiskMode> {
+    #[must_use]
+    pub const fn disk(&self) -> Option<&DiskMode> {
         self.disk.as_ref()
     }
-    pub fn update_interval_ms(&self) -> &UpdateInterval {
+    #[must_use]
+    pub const fn update_interval_ms(&self) -> &UpdateInterval {
         &self.update_interval_ms
     }
 }
@@ -114,7 +120,8 @@ impl MetricsConfig {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CpuUsage(f32);
 impl CpuUsage {
-    pub fn new(val: f32) -> Self {
+    #[must_use]
+    pub const fn new(val: f32) -> Self {
         Self(val)
     }
 }
@@ -122,11 +129,13 @@ impl CpuUsage {
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryBytes(u64);
 impl MemoryBytes {
-    pub fn new(val: u64) -> Self {
+    #[must_use]
+    pub const fn new(val: u64) -> Self {
         Self(val)
     }
     #[cfg(test)]
-    pub fn value(&self) -> u64 {
+    #[must_use]
+    pub const fn value(&self) -> u64 {
         self.0
     }
 }
@@ -134,11 +143,13 @@ impl MemoryBytes {
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkSpeed(u64);
 impl NetworkSpeed {
-    pub fn new(val: u64) -> Self {
+    #[must_use]
+    pub const fn new(val: u64) -> Self {
         Self(val)
     }
     #[cfg(test)]
-    pub fn value(&self) -> u64 {
+    #[must_use]
+    pub const fn value(&self) -> u64 {
         self.0
     }
 }
@@ -146,11 +157,13 @@ impl NetworkSpeed {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Temperature(f32);
 impl Temperature {
-    pub fn new(val: f32) -> Self {
+    #[must_use]
+    pub const fn new(val: f32) -> Self {
         Self(val)
     }
     #[cfg(test)]
-    pub fn value(&self) -> f32 {
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
@@ -158,6 +171,7 @@ impl Temperature {
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiskName(String);
 impl DiskName {
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
@@ -166,12 +180,13 @@ impl DiskName {
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MountPoint(String);
 impl MountPoint {
+    #[must_use]
     pub fn new(mp: impl Into<String>) -> Self {
         Self(mp.into())
     }
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DiskMetric {
     name: DiskName,
     mount_point: MountPoint,
@@ -181,7 +196,8 @@ pub struct DiskMetric {
 }
 
 impl DiskMetric {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         name: DiskName,
         mount_point: MountPoint,
         total_bytes: MemoryBytes,
@@ -229,7 +245,8 @@ pub struct CreateMetricsCommand {
 
 impl CreateMetricsCommand {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         cpu_usage: CpuUsage,
         per_core: Vec<CpuUsage>,
         memory_used: MemoryBytes,
@@ -257,68 +274,81 @@ impl CreateMetricsCommand {
         }
     }
 
-    pub fn cpu_usage(&self) -> &CpuUsage {
+    #[must_use]
+    pub const fn cpu_usage(&self) -> &CpuUsage {
         &self.cpu_usage
     }
 
+    #[must_use]
     pub fn per_core(&self) -> &[CpuUsage] {
         &self.per_core
     }
 
-    pub fn memory_used(&self) -> &MemoryBytes {
+    #[must_use]
+    pub const fn memory_used(&self) -> &MemoryBytes {
         &self.memory_used
     }
 
-    pub fn memory_total(&self) -> &MemoryBytes {
+    #[must_use]
+    pub const fn memory_total(&self) -> &MemoryBytes {
         &self.memory_total
     }
 
-    pub fn swap_used(&self) -> &MemoryBytes {
+    #[must_use]
+    pub const fn swap_used(&self) -> &MemoryBytes {
         &self.swap_used
     }
 
-    pub fn swap_total(&self) -> &MemoryBytes {
+    #[must_use]
+    pub const fn swap_total(&self) -> &MemoryBytes {
         &self.swap_total
     }
 
+    #[must_use]
     pub fn disks(&self) -> &[DiskMetric] {
         &self.disks
     }
 
-    pub fn network_tx(&self) -> &NetworkSpeed {
+    #[must_use]
+    pub const fn network_tx(&self) -> &NetworkSpeed {
         &self.network_tx
     }
 
-    pub fn network_rx(&self) -> &NetworkSpeed {
+    #[must_use]
+    pub const fn network_rx(&self) -> &NetworkSpeed {
         &self.network_rx
     }
 
-    pub fn temperature(&self) -> &Temperature {
+    #[must_use]
+    pub const fn temperature(&self) -> &Temperature {
         &self.temperature
     }
 
-    pub fn config(&self) -> &MetricsConfig {
+    #[must_use]
+    pub const fn config(&self) -> &MetricsConfig {
         &self.config
     }
 }
 
 impl MetricsState {
+    #[must_use]
     pub fn new(cmd: CreateMetricsCommand) -> Self {
         Self {
-            cpu_usage: cmd.cpu_usage().clone(),
-            per_core: cmd.per_core().to_vec(),
-            memory_used: cmd.memory_used().clone(),
-            memory_total: cmd.memory_total().clone(),
-            swap_used: cmd.swap_used().clone(),
-            swap_total: cmd.swap_total().clone(),
-            disks: cmd.disks().to_vec(),
-            network_tx: cmd.network_tx().clone(),
-            network_rx: cmd.network_rx().clone(),
-            temperature: cmd.temperature().clone(),
-            config: cmd.config().clone(),
+            cpu_usage: cmd.cpu_usage,
+            per_core: cmd.per_core,
+            memory_used: cmd.memory_used,
+            memory_total: cmd.memory_total,
+            swap_used: cmd.swap_used,
+            swap_total: cmd.swap_total,
+            disks: cmd.disks,
+            network_tx: cmd.network_tx,
+            network_rx: cmd.network_rx,
+            temperature: cmd.temperature,
+            config: cmd.config,
         }
     }
 
+    #[must_use]
     pub fn normalize_cpu_usage(
         mode: &CpuMode,
         global_cpu: f32,
@@ -342,23 +372,28 @@ impl MetricsState {
     }
 
     #[cfg(test)]
-    pub fn memory_total(&self) -> &MemoryBytes {
+    #[must_use]
+    pub const fn memory_total(&self) -> &MemoryBytes {
         &self.memory_total
     }
     #[cfg(test)]
+    #[must_use]
     pub fn disks(&self) -> &[DiskMetric] {
         &self.disks
     }
     #[cfg(test)]
-    pub fn network_tx(&self) -> &NetworkSpeed {
+    #[must_use]
+    pub const fn network_tx(&self) -> &NetworkSpeed {
         &self.network_tx
     }
     #[cfg(test)]
-    pub fn network_rx(&self) -> &NetworkSpeed {
+    #[must_use]
+    pub const fn network_rx(&self) -> &NetworkSpeed {
         &self.network_rx
     }
     #[cfg(test)]
-    pub fn temperature(&self) -> &Temperature {
+    #[must_use]
+    pub const fn temperature(&self) -> &Temperature {
         &self.temperature
     }
 }
@@ -421,10 +456,10 @@ mod tests {
 
     #[test]
     fn test_metrics_types() {
-        assert_eq!(CpuUsage::new(42.0).0, 42.0);
+        assert!((CpuUsage::new(42.0).0 - 42.0).abs() < f32::EPSILON);
         assert_eq!(MemoryBytes::new(1024).0, 1024);
         assert_eq!(NetworkSpeed::new(512).0, 512);
-        assert_eq!(Temperature::new(60.0).0, 60.0);
+        assert!((Temperature::new(60.0).0 - 60.0).abs() < f32::EPSILON);
         assert_eq!(DiskName::new("sda1"), DiskName("sda1".to_string()));
         assert_eq!(MountPoint::new("/mnt"), MountPoint("/mnt".to_string()));
     }

@@ -19,6 +19,7 @@ pub struct ConfigDto {
 }
 
 impl ConfigDto {
+    #[must_use]
     pub fn into_domain<V: FontValidatorPort>(self, _validator: &V) -> domain::Config {
         let root = self.root.into_domain();
         let modules = self.modules.into_domain();
@@ -49,7 +50,7 @@ fn default_root_name() -> String {
     "bar".to_string()
 }
 
-fn default_height() -> u32 {
+const fn default_height() -> u32 {
     30
 }
 
@@ -96,13 +97,14 @@ fn json_map_to_options(
 }
 
 impl RootConfigDto {
+    #[must_use]
     pub fn into_domain(self) -> domain::RootConfig {
         domain::RootConfig::new(crate::shared::config::domain::CreateRootConfigCommand::new(
             crate::shared::primitives::ModuleName::new(self.name),
             crate::shared::primitives::geometry::BarHeight::new(self.height),
             self.vertical_alignment.into_domain(),
             self.margin.into_domain(),
-            self.unfocused.map(|u| u.into_domain()),
+            self.unfocused.map(PartialRootConfigDto::into_domain),
             json_map_to_options(self.options),
         ))
     }
@@ -118,11 +120,12 @@ pub enum VerticalAlignmentDto {
 }
 
 impl VerticalAlignmentDto {
-    pub fn into_domain(self) -> domain::VerticalAlignment {
+    #[must_use]
+    pub const fn into_domain(self) -> domain::VerticalAlignment {
         match self {
-            VerticalAlignmentDto::Top => domain::VerticalAlignment::Top,
-            VerticalAlignmentDto::Center => domain::VerticalAlignment::Center,
-            VerticalAlignmentDto::Bottom => domain::VerticalAlignment::Bottom,
+            Self::Top => domain::VerticalAlignment::Top,
+            Self::Center => domain::VerticalAlignment::Center,
+            Self::Bottom => domain::VerticalAlignment::Bottom,
         }
     }
 }
@@ -148,7 +151,8 @@ impl Default for MarginConfigDto {
 }
 
 impl MarginConfigDto {
-    pub fn into_domain(self) -> domain::MarginConfig {
+    #[must_use]
+    pub const fn into_domain(self) -> domain::MarginConfig {
         match self {
             Self::All(val) => domain::MarginConfig::new(
                 domain::MarginOffset::new(val),
@@ -164,10 +168,34 @@ impl MarginConfigDto {
                 horizontal,
                 vertical,
             } => {
-                let t = top.or(vertical).unwrap_or(0);
-                let b = bottom.or(vertical).unwrap_or(0);
-                let l = left.or(horizontal).unwrap_or(0);
-                let r = right.or(horizontal).unwrap_or(0);
+                let t = match top {
+                    Some(v) => v,
+                    None => match vertical {
+                        Some(v) => v,
+                        None => 0,
+                    },
+                };
+                let b = match bottom {
+                    Some(v) => v,
+                    None => match vertical {
+                        Some(v) => v,
+                        None => 0,
+                    },
+                };
+                let l = match left {
+                    Some(v) => v,
+                    None => match horizontal {
+                        Some(v) => v,
+                        None => 0,
+                    },
+                };
+                let r = match right {
+                    Some(v) => v,
+                    None => match horizontal {
+                        Some(v) => v,
+                        None => 0,
+                    },
+                };
                 domain::MarginConfig::new(
                     domain::MarginOffset::new(t),
                     domain::MarginOffset::new(b),
@@ -199,11 +227,12 @@ pub enum ModuleEntryDto {
     OptionsOnly(HashMap<String, serde_json::Value>),
 }
 
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
 
 impl ModulesConfigDto {
+    #[must_use]
     pub fn into_domain(self) -> domain::ModulesConfig {
         let mut map = HashMap::new();
         for (name_str, entry) in self.modules {
@@ -214,10 +243,9 @@ impl ModulesConfigDto {
                     engine,
                     options,
                 } => {
-                    let selection = match engine {
-                        Some(e) => domain::EngineSelection::Explicit(domain::EngineId::new(e)),
-                        None => domain::EngineSelection::Auto,
-                    };
+                    let selection = engine.map_or(domain::EngineSelection::Auto, |e| {
+                        domain::EngineSelection::Explicit(domain::EngineId::new(e))
+                    });
                     domain::ModuleConfig::new(
                         mod_name.clone(),
                         enable,
@@ -260,19 +288,20 @@ impl Default for RenderingModeDto {
 }
 
 impl RenderingModeDto {
-    pub fn into_domain(self) -> domain::RenderingMode {
+    #[must_use]
+    pub const fn into_domain(self) -> domain::RenderingMode {
         match self {
-            RenderingModeDto::Immediate { fps_limit } => {
+            Self::Immediate { fps_limit } => {
                 domain::RenderingMode::new_immediate(fps_limit)
             }
-            RenderingModeDto::Timebased { duration_ms } => {
+            Self::Timebased { duration_ms } => {
                 domain::RenderingMode::new_timebased(duration_ms)
             }
         }
     }
 }
 
-fn default_timebased_duration_ms() -> u64 {
+const fn default_timebased_duration_ms() -> u64 {
     100
 }
 
@@ -304,7 +333,8 @@ impl Default for PartialMarginConfigDto {
 }
 
 impl PartialMarginConfigDto {
-    pub fn into_domain(self) -> domain::PartialMarginConfig {
+    #[must_use]
+    pub const fn into_domain(self) -> domain::PartialMarginConfig {
         match self {
             Self::All(val) => domain::PartialMarginConfig::new(
                 Some(domain::MarginOffset::new(val)),
@@ -320,10 +350,34 @@ impl PartialMarginConfigDto {
                 horizontal,
                 vertical,
             } => {
-                let t = top.or(vertical).map(domain::MarginOffset::new);
-                let b = bottom.or(vertical).map(domain::MarginOffset::new);
-                let l = left.or(horizontal).map(domain::MarginOffset::new);
-                let r = right.or(horizontal).map(domain::MarginOffset::new);
+                let t = match top {
+                    Some(v) => Some(domain::MarginOffset::new(v)),
+                    None => match vertical {
+                        Some(v) => Some(domain::MarginOffset::new(v)),
+                        None => None,
+                    },
+                };
+                let b = match bottom {
+                    Some(v) => Some(domain::MarginOffset::new(v)),
+                    None => match vertical {
+                        Some(v) => Some(domain::MarginOffset::new(v)),
+                        None => None,
+                    },
+                };
+                let l = match left {
+                    Some(v) => Some(domain::MarginOffset::new(v)),
+                    None => match horizontal {
+                        Some(v) => Some(domain::MarginOffset::new(v)),
+                        None => None,
+                    },
+                };
+                let r = match right {
+                    Some(v) => Some(domain::MarginOffset::new(v)),
+                    None => match horizontal {
+                        Some(v) => Some(domain::MarginOffset::new(v)),
+                        None => None,
+                    },
+                };
                 domain::PartialMarginConfig::new(t, b, l, r)
             }
         }
@@ -341,13 +395,14 @@ pub struct PartialRootConfigDto {
 }
 
 impl PartialRootConfigDto {
+    #[must_use]
     pub fn into_domain(self) -> domain::PartialRootConfig {
         domain::PartialRootConfig::new(
             crate::shared::config::domain::CreatePartialRootConfigCommand::new(
                 self.height
                     .map(crate::shared::primitives::geometry::BarHeight::new),
-                self.vertical_alignment.map(|v| v.into_domain()),
-                self.margin.map(|m| m.into_domain()),
+                self.vertical_alignment.map(VerticalAlignmentDto::into_domain),
+                self.margin.map(PartialMarginConfigDto::into_domain),
             ),
         )
     }
@@ -366,6 +421,7 @@ pub struct TooltipConfigDto {
 }
 
 impl TooltipConfigDto {
+    #[must_use]
     pub fn into_domain(self) -> domain::TooltipConfig {
         let default = domain::TooltipConfig::default();
         domain::TooltipConfig::new(
@@ -385,14 +441,11 @@ impl TooltipConfigDto {
                 .map(domain::FontSize::new)
                 .or_else(|| default.size()),
             self.radius
-                .map(domain::BorderRadius::new)
-                .unwrap_or_else(|| default.radius()),
+                .map_or_else(|| default.radius(), domain::BorderRadius::new),
             self.border_width
-                .map(domain::BorderSize::new)
-                .unwrap_or_else(|| default.border_width()),
+                .map_or_else(|| default.border_width(), domain::BorderSize::new),
             self.padding
-                .map(domain::PaddingOffset::new)
-                .unwrap_or_else(|| default.padding()),
+                .map_or_else(|| default.padding(), domain::PaddingOffset::new),
         )
     }
 }

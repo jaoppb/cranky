@@ -9,23 +9,28 @@ use std::ops::Deref;
 pub struct BinaryData(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl BinaryData {
+    #[must_use]
     pub fn new(data: impl Into<Vec<u8>>) -> Self {
         Self(data.into())
     }
 
+    #[must_use]
     pub fn into_vec(self) -> Vec<u8> {
         self.0
     }
 
+    #[must_use]
     pub fn as_slice(&self) -> &[u8] {
         &self.0
     }
 
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.0.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }
@@ -67,7 +72,8 @@ impl fmt::Debug for BinaryData {
         if tracing::enabled!(target: "cranky::binary", tracing::Level::TRACE) {
             self.0.fmt(f)
         } else {
-            write!(f, "<Binary Data ({} bytes)>", self.0.len())
+            let len = self.0.len();
+            write!(f, "<Binary Data ({len} bytes)>")
         }
     }
 }
@@ -101,11 +107,11 @@ mod tests {
     #[test]
     fn test_binary_data_debug_default_omission() {
         let binary = BinaryData::new(vec![10, 20, 30]);
-        let formatted = format!("{:?}", binary);
+        let formatted = format!("{binary:?}");
         assert_eq!(formatted, "<Binary Data (3 bytes)>");
 
         let empty = BinaryData::default();
-        let formatted_empty = format!("{:?}", empty);
+        let formatted_empty = format!("{empty:?}");
         assert_eq!(formatted_empty, "<Binary Data (0 bytes)>");
     }
 
@@ -117,7 +123,7 @@ mod tests {
         let binary = BinaryData::new(vec![1, 2, 3]);
 
         tracing::subscriber::with_default(subscriber, || {
-            let formatted = format!("{:?}", binary);
+            let formatted = format!("{binary:?}");
             assert_eq!(formatted, "[1, 2, 3]");
         });
     }

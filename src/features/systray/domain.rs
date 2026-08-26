@@ -16,6 +16,7 @@ impl SystrayId {
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -41,6 +42,7 @@ impl Destination {
     pub fn new(dest: impl Into<String>) -> Self {
         Self(dest.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -54,6 +56,7 @@ impl ObjectPath {
     pub fn new(path: impl Into<String>) -> Self {
         Self(path.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -78,6 +81,7 @@ impl IconName {
         Self(name.into())
     }
     #[cfg(test)]
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -100,11 +104,13 @@ impl IconImage {
         }
     }
     #[cfg(test)]
+    #[must_use]
     pub fn data(&self) -> &[u8] {
         &self.data
     }
     #[cfg(test)]
-    pub fn size(&self) -> &Size {
+    #[must_use]
+    pub const fn size(&self) -> &Size {
         &self.size
     }
 }
@@ -118,6 +124,7 @@ impl ItemId {
         Self(id.into())
     }
     #[cfg(test)]
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -128,11 +135,13 @@ impl ItemId {
 pub struct WindowId(u32);
 
 impl WindowId {
-    pub fn new(id: u32) -> Self {
+    #[must_use]
+    pub const fn new(id: u32) -> Self {
         Self(id)
     }
     #[cfg(test)]
-    pub fn value(&self) -> u32 {
+    #[must_use]
+    pub const fn value(&self) -> u32 {
         self.0
     }
 }
@@ -142,10 +151,12 @@ impl WindowId {
 pub struct ItemIsMenu(bool);
 
 impl ItemIsMenu {
-    pub fn new(val: bool) -> Self {
+    #[must_use]
+    pub const fn new(val: bool) -> Self {
         Self(val)
     }
-    pub fn value(&self) -> bool {
+    #[must_use]
+    pub const fn value(&self) -> bool {
         self.0
     }
 }
@@ -159,6 +170,7 @@ impl SystrayTooltipTitle {
         Self(title.into())
     }
     #[cfg(test)]
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -173,6 +185,7 @@ impl SystrayTooltipDescription {
         Self(desc.into())
     }
     #[cfg(test)]
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -193,6 +206,7 @@ pub enum SystrayActionName {
 }
 
 impl SystrayActionName {
+    #[must_use]
     pub fn parse_str(s: &str) -> Self {
         match s {
             "Primary" => Self::Primary,
@@ -207,7 +221,8 @@ impl SystrayActionName {
         }
     }
 
-    pub fn as_str(&self) -> &str {
+    #[must_use]
+    pub const fn as_str(&self) -> &str {
         match self {
             Self::Primary => "Primary",
             Self::ContextMenu => "ContextMenu",
@@ -251,6 +266,7 @@ pub enum SystrayCategory {
 }
 
 impl SystrayCategory {
+    #[must_use]
     pub fn parse_str(s: &str) -> Self {
         match s {
             "ApplicationStatus" => Self::ApplicationStatus,
@@ -261,7 +277,8 @@ impl SystrayCategory {
         }
     }
 
-    pub fn as_str(&self) -> &str {
+    #[must_use]
+    pub const fn as_str(&self) -> &str {
         match self {
             Self::ApplicationStatus => "ApplicationStatus",
             Self::Communications => "Communications",
@@ -299,6 +316,7 @@ pub enum SystrayIcon {
 }
 
 impl SystrayIcon {
+    #[must_use]
     pub fn new(name: Option<IconName>, image: Option<IconImage>) -> Option<Self> {
         match (name, image) {
             (Some(name), Some(image)) => Some(Self::Both { name, image }),
@@ -309,7 +327,8 @@ impl SystrayIcon {
     }
 
     #[cfg(test)]
-    pub fn name(&self) -> Option<&IconName> {
+    #[must_use]
+    pub const fn name(&self) -> Option<&IconName> {
         match self {
             Self::Both { name, .. } | Self::NameOnly { name } => Some(name),
             Self::ImageOnly { .. } => None,
@@ -317,7 +336,8 @@ impl SystrayIcon {
     }
 
     #[cfg(test)]
-    pub fn image(&self) -> Option<&IconImage> {
+    #[must_use]
+    pub const fn image(&self) -> Option<&IconImage> {
         match self {
             Self::Both { image, .. } | Self::ImageOnly { image } => Some(image),
             Self::NameOnly { .. } => None,
@@ -333,7 +353,8 @@ pub struct SystrayTooltip {
 }
 
 impl SystrayTooltip {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         icon: Option<SystrayIcon>,
         title: SystrayTooltipTitle,
         description: SystrayTooltipDescription,
@@ -346,22 +367,25 @@ impl SystrayTooltip {
     }
 
     #[cfg(test)]
-    pub fn icon(&self) -> Option<&SystrayIcon> {
+    #[must_use]
+    pub const fn icon(&self) -> Option<&SystrayIcon> {
         self.icon.as_ref()
     }
 
     #[cfg(test)]
-    pub fn title(&self) -> &SystrayTooltipTitle {
+    #[must_use]
+    pub const fn title(&self) -> &SystrayTooltipTitle {
         &self.title
     }
 
     #[cfg(test)]
-    pub fn description(&self) -> &SystrayTooltipDescription {
+    #[must_use]
+    pub const fn description(&self) -> &SystrayTooltipDescription {
         &self.description
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SystrayItem {
     id: SystrayId,
     destination: Destination,
@@ -398,7 +422,8 @@ pub struct CreateSystrayItemCommand {
 
 impl CreateSystrayItemCommand {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         id: SystrayId,
         destination: Destination,
         path: ObjectPath,
@@ -427,90 +452,110 @@ impl CreateSystrayItemCommand {
         }
     }
 
+    #[must_use]
     pub fn with_item_id(mut self, item_id: Option<ItemId>) -> Self {
         self.item_id = item_id;
         self
     }
 
-    pub fn with_window_id(mut self, window_id: Option<WindowId>) -> Self {
+    #[must_use]
+    pub const fn with_window_id(mut self, window_id: Option<WindowId>) -> Self {
         self.window_id = window_id;
         self
     }
 
+    #[must_use]
     pub fn with_attention_icon(mut self, attention_icon: Option<SystrayIcon>) -> Self {
         self.attention_icon = attention_icon;
         self
     }
 
+    #[must_use]
     pub fn with_overlay_icon(mut self, overlay_icon: Option<SystrayIcon>) -> Self {
         self.overlay_icon = overlay_icon;
         self
     }
 
+    #[must_use]
     pub fn with_tooltip(mut self, tooltip: Option<SystrayTooltip>) -> Self {
         self.tooltip = tooltip;
         self
     }
 
     #[cfg(test)]
-    pub fn id(&self) -> &SystrayId {
+    #[must_use]
+    pub const fn id(&self) -> &SystrayId {
         &self.id
     }
     #[cfg(test)]
-    pub fn destination(&self) -> &Destination {
+    #[must_use]
+    pub const fn destination(&self) -> &Destination {
         &self.destination
     }
     #[cfg(test)]
-    pub fn path(&self) -> &ObjectPath {
+    #[must_use]
+    pub const fn path(&self) -> &ObjectPath {
         &self.path
     }
     #[cfg(test)]
-    pub fn title(&self) -> &Title {
+    #[must_use]
+    pub const fn title(&self) -> &Title {
         &self.title
     }
     #[cfg(test)]
-    pub fn status(&self) -> &SystrayStatus {
+    #[must_use]
+    pub const fn status(&self) -> &SystrayStatus {
         &self.status
     }
     #[cfg(test)]
-    pub fn icon(&self) -> Option<&SystrayIcon> {
+    #[must_use]
+    pub const fn icon(&self) -> Option<&SystrayIcon> {
         self.icon.as_ref()
     }
     #[cfg(test)]
-    pub fn menu_path(&self) -> Option<&ObjectPath> {
+    #[must_use]
+    pub const fn menu_path(&self) -> Option<&ObjectPath> {
         self.menu_path.as_ref()
     }
     #[cfg(test)]
-    pub fn item_id(&self) -> Option<&ItemId> {
+    #[must_use]
+    pub const fn item_id(&self) -> Option<&ItemId> {
         self.item_id.as_ref()
     }
     #[cfg(test)]
-    pub fn category(&self) -> &SystrayCategory {
+    #[must_use]
+    pub const fn category(&self) -> &SystrayCategory {
         &self.category
     }
     #[cfg(test)]
-    pub fn window_id(&self) -> Option<WindowId> {
+    #[must_use]
+    pub const fn window_id(&self) -> Option<WindowId> {
         self.window_id
     }
     #[cfg(test)]
-    pub fn item_is_menu(&self) -> ItemIsMenu {
+    #[must_use]
+    pub const fn item_is_menu(&self) -> ItemIsMenu {
         self.item_is_menu
     }
     #[cfg(test)]
-    pub fn attention_icon(&self) -> Option<&SystrayIcon> {
+    #[must_use]
+    pub const fn attention_icon(&self) -> Option<&SystrayIcon> {
         self.attention_icon.as_ref()
     }
     #[cfg(test)]
-    pub fn overlay_icon(&self) -> Option<&SystrayIcon> {
+    #[must_use]
+    pub const fn overlay_icon(&self) -> Option<&SystrayIcon> {
         self.overlay_icon.as_ref()
     }
     #[cfg(test)]
-    pub fn tooltip(&self) -> Option<&SystrayTooltip> {
+    #[must_use]
+    pub const fn tooltip(&self) -> Option<&SystrayTooltip> {
         self.tooltip.as_ref()
     }
 }
 
 impl SystrayItem {
+    #[must_use]
     pub fn new(cmd: CreateSystrayItemCommand) -> Self {
         Self {
             id: cmd.id,
@@ -530,114 +575,136 @@ impl SystrayItem {
         }
     }
 
+    #[must_use]
     pub fn with_title(mut self, title: String) -> Self {
         self.title = Title::new(title);
         self
     }
 
-    pub fn with_status(mut self, status: SystrayStatus) -> Self {
+    #[must_use]
+    pub const fn with_status(mut self, status: SystrayStatus) -> Self {
         self.status = status;
         self
     }
 
+    #[must_use]
     pub fn with_icon(mut self, icon: Option<SystrayIcon>) -> Self {
         self.icon = icon;
         self
     }
 
+    #[must_use]
     pub fn with_menu_path(mut self, menu_path: Option<ObjectPath>) -> Self {
         self.menu_path = menu_path;
         self
     }
 
-    pub fn with_item_is_menu(mut self, item_is_menu: ItemIsMenu) -> Self {
+    #[must_use]
+    pub const fn with_item_is_menu(mut self, item_is_menu: ItemIsMenu) -> Self {
         self.item_is_menu = item_is_menu;
         self
     }
 
+    #[must_use]
     pub fn with_attention_icon(mut self, attention_icon: Option<SystrayIcon>) -> Self {
         self.attention_icon = attention_icon;
         self
     }
 
+    #[must_use]
     pub fn with_overlay_icon(mut self, overlay_icon: Option<SystrayIcon>) -> Self {
         self.overlay_icon = overlay_icon;
         self
     }
 
+    #[must_use]
     pub fn with_tooltip(mut self, tooltip: Option<SystrayTooltip>) -> Self {
         self.tooltip = tooltip;
         self
     }
 
-    pub fn id(&self) -> &SystrayId {
+    #[must_use]
+    pub const fn id(&self) -> &SystrayId {
         &self.id
     }
 
-    pub fn destination(&self) -> &Destination {
+    #[must_use]
+    pub const fn destination(&self) -> &Destination {
         &self.destination
     }
 
-    pub fn path(&self) -> &ObjectPath {
+    #[must_use]
+    pub const fn path(&self) -> &ObjectPath {
         &self.path
     }
 
     #[cfg(test)]
-    pub fn title(&self) -> &Title {
+    #[must_use]
+    pub const fn title(&self) -> &Title {
         &self.title
     }
 
     #[cfg(test)]
-    pub fn status(&self) -> &SystrayStatus {
+    #[must_use]
+    pub const fn status(&self) -> &SystrayStatus {
         &self.status
     }
 
     #[cfg(test)]
-    pub fn icon(&self) -> Option<&SystrayIcon> {
+    #[must_use]
+    pub const fn icon(&self) -> Option<&SystrayIcon> {
         self.icon.as_ref()
     }
 
     #[cfg(test)]
-    pub fn menu_path(&self) -> Option<&ObjectPath> {
+    #[must_use]
+    pub const fn menu_path(&self) -> Option<&ObjectPath> {
         self.menu_path.as_ref()
     }
 
     #[cfg(test)]
-    pub fn item_id(&self) -> Option<&ItemId> {
+    #[must_use]
+    pub const fn item_id(&self) -> Option<&ItemId> {
         self.item_id.as_ref()
     }
 
     #[cfg(test)]
-    pub fn category(&self) -> &SystrayCategory {
+    #[must_use]
+    pub const fn category(&self) -> &SystrayCategory {
         &self.category
     }
 
     #[cfg(test)]
-    pub fn window_id(&self) -> Option<WindowId> {
+    #[must_use]
+    pub const fn window_id(&self) -> Option<WindowId> {
         self.window_id
     }
 
-    pub fn item_is_menu(&self) -> ItemIsMenu {
+    #[must_use]
+    pub const fn item_is_menu(&self) -> ItemIsMenu {
         self.item_is_menu
     }
 
     #[cfg(test)]
-    pub fn attention_icon(&self) -> Option<&SystrayIcon> {
+    #[must_use]
+    pub const fn attention_icon(&self) -> Option<&SystrayIcon> {
         self.attention_icon.as_ref()
     }
 
     #[cfg(test)]
-    pub fn overlay_icon(&self) -> Option<&SystrayIcon> {
+    #[must_use]
+    pub const fn overlay_icon(&self) -> Option<&SystrayIcon> {
         self.overlay_icon.as_ref()
     }
 
     #[cfg(test)]
-    pub fn tooltip(&self) -> Option<&SystrayTooltip> {
+    #[must_use]
+    pub const fn tooltip(&self) -> Option<&SystrayTooltip> {
         self.tooltip.as_ref()
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SystrayState {
     items: std::collections::BTreeMap<SystrayId, SystrayItem>,
 }
@@ -674,11 +741,13 @@ impl<'de> serde::Deserialize<'de> for SystrayState {
 }
 
 impl SystrayState {
-    pub fn new(items: std::collections::BTreeMap<SystrayId, SystrayItem>) -> Self {
+    #[must_use]
+    pub const fn new(items: std::collections::BTreeMap<SystrayId, SystrayItem>) -> Self {
         Self { items }
     }
 
-    pub fn items(&self) -> &std::collections::BTreeMap<SystrayId, SystrayItem> {
+    #[must_use]
+    pub const fn items(&self) -> &std::collections::BTreeMap<SystrayId, SystrayItem> {
         &self.items
     }
 }
@@ -704,7 +773,7 @@ mod tests {
     fn test_icon_image_debug_omission() {
         let size = crate::shared::primitives::geometry::Size::new(16, 16);
         let img = IconImage::new(vec![255; 16 * 16 * 4], size);
-        let debug_str = format!("{:?}", img);
+        let debug_str = format!("{img:?}");
         assert!(debug_str.contains("<Binary Data (1024 bytes)>"));
         assert!(!debug_str.contains("255, 255"));
     }

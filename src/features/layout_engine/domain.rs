@@ -56,10 +56,12 @@ pub struct Gap {
 }
 
 impl Gap {
-    pub fn new(value: f64) -> Self {
+    #[must_use]
+    pub const fn new(value: f64) -> Self {
         Self { value }
     }
-    pub fn value(&self) -> f64 {
+    #[must_use]
+    pub const fn value(&self) -> f64 {
         self.value
     }
 }
@@ -77,7 +79,8 @@ pub struct BoxMargin {
 }
 
 impl BoxMargin {
-    pub fn new(top: f64, bottom: f64, left: f64, right: f64) -> Self {
+    #[must_use]
+    pub const fn new(top: f64, bottom: f64, left: f64, right: f64) -> Self {
         Self {
             top,
             bottom,
@@ -88,16 +91,20 @@ impl BoxMargin {
 }
 
 impl BoxMargin {
-    pub fn top(&self) -> f64 {
+    #[must_use]
+    pub const fn top(&self) -> f64 {
         self.top
     }
-    pub fn bottom(&self) -> f64 {
+    #[must_use]
+    pub const fn bottom(&self) -> f64 {
         self.bottom
     }
-    pub fn left(&self) -> f64 {
+    #[must_use]
+    pub const fn left(&self) -> f64 {
         self.left
     }
-    pub fn right(&self) -> f64 {
+    #[must_use]
+    pub const fn right(&self) -> f64 {
         self.right
     }
 }
@@ -121,29 +128,37 @@ pub struct FlexStyle {
 }
 
 impl FlexStyle {
-    pub fn with_padding(mut self, padding: BoxMargin) -> Self {
+    #[must_use]
+    pub const fn with_padding(mut self, padding: BoxMargin) -> Self {
         self.padding = padding;
         self
     }
-    pub fn direction(&self) -> FlexDirection {
+    #[must_use]
+    pub const fn direction(&self) -> FlexDirection {
         self.direction
     }
-    pub fn justify(&self) -> JustifyContent {
+    #[must_use]
+    pub const fn justify(&self) -> JustifyContent {
         self.justify
     }
-    pub fn align_items(&self) -> AlignItems {
+    #[must_use]
+    pub const fn align_items(&self) -> AlignItems {
         self.align_items
     }
-    pub fn padding(&self) -> &BoxMargin {
+    #[must_use]
+    pub const fn padding(&self) -> &BoxMargin {
         &self.padding
     }
-    pub fn margin(&self) -> &BoxMargin {
+    #[must_use]
+    pub const fn margin(&self) -> &BoxMargin {
         &self.margin
     }
-    pub fn gap(&self) -> Option<&Gap> {
+    #[must_use]
+    pub const fn gap(&self) -> Option<&Gap> {
         self.gap.as_ref()
     }
-    pub fn position(&self) -> PositionType {
+    #[must_use]
+    pub const fn position(&self) -> PositionType {
         self.position
     }
 }
@@ -155,18 +170,18 @@ use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue
 #[derive(Debug, Clone, PartialEq)]
 pub enum StyledNode {
     Flex {
-        children: Vec<StyledNode>,
+        children: Vec<Self>,
         style: ComputedStyle,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<StyledNode>>,
+        tooltip: Option<Box<Self>>,
     },
     Text {
         text: TextContent,
         style: ComputedStyle,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<StyledNode>>,
+        tooltip: Option<Box<Self>>,
     },
     Progress {
         value: ProgressValue,
@@ -174,19 +189,19 @@ pub enum StyledNode {
         style: ComputedStyle,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<StyledNode>>,
+        tooltip: Option<Box<Self>>,
     },
     Rect {
         style: ComputedStyle,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<StyledNode>>,
+        tooltip: Option<Box<Self>>,
     },
     Image {
         data: BinaryData,
         pixel_size: Size,
         style: ComputedStyle,
-        tooltip: Option<Box<StyledNode>>,
+        tooltip: Option<Box<Self>>,
     },
     Module {
         key: ModuleKey,
@@ -194,19 +209,20 @@ pub enum StyledNode {
         style: ComputedStyle,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<StyledNode>>,
+        tooltip: Option<Box<Self>>,
     },
 }
 
 impl StyledNode {
-    pub fn style(&self) -> &ComputedStyle {
+    #[must_use]
+    pub const fn style(&self) -> &ComputedStyle {
         match self {
-            Self::Flex { style, .. } => style,
-            Self::Text { style, .. } => style,
-            Self::Progress { style, .. } => style,
-            Self::Rect { style, .. } => style,
-            Self::Image { style, .. } => style,
-            Self::Module { style, .. } => style,
+            Self::Flex { style, .. }
+            | Self::Text { style, .. }
+            | Self::Progress { style, .. }
+            | Self::Rect { style, .. }
+            | Self::Image { style, .. }
+            | Self::Module { style, .. } => style,
         }
     }
 }
@@ -224,7 +240,7 @@ use crate::shared::primitives::geometry::Rect;
 pub enum RenderNode {
     Flex {
         rect: Rect,
-        children: Vec<RenderNode>,
+        children: Vec<Self>,
         style: ComputedStyle,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
@@ -271,6 +287,7 @@ pub enum RenderNode {
 }
 
 impl RenderNode {
+    #[must_use]
     pub fn collect_module_layouts(&self) -> Vec<ChildModuleLayout> {
         let mut layouts = Vec::new();
         self.collect_module_layouts_recursive(&mut layouts);
@@ -293,40 +310,44 @@ impl RenderNode {
 }
 
 impl RenderNode {
-    pub fn rect(&self) -> Rect {
+    #[must_use]
+    pub const fn rect(&self) -> Rect {
         match self {
-            Self::Flex { rect, .. } => *rect,
-            Self::Text { rect, .. } => *rect,
-            Self::Progress { rect, .. } => *rect,
-            Self::Rect { rect, .. } => *rect,
-            Self::Image { rect, .. } => *rect,
-            Self::Module { rect, .. } => *rect,
+            Self::Flex { rect, .. }
+            | Self::Text { rect, .. }
+            | Self::Progress { rect, .. }
+            | Self::Rect { rect, .. }
+            | Self::Image { rect, .. }
+            | Self::Module { rect, .. } => *rect,
         }
     }
 
-    pub fn on_click(&self) -> Option<&crate::app::commands::AppCommand> {
+    #[must_use]
+    pub const fn on_click(&self) -> Option<&crate::app::commands::AppCommand> {
         match self {
-            Self::Text { on_click, .. } => on_click.as_ref(),
-            Self::Flex { on_click, .. } => on_click.as_ref(),
-            Self::Progress { on_click, .. } => on_click.as_ref(),
-            Self::Rect { on_click, .. } => on_click.as_ref(),
-            Self::Module { on_click, .. } => on_click.as_ref(),
-            _ => None,
+            Self::Text { on_click, .. }
+            | Self::Flex { on_click, .. }
+            | Self::Progress { on_click, .. }
+            | Self::Rect { on_click, .. }
+            | Self::Module { on_click, .. } => on_click.as_ref(),
+            Self::Image { .. } => None,
         }
     }
 
-    pub fn on_hover(&self) -> Option<&crate::app::commands::AppCommand> {
+    #[must_use]
+    pub const fn on_hover(&self) -> Option<&crate::app::commands::AppCommand> {
         match self {
-            Self::Text { on_hover, .. } => on_hover.as_ref(),
-            Self::Flex { on_hover, .. } => on_hover.as_ref(),
-            Self::Progress { on_hover, .. } => on_hover.as_ref(),
-            Self::Rect { on_hover, .. } => on_hover.as_ref(),
-            Self::Module { on_hover, .. } => on_hover.as_ref(),
-            _ => None,
+            Self::Text { on_hover, .. }
+            | Self::Flex { on_hover, .. }
+            | Self::Progress { on_hover, .. }
+            | Self::Rect { on_hover, .. }
+            | Self::Module { on_hover, .. } => on_hover.as_ref(),
+            Self::Image { .. } => None,
         }
     }
 
-    pub fn hit_test(&self, pos: crate::shared::primitives::geometry::Position) -> Vec<&RenderNode> {
+    #[must_use]
+    pub fn hit_test(&self, pos: crate::shared::primitives::geometry::Position) -> Vec<&Self> {
         let mut path = Vec::new();
         self.hit_test_internal(pos, &mut path);
         path
@@ -335,38 +356,47 @@ impl RenderNode {
     fn hit_test_internal<'a>(
         &'a self,
         pos: crate::shared::primitives::geometry::Position,
-        path: &mut Vec<&'a RenderNode>,
+        path: &mut Vec<&'a Self>,
     ) {
         let r = self.rect();
+        let width_i32 = i32::try_from(r.width()).unwrap_or(i32::MAX);
+        let height_i32 = i32::try_from(r.height()).unwrap_or(i32::MAX);
+        let max_x = r.x().saturating_add(width_i32);
+        let max_y = r.y().saturating_add(height_i32);
         if pos.x() >= r.x()
-            && pos.x() < r.x() + r.width() as i32
+            && pos.x() < max_x
             && pos.y() >= r.y()
-            && pos.y() < r.y() + r.height() as i32
+            && pos.y() < max_y
         {
             path.push(self);
             if let Self::Flex { children, .. } = self {
                 for child in children {
-                    let prev_len = path.len();
                     child.hit_test_internal(pos, path);
-                    if path.len() > prev_len {
-                        break;
-                    }
                 }
             }
         }
     }
 
+    #[must_use]
     pub fn tooltip(&self) -> Option<&StyledNode> {
         match self {
-            RenderNode::Flex { tooltip, .. } => tooltip.as_deref(),
-            RenderNode::Text { tooltip, .. } => tooltip.as_deref(),
-            RenderNode::Progress { tooltip, .. } => tooltip.as_deref(),
-            RenderNode::Rect { tooltip, .. } => tooltip.as_deref(),
-            RenderNode::Image { tooltip, .. } => tooltip.as_deref(),
-            RenderNode::Module { tooltip, .. } => tooltip.as_deref(),
+            Self::Flex { tooltip, .. }
+            | Self::Text { tooltip, .. }
+            | Self::Progress { tooltip, .. }
+            | Self::Rect { tooltip, .. }
+            | Self::Image { tooltip, .. }
+            | Self::Module { tooltip, .. } => tooltip.as_deref(),
         }
     }
 
+    #[allow(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::arithmetic_side_effects,
+        clippy::too_many_lines
+    )]
     pub fn render_to_canvas(
         &self,
         canvas: &mut dyn crate::shared::rendering::ports::canvas::Canvas,
@@ -386,7 +416,7 @@ impl RenderNode {
                         LogicalPx::new(rect.width() as f32),
                         LogicalPx::new(rect.height() as f32),
                         bg.clone(),
-                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value())),
                     );
                 }
                 if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
@@ -394,7 +424,7 @@ impl RenderNode {
                         crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
                         crate::shared::primitives::geometry::Size::new(rect.width(), rect.height()),
                         color.clone(),
-                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value())),
                         LogicalPx::new(size.value()),
                     );
                 }
@@ -409,7 +439,7 @@ impl RenderNode {
                 style,
                 ..
             } => {
-                let r = LogicalPx::new(style.border_radius().map(|rad| rad.value()).unwrap_or(0.0));
+                let r = LogicalPx::new(style.border_radius().map_or(0.0, |rad| rad.value()));
                 if let Some(bg) = style.background() {
                     canvas.draw_rect(
                         LogicalPx::new(rect.x() as f32),
@@ -472,7 +502,7 @@ impl RenderNode {
                         LogicalPx::new(rect.width() as f32),
                         LogicalPx::new(rect.height() as f32),
                         c.clone(),
-                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value())),
                     );
                 }
                 if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
@@ -480,7 +510,7 @@ impl RenderNode {
                         crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
                         crate::shared::primitives::geometry::Size::new(rect.width(), rect.height()),
                         color.clone(),
-                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value())),
                         LogicalPx::new(size.value()),
                     );
                 }
@@ -495,7 +525,7 @@ impl RenderNode {
                         LogicalPx::new(rect.width() as f32),
                         LogicalPx::new(rect.height() as f32),
                         bg.clone(),
-                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value())),
                     );
                 }
                 if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
@@ -503,7 +533,7 @@ impl RenderNode {
                         crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
                         crate::shared::primitives::geometry::Size::new(rect.width(), rect.height()),
                         color.clone(),
-                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value())),
                         LogicalPx::new(size.value()),
                     );
                 }
@@ -543,7 +573,7 @@ impl RenderNode {
                         LogicalPx::new(rect.width() as f32),
                         LogicalPx::new(rect.height() as f32),
                         bg.clone(),
-                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value())),
                     );
                 }
                 if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
@@ -551,7 +581,7 @@ impl RenderNode {
                         crate::shared::primitives::geometry::Position::new(rect.x(), rect.y()),
                         crate::shared::primitives::geometry::Size::new(rect.width(), rect.height()),
                         color.clone(),
-                        LogicalPx::new(style.border_radius().map(|r| r.value()).unwrap_or(0.0)),
+                        LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value())),
                         LogicalPx::new(size.value()),
                     );
                 }
@@ -569,7 +599,7 @@ mod tests {
     #[test]
     fn test_gap_and_margins() {
         let gap = Gap { value: 10.0 };
-        assert_eq!(gap.value(), 10.0);
+        assert!((gap.value() - 10.0).abs() < f64::EPSILON);
 
         let margin = BoxMargin {
             top: 1.0,
@@ -577,10 +607,10 @@ mod tests {
             left: 3.0,
             right: 4.0,
         };
-        assert_eq!(margin.top(), 1.0);
-        assert_eq!(margin.bottom(), 2.0);
-        assert_eq!(margin.left(), 3.0);
-        assert_eq!(margin.right(), 4.0);
+        assert!((margin.top() - 1.0).abs() < f64::EPSILON);
+        assert!((margin.bottom() - 2.0).abs() < f64::EPSILON);
+        assert!((margin.left() - 3.0).abs() < f64::EPSILON);
+        assert!((margin.right() - 4.0).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -604,9 +634,9 @@ mod tests {
         assert_eq!(style.justify(), JustifyContent::Center);
         assert_eq!(style.align_items(), AlignItems::Stretch);
         assert_eq!(style.position(), PositionType::Absolute);
-        assert_eq!(style.padding().top(), 1.0);
-        assert_eq!(style.margin().top(), 0.0);
-        assert_eq!(style.gap().unwrap().value(), 5.0);
+        assert!((style.padding().top() - 1.0).abs() < f64::EPSILON);
+        assert!((style.margin().top() - 0.0).abs() < f64::EPSILON);
+        assert!((style.gap().unwrap().value() - 5.0).abs() < f64::EPSILON);
     }
 
     #[test]

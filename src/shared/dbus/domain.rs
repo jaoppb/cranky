@@ -11,9 +11,11 @@ pub enum BusType {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Destination(String);
 impl Destination {
+    #[must_use]
     pub fn new(val: impl Into<String>) -> Self {
         Self(val.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -22,9 +24,11 @@ impl Destination {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Path(String);
 impl Path {
+    #[must_use]
     pub fn new(val: impl Into<String>) -> Self {
         Self(val.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -33,9 +37,11 @@ impl Path {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Interface(String);
 impl Interface {
+    #[must_use]
     pub fn new(val: impl Into<String>) -> Self {
         Self(val.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -44,9 +50,11 @@ impl Interface {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Member(String);
 impl Member {
+    #[must_use]
     pub fn new(val: impl Into<String>) -> Self {
         Self(val.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -62,7 +70,8 @@ pub struct DBusSubscription {
 }
 
 impl DBusSubscription {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         bus: BusType,
         destination: Option<Destination>,
         path: Option<Path>,
@@ -78,19 +87,24 @@ impl DBusSubscription {
         }
     }
 
-    pub fn bus(&self) -> BusType {
+    #[must_use]
+    pub const fn bus(&self) -> BusType {
         self.bus
     }
-    pub fn destination(&self) -> Option<&Destination> {
+    #[must_use]
+    pub const fn destination(&self) -> Option<&Destination> {
         self.destination.as_ref()
     }
-    pub fn path(&self) -> Option<&Path> {
+    #[must_use]
+    pub const fn path(&self) -> Option<&Path> {
         self.path.as_ref()
     }
-    pub fn interface(&self) -> Option<&Interface> {
+    #[must_use]
+    pub const fn interface(&self) -> Option<&Interface> {
         self.interface.as_ref()
     }
-    pub fn member(&self) -> Option<&Member> {
+    #[must_use]
+    pub const fn member(&self) -> Option<&Member> {
         self.member.as_ref()
     }
 }
@@ -102,17 +116,19 @@ pub enum DBusValue {
     Int(i64),
     Float(f64),
     Bool(bool),
-    Array(Vec<DBusValue>),
-    Dict(HashMap<String, DBusValue>),
+    Array(Vec<Self>),
+    Dict(HashMap<String, Self>),
     Null,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PropertyName(String);
 impl PropertyName {
+    #[must_use]
     pub fn new(val: impl Into<String>) -> Self {
         Self(val.into())
     }
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -121,21 +137,33 @@ impl PropertyName {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PropertiesMap(HashMap<PropertyName, DBusValue>);
 impl PropertiesMap {
-    pub fn new(inner: HashMap<PropertyName, DBusValue>) -> Self {
+    #[must_use]
+    pub const fn new(inner: HashMap<PropertyName, DBusValue>) -> Self {
         Self(inner)
     }
+    #[must_use]
     pub fn get(&self, name: &PropertyName) -> Option<&DBusValue> {
         self.0.get(name)
     }
+    #[must_use]
     pub fn iter(&self) -> std::collections::hash_map::Iter<'_, PropertyName, DBusValue> {
         self.0.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a PropertiesMap {
+    type Item = (&'a PropertyName, &'a DBusValue);
+    type IntoIter = std::collections::hash_map::Iter<'a, PropertyName, DBusValue>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
 use futures::Stream;
 use std::pin::Pin;
 
-/// A stream of property change signals from DBus.
+/// A stream of property change signals from `DBus`.
 /// Consumers await this for updates without knowing the underlying implementation.
 pub type PropertyChangedStream =
     Pin<Box<dyn Stream<Item = (Interface, PropertiesMap)> + Send + Sync>>;
@@ -151,7 +179,8 @@ pub struct NameOwnerChanged {
 }
 
 impl NameOwnerChanged {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         name: Destination,
         old_owner: Option<Destination>,
         new_owner: Option<Destination>,
@@ -162,19 +191,24 @@ impl NameOwnerChanged {
             new_owner,
         }
     }
-    pub fn name(&self) -> &Destination {
+    #[must_use]
+    pub const fn name(&self) -> &Destination {
         &self.name
     }
-    pub fn old_owner(&self) -> Option<&Destination> {
+    #[must_use]
+    pub const fn old_owner(&self) -> Option<&Destination> {
         self.old_owner.as_ref()
     }
-    pub fn new_owner(&self) -> Option<&Destination> {
+    #[must_use]
+    pub const fn new_owner(&self) -> Option<&Destination> {
         self.new_owner.as_ref()
     }
-    pub fn is_new(&self) -> bool {
+    #[must_use]
+    pub const fn is_new(&self) -> bool {
         self.old_owner.is_none() && self.new_owner.is_some()
     }
-    pub fn is_gone(&self) -> bool {
+    #[must_use]
+    pub const fn is_gone(&self) -> bool {
         self.old_owner.is_some() && self.new_owner.is_none()
     }
 }
@@ -187,11 +221,13 @@ pub struct DBusState {
 }
 
 impl DBusState {
-    pub fn new(properties: HashMap<String, DBusValue>) -> Self {
+    #[must_use]
+    pub const fn new(properties: HashMap<String, DBusValue>) -> Self {
         Self { properties }
     }
 
-    pub fn properties(&self) -> &HashMap<String, DBusValue> {
+    #[must_use]
+    pub const fn properties(&self) -> &HashMap<String, DBusValue> {
         &self.properties
     }
 }

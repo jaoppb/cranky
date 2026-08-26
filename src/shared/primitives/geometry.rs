@@ -7,15 +7,18 @@ pub struct Position {
 }
 
 impl Position {
-    pub fn new(x: i32, y: i32) -> Self {
+    #[must_use]
+    pub const fn new(x: i32, y: i32) -> Self {
         Self { x, y }
     }
 
-    pub fn x(&self) -> i32 {
+    #[must_use]
+    pub const fn x(&self) -> i32 {
         self.x
     }
 
-    pub fn y(&self) -> i32 {
+    #[must_use]
+    pub const fn y(&self) -> i32 {
         self.y
     }
 }
@@ -27,15 +30,18 @@ pub struct Size {
 }
 
 impl Size {
-    pub fn new(width: u32, height: u32) -> Self {
+    #[must_use]
+    pub const fn new(width: u32, height: u32) -> Self {
         Self { width, height }
     }
 
-    pub fn width(&self) -> u32 {
+    #[must_use]
+    pub const fn width(&self) -> u32 {
         self.width
     }
 
-    pub fn height(&self) -> u32 {
+    #[must_use]
+    pub const fn height(&self) -> u32 {
         self.height
     }
 }
@@ -47,32 +53,39 @@ pub struct Rect {
 }
 
 impl Rect {
-    pub fn new(position: Position, size: Size) -> Self {
+    #[must_use]
+    pub const fn new(position: Position, size: Size) -> Self {
         Self { position, size }
     }
 
     #[cfg(test)]
-    pub fn position(&self) -> &Position {
+    #[must_use]
+    pub const fn position(&self) -> &Position {
         &self.position
     }
 
-    pub fn size(&self) -> &Size {
+    #[must_use]
+    pub const fn size(&self) -> &Size {
         &self.size
     }
 
-    pub fn x(&self) -> i32 {
+    #[must_use]
+    pub const fn x(&self) -> i32 {
         self.position.x()
     }
 
-    pub fn y(&self) -> i32 {
+    #[must_use]
+    pub const fn y(&self) -> i32 {
         self.position.y()
     }
 
-    pub fn width(&self) -> u32 {
+    #[must_use]
+    pub const fn width(&self) -> u32 {
         self.size.width()
     }
 
-    pub fn height(&self) -> u32 {
+    #[must_use]
+    pub const fn height(&self) -> u32 {
         self.size.height()
     }
 }
@@ -81,13 +94,17 @@ impl Rect {
 pub struct LogicalPx(f32);
 
 impl LogicalPx {
-    pub fn new(value: f32) -> Self {
+    #[must_use]
+    pub const fn new(value: f32) -> Self {
         Self(value)
     }
-    pub fn value(&self) -> f32 {
+
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 
+    #[must_use]
     pub fn apply_scale(&self, scale: &Scale) -> PhysicalPx {
         PhysicalPx::new(self.0 * scale.value())
     }
@@ -97,13 +114,17 @@ impl LogicalPx {
 pub struct PhysicalPx(f32);
 
 impl PhysicalPx {
-    pub fn new(value: f32) -> Self {
+    #[must_use]
+    pub const fn new(value: f32) -> Self {
         Self(value)
     }
-    pub fn value(&self) -> f32 {
+
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 
+    #[must_use]
     pub fn apply_inverse_scale(&self, scale: &Scale) -> LogicalPx {
         if scale.value() == 0.0 {
             LogicalPx::new(0.0)
@@ -117,11 +138,13 @@ impl PhysicalPx {
 pub struct Scale(f32);
 
 impl Scale {
-    pub fn new(value: f32) -> Self {
+    #[must_use]
+    pub const fn new(value: f32) -> Self {
         Self(value)
     }
 
-    pub fn value(&self) -> f32 {
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
@@ -130,10 +153,13 @@ impl Scale {
 pub struct BarWidth(u32);
 
 impl BarWidth {
-    pub fn new(value: u32) -> Self {
+    #[must_use]
+    pub const fn new(value: u32) -> Self {
         Self(value)
     }
-    pub fn value(&self) -> u32 {
+
+    #[must_use]
+    pub const fn value(&self) -> u32 {
         self.0
     }
 }
@@ -142,10 +168,13 @@ impl BarWidth {
 pub struct BarHeight(u32);
 
 impl BarHeight {
-    pub fn new(value: u32) -> Self {
+    #[must_use]
+    pub const fn new(value: u32) -> Self {
         Self(value)
     }
-    pub fn value(&self) -> u32 {
+
+    #[must_use]
+    pub const fn value(&self) -> u32 {
         self.0
     }
 }

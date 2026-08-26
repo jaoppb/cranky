@@ -36,6 +36,7 @@ pub struct ModuleRegistry {
 }
 
 impl ModuleRegistry {
+    #[must_use]
     pub fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
         let loader = FsStyleLoader::new(app_env.clone());
         let _ = loader.ensure_builtin_styles();
@@ -64,6 +65,7 @@ impl ModuleRegistry {
         self.style_to_modules.clear();
     }
 
+    #[must_use]
     pub fn modules_using_style(
         &self,
         sheet: &StyleSheetName,
@@ -74,6 +76,7 @@ impl ModuleRegistry {
             .unwrap_or_default()
     }
 
+    #[must_use]
     pub fn create_style_resolver_for_module(
         &self,
         styles: &[StyleSheetName],
@@ -82,7 +85,7 @@ impl ModuleRegistry {
         let parser = LightningCssAdapter::new();
         let mut parsed_sheets: Vec<Box<dyn ParsedStyleSheetPort>> = Vec::new();
 
-        tracing::debug!(requested_styles = ?styles.iter().map(|s| s.as_str()).collect::<Vec<_>>(), "Creating composite style resolver for module");
+        tracing::debug!(requested_styles = ?styles.iter().map(super::super::features::styling::domain::StyleSheetName::as_str).collect::<Vec<_>>(), "Creating composite style resolver for module");
 
         // 1. Always load base.css first if available
         if let Ok(base_name) = StyleSheetName::new("base")
@@ -115,7 +118,7 @@ impl ModuleRegistry {
         use crate::features::module_runtime::ports::RegistryLoadError;
 
         let id = ModuleId::new(*next_id);
-        *next_id += 1;
+        *next_id = next_id.saturating_add(1);
 
         let mut module = builtins::BuiltinModules::find_module(
             config.name(),
@@ -151,7 +154,7 @@ impl ModuleRegistry {
         tracing::debug!(
             module = %config.name().as_str(),
             id = %id,
-            styles = ?mod_styles.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            styles = ?mod_styles.iter().map(super::super::features::styling::domain::StyleSheetName::as_str).collect::<Vec<_>>(),
             "Registered module style dependencies"
         );
 
@@ -186,6 +189,7 @@ pub(crate) struct WatchLayoutSender {
 
 #[cfg(test)]
 impl WatchLayoutSender {
+    #[must_use]
     pub fn new(
         tx: tokio::sync::watch::Sender<
             std::collections::HashMap<
@@ -364,7 +368,9 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
             .collect();
 
         for id in target_ids {
-            let cfg = self.module_configs.get(&id).unwrap();
+            let Some(cfg) = self.module_configs.get(&id) else {
+                continue;
+            };
             let mut module =
                 builtins::BuiltinModules::find_module(cfg.name(), cfg.engine(), &self.app_env)
                     .map_err(|e| match e {
@@ -442,7 +448,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
     ) {
         for sub in &self.dbus_subscriptions {
             if let Err(e) = dbus.subscribe(sub.clone()).await {
-                tracing::error!("Failed to subscribe to DBus: {}", e);
+                tracing::error!("Failed to subscribe to DBus: {e}");
             }
         }
     }
@@ -461,6 +467,11 @@ mod tests {
         }
     }
 
+    struct MockSender;
+    impl crate::features::module_runtime::ports::CommandSender for MockSender {
+        fn send_command(&self, _cmd: crate::app::commands::AppCommand) {}
+    }
+
     #[test]
     fn test_module_registry_load() {
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
@@ -471,11 +482,11 @@ mod tests {
             None,
         ));
         let mut registry = ModuleRegistry::new(app_env);
-        let toml_str = r##"
+        let toml_str = r#"
             [root]
             name = "bar"
             left = ["hour"]
-        "##;
+        "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
 
@@ -509,7 +520,7 @@ mod tests {
     #[test]
     fn test_watch_layout_sender() {
         use crate::features::module_runtime::ports::LayoutSender;
-        let (tx, _rx) = tokio::sync::watch::channel(std::collections::HashMap::new());
+        let (tx, rx) = tokio::sync::watch::channel(std::collections::HashMap::new());
         let sender = WatchLayoutSender { tx };
 
         let mut layout = std::collections::HashMap::new();
@@ -522,7 +533,7 @@ mod tests {
         );
         sender.send_layout(layout.clone());
 
-        let current = _rx.borrow().clone();
+        let current = rx.borrow().clone();
         assert!(current.contains_key(&crate::shared::primitives::MonitorId::new("1")));
     }
 
@@ -536,11 +547,11 @@ mod tests {
             None,
         ));
         let mut registry = ModuleRegistry::new(app_env);
-        let toml_str = r##"
+        let toml_str = r#"
             [root]
             name = "bar"
             left = ["nonexistent"]
-        "##;
+        "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
 
@@ -564,11 +575,11 @@ mod tests {
             None,
         ));
         let mut registry = ModuleRegistry::new(app_env);
-        let toml_str = r##"
+        let toml_str = r#"
             [root]
             name = "bar"
             left = ["hour"]
-        "##;
+        "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
 
@@ -595,11 +606,11 @@ mod tests {
             None,
         ));
         let mut registry = ModuleRegistry::new(app_env);
-        let toml_str = r##"
+        let toml_str = r#"
             [root]
             name = "bar"
             left = ["hour"]
-        "##;
+        "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
         crate::features::module_runtime::ports::ModuleRegistryPort::<
@@ -631,11 +642,11 @@ mod tests {
             None,
         ));
         let mut registry = ModuleRegistry::new(app_env);
-        let toml_str = r##"
+        let toml_str = r#"
             [root]
             name = "bar"
             left = ["hour"]
-        "##;
+        "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
         crate::features::module_runtime::ports::ModuleRegistryPort::<
@@ -647,10 +658,6 @@ mod tests {
         let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
             std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
 
-        struct MockSender;
-        impl crate::features::module_runtime::ports::CommandSender for MockSender {
-            fn send_command(&self, _cmd: crate::app::commands::AppCommand) {}
-        }
         let command_tx = std::sync::Arc::new(MockSender);
         let canvas_factory = std::sync::Arc::new(std::sync::Mutex::new(
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),

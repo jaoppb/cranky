@@ -27,7 +27,8 @@ pub mod test_support {
     }
 
     impl ChannelCommandSender {
-        pub fn new(tx: std::sync::mpsc::Sender<AppCommand>) -> Self {
+        #[must_use]
+        pub const fn new(tx: std::sync::mpsc::Sender<AppCommand>) -> Self {
             Self { tx }
         }
     }
@@ -56,23 +57,23 @@ pub mod test_support {
     pub struct MockCanvasFactory;
 
     impl CanvasFactory for MockCanvasFactory {
-        fn create_canvas<'a>(
-            &'a mut self,
-            _data: &'a mut [u8],
+        fn create_canvas(
+            &mut self,
+            _data: &mut [u8],
             _size: Size,
             _scale: Scale,
             _font_family: FontFamily,
             _font_size: FontSize,
-        ) -> impl Canvas + 'a {
+        ) -> impl Canvas + '_ {
             MockCanvas
         }
 
-        fn create_text_measurer<'a>(
-            &'a mut self,
+        fn create_text_measurer(
+            &mut self,
             _scale: Scale,
             _font_family: FontFamily,
             _font_size: FontSize,
-        ) -> impl TextMeasurer + 'a {
+        ) -> impl TextMeasurer + '_ {
             MockMeasurer
         }
     }
@@ -140,14 +141,16 @@ pub mod test_support {
     }
 
     impl TestModulePort {
-        pub fn new(node: VNode) -> Self {
+        #[must_use]
+        pub const fn new(node: VNode) -> Self {
             Self {
                 node,
                 subs: Vec::new(),
             }
         }
 
-        pub fn with_subs(node: VNode, subs: Vec<SignalKind>) -> Self {
+        #[must_use]
+        pub const fn with_subs(node: VNode, subs: Vec<SignalKind>) -> Self {
             Self { node, subs }
         }
     }

@@ -19,5 +19,10 @@ pub type WindowManagerState = (
 );
 
 pub trait WindowManagerPort: Send + Sync {
+    /// Retrieves the current state of the window manager.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WindowManagerError`] if querying the window manager fails.
     fn get_state(&self) -> Result<WindowManagerState, WindowManagerError>;
 }

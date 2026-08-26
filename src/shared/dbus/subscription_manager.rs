@@ -13,6 +13,7 @@ pub struct DbusSubscriptionManager {
 }
 
 impl DbusSubscriptionManager {
+    #[must_use]
     pub fn new(conn: Arc<dyn DbusConnectionPort>, hub: &SignalHub) -> Self {
         Self {
             conn,
@@ -20,11 +21,15 @@ impl DbusSubscriptionManager {
         }
     }
 
+    /// Subscribes to `DBus` signals based on the provided subscription specification.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DbusConnectionError` if subscribing on the underlying `DBus` connection fails.
     pub async fn subscribe(&mut self, sub: DBusSubscription) -> Result<(), DbusConnectionError> {
         let is_properties_changed = sub
             .member()
-            .map(|m| m.as_str() == "PropertiesChanged")
-            .unwrap_or(false);
+            .is_some_and(|m| m.as_str() == "PropertiesChanged");
 
         let tx = self.dbus_tx.clone();
 
@@ -33,18 +38,18 @@ impl DbusSubscriptionManager {
                 .conn
                 .subscribe_properties_changed(sub.bus(), dest, path)
                 .await?;
-            debug!("Subscribed to DBus PropertiesChanged on {:?}", path);
+            debug!("Subscribed to DBus PropertiesChanged on {path:?}");
             let path_str = path.as_str().to_string();
             tokio::spawn(async move {
                 while let Some((iface, changed_props)) = stream.next().await {
+                    let iface_str = iface.as_str();
                     tracing::debug!(
-                        "Received DBus PropertiesChanged on {:?} for interface {:?}",
-                        path_str,
-                        iface.as_str()
+                        "Received DBus PropertiesChanged on {path_str:?} for interface {iface_str:?}"
                     );
                     let mut properties = tx.borrow().properties().clone();
-                    for (k, v) in changed_props.iter() {
-                        let prop_key = format!("{}.{}", iface.as_str(), k.as_str());
+                    for (k, v) in &changed_props {
+                        let k_str = k.as_str();
+                        let prop_key = format!("{iface_str}.{k_str}");
                         properties.insert(prop_key, v.clone());
                     }
                     let _ = tx.send(DBusState::new(properties));
@@ -58,13 +63,13 @@ impl DbusSubscriptionManager {
         debug!("Subscribed to generic DBus signal");
         tokio::spawn(async move {
             while let Some((path, member, value)) = stream.next().await {
+                let path_str = path.as_str();
+                let member_str = member.as_str();
                 tracing::debug!(
-                    "Received generic DBus signal on {:?} for member {:?}",
-                    path.as_str(),
-                    member.as_str()
+                    "Received generic DBus signal on {path_str:?} for member {member_str:?}"
                 );
                 let mut properties = tx.borrow().properties().clone();
-                let prop_key = format!("{}.{}", path.as_str(), member.as_str());
+                let prop_key = format!("{path_str}.{member_str}");
                 properties.insert(prop_key, value);
                 let _ = tx.send(DBusState::new(properties));
             }

@@ -77,36 +77,34 @@ enum SniEvent {
 }
 
 impl SniEvent {
-    async fn apply<'a>(
+    async fn apply(
         self,
         item: SystrayItem,
-        proxy: &StatusNotifierItemProxy<'a>,
+        proxy: &StatusNotifierItemProxy<'_>,
     ) -> SystrayItem {
         match self {
-            SniEvent::Title => {
+            Self::Title => {
                 let title = proxy.title().await.unwrap_or_default();
-                tracing::trace!("SniEvent::Title: updated title to '{}'", title);
+                tracing::trace!("SniEvent::Title: updated title to '{title}'");
                 item.with_title(title)
             }
-            SniEvent::Status(status_str) => {
+            Self::Status(status_str) => {
                 let status = match status_str.as_str() {
                     "Active" => SystrayStatus::Active,
                     "Passive" => SystrayStatus::Passive,
                     "NeedsAttention" => SystrayStatus::NeedsAttention,
                     _ => SystrayStatus::Unknown,
                 };
-                tracing::trace!("SniEvent::Status: updated status to {:?}", status);
+                tracing::trace!("SniEvent::Status: updated status to {status:?}");
                 item.with_status(status)
             }
-            SniEvent::Icon | SniEvent::ThemePath => {
+            Self::Icon | Self::ThemePath => {
                 let icon_name = proxy.icon_name().await.ok();
                 let icon_theme_path = proxy.icon_theme_path().await.ok();
                 let icon_pixmap = proxy.icon_pixmap().await.ok();
+                let has_pixmap = icon_pixmap.as_ref().is_some_and(|p| !p.is_empty());
                 tracing::trace!(
-                    "SniEvent::Icon/ThemePath: updated icon_name={:?}, theme_path={:?}, has_pixmap={}",
-                    icon_name,
-                    icon_theme_path,
-                    icon_pixmap.as_ref().map(|p| !p.is_empty()).unwrap_or(false)
+                    "SniEvent::Icon/ThemePath: updated icon_name={icon_name:?}, theme_path={icon_theme_path:?}, has_pixmap={has_pixmap}"
                 );
                 let icon_image =
                     resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
@@ -116,7 +114,7 @@ impl SniEvent {
                 );
                 item.with_icon(icon)
             }
-            SniEvent::AttentionIcon => {
+            Self::AttentionIcon => {
                 let icon_name = proxy.attention_icon_name().await.ok();
                 let icon_theme_path = proxy.attention_icon_theme_path().await.ok();
                 let icon_pixmap = proxy.attention_icon_pixmap().await.ok();
@@ -129,7 +127,7 @@ impl SniEvent {
                 );
                 item.with_attention_icon(icon)
             }
-            SniEvent::OverlayIcon => {
+            Self::OverlayIcon => {
                 let icon_name = proxy.overlay_icon_name().await.ok();
                 let icon_pixmap = proxy.overlay_icon_pixmap().await.ok();
                 tracing::trace!("SniEvent::OverlayIcon: updated overlay icon");
@@ -140,15 +138,16 @@ impl SniEvent {
                 );
                 item.with_overlay_icon(icon)
             }
-            SniEvent::ToolTip => {
-                let tooltip = match proxy.tool_tip().await {
-                    Ok(val) => Watcher::parse_raw_tooltip(val),
-                    Err(_) => None,
-                };
+            Self::ToolTip => {
+                let tooltip = proxy
+                    .tool_tip()
+                    .await
+                    .ok()
+                    .and_then(Watcher::parse_raw_tooltip);
                 tracing::trace!("SniEvent::ToolTip: updated tooltip");
                 item.with_tooltip(tooltip)
             }
-            SniEvent::Menu => {
+            Self::Menu => {
                 let mut item = item;
                 if let Ok(menu_path) = proxy.menu().await {
                     item = item.with_menu_path(Some(
@@ -174,11 +173,12 @@ fn resolve_pixmap_data(
     if pixmaps.is_empty() {
         return None;
     }
-    let target_size = (24.0 * max_scale) as i32;
+    #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+    let target_size = (24.0f32 * max_scale).round() as i32;
     let mut best_diff = i32::MAX;
     let mut best_pixmap: Option<&(i32, i32, Vec<u8>)> = None;
     for pixmap in pixmaps {
-        let diff = (pixmap.0 - target_size).abs();
+        let diff = pixmap.0.saturating_sub(target_size).abs();
         if diff < best_diff {
             best_diff = diff;
             best_pixmap = Some(pixmap);
@@ -186,24 +186,23 @@ fn resolve_pixmap_data(
     }
 
     if let Some(pixmap) = best_pixmap {
-        let w = pixmap.0 as u32;
-        let h = pixmap.1 as u32;
+        let width = u32::try_from(pixmap.0).ok()?;
+        let height = u32::try_from(pixmap.1).ok()?;
         let data = &pixmap.2;
-        if data.len() == (w * h * 4) as usize {
+        let expected_len = usize::try_from(width.checked_mul(height)?.checked_mul(4)?).ok()?;
+        if data.len() == expected_len {
             let mut rgba_data = Vec::with_capacity(data.len());
             for chunk in data.chunks_exact(4) {
-                let a = chunk[0];
-                let r = chunk[1];
-                let g = chunk[2];
-                let b = chunk[3];
-                rgba_data.push(r);
-                rgba_data.push(g);
-                rgba_data.push(b);
-                rgba_data.push(a);
+                if let &[alpha, red, green, blue] = chunk {
+                    rgba_data.push(red);
+                    rgba_data.push(green);
+                    rgba_data.push(blue);
+                    rgba_data.push(alpha);
+                }
             }
             return Some(crate::features::systray::domain::IconImage::new(
                 rgba_data,
-                crate::shared::primitives::geometry::Size::new(w, h),
+                crate::shared::primitives::geometry::Size::new(width, height),
             ));
         }
     }
@@ -226,11 +225,11 @@ async fn resolve_icon(
 
             if let Some(theme_path) = &icon_theme_path {
                 let base = std::path::Path::new(theme_path);
-                let png = base.join(format!("{}.png", name));
+                let png = base.join(format!("{name}.png"));
                 if png.exists() {
                     found_path = Some(png);
                 } else {
-                    let svg = base.join(format!("{}.svg", name));
+                    let svg = base.join(format!("{name}.svg"));
                     if svg.exists() {
                         found_path = Some(svg);
                     }
@@ -291,12 +290,13 @@ struct Watcher {
 
 #[interface(name = "org.kde.StatusNotifierWatcher")]
 impl Watcher {
+    #[allow(clippy::unused_async)]
     async fn register_status_notifier_item(
         &self,
         service: String,
         #[zbus(header)] header: zbus::message::Header<'_>,
     ) {
-        debug!("Registered SNI item: {}", service);
+        debug!("Registered SNI item: {service}");
 
         let mut full_path = service.clone();
         if !full_path.starts_with('/') {
@@ -306,10 +306,9 @@ impl Watcher {
         let dbus_dest = if service.starts_with('/') {
             header
                 .sender()
-                .map(|s| s.as_str().to_string())
-                .unwrap_or_else(|| service.clone())
+                .map_or_else(|| service.clone(), |s| s.as_str().to_string())
         } else {
-            service.clone()
+            service
         };
 
         let conn = self.conn.clone();
@@ -318,13 +317,14 @@ impl Watcher {
 
         self.runtime.spawn(async move {
             if let Err(e) = Self::track_item(conn, items, hub, dbus_dest, full_path).await {
-                error!("Failed to track SNI item: {}", e);
+                error!("Failed to track SNI item: {e}");
             }
         });
     }
 
+    #[allow(clippy::unused_async)]
     async fn register_status_notifier_host(&self, service: String) {
-        debug!("Registered SNI host: {}", service);
+        debug!("Registered SNI host: {service}");
     }
 
     #[zbus(property)]
@@ -333,13 +333,15 @@ impl Watcher {
         items.keys().map(|id| id.as_str().to_string()).collect()
     }
 
+    #[allow(clippy::unused_self)]
     #[zbus(property)]
-    fn is_status_notifier_host_registered(&self) -> bool {
+    const fn is_status_notifier_host_registered(&self) -> bool {
         true
     }
 
+    #[allow(clippy::unused_self)]
     #[zbus(property)]
-    fn protocol_version(&self) -> i32 {
+    const fn protocol_version(&self) -> i32 {
         0
     }
 }
@@ -403,42 +405,47 @@ impl Watcher {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn fetch_systray_item(
         conn: &Connection,
         id: String,
         dest: String,
         path_str: String,
     ) -> SystrayItem {
-        let iface = InterfaceName::try_from("org.kde.StatusNotifierItem").unwrap();
-        let path = ObjectPath::try_from(path_str.as_str()).unwrap();
-
-        let props = match PropertiesProxy::builder(conn)
-            .destination(dest.clone())
-            .unwrap()
-            .path(path.clone())
-            .unwrap()
-            .build()
-            .await
-        {
-            Ok(p) => p,
-            Err(_) => {
-                return SystrayItem::new(
-                    crate::features::systray::domain::CreateSystrayItemCommand::new(
-                        crate::features::systray::domain::SystrayId::new(id.clone()),
-                        crate::features::systray::domain::Destination::new(dest.clone()),
-                        crate::features::systray::domain::ObjectPath::new(path_str.clone()),
-                        crate::features::systray::domain::Title::new(String::new()),
-                        SystrayStatus::Unknown,
-                        None,
-                        None,
-                        crate::features::systray::domain::SystrayCategory::ApplicationStatus,
-                        crate::features::systray::domain::ItemIsMenu::new(false),
-                    ),
-                );
-            }
+        let default_item = || {
+            SystrayItem::new(
+                crate::features::systray::domain::CreateSystrayItemCommand::new(
+                    crate::features::systray::domain::SystrayId::new(id.clone()),
+                    crate::features::systray::domain::Destination::new(dest.clone()),
+                    crate::features::systray::domain::ObjectPath::new(path_str.clone()),
+                    crate::features::systray::domain::Title::new(String::new()),
+                    SystrayStatus::Unknown,
+                    None,
+                    None,
+                    crate::features::systray::domain::SystrayCategory::ApplicationStatus,
+                    crate::features::systray::domain::ItemIsMenu::new(false),
+                ),
+            )
         };
 
-        let mut all_props = props.get_all(iface.clone()).await.unwrap_or_default();
+        let Ok(iface) = InterfaceName::try_from("org.kde.StatusNotifierItem") else {
+            return default_item();
+        };
+        let Ok(path) = ObjectPath::try_from(path_str.as_str()) else {
+            return default_item();
+        };
+
+        let Ok(props_builder) = PropertiesProxy::builder(conn).destination(dest.clone()) else {
+            return default_item();
+        };
+        let Ok(props_builder) = props_builder.path(path) else {
+            return default_item();
+        };
+        let Ok(props) = props_builder.build().await else {
+            return default_item();
+        };
+
+        let mut all_props = props.get_all(iface).await.unwrap_or_default();
 
         let title: String = all_props
             .remove("Title")
@@ -465,7 +472,7 @@ impl Watcher {
                 all_props
                     .remove("WindowId")
                     .and_then(|v| v.try_into().ok())
-                    .map(|id: i32| id as u32)
+                    .and_then(|id: i32| u32::try_from(id).ok())
             });
         let item_is_menu_val: bool = all_props
             .remove("ItemIsMenu")
@@ -485,12 +492,7 @@ impl Watcher {
             });
 
         tracing::debug!(
-            "SNI fetch [{}]: title='{}', status='{}', icon_name='{:?}', theme_path='{:?}'",
-            id,
-            title,
-            status_str,
-            icon_name,
-            icon_theme_path
+            "SNI fetch [{id}]: title='{title}', status='{status_str}', icon_name='{icon_name:?}', theme_path='{icon_theme_path:?}'"
         );
 
         let status = match status_str.as_str() {
@@ -580,7 +582,7 @@ impl Watcher {
         dest: String,
         path_str: String,
     ) -> zbus::Result<()> {
-        let id = format!("{}{}", dest, path_str);
+        let id = format!("{dest}{path_str}");
 
         let proxy = StatusNotifierItemProxy::builder(&conn)
             .destination(dest.clone())?
@@ -597,41 +599,41 @@ impl Watcher {
         }
         Self::publish_state(&items, &hub).await;
 
-        tracing::debug!("Setting up SNI signal streams for {}", id);
+        tracing::debug!("Setting up SNI signal streams for {id}");
         let Ok(new_title) = proxy.receive_new_title().await else {
-            tracing::error!("Failed to subscribe to new_title for {}", id);
+            tracing::error!("Failed to subscribe to new_title for {id}");
             return Ok(());
         };
         let Ok(new_icon) = proxy.receive_new_icon().await else {
-            tracing::error!("Failed to subscribe to new_icon for {}", id);
+            tracing::error!("Failed to subscribe to new_icon for {id}");
             return Ok(());
         };
         let Ok(new_status) = proxy.receive_new_status().await else {
-            tracing::error!("Failed to subscribe to new_status for {}", id);
+            tracing::error!("Failed to subscribe to new_status for {id}");
             return Ok(());
         };
         let Ok(new_path) = proxy.receive_new_icon_theme_path().await else {
-            tracing::error!("Failed to subscribe to new_icon_theme_path for {}", id);
+            tracing::error!("Failed to subscribe to new_icon_theme_path for {id}");
             return Ok(());
         };
         let Ok(new_attention_icon) = proxy.receive_new_attention_icon().await else {
-            tracing::error!("Failed to subscribe to new_attention_icon for {}", id);
+            tracing::error!("Failed to subscribe to new_attention_icon for {id}");
             return Ok(());
         };
         let Ok(new_overlay_icon) = proxy.receive_new_overlay_icon().await else {
-            tracing::error!("Failed to subscribe to new_overlay_icon for {}", id);
+            tracing::error!("Failed to subscribe to new_overlay_icon for {id}");
             return Ok(());
         };
         let Ok(new_tool_tip) = proxy.receive_new_tool_tip().await else {
-            tracing::error!("Failed to subscribe to new_tool_tip for {}", id);
+            tracing::error!("Failed to subscribe to new_tool_tip for {id}");
             return Ok(());
         };
         let Ok(new_menu) = proxy.receive_new_menu().await else {
-            tracing::error!("Failed to subscribe to new_menu for {}", id);
+            tracing::error!("Failed to subscribe to new_menu for {id}");
             return Ok(());
         };
 
-        tracing::debug!("Successfully subscribed to all SNI signals for {}", id);
+        tracing::debug!("Successfully subscribed to all SNI signals for {id}");
 
         let items_clone = items.clone();
         let hub_clone = hub.clone();
@@ -644,7 +646,7 @@ impl Watcher {
                 .merge(new_status.map(|sig| {
                     SniEvent::Status(
                         sig.args()
-                            .map(|a| a.status().to_string())
+                            .map(|a| a.status().clone())
                             .unwrap_or_default(),
                     )
                 }))
@@ -656,7 +658,7 @@ impl Watcher {
                 .merge(new_menu.map(|_| SniEvent::Menu));
 
             while let Some(event) = events.next().await {
-                tracing::trace!("Received SNI event {:?} for systray item {}", event, id_clone);
+                tracing::trace!("Received SNI event {event:?} for systray item {id_clone}");
                 let current_item = {
                     let lock = items_clone.read().await;
                     lock.get(&crate::features::systray::domain::SystrayId::new(&id_clone))
@@ -679,7 +681,7 @@ impl Watcher {
                 Self::publish_state(&items_clone, &hub_clone).await;
             }
 
-            tracing::debug!("Systray item {} loop terminated, cleaning up state", id_clone);
+            tracing::debug!("Systray item {id_clone} loop terminated, cleaning up state");
             {
                 let mut lock = items_clone.write().await;
                 lock.remove(&crate::features::systray::domain::SystrayId::new(&id_clone));
@@ -695,11 +697,9 @@ impl Watcher {
         hub: &Arc<SignalHub>,
         destination: &str,
     ) -> bool {
-        let mut removed = false;
-        {
-            let mut lock = items.write().await;
-            let keys_to_remove: Vec<_> = lock
-                .iter()
+        let keys_to_remove: Vec<_> = {
+            let lock = items.read().await;
+            lock.iter()
                 .filter_map(|(id, item)| {
                     if item.destination().as_str() == destination {
                         Some(id.clone())
@@ -707,19 +707,21 @@ impl Watcher {
                         None
                     }
                 })
-                .collect();
+                .collect()
+        };
 
+        let mut removed = false;
+        if !keys_to_remove.is_empty() {
+            let mut lock = items.write().await;
             for key in keys_to_remove {
                 tracing::debug!(
-                    "Removing SNI systray item {} because D-Bus name {} disconnected",
-                    key.as_str(),
-                    destination
+                    "Removing SNI systray item {} because D-Bus name {destination} disconnected",
+                    key.as_str()
                 );
                 lock.remove(&key);
                 removed = true;
             }
-        }
-        if removed {
+            drop(lock);
             Self::publish_state(items, hub).await;
         }
         removed
@@ -729,13 +731,16 @@ impl Watcher {
         items: &Arc<RwLock<BTreeMap<crate::features::systray::domain::SystrayId, SystrayItem>>>,
         hub: &Arc<SignalHub>,
     ) {
-        let lock = items.read().await;
-        let state = SystrayState::new(lock.clone());
+        let state = {
+            let lock = items.read().await;
+            SystrayState::new(lock.clone())
+        };
         let _ = hub.systray_tx().send(state);
     }
 }
 
 impl SniAdapter {
+    #[must_use]
     pub fn new(hub: Arc<SignalHub>) -> Self {
         Self {
             hub,
@@ -769,12 +774,10 @@ impl SniPort for SniAdapter {
 
             while let Some(sig) = stream.next().await {
                 if let Ok(args) = sig.args() {
-                    let is_unowned = args.new_owner().is_none()
-                        || args
-                            .new_owner()
-                            .as_ref()
-                            .map(|n| n.as_str().is_empty())
-                            .unwrap_or(true);
+                    let is_unowned = args
+                        .new_owner()
+                        .as_ref()
+                        .is_none_or(|n| n.as_str().is_empty());
                     if is_unowned {
                         Watcher::remove_by_destination(&items_clone, &hub_clone, args.name()).await;
                     }
@@ -784,7 +787,7 @@ impl SniPort for SniAdapter {
 
         // Attempt to request the Watcher name
         match conn.request_name("org.kde.StatusNotifierWatcher").await {
-            Ok(_) => {
+            Ok(()) => {
                 info!("Successfully claimed org.kde.StatusNotifierWatcher");
                 let watcher = Watcher {
                     items: self.items.clone(),
@@ -816,18 +819,20 @@ impl SniPort for SniAdapter {
         action: &crate::features::systray::domain::SystrayActionName,
         pos: Option<crate::shared::primitives::geometry::Position>,
     ) -> Result<(), SniPortError> {
-        let lock = self.conn.lock().await;
-        let items_lock = self.items.read().await;
+        let (conn_opt, item_opt) = {
+            let lock = self.conn.lock().await;
+            let items_lock = self.items.read().await;
+            (lock.clone(), items_lock.get(id).cloned())
+        };
 
-        if let (Some(conn), Some(item)) = (lock.as_ref(), items_lock.get(id)) {
+        if let (Some(conn), Some(item)) = (conn_opt.as_ref(), item_opt.as_ref()) {
             debug!(
-                "trigger_action: Systray item found [id={}, dest={}, path={}, item_is_menu={}], routing action '{}' at pos {:?}",
+                "trigger_action: Systray item found [id={}, dest={}, path={}, item_is_menu={}], routing action '{}' at pos {pos:?}",
                 id.as_str(),
                 item.destination().as_str(),
                 item.path().as_str(),
                 item.item_is_menu().value(),
-                action.as_str(),
-                pos
+                action.as_str()
             );
             let proxy = zbus::Proxy::new(
                 conn,
@@ -838,9 +843,8 @@ impl SniPort for SniAdapter {
             .await
             .map_err(|e: zbus::Error| {
                 error!(
-                    "trigger_action: Failed to create D-Bus proxy for {}: {}",
-                    id.as_str(),
-                    e
+                    "trigger_action: Failed to create D-Bus proxy for {}: {e}",
+                    id.as_str()
                 );
                 SniPortError::ActionFailed {
                     id: id.as_str().to_string(),
@@ -848,41 +852,37 @@ impl SniPort for SniAdapter {
                 }
             })?;
 
-            let (x, y) = pos.map(|p| (p.x(), p.y())).unwrap_or((0, 0));
+            let pos_x = pos.map_or(0, |p| p.x());
+            let pos_y = pos.map_or(0, |p| p.y());
 
             match action.as_str() {
                 "Primary" => {
                     if item.item_is_menu().value() {
                         debug!(
-                            "trigger_action: item_is_menu=true, calling ContextMenu({}, {}) on D-Bus",
-                            x, y
+                            "trigger_action: item_is_menu=true, calling ContextMenu({pos_x}, {pos_y}) on D-Bus"
                         );
-                        match proxy.call_method("ContextMenu", &(x, y)).await {
-                            Ok(_) => debug!("trigger_action: ContextMenu({}, {}) succeeded", x, y),
+                        match proxy.call_method("ContextMenu", &(pos_x, pos_y)).await {
+                            Ok(_) => debug!("trigger_action: ContextMenu({pos_x}, {pos_y}) succeeded"),
                             Err(e) => {
-                                error!("trigger_action: ContextMenu({}, {}) failed: {}", x, y, e)
+                                error!("trigger_action: ContextMenu({pos_x}, {pos_y}) failed: {e}");
                             }
                         }
                     } else {
                         debug!(
-                            "trigger_action: item_is_menu=false, calling Activate({}, {}) on D-Bus",
-                            x, y
+                            "trigger_action: item_is_menu=false, calling Activate({pos_x}, {pos_y}) on D-Bus"
                         );
-                        match proxy.call_method("Activate", &(x, y)).await {
-                            Ok(_) => debug!("trigger_action: Activate({}, {}) succeeded", x, y),
+                        match proxy.call_method("Activate", &(pos_x, pos_y)).await {
+                            Ok(_) => debug!("trigger_action: Activate({pos_x}, {pos_y}) succeeded"),
                             Err(e) => {
                                 warn!(
-                                    "trigger_action: Activate({}, {}) failed: {}, attempting SecondaryActivate({}, {})",
-                                    x, y, e, x, y
-                                    );
-                                match proxy.call_method("SecondaryActivate", &(x, y)).await {
+                                    "trigger_action: Activate({pos_x}, {pos_y}) failed: {e}, attempting SecondaryActivate({pos_x}, {pos_y})"
+                                );
+                                match proxy.call_method("SecondaryActivate", &(pos_x, pos_y)).await {
                                     Ok(_) => debug!(
-                                        "trigger_action: SecondaryActivate({}, {}) succeeded",
-                                        x, y
+                                        "trigger_action: SecondaryActivate({pos_x}, {pos_y}) succeeded"
                                     ),
                                     Err(e2) => error!(
-                                        "trigger_action: SecondaryActivate({}, {}) failed: {}",
-                                        x, y, e2
+                                        "trigger_action: SecondaryActivate({pos_x}, {pos_y}) failed: {e2}"
                                     ),
                                 }
                             }
@@ -890,73 +890,71 @@ impl SniPort for SniAdapter {
                     }
                 }
                 "Activate" => {
-                    debug!("trigger_action: Calling Activate({}, {}) on D-Bus", x, y);
-                    match proxy.call_method("Activate", &(x, y)).await {
-                        Ok(_) => debug!("trigger_action: Activate({}, {}) succeeded", x, y),
-                        Err(e) => error!("trigger_action: Activate({}, {}) failed: {}", x, y, e),
+                    debug!("trigger_action: Calling Activate({pos_x}, {pos_y}) on D-Bus");
+                    match proxy.call_method("Activate", &(pos_x, pos_y)).await {
+                        Ok(_) => debug!("trigger_action: Activate({pos_x}, {pos_y}) succeeded"),
+                        Err(e) => error!("trigger_action: Activate({pos_x}, {pos_y}) failed: {e}"),
                     }
                 }
                 "SecondaryActivate" => {
                     debug!(
-                        "trigger_action: Calling SecondaryActivate({}, {}) on D-Bus",
-                        x, y
+                        "trigger_action: Calling SecondaryActivate({pos_x}, {pos_y}) on D-Bus"
                     );
-                    match proxy.call_method("SecondaryActivate", &(x, y)).await {
-                        Ok(_) => debug!("trigger_action: SecondaryActivate({}, {}) succeeded", x, y),
+                    match proxy.call_method("SecondaryActivate", &(pos_x, pos_y)).await {
+                        Ok(_) => debug!("trigger_action: SecondaryActivate({pos_x}, {pos_y}) succeeded"),
                         Err(e) => error!(
-                            "trigger_action: SecondaryActivate({}, {}) failed: {}",
-                            x, y, e
+                            "trigger_action: SecondaryActivate({pos_x}, {pos_y}) failed: {e}"
                         ),
                     }
                 }
                 "ContextMenu" => {
-                    debug!("trigger_action: Calling ContextMenu({}, {}) on D-Bus", x, y);
-                    match proxy.call_method("ContextMenu", &(x, y)).await {
-                        Ok(_) => debug!("trigger_action: ContextMenu({}, {}) succeeded", x, y),
-                        Err(e) => error!("trigger_action: ContextMenu({}, {}) failed: {}", x, y, e),
+                    debug!("trigger_action: Calling ContextMenu({pos_x}, {pos_y}) on D-Bus");
+                    match proxy.call_method("ContextMenu", &(pos_x, pos_y)).await {
+                        Ok(_) => debug!("trigger_action: ContextMenu({pos_x}, {pos_y}) succeeded"),
+                        Err(e) => error!("trigger_action: ContextMenu({pos_x}, {pos_y}) failed: {e}"),
                     }
                 }
                 "ScrollUp" => {
                     debug!("trigger_action: Calling Scroll(-1, 'vertical') on D-Bus");
                     match proxy.call_method("Scroll", &(-1, "vertical")).await {
                         Ok(_) => debug!("trigger_action: Scroll(-1, 'vertical') succeeded"),
-                        Err(e) => error!("trigger_action: Scroll(-1, 'vertical') failed: {}", e),
+                        Err(e) => error!("trigger_action: Scroll(-1, 'vertical') failed: {e}"),
                     }
                 }
                 "ScrollDown" => {
                     debug!("trigger_action: Calling Scroll(1, 'vertical') on D-Bus");
                     match proxy.call_method("Scroll", &(1, "vertical")).await {
                         Ok(_) => debug!("trigger_action: Scroll(1, 'vertical') succeeded"),
-                        Err(e) => error!("trigger_action: Scroll(1, 'vertical') failed: {}", e),
+                        Err(e) => error!("trigger_action: Scroll(1, 'vertical') failed: {e}"),
                     }
                 }
                 "ScrollLeft" => {
                     debug!("trigger_action: Calling Scroll(-1, 'horizontal') on D-Bus");
                     match proxy.call_method("Scroll", &(-1, "horizontal")).await {
                         Ok(_) => debug!("trigger_action: Scroll(-1, 'horizontal') succeeded"),
-                        Err(e) => error!("trigger_action: Scroll(-1, 'horizontal') failed: {}", e),
+                        Err(e) => error!("trigger_action: Scroll(-1, 'horizontal') failed: {e}"),
                     }
                 }
                 "ScrollRight" => {
                     debug!("trigger_action: Calling Scroll(1, 'horizontal') on D-Bus");
                     match proxy.call_method("Scroll", &(1, "horizontal")).await {
                         Ok(_) => debug!("trigger_action: Scroll(1, 'horizontal') succeeded"),
-                        Err(e) => error!("trigger_action: Scroll(1, 'horizontal') failed: {}", e),
+                        Err(e) => error!("trigger_action: Scroll(1, 'horizontal') failed: {e}"),
                     }
                 }
                 other => {
-                    warn!("trigger_action: Unrecognized action '{}'", other);
+                    warn!("trigger_action: Unrecognized action '{other}'");
                 }
             }
         } else {
-            if lock.is_none() {
+            if conn_opt.is_none() {
                 error!(
                     "trigger_action: No D-Bus connection available when trying to trigger action '{}' on {}",
                     action.as_str(),
                     id.as_str()
                 );
             }
-            if items_lock.get(id).is_none() {
+            if item_opt.is_none() {
                 error!(
                     "trigger_action: Systray item ID '{}' not found in registry when trying to trigger action '{}'",
                     id.as_str(),
@@ -1030,6 +1028,7 @@ mod tests {
         assert!(lock.contains_key(&SystrayId::new("app3")));
         assert!(!lock.contains_key(&SystrayId::new("app1")));
         assert!(!lock.contains_key(&SystrayId::new("app2")));
+        drop(lock);
 
         let state = hub.systray_rx().borrow().clone();
         assert_eq!(state.items().len(), 1);
@@ -1059,8 +1058,7 @@ mod tests {
         let removed = Watcher::remove_by_destination(&items, &hub, ":1.99").await;
         assert!(!removed);
 
-        let lock = items.read().await;
-        assert_eq!(lock.len(), 1);
+        assert_eq!(items.read().await.len(), 1);
     }
 
     #[test]

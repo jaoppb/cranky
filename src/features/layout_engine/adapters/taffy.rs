@@ -22,7 +22,7 @@ use taffy::{
 struct LayoutState {
     root_node: NodeId,
     layout: StyledNode,
-    children: Vec<LayoutState>,
+    children: Vec<Self>,
 }
 
 enum Patch<'a> {
@@ -31,7 +31,7 @@ enum Patch<'a> {
         old_state: &'a LayoutState,
         new_layout: &'a StyledNode,
         style: Box<Option<Style>>,
-        children: Option<Vec<Patch<'a>>>,
+        children: Option<Vec<Self>>,
     },
     Replace {
         old_state: &'a LayoutState,
@@ -54,6 +54,7 @@ impl Default for TaffyLayoutAdapter {
 }
 
 impl TaffyLayoutAdapter {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             taffy: TaffyTree::new(),
@@ -65,8 +66,8 @@ impl TaffyLayoutAdapter {
 impl From<FlexDirection> for TaffyFlexDirection {
     fn from(dir: FlexDirection) -> Self {
         match dir {
-            FlexDirection::Row => TaffyFlexDirection::Row,
-            FlexDirection::Column => TaffyFlexDirection::Column,
+            FlexDirection::Row => Self::Row,
+            FlexDirection::Column => Self::Column,
         }
     }
 }
@@ -74,12 +75,12 @@ impl From<FlexDirection> for TaffyFlexDirection {
 impl From<JustifyContent> for TaffyJustifyContent {
     fn from(jc: JustifyContent) -> Self {
         match jc {
-            JustifyContent::Start => TaffyJustifyContent::FLEX_START,
-            JustifyContent::End => TaffyJustifyContent::FLEX_END,
-            JustifyContent::Center => TaffyJustifyContent::CENTER,
-            JustifyContent::SpaceBetween => TaffyJustifyContent::SPACE_BETWEEN,
-            JustifyContent::SpaceAround => TaffyJustifyContent::SPACE_AROUND,
-            JustifyContent::SpaceEvenly => TaffyJustifyContent::SPACE_EVENLY,
+            JustifyContent::Start => Self::FLEX_START,
+            JustifyContent::End => Self::FLEX_END,
+            JustifyContent::Center => Self::CENTER,
+            JustifyContent::SpaceBetween => Self::SPACE_BETWEEN,
+            JustifyContent::SpaceAround => Self::SPACE_AROUND,
+            JustifyContent::SpaceEvenly => Self::SPACE_EVENLY,
         }
     }
 }
@@ -87,10 +88,10 @@ impl From<JustifyContent> for TaffyJustifyContent {
 impl From<AlignItems> for TaffyAlignItems {
     fn from(ai: AlignItems) -> Self {
         match ai {
-            AlignItems::Start => TaffyAlignItems::FLEX_START,
-            AlignItems::End => TaffyAlignItems::FLEX_END,
-            AlignItems::Center => TaffyAlignItems::CENTER,
-            AlignItems::Stretch => TaffyAlignItems::STRETCH,
+            AlignItems::Start => Self::FLEX_START,
+            AlignItems::End => Self::FLEX_END,
+            AlignItems::Center => Self::CENTER,
+            AlignItems::Stretch => Self::STRETCH,
         }
     }
 }
@@ -98,17 +99,18 @@ impl From<AlignItems> for TaffyAlignItems {
 impl From<PositionType> for taffy::style::Position {
     fn from(pt: PositionType) -> Self {
         match pt {
-            PositionType::Relative => taffy::style::Position::Relative,
-            PositionType::Absolute => taffy::style::Position::Absolute,
+            PositionType::Relative => Self::Relative,
+            PositionType::Absolute => Self::Absolute,
         }
     }
 }
 
+#[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
 impl From<&crate::features::layout_engine::domain::BoxMargin>
     for taffy::geometry::Rect<LengthPercentage>
 {
     fn from(padding: &crate::features::layout_engine::domain::BoxMargin) -> Self {
-        taffy::geometry::Rect {
+        Self {
             left: LengthPercentage::length(padding.left() as f32),
             right: LengthPercentage::length(padding.right() as f32),
             top: LengthPercentage::length(padding.top() as f32),
@@ -117,11 +119,12 @@ impl From<&crate::features::layout_engine::domain::BoxMargin>
     }
 }
 
+#[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
 impl From<&crate::features::layout_engine::domain::BoxMargin>
     for taffy::geometry::Rect<taffy::style::LengthPercentageAuto>
 {
     fn from(margin: &crate::features::layout_engine::domain::BoxMargin) -> Self {
-        taffy::geometry::Rect {
+        Self {
             left: LengthPercentage::length(margin.left() as f32).into(),
             right: LengthPercentage::length(margin.right() as f32).into(),
             top: LengthPercentage::length(margin.top() as f32).into(),
@@ -130,9 +133,10 @@ impl From<&crate::features::layout_engine::domain::BoxMargin>
     }
 }
 
+#[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
 impl From<&crate::features::layout_engine::domain::Gap> for TaffySize<LengthPercentage> {
     fn from(gap: &crate::features::layout_engine::domain::Gap) -> Self {
-        TaffySize {
+        Self {
             width: LengthPercentage::length(gap.value() as f32),
             height: LengthPercentage::length(gap.value() as f32),
         }
@@ -142,34 +146,37 @@ impl From<&crate::features::layout_engine::domain::Gap> for TaffySize<LengthPerc
 impl From<crate::features::styling::domain::CssLength> for Dimension {
     fn from(l: crate::features::styling::domain::CssLength) -> Self {
         match l {
-            crate::features::styling::domain::CssLength::Px(v) => Dimension::length(v),
+            crate::features::styling::domain::CssLength::Px(v) => Self::length(v),
             crate::features::styling::domain::CssLength::Percent(v) => {
-                Dimension::percent(v / 100.0)
+                Self::percent(v / 100.0)
             }
-            crate::features::styling::domain::CssLength::Auto => Dimension::auto(),
+            crate::features::styling::domain::CssLength::Auto => Self::auto(),
         }
     }
 }
 
+#[allow(
+    clippy::as_conversions,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::too_many_lines
+)]
 fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
     let computed = node.style();
     let mut style = Style {
         flex_direction: computed.flex_direction().unwrap_or_default().into(),
-        justify_content: computed.justify_content().map(|jc| jc.into()),
-        align_items: computed.align_items().map(|ai| ai.into()),
+        justify_content: computed.justify_content().map(Into::into),
+        align_items: computed.align_items().map(Into::into),
         position: computed.position().unwrap_or_default().into(),
         padding: computed
             .padding()
-            .map(|p| p.into())
-            .unwrap_or(taffy::geometry::Rect::zero()),
+            .map_or_else(taffy::geometry::Rect::zero, Into::into),
         margin: computed
             .margin()
-            .map(|m| m.into())
-            .unwrap_or(taffy::geometry::Rect::zero()),
+            .map_or_else(taffy::geometry::Rect::zero, Into::into),
         gap: computed
             .gap()
-            .map(|g| g.into())
-            .unwrap_or(TaffySize::zero()),
+            .map_or_else(TaffySize::zero, Into::into),
         ..Default::default()
     };
 
@@ -207,12 +214,12 @@ fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
     match node {
         StyledNode::Flex { .. } => style,
         StyledNode::Text { text, style: s, .. } => {
-            let measured = measurer.measure(text.as_str(), s.font_family(), s.font_size());
+            let text_size = measurer.measure(text.as_str(), s.font_family(), s.font_size());
             if computed.width().is_none() {
-                style.size.width = Dimension::length(measured.width() as f32);
+                style.size.width = Dimension::length(text_size.width() as f32);
             }
             if computed.height().is_none() {
-                style.size.height = Dimension::length(measured.height() as f32);
+                style.size.height = Dimension::length(text_size.height() as f32);
             }
             style
         }
@@ -266,7 +273,7 @@ struct TaffyTreeBuilder<'a> {
 }
 
 impl<'a> TaffyTreeBuilder<'a> {
-    fn new(taffy: &'a mut TaffyTree) -> Self {
+    const fn new(taffy: &'a mut TaffyTree) -> Self {
         Self { taffy }
     }
 
@@ -305,6 +312,7 @@ impl<'a> TaffyTreeBuilder<'a> {
 }
 
 impl LayoutEnginePort for TaffyLayoutAdapter {
+    #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
     fn calculate_layout_with_constraints(
         &mut self,
         node: StyledNode,
@@ -322,13 +330,12 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
 
         let root_node_id = new_state.root_node;
 
-        let available_space = match available_size {
-            Some(size) => taffy::geometry::Size {
+        let available_space = available_size.map_or(taffy::geometry::Size::MAX_CONTENT, |size| {
+            taffy::geometry::Size {
                 width: taffy::style::AvailableSpace::Definite(size.width() as f32),
                 height: taffy::style::AvailableSpace::Definite(size.height() as f32),
-            },
-            None => taffy::geometry::Size::MAX_CONTENT,
-        };
+            }
+        });
 
         // Compute layout
         self.taffy
@@ -356,35 +363,33 @@ fn build_layout_state(
 ) -> Result<LayoutState, LayoutError> {
     let style = node_to_style(node, measurer);
 
-    match node {
-        StyledNode::Flex { children, .. } => {
-            let mut state_children = Vec::new();
-            let mut child_ids = Vec::new();
-            for child in children {
-                let state_child = build_layout_state(builder, child, measurer)?;
-                child_ids.push(state_child.root_node);
-                state_children.push(state_child);
-            }
-
-            let node_id = builder.add_node(style, &child_ids)?;
-
-            Ok(LayoutState {
-                root_node: node_id,
-                layout: node.clone(),
-                children: state_children,
-            })
+    if let StyledNode::Flex { children, .. } = node {
+        let mut state_children = Vec::new();
+        let mut child_ids = Vec::new();
+        for child in children {
+            let state_child = build_layout_state(builder, child, measurer)?;
+            child_ids.push(state_child.root_node);
+            state_children.push(state_child);
         }
-        _ => {
-            let node_id = builder.add_leaf(style)?;
-            Ok(LayoutState {
-                root_node: node_id,
-                layout: node.clone(),
-                children: Vec::new(),
-            })
-        }
+
+        let node_id = builder.add_node(style, &child_ids)?;
+
+        Ok(LayoutState {
+            root_node: node_id,
+            layout: node.clone(),
+            children: state_children,
+        })
+    } else {
+        let node_id = builder.add_leaf(style)?;
+        Ok(LayoutState {
+            root_node: node_id,
+            layout: node.clone(),
+            children: Vec::new(),
+        })
     }
 }
 
+#[allow(clippy::too_many_lines, clippy::if_not_else, clippy::indexing_slicing)]
 fn diff<'a>(
     old_state: &'a LayoutState,
     new_layout: &'a StyledNode,
@@ -501,10 +506,10 @@ fn diff<'a>(
                 style: new_style, ..
             },
         ) => {
-            let style = if old_style != new_style {
-                Some(node_to_style(new_layout, measurer))
-            } else {
+            let style = if old_style == new_style {
                 None
+            } else {
+                Some(node_to_style(new_layout, measurer))
             };
 
             if style.is_some() {
@@ -559,7 +564,10 @@ fn diff<'a>(
                 children: None,
             }
         }
-        _ => unreachable!(),
+        _ => Patch::Replace {
+            old_state,
+            new_layout,
+        },
     }
 }
 
@@ -592,8 +600,8 @@ fn apply_patch(
                 }
 
                 if old_state.children.len() > new_state_children.len() {
-                    for i in new_state_children.len()..old_state.children.len() {
-                        builder.remove_recursive(old_state.children[i].root_node);
+                    for child in old_state.children.iter().skip(new_state_children.len()) {
+                        builder.remove_recursive(child.root_node);
                     }
                 }
 
@@ -622,6 +630,13 @@ fn apply_patch(
     }
 }
 
+#[allow(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::too_many_lines
+)]
 fn build_render_tree(
     taffy: &TaffyTree,
     node_id: NodeId,
@@ -632,8 +647,8 @@ fn build_render_tree(
         .layout(node_id)
         .map_err(|e| LayoutError::EngineError(e.to_string()))?;
 
-    let abs_x = offset.x() + layout.location.x as i32;
-    let abs_y = offset.y() + layout.location.y as i32;
+    let abs_x = offset.x().saturating_add(layout.location.x as i32);
+    let abs_y = offset.y().saturating_add(layout.location.y as i32);
     let rect = Rect::new(
         Position::new(abs_x, abs_y),
         Size::new(layout.size.width as u32, layout.size.height as u32),
@@ -758,7 +773,8 @@ mod tests {
             _font: Option<&FontFamily>,
             _size: Option<FontSize>,
         ) -> Size {
-            Size::new(text.len() as u32 * 10, 20)
+            let len = u32::try_from(text.len()).unwrap_or(0);
+            Size::new(len.saturating_mul(10), 20)
         }
 
         fn measure_module(&self, key: &ModuleKey) -> Option<Size> {

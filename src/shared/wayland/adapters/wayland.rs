@@ -1,9 +1,22 @@
-use crate::shared::wayland::ports::DisplayServerPort;
+#![allow(
+    clippy::as_conversions,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_wrap,
+    clippy::ignored_unit_patterns,
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::expect_used,
+    clippy::indexing_slicing
+)]
 
+use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::wayland::ports::DisplayServerError;
-
 use crate::shared::primitives::geometry::Scale;
+use crate::shared::wayland::ports::DisplayServerError;
+use crate::shared::wayland::ports::DisplayServerPort;
 use crate::shared::rendering::adapters::tiny_skia::TinySkiaCosmicCanvas;
 use crate::shared::wayland::adapters::shm::{BufferUserData, ShmBuffer};
 use async_trait::async_trait;
@@ -57,6 +70,7 @@ pub struct SurfaceCommand {
 }
 
 impl SurfaceCommand {
+    #[must_use]
     pub fn new(
         module_id: crate::shared::primitives::ModuleId,
         parent_id: Option<crate::shared::primitives::ModuleId>,
@@ -73,19 +87,24 @@ impl SurfaceCommand {
         }
     }
 
-    pub fn module_id(&self) -> crate::shared::primitives::ModuleId {
+    #[must_use]
+    pub const fn module_id(&self) -> crate::shared::primitives::ModuleId {
         self.module_id
     }
-    pub fn parent_id(&self) -> Option<crate::shared::primitives::ModuleId> {
+    #[must_use]
+    pub const fn parent_id(&self) -> Option<crate::shared::primitives::ModuleId> {
         self.parent_id
     }
-    pub fn monitor_id(&self) -> &crate::shared::primitives::MonitorId {
+    #[must_use]
+    pub const fn monitor_id(&self) -> &crate::shared::primitives::MonitorId {
         &self.monitor_id
     }
-    pub fn position(&self) -> crate::shared::primitives::geometry::Position {
+    #[must_use]
+    pub const fn position(&self) -> crate::shared::primitives::geometry::Position {
         self.position
     }
-    pub fn buffer(&self) -> &crate::shared::primitives::render::RenderBuffer {
+    #[must_use]
+    pub const fn buffer(&self) -> &crate::shared::primitives::render::RenderBuffer {
         &self.buffer
     }
 }
@@ -128,7 +147,7 @@ impl SurfaceManagerPort for WaylandSurfaceManager {
         buffer: crate::shared::primitives::render::RenderBuffer,
     ) {
         {
-            let mut map = self.pending_surfaces.lock().unwrap();
+            let mut map = self.pending_surfaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             map.insert(
                 (module_id, monitor_id.clone()),
                 SurfaceCommand::new(module_id, parent_id, monitor_id, position, buffer),
@@ -244,6 +263,9 @@ impl Drop for WaylandBar {
 }
 
 impl WaylandAdapter {
+    /// # Errors
+    ///
+    /// Returns `DisplayServerError::ConnectionFailed` if connecting to Wayland environment fails.
     pub fn new(
         hub: Arc<SignalHub>,
         command_tx: tokio::sync::mpsc::Sender<crate::app::commands::AppCommand>,
@@ -331,7 +353,7 @@ impl DisplayServerPort for WaylandAdapter {
                     // Drop read guard to process surface commands, then we will loop again in App
                     drop(r_guard);
                     let cmds: Vec<SurfaceCommand> = {
-                        let mut map = self.pending_surfaces.lock().unwrap();
+                        let mut map = self.pending_surfaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                         map.drain().map(|(_, cmd)| cmd).collect()
                     };
                     for cmd in cmds {
@@ -405,6 +427,7 @@ impl DisplayServerPort for WaylandAdapter {
         self.render_all_outputs(read_model, layout_senders, &qh)
     }
 
+    #[allow(clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_precision_loss)]
     fn show_tooltip(
         &mut self,
         layout: crate::features::layout_engine::domain::StyledNode,
@@ -444,8 +467,7 @@ impl DisplayServerPort for WaylandAdapter {
 
         let mut bar_scale = 1;
         let mut output_name = String::new();
-        let mut pointer_x = state.pointer_pos.0;
-        let mut _pointer_y = state.pointer_pos.1;
+        let (mut pointer_x, mut _pointer_y) = (state.pointer_pos.0, state.pointer_pos.1);
         let mut bar_height = 0;
         let mut _bar_margin_left: i32 = 0;
         let mut _bar_margin_top: i32 = 0;
@@ -491,12 +513,6 @@ impl DisplayServerPort for WaylandAdapter {
             return Ok(());
         };
 
-        let _output = state
-            .outputs
-            .iter()
-            .find(|o| o.name == output_name)
-            .map(|o| &o.output);
-
         let font_family = crate::shared::config::domain::FontFamily::new("Inter".to_string());
         let font_size = crate::shared::config::domain::FontSize::new(12.0);
         let scale = Scale::new(bar_scale as f32);
@@ -510,7 +526,6 @@ impl DisplayServerPort for WaylandAdapter {
                     font_size,
                 );
 
-            use crate::features::layout_engine::ports::LayoutEnginePort;
             let mut engine =
                 crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
             if let Ok(render_node) = engine.calculate_layout(
@@ -570,61 +585,63 @@ impl DisplayServerPort for WaylandAdapter {
                 tooltip.shm_buffer.swap_buffers();
                 tracing::debug!(size = ?new_size, "Redrew tooltip in-place (same Size VO)");
                 return Ok(());
-            } else {
-                let qh = self.event_queue.handle();
-                let mut new_shm_buffer = ShmBuffer::new(
-                    shm,
-                    width,
-                    height,
-                    &qh,
-                    state.app_env.xdg_runtime_dir().as_path(),
-                )
-                .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
-                let data = new_shm_buffer.mmap_mut();
-                if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(data, width, height) {
-                    let mut actual_canvas = TinySkiaCosmicCanvas::new(
-                        pixmap,
-                        &mut state.font_system,
-                        &mut state.swash_cache,
-                        scale,
-                        font_family.clone(),
-                        font_size,
-                    );
-                    render_node.render_to_canvas(&mut actual_canvas);
-                }
-                let positioner = xdg_wm_base.create_positioner(&qh, ());
-                positioner.set_size(width as i32, height as i32);
-                positioner.set_anchor_rect(pointer_x as i32, bar_height as i32, 1, 1);
-                positioner.set_anchor(
-                    wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom,
-                );
-                positioner.set_gravity(
-                    wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::Bottom,
-                );
-                positioner.set_constraint_adjustment(
-                    wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideX |
-                    wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideY |
-                    wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::FlipY
-                );
-                tooltip.reposition_token = tooltip.reposition_token.wrapping_add(1);
-                tooltip
-                    .xdg_popup
-                    .reposition(&positioner, tooltip.reposition_token);
-                positioner.destroy();
-                tooltip.shm_buffer = new_shm_buffer;
-                tooltip.size = new_size;
-                tooltip.layout = layout;
-                tooltip
-                    .surface
-                    .attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
-                tooltip
-                    .surface
-                    .damage_buffer(0, 0, width as i32, height as i32);
-                tooltip.surface.commit();
-                tooltip.shm_buffer.swap_buffers();
-                tracing::debug!(size = ?new_size, token = tooltip.reposition_token, "Redrew and repositioned tooltip in-place (new Size VO)");
-                return Ok(());
             }
+            let qh = self.event_queue.handle();
+            let mut new_shm_buffer = ShmBuffer::new(
+                shm,
+                width,
+                height,
+                &qh,
+                state.app_env.xdg_runtime_dir().as_path(),
+            )
+            .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
+            let data = new_shm_buffer.mmap_mut();
+            if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(data, width, height) {
+                let mut actual_canvas = TinySkiaCosmicCanvas::new(
+                    pixmap,
+                    &mut state.font_system,
+                    &mut state.swash_cache,
+                    scale,
+                    font_family.clone(),
+                    font_size,
+                );
+                render_node.render_to_canvas(&mut actual_canvas);
+            }
+            let positioner = xdg_wm_base.create_positioner(&qh, ());
+            let width_i32 = i32::try_from(width).unwrap_or_default();
+            let height_i32 = i32::try_from(height).unwrap_or_default();
+            positioner.set_size(width_i32, height_i32);
+            #[allow(clippy::cast_possible_truncation)]
+            positioner.set_anchor_rect(pointer_x as i32, i32::try_from(bar_height).unwrap_or_default(), 1, 1);
+            positioner.set_anchor(
+                wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom,
+            );
+            positioner.set_gravity(
+                wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::Bottom,
+            );
+            positioner.set_constraint_adjustment(
+                wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideX |
+                wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideY |
+                wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::FlipY
+            );
+            tooltip.reposition_token = tooltip.reposition_token.wrapping_add(1);
+            tooltip
+                .xdg_popup
+                .reposition(&positioner, tooltip.reposition_token);
+            positioner.destroy();
+            tooltip.shm_buffer = new_shm_buffer;
+            tooltip.size = new_size;
+            tooltip.layout = layout;
+            tooltip
+                .surface
+                .attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
+            tooltip
+                .surface
+                .damage_buffer(0, 0, width_i32, height_i32);
+            tooltip.surface.commit();
+            tooltip.shm_buffer.swap_buffers();
+            tracing::debug!(size = ?new_size, token = tooltip.reposition_token, "Redrew and repositioned tooltip in-place (new Size VO)");
+            return Ok(());
         }
 
         let qh = self.event_queue.handle();
@@ -1592,6 +1609,7 @@ mod tests {
         let cmd = map
             .remove(&(module_id, monitor_id))
             .expect("Failed to find command");
+        drop(map);
         assert_eq!(cmd.buffer().size().width(), 20);
     }
 
@@ -1710,7 +1728,7 @@ mod tests {
             bars: Vec::new(),
             seat: None,
             pointer: None,
-            command_tx: command_tx.clone(),
+            command_tx,
             surface_to_id: HashMap::new(),
             pointer_surface: None,
             pointer_pos: (0.0, 0.0),
@@ -1757,6 +1775,6 @@ mod tests {
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));
-        let _ = WaylandAdapter::new(hub.clone(), tx, app_env);
+        let _ = WaylandAdapter::new(hub, tx, app_env);
     }
 }

@@ -34,12 +34,23 @@ pub enum StylingError {
 pub struct StyleSheetName(String);
 
 impl StyleSheetName {
+    /// Creates a new `StyleSheetName`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidStyleSheetName` if name is empty, contains path separators, `.css` extension, or invalid characters.
     pub fn new(name: impl Into<String>) -> Result<Self, StylingError> {
         let s = name.into();
         if s.is_empty() {
             return Err(StylingError::InvalidStyleSheetName(s));
         }
-        if s.contains('/') || s.contains('\\') || s.contains("..") || s.ends_with(".css") {
+        if s.contains('/')
+            || s.contains('\\')
+            || s.contains("..")
+            || std::path::Path::new(&s)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("css"))
+        {
             return Err(StylingError::InvalidStyleSheetName(s));
         }
         if !s
@@ -51,6 +62,7 @@ impl StyleSheetName {
         Ok(Self(s))
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -66,12 +78,19 @@ impl std::fmt::Display for StyleSheetName {
 pub struct ClassName(String);
 
 impl ClassName {
+    /// Creates a new `ClassName`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidClassName` if name is empty or contains invalid characters.
     pub fn new(name: impl Into<String>) -> Result<Self, StylingError> {
         let s = name.into();
         if s.is_empty() {
             return Err(StylingError::InvalidClassName(s));
         }
-        let first = s.chars().next().unwrap();
+        let Some(first) = s.chars().next() else {
+            return Err(StylingError::InvalidClassName(s));
+        };
         if !first.is_ascii_alphabetic() && first != '_' && first != '-' {
             return Err(StylingError::InvalidClassName(s));
         }
@@ -84,6 +103,7 @@ impl ClassName {
         Ok(Self(s))
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -101,7 +121,7 @@ impl<'de> Deserialize<'de> for ClassName {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        ClassName::new(s).map_err(serde::de::Error::custom)
+        Self::new(s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -109,6 +129,11 @@ impl<'de> Deserialize<'de> for ClassName {
 pub struct ClassNameList(Vec<ClassName>);
 
 impl ClassNameList {
+    /// Parses a space-separated string of class names.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidClassName` if any class name is invalid.
     pub fn parse(classes: &str) -> Result<Self, StylingError> {
         let mut list = Vec::new();
         for item in classes.split_whitespace() {
@@ -117,16 +142,27 @@ impl ClassNameList {
         Ok(Self(list))
     }
 
-    pub fn new(list: Vec<ClassName>) -> Self {
+    #[must_use]
+    pub const fn new(list: Vec<ClassName>) -> Self {
         Self(list)
     }
 
+    #[must_use]
     pub fn as_slice(&self) -> &[ClassName] {
         &self.0
     }
 
     pub fn iter(&self) -> std::slice::Iter<'_, ClassName> {
         self.0.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a ClassNameList {
+    type Item = &'a ClassName;
+    type IntoIter = std::slice::Iter<'a, ClassName>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -143,13 +179,13 @@ impl<'de> Deserialize<'de> for ClassNameList {
         }
 
         match ClassRepr::deserialize(deserializer)? {
-            ClassRepr::Str(s) => ClassNameList::parse(&s).map_err(serde::de::Error::custom),
+            ClassRepr::Str(s) => Self::parse(&s).map_err(serde::de::Error::custom),
             ClassRepr::List(list) => {
                 let mut out = Vec::new();
                 for item in list {
                     out.push(ClassName::new(item).map_err(serde::de::Error::custom)?);
                 }
-                Ok(ClassNameList(out))
+                Ok(Self(out))
             }
         }
     }
@@ -159,12 +195,19 @@ impl<'de> Deserialize<'de> for ClassNameList {
 pub struct ElementId(String);
 
 impl ElementId {
+    /// Creates a new `ElementId`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidElementId` if id is empty or contains invalid characters.
     pub fn new(id: impl Into<String>) -> Result<Self, StylingError> {
         let s = id.into();
         if s.is_empty() {
             return Err(StylingError::InvalidElementId(s));
         }
-        let first = s.chars().next().unwrap();
+        let Some(first) = s.chars().next() else {
+            return Err(StylingError::InvalidElementId(s));
+        };
         if !first.is_ascii_alphabetic() && first != '_' {
             return Err(StylingError::InvalidElementId(s));
         }
@@ -177,6 +220,7 @@ impl ElementId {
         Ok(Self(s))
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -194,7 +238,7 @@ impl<'de> Deserialize<'de> for ElementId {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        ElementId::new(s).map_err(serde::de::Error::custom)
+        Self::new(s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -202,18 +246,29 @@ impl<'de> Deserialize<'de> for ElementId {
 pub struct ProgressValue(f32);
 
 impl ProgressValue {
+    /// Creates a new `ProgressValue` between 0.0 and 1.0.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidProgressValue` if `value` is NaN or not in 0.0..=1.0.
     pub fn new(value: f32) -> Result<Self, StylingError> {
         if value.is_nan() || !(0.0..=1.0).contains(&value) {
-            return Err(StylingError::InvalidProgressValue(format!("{}", value)));
+            return Err(StylingError::InvalidProgressValue(format!("{value}")));
         }
         Ok(Self(value))
     }
 
+    /// Creates a new `ProgressValue` from a percentage value (0.0 to 100.0).
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidProgressValue` if `pct` is NaN or not in 0.0..=100.0.
     pub fn from_percentage(pct: f32) -> Result<Self, StylingError> {
         Self::new(pct / 100.0)
     }
 
-    pub fn value(&self) -> f32 {
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
@@ -224,7 +279,7 @@ impl<'de> Deserialize<'de> for ProgressValue {
         D: serde::Deserializer<'de>,
     {
         let v = f32::deserialize(deserializer)?;
-        ProgressValue::new(v).map_err(serde::de::Error::custom)
+        Self::new(v).map_err(serde::de::Error::custom)
     }
 }
 
@@ -237,11 +292,13 @@ pub enum Orientation {
 }
 
 impl Orientation {
-    pub fn is_horizontal(&self) -> bool {
+    #[must_use]
+    pub const fn is_horizontal(&self) -> bool {
         matches!(self, Self::Horizontal)
     }
 
-    pub fn is_vertical(&self) -> bool {
+    #[must_use]
+    pub const fn is_vertical(&self) -> bool {
         matches!(self, Self::Vertical)
     }
 }
@@ -250,14 +307,20 @@ impl Orientation {
 pub struct Opacity(f32);
 
 impl Opacity {
+    /// Creates a new `Opacity` between 0.0 and 1.0.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidOpacity` if `value` is NaN or not in 0.0..=1.0.
     pub fn new(value: f32) -> Result<Self, StylingError> {
         if value.is_nan() || !(0.0..=1.0).contains(&value) {
-            return Err(StylingError::InvalidOpacity(format!("{}", value)));
+            return Err(StylingError::InvalidOpacity(format!("{value}")));
         }
         Ok(Self(value))
     }
 
-    pub fn value(&self) -> f32 {
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
@@ -268,7 +331,7 @@ impl<'de> Deserialize<'de> for Opacity {
         D: serde::Deserializer<'de>,
     {
         let v = f32::deserialize(deserializer)?;
-        Opacity::new(v).map_err(serde::de::Error::custom)
+        Self::new(v).map_err(serde::de::Error::custom)
     }
 }
 
@@ -276,17 +339,22 @@ impl<'de> Deserialize<'de> for Opacity {
 pub struct FlexGrow(f32);
 
 impl FlexGrow {
+    /// Creates a new `FlexGrow` value >= 0.0.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidFlexValue` if `value` is NaN or negative.
     pub fn new(value: f32) -> Result<Self, StylingError> {
         if value.is_nan() || value < 0.0 {
             return Err(StylingError::InvalidFlexValue(format!(
-                "flex-grow cannot be negative or NaN, got {}",
-                value
+                "flex-grow cannot be negative or NaN, got {value}"
             )));
         }
         Ok(Self(value))
     }
 
-    pub fn value(&self) -> f32 {
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
@@ -297,7 +365,7 @@ impl<'de> Deserialize<'de> for FlexGrow {
         D: serde::Deserializer<'de>,
     {
         let v = f32::deserialize(deserializer)?;
-        FlexGrow::new(v).map_err(serde::de::Error::custom)
+        Self::new(v).map_err(serde::de::Error::custom)
     }
 }
 
@@ -305,17 +373,22 @@ impl<'de> Deserialize<'de> for FlexGrow {
 pub struct FlexShrink(f32);
 
 impl FlexShrink {
+    /// Creates a new `FlexShrink` value >= 0.0.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidFlexValue` if `value` is NaN or negative.
     pub fn new(value: f32) -> Result<Self, StylingError> {
         if value.is_nan() || value < 0.0 {
             return Err(StylingError::InvalidFlexValue(format!(
-                "flex-shrink cannot be negative or NaN, got {}",
-                value
+                "flex-shrink cannot be negative or NaN, got {value}"
             )));
         }
         Ok(Self(value))
     }
 
-    pub fn value(&self) -> f32 {
+    #[must_use]
+    pub const fn value(&self) -> f32 {
         self.0
     }
 }
@@ -326,7 +399,7 @@ impl<'de> Deserialize<'de> for FlexShrink {
         D: serde::Deserializer<'de>,
     {
         let v = f32::deserialize(deserializer)?;
-        FlexShrink::new(v).map_err(serde::de::Error::custom)
+        Self::new(v).map_err(serde::de::Error::custom)
     }
 }
 
@@ -338,34 +411,44 @@ pub enum CssLength {
 }
 
 impl CssLength {
+    /// Creates a pixel length value.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidLength` if `v` is NaN or negative.
     pub fn px(v: f32) -> Result<Self, StylingError> {
         if v.is_nan() || v < 0.0 {
             return Err(StylingError::InvalidLength(format!(
-                "Length cannot be negative or NaN, got {}",
-                v
+                "Length cannot be negative or NaN, got {v}"
             )));
         }
         Ok(Self::Px(v))
     }
 
+    /// Creates a percentage length value.
+    ///
+    /// # Errors
+    ///
+    /// Returns `StylingError::InvalidLength` if `v` is NaN or negative.
     pub fn percent(v: f32) -> Result<Self, StylingError> {
         if v.is_nan() || v < 0.0 {
             return Err(StylingError::InvalidLength(format!(
-                "Percentage cannot be negative or NaN, got {}",
-                v
+                "Percentage cannot be negative or NaN, got {v}"
             )));
         }
         Ok(Self::Percent(v))
     }
 
-    pub fn value(&self) -> Option<f32> {
+    #[must_use]
+    pub const fn value(&self) -> Option<f32> {
         match self {
             Self::Px(v) | Self::Percent(v) => Some(*v),
             Self::Auto => None,
         }
     }
 
-    pub fn is_auto(&self) -> bool {
+    #[must_use]
+    pub const fn is_auto(&self) -> bool {
         matches!(self, Self::Auto)
     }
 }
@@ -408,82 +491,108 @@ pub struct ComputedStyle {
 }
 
 impl ComputedStyle {
-    pub fn background(&self) -> Option<&DrawingColor> {
+    #[must_use]
+    pub const fn background(&self) -> Option<&DrawingColor> {
         self.background.as_ref()
     }
-    pub fn color(&self) -> Option<&DrawingColor> {
+    #[must_use]
+    pub const fn color(&self) -> Option<&DrawingColor> {
         self.color.as_ref()
     }
-    pub fn accent_color(&self) -> Option<&DrawingColor> {
+    #[must_use]
+    pub const fn accent_color(&self) -> Option<&DrawingColor> {
         self.accent_color.as_ref()
     }
-    pub fn font_family(&self) -> Option<&FontFamily> {
+    #[must_use]
+    pub const fn font_family(&self) -> Option<&FontFamily> {
         self.font_family.as_ref()
     }
-    pub fn font_size(&self) -> Option<FontSize> {
+    #[must_use]
+    pub const fn font_size(&self) -> Option<FontSize> {
         self.font_size
     }
-    pub fn border_size(&self) -> Option<BorderSize> {
+    #[must_use]
+    pub const fn border_size(&self) -> Option<BorderSize> {
         self.border_size
     }
-    pub fn border_color(&self) -> Option<&DrawingColor> {
+    #[must_use]
+    pub const fn border_color(&self) -> Option<&DrawingColor> {
         self.border_color.as_ref()
     }
-    pub fn border_radius(&self) -> Option<BorderRadius> {
+    #[must_use]
+    pub const fn border_radius(&self) -> Option<BorderRadius> {
         self.border_radius
     }
-    pub fn width(&self) -> Option<CssLength> {
+    #[must_use]
+    pub const fn width(&self) -> Option<CssLength> {
         self.width
     }
-    pub fn height(&self) -> Option<CssLength> {
+    #[must_use]
+    pub const fn height(&self) -> Option<CssLength> {
         self.height
     }
-    pub fn min_width(&self) -> Option<CssLength> {
+    #[must_use]
+    pub const fn min_width(&self) -> Option<CssLength> {
         self.min_width
     }
-    pub fn min_height(&self) -> Option<CssLength> {
+    #[must_use]
+    pub const fn min_height(&self) -> Option<CssLength> {
         self.min_height
     }
-    pub fn max_width(&self) -> Option<CssLength> {
+    #[must_use]
+    pub const fn max_width(&self) -> Option<CssLength> {
         self.max_width
     }
-    pub fn max_height(&self) -> Option<CssLength> {
+    #[must_use]
+    pub const fn max_height(&self) -> Option<CssLength> {
         self.max_height
     }
-    pub fn padding(&self) -> Option<&BoxMargin> {
+    #[must_use]
+    pub const fn padding(&self) -> Option<&BoxMargin> {
         self.padding.as_ref()
     }
-    pub fn margin(&self) -> Option<&BoxMargin> {
+    #[must_use]
+    pub const fn margin(&self) -> Option<&BoxMargin> {
         self.margin.as_ref()
     }
-    pub fn gap(&self) -> Option<&Gap> {
+    #[must_use]
+    pub const fn gap(&self) -> Option<&Gap> {
         self.gap.as_ref()
     }
-    pub fn flex_direction(&self) -> Option<FlexDirection> {
+    #[must_use]
+    pub const fn flex_direction(&self) -> Option<FlexDirection> {
         self.flex_direction
     }
-    pub fn justify_content(&self) -> Option<JustifyContent> {
+    #[must_use]
+    pub const fn justify_content(&self) -> Option<JustifyContent> {
         self.justify_content
     }
-    pub fn align_items(&self) -> Option<AlignItems> {
+    #[must_use]
+    pub const fn align_items(&self) -> Option<AlignItems> {
         self.align_items
     }
-    pub fn position(&self) -> Option<PositionType> {
+    #[must_use]
+    pub const fn position(&self) -> Option<PositionType> {
         self.position
     }
-    pub fn opacity(&self) -> Option<Opacity> {
+    #[must_use]
+    pub const fn opacity(&self) -> Option<Opacity> {
         self.opacity
     }
-    pub fn flex_grow(&self) -> Option<FlexGrow> {
+    #[must_use]
+    pub const fn flex_grow(&self) -> Option<FlexGrow> {
         self.flex_grow
     }
-    pub fn flex_shrink(&self) -> Option<FlexShrink> {
+    #[must_use]
+    pub const fn flex_shrink(&self) -> Option<FlexShrink> {
         self.flex_shrink
     }
-    pub fn flex_basis(&self) -> Option<CssLength> {
+    #[must_use]
+    pub const fn flex_basis(&self) -> Option<CssLength> {
         self.flex_basis
     }
-    pub fn align_self(&self) -> Option<AlignItems> {
+    #[must_use]
+    pub const fn align_self(&self) -> Option<AlignItems> {
         self.align_self
     }
 
@@ -499,85 +608,85 @@ impl ComputedStyle {
     pub fn set_font_family(&mut self, font_family: FontFamily) {
         self.font_family = Some(font_family);
     }
-    pub fn set_font_size(&mut self, font_size: FontSize) {
+    pub const fn set_font_size(&mut self, font_size: FontSize) {
         self.font_size = Some(font_size);
     }
-    pub fn set_border_size(&mut self, border_size: BorderSize) {
+    pub const fn set_border_size(&mut self, border_size: BorderSize) {
         self.border_size = Some(border_size);
     }
     pub fn set_border_color(&mut self, border_color: DrawingColor) {
         self.border_color = Some(border_color);
     }
-    pub fn set_border_radius(&mut self, border_radius: BorderRadius) {
+    pub const fn set_border_radius(&mut self, border_radius: BorderRadius) {
         self.border_radius = Some(border_radius);
     }
-    pub fn set_width(&mut self, width: CssLength) {
+    pub const fn set_width(&mut self, width: CssLength) {
         self.width = Some(width);
     }
-    pub fn set_height(&mut self, height: CssLength) {
+    pub const fn set_height(&mut self, height: CssLength) {
         self.height = Some(height);
     }
-    pub fn set_min_width(&mut self, min_width: CssLength) {
+    pub const fn set_min_width(&mut self, min_width: CssLength) {
         self.min_width = Some(min_width);
     }
-    pub fn set_min_height(&mut self, min_height: CssLength) {
+    pub const fn set_min_height(&mut self, min_height: CssLength) {
         self.min_height = Some(min_height);
     }
-    pub fn set_max_width(&mut self, max_width: CssLength) {
+    pub const fn set_max_width(&mut self, max_width: CssLength) {
         self.max_width = Some(max_width);
     }
-    pub fn set_max_height(&mut self, max_height: CssLength) {
+    pub const fn set_max_height(&mut self, max_height: CssLength) {
         self.max_height = Some(max_height);
     }
-    pub fn set_padding(&mut self, padding: BoxMargin) {
+    pub const fn set_padding(&mut self, padding: BoxMargin) {
         self.padding = Some(padding);
     }
-    pub fn set_margin(&mut self, margin: BoxMargin) {
+    pub const fn set_margin(&mut self, margin: BoxMargin) {
         self.margin = Some(margin);
     }
-    pub fn set_gap(&mut self, gap: Gap) {
+    pub const fn set_gap(&mut self, gap: Gap) {
         self.gap = Some(gap);
     }
-    pub fn set_flex_direction(&mut self, flex_direction: FlexDirection) {
+    pub const fn set_flex_direction(&mut self, flex_direction: FlexDirection) {
         self.flex_direction = Some(flex_direction);
     }
-    pub fn set_justify_content(&mut self, justify_content: JustifyContent) {
+    pub const fn set_justify_content(&mut self, justify_content: JustifyContent) {
         self.justify_content = Some(justify_content);
     }
-    pub fn set_align_items(&mut self, align_items: AlignItems) {
+    pub const fn set_align_items(&mut self, align_items: AlignItems) {
         self.align_items = Some(align_items);
     }
-    pub fn set_position(&mut self, position: PositionType) {
+    pub const fn set_position(&mut self, position: PositionType) {
         self.position = Some(position);
     }
-    pub fn set_opacity(&mut self, opacity: Opacity) {
+    pub const fn set_opacity(&mut self, opacity: Opacity) {
         self.opacity = Some(opacity);
     }
-    pub fn set_flex_grow(&mut self, flex_grow: FlexGrow) {
+    pub const fn set_flex_grow(&mut self, flex_grow: FlexGrow) {
         self.flex_grow = Some(flex_grow);
     }
-    pub fn set_flex_shrink(&mut self, flex_shrink: FlexShrink) {
+    pub const fn set_flex_shrink(&mut self, flex_shrink: FlexShrink) {
         self.flex_shrink = Some(flex_shrink);
     }
-    pub fn set_flex_basis(&mut self, flex_basis: CssLength) {
+    pub const fn set_flex_basis(&mut self, flex_basis: CssLength) {
         self.flex_basis = Some(flex_basis);
     }
-    pub fn set_align_self(&mut self, align_self: AlignItems) {
+    pub const fn set_align_self(&mut self, align_self: AlignItems) {
         self.align_self = Some(align_self);
     }
 
-    pub fn merge_with(&mut self, other: &ComputedStyle) {
+    pub fn merge_with(&mut self, other: &Self) {
         if other.background.is_some() {
-            self.background = other.background.clone();
+            self.background.clone_from(&other.background);
         }
         if other.color.is_some() {
-            self.color = other.color.clone();
+            self.color.clone_from(&other.color);
         }
         if other.accent_color.is_some() {
-            self.accent_color = other.accent_color.clone();
+            self.accent_color.clone_from(&other.accent_color);
         }
         if other.font_family.is_some() {
-            self.font_family = other.font_family.clone();
+            self.font_family.clone_from(&other.font_family);
         }
         if other.font_size.is_some() {
             self.font_size = other.font_size;
@@ -586,7 +695,7 @@ impl ComputedStyle {
             self.border_size = other.border_size;
         }
         if other.border_color.is_some() {
-            self.border_color = other.border_color.clone();
+            self.border_color.clone_from(&other.border_color);
         }
         if other.border_radius.is_some() {
             self.border_radius = other.border_radius;
@@ -610,13 +719,13 @@ impl ComputedStyle {
             self.max_height = other.max_height;
         }
         if other.padding.is_some() {
-            self.padding = other.padding.clone();
+            self.padding.clone_from(&other.padding);
         }
         if other.margin.is_some() {
-            self.margin = other.margin.clone();
+            self.margin.clone_from(&other.margin);
         }
         if other.gap.is_some() {
-            self.gap = other.gap.clone();
+            self.gap.clone_from(&other.gap);
         }
         if other.flex_direction.is_some() {
             self.flex_direction = other.flex_direction;
@@ -654,16 +763,17 @@ pub struct ElementQuery<'a> {
     id: Option<&'a ElementId>,
     classes: &'a [ClassName],
     pseudo_classes: &'a [PseudoClass],
-    parent: Option<&'a ElementQuery<'a>>,
+    parent: Option<&'a Self>,
 }
 
 impl<'a> ElementQuery<'a> {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         tag: &'a str,
         id: Option<&'a ElementId>,
         classes: &'a [ClassName],
         pseudo_classes: &'a [PseudoClass],
-        parent: Option<&'a ElementQuery<'a>>,
+        parent: Option<&'a Self>,
     ) -> Self {
         Self {
             tag,
@@ -674,23 +784,28 @@ impl<'a> ElementQuery<'a> {
         }
     }
 
-    pub fn tag(&self) -> &'a str {
+    #[must_use]
+    pub const fn tag(&self) -> &'a str {
         self.tag
     }
 
-    pub fn id(&self) -> Option<&'a ElementId> {
+    #[must_use]
+    pub const fn id(&self) -> Option<&'a ElementId> {
         self.id
     }
 
-    pub fn classes(&self) -> &'a [ClassName] {
+    #[must_use]
+    pub const fn classes(&self) -> &'a [ClassName] {
         self.classes
     }
 
-    pub fn pseudo_classes(&self) -> &'a [PseudoClass] {
+    #[must_use]
+    pub const fn pseudo_classes(&self) -> &'a [PseudoClass] {
         self.pseudo_classes
     }
 
-    pub fn parent(&self) -> Option<&'a ElementQuery<'a>> {
+    #[must_use]
+    pub const fn parent(&self) -> Option<&'a Self> {
         self.parent
     }
 }
@@ -705,7 +820,7 @@ mod tests {
         assert!(StyleSheetName::new("hour_style-1").is_ok());
         assert_eq!(
             StyleSheetName::new("").unwrap_err(),
-            StylingError::InvalidStyleSheetName("".into())
+            StylingError::InvalidStyleSheetName(String::new())
         );
         assert!(StyleSheetName::new("base.css").is_err());
         assert!(StyleSheetName::new("../base").is_err());
@@ -743,7 +858,7 @@ mod tests {
         assert!(ProgressValue::new(f32::NAN).is_err());
 
         let from_pct = ProgressValue::from_percentage(75.0).unwrap();
-        assert_eq!(from_pct.value(), 0.75);
+        assert!((from_pct.value() - 0.75).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -759,11 +874,11 @@ mod tests {
         style2.set_flex_shrink(FlexShrink::new(0.0).unwrap());
 
         style1.merge_with(&style2);
-        assert_eq!(style1.font_size().unwrap().value(), 16.0);
-        assert_eq!(style1.border_radius().unwrap().value(), 4.0);
-        assert_eq!(style1.opacity().unwrap().value(), 0.8);
-        assert_eq!(style1.flex_grow().unwrap().value(), 1.0);
-        assert_eq!(style1.flex_shrink().unwrap().value(), 0.0);
+        assert!((style1.font_size().unwrap().value() - 16.0).abs() < f32::EPSILON);
+        assert!((style1.border_radius().unwrap().value() - 4.0).abs() < f32::EPSILON);
+        assert!((style1.opacity().unwrap().value() - 0.8).abs() < f32::EPSILON);
+        assert!((style1.flex_grow().unwrap().value() - 1.0).abs() < f32::EPSILON);
+        assert!((style1.flex_shrink().unwrap().value()).abs() < f32::EPSILON);
     }
 
     #[test]

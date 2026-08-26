@@ -6,10 +6,12 @@ use std::collections::HashMap;
 pub struct DefaultVdomDiffAdapter;
 
 impl DefaultVdomDiffAdapter {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 
+    #[allow(clippy::too_many_lines, clippy::if_not_else)]
     fn diff_nodes(&self, old_node: &VNode, new_node: &VNode) -> Patch {
         if old_node.tag() != new_node.tag() {
             return Patch::Replace {
@@ -216,24 +218,29 @@ impl DefaultVdomDiffAdapter {
         } else {
             let max_len = std::cmp::max(old_children.len(), new_children.len());
             for i in 0..max_len {
-                if i < old_children.len() && i < new_children.len() {
-                    let p = self.diff_nodes(&old_children[i], &new_children[i]);
-                    if !p.is_no_change() {
-                        child_patches.push(ChildPatchOp::Update {
-                            node_id: old_children[i].node_id(),
-                            patch: Box::new(p),
+                match (old_children.get(i), new_children.get(i)) {
+                    (Some(old_child), Some(new_child)) => {
+                        let p = self.diff_nodes(old_child, new_child);
+                        if !p.is_no_change() {
+                            child_patches.push(ChildPatchOp::Update {
+                                node_id: old_child.node_id(),
+                                patch: Box::new(p),
+                            });
+                        }
+                    }
+                    (None, Some(new_child)) => {
+                        child_patches.push(ChildPatchOp::Insert {
+                            index: i,
+                            node: Box::new(new_child.clone()),
                         });
                     }
-                } else if i >= old_children.len() {
-                    child_patches.push(ChildPatchOp::Insert {
-                        index: i,
-                        node: Box::new(new_children[i].clone()),
-                    });
-                } else {
-                    child_patches.push(ChildPatchOp::Remove {
-                        node_id: old_children[i].node_id(),
-                        index: i,
-                    });
+                    (Some(old_child), None) => {
+                        child_patches.push(ChildPatchOp::Remove {
+                            node_id: old_child.node_id(),
+                            index: i,
+                        });
+                    }
+                    (None, None) => {}
                 }
             }
         }
@@ -255,9 +262,9 @@ impl DefaultVdomDiffAdapter {
 }
 
 impl VdomDiffPort for DefaultVdomDiffAdapter {
-    fn diff<'a>(&self, old_tree: Option<&'a VNode>, new_tree: &'a VNode) -> DiffResult {
-        match old_tree {
-            None => {
+    fn diff(&self, old_tree: Option<&VNode>, new_tree: &VNode) -> DiffResult {
+        old_tree.map_or_else(
+            || {
                 tracing::trace!(
                     new_tag = %new_tree.tag(),
                     "Diffing VDOM: initial render (no previous tree)"
@@ -266,8 +273,8 @@ impl VdomDiffPort for DefaultVdomDiffAdapter {
                     old_node_id: new_tree.node_id(),
                     new_node: Box::new(new_tree.clone()),
                 })
-            }
-            Some(old) => {
+            },
+            |old| {
                 let patch = self.diff_nodes(old, new_tree);
                 tracing::trace!(
                     old_tag = %old.tag(),
@@ -276,8 +283,8 @@ impl VdomDiffPort for DefaultVdomDiffAdapter {
                     "Diffing VDOM completed"
                 );
                 DiffResult::new(patch)
-            }
-        }
+            },
+        )
     }
 }
 
@@ -402,7 +409,7 @@ mod tests {
             None,
             None,
         )
-        .with_key(k1.clone());
+        .with_key(k1);
         let child2 = VNode::new_text(
             TextContent::new("2".to_string()),
             None,
@@ -411,7 +418,7 @@ mod tests {
             None,
             None,
         )
-        .with_key(k2.clone());
+        .with_key(k2);
 
         let old_tree = VNode::new_flex(
             vec![child1.clone(), child2.clone()],
@@ -422,7 +429,7 @@ mod tests {
             None,
         );
         let new_tree = VNode::new_flex(
-            vec![child2.clone(), child1.clone()],
+            vec![child2, child1],
             None,
             None,
             None,
@@ -481,7 +488,7 @@ mod tests {
             None,
         );
         let new_tree = VNode::new_flex(
-            vec![child1.clone(), child2.clone(), child3.clone()],
+            vec![child1, child2, child3],
             None,
             None,
             None,

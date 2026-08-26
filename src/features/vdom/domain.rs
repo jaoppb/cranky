@@ -21,15 +21,18 @@ pub enum VdomError {
 pub struct NodeId(Uuid);
 
 impl NodeId {
+    #[must_use]
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
 
-    pub fn from_uuid(uuid: Uuid) -> Self {
+    #[must_use]
+    pub const fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
     }
 
-    pub fn uuid(&self) -> &Uuid {
+    #[must_use]
+    pub const fn uuid(&self) -> &Uuid {
         &self.0
     }
 }
@@ -50,6 +53,11 @@ impl std::fmt::Display for NodeId {
 pub struct NodeKey(String);
 
 impl NodeKey {
+    /// Creates a new `NodeKey`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `VdomError::InvalidNodeKey` if the key is empty or whitespace.
     pub fn new(key: impl Into<String>) -> Result<Self, VdomError> {
         let s = key.into();
         if s.trim().is_empty() {
@@ -60,6 +68,7 @@ impl NodeKey {
         Ok(Self(s))
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -77,7 +86,7 @@ impl<'de> Deserialize<'de> for NodeKey {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        NodeKey::new(s).map_err(serde::de::Error::custom)
+        Self::new(s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -93,7 +102,8 @@ pub enum NodeTag {
 }
 
 impl NodeTag {
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Flex => "flex",
             Self::Text => "text",
@@ -104,11 +114,13 @@ impl NodeTag {
         }
     }
 
-    pub fn is_container(&self) -> bool {
+    #[must_use]
+    pub const fn is_container(&self) -> bool {
         matches!(self, Self::Flex)
     }
 
-    pub fn is_leaf(&self) -> bool {
+    #[must_use]
+    pub const fn is_leaf(&self) -> bool {
         !self.is_container()
     }
 }
@@ -126,10 +138,12 @@ pub struct TextContent {
 }
 
 impl TextContent {
-    pub fn new(text: String) -> Self {
+    #[must_use]
+    pub const fn new(text: String) -> Self {
         Self { text }
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.text
     }
@@ -210,19 +224,20 @@ pub struct VNode {
     #[serde(default)]
     on_hover: Option<AppCommand>,
     #[serde(default)]
-    tooltip: Option<Box<VNode>>,
+    tooltip: Option<Box<Self>>,
     #[serde(flatten)]
     kind: VNodeKind,
 }
 
 impl VNode {
+    #[must_use]
     pub fn new_flex(
-        children: Vec<VNode>,
+        children: Vec<Self>,
         class: Option<ClassNameList>,
         id: Option<ElementId>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<VNode>>,
+        tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
             node_id: NodeId::new(),
@@ -236,13 +251,14 @@ impl VNode {
         }
     }
 
+    #[must_use]
     pub fn new_text(
         text: TextContent,
         class: Option<ClassNameList>,
         id: Option<ElementId>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<VNode>>,
+        tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
             node_id: NodeId::new(),
@@ -256,6 +272,7 @@ impl VNode {
         }
     }
 
+    #[must_use]
     pub fn new_progress(
         value: ProgressValue,
         orientation: Orientation,
@@ -263,7 +280,7 @@ impl VNode {
         id: Option<ElementId>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<VNode>>,
+        tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
             node_id: NodeId::new(),
@@ -277,12 +294,13 @@ impl VNode {
         }
     }
 
+    #[must_use]
     pub fn new_rect(
         class: Option<ClassNameList>,
         id: Option<ElementId>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<VNode>>,
+        tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
             node_id: NodeId::new(),
@@ -296,12 +314,13 @@ impl VNode {
         }
     }
 
+    #[must_use]
     pub fn new_image(
         data: impl Into<BinaryData>,
         pixel_size: Size,
         class: Option<ClassNameList>,
         id: Option<ElementId>,
-        tooltip: Option<Box<VNode>>,
+        tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
             node_id: NodeId::new(),
@@ -319,6 +338,7 @@ impl VNode {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[must_use]
     pub fn new_module(
         name: ModuleName,
         instance_id: Option<ModuleInstanceId>,
@@ -327,7 +347,7 @@ impl VNode {
         id: Option<ElementId>,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
-        tooltip: Option<Box<VNode>>,
+        tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
             node_id: NodeId::new(),
@@ -345,45 +365,55 @@ impl VNode {
         }
     }
 
-    pub fn node_id(&self) -> NodeId {
+    #[must_use]
+    pub const fn node_id(&self) -> NodeId {
         self.node_id
     }
 
-    pub fn with_node_id(mut self, node_id: NodeId) -> Self {
+    #[must_use]
+    pub const fn with_node_id(mut self, node_id: NodeId) -> Self {
         self.node_id = node_id;
         self
     }
 
-    pub fn key(&self) -> Option<&NodeKey> {
+    #[must_use]
+    pub const fn key(&self) -> Option<&NodeKey> {
         self.key.as_ref()
     }
 
+    #[must_use]
     pub fn with_key(mut self, key: NodeKey) -> Self {
         self.key = Some(key);
         self
     }
 
-    pub fn element_id(&self) -> Option<&ElementId> {
+    #[must_use]
+    pub const fn element_id(&self) -> Option<&ElementId> {
         self.id.as_ref()
     }
 
-    pub fn class_names(&self) -> Option<&ClassNameList> {
+    #[must_use]
+    pub const fn class_names(&self) -> Option<&ClassNameList> {
         self.class.as_ref()
     }
 
-    pub fn on_click(&self) -> Option<&AppCommand> {
+    #[must_use]
+    pub const fn on_click(&self) -> Option<&AppCommand> {
         self.on_click.as_ref()
     }
 
-    pub fn on_hover(&self) -> Option<&AppCommand> {
+    #[must_use]
+    pub const fn on_hover(&self) -> Option<&AppCommand> {
         self.on_hover.as_ref()
     }
 
-    pub fn tooltip(&self) -> Option<&VNode> {
+    #[must_use]
+    pub fn tooltip(&self) -> Option<&Self> {
         self.tooltip.as_deref()
     }
 
-    pub fn tag(&self) -> NodeTag {
+    #[must_use]
+    pub const fn tag(&self) -> NodeTag {
         match &self.kind {
             VNodeKind::Flex { .. } => NodeTag::Flex,
             VNodeKind::Text { .. } => NodeTag::Text,
@@ -394,39 +424,40 @@ impl VNode {
         }
     }
 
-    pub fn kind(&self) -> &VNodeKind {
+    #[must_use]
+    pub const fn kind(&self) -> &VNodeKind {
         &self.kind
     }
 
-    pub fn kind_mut(&mut self) -> &mut VNodeKind {
+    pub const fn kind_mut(&mut self) -> &mut VNodeKind {
         &mut self.kind
     }
 
-    pub fn children(&self) -> &[VNode] {
+    #[must_use]
+    pub const fn children(&self) -> &[Self] {
         match &self.kind {
             VNodeKind::Flex { children } => children.as_slice(),
             _ => &[],
         }
     }
 
-    pub fn children_mut(&mut self) -> Option<&mut Vec<VNode>> {
+    pub const fn children_mut(&mut self) -> Option<&mut Vec<Self>> {
         match &mut self.kind {
             VNodeKind::Flex { children } => Some(children),
             _ => None,
         }
     }
 
+    #[must_use]
     pub fn resolve_styles(
         &self,
         resolver: &dyn StyleResolverPort,
         parent: Option<&ElementQuery>,
     ) -> StyledNode {
-        let empty_classes = ClassNameList::default();
         let classes_slice = self
             .class
             .as_ref()
-            .map(|c| c.as_slice())
-            .unwrap_or(empty_classes.as_slice());
+            .map_or(&[][..], ClassNameList::as_slice);
         let query = ElementQuery::new(
             self.tag().as_str(),
             self.id.as_ref(),
@@ -509,8 +540,8 @@ pub enum Patch {
         class_changed: bool,
         id_changed: bool,
         handlers_changed: bool,
-        tooltip_patch: Option<Box<Patch>>,
-        kind_patch: Box<Patch>,
+        tooltip_patch: Option<Box<Self>>,
+        kind_patch: Box<Self>,
     },
     UpdateText {
         node_id: NodeId,
@@ -539,7 +570,8 @@ pub enum Patch {
 }
 
 impl Patch {
-    pub fn is_no_change(&self) -> bool {
+    #[must_use]
+    pub const fn is_no_change(&self) -> bool {
         matches!(self, Self::NoChange)
     }
 }
@@ -571,21 +603,25 @@ pub struct DiffResult {
 }
 
 impl DiffResult {
-    pub fn new(patch: Patch) -> Self {
+    #[must_use]
+    pub const fn new(patch: Patch) -> Self {
         Self { patch }
     }
 
-    pub fn unchanged() -> Self {
+    #[must_use]
+    pub const fn unchanged() -> Self {
         Self {
             patch: Patch::NoChange,
         }
     }
 
-    pub fn is_unchanged(&self) -> bool {
+    #[must_use]
+    pub const fn is_unchanged(&self) -> bool {
         self.patch.is_no_change()
     }
 
-    pub fn patch(&self) -> &Patch {
+    #[must_use]
+    pub const fn patch(&self) -> &Patch {
         &self.patch
     }
 }
@@ -636,7 +672,7 @@ mod tests {
         assert!(text_node.tag().is_leaf());
         assert_eq!(text_node.children().len(), 0);
 
-        let flex_node = VNode::new_flex(vec![text_node.clone()], None, None, None, None, None);
+        let flex_node = VNode::new_flex(vec![text_node], None, None, None, None, None);
         assert_eq!(flex_node.tag(), NodeTag::Flex);
         assert!(flex_node.tag().is_container());
         assert_eq!(flex_node.children().len(), 1);
@@ -670,9 +706,8 @@ mod tests {
             r#"{{
             "type": "text",
             "text": "test",
-            "node_id": "{}"
-        }}"#,
-            fake_uuid
+            "node_id": "{fake_uuid}"
+        }}"#
         );
 
         let node: VNode = serde_json::from_str(&json).expect("Deserialization failed");
@@ -708,7 +743,7 @@ mod tests {
         assert_eq!(deserialized.tag(), NodeTag::Module);
         if let VNodeKind::Module { name, instance_id, options } = deserialized.kind() {
             assert_eq!(name.as_str(), "hour");
-            assert_eq!(instance_id.as_ref().map(|id| id.as_str()), Some("h1"));
+            assert_eq!(instance_id.as_ref().map(crate::shared::primitives::ModuleInstanceId::as_str), Some("h1"));
             assert_eq!(options.get("format").and_then(|v| v.as_str()), Some("%H:%M:%S"));
         } else {
             panic!("Expected VNodeKind::Module");
@@ -731,7 +766,7 @@ mod tests {
             None,
             None,
         );
-        let debug_str = format!("{:?}", node);
+        let debug_str = format!("{node:?}");
         assert!(debug_str.contains("<Binary Data (8 bytes)>"));
         assert!(!debug_str.contains("1, 2, 3, 4"));
     }

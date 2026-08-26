@@ -5,7 +5,10 @@ use tokio::sync::mpsc;
 use tracing::{debug, error};
 use zbus::Connection;
 
-use crate::shared::dbus::domain::*;
+use crate::shared::dbus::domain::{
+    BusType, DBusSubscription, DBusValue, Destination, Interface, Member, NameChangedStream,
+    NameOwnerChanged, Path, PropertiesMap, PropertyChangedStream, PropertyName, SignalStream,
+};
 use crate::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
 
 pub struct Connected;
@@ -24,7 +27,8 @@ impl Default for ZbusConnectionAdapter<Disconnected> {
 }
 
 impl ZbusConnectionAdapter<Disconnected> {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             session_conn: None,
             system_conn: None,
@@ -32,19 +36,24 @@ impl ZbusConnectionAdapter<Disconnected> {
         }
     }
 
+    /// Connects to `DBus` session and system buses.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DbusConnectionError` if connection to buses fails.
     pub async fn connect(
         mut self,
     ) -> Result<ZbusConnectionAdapter<Connected>, DbusConnectionError> {
         debug!("Connecting to DBus Session Bus...");
         match Connection::session().await {
             Ok(conn) => self.session_conn = Some(conn),
-            Err(e) => error!("Failed to connect to Session Bus: {}", e),
+            Err(e) => error!("Failed to connect to Session Bus: {e}"),
         }
 
         debug!("Connecting to DBus System Bus...");
         match Connection::system().await {
             Ok(conn) => self.system_conn = Some(conn),
-            Err(e) => error!("Failed to connect to System Bus: {}", e),
+            Err(e) => error!("Failed to connect to System Bus: {e}"),
         }
 
         Ok(ZbusConnectionAdapter {
@@ -64,17 +73,17 @@ impl ZbusConnectionAdapter<Connected> {
         .ok_or(DbusConnectionError::NotInitialized(bus))
     }
 
-    /// Convert a zbus::zvariant::Value to our domain DBusValue
+    /// Convert a `zbus::zvariant::Value` to our domain `DBusValue`
     fn parse_value(val: &zbus::zvariant::Value<'_>) -> DBusValue {
         use zbus::zvariant::Value;
         match val {
             Value::Str(s) => DBusValue::String(s.as_str().to_string()),
-            Value::I16(i) => DBusValue::Int(*i as i64),
-            Value::I32(i) => DBusValue::Int(*i as i64),
+            Value::I16(i) => DBusValue::Int(i64::from(*i)),
+            Value::I32(i) => DBusValue::Int(i64::from(*i)),
             Value::I64(i) => DBusValue::Int(*i),
-            Value::U16(u) => DBusValue::Int(*u as i64),
-            Value::U32(u) => DBusValue::Int(*u as i64),
-            Value::U64(u) => DBusValue::Int(*u as i64),
+            Value::U16(u) => DBusValue::Int(i64::from(*u)),
+            Value::U32(u) => DBusValue::Int(i64::from(*u)),
+            Value::U64(u) => DBusValue::Int(i64::try_from(*u).unwrap_or(i64::MAX)),
             Value::F64(f) => DBusValue::Float(*f),
             Value::Bool(b) => DBusValue::Bool(*b),
             Value::Array(a) => {
@@ -150,8 +159,7 @@ impl DbusConnectionPort for ZbusConnectionAdapter<Connected> {
         let dict: std::collections::HashMap<String, zbus::zvariant::Value> =
             msg_body.deserialize().map_err(|e| {
                 DbusConnectionError::MethodCallFailed(format!(
-                    "Failed to deserialize properties: {}",
-                    e
+                    "Failed to deserialize properties: {e}"
                 ))
             })?;
 
@@ -235,7 +243,7 @@ impl DbusConnectionPort for ZbusConnectionAdapter<Connected> {
             .map_err(|e| DbusConnectionError::MethodCallFailed(e.to_string()))?;
 
         let names: Vec<String> = msg.body().deserialize().map_err(|e| {
-            DbusConnectionError::MethodCallFailed(format!("Failed to deserialize names: {}", e))
+            DbusConnectionError::MethodCallFailed(format!("Failed to deserialize names: {e}"))
         })?;
 
         Ok(names.into_iter().map(Destination::new).collect())
@@ -343,12 +351,10 @@ impl DbusConnectionPort for ZbusConnectionAdapter<Connected> {
                     let header = msg.header();
                     let path = header
                         .path()
-                        .map(|p| Path::new(p.as_str()))
-                        .unwrap_or_else(|| Path::new(""));
+                        .map_or_else(|| Path::new(""), |p| Path::new(p.as_str()));
                     let member = header
                         .member()
-                        .map(|m| Member::new(m.as_str()))
-                        .unwrap_or_else(|| Member::new(""));
+                        .map_or_else(|| Member::new(""), |m| Member::new(m.as_str()));
 
                     if let Ok(body_val) = msg.body().deserialize::<zbus::zvariant::Value<'_>>() {
                         let parsed = Self::parse_value(&body_val);

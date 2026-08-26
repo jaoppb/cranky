@@ -6,6 +6,7 @@ use crate::features::workspaces::ports::WindowManagerError;
 use crate::features::workspaces::ports::WindowManagerPort;
 use crate::shared::events::signals::{HyprlandState, SignalHub};
 use serde::Deserialize;
+use std::io::{BufRead, ErrorKind};
 use std::sync::Arc;
 
 #[derive(Deserialize)]
@@ -16,6 +17,7 @@ struct HyprWorkspaceDto {
 }
 
 impl HyprWorkspaceDto {
+    #[must_use]
     fn into_domain(self) -> Workspace {
         Workspace::new(
             crate::features::workspaces::domain::WorkspaceId::new(self.id),
@@ -43,6 +45,7 @@ struct HyprActiveWorkspaceDto {
 }
 
 impl HyprMonitorDto {
+    #[must_use]
     fn into_domain(self) -> (Monitor, bool) {
         let special_ws_id = if self.special_workspace.id != 0 {
             Some(crate::features::workspaces::domain::WorkspaceId::new(
@@ -65,6 +68,7 @@ pub struct HyprlandAdapter {
 }
 
 impl HyprlandAdapter {
+    #[must_use]
     pub fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
         Self {
             provider: Arc::new(RealHyprlandProvider::new(app_env)),
@@ -72,6 +76,7 @@ impl HyprlandAdapter {
     }
 
     #[cfg(test)]
+    #[must_use]
     pub fn with_provider(provider: Arc<dyn HyprlandProvider>) -> Self {
         Self { provider }
     }
@@ -112,14 +117,14 @@ impl HyprlandAdapter {
                 })
             }
             "moveworkspacev2" => {
-                let parts: Vec<&str> = payload.splitn(3, ',').collect();
-                if parts.len() != 3 {
-                    return None;
-                }
+                let mut parts = payload.splitn(3, ',');
+                let id_str = parts.next()?;
+                let name = parts.next()?;
+                let monitor_name = parts.next()?;
                 Some(WindowManagerEvent::WorkspaceMoved {
-                    id: WorkspaceId::new(parts[0].parse().ok()?),
-                    name: WorkspaceName::new(parts[1]),
-                    monitor_name: MonitorName::new(parts[2]),
+                    id: WorkspaceId::new(id_str.parse().ok()?),
+                    name: WorkspaceName::new(name),
+                    monitor_name: MonitorName::new(monitor_name),
                 })
             }
             "renameworkspace" => {
@@ -130,23 +135,23 @@ impl HyprlandAdapter {
                 })
             }
             "activespecialv2" => {
-                let parts: Vec<&str> = payload.splitn(3, ',').collect();
-                if parts.len() != 3 {
-                    return None;
-                }
-                let id = match parts[0].parse::<i32>() {
+                let mut parts = payload.splitn(3, ',');
+                let id_str = parts.next()?;
+                let name_str = parts.next()?;
+                let monitor_str = parts.next()?;
+                let id = match id_str.parse::<i32>() {
                     Ok(0) | Err(_) => None,
                     Ok(val) => Some(WorkspaceId::new(val)),
                 };
-                let ws_name = if id.is_none() || parts[1].is_empty() {
+                let ws_name = if id.is_none() || name_str.is_empty() {
                     None
                 } else {
-                    Some(WorkspaceName::new(parts[1]))
+                    Some(WorkspaceName::new(name_str))
                 };
                 Some(WindowManagerEvent::SpecialWorkspaceActivated {
                     id,
                     name: ws_name,
-                    monitor_name: MonitorName::new(parts[2]),
+                    monitor_name: MonitorName::new(monitor_str),
                 })
             }
             "activewindowv2" => Some(WindowManagerEvent::ActiveWindowChanged {
@@ -163,7 +168,8 @@ impl HyprlandAdapter {
         }
     }
 
-    /// Runs a background loop that listens to Hyprland event socket and pushes updates to the SignalHub.
+    /// Runs a background loop that listens to Hyprland event socket and pushes updates to the `SignalHub`.
+    #[allow(clippy::unused_async, clippy::too_many_lines, clippy::useless_let_if_seq)]
     pub async fn run(self, hub: Arc<SignalHub>) {
         // Since we are reading from a socket using blocking std::io we can't easily use tokio::time::timeout
         // directly on the reader without wrapping it. We will use a channel to bridge to async, or just
@@ -176,8 +182,8 @@ impl HyprlandAdapter {
                 let stream = match self.provider.listen_events() {
                     Ok(s) => s,
                     Err(e) => {
-                        tracing::error!("Failed to connect to Hyprland event socket: {}", e);
-                        std::thread::sleep(std::time::Duration::from_millis(1000));
+                        tracing::error!("Failed to connect to Hyprland event socket: {e}");
+                        std::thread::sleep(std::time::Duration::from_secs(1));
                         continue;
                     }
                 };
@@ -185,7 +191,6 @@ impl HyprlandAdapter {
                 // set read timeout to simulate batching drain (2ms)
                 let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(2)));
 
-                use std::io::{BufRead, ErrorKind};
                 let mut reader = std::io::BufReader::new(stream);
 
                 // Initial fetch
@@ -198,7 +203,7 @@ impl HyprlandAdapter {
                         state
                     }
                     Err(e) => {
-                        tracing::error!("Hyprland adapter error on initial fetch: {}", e);
+                        tracing::error!("Hyprland adapter error on initial fetch: {e}");
                         HyprlandState::new(
                             std::collections::BTreeMap::new(),
                             std::collections::BTreeMap::new(),
@@ -308,7 +313,7 @@ impl HyprlandAdapter {
                             }
                         }
                         Err(e) => {
-                            tracing::error!("Hyprland event socket read error: {}", e);
+                            tracing::error!("Hyprland event socket read error: {e}");
                             break;
                         }
                     }
@@ -329,13 +334,13 @@ impl WindowManagerPort for HyprlandAdapter {
             self.provider
                 .query_workspaces()
                 .map_err(|e| WindowManagerError::IpcError {
-                    reason: format!("Failed to get workspaces: {}", e),
+                    reason: format!("Failed to get workspaces: {e}"),
                 })?;
         let mon_json =
             self.provider
                 .query_monitors()
                 .map_err(|e| WindowManagerError::IpcError {
-                    reason: format!("Failed to get monitors: {}", e),
+                    reason: format!("Failed to get monitors: {e}"),
                 })?;
 
         let workspaces: std::collections::BTreeMap<_, _> =

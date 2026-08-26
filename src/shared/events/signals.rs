@@ -16,7 +16,7 @@ pub enum SignalKind {
     Mpris,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HyprlandState {
     workspaces:
         std::collections::BTreeMap<crate::features::workspaces::domain::WorkspaceId, Workspace>,
@@ -44,7 +44,8 @@ impl serde::Serialize for HyprlandState {
 }
 
 impl HyprlandState {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         workspaces: std::collections::BTreeMap<
             crate::features::workspaces::domain::WorkspaceId,
             Workspace,
@@ -62,21 +63,24 @@ impl HyprlandState {
         }
     }
 
-    pub fn monitors(
+    #[must_use]
+    pub const fn monitors(
         &self,
     ) -> &std::collections::BTreeMap<crate::features::workspaces::domain::MonitorName, Monitor>
     {
         &self.monitors
     }
 
-    pub fn workspaces(
+    #[must_use]
+    pub const fn workspaces(
         &self,
     ) -> &std::collections::BTreeMap<crate::features::workspaces::domain::WorkspaceId, Workspace>
     {
         &self.workspaces
     }
 
-    pub fn focused_monitor(&self) -> Option<&crate::features::workspaces::domain::MonitorName> {
+    #[must_use]
+    pub const fn focused_monitor(&self) -> Option<&crate::features::workspaces::domain::MonitorName> {
         self.focused_monitor.as_ref()
     }
 
@@ -166,8 +170,8 @@ impl HyprlandState {
                     }
                 }
             }
-            WindowManagerEvent::ActiveWindowChanged { .. } => {}
-            WindowManagerEvent::WindowTitleChanged { .. } => {}
+            WindowManagerEvent::ActiveWindowChanged { .. }
+            | WindowManagerEvent::WindowTitleChanged { .. } => {}
         }
     }
 }
@@ -200,6 +204,7 @@ pub struct SignalHub {
 }
 
 impl SignalHub {
+    #[must_use]
     pub fn new(initial_config: Config) -> Self {
         let config = watch::channel(initial_config);
         let hyprland = watch::channel(HyprlandState::new(
@@ -228,77 +233,97 @@ impl SignalHub {
         }
     }
 
+    #[must_use]
     pub fn module_sizes_tx(&self) -> watch::Sender<ModuleSizesMap> {
         self.module_sizes.0.clone()
     }
 
+    #[must_use]
     pub fn module_sizes_rx(&self) -> watch::Receiver<ModuleSizesMap> {
         self.module_sizes.1.clone()
     }
 
+    #[must_use]
     pub fn mpris_tx(&self) -> watch::Sender<crate::features::mpris::domain::MprisState> {
         self.mpris.0.clone()
     }
 
+    #[must_use]
     pub fn mpris_rx(&self) -> watch::Receiver<crate::features::mpris::domain::MprisState> {
         self.mpris.1.clone()
     }
 
+    #[must_use]
     pub fn config_tx(&self) -> watch::Sender<Config> {
         self.config.0.clone()
     }
 
+    #[must_use]
     pub fn config_rx(&self) -> watch::Receiver<Config> {
         self.config.1.clone()
     }
 
+    #[must_use]
     pub fn hyprland_tx(&self) -> watch::Sender<HyprlandState> {
         self.hyprland.0.clone()
     }
 
+    #[must_use]
     pub fn hyprland_rx(&self) -> watch::Receiver<HyprlandState> {
         self.hyprland.1.clone()
     }
 
+    #[must_use]
     pub fn time_tx(&self) -> watch::Sender<chrono::DateTime<chrono::Local>> {
         self.time.0.clone()
     }
 
+    #[must_use]
     pub fn time_rx(&self) -> watch::Receiver<chrono::DateTime<chrono::Local>> {
         self.time.1.clone()
     }
 
+    #[must_use]
     pub fn dbus_tx(&self) -> watch::Sender<DBusState> {
         self.dbus.0.clone()
     }
 
+    #[must_use]
     pub fn dbus_rx(&self) -> watch::Receiver<DBusState> {
         self.dbus.1.clone()
     }
 
+    #[must_use]
     pub fn systray_tx(&self) -> watch::Sender<SystrayState> {
         self.systray.0.clone()
     }
 
+    #[must_use]
     pub fn systray_rx(&self) -> watch::Receiver<SystrayState> {
         self.systray.1.clone()
     }
 
+    #[must_use]
     pub fn metrics_tx(&self) -> watch::Sender<crate::features::metrics::domain::MetricsState> {
         self.metrics.0.clone()
     }
 
+    #[must_use]
     pub fn metrics_rx(&self) -> watch::Receiver<crate::features::metrics::domain::MetricsState> {
         self.metrics.1.clone()
     }
-    pub fn pointer_tx(&self) -> &crate::shared::events::core::PointerSender {
+
+    #[must_use]
+    pub const fn pointer_tx(&self) -> &crate::shared::events::core::PointerSender {
         &self.pointer.0
     }
 
+    #[must_use]
     pub fn pointer_rx(&self) -> crate::shared::events::core::PointerReceiver {
         self.pointer.0.subscribe()
     }
 
+    #[must_use]
     pub fn signal_to_stream(
         &self,
         kind: &SignalKind,

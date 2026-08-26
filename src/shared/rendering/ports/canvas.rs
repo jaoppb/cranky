@@ -4,6 +4,7 @@ use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
 
 pub trait CanvasFactory: Send + Sync {
+    #[must_use]
     fn create_canvas<'a>(
         &'a mut self,
         data: &'a mut [u8],
@@ -13,14 +14,16 @@ pub trait CanvasFactory: Send + Sync {
         font_size: FontSize,
     ) -> impl Canvas + 'a;
 
-    fn create_text_measurer<'a>(
-        &'a mut self,
+    #[must_use]
+    fn create_text_measurer(
+        &mut self,
         scale: Scale,
         font_family: FontFamily,
         font_size: FontSize,
-    ) -> impl crate::features::layout_engine::domain::TextMeasurer + 'a;
+    ) -> impl crate::features::layout_engine::domain::TextMeasurer + '_;
 }
 
+#[cfg_attr(test, allow(clippy::ref_option_ref, clippy::struct_field_names))]
 #[cfg_attr(test, mockall::automock)]
 #[allow(clippy::needless_lifetimes)]
 pub trait Canvas: Send + Sync {
@@ -39,7 +42,7 @@ pub trait Canvas: Send + Sync {
     fn draw_border(
         &mut self,
         position: Position,
-        size: crate::shared::primitives::geometry::Size,
+        size: Size,
         color: DrawingColor,
         radius: LogicalPx,
         border_size: LogicalPx,
@@ -59,8 +62,8 @@ pub trait Canvas: Send + Sync {
     fn draw_image(
         &mut self,
         image_data: &[u8],
-        pixel_size: crate::shared::primitives::geometry::Size,
-        logical_size: crate::shared::primitives::geometry::Size,
+        pixel_size: Size,
+        logical_size: Size,
         position: Position,
     );
 }

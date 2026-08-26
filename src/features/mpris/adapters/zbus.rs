@@ -3,7 +3,9 @@ use tokio::sync::watch;
 use tokio_stream::StreamExt;
 use tracing::warn;
 
-use crate::features::mpris::domain::*;
+use crate::features::mpris::domain::{
+    AlbumArtUrl, MprisState, PlaybackStatus, PlayerName, PlayerState, TrackArtist, TrackName,
+};
 use crate::shared::dbus::domain::{BusType, DBusValue, Destination, Interface, Path};
 use crate::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
 use crate::shared::events::signals::SignalHub;
@@ -14,6 +16,7 @@ pub struct ZbusMprisAdapter {
 }
 
 impl ZbusMprisAdapter {
+    #[must_use]
     pub fn new(conn: Arc<dyn DbusConnectionPort>, hub: &SignalHub) -> Self {
         Self {
             conn,
@@ -21,14 +24,19 @@ impl ZbusMprisAdapter {
         }
     }
 
-    pub async fn start_watching(&mut self) -> Result<(), DbusConnectionError> {
+    /// Starts watching for MPRIS players and their playback state changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DbusConnectionError`] if subscribing or querying D-Bus fails.
+    pub async fn start_watching(&self) -> Result<(), DbusConnectionError> {
         tracing::debug!("Starting MPRIS watcher...");
         self.load_initial_players().await?;
         self.watch_name_changes().await?;
         Ok(())
     }
 
-    async fn load_initial_players(&mut self) -> Result<(), DbusConnectionError> {
+    async fn load_initial_players(&self) -> Result<(), DbusConnectionError> {
         let names = self.conn.list_names(BusType::Session).await?;
         for name in names {
             if name.as_str().starts_with("org.mpris.MediaPlayer2.") {
@@ -38,7 +46,7 @@ impl ZbusMprisAdapter {
         Ok(())
     }
 
-    async fn add_player(&mut self, dest: Destination) {
+    async fn add_player(&self, dest: Destination) {
         let path = Path::new("/org/mpris/MediaPlayer2");
         let iface = Interface::new("org.mpris.MediaPlayer2.Player");
 
@@ -49,7 +57,7 @@ impl ZbusMprisAdapter {
         {
             Ok(p) => p,
             Err(e) => {
-                warn!("Failed to read MPRIS properties for {:?}: {}", dest, e);
+                warn!("Failed to read MPRIS properties for {dest:?}: {e}");
                 return;
             }
         };
@@ -80,7 +88,7 @@ impl ZbusMprisAdapter {
                             .strip_prefix("org.mpris.MediaPlayer2.")
                             .unwrap_or(dest_clone.as_str());
                         if let Some(mut player) = mpris_state.players.get(p_name).cloned() {
-                            tracing::debug!("MPRIS properties changed for player: {}", p_name);
+                            tracing::debug!("MPRIS properties changed for player: {p_name}");
                             Self::update_state_from_props(&mut player, &changed_props);
                             mpris_state.players.insert(p_name.to_string(), player);
                             let _ = tx.send(mpris_state);
@@ -97,7 +105,8 @@ impl ZbusMprisAdapter {
         if mpris_state.active_player.is_none() {
             mpris_state.active_player = Some(player_name.clone());
         }
-        tracing::debug!("Found MPRIS player: {}", player_name.as_str());
+        let name_str = player_name.as_str();
+        tracing::debug!("Found MPRIS player: {name_str}");
         let _ = self.mpris_tx.send(mpris_state);
     }
 
@@ -131,7 +140,7 @@ impl ZbusMprisAdapter {
         }
     }
 
-    async fn watch_name_changes(&mut self) -> Result<(), DbusConnectionError> {
+    async fn watch_name_changes(&self) -> Result<(), DbusConnectionError> {
         let mut stream = self.conn.subscribe_name_changes(BusType::Session).await?;
 
         // Use an Arc<Mutex<ZbusMprisAdapter>>? We can't really do that since we're consuming stream in a spawn.
@@ -201,11 +210,11 @@ impl ZbusMprisAdapter {
                             if mpris_state.active_player.is_none() {
                                 mpris_state.active_player = Some(PlayerName::new(&player_name));
                             }
-                            tracing::debug!("Found new MPRIS player: {}", player_name);
+                            tracing::debug!("Found new MPRIS player: {player_name}");
                             let _ = tx.send(mpris_state);
                         }
                     } else if event.is_gone() {
-                        tracing::debug!("MPRIS player gone: {}", player_name);
+                        tracing::debug!("MPRIS player gone: {player_name}");
                         let mut mpris_state = tx.borrow().clone();
                         mpris_state.players.remove(&player_name);
                         if let Some(active) = &mpris_state.active_player

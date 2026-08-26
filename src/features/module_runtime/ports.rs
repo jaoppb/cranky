@@ -45,6 +45,11 @@ pub trait LayoutSender: Send + Sync {
 }
 #[async_trait]
 pub trait AnyModulePort: Send + Sync {
+    /// Initialize module with configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ModuleInitError` if module initialization fails.
     fn init(&mut self, config: &ModuleConfig, full_config: &Config) -> Result<(), ModuleInitError>;
     fn subscriptions(&self) -> &[SignalKind];
     fn dbus_subscriptions(&self) -> &[crate::shared::dbus::domain::DBusSubscription] {
@@ -54,8 +59,12 @@ pub trait AnyModulePort: Send + Sync {
     fn refresh(&mut self, hub: &SignalHub, changed_signals: &[SignalKind]);
     fn render(&self, monitor: &MonitorId) -> crate::features::vdom::domain::VNode;
 
-    /// Invoke a named function on the script. Used by ScriptCall click actions.
-    /// Returns Ok(()) if the function exists and ran successfully.
+    /// Invoke a named function on the script. Used by `ScriptCall` click actions.
+    /// Returns `Ok(())` if the function exists and ran successfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns `ModuleInitError` if the function execution fails.
     fn call_function(
         &mut self,
         name: &crate::shared::primitives::FunctionName,
@@ -67,6 +76,11 @@ pub trait AnyModulePort: Send + Sync {
 pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>:
     Send + Sync
 {
+    /// Load module configurations into registry.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RegistryLoadError` if module loading fails.
     fn load(&mut self, config: &Config) -> Result<(), RegistryLoadError>;
     fn spawn_all(
         &mut self,
@@ -76,6 +90,11 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
         canvas_factory: Arc<std::sync::Mutex<Fact>>,
     ) -> std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>;
 
+    /// Reload a specific module by name.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RegistryLoadError` if module reload fails.
     fn reload_module(
         &mut self,
         name: &crate::shared::primitives::ModuleName,

@@ -1,4 +1,4 @@
-use crate::features::module_runtime::ports::AnyModulePort;
+use crate::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
 use crate::shared::config::domain::ModuleConfig;
 use crate::shared::dbus::domain::{BusType, DBusSubscription};
 use crate::shared::events::signals::{SignalHub, SignalKind};
@@ -20,6 +20,7 @@ pub struct LuaScriptLoader;
 
 #[cfg(test)]
 impl LuaScriptLoader {
+    #[must_use]
     pub fn load_built_in(name: &str) -> Option<String> {
         match name {
             "hour" => Some(include_str!("../../../../assets/widgets/hour.lua").to_string()),
@@ -36,6 +37,9 @@ impl LuaScriptLoader {
 pub struct LuaStateSynchronizer;
 
 impl LuaStateSynchronizer {
+    /// # Errors
+    ///
+    /// Returns `mlua::Error` if setting globals fails.
     pub fn sync(lua: &Lua, hub: &SignalHub, changed: &[SignalKind]) -> mlua::Result<()> {
         let globals = lua.globals();
         let mut dbus_handled = false;
@@ -90,14 +94,14 @@ impl LuaStateSynchronizer {
                         let _ = globals.set("mpris", val);
                     }
                 }
-                _ => {}
+                SignalKind::DBus => {}
             }
         }
 
         if let Ok(refresh_fn) = globals.get::<Function>("refresh") {
             let t0 = std::time::Instant::now();
             match refresh_fn.call::<()>(()) {
-                Ok(_) => {
+                Ok(()) => {
                     tracing::debug!(
                         duration_ms = t0.elapsed().as_millis(),
                         duration_micros = t0.elapsed().as_micros(),
@@ -124,6 +128,7 @@ pub struct LuaModule {
 }
 
 impl LuaModule {
+    #[must_use]
     pub fn new(name: String, source: String) -> Self {
         Self {
             lua: Mutex::new(Lua::new()),
@@ -136,6 +141,7 @@ impl LuaModule {
     }
 
     #[cfg(test)]
+    #[must_use]
     pub fn built_in(name: &str) -> Option<Self> {
         LuaScriptLoader::load_built_in(name).map(|source| Self::new(name.to_string(), source))
     }
@@ -248,56 +254,58 @@ impl LuaModule {
 }
 
 impl AnyModulePort for LuaModule {
+    #[allow(clippy::significant_drop_tightening)]
     fn init(
         &mut self,
         config: &ModuleConfig,
         full_config: &crate::shared::config::domain::Config,
-    ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
-        use crate::features::module_runtime::ports::ModuleInitError;
+    ) -> Result<(), ModuleInitError> {
+        let (subs, dbus_subs, styles) = {
+            let lua = self.lua.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let globals = lua.globals();
 
-        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
-        let globals = lua.globals();
+            let root_config = full_config.root();
 
-        let root_config = full_config.root();
+            // Expose root config
+            let root_config_table = lua
+                .create_table()
+                .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+            root_config_table
+                .set("name", root_config.name().as_str())
+                .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+            root_config_table
+                .set("height", root_config.height().value())
+                .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+            globals
+                .set("root_config", root_config_table)
+                .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
 
-        // Expose root config
-        let root_config_table = lua
-            .create_table()
-            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
-        root_config_table
-            .set("name", root_config.name().as_str())
-            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
-        root_config_table
-            .set("height", root_config.height().value())
-            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
-        globals
-            .set("root_config", root_config_table)
-            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
-
-        // Expose module config options using mlua's serde support
-        let options_lua = lua.to_value(config.options()).map_err(|e| {
-            ModuleInitError::ConfigError(format!("Failed to convert config to Lua: {}", e))
-        })?;
-        globals
-            .set("config", options_lua)
-            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
-
-        // Load the script
-        lua.load(&self.source)
-            .set_name(&self.name)
-            .exec()
-            .map_err(|e| {
-                ModuleInitError::ScriptError(format!("Lua load error in {}: {}", self.name, e))
+            // Expose module config options using mlua's serde support
+            let options_lua = lua.to_value(config.options()).map_err(|e| {
+                ModuleInitError::ConfigError(format!("Failed to convert config to Lua: {e}"))
             })?;
+            globals
+                .set("config", options_lua)
+                .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
 
-        // Call init if it exists
-        if let Ok(init_fn) = globals.get::<mlua::Function>("init") {
-            init_fn.call::<()>(()).map_err(|e| {
-                ModuleInitError::ScriptError(format!("Lua init error in {}: {}", self.name, e))
-            })?;
-        }
+            // Load the script
+            lua.load(&self.source)
+                .set_name(&self.name)
+                .exec()
+                .map_err(|e| {
+                    ModuleInitError::ScriptError(format!("Lua load error in {}: {e}", self.name))
+                })?;
 
-        let (subs, dbus_subs, styles) = Self::evaluate_metadata(&lua, &self.name);
+            // Call init if it exists
+            if let Ok(init_fn) = globals.get::<mlua::Function>("init") {
+                init_fn.call::<()>(()).map_err(|e| {
+                    ModuleInitError::ScriptError(format!("Lua init error in {}: {e}", self.name))
+                })?;
+            }
+
+            Self::evaluate_metadata(&lua, &self.name)
+        };
+
         self.cached_subs = subs;
         self.cached_dbus_subs = dbus_subs;
         self.cached_styles = styles;
@@ -320,9 +328,9 @@ impl AnyModulePort for LuaModule {
     fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
         let t0 = std::time::Instant::now();
         tracing::debug!(?changed, "Refreshing LuaModulePort");
-        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
+        let lua = self.lua.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         match LuaStateSynchronizer::sync(&lua, hub, changed) {
-            Ok(_) => {
+            Ok(()) => {
                 tracing::debug!(
                     ?changed,
                     duration_ms = t0.elapsed().as_millis(),
@@ -336,50 +344,46 @@ impl AnyModulePort for LuaModule {
         }
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     fn render(&self, monitor: &MonitorId) -> crate::features::vdom::domain::VNode {
         let t0 = std::time::Instant::now();
-        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
+        let lua = self.lua.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let globals = lua.globals();
         let lua_monitor = LuaMonitor(monitor.clone());
 
         if let Ok(render_fn) = globals.get::<mlua::Function>("render") {
             match render_fn.call::<mlua::Value>(lua_monitor) {
                 Ok(val) => {
-                    let call_ms = t0.elapsed().as_millis();
-                    match lua.from_value::<crate::features::vdom::domain::VNode>(val) {
+                    let vnode: Result<crate::features::vdom::domain::VNode, _> =
+                        lua.from_value(val);
+                    match vnode {
                         Ok(node) => {
                             tracing::debug!(
+                                module = %self.name,
                                 monitor = %monitor,
-                                call_ms,
-                                total_ms = t0.elapsed().as_millis(),
-                                ?node,
-                                "Lua render_fn succeeded and deserialized VNode"
+                                duration_ms = t0.elapsed().as_millis(),
+                                duration_micros = t0.elapsed().as_micros(),
+                                "Lua render completed successfully"
                             );
                             return node;
                         }
                         Err(e) => {
-                            tracing::error!(monitor = %monitor, err = ?e, "Failed to deserialize VNode from Lua render_fn");
-                            let msg = format!("Deserialization error: {}", e);
-                            return crate::features::vdom::domain::VNode::new_flex(
-                                vec![crate::features::vdom::domain::VNode::new_text(
-                                    crate::features::vdom::domain::TextContent::new(msg),
-                                    None,
-                                    None,
-                                    None,
-                                    None,
-                                    None,
-                                )],
-                                None,
-                                None,
-                                None,
-                                None,
-                                None,
+                            tracing::error!(
+                                module = %self.name,
+                                monitor = %monitor,
+                                err = ?e,
+                                "Failed to convert Lua return value to VNode"
                             );
                         }
                     }
                 }
                 Err(e) => {
-                    tracing::error!(monitor = %monitor, err = ?e, "Lua render_fn execution failed");
+                    tracing::error!(
+                        module = %self.name,
+                        monitor = %monitor,
+                        err = ?e,
+                        "Lua render_fn execution failed"
+                    );
                 }
             }
         }
@@ -387,24 +391,23 @@ impl AnyModulePort for LuaModule {
         crate::features::vdom::domain::VNode::new_flex(vec![], None, None, None, None, None)
     }
 
+    #[allow(clippy::significant_drop_tightening)]
     fn call_function(
         &mut self,
         name: &crate::shared::primitives::FunctionName,
-    ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
-        let lua = self.lua.lock().unwrap_or_else(|e| e.into_inner());
+    ) -> Result<(), ModuleInitError> {
+        let lua = self.lua.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let globals = lua.globals();
 
-        if let Ok(func) = globals.get::<mlua::Function>(name.as_str()) {
-            func.call::<()>(()).map_err(|e| {
-                crate::features::module_runtime::ports::ModuleInitError::ScriptError(format!(
-                    "Failed to call function '{}': {}",
-                    name, e
-                ))
+        globals
+            .get::<mlua::Function>(name.as_str())
+            .map_or(Ok(()), |func| {
+                func.call::<()>(()).map_err(|e| {
+                    ModuleInitError::ScriptError(format!(
+                        "Failed to call function '{name}': {e}"
+                    ))
+                })
             })
-        } else {
-            // It's not necessarily an error if a script doesn't handle an action, but the port signature asks for Ok if successful
-            Ok(())
-        }
     }
 }
 
@@ -451,7 +454,6 @@ mod tests {
         module.refresh(&hub, &subs);
 
         let layout = module.render(&MonitorId::new("DP-1"));
-        println!("{:#?}", layout);
 
         // Assert it returns a flex with a single child (the systray item)
         assert_eq!(layout.tag(), crate::features::vdom::domain::NodeTag::Flex);

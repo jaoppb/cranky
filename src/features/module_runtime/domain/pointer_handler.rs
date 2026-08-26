@@ -18,15 +18,18 @@ pub struct PointerHandler {
 }
 
 impl PointerHandler {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn last_tooltip(&self) -> Option<&StyledNode> {
+    #[must_use]
+    pub const fn last_tooltip(&self) -> Option<&StyledNode> {
         self.last_tooltip.as_ref()
     }
 
-    pub fn last_pointer_pos(&self) -> Option<&(MonitorId, Position)> {
+    #[must_use]
+    pub const fn last_pointer_pos(&self) -> Option<&(MonitorId, Position)> {
         self.last_pointer_pos.as_ref()
     }
 
@@ -40,6 +43,7 @@ impl PointerHandler {
 
         match event {
             PointerEvent::Click { x, y, .. } => {
+                #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
                 let pos = Position::new(*x as i32, *y as i32);
                 self.last_pointer_pos = Some((monitor_id.clone(), pos));
                 let hit = render_tree.hit_test(pos);
@@ -54,6 +58,7 @@ impl PointerHandler {
                 }
             }
             PointerEvent::PointerMotion { x, y } => {
+                #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
                 let pos = Position::new(*x as i32, *y as i32);
                 self.last_pointer_pos = Some((monitor_id.clone(), pos));
                 let hit = render_tree.hit_test(pos);
@@ -74,9 +79,6 @@ impl PointerHandler {
                     }
                     self.last_tooltip = hit_tooltip;
                 }
-            }
-            PointerEvent::PointerEnter => {
-                // Pointer entered module bounds; no action required
             }
             PointerEvent::PointerLeave => {
                 self.last_pointer_pos = None;

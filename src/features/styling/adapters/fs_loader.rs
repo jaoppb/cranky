@@ -11,6 +11,7 @@ pub struct CompositeStyleResolver {
 }
 
 impl CompositeStyleResolver {
+    #[must_use]
     pub fn new(stylesheets: Vec<Box<dyn ParsedStyleSheetPort>>) -> Self {
         Self { stylesheets }
     }
@@ -51,10 +52,12 @@ impl FsStyleLoader {
         ("mpris", include_str!("../../../../assets/styles/mpris.css")),
     ];
 
-    pub fn new(app_env: Arc<AppEnvironment>) -> Self {
+    #[must_use]
+    pub const fn new(app_env: Arc<AppEnvironment>) -> Self {
         Self { app_env }
     }
 
+    #[must_use]
     pub fn builtin_content(name: &str) -> Option<&'static str> {
         Self::BUILTIN_STYLES
             .iter()
@@ -72,7 +75,7 @@ impl StyleLoaderPort for FsStyleLoader {
         fs::create_dir_all(&dir).map_err(|e| StylingError::LoaderError(e.to_string()))?;
 
         for (name, content) in Self::BUILTIN_STYLES {
-            let path = dir.join(format!("{}.css", name));
+            let path = dir.join(format!("{name}.css"));
             if !path.exists() || fs::read_to_string(&path).ok().as_deref() != Some(*content) {
                 tracing::debug!(path = ?path, stylesheet = %name, "Writing built-in stylesheet to disk");
                 let _ = fs::write(&path, content);
@@ -87,7 +90,7 @@ impl StyleLoaderPort for FsStyleLoader {
         let user_dir = PathBuf::from(home).join(".config/cranky/styles");
         let shadow_dir = PathBuf::from(home).join(".local/share/cranky/styles");
 
-        let file_name = format!("{}.css", name.as_str());
+        let file_name = format!("{name}.css");
 
         // 1. Check user config directory
         let user_file = user_dir.join(&file_name);
@@ -111,8 +114,7 @@ impl StyleLoaderPort for FsStyleLoader {
 
         tracing::warn!(stylesheet = %name.as_str(), "Stylesheet not found in any search path");
         Err(StylingError::LoaderError(format!(
-            "Stylesheet '{}' not found",
-            name.as_str()
+            "Stylesheet '{name}' not found"
         )))
     }
 
@@ -142,7 +144,7 @@ impl StyleLoaderPort for FsStyleLoader {
                 }
             }
         })
-        .map_err(|e| StylingError::LoaderError(format!("Failed to create style watcher: {}", e)))?;
+        .map_err(|e| StylingError::LoaderError(format!("Failed to create style watcher: {e}")))?;
 
         if user_dir.exists() {
             let _ = watcher.watch(&user_dir, RecursiveMode::NonRecursive);
@@ -160,7 +162,7 @@ mod tests {
     use super::*;
 
     fn get_test_env(sub: &str) -> Arc<AppEnvironment> {
-        let dir = std::env::temp_dir().join(format!("cranky_test_styling_{}", sub));
+        let dir = std::env::temp_dir().join(format!("cranky_test_styling_{sub}"));
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::create_dir_all(&dir);
         Arc::new(AppEnvironment::new(

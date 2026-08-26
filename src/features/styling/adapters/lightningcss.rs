@@ -44,7 +44,8 @@ struct SelectorStep {
 pub struct LightningCssAdapter;
 
 impl LightningCssAdapter {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -118,8 +119,8 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
         tracing::trace!(
             stylesheet = %self.name.as_str(),
             tag = %query.tag(),
-            id = ?query.id().map(|i| i.as_str()),
-            classes = ?query.classes().iter().map(|c| c.as_str()).collect::<Vec<_>>(),
+            id = ?query.id().map(super::super::domain::ElementId::as_str),
+            classes = ?query.classes().iter().map(super::super::domain::ClassName::as_str).collect::<Vec<_>>(),
             has_bg = result.background().is_some(),
             has_color = result.color().is_some(),
             "Resolved style for query"
@@ -153,10 +154,10 @@ fn compile_selector(selector: &Selector) -> CompiledSelector {
             Component::NonTSPseudoClass(pseudo) => match pseudo {
                 LightningPseudoClass::Hover => current_step.pseudo_classes.push(PseudoClass::Hover),
                 LightningPseudoClass::Active => {
-                    current_step.pseudo_classes.push(PseudoClass::Active)
+                    current_step.pseudo_classes.push(PseudoClass::Active);
                 }
                 LightningPseudoClass::Focus | LightningPseudoClass::FocusVisible => {
-                    current_step.pseudo_classes.push(PseudoClass::Focused)
+                    current_step.pseudo_classes.push(PseudoClass::Focused);
                 }
                 LightningPseudoClass::Custom { name } if name.as_ref() == "focused" => {
                     current_step.pseudo_classes.push(PseudoClass::Focused);
@@ -183,11 +184,9 @@ fn compile_selector(selector: &Selector) -> CompiledSelector {
 }
 
 fn matches_selector(selector: &CompiledSelector, query: &ElementQuery) -> bool {
-    if selector.steps.is_empty() {
+    let Some(first_step) = selector.steps.first() else {
         return false;
-    }
-
-    let first_step = &selector.steps[0];
+    };
     if !step_matches(first_step, query) {
         return false;
     }
@@ -197,13 +196,17 @@ fn matches_selector(selector: &CompiledSelector, query: &ElementQuery) -> bool {
     }
 
     let mut current_query = query.parent();
-    let mut step_idx = 1;
+    let mut step_idx = 1usize;
 
     while step_idx < selector.steps.len() {
-        let prev_comb = selector.steps[step_idx - 1]
-            .combinator
+        let prev_comb = selector
+            .steps
+            .get(step_idx.saturating_sub(1))
+            .and_then(|s| s.combinator)
             .unwrap_or(Combinator::Descendant);
-        let step = &selector.steps[step_idx];
+        let Some(step) = selector.steps.get(step_idx) else {
+            return false;
+        };
 
         match prev_comb {
             Combinator::Child => {
@@ -214,7 +217,7 @@ fn matches_selector(selector: &CompiledSelector, query: &ElementQuery) -> bool {
                     return false;
                 }
                 current_query = q.parent();
-                step_idx += 1;
+                step_idx = step_idx.saturating_add(1);
             }
             Combinator::Descendant => {
                 let mut matched = false;
@@ -222,7 +225,7 @@ fn matches_selector(selector: &CompiledSelector, query: &ElementQuery) -> bool {
                     if step_matches(step, q) {
                         matched = true;
                         current_query = q.parent();
-                        step_idx += 1;
+                        step_idx = step_idx.saturating_add(1);
                         break;
                     }
                     current_query = q.parent();
@@ -270,6 +273,7 @@ fn step_matches(step: &SelectorStep, query: &ElementQuery) -> bool {
     true
 }
 
+#[allow(clippy::too_many_lines, clippy::match_wildcard_for_single_variants)]
 fn parse_declarations(declarations: &DeclarationBlock) -> ComputedStyle {
     let mut style = ComputedStyle::default();
 
@@ -388,7 +392,7 @@ fn parse_declarations(declarations: &DeclarationBlock) -> ComputedStyle {
                     .to_css_string(PrinterOptions::default())
                     .unwrap_or_default();
                 let row = parse_length_str(&row_str);
-                style.set_gap(Gap::new(row as f64));
+                style.set_gap(Gap::new(f64::from(row)));
             }
             Property::FlexDirection(dir, _) => {
                 let s = dir
@@ -681,6 +685,7 @@ fn apply_border(style: &mut ComputedStyle, border: &Border) {
     }
 }
 
+#[allow(clippy::option_if_let_else)]
 fn parse_length_str(s: &str) -> f32 {
     let s = s.trim();
     if let Some(num) = s.strip_suffix("px") {
@@ -695,17 +700,14 @@ fn parse_length_str(s: &str) -> f32 {
 }
 
 fn convert_color(color: &LightningCssColor) -> Option<Color> {
-    match color {
-        LightningCssColor::RGBA(rgba) => {
-            Some(Color::new(rgba.red, rgba.green, rgba.blue, rgba.alpha))
-        }
-        _ => {
-            let raw = color.to_css_string(PrinterOptions::default()).ok()?;
-            if let Ok(DrawingColor::Solid(c)) = DrawingColor::parse(&raw) {
-                Some(c)
-            } else {
-                None
-            }
+    if let LightningCssColor::RGBA(rgba) = color {
+        Some(Color::new(rgba.red, rgba.green, rgba.blue, rgba.alpha))
+    } else {
+        let raw = color.to_css_string(PrinterOptions::default()).ok()?;
+        if let Ok(DrawingColor::Solid(c)) = DrawingColor::parse(&raw) {
+            Some(c)
+        } else {
+            None
         }
     }
 }
@@ -714,7 +716,7 @@ fn length_to_f64(len: &LengthPercentageOrAuto) -> f64 {
     let s = len
         .to_css_string(PrinterOptions::default())
         .unwrap_or_default();
-    parse_length_str(&s) as f64
+    f64::from(parse_length_str(&s))
 }
 
 #[cfg(test)]
@@ -722,10 +724,35 @@ mod tests {
     use super::*;
     use crate::features::styling::domain::ClassName;
 
+    struct DummyMeasurer;
+    impl crate::features::layout_engine::domain::TextMeasurer for DummyMeasurer {
+        fn measure(
+            &mut self,
+            text: &str,
+            _f: Option<&crate::shared::config::domain::FontFamily>,
+            _s: Option<crate::shared::config::domain::FontSize>,
+        ) -> crate::shared::primitives::geometry::Size {
+            let text_len = u32::try_from(text.len()).unwrap_or(0);
+            crate::shared::primitives::geometry::Size::new(text_len.saturating_mul(8), 16)
+        }
+    }
+
+    struct FixedDummyMeasurer;
+    impl crate::features::layout_engine::domain::TextMeasurer for FixedDummyMeasurer {
+        fn measure(
+            &mut self,
+            _text: &str,
+            _f: Option<&crate::shared::config::domain::FontFamily>,
+            _s: Option<crate::shared::config::domain::FontSize>,
+        ) -> crate::shared::primitives::geometry::Size {
+            crate::shared::primitives::geometry::Size::new(10, 10)
+        }
+    }
+
     #[test]
     fn test_parse_basic_css_rules() {
         let parser = LightningCssAdapter::new();
-        let css = r#"
+        let css = r"
             bar {
                 background-color: #1a1b26;
                 padding: 4px 8px;
@@ -747,7 +774,7 @@ mod tests {
                 border-radius: 6px;
                 accent-color: #bb9af7;
             }
-        "#;
+        ";
 
         let parsed = parser
             .parse_stylesheet(StyleSheetName::new("test").unwrap(), css)
@@ -757,8 +784,8 @@ mod tests {
         let ws_class = ClassName::new("workspace-btn").unwrap();
         let query_ws = ElementQuery::new("flex", None, std::slice::from_ref(&ws_class), &[], None);
         let style_ws = parsed.resolve_style(&query_ws);
-        assert_eq!(style_ws.border_radius().unwrap().value(), 4.0);
-        assert_eq!(style_ws.font_size().unwrap().value(), 14.0);
+        assert!((style_ws.border_radius().unwrap().value() - 4.0).abs() < f32::EPSILON);
+        assert!((style_ws.font_size().unwrap().value() - 14.0).abs() < f32::EPSILON);
 
         // Test matching .workspace-btn:hover
         let query_ws_hover = ElementQuery::new(
@@ -788,18 +815,18 @@ mod tests {
         // Test matching progress
         let query_progress = ElementQuery::new("progress", None, &[], &[], None);
         let style_prog = parsed.resolve_style(&query_progress);
-        assert_eq!(style_prog.border_radius().unwrap().value(), 6.0);
+        assert!((style_prog.border_radius().unwrap().value() - 6.0).abs() < f32::EPSILON);
         assert!(style_prog.accent_color().is_some());
     }
 
     #[test]
     fn test_descendant_combinator() {
         let parser = LightningCssAdapter::new();
-        let css = r#"
+        let css = r"
             bar .item {
                 color: #ffffff;
             }
-        "#;
+        ";
         let parsed = parser
             .parse_stylesheet(StyleSheetName::new("test").unwrap(), css)
             .unwrap();
@@ -829,7 +856,7 @@ mod tests {
         use crate::shared::rendering::ports::canvas::MockCanvas;
 
         let parser = LightningCssAdapter::new();
-        let theme_css = r#"
+        let theme_css = r"
             .clock-label {
                 color: #ff5555;
                 font-size: 16px;
@@ -839,7 +866,7 @@ mod tests {
                 accent-color: #50fa7b;
                 border-radius: 4px;
             }
-        "#;
+        ";
 
         let parsed = parser
             .parse_stylesheet(StyleSheetName::new("random").unwrap(), theme_css)
@@ -859,7 +886,7 @@ mod tests {
             None,
         );
         let styled_clock = clock_node.resolve_styles(&resolver, None);
-        assert_eq!(styled_clock.style().font_size().unwrap().value(), 16.0);
+        assert!((styled_clock.style().font_size().unwrap().value() - 16.0).abs() < f32::EPSILON);
 
         // 2. Progress bar horizontal & vertical rendering
         let h_prog = VNode::new_progress(
@@ -873,18 +900,6 @@ mod tests {
         );
         let styled_h = h_prog.resolve_styles(&resolver, None);
         let mut engine = TaffyLayoutAdapter::new();
-
-        struct DummyMeasurer;
-        impl crate::features::layout_engine::domain::TextMeasurer for DummyMeasurer {
-            fn measure(
-                &mut self,
-                text: &str,
-                _f: Option<&crate::shared::config::domain::FontFamily>,
-                _s: Option<crate::shared::config::domain::FontSize>,
-            ) -> crate::shared::primitives::geometry::Size {
-                crate::shared::primitives::geometry::Size::new(text.len() as u32 * 8, 16)
-            }
-        }
 
         let render_h = engine
             .calculate_layout(styled_h, &mut DummyMeasurer, Position::new(0, 0))
@@ -903,12 +918,12 @@ mod tests {
         use crate::shared::primitives::geometry::{Position, Size};
 
         let parser = LightningCssAdapter::new();
-        let css = r#"
+        let css = r"
             .icon {
                 width: 20px;
                 height: 20px;
             }
-        "#;
+        ";
         let parsed = parser
             .parse_stylesheet(StyleSheetName::new("systray").unwrap(), css)
             .unwrap();
@@ -936,20 +951,9 @@ mod tests {
         );
 
         let mut engine = TaffyLayoutAdapter::new();
-        struct DummyMeasurer;
-        impl crate::features::layout_engine::domain::TextMeasurer for DummyMeasurer {
-            fn measure(
-                &mut self,
-                _text: &str,
-                _f: Option<&crate::shared::config::domain::FontFamily>,
-                _s: Option<crate::shared::config::domain::FontSize>,
-            ) -> crate::shared::primitives::geometry::Size {
-                crate::shared::primitives::geometry::Size::new(10, 10)
-            }
-        }
 
         let render_node = engine
-            .calculate_layout(styled_img, &mut DummyMeasurer, Position::new(0, 0))
+            .calculate_layout(styled_img, &mut FixedDummyMeasurer, Position::new(0, 0))
             .unwrap();
 
         assert_eq!(render_node.rect().width(), 20);
@@ -959,7 +963,7 @@ mod tests {
     #[test]
     fn test_advanced_css_properties_parsing_and_layout() {
         let parser = LightningCssAdapter::new();
-        let css = r#"
+        let css = r"
             .box {
                 background: #1e1e2e;
                 flex-grow: 1;
@@ -969,7 +973,7 @@ mod tests {
                 padding-right: 8px;
                 border: 2px solid #7aa2f7;
             }
-        "#;
+        ";
         let parsed = parser
             .parse_stylesheet(StyleSheetName::new("box").unwrap(), css)
             .unwrap();
@@ -979,11 +983,11 @@ mod tests {
 
         let style = parsed.resolve_style(&query);
         assert!(style.background().is_some());
-        assert_eq!(style.flex_grow().unwrap().value(), 1.0);
-        assert_eq!(style.flex_shrink().unwrap().value(), 0.0);
+        assert!((style.flex_grow().unwrap().value() - 1.0).abs() < f32::EPSILON);
+        assert!((style.flex_shrink().unwrap().value() - 0.0).abs() < f32::EPSILON);
         assert_eq!(style.align_self(), Some(AlignItems::Center));
-        assert_eq!(style.padding().unwrap().left(), 12.0);
-        assert_eq!(style.padding().unwrap().right(), 8.0);
-        assert_eq!(style.border_size().unwrap().value(), 2.0);
+        assert!((style.padding().unwrap().left() - 12.0).abs() < f64::EPSILON);
+        assert!((style.padding().unwrap().right() - 8.0).abs() < f64::EPSILON);
+        assert!((style.border_size().unwrap().value() - 2.0).abs() < f32::EPSILON);
     }
 }
