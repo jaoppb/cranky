@@ -259,6 +259,13 @@ impl<
         })
     }
 
+    #[must_use]
+    pub fn active_signals(
+        &self,
+    ) -> &std::collections::HashSet<crate::shared::events::signals::SignalKind> {
+        self.registry.active_signal_subscriptions()
+    }
+
     /// Runs the main event loop, listening for display events, commands, and signals.
     ///
     /// # Errors

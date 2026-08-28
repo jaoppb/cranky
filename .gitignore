@@ -11,10 +11,11 @@
 # OS
 .DS_Store
 
-# Coverage
+# Coverage & Profiling
 coverage_report/
 lcov.info
 *.profraw
+*.json.gz
 
 # Arch Linux / makepkg
 contrib/arch/src/

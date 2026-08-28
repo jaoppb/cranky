@@ -1,11 +1,13 @@
-use crate::features::systray::domain::{SystrayItem, SystrayState, SystrayStatus};
-use crate::features::systray::ports::{SniPort, SniPortError};
+use crate::features::systray::domain::{
+    IconCacheKey, IconImage, IconName, IconThemePath, SystrayItem, SystrayState, SystrayStatus,
+};
+use crate::features::systray::ports::{SniPort, SniPortError, SystrayIconCachePort};
 use crate::shared::events::signals::SignalHub;
 use async_trait::async_trait;
 
 use freedesktop_icons::lookup;
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, LazyLock, Mutex};
 use tokio::sync::RwLock;
 
 use tracing::{debug, error, info, warn};
@@ -205,13 +207,53 @@ fn resolve_pixmap_data(
     None
 }
 
+#[derive(Debug, Default)]
+pub struct InMemorySystrayIconCache(
+    Mutex<HashMap<IconCacheKey, Option<IconImage>>>,
+);
+
+impl InMemorySystrayIconCache {
+    #[must_use]
+    pub fn new() -> Self {
+        Self(Mutex::new(HashMap::new()))
+    }
+}
+
+impl SystrayIconCachePort for InMemorySystrayIconCache {
+    fn get(&self, key: &IconCacheKey) -> Option<Option<IconImage>> {
+        self.0.lock().ok().and_then(|cache| cache.get(key).cloned())
+    }
+
+    fn insert(&self, key: IconCacheKey, image: Option<IconImage>) {
+        if let Ok(mut cache) = self.0.lock() {
+            cache.insert(key, image);
+        }
+    }
+}
+
+static ICON_CACHE: LazyLock<InMemorySystrayIconCache> = LazyLock::new(InMemorySystrayIconCache::new);
+
 async fn resolve_icon(
     icon_name: Option<String>,
     icon_theme_path: Option<String>,
     icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>>,
-) -> Option<crate::features::systray::domain::IconImage> {
+) -> Option<IconImage> {
+    let cache_key = icon_name.as_ref().map(|name| {
+        IconCacheKey::new(
+            IconName::new(name.clone()),
+            icon_theme_path.as_ref().map(|tp| IconThemePath::new(tp.clone())),
+        )
+    });
+
+    if let Some(ref key) = cache_key
+        && let Some(cached) = ICON_CACHE.get(key)
+    {
+        return cached;
+    }
+
     let max_scale = 3.0f32; // Default to 3.0 for sharp scaling on any screen
     let icon_name_clone = icon_name.clone();
+    let theme_path_clone = icon_theme_path.clone();
     let (_, icon_image) = tokio::task::spawn_blocking(move || {
         let mut icon_loaded = false;
         let mut icon_image = None;
@@ -219,7 +261,7 @@ async fn resolve_icon(
         if let Some(name) = &icon_name_clone {
             let mut found_path = None;
 
-            if let Some(theme_path) = &icon_theme_path {
+            if let Some(theme_path) = &theme_path_clone {
                 let base = std::path::Path::new(theme_path);
                 let png = base.join(format!("{name}.png"));
                 if png.exists() {
@@ -244,7 +286,7 @@ async fn resolve_icon(
             if let Some(icon_path) = found_path
                 && let Some((w, h, bytes)) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale)
             {
-                icon_image = Some(crate::features::systray::domain::IconImage::new(
+                icon_image = Some(IconImage::new(
                     bytes,
                     crate::shared::primitives::geometry::Size::new(w, h),
                 ));
@@ -266,6 +308,10 @@ async fn resolve_icon(
     })
     .await
     .unwrap_or((false, None));
+
+    if let Some(key) = cache_key {
+        ICON_CACHE.insert(key, icon_image.clone());
+    }
 
     icon_image
 }
@@ -1095,5 +1141,24 @@ mod tests {
         let tooltip = Watcher::parse_raw_tooltip(val).expect("Should parse tooltip");
         assert_eq!(tooltip.title().as_str(), "Title");
         assert_eq!(tooltip.description().as_str(), "Description\nLine 2");
+    }
+
+    #[test]
+    fn test_in_memory_systray_icon_cache() {
+        let cache = InMemorySystrayIconCache::new();
+        let key = IconCacheKey::new(
+            IconName::new("test-app"),
+            Some(IconThemePath::new("/custom/path")),
+        );
+
+        assert_eq!(cache.get(&key), None);
+
+        let icon_img = IconImage::new(
+            vec![1, 2, 3, 4],
+            crate::shared::primitives::geometry::Size::new(1, 1),
+        );
+        cache.insert(key.clone(), Some(icon_img.clone()));
+
+        assert_eq!(cache.get(&key), Some(Some(icon_img)));
     }
 }

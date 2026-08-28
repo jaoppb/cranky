@@ -56,6 +56,7 @@ fn init_tracing(env: &AppEnvironment) -> tracing_appender::non_blocking::WorkerG
 async fn init_secondary_adapters(
     hub: &Arc<SignalHub>,
     metrics_config: &cranky::features::metrics::domain::MetricsConfig,
+    active_signals: &std::collections::HashSet<cranky::shared::events::signals::SignalKind>,
 ) -> Result<
     (
         cranky::shared::dbus::subscription_manager::DbusSubscriptionManager,
@@ -72,45 +73,59 @@ async fn init_secondary_adapters(
     let dbus_manager =
         cranky::shared::dbus::subscription_manager::DbusSubscriptionManager::new(conn.clone(), hub);
 
-    let mpris_adapter =
-        cranky::features::mpris::adapters::zbus::ZbusMprisAdapter::new(conn.clone(), hub);
-    if let Err(e) = mpris_adapter.start_watching().await {
-        error!("Failed to start MPRIS watcher: {e}");
+    if active_signals.contains(&cranky::shared::events::signals::SignalKind::Mpris) {
+        let mpris_adapter =
+            cranky::features::mpris::adapters::zbus::ZbusMprisAdapter::new(conn.clone(), hub);
+        if let Err(e) = mpris_adapter.start_watching().await {
+            error!("Failed to start MPRIS watcher: {e}");
+        }
     }
 
     let mut sni_adapter = SniAdapter::new(hub.clone());
-    if let Err(e) = sni_adapter.start().await {
+    if active_signals.contains(&cranky::shared::events::signals::SignalKind::Systray)
+        && let Err(e) = sni_adapter.start().await
+    {
         error!("Failed to start SNI Watcher: {e:?}");
     }
 
-    let metrics_adapter = SysinfoAdapter::new(metrics_config.clone(), hub.clone());
-    metrics_adapter.start().await;
+    if active_signals.contains(&cranky::shared::events::signals::SignalKind::Metrics) {
+        let metrics_adapter = SysinfoAdapter::new(metrics_config.clone(), hub.clone());
+        metrics_adapter.start().await;
+    }
 
     Ok((dbus_manager, sni_adapter))
 }
 
-fn spawn_background_tasks(hub: &Arc<SignalHub>, hyprland_adapter: HyprlandAdapter) {
-    let hub_for_hypr = hub.clone();
-    tokio::spawn(
-        async move {
-            hyprland_adapter.run(hub_for_hypr).await;
-        }
-        .instrument(info_span!("hyprland_adapter")),
-    );
-
-    let hub_for_time = hub.clone();
-    tokio::spawn(
-        async move {
-            loop {
-                let now = chrono::Local::now();
-                let ms_until_next_sec =
-                    1000_u64.saturating_sub(u64::from(now.timestamp_subsec_millis()));
-                tokio::time::sleep(std::time::Duration::from_millis(ms_until_next_sec)).await;
-                let _ = hub_for_time.time_tx().send(chrono::Local::now());
+fn spawn_background_tasks(
+    hub: &Arc<SignalHub>,
+    hyprland_adapter: HyprlandAdapter,
+    active_signals: &std::collections::HashSet<cranky::shared::events::signals::SignalKind>,
+) {
+    if active_signals.contains(&cranky::shared::events::signals::SignalKind::Hyprland) {
+        let hub_for_hypr = hub.clone();
+        tokio::spawn(
+            async move {
+                hyprland_adapter.run(hub_for_hypr).await;
             }
-        }
-        .instrument(info_span!("time_adapter")),
-    );
+            .instrument(info_span!("hyprland_adapter")),
+        );
+    }
+
+    if active_signals.contains(&cranky::shared::events::signals::SignalKind::Time) {
+        let hub_for_time = hub.clone();
+        tokio::spawn(
+            async move {
+                loop {
+                    let now = chrono::Local::now();
+                    let ms_until_next_sec =
+                        1000_u64.saturating_sub(u64::from(now.timestamp_subsec_millis()));
+                    tokio::time::sleep(std::time::Duration::from_millis(ms_until_next_sec)).await;
+                    let _ = hub_for_time.time_tx().send(chrono::Local::now());
+                }
+            }
+            .instrument(info_span!("time_adapter")),
+        );
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -156,13 +171,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         registry,
     )?;
 
+    let active_signals = app.active_signals();
+
     // 3. Initialize secondary adapters
     let (zbus_adapter, sni_adapter) =
-        init_secondary_adapters(&hub, initial_config.metrics()).await?;
+        init_secondary_adapters(&hub, initial_config.metrics(), active_signals).await?;
 
     // 4. Spawn background worker tasks
     let hyprland_adapter = HyprlandAdapter::new(app_env.clone());
-    spawn_background_tasks(&hub, hyprland_adapter);
+    spawn_background_tasks(&hub, hyprland_adapter, active_signals);
 
     let hub_for_config = hub.clone();
     let _config_watcher = config_adapter.watch(hub_for_config)?;

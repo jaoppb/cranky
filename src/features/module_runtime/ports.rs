@@ -125,4 +125,6 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
         &self,
         dbus: &mut crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
     );
+
+    fn active_signal_subscriptions(&self) -> &std::collections::HashSet<SignalKind>;
 }

@@ -20,7 +20,7 @@ impl SysinfoAdapter {
         let hub = self.hub.clone();
 
         tokio::spawn(async move {
-            let mut sys = System::new_all();
+            let mut sys = System::new();
             let mut networks = Networks::new_with_refreshed_list();
             let mut disks = Disks::new_with_refreshed_list();
             let mut components = Components::new_with_refreshed_list();
@@ -57,9 +57,22 @@ impl SysinfoAdapter {
     ) -> MetricsState {
         sys.refresh_cpu_usage();
         sys.refresh_memory();
-        networks.refresh(true);
-        disks.refresh(true);
-        components.refresh(true);
+        if config.network().is_some()
+            && config.network() != Some(&crate::features::metrics::domain::NetworkMode::Disabled)
+        {
+            networks.refresh(true);
+        }
+        if config.disk().is_some()
+            && config.disk() != Some(&crate::features::metrics::domain::DiskMode::Disabled)
+        {
+            disks.refresh(true);
+        }
+        if config.temperature().is_some()
+            && config.temperature()
+                != Some(&crate::features::metrics::domain::TemperatureMode::Disabled)
+        {
+            components.refresh(true);
+        }
 
         // CPU
         let nproc = f32::from(u16::try_from(sys.cpus().len()).unwrap_or(1));
@@ -148,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_sysinfo_adapter_gather_metrics_all_enabled() {
-        let mut sys = System::new_all();
+        let mut sys = System::new();
         let mut networks = Networks::new_with_refreshed_list();
         let mut disks = Disks::new_with_refreshed_list();
         let mut components = Components::new_with_refreshed_list();
@@ -175,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_sysinfo_adapter_gather_metrics_all_disabled() {
-        let mut sys = System::new_all();
+        let mut sys = System::new();
         let mut networks = Networks::new_with_refreshed_list();
         let mut disks = Disks::new_with_refreshed_list();
         let mut components = Components::new_with_refreshed_list();
@@ -205,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_sysinfo_adapter_gather_metrics_fahrenheit() {
-        let mut sys = System::new_all();
+        let mut sys = System::new();
         let mut networks = Networks::new_with_refreshed_list();
         let mut disks = Disks::new_with_refreshed_list();
         let mut components = Components::new_with_refreshed_list();

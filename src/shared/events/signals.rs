@@ -6,7 +6,7 @@ use tokio::sync::watch;
 use crate::features::systray::domain::SystrayState;
 use crate::shared::dbus::domain::DBusState;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SignalKind {
     Time,
     Hyprland,

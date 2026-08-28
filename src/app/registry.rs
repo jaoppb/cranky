@@ -32,6 +32,7 @@ pub struct ModuleRegistry {
     name_to_ids: HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>,
     dbus_subscriptions: Vec<crate::shared::dbus::domain::DBusSubscription>,
     style_to_modules: HashMap<StyleSheetName, HashSet<crate::shared::primitives::ModuleName>>,
+    active_signals: HashSet<crate::shared::events::signals::SignalKind>,
     app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
 }
 
@@ -50,6 +51,7 @@ impl ModuleRegistry {
             name_to_ids: HashMap::new(),
             dbus_subscriptions: Vec::new(),
             style_to_modules: HashMap::new(),
+            active_signals: HashSet::new(),
             app_env,
         }
     }
@@ -63,6 +65,7 @@ impl ModuleRegistry {
         self.name_to_ids.clear();
         self.dbus_subscriptions.clear();
         self.style_to_modules.clear();
+        self.active_signals.clear();
     }
 
     #[must_use]
@@ -145,6 +148,10 @@ impl ModuleRegistry {
 
         for sub in module.dbus_subscriptions() {
             self.dbus_subscriptions.push(sub.clone());
+        }
+
+        for sub in module.subscriptions() {
+            self.active_signals.insert(*sub);
         }
 
         let mod_styles = module.styles();
@@ -400,6 +407,10 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
                     .insert(cfg.name().clone());
             }
 
+            for sub in module.subscriptions() {
+                self.active_signals.insert(*sub);
+            }
+
             let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
             new_senders.insert(id, Box::new(WatchLayoutSender { tx: layout_tx }));
 
@@ -448,6 +459,12 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
                 tracing::error!("Failed to subscribe to DBus: {e}");
             }
         }
+    }
+
+    fn active_signal_subscriptions(
+        &self,
+    ) -> &std::collections::HashSet<crate::shared::events::signals::SignalKind> {
+        &self.active_signals
     }
 }
 
@@ -672,5 +689,11 @@ mod tests {
 
         assert_eq!(senders.len(), 2); // bar + hour
         assert!(registry.modules.is_empty());
+        assert!(
+            crate::features::module_runtime::ports::ModuleRegistryPort::<
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
+            >::active_signal_subscriptions(&registry)
+            .contains(&crate::shared::events::signals::SignalKind::Time)
+        );
     }
 }

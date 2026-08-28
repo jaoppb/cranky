@@ -72,7 +72,7 @@ impl Title {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct IconName(String);
 
@@ -80,10 +80,44 @@ impl IconName {
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
-    #[cfg(test)]
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct IconThemePath(String);
+
+impl IconThemePath {
+    pub fn new(path: impl Into<String>) -> Self {
+        Self(path.into())
+    }
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IconCacheKey {
+    name: IconName,
+    theme_path: Option<IconThemePath>,
+}
+
+impl IconCacheKey {
+    #[must_use]
+    pub const fn new(name: IconName, theme_path: Option<IconThemePath>) -> Self {
+        Self { name, theme_path }
+    }
+    #[must_use]
+    pub const fn name(&self) -> &IconName {
+        &self.name
+    }
+    #[must_use]
+    pub const fn theme_path(&self) -> Option<&IconThemePath> {
+        self.theme_path.as_ref()
     }
 }
 

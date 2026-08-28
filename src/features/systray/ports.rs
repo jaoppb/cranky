@@ -23,3 +23,16 @@ pub trait SniPort: Send + Sync {
         pos: Option<crate::shared::primitives::geometry::Position>,
     ) -> Result<(), SniPortError>;
 }
+
+#[cfg_attr(test, mockall::automock)]
+pub trait SystrayIconCachePort: Send + Sync {
+    fn get(
+        &self,
+        key: &crate::features::systray::domain::IconCacheKey,
+    ) -> Option<Option<crate::features::systray::domain::IconImage>>;
+    fn insert(
+        &self,
+        key: crate::features::systray::domain::IconCacheKey,
+        image: Option<crate::features::systray::domain::IconImage>,
+    );
+}
