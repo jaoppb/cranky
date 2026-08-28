@@ -147,9 +147,7 @@ impl From<crate::features::styling::domain::CssLength> for Dimension {
     fn from(l: crate::features::styling::domain::CssLength) -> Self {
         match l {
             crate::features::styling::domain::CssLength::Px(v) => Self::length(v),
-            crate::features::styling::domain::CssLength::Percent(v) => {
-                Self::percent(v / 100.0)
-            }
+            crate::features::styling::domain::CssLength::Percent(v) => Self::percent(v / 100.0),
             crate::features::styling::domain::CssLength::Auto => Self::auto(),
         }
     }
@@ -174,9 +172,7 @@ fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
         margin: computed
             .margin()
             .map_or_else(taffy::geometry::Rect::zero, Into::into),
-        gap: computed
-            .gap()
-            .map_or_else(TaffySize::zero, Into::into),
+        gap: computed.gap().map_or_else(TaffySize::zero, Into::into),
         ..Default::default()
     };
 
@@ -552,10 +548,7 @@ fn diff<'a>(
                 Patch::Keep(old_state)
             }
         }
-        (
-            StyledNode::Module { .. },
-            StyledNode::Module { .. },
-        ) => {
+        (StyledNode::Module { .. }, StyledNode::Module { .. }) => {
             let style = node_to_style(new_layout, measurer);
             Patch::Update {
                 old_state,
@@ -869,7 +862,9 @@ mod tests {
         };
 
         let mut root_style = ComputedStyle::default();
-        root_style.set_padding(crate::features::layout_engine::domain::BoxMargin::new(0.0, 0.0, 16.0, 16.0));
+        root_style.set_padding(crate::features::layout_engine::domain::BoxMargin::new(
+            0.0, 0.0, 16.0, 16.0,
+        ));
         let root = StyledNode::Flex {
             children: vec![child1],
             style: root_style,
@@ -881,7 +876,7 @@ mod tests {
         let render_tree = adapter
             .calculate_layout(root, &mut measurer, Position::new(0, 0))
             .unwrap();
-        
+
         let layouts = render_tree.collect_module_layouts();
         assert_eq!(layouts.len(), 1);
         assert_eq!(layouts[0].key().name().as_str(), "workspace");

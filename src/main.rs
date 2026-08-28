@@ -1,39 +1,30 @@
 #![deny(unsafe_code)]
 #![warn(clippy::type_complexity, clippy::needless_lifetimes)]
 
-use tracing::{error, info, info_span};
-pub mod app;
-pub mod features;
-pub mod shared;
-mod utils;
-
-#[cfg(test)]
-#[macro_use]
-pub mod test_utils;
-
-use crate::app::commands::AppCommand;
-use crate::app::state::CrankyApp;
-use crate::features::metrics::adapters::SysinfoAdapter;
-use crate::features::styling::ports::StyleLoaderPort;
-use crate::features::systray::adapters::SniAdapter;
-use crate::features::systray::ports::SniPort;
-use crate::features::workspaces::adapters::hyprland::HyprlandAdapter;
-use crate::shared::config::adapters::ConfigAdapter;
-use crate::shared::events::signals::SignalHub;
-use crate::shared::rendering::adapters::font::CosmicFontValidatorAdapter;
-use crate::shared::wayland::adapters::wayland::WaylandAdapter;
+use cranky::app::commands::AppCommand;
+use cranky::app::state::CrankyApp;
+use cranky::features::metrics::adapters::SysinfoAdapter;
+use cranky::features::styling::ports::StyleLoaderPort;
+use cranky::features::systray::adapters::SniAdapter;
+use cranky::features::systray::ports::SniPort;
+use cranky::features::workspaces::adapters::hyprland::HyprlandAdapter;
+use cranky::shared::config::adapters::ConfigAdapter;
+use cranky::shared::events::signals::SignalHub;
+use cranky::shared::rendering::adapters::font::CosmicFontValidatorAdapter;
+use cranky::shared::wayland::adapters::wayland::WaylandAdapter;
 use std::sync::Arc;
+use tracing::{error, info, info_span};
 
 use tokio::sync::mpsc;
 use tracing::Instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-use crate::shared::env::domain::AppEnvironment;
-use crate::shared::env::ports::EnvironmentPort;
+use cranky::shared::env::domain::AppEnvironment;
+use cranky::shared::env::ports::EnvironmentPort;
 
 struct MainCommandSender(mpsc::Sender<AppCommand>);
-impl crate::features::module_runtime::ports::CommandSender for MainCommandSender {
+impl cranky::features::module_runtime::ports::CommandSender for MainCommandSender {
     fn send_command(&self, cmd: AppCommand) {
         let _ = self.0.try_send(cmd);
     }
@@ -64,25 +55,25 @@ fn init_tracing(env: &AppEnvironment) -> tracing_appender::non_blocking::WorkerG
 
 async fn init_secondary_adapters(
     hub: &Arc<SignalHub>,
-    metrics_config: &crate::features::metrics::domain::MetricsConfig,
+    metrics_config: &cranky::features::metrics::domain::MetricsConfig,
 ) -> Result<
     (
-        crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
+        cranky::shared::dbus::subscription_manager::DbusSubscriptionManager,
         SniAdapter,
     ),
     Box<dyn std::error::Error>,
 > {
-    let conn_adapter = crate::shared::dbus::adapters::connection::ZbusConnectionAdapter::new()
+    let conn_adapter = cranky::shared::dbus::adapters::connection::ZbusConnectionAdapter::new()
         .connect()
         .await
         .map_err(|e| format!("DBus connection required: {e}"))?;
-    let conn: Arc<dyn crate::shared::dbus::ports::DbusConnectionPort> = Arc::new(conn_adapter);
+    let conn: Arc<dyn cranky::shared::dbus::ports::DbusConnectionPort> = Arc::new(conn_adapter);
 
     let dbus_manager =
-        crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(conn.clone(), hub);
+        cranky::shared::dbus::subscription_manager::DbusSubscriptionManager::new(conn.clone(), hub);
 
     let mpris_adapter =
-        crate::features::mpris::adapters::zbus::ZbusMprisAdapter::new(conn.clone(), hub);
+        cranky::features::mpris::adapters::zbus::ZbusMprisAdapter::new(conn.clone(), hub);
     if let Err(e) = mpris_adapter.start_watching().await {
         error!("Failed to start MPRIS watcher: {e}");
     }
@@ -124,7 +115,7 @@ fn spawn_background_tasks(hub: &Arc<SignalHub>, hyprland_adapter: HyprlandAdapte
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let env_adapter = crate::shared::env::adapters::os::OsEnvironmentAdapter;
+    let env_adapter = cranky::shared::env::adapters::os::OsEnvironmentAdapter;
     let app_env = std::sync::Arc::new(env_adapter.read_environment()?);
 
     let _guard = init_tracing(&app_env);
@@ -146,13 +137,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (wayland_adapter, surface_manager) =
         WaylandAdapter::new(hub.clone(), command_tx.clone(), app_env.clone())?;
-    let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
+    let surface_manager: cranky::shared::wayland::ports::DynSurfaceManager =
         std::sync::Arc::new(surface_manager);
 
-    let registry = Box::new(crate::app::registry::ModuleRegistry::new(app_env.clone()));
+    let registry = Box::new(cranky::app::registry::ModuleRegistry::new(app_env.clone()));
 
     let canvas_factory = Arc::new(std::sync::Mutex::new(
-        crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
+        cranky::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
     ));
 
     let mut app = CrankyApp::new(
@@ -177,7 +168,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _config_watcher = config_adapter.watch(hub_for_config)?;
 
     let style_loader =
-        crate::features::styling::adapters::fs_loader::FsStyleLoader::new(app_env.clone());
+        cranky::features::styling::adapters::fs_loader::FsStyleLoader::new(app_env.clone());
     if let Err(e) = style_loader.ensure_builtin_styles() {
         error!("Failed to deploy builtin styles: {e}");
     }
@@ -191,7 +182,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
 
-    let _script_watcher = crate::app::builtins::BuiltinModules::watch_scripts(
+    let _script_watcher = cranky::app::builtins::BuiltinModules::watch_scripts(
         Arc::new(MainCommandSender(command_tx.clone())),
         &app_env,
     )?;

@@ -120,24 +120,21 @@ impl ModuleRegistry {
         let id = ModuleId::new(*next_id);
         *next_id = next_id.saturating_add(1);
 
-        let mut module = builtins::BuiltinModules::find_module(
-            config.name(),
-            config.engine(),
-            &self.app_env,
-        )
-        .map_err(|e| match e {
-            BuiltinError::ModuleNotFound { module_name, .. } => {
-                RegistryLoadError::ModuleNotFound(module_name)
-            }
-            BuiltinError::UnsupportedEngine {
-                engine,
-                module_name,
-            } => RegistryLoadError::UnsupportedEngine {
-                engine,
-                module_name,
-            },
-            BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
-        })?;
+        let mut module =
+            builtins::BuiltinModules::find_module(config.name(), config.engine(), &self.app_env)
+                .map_err(|e| match e {
+                    BuiltinError::ModuleNotFound { module_name, .. } => {
+                        RegistryLoadError::ModuleNotFound(module_name)
+                    }
+                    BuiltinError::UnsupportedEngine {
+                        engine,
+                        module_name,
+                    } => RegistryLoadError::UnsupportedEngine {
+                        engine,
+                        module_name,
+                    },
+                    BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
+                })?;
 
         module
             .init(config, full_config)

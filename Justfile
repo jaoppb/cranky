@@ -25,6 +25,10 @@ run-release:
 test:
     cargo test
 
+# Run performance benchmarks with criterion
+bench *args:
+    cargo bench {{args}}
+
 # Run Clippy checks
 clippy:
     cargo clippy --all-targets --all-features

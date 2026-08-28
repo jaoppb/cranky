@@ -15,17 +15,17 @@
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::geometry::Scale;
-use crate::shared::wayland::ports::DisplayServerError;
-use crate::shared::wayland::ports::DisplayServerPort;
 use crate::shared::rendering::adapters::tiny_skia::TinySkiaCosmicCanvas;
 use crate::shared::wayland::adapters::shm::{BufferUserData, ShmBuffer};
+use crate::shared::wayland::ports::DisplayServerError;
+use crate::shared::wayland::ports::DisplayServerPort;
 use async_trait::async_trait;
 use cosmic_text::{FontSystem, SwashCache};
 use std::collections::HashMap;
+use std::os::unix::io::{AsFd, AsRawFd, RawFd};
 use std::sync::{Arc, Mutex};
 use tokio::io::unix::AsyncFd;
 use tracing::{debug, info_span};
-use std::os::unix::io::{AsFd, AsRawFd, RawFd};
 use wayland_client::{
     Connection, Dispatch, EventQueue, QueueHandle,
     backend::WaylandError,
@@ -147,7 +147,10 @@ impl SurfaceManagerPort for WaylandSurfaceManager {
         buffer: crate::shared::primitives::render::RenderBuffer,
     ) {
         {
-            let mut map = self.pending_surfaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut map = self
+                .pending_surfaces
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             map.insert(
                 (module_id, monitor_id.clone()),
                 SurfaceCommand::new(module_id, parent_id, monitor_id, position, buffer),
@@ -427,7 +430,11 @@ impl DisplayServerPort for WaylandAdapter {
         self.render_all_outputs(read_model, layout_senders, &qh)
     }
 
-    #[allow(clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_precision_loss)]
+    #[allow(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        clippy::cast_precision_loss
+    )]
     fn show_tooltip(
         &mut self,
         layout: crate::features::layout_engine::domain::StyledNode,
@@ -612,10 +619,14 @@ impl DisplayServerPort for WaylandAdapter {
             let height_i32 = i32::try_from(height).unwrap_or_default();
             positioner.set_size(width_i32, height_i32);
             #[allow(clippy::cast_possible_truncation)]
-            positioner.set_anchor_rect(pointer_x as i32, i32::try_from(bar_height).unwrap_or_default(), 1, 1);
-            positioner.set_anchor(
-                wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom,
+            positioner.set_anchor_rect(
+                pointer_x as i32,
+                i32::try_from(bar_height).unwrap_or_default(),
+                1,
+                1,
             );
+            positioner
+                .set_anchor(wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom);
             positioner.set_gravity(
                 wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::Bottom,
             );
@@ -635,9 +646,7 @@ impl DisplayServerPort for WaylandAdapter {
             tooltip
                 .surface
                 .attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
-            tooltip
-                .surface
-                .damage_buffer(0, 0, width_i32, height_i32);
+            tooltip.surface.damage_buffer(0, 0, width_i32, height_i32);
             tooltip.surface.commit();
             tooltip.shm_buffer.swap_buffers();
             tracing::debug!(size = ?new_size, token = tooltip.reposition_token, "Redrew and repositioned tooltip in-place (new Size VO)");
@@ -785,9 +794,10 @@ impl WaylandAdapter {
             bar.surface.commit();
             bar.shm_buffer.swap_buffers();
 
-            self.state
-                .surface_to_id
-                .insert(bar.surface.clone(), (cmd.module_id(), cmd.monitor_id().clone()));
+            self.state.surface_to_id.insert(
+                bar.surface.clone(),
+                (cmd.module_id(), cmd.monitor_id().clone()),
+            );
         } else {
             // Child module rendering to a subsurface parented to bar.surface
             let mut new_surface_to_register = None;
@@ -858,9 +868,10 @@ impl WaylandAdapter {
 
             ms.shm_buffer.swap_buffers();
 
-            self.state
-                .surface_to_id
-                .insert(ms.surface.clone(), (cmd.module_id(), cmd.monitor_id().clone()));
+            self.state.surface_to_id.insert(
+                ms.surface.clone(),
+                (cmd.module_id(), cmd.monitor_id().clone()),
+            );
         }
 
         Ok(())
@@ -878,10 +889,7 @@ impl WaylandAdapter {
         let span = info_span!("render_all_outputs");
         let _enter = span.enter();
 
-        let WaylandState {
-            ref mut bars,
-            ..
-        } = self.state;
+        let WaylandState { ref mut bars, .. } = self.state;
 
         if bars.is_empty() {
             debug!("No bars available for rendering.");

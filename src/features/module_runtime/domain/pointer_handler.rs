@@ -158,7 +158,10 @@ mod tests {
         );
 
         assert_eq!(actions.len(), 1);
-        assert_eq!(actions[0], PointerAction::SendCommand(AppCommand::RequestRender));
+        assert_eq!(
+            actions[0],
+            PointerAction::SendCommand(AppCommand::RequestRender)
+        );
     }
 
     #[test]
@@ -166,11 +169,7 @@ mod tests {
         let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
         let func_name = FunctionName::new("toggle_menu");
-        let tree = make_test_tree(
-            Some(AppCommand::ScriptCall(func_name.clone())),
-            None,
-            None,
-        );
+        let tree = make_test_tree(Some(AppCommand::ScriptCall(func_name.clone())), None, None);
 
         let actions = handler.handle_event(
             &PointerEvent::Click {
@@ -224,7 +223,10 @@ mod tests {
         // PointerLeave -> HideTooltip
         let actions3 = handler.handle_event(&PointerEvent::PointerLeave, &mon, &tree);
         assert_eq!(actions3.len(), 1);
-        assert_eq!(actions3[0], PointerAction::SendCommand(AppCommand::HideTooltip));
+        assert_eq!(
+            actions3[0],
+            PointerAction::SendCommand(AppCommand::HideTooltip)
+        );
         assert!(handler.last_tooltip().is_none());
     }
 

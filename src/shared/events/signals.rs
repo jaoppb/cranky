@@ -80,7 +80,9 @@ impl HyprlandState {
     }
 
     #[must_use]
-    pub const fn focused_monitor(&self) -> Option<&crate::features::workspaces::domain::MonitorName> {
+    pub const fn focused_monitor(
+        &self,
+    ) -> Option<&crate::features::workspaces::domain::MonitorName> {
         self.focused_monitor.as_ref()
     }
 
@@ -176,8 +178,10 @@ impl HyprlandState {
     }
 }
 
-pub type ModuleSizesMap =
-    std::collections::HashMap<crate::shared::primitives::MonitorId, crate::shared::primitives::ChildSizesMap>;
+pub type ModuleSizesMap = std::collections::HashMap<
+    crate::shared::primitives::MonitorId,
+    crate::shared::primitives::ChildSizesMap,
+>;
 
 pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
@@ -200,7 +204,10 @@ pub struct SignalHub {
         watch::Sender<crate::features::mpris::domain::MprisState>,
         watch::Receiver<crate::features::mpris::domain::MprisState>,
     ),
-    module_sizes: (watch::Sender<ModuleSizesMap>, watch::Receiver<ModuleSizesMap>),
+    module_sizes: (
+        watch::Sender<ModuleSizesMap>,
+        watch::Receiver<ModuleSizesMap>,
+    ),
 }
 
 impl SignalHub {

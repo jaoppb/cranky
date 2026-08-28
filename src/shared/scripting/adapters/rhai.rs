@@ -168,8 +168,14 @@ impl AnyModulePort for RhaiModule {
         use crate::features::module_runtime::ports::ModuleInitError;
 
         let root_config = full_config.root();
-        let mut scope = self.scope.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let engine = self.engine.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut scope = self
+            .scope
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let engine = self
+            .engine
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         // Expose root config
         let mut root_map = rhai::Map::new();
@@ -194,7 +200,8 @@ impl AnyModulePort for RhaiModule {
         // Call init if it exists
         let _ = engine.call_fn::<()>(&mut scope, &self.ast, "init", ());
 
-        let (subs, dbus_subs, styles) = Self::evaluate_metadata(&engine, &mut scope, &self.ast, &self.name);
+        let (subs, dbus_subs, styles) =
+            Self::evaluate_metadata(&engine, &mut scope, &self.ast, &self.name);
         self.cached_subs = subs;
         self.cached_dbus_subs = dbus_subs;
         self.cached_styles = styles;
@@ -216,8 +223,14 @@ impl AnyModulePort for RhaiModule {
 
     #[allow(clippy::significant_drop_tightening)]
     fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
-        let mut scope = self.scope.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let engine = self.engine.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut scope = self
+            .scope
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let engine = self
+            .engine
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         if changed.contains(&SignalKind::Time) {
             let time = *hub.time_rx().borrow();
@@ -263,9 +276,7 @@ impl AnyModulePort for RhaiModule {
 
         let mut dbus_handled = false;
         for signal in changed {
-            if matches!(signal, SignalKind::DBus)
-                && !dbus_handled
-            {
+            if matches!(signal, SignalKind::DBus) && !dbus_handled {
                 let dbus_state = hub.dbus_rx().borrow().clone();
                 if let Ok(dbus_json) = serde_json::to_string(&dbus_state.properties())
                     && let Ok(dbus_rhai) = engine.parse_json(&dbus_json, true)
@@ -283,8 +294,14 @@ impl AnyModulePort for RhaiModule {
 
     #[allow(clippy::significant_drop_tightening)]
     fn render(&self, monitor: &MonitorId) -> crate::features::vdom::domain::VNode {
-        let mut scope = self.scope.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let engine = self.engine.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut scope = self
+            .scope
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let engine = self
+            .engine
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let monitor_id = monitor.as_str().to_string();
 
         match engine.call_fn::<rhai::Dynamic>(&mut scope, &self.ast, "render", (monitor_id,)) {
@@ -292,9 +309,7 @@ impl AnyModulePort for RhaiModule {
                 match rhai::serde::from_dynamic::<crate::features::vdom::domain::VNode>(&result) {
                     Ok(node) => node,
                     Err(e) => {
-                        tracing::error!(
-                            "Failed to deserialize render output in rhai module: {e}"
-                        );
+                        tracing::error!("Failed to deserialize render output in rhai module: {e}");
                         crate::features::vdom::domain::VNode::new_flex(
                             vec![],
                             None,
@@ -318,8 +333,14 @@ impl AnyModulePort for RhaiModule {
         &mut self,
         name: &crate::shared::primitives::FunctionName,
     ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
-        let mut scope = self.scope.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let engine = self.engine.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut scope = self
+            .scope
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let engine = self
+            .engine
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         match engine.call_fn::<()>(&mut scope, &self.ast, name.as_str(), ()) {
             Ok(()) => Ok(()),

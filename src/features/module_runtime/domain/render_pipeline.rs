@@ -98,20 +98,22 @@ impl<'a, M: TextMeasurer> ModuleSizeMeasurer<'a, M> {
 }
 
 impl<M: TextMeasurer> TextMeasurer for ModuleSizeMeasurer<'_, M> {
-    fn measure(
-        &mut self,
-        text: &str,
-        font: Option<&FontFamily>,
-        size: Option<FontSize>,
-    ) -> Size {
+    fn measure(&mut self, text: &str, font: Option<&FontFamily>, size: Option<FontSize>) -> Size {
         self.inner.measure(text, font, size)
     }
 
     fn measure_module(&self, key: &ModuleKey) -> Option<Size> {
-        let size = self
-            .child_sizes
-            .and_then(|sizes| sizes.get_by_name_or_key(key.name(), key.instance_id()).copied());
-        tracing::trace!(?key, ?size, has_child_sizes = self.child_sizes.is_some(), "measure_module called");
+        let size = self.child_sizes.and_then(|sizes| {
+            sizes
+                .get_by_name_or_key(key.name(), key.instance_id())
+                .copied()
+        });
+        tracing::trace!(
+            ?key,
+            ?size,
+            has_child_sizes = self.child_sizes.is_some(),
+            "measure_module called"
+        );
         size
     }
 }
@@ -238,8 +240,7 @@ impl RenderPipeline {
             return None;
         }
 
-        let vdom_dirty =
-            !diff_result.is_unchanged() || !self.render_trees.contains_key(monitor_id);
+        let vdom_dirty = !diff_result.is_unchanged() || !self.render_trees.contains_key(monitor_id);
 
         Some(PipelineDiff::new(
             new_vdom,
@@ -387,18 +388,9 @@ impl RenderPipeline {
         )?;
 
         let current_bounds = ctx.current_bounds;
-        let (render_node, size_change, child_layouts) = self.layout(
-            monitor_id,
-            diff,
-            &mut ctx,
-        )?;
+        let (render_node, size_change, child_layouts) = self.layout(monitor_id, diff, &mut ctx)?;
 
-        let buffer = self.paint(
-            monitor_id,
-            &render_node,
-            current_bounds,
-            ctx.canvas_factory,
-        );
+        let buffer = self.paint(monitor_id, &render_node, current_bounds, ctx.canvas_factory);
 
         Some(RenderOutcome::new(
             size_change,

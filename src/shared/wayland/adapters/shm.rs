@@ -36,8 +36,8 @@ impl MmappedShm {
     }
 }
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Clone, Debug)]
 pub struct BufferUserData {
@@ -67,7 +67,10 @@ pub struct BufferSlot {
 
 impl BufferSlot {
     #[must_use]
-    pub const fn new(buffer: wayland_client::protocol::wl_buffer::WlBuffer, busy: Arc<AtomicBool>) -> Self {
+    pub const fn new(
+        buffer: wayland_client::protocol::wl_buffer::WlBuffer,
+        busy: Arc<AtomicBool>,
+    ) -> Self {
         Self { buffer, busy }
     }
 
@@ -110,7 +113,8 @@ fn create_shm_file(size: usize, xdg_runtime_dir: &std::path::Path) -> Result<Fil
 
     // Immediately unlink the file so it's only accessible via the FD
     let _ = std::fs::remove_file(&path);
-    let len = u64::try_from(size).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    let len = u64::try_from(size)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     file.set_len(len)?;
     Ok(file)
 }
@@ -141,7 +145,8 @@ impl ShmBuffer {
             + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, BufferUserData>
             + 'static,
     {
-        let frame_size = usize::try_from(width.saturating_mul(height).saturating_mul(4)).unwrap_or_default();
+        let frame_size =
+            usize::try_from(width.saturating_mul(height).saturating_mul(4)).unwrap_or_default();
         let total_size = frame_size.saturating_mul(2);
         let file = create_shm_file(total_size, xdg_runtime_dir)?;
 
@@ -194,7 +199,8 @@ impl ShmBuffer {
 
     #[must_use]
     pub fn mmap_mut(&mut self) -> &mut [u8] {
-        let frame_size = usize::try_from(self.width.saturating_mul(self.height).saturating_mul(4)).unwrap_or_default();
+        let frame_size = usize::try_from(self.width.saturating_mul(self.height).saturating_mul(4))
+            .unwrap_or_default();
         let offset = self.back_index.saturating_mul(frame_size);
         if let Some(slot) = self.slots.get(self.back_index)
             && slot.is_busy()
@@ -205,10 +211,7 @@ impl ShmBuffer {
             );
         }
         let end = offset.saturating_add(frame_size);
-        self.shm
-            .mmap_mut()
-            .get_mut(offset..end)
-            .unwrap_or_default()
+        self.shm.mmap_mut().get_mut(offset..end).unwrap_or_default()
     }
 
     #[must_use]

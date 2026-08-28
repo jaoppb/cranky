@@ -5,7 +5,9 @@ use crate::features::styling::domain::{
 };
 use crate::features::styling::ports::StyleResolverPort;
 use crate::shared::primitives::geometry::Size;
-use crate::shared::primitives::{BinaryData, ModuleInstanceId, ModuleKey, ModuleName, ModuleOptions};
+use crate::shared::primitives::{
+    BinaryData, ModuleInstanceId, ModuleKey, ModuleName, ModuleOptions,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
@@ -195,10 +197,7 @@ pub enum VNodeKind {
     #[serde(rename = "rect")]
     Rect,
     #[serde(rename = "image")]
-    Image {
-        data: BinaryData,
-        pixel_size: Size,
-    },
+    Image { data: BinaryData, pixel_size: Size },
     #[serde(rename = "module")]
     Module {
         name: ModuleName,
@@ -454,10 +453,7 @@ impl VNode {
         resolver: &dyn StyleResolverPort,
         parent: Option<&ElementQuery>,
     ) -> StyledNode {
-        let classes_slice = self
-            .class
-            .as_ref()
-            .map_or(&[][..], ClassNameList::as_slice);
+        let classes_slice = self.class.as_ref().map_or(&[][..], ClassNameList::as_slice);
         let query = ElementQuery::new(
             self.tag().as_str(),
             self.id.as_ref(),
@@ -717,7 +713,10 @@ mod tests {
     #[test]
     fn test_vnode_module_serde_and_constructor() {
         let mut opts_map = HashMap::new();
-        opts_map.insert("format".to_string(), crate::shared::primitives::DynamicValue::from("%H:%M"));
+        opts_map.insert(
+            "format".to_string(),
+            crate::shared::primitives::DynamicValue::from("%H:%M"),
+        );
         let opts = ModuleOptions::new(opts_map);
         let module_node = VNode::new_module(
             ModuleName::new("hour"),
@@ -741,10 +740,23 @@ mod tests {
         }"#;
         let deserialized: VNode = serde_json::from_str(json).expect("Deserialization failed");
         assert_eq!(deserialized.tag(), NodeTag::Module);
-        if let VNodeKind::Module { name, instance_id, options } = deserialized.kind() {
+        if let VNodeKind::Module {
+            name,
+            instance_id,
+            options,
+        } = deserialized.kind()
+        {
             assert_eq!(name.as_str(), "hour");
-            assert_eq!(instance_id.as_ref().map(crate::shared::primitives::ModuleInstanceId::as_str), Some("h1"));
-            assert_eq!(options.get("format").and_then(|v| v.as_str()), Some("%H:%M:%S"));
+            assert_eq!(
+                instance_id
+                    .as_ref()
+                    .map(crate::shared::primitives::ModuleInstanceId::as_str),
+                Some("h1")
+            );
+            assert_eq!(
+                options.get("format").and_then(|v| v.as_str()),
+                Some("%H:%M:%S")
+            );
         } else {
             panic!("Expected VNodeKind::Module");
         }

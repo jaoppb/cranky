@@ -87,8 +87,8 @@ impl IconName {
     }
 }
 
-use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::BinaryData;
+use crate::shared::primitives::geometry::Size;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct IconImage {

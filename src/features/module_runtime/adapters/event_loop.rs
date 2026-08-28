@@ -2,15 +2,13 @@ use crate::app::commands::AppCommand;
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::{
-    PointerAction, PointerHandler, RenderPipeline,
-};
+use crate::features::module_runtime::domain::{PointerAction, PointerHandler, RenderPipeline};
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::events::signals::SignalKind;
-use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::Rect;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use futures_util::StreamExt;
 use std::collections::{HashMap, HashSet};
@@ -343,8 +341,8 @@ mod tests {
     use crate::features::vdom::domain::VNode;
     use crate::shared::config::domain::Config;
     use crate::shared::events::signals::SignalHub;
-    use crate::shared::primitives::geometry::{Position, Size};
     use crate::shared::primitives::ModuleId;
+    use crate::shared::primitives::geometry::{Position, Size};
 
     #[test]
     fn test_discover_monitors_aggregates_sources() {
@@ -418,7 +416,9 @@ mod tests {
 
         event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), outcome);
 
-        let received = cmd_rx.try_recv().expect("Should have sent ModuleSizeChanged");
+        let received = cmd_rx
+            .try_recv()
+            .expect("Should have sent ModuleSizeChanged");
         match received {
             AppCommand::ModuleSizeChanged(mon, mod_id, size) => {
                 assert_eq!(mon.as_str(), "DP-1");

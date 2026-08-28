@@ -261,7 +261,10 @@ impl AnyModulePort for LuaModule {
         full_config: &crate::shared::config::domain::Config,
     ) -> Result<(), ModuleInitError> {
         let (subs, dbus_subs, styles) = {
-            let lua = self.lua.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let lua = self
+                .lua
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let globals = lua.globals();
 
             let root_config = full_config.root();
@@ -328,7 +331,10 @@ impl AnyModulePort for LuaModule {
     fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
         let t0 = std::time::Instant::now();
         tracing::debug!(?changed, "Refreshing LuaModulePort");
-        let lua = self.lua.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let lua = self
+            .lua
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match LuaStateSynchronizer::sync(&lua, hub, changed) {
             Ok(()) => {
                 tracing::debug!(
@@ -347,7 +353,10 @@ impl AnyModulePort for LuaModule {
     #[allow(clippy::significant_drop_tightening)]
     fn render(&self, monitor: &MonitorId) -> crate::features::vdom::domain::VNode {
         let t0 = std::time::Instant::now();
-        let lua = self.lua.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let lua = self
+            .lua
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let globals = lua.globals();
         let lua_monitor = LuaMonitor(monitor.clone());
 
@@ -396,16 +405,17 @@ impl AnyModulePort for LuaModule {
         &mut self,
         name: &crate::shared::primitives::FunctionName,
     ) -> Result<(), ModuleInitError> {
-        let lua = self.lua.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let lua = self
+            .lua
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let globals = lua.globals();
 
         globals
             .get::<mlua::Function>(name.as_str())
             .map_or(Ok(()), |func| {
                 func.call::<()>(()).map_err(|e| {
-                    ModuleInitError::ScriptError(format!(
-                        "Failed to call function '{name}': {e}"
-                    ))
+                    ModuleInitError::ScriptError(format!("Failed to call function '{name}': {e}"))
                 })
             })
     }
@@ -434,17 +444,19 @@ mod tests {
         module.init(&module_config, &config).expect("Init failed");
 
         let hub = SignalHub::new(crate::shared::config::domain::Config::default());
-        let item = SystrayItem::new(crate::features::systray::domain::CreateSystrayItemCommand::new(
-            SystrayId::new("test_systray"),
-            Destination::new("dest"),
-            ObjectPath::new("/path"),
-            Title::new("Test Systray"),
-            SystrayStatus::Active,
-            None,
-            None,
-            crate::features::systray::domain::SystrayCategory::ApplicationStatus,
-            crate::features::systray::domain::ItemIsMenu::new(false),
-        ));
+        let item = SystrayItem::new(
+            crate::features::systray::domain::CreateSystrayItemCommand::new(
+                SystrayId::new("test_systray"),
+                Destination::new("dest"),
+                ObjectPath::new("/path"),
+                Title::new("Test Systray"),
+                SystrayStatus::Active,
+                None,
+                None,
+                crate::features::systray::domain::SystrayCategory::ApplicationStatus,
+                crate::features::systray::domain::ItemIsMenu::new(false),
+            ),
+        );
 
         let mut map = std::collections::BTreeMap::new();
         map.insert(item.id().clone(), item);
@@ -498,17 +510,19 @@ mod tests {
             Some(icon_img),
         );
 
-        let item = SystrayItem::new(crate::features::systray::domain::CreateSystrayItemCommand::new(
-            SystrayId::new("test_systray"),
-            Destination::new("dest"),
-            ObjectPath::new("/path"),
-            Title::new("Test Systray"),
-            SystrayStatus::Active,
-            icon,
-            None,
-            crate::features::systray::domain::SystrayCategory::ApplicationStatus,
-            crate::features::systray::domain::ItemIsMenu::new(false),
-        ));
+        let item = SystrayItem::new(
+            crate::features::systray::domain::CreateSystrayItemCommand::new(
+                SystrayId::new("test_systray"),
+                Destination::new("dest"),
+                ObjectPath::new("/path"),
+                Title::new("Test Systray"),
+                SystrayStatus::Active,
+                icon,
+                None,
+                crate::features::systray::domain::SystrayCategory::ApplicationStatus,
+                crate::features::systray::domain::ItemIsMenu::new(false),
+            ),
+        );
 
         let mut map = std::collections::BTreeMap::new();
         map.insert(item.id().clone(), item);

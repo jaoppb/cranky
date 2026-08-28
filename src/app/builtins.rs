@@ -133,10 +133,7 @@ impl BuiltinModules {
 
         for dir in [&user_dir, &shadow_dir] {
             for engine in &target_engines {
-                let path = dir.join(format!(
-                    "{name}.{}",
-                    engine.file_extension().as_str()
-                ));
+                let path = dir.join(format!("{name}.{}", engine.file_extension().as_str()));
                 if let Ok(source) = fs::read_to_string(&path)
                     && let Ok(module) = engine.load_module(name.as_str(), &source)
                 {

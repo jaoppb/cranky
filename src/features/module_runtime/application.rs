@@ -1,14 +1,10 @@
 use crate::features::module_runtime::adapters::EventLoop;
-use crate::features::module_runtime::domain::{
-    ModuleIdentity, PointerHandler, RenderPipeline,
-};
+use crate::features::module_runtime::domain::{ModuleIdentity, PointerHandler, RenderPipeline};
 use crate::features::module_runtime::ports::{AnyModulePort, CommandSender};
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::{
-    ModuleId, ModuleInstanceId, MonitorId, geometry::Rect,
-};
+use crate::shared::primitives::{ModuleId, ModuleInstanceId, MonitorId, geometry::Rect};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
@@ -217,11 +213,8 @@ mod tests {
                     .monitors
                     .first()
                     .map(|m| crate::features::workspaces::domain::MonitorName::new(*m));
-                let h_state = HyprlandState::new(
-                    std::collections::BTreeMap::new(),
-                    monitors_map,
-                    focused,
-                );
+                let h_state =
+                    HyprlandState::new(std::collections::BTreeMap::new(), monitors_map, focused);
                 hub.hyprland_tx().send(h_state).unwrap();
             }
 
@@ -299,7 +292,10 @@ mod tests {
         .await
         .unwrap();
 
-        let cmd = fixture.cmd_rx.try_recv().expect("Should send size changed command");
+        let cmd = fixture
+            .cmd_rx
+            .try_recv()
+            .expect("Should send size changed command");
         match cmd {
             AppCommand::ModuleSizeChanged(mon, mod_id, size) => {
                 assert_eq!(mon.as_str(), "DP-1");
@@ -436,8 +432,18 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(event_loop.render_pipeline().vdom_trees().contains_key(&MonitorId::new("DP-1")));
-        assert!(event_loop.render_pipeline().render_trees().contains_key(&MonitorId::new("DP-1")));
+        assert!(
+            event_loop
+                .render_pipeline()
+                .vdom_trees()
+                .contains_key(&MonitorId::new("DP-1"))
+        );
+        assert!(
+            event_loop
+                .render_pipeline()
+                .render_trees()
+                .contains_key(&MonitorId::new("DP-1"))
+        );
 
         // Second run with identical VDOM triggers early continue
         let event_loop = tokio::task::spawn_blocking(move || {
@@ -448,8 +454,18 @@ mod tests {
         .await
         .unwrap();
 
-        assert!(event_loop.render_pipeline().vdom_trees().contains_key(&MonitorId::new("DP-1")));
-        assert!(event_loop.render_pipeline().render_trees().contains_key(&MonitorId::new("DP-1")));
+        assert!(
+            event_loop
+                .render_pipeline()
+                .vdom_trees()
+                .contains_key(&MonitorId::new("DP-1"))
+        );
+        assert!(
+            event_loop
+                .render_pipeline()
+                .render_trees()
+                .contains_key(&MonitorId::new("DP-1"))
+        );
     }
 
     #[tokio::test]
@@ -517,6 +533,9 @@ mod tests {
                 found_container_layouts = true;
             }
         }
-        assert!(found_container_layouts, "Should emit ContainerLayoutsCalculated");
+        assert!(
+            found_container_layouts,
+            "Should emit ContainerLayoutsCalculated"
+        );
     }
 }

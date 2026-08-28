@@ -71,6 +71,11 @@ lightningcss = "1.0.0-alpha.63"
 
 [dev-dependencies]
 mockall = "0.14"
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+
+[[bench]]
+name = "benchmarks"
+harness = false
 
 [profile.release]
 debug = 1

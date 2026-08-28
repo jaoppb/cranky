@@ -428,14 +428,7 @@ mod tests {
             None,
             None,
         );
-        let new_tree = VNode::new_flex(
-            vec![child2, child1],
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let new_tree = VNode::new_flex(vec![child2, child1], None, None, None, None, None);
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
         assert!(!res.is_unchanged());
@@ -487,14 +480,7 @@ mod tests {
             None,
             None,
         );
-        let new_tree = VNode::new_flex(
-            vec![child1, child2, child3],
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let new_tree = VNode::new_flex(vec![child1, child2, child3], None, None, None, None, None);
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
         assert!(!res.is_unchanged());

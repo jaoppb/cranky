@@ -77,11 +77,7 @@ enum SniEvent {
 }
 
 impl SniEvent {
-    async fn apply(
-        self,
-        item: SystrayItem,
-        proxy: &StatusNotifierItemProxy<'_>,
-    ) -> SystrayItem {
+    async fn apply(self, item: SystrayItem, proxy: &StatusNotifierItemProxy<'_>) -> SystrayItem {
         match self {
             Self::Title => {
                 let title = proxy.title().await.unwrap_or_default();
@@ -644,11 +640,7 @@ impl Watcher {
             let mut events = new_title
                 .map(|_| SniEvent::Title)
                 .merge(new_status.map(|sig| {
-                    SniEvent::Status(
-                        sig.args()
-                            .map(|a| a.status().clone())
-                            .unwrap_or_default(),
-                    )
+                    SniEvent::Status(sig.args().map(|a| a.status().clone()).unwrap_or_default())
                 }))
                 .merge(new_icon.map(|_| SniEvent::Icon))
                 .merge(new_path.map(|_| SniEvent::ThemePath))
@@ -862,7 +854,9 @@ impl SniPort for SniAdapter {
                             "trigger_action: item_is_menu=true, calling ContextMenu({pos_x}, {pos_y}) on D-Bus"
                         );
                         match proxy.call_method("ContextMenu", &(pos_x, pos_y)).await {
-                            Ok(_) => debug!("trigger_action: ContextMenu({pos_x}, {pos_y}) succeeded"),
+                            Ok(_) => {
+                                debug!("trigger_action: ContextMenu({pos_x}, {pos_y}) succeeded");
+                            }
                             Err(e) => {
                                 error!("trigger_action: ContextMenu({pos_x}, {pos_y}) failed: {e}");
                             }
@@ -877,7 +871,10 @@ impl SniPort for SniAdapter {
                                 warn!(
                                     "trigger_action: Activate({pos_x}, {pos_y}) failed: {e}, attempting SecondaryActivate({pos_x}, {pos_y})"
                                 );
-                                match proxy.call_method("SecondaryActivate", &(pos_x, pos_y)).await {
+                                match proxy
+                                    .call_method("SecondaryActivate", &(pos_x, pos_y))
+                                    .await
+                                {
                                     Ok(_) => debug!(
                                         "trigger_action: SecondaryActivate({pos_x}, {pos_y}) succeeded"
                                     ),
@@ -897,11 +894,14 @@ impl SniPort for SniAdapter {
                     }
                 }
                 "SecondaryActivate" => {
-                    debug!(
-                        "trigger_action: Calling SecondaryActivate({pos_x}, {pos_y}) on D-Bus"
-                    );
-                    match proxy.call_method("SecondaryActivate", &(pos_x, pos_y)).await {
-                        Ok(_) => debug!("trigger_action: SecondaryActivate({pos_x}, {pos_y}) succeeded"),
+                    debug!("trigger_action: Calling SecondaryActivate({pos_x}, {pos_y}) on D-Bus");
+                    match proxy
+                        .call_method("SecondaryActivate", &(pos_x, pos_y))
+                        .await
+                    {
+                        Ok(_) => {
+                            debug!("trigger_action: SecondaryActivate({pos_x}, {pos_y}) succeeded");
+                        }
                         Err(e) => error!(
                             "trigger_action: SecondaryActivate({pos_x}, {pos_y}) failed: {e}"
                         ),
@@ -911,7 +911,9 @@ impl SniPort for SniAdapter {
                     debug!("trigger_action: Calling ContextMenu({pos_x}, {pos_y}) on D-Bus");
                     match proxy.call_method("ContextMenu", &(pos_x, pos_y)).await {
                         Ok(_) => debug!("trigger_action: ContextMenu({pos_x}, {pos_y}) succeeded"),
-                        Err(e) => error!("trigger_action: ContextMenu({pos_x}, {pos_y}) failed: {e}"),
+                        Err(e) => {
+                            error!("trigger_action: ContextMenu({pos_x}, {pos_y}) failed: {e}");
+                        }
                     }
                 }
                 "ScrollUp" => {

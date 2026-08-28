@@ -62,7 +62,10 @@ macro_rules! assert_pixmap_has_color {
 pub fn get_pixel_color(pixmap: &mut tiny_skia::PixmapMut, x: u32, y: u32) -> (u8, u8, u8, u8) {
     let width = pixmap.width();
     let height = pixmap.height();
-    assert!(x < width && y < height, "Pixel coordinates ({x}, {y}) out of bounds");
+    assert!(
+        x < width && y < height,
+        "Pixel coordinates ({x}, {y}) out of bounds"
+    );
     let data = pixmap.data_mut();
     let y_idx = usize::try_from(y).unwrap_or_default();
     let width_idx = usize::try_from(width).unwrap_or_default();

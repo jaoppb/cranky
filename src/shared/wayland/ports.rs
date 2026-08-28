@@ -26,7 +26,8 @@ pub trait SurfaceManagerPort: Send + Sync {
         buffer: RenderBuffer,
     ) {
         let _ = parent_id;
-        self.submit_buffer(module_id, monitor_id, position, buffer).await;
+        self.submit_buffer(module_id, monitor_id, position, buffer)
+            .await;
     }
 }
 

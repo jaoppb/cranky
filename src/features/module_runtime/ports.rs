@@ -107,8 +107,12 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
 
     fn root_module(&self) -> Option<ModuleId>;
     fn module_ids(&self) -> &[ModuleId];
-    fn module_names(&self) -> &std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleName>;
-    fn name_to_ids(&self) -> &std::collections::HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>;
+    fn module_names(
+        &self,
+    ) -> &std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleName>;
+    fn name_to_ids(
+        &self,
+    ) -> &std::collections::HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>;
 
     fn modules_using_style(
         &self,

@@ -291,12 +291,8 @@ impl RenderingModeDto {
     #[must_use]
     pub const fn into_domain(self) -> domain::RenderingMode {
         match self {
-            Self::Immediate { fps_limit } => {
-                domain::RenderingMode::new_immediate(fps_limit)
-            }
-            Self::Timebased { duration_ms } => {
-                domain::RenderingMode::new_timebased(duration_ms)
-            }
+            Self::Immediate { fps_limit } => domain::RenderingMode::new_immediate(fps_limit),
+            Self::Timebased { duration_ms } => domain::RenderingMode::new_timebased(duration_ms),
         }
     }
 }
@@ -401,7 +397,8 @@ impl PartialRootConfigDto {
             crate::shared::config::domain::CreatePartialRootConfigCommand::new(
                 self.height
                     .map(crate::shared::primitives::geometry::BarHeight::new),
-                self.vertical_alignment.map(VerticalAlignmentDto::into_domain),
+                self.vertical_alignment
+                    .map(VerticalAlignmentDto::into_domain),
                 self.margin.map(PartialMarginConfigDto::into_domain),
             ),
         )
@@ -529,13 +526,17 @@ mod tests {
         "#;
         let dto: ModulesConfigDto = toml::from_str(toml_str).unwrap();
         let domain = dto.into_domain();
-        let hour = domain.get(&crate::shared::primitives::ModuleName::new("hour")).unwrap();
+        let hour = domain
+            .get(&crate::shared::primitives::ModuleName::new("hour"))
+            .unwrap();
         assert_eq!(
             hour.options().get("format").and_then(|v| v.as_str()),
             Some("%H:%M:%S")
         );
 
-        let ws = domain.get(&crate::shared::primitives::ModuleName::new("workspace")).unwrap();
+        let ws = domain
+            .get(&crate::shared::primitives::ModuleName::new("workspace"))
+            .unwrap();
         assert!(ws.is_enabled());
         assert_eq!(ws.engine().as_explicit().unwrap().as_str(), "rhai");
     }

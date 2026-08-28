@@ -169,7 +169,11 @@ impl HyprlandAdapter {
     }
 
     /// Runs a background loop that listens to Hyprland event socket and pushes updates to the `SignalHub`.
-    #[allow(clippy::unused_async, clippy::too_many_lines, clippy::useless_let_if_seq)]
+    #[allow(
+        clippy::unused_async,
+        clippy::too_many_lines,
+        clippy::useless_let_if_seq
+    )]
     pub async fn run(self, hub: Arc<SignalHub>) {
         // Since we are reading from a socket using blocking std::io we can't easily use tokio::time::timeout
         // directly on the reader without wrapping it. We will use a channel to bridge to async, or just

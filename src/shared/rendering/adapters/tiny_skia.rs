@@ -242,7 +242,11 @@ impl Canvas for TinySkiaCosmicCanvas<'_> {
         }
     }
 
-    #[allow(clippy::as_conversions, clippy::cast_precision_loss, clippy::many_single_char_names)]
+    #[allow(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        clippy::many_single_char_names
+    )]
     fn draw_border(
         &mut self,
         position: Position,
@@ -388,7 +392,8 @@ impl Canvas for TinySkiaCosmicCanvas<'_> {
                             let r = scale_channel(pixel.red());
                             let g = scale_channel(pixel.green());
                             let b = scale_channel(pixel.blue());
-                            if let Some(c) = tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, a) {
+                            if let Some(c) = tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, a)
+                            {
                                 *pixel = c;
                             } else {
                                 *pixel = tiny_skia::PremultipliedColorU8::TRANSPARENT;
@@ -496,7 +501,11 @@ impl<'a> CosmicTextMeasurer<'a> {
 }
 
 impl crate::features::layout_engine::domain::TextMeasurer for CosmicTextMeasurer<'_> {
-    #[allow(clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    #[allow(
+        clippy::as_conversions,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     fn measure(
         &mut self,
         text: &str,

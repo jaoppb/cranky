@@ -363,11 +363,7 @@ impl RenderNode {
         let height_i32 = i32::try_from(r.height()).unwrap_or(i32::MAX);
         let max_x = r.x().saturating_add(width_i32);
         let max_y = r.y().saturating_add(height_i32);
-        if pos.x() >= r.x()
-            && pos.x() < max_x
-            && pos.y() >= r.y()
-            && pos.y() < max_y
-        {
+        if pos.x() >= r.x() && pos.x() < max_x && pos.y() >= r.y() && pos.y() < max_y {
             path.push(self);
             if let Self::Flex { children, .. } = self {
                 for child in children {

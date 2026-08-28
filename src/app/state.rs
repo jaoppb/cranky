@@ -87,10 +87,7 @@ impl AppReadModel {
         if let Some(mon_layouts) = self.computed_layouts.get(monitor) {
             for (&mod_id, &bounds) in mon_layouts {
                 if Some(mod_id) != self.root_module {
-                    layouts.push(ModuleLayout {
-                        id: mod_id,
-                        bounds,
-                    });
+                    layouts.push(ModuleLayout { id: mod_id, bounds });
                 }
             }
             return layouts;
@@ -164,7 +161,8 @@ impl AppReadModel {
             center_sizes.push((id, size));
         }
         if !center_sizes.is_empty() {
-            center_width = ((center_sizes.len().saturating_sub(1)) as f32).mul_add(gap, center_width);
+            center_width =
+                ((center_sizes.len().saturating_sub(1)) as f32).mul_add(gap, center_width);
         }
 
         let mut center_x = (bar_width.value() as f32 - center_width) / 2.0;
@@ -489,10 +487,7 @@ impl<
         if let Some(name) = name {
             let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
             let mon_entry = sizes_map.entry(monitor_id).or_default();
-            mon_entry.insert(
-                crate::shared::primitives::ModuleKey::new(name, None),
-                size,
-            );
+            mon_entry.insert(crate::shared::primitives::ModuleKey::new(name, None), size);
             let _ = self.hub.module_sizes_tx().send(sizes_map);
         }
     }
@@ -786,8 +781,11 @@ mod tests {
             .module_sizes
             .insert(MonitorId::new("DP-1"), sizes);
 
-        let layouts =
-            read_model.calculate_layout(&MonitorId::new("DP-1"), BarWidth::new(1920), config.root());
+        let layouts = read_model.calculate_layout(
+            &MonitorId::new("DP-1"),
+            BarWidth::new(1920),
+            config.root(),
+        );
         assert_eq!(layouts.len(), 3);
 
         let gap = 8;
@@ -932,25 +930,54 @@ mod tests {
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
         >::new();
         mock_registry.expect_load().returning(|_| Ok(()));
-        mock_registry.expect_root_module().return_const(Some(ModuleId::new(0)));
-        mock_registry.expect_module_ids().return_const(vec![ModuleId::new(0), ModuleId::new(1)]);
+        mock_registry
+            .expect_root_module()
+            .return_const(Some(ModuleId::new(0)));
+        mock_registry
+            .expect_module_ids()
+            .return_const(vec![ModuleId::new(0), ModuleId::new(1)]);
         let mut names = HashMap::new();
-        names.insert(ModuleId::new(0), crate::shared::primitives::ModuleName::new("bar"));
-        names.insert(ModuleId::new(1), crate::shared::primitives::ModuleName::new("hour"));
+        names.insert(
+            ModuleId::new(0),
+            crate::shared::primitives::ModuleName::new("bar"),
+        );
+        names.insert(
+            ModuleId::new(1),
+            crate::shared::primitives::ModuleName::new("hour"),
+        );
         mock_registry.expect_module_names().return_const(names);
         let mut name_to_ids = HashMap::new();
-        name_to_ids.insert(crate::shared::primitives::ModuleName::new("bar"), vec![ModuleId::new(0)]);
-        name_to_ids.insert(crate::shared::primitives::ModuleName::new("hour"), vec![ModuleId::new(1)]);
+        name_to_ids.insert(
+            crate::shared::primitives::ModuleName::new("bar"),
+            vec![ModuleId::new(0)],
+        );
+        name_to_ids.insert(
+            crate::shared::primitives::ModuleName::new("hour"),
+            vec![ModuleId::new(1)],
+        );
         mock_registry.expect_name_to_ids().return_const(name_to_ids);
-        
+
         let (layout_tx_0, _layout_rx_0) = tokio::sync::watch::channel(HashMap::new());
         let (layout_tx_1, mut layout_rx_1) = tokio::sync::watch::channel(HashMap::new());
-        let mut senders: HashMap<ModuleId, Box<dyn crate::features::module_runtime::ports::LayoutSender>> = HashMap::new();
-        senders.insert(ModuleId::new(0), Box::new(crate::app::registry::WatchLayoutSender::new(layout_tx_0)));
-        senders.insert(ModuleId::new(1), Box::new(crate::app::registry::WatchLayoutSender::new(layout_tx_1)));
+        let mut senders: HashMap<
+            ModuleId,
+            Box<dyn crate::features::module_runtime::ports::LayoutSender>,
+        > = HashMap::new();
+        senders.insert(
+            ModuleId::new(0),
+            Box::new(crate::app::registry::WatchLayoutSender::new(layout_tx_0)),
+        );
+        senders.insert(
+            ModuleId::new(1),
+            Box::new(crate::app::registry::WatchLayoutSender::new(layout_tx_1)),
+        );
 
-        mock_registry.expect_spawn_all().return_once(|_, _, _, _| senders);
-        mock_registry.expect_register_dbus_subscriptions().returning(|_| Box::pin(std::future::ready(())));
+        mock_registry
+            .expect_spawn_all()
+            .return_once(|_, _, _, _| senders);
+        mock_registry
+            .expect_register_dbus_subscriptions()
+            .returning(|_| Box::pin(std::future::ready(())));
         mock_registry.expect_clear().returning(|| ());
 
         let canvas_factory = Arc::new(std::sync::Mutex::new(
@@ -974,7 +1001,9 @@ mod tests {
                 parent_id: ModuleId::new(0),
                 monitor_id: MonitorId::new("DP-1"),
                 layouts: vec![crate::shared::primitives::ChildModuleLayout::new(
-                    crate::shared::primitives::ModuleKey::from_name(crate::shared::primitives::ModuleName::new("hour")),
+                    crate::shared::primitives::ModuleKey::from_name(
+                        crate::shared::primitives::ModuleName::new("hour"),
+                    ),
                     Rect::new(Position::new(100, 0), Size::new(80, 24)),
                 )],
             })
@@ -987,7 +1016,9 @@ mod tests {
                 parent_id: ModuleId::new(0),
                 monitor_id: MonitorId::new("DP-2"),
                 layouts: vec![crate::shared::primitives::ChildModuleLayout::new(
-                    crate::shared::primitives::ModuleKey::from_name(crate::shared::primitives::ModuleName::new("hour")),
+                    crate::shared::primitives::ModuleKey::from_name(
+                        crate::shared::primitives::ModuleName::new("hour"),
+                    ),
                     Rect::new(Position::new(150, 0), Size::new(80, 24)),
                 )],
             })
@@ -1001,7 +1032,9 @@ mod tests {
             let mut stop_rx = stop_rx.clone();
             Box::pin(async move {
                 let _ = stop_rx.changed().await;
-                Err(crate::shared::wayland::ports::DisplayServerError::Internal("Done".to_string()))
+                Err(crate::shared::wayland::ports::DisplayServerError::Internal(
+                    "Done".to_string(),
+                ))
             })
         });
         mock_display.expect_dispatch_pending().returning(|| Ok(()));
@@ -1027,7 +1060,9 @@ mod tests {
         loop {
             layout_rx_1.changed().await.unwrap();
             let current = layout_rx_1.borrow().clone();
-            if current.contains_key(&MonitorId::new("DP-1")) && current.contains_key(&MonitorId::new("DP-2")) {
+            if current.contains_key(&MonitorId::new("DP-1"))
+                && current.contains_key(&MonitorId::new("DP-2"))
+            {
                 assert_eq!(current.get(&MonitorId::new("DP-1")).unwrap().x(), 100);
                 assert_eq!(current.get(&MonitorId::new("DP-2")).unwrap().x(), 150);
                 break;

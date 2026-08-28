@@ -3,7 +3,12 @@ use std::path::Path;
 use tiny_skia::Transform;
 
 #[must_use]
-#[allow(clippy::as_conversions, clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+#[allow(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
 pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
     let icon_px = (f32::from(icon_size) * scale.max(1.0))
         .ceil()
