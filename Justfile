@@ -53,3 +53,8 @@ coverage:
 # Install git hooks with Lefthook
 setup-hooks:
     lefthook install
+
+# Analyze performance profile (JSON.GZ)
+analyze-profile *args:
+    python3 scripts/analyze_profile.py {{args}}
+
