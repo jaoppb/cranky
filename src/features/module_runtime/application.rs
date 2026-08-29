@@ -8,7 +8,7 @@ use crate::shared::primitives::{ModuleId, ModuleInstanceId, MonitorId, geometry:
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::watch;
 
 pub struct ModuleContext {
@@ -99,7 +99,7 @@ impl ModuleContext {
 pub struct ModuleActor<F: CanvasFactory + 'static> {
     port: Box<dyn AnyModulePort>,
     ctx: ModuleContext,
-    canvas_factory: Arc<Mutex<F>>,
+    canvas_factory: F,
     style_resolver: Arc<dyn StyleResolverPort>,
     vdom_diff: Arc<dyn VdomDiffPort>,
 }
@@ -109,7 +109,7 @@ impl<F: CanvasFactory + 'static> ModuleActor<F> {
     pub fn new(
         port: Box<dyn AnyModulePort>,
         ctx: ModuleContext,
-        canvas_factory: Arc<Mutex<F>>,
+        canvas_factory: F,
         style_resolver: Arc<dyn StyleResolverPort>,
         vdom_diff: Arc<dyn VdomDiffPort>,
     ) -> Self {
@@ -228,7 +228,7 @@ mod tests {
 
             let resolver = Arc::new(CompositeStyleResolver::new(vec![]));
             let diff_adapter = Arc::new(DefaultVdomDiffAdapter::new());
-            let canvas_factory = Arc::new(Mutex::new(MockCanvasFactory));
+            let canvas_factory = MockCanvasFactory;
 
             let event_loop = EventLoop::new(
                 port,

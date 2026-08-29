@@ -33,18 +33,16 @@ end
 
 function render(monitor)
 	if #items == 0 then
-		return {
-			type = "text",
+		return vdom.text({
 			class = "empty",
 			text = empty_label,
-			tooltip = {
-				type = "flex",
+			tooltip = vdom.flex({
 				class = "tooltip",
 				children = {
-					{ type = "text", text = "No systray items are currently active" },
+					vdom.text({ text = "No systray items are currently active" }),
 				},
-			},
-		}
+			}),
+		})
 	end
 
 	local children = {}
@@ -61,27 +59,33 @@ function render(monitor)
 				img = item.icon.image
 			end
 			if type(img) == "table" then
-				table.insert(item_children, {
-					type = "image",
-					class = "icon",
-					data = img.data,
-					pixel_size = img.size,
-				})
+				table.insert(
+					item_children,
+					vdom.image({
+						class = "icon",
+						data = img.data,
+						pixel_size = img.size,
+					})
+				)
 			else
-				table.insert(item_children, {
-					type = "rect",
-					class = "icon-placeholder",
-				})
+				table.insert(
+					item_children,
+					vdom.rect({
+						class = "icon-placeholder",
+					})
+				)
 			end
 		end
 
 		if show_titles then
 			local label = (item.title and item.title ~= "") and item.title or item.item_id or "app"
-			table.insert(item_children, {
-				type = "text",
-				class = "title",
-				text = label,
-			})
+			table.insert(
+				item_children,
+				vdom.text({
+					class = "title",
+					text = label,
+				})
+			)
 		end
 
 		local tooltip_children = {}
@@ -89,22 +93,23 @@ function render(monitor)
 			local t = item.tooltip.title or ""
 			local d = item.tooltip.description or ""
 			if t ~= "" then
-				table.insert(tooltip_children, { type = "text", class = "tooltip-title", text = t })
+				table.insert(tooltip_children, vdom.text({ class = "tooltip-title", text = t }))
 			end
 			if d ~= "" and d ~= t then
-				table.insert(tooltip_children, { type = "text", class = "tooltip-desc", text = d })
+				table.insert(tooltip_children, vdom.text({ class = "tooltip-desc", text = d }))
 			end
 		end
 		if #tooltip_children == 0 then
-			table.insert(tooltip_children, {
-				type = "text",
-				class = "tooltip-title",
-				text = (item.title and item.title ~= "") and item.title or item.item_id or "app",
-			})
+			table.insert(
+				tooltip_children,
+				vdom.text({
+					class = "tooltip-title",
+					text = (item.title and item.title ~= "") and item.title or item.item_id or "app",
+				})
+			)
 		end
 
-		local item_node = {
-			type = "flex",
+		local item_node = vdom.flex({
 			class = "item",
 			children = item_children,
 			on_click = {
@@ -113,18 +118,16 @@ function render(monitor)
 					action = "Primary",
 				},
 			},
-			tooltip = {
-				type = "flex",
+			tooltip = vdom.flex({
 				class = "tooltip",
 				children = tooltip_children,
-			},
-		}
+			}),
+		})
 		table.insert(children, item_node)
 	end
 
-	return {
-		type = "flex",
+	return vdom.flex({
 		class = "container",
 		children = children,
-	}
+	})
 end

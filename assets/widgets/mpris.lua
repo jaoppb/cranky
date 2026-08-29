@@ -94,13 +94,12 @@ end
 local function create_button(icon, cmd, tooltip_text, class_name)
 	local ttip = nil
 	if tooltip_text then
-		ttip = {
-			type = "flex",
+		ttip = vdom.flex({
 			class = "tooltip",
 			children = {
-				{ type = "text", text = tooltip_text },
+				vdom.text({ text = tooltip_text }),
 			},
-		}
+		})
 	end
 
 	local click_action
@@ -114,21 +113,20 @@ local function create_button(icon, cmd, tooltip_text, class_name)
 		click_action = cmd
 	end
 
-	return {
-		type = "flex",
+	return vdom.flex({
 		class = class_name or "btn",
 		on_click = click_action,
 		tooltip = ttip,
 		children = {
-			{ type = "text", text = icon },
+			vdom.text({ text = icon }),
 		},
-	}
+	})
 end
 
 function render(monitor)
 	local p, bus_name = get_active_player()
 	if not p then
-		return { type = "flex", class = "container" }
+		return vdom.flex({ class = "container" })
 	end
 
 	local title = p.track_name or "Unknown"
@@ -185,27 +183,27 @@ function render(monitor)
 	end
 
 	-- Track info
-	table.insert(children, {
-		type = "flex",
-		class = "track-info",
-		tooltip = {
-			type = "flex",
-			class = "tooltip",
+	table.insert(
+		children,
+		vdom.flex({
+			class = "track-info",
+			tooltip = vdom.flex({
+				class = "tooltip",
+				children = {
+					vdom.text({ class = "title", text = "Title: " .. title }),
+					vdom.text({ class = "artist", text = "Artist: " .. (artist ~= "" and artist or "Unknown") }),
+					vdom.text({ class = "status", text = "Status: " .. p.status }),
+					vdom.text({ class = "player", text = "Player: " .. (p.name or bus_name) }),
+				},
+			}),
 			children = {
-				{ type = "text", class = "title", text = "Title: " .. title },
-				{ type = "text", class = "artist", text = "Artist: " .. (artist ~= "" and artist or "Unknown") },
-				{ type = "text", class = "status", text = "Status: " .. p.status },
-				{ type = "text", class = "player", text = "Player: " .. (p.name or bus_name) },
+				vdom.text({ text = truncated_text }),
 			},
-		},
-		children = {
-			{ type = "text", text = truncated_text },
-		},
-	})
+		})
+	)
 
-	return {
-		type = "flex",
+	return vdom.flex({
 		class = "container",
 		children = children,
-	}
+	})
 end

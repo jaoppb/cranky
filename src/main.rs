@@ -157,9 +157,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let registry = Box::new(cranky::app::registry::ModuleRegistry::new(app_env.clone()));
 
-    let canvas_factory = Arc::new(std::sync::Mutex::new(
-        cranky::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
-    ));
+    let canvas_factory =
+        cranky::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
     let mut app = CrankyApp::new(
         hub.clone(),

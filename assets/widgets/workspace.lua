@@ -96,11 +96,10 @@ function render(monitor)
 				exec_cmd = "hyprctl dispatch 'hl.dsp.focus({ workspace = \"" .. ws.id .. "\"})'"
 			end
 
-			local text_node = {
-				type = "text",
+			local text_node = vdom.text({
 				class = "label",
 				text = label,
-			}
+			})
 
 			local classes = "item"
 			if is_visible then
@@ -111,26 +110,26 @@ function render(monitor)
 				end
 			end
 
-			table.insert(children, {
-				type = "flex",
-				class = classes,
-				id = "ws-" .. ws.id,
-				on_click = { Exec = exec_cmd },
-				tooltip = {
-					type = "flex",
-					class = "tooltip",
-					children = {
-						{ type = "text", text = "Switch to workspace " .. label },
-					},
-				},
-				children = { text_node },
-			})
+			table.insert(
+				children,
+				vdom.flex({
+					class = classes,
+					id = "ws-" .. ws.id,
+					on_click = { Exec = exec_cmd },
+					tooltip = vdom.flex({
+						class = "tooltip",
+						children = {
+							vdom.text({ text = "Switch to workspace " .. label }),
+						},
+					}),
+					children = { text_node },
+				})
+			)
 		end
 	end
 
-	return {
-		type = "flex",
+	return vdom.flex({
 		class = "container",
 		children = children,
-	}
+	})
 end

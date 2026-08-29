@@ -191,7 +191,7 @@ pub struct CrankyApp<
     surface_manager: DynSurfaceManager,
     command_tx_clone: mpsc::Sender<AppCommand>,
     registry: Box<R>,
-    canvas_factory: Arc<std::sync::Mutex<F>>,
+    canvas_factory: F,
 }
 
 struct MpscCommandSender(mpsc::Sender<AppCommand>);
@@ -220,7 +220,7 @@ impl<
         command_rx: mpsc::Receiver<AppCommand>,
         command_tx: mpsc::Sender<AppCommand>,
         surface_manager: DynSurfaceManager,
-        canvas_factory: Arc<std::sync::Mutex<F>>,
+        canvas_factory: F,
         mut registry: Box<R>,
     ) -> Result<Self, AppError> {
         registry.load(&config).map_err(AppError::Module)?;
@@ -535,9 +535,8 @@ mod tests {
             .expect_spawn_all()
             .returning(|_, _, _, _| HashMap::new());
 
-        let canvas_factory = Arc::new(std::sync::Mutex::new(
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
-        ));
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
         let app_result = CrankyApp::new(
             hub,
@@ -580,9 +579,8 @@ mod tests {
             .returning(|_| Box::pin(std::future::ready(())));
         mock_registry.expect_clear().returning(|| ());
 
-        let canvas_factory = Arc::new(std::sync::Mutex::new(
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
-        ));
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
         let mut app = CrankyApp::new(
             hub.clone(),
@@ -836,9 +834,8 @@ mod tests {
             .returning(|_| Box::pin(std::future::ready(())));
         mock_registry.expect_clear().returning(|| ());
 
-        let canvas_factory = Arc::new(std::sync::Mutex::new(
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
-        ));
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
         let mut app = CrankyApp::new(
             hub.clone(),
@@ -987,9 +984,8 @@ mod tests {
             .returning(|_| Box::pin(std::future::ready(())));
         mock_registry.expect_clear().returning(|| ());
 
-        let canvas_factory = Arc::new(std::sync::Mutex::new(
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
-        ));
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
         let mut app = CrankyApp::new(
             hub.clone(),

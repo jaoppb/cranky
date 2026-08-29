@@ -12,7 +12,7 @@ use crate::shared::primitives::geometry::Rect;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use futures_util::StreamExt;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum EventLoopEvent {
@@ -28,7 +28,7 @@ pub struct EventLoop<F: CanvasFactory + 'static> {
     ctx: ModuleContext,
     pointer_handler: PointerHandler,
     render_pipeline: RenderPipeline,
-    canvas_factory: Arc<Mutex<F>>,
+    canvas_factory: F,
     vdom_diff: Arc<dyn VdomDiffPort>,
     style_resolver: Arc<dyn StyleResolverPort>,
 }
@@ -40,7 +40,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         ctx: ModuleContext,
         pointer_handler: PointerHandler,
         render_pipeline: RenderPipeline,
-        canvas_factory: Arc<Mutex<F>>,
+        canvas_factory: F,
         style_resolver: Arc<dyn StyleResolverPort>,
         vdom_diff: Arc<dyn VdomDiffPort>,
     ) -> Self {
@@ -139,7 +139,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         &mut self,
         monitor_id: &MonitorId,
         event: &crate::shared::events::core::PointerEvent,
-    ) {
+    ) -> bool {
         let ctx_id = self.ctx.id();
         tracing::debug!(
             module = %ctx_id,
@@ -174,12 +174,14 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
                 let subs = self.port.subscriptions().to_vec();
                 self.port.refresh(self.ctx.hub(), &subs);
             }
+            changed
         } else {
             tracing::warn!(
                 module = %ctx_id,
                 monitor = %monitor_id,
                 "Received pointer event but no render tree found for monitor"
             );
+            false
         }
     }
 
@@ -196,31 +198,48 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
 
         loop {
             let event = self.poll_next_event(&mut events_stream, &mut module_sizes_rx);
+            let mut should_render = false;
 
             match event {
                 EventLoopEvent::Shutdown => break,
                 EventLoopEvent::Signals(sigs) => {
                     if !sigs.is_empty() {
                         self.port.refresh(self.ctx.hub(), &sigs);
+                        should_render = true;
                     }
                 }
-                EventLoopEvent::ModuleSizesChanged => {}
+                EventLoopEvent::ModuleSizesChanged => {
+                    let current_sizes = self.ctx.hub().module_sizes_rx().borrow().clone();
+                    for (mon_id, last_sizes) in self.render_pipeline.last_child_sizes() {
+                        let current_mon_sizes = current_sizes.get(mon_id);
+                        if last_sizes.as_ref() != current_mon_sizes {
+                            should_render = true;
+                            break;
+                        }
+                    }
+                }
                 EventLoopEvent::LayoutChanged => {
                     self.port.refresh(self.ctx.hub(), &subs);
+                    should_render = true;
                 }
                 EventLoopEvent::Pointer(monitor_id, event) => {
-                    self.handle_pointer_event(&monitor_id, &event);
+                    let changed = self.handle_pointer_event(&monitor_id, &event);
+                    if changed {
+                        should_render = true;
+                    }
                 }
             }
 
-            self.render_all_monitors(&mut layout_engines);
+            if should_render {
+                self.render_all_monitors(&mut layout_engines);
 
-            let post_actions = self
-                .pointer_handler
-                .update_after_render(self.render_pipeline.render_trees());
-            for action in post_actions {
-                if let PointerAction::SendCommand(cmd) = action {
-                    self.ctx.command_tx().send_command(cmd);
+                let post_actions = self
+                    .pointer_handler
+                    .update_after_render(self.render_pipeline.render_trees());
+                for action in post_actions {
+                    if let PointerAction::SendCommand(cmd) = action {
+                        self.ctx.command_tx().send_command(cmd);
+                    }
                 }
             }
         }
@@ -298,14 +317,11 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
                 .or_insert_with(|| Box::new(TaffyLayoutAdapter::new()));
 
             let outcome = {
-                let Ok(mut factory) = self.canvas_factory.lock() else {
-                    continue;
-                };
                 let layout_ctx = crate::features::module_runtime::domain::LayoutContext {
                     style_resolver: self.style_resolver.as_ref(),
                     current_bounds,
                     current_child_sizes,
-                    canvas_factory: &mut *factory,
+                    canvas_factory: &mut self.canvas_factory,
                     layout_engine: engine.as_mut(),
                 };
                 self.render_pipeline.process_monitor(
@@ -360,7 +376,7 @@ mod tests {
             ctx,
             PointerHandler::new(),
             RenderPipeline::new(),
-            Arc::new(Mutex::new(MockCanvasFactory)),
+            MockCanvasFactory,
             Arc::new(CompositeStyleResolver::new(vec![])),
             Arc::new(DefaultVdomDiffAdapter::new()),
         );
@@ -396,7 +412,7 @@ mod tests {
             ctx,
             PointerHandler::new(),
             RenderPipeline::new(),
-            Arc::new(Mutex::new(MockCanvasFactory)),
+            MockCanvasFactory,
             Arc::new(CompositeStyleResolver::new(vec![])),
             Arc::new(DefaultVdomDiffAdapter::new()),
         );
@@ -427,5 +443,35 @@ mod tests {
             }
             _ => panic!("Unexpected command"),
         }
+    }
+
+    #[test]
+    fn test_handle_pointer_event_no_tree_returns_false() {
+        let id = ModuleId::new(1);
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let sm = Arc::new(MockSurfaceManager);
+        let cmd = Arc::new(MockCommandSender);
+        let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
+        let ctx = ModuleContext::new(id, hub, sm, cmd, rx);
+
+        let mut event_loop = EventLoop::new(
+            Box::new(TestModulePort::new(VNode::new_rect(
+                None, None, None, None, None,
+            ))),
+            ctx,
+            PointerHandler::new(),
+            RenderPipeline::new(),
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        );
+
+        let event = crate::shared::events::core::PointerEvent::Click {
+            button: 0,
+            x: 10.0,
+            y: 10.0,
+        };
+        let changed = event_loop.handle_pointer_event(&MonitorId::new("DP-1"), &event);
+        assert!(!changed);
     }
 }

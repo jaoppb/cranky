@@ -21,6 +21,12 @@ impl Default for TinySkiaCanvasFactory {
     }
 }
 
+impl Clone for TinySkiaCanvasFactory {
+    fn clone(&self) -> Self {
+        Self::new()
+    }
+}
+
 impl TinySkiaCanvasFactory {
     #[must_use]
     pub fn new() -> Self {

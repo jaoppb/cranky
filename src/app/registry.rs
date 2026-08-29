@@ -294,7 +294,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
         hub: std::sync::Arc<SignalHub>,
         surface_manager: crate::shared::wayland::ports::DynSurfaceManager,
         command_tx: std::sync::Arc<dyn crate::features::module_runtime::ports::CommandSender>,
-        canvas_factory: std::sync::Arc<std::sync::Mutex<Fact>>,
+        canvas_factory: Fact,
     ) -> std::collections::HashMap<
         ModuleId,
         Box<dyn crate::features::module_runtime::ports::LayoutSender>,
@@ -349,7 +349,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
         hub: std::sync::Arc<SignalHub>,
         surface_manager: crate::shared::wayland::ports::DynSurfaceManager,
         command_tx: std::sync::Arc<dyn crate::features::module_runtime::ports::CommandSender>,
-        canvas_factory: std::sync::Arc<std::sync::Mutex<Fact>>,
+        canvas_factory: Fact,
     ) -> Result<
         std::collections::HashMap<
             ModuleId,
@@ -673,9 +673,8 @@ mod tests {
             std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
 
         let command_tx = std::sync::Arc::new(MockSender);
-        let canvas_factory = std::sync::Arc::new(std::sync::Mutex::new(
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
-        ));
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
         let senders = crate::features::module_runtime::ports::ModuleRegistryPort::<
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,

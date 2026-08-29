@@ -109,6 +109,44 @@ impl RhaiModule {
         (subs, dbus_subs, styles)
     }
 
+    fn parse_dbus_subscription(
+        map: &rhai::Map,
+    ) -> Option<crate::shared::dbus::domain::DBusSubscription> {
+        let is_dbus = map
+            .get("type")
+            .and_then(|v| v.clone().try_cast::<String>())
+            .as_deref()
+            == Some("dbus");
+        if !is_dbus {
+            return None;
+        }
+
+        let bus = match map
+            .get("bus")
+            .and_then(|v| v.clone().try_cast::<String>())
+            .as_deref()
+        {
+            Some("system") => crate::shared::dbus::domain::BusType::System,
+            _ => crate::shared::dbus::domain::BusType::Session,
+        };
+
+        Some(crate::shared::dbus::domain::DBusSubscription::new(
+            bus,
+            map.get("destination")
+                .and_then(|v| v.clone().try_cast::<String>())
+                .map(crate::shared::dbus::domain::Destination::new),
+            map.get("path")
+                .and_then(|v| v.clone().try_cast::<String>())
+                .map(crate::shared::dbus::domain::Path::new),
+            map.get("interface")
+                .and_then(|v| v.clone().try_cast::<String>())
+                .map(crate::shared::dbus::domain::Interface::new),
+            map.get("member")
+                .and_then(|v| v.clone().try_cast::<String>())
+                .map(crate::shared::dbus::domain::Member::new),
+        ))
+    }
+
     fn parse_subscriptions_array(
         subs: &rhai::Array,
         result: &mut Vec<SignalKind>,
@@ -125,34 +163,10 @@ impl RhaiModule {
                     _ => {}
                 }
             } else if let Some(map) = sub.clone().try_cast::<rhai::Map>()
-                && map
-                    .get("type")
-                    .and_then(|v| v.clone().try_cast::<String>())
-                    .as_deref()
-                    == Some("dbus")
+                && let Some(dbus_sub) = Self::parse_dbus_subscription(&map)
             {
-                let bus_str = map.get("bus").and_then(|v| v.clone().try_cast::<String>());
-                let bus = if bus_str.as_deref() == Some("system") {
-                    crate::shared::dbus::domain::BusType::System
-                } else {
-                    crate::shared::dbus::domain::BusType::Session
-                };
                 result.push(SignalKind::DBus);
-                dbus_subs.push(crate::shared::dbus::domain::DBusSubscription::new(
-                    bus,
-                    map.get("destination")
-                        .and_then(|v| v.clone().try_cast::<String>())
-                        .map(crate::shared::dbus::domain::Destination::new),
-                    map.get("path")
-                        .and_then(|v| v.clone().try_cast::<String>())
-                        .map(crate::shared::dbus::domain::Path::new),
-                    map.get("interface")
-                        .and_then(|v| v.clone().try_cast::<String>())
-                        .map(crate::shared::dbus::domain::Interface::new),
-                    map.get("member")
-                        .and_then(|v| v.clone().try_cast::<String>())
-                        .map(crate::shared::dbus::domain::Member::new),
-                ));
+                dbus_subs.push(dbus_sub);
             }
         }
     }

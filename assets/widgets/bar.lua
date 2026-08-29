@@ -26,47 +26,49 @@ function refresh() end
 function render(monitor)
 	local left_children = {}
 	for _, mod_name in ipairs(left) do
-		table.insert(left_children, {
-			type = "module",
-			name = mod_name,
-		})
+		table.insert(
+			left_children,
+			vdom.module({
+				name = mod_name,
+			})
+		)
 	end
 
 	local center_children = {}
 	for _, mod_name in ipairs(center) do
-		table.insert(center_children, {
-			type = "module",
-			name = mod_name,
-		})
+		table.insert(
+			center_children,
+			vdom.module({
+				name = mod_name,
+			})
+		)
 	end
 
 	local right_children = {}
 	for _, mod_name in ipairs(right) do
-		table.insert(right_children, {
-			type = "module",
-			name = mod_name,
-		})
+		table.insert(
+			right_children,
+			vdom.module({
+				name = mod_name,
+			})
+		)
 	end
 
-	return {
-		type = "flex",
+	return vdom.flex({
 		class = "root",
 		children = {
-			{
-				type = "flex",
+			vdom.flex({
 				class = "left",
 				children = left_children,
-			},
-			{
-				type = "flex",
+			}),
+			vdom.flex({
 				class = "center",
 				children = center_children,
-			},
-			{
-				type = "flex",
+			}),
+			vdom.flex({
 				class = "right",
 				children = right_children,
-			},
+			}),
 		},
-	}
+	})
 end

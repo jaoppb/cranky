@@ -118,12 +118,12 @@ end
 
 function render(monitor)
 	if not state.config then
-		return { type = "flex", class = "container" }
+		return vdom.flex({ class = "container" })
 	end
 
 	local widgets = get_widgets()
 	if #widgets == 0 then
-		return { type = "flex", class = "container" }
+		return vdom.flex({ class = "container" })
 	end
 
 	local children = {}
@@ -131,38 +131,45 @@ function render(monitor)
 	for i, w in ipairs(widgets) do
 		local widget_children = {}
 
-		table.insert(widget_children, {
-			type = "text",
-			class = "label",
-			text = w.label,
-		})
+		table.insert(
+			widget_children,
+			vdom.text({
+				class = "label",
+				text = w.label,
+			})
+		)
 
 		if w.type == "bar" then
 			local percent = math.min(100, math.max(0, w.value))
-			table.insert(widget_children, {
-				type = "progress",
-				class = get_progress_class(percent),
-				value = percent / 100.0,
-				orientation = "horizontal",
-			})
+			table.insert(
+				widget_children,
+				vdom.progress({
+					class = get_progress_class(percent),
+					value = percent / 100.0,
+					orientation = "horizontal",
+				})
+			)
 		elseif w.type == "text" then
-			table.insert(widget_children, {
-				type = "text",
-				class = "value",
-				text = w.text,
-			})
+			table.insert(
+				widget_children,
+				vdom.text({
+					class = "value",
+					text = w.text,
+				})
+			)
 		end
 
-		table.insert(children, {
-			type = "flex",
-			class = "item",
-			children = widget_children,
-		})
+		table.insert(
+			children,
+			vdom.flex({
+				class = "item",
+				children = widget_children,
+			})
+		)
 	end
 
-	return {
-		type = "flex",
+	return vdom.flex({
 		class = "container",
 		children = children,
-	}
+	})
 end

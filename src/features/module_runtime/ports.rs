@@ -87,7 +87,7 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
         hub: Arc<SignalHub>,
         surface_manager: DynSurfaceManager,
         command_tx: Arc<dyn CommandSender>,
-        canvas_factory: Arc<std::sync::Mutex<Fact>>,
+        canvas_factory: Fact,
     ) -> std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>;
 
     /// Reload a specific module by name.
@@ -102,7 +102,7 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
         hub: Arc<SignalHub>,
         surface_manager: DynSurfaceManager,
         command_tx: Arc<dyn CommandSender>,
-        canvas_factory: Arc<std::sync::Mutex<Fact>>,
+        canvas_factory: Fact,
     ) -> Result<std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>, RegistryLoadError>;
 
     fn root_module(&self) -> Option<ModuleId>;

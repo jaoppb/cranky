@@ -3,7 +3,7 @@ use crate::shared::primitives::color::DrawingColor;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
 
-pub trait CanvasFactory: Send + Sync {
+pub trait CanvasFactory: Send + Sync + Clone {
     #[must_use]
     fn create_canvas<'a>(
         &'a mut self,

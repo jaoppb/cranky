@@ -33,10 +33,9 @@ function refresh()
 end
 
 function render(monitor)
-	return {
-		type = "text",
+	return vdom.text({
 		class = "time",
 		text = time_str,
 		on_click = on_click,
-	}
+	})
 end

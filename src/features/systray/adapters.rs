@@ -208,9 +208,7 @@ fn resolve_pixmap_data(
 }
 
 #[derive(Debug, Default)]
-pub struct InMemorySystrayIconCache(
-    Mutex<HashMap<IconCacheKey, Option<IconImage>>>,
-);
+pub struct InMemorySystrayIconCache(Mutex<HashMap<IconCacheKey, Option<IconImage>>>);
 
 impl InMemorySystrayIconCache {
     #[must_use]
@@ -231,7 +229,8 @@ impl SystrayIconCachePort for InMemorySystrayIconCache {
     }
 }
 
-static ICON_CACHE: LazyLock<InMemorySystrayIconCache> = LazyLock::new(InMemorySystrayIconCache::new);
+static ICON_CACHE: LazyLock<InMemorySystrayIconCache> =
+    LazyLock::new(InMemorySystrayIconCache::new);
 
 async fn resolve_icon(
     icon_name: Option<String>,
@@ -241,7 +240,9 @@ async fn resolve_icon(
     let cache_key = icon_name.as_ref().map(|name| {
         IconCacheKey::new(
             IconName::new(name.clone()),
-            icon_theme_path.as_ref().map(|tp| IconThemePath::new(tp.clone())),
+            icon_theme_path
+                .as_ref()
+                .map(|tp| IconThemePath::new(tp.clone())),
         )
     });
 
