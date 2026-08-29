@@ -54,7 +54,12 @@ coverage:
 setup-hooks:
     lefthook install
 
+# Record performance profile with samply
+record-profile *args:
+    samply record --save-only -o scripts/profile.json.gz ./target/release/cranky {{args}}
+
 # Analyze performance profile (JSON.GZ)
 analyze-profile *args:
     python3 scripts/analyze_profile.py {{args}}
+
 
