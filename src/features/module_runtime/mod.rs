@@ -41,9 +41,8 @@ pub mod test_support {
 
     pub struct MockSurfaceManager;
 
-    #[async_trait::async_trait]
     impl crate::shared::wayland::ports::SurfaceManagerPort for MockSurfaceManager {
-        async fn submit_buffer(
+        fn submit_buffer(
             &self,
             _mod_id: ModuleId,
             _mon_id: MonitorId,

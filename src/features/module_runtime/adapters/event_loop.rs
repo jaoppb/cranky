@@ -75,7 +75,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         )
     }
 
-    pub fn poll_next_event(
+    pub async fn poll_next_event(
         &mut self,
         events_stream: &mut futures_util::stream::SelectAll<
             futures_util::stream::BoxStream<'static, SignalKind>,
@@ -84,55 +84,52 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
             HashMap<MonitorId, crate::shared::primitives::ChildSizesMap>,
         >,
     ) -> EventLoopEvent {
-        let rt = tokio::runtime::Handle::current();
-        rt.block_on(async {
-            let ctx_id = self.ctx.id();
-            let (layout_rx, input_rx) = self.ctx.rxs_mut();
+        let ctx_id = self.ctx.id();
+        let (layout_rx, input_rx) = self.ctx.rxs_mut();
 
-            tokio::select! {
-                Some(sig) = events_stream.next(), if !events_stream.is_empty() => {
-                    let mut changed_signals = HashSet::new();
-                    changed_signals.insert(sig);
-                    while let Some(Some(sig2)) = futures_util::FutureExt::now_or_never(events_stream.next()) {
-                        changed_signals.insert(sig2);
-                    }
-                    EventLoopEvent::Signals(changed_signals.into_iter().collect())
+        tokio::select! {
+            Some(sig) = events_stream.next(), if !events_stream.is_empty() => {
+                let mut changed_signals = HashSet::new();
+                changed_signals.insert(sig);
+                while let Some(Some(sig2)) = futures_util::FutureExt::now_or_never(events_stream.next()) {
+                    changed_signals.insert(sig2);
                 }
-                res = module_sizes_rx.changed() => {
-                    if res.is_err() {
-                        EventLoopEvent::Shutdown
-                    } else {
-                        EventLoopEvent::ModuleSizesChanged
-                    }
+                EventLoopEvent::Signals(changed_signals.into_iter().collect())
+            }
+            res = module_sizes_rx.changed() => {
+                if res.is_err() {
+                    EventLoopEvent::Shutdown
+                } else {
+                    EventLoopEvent::ModuleSizesChanged
                 }
-                res = layout_rx.changed() => {
-                    if res.is_err() {
-                        EventLoopEvent::Shutdown
-                    } else {
-                        EventLoopEvent::LayoutChanged
-                    }
+            }
+            res = layout_rx.changed() => {
+                if res.is_err() {
+                    EventLoopEvent::Shutdown
+                } else {
+                    EventLoopEvent::LayoutChanged
                 }
-                res = input_rx.recv() => {
-                    match res {
-                        Ok((target_id, monitor_id, event)) => {
-                            if target_id == ctx_id {
-                                EventLoopEvent::Pointer(monitor_id, event)
-                            } else {
-                                EventLoopEvent::Signals(Vec::new())
-                            }
-                        }
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                            tracing::warn!(module = %ctx_id, lagged = n, "ModuleActor input_rx lagged, skipped messages");
+            }
+            res = input_rx.recv() => {
+                match res {
+                    Ok((target_id, monitor_id, event)) => {
+                        if target_id == ctx_id {
+                            EventLoopEvent::Pointer(monitor_id, event)
+                        } else {
                             EventLoopEvent::Signals(Vec::new())
                         }
-                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                            tracing::debug!(module = %ctx_id, "ModuleActor input_rx closed");
-                            EventLoopEvent::Shutdown
-                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!(module = %ctx_id, lagged = n, "ModuleActor input_rx lagged, skipped messages");
+                        EventLoopEvent::Signals(Vec::new())
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        tracing::debug!(module = %ctx_id, "ModuleActor input_rx closed");
+                        EventLoopEvent::Shutdown
                     }
                 }
             }
-        })
+        }
     }
 
     pub fn handle_pointer_event(
@@ -185,7 +182,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         }
     }
 
-    pub fn run(mut self) {
+    pub async fn run(mut self) {
         let subs = self.port.subscriptions().to_vec();
         let mut events_stream = self.ctx.hub().subscribe_streams(&subs);
         let mut layout_engines: HashMap<MonitorId, Box<dyn LayoutEnginePort>> = HashMap::new();
@@ -197,7 +194,9 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
         let mut module_sizes_rx = self.ctx.hub().module_sizes_rx();
 
         loop {
-            let event = self.poll_next_event(&mut events_stream, &mut module_sizes_rx);
+            let event = self
+                .poll_next_event(&mut events_stream, &mut module_sizes_rx)
+                .await;
             let mut should_render = false;
 
             match event {
@@ -290,11 +289,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
             let module_id = self.ctx.id();
             let parent_id = self.ctx.parent_id();
             let target_monitor_id = monitor_id.clone();
-            let rt = tokio::runtime::Handle::current();
-            rt.block_on(async move {
-                sm.submit_child_buffer(module_id, parent_id, target_monitor_id, position, buffer)
-                    .await;
-            });
+            sm.submit_child_buffer(module_id, parent_id, target_monitor_id, position, buffer);
         }
     }
 

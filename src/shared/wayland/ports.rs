@@ -4,11 +4,10 @@ use crate::shared::primitives::{ModuleId, MonitorId};
 use async_trait::async_trait;
 use std::sync::Arc;
 
-#[async_trait]
 #[cfg_attr(test, mockall::automock)]
 pub trait SurfaceManagerPort: Send + Sync {
     /// Submit a rendered buffer for a specific module on a specific monitor.
-    async fn submit_buffer(
+    fn submit_buffer(
         &self,
         module_id: ModuleId,
         monitor_id: MonitorId,
@@ -17,7 +16,7 @@ pub trait SurfaceManagerPort: Send + Sync {
     );
 
     /// Submit a rendered buffer with optional parent module ID for nested subsurfaces.
-    async fn submit_child_buffer(
+    fn submit_child_buffer(
         &self,
         module_id: ModuleId,
         parent_id: Option<ModuleId>,
@@ -26,8 +25,7 @@ pub trait SurfaceManagerPort: Send + Sync {
         buffer: RenderBuffer,
     ) {
         let _ = parent_id;
-        self.submit_buffer(module_id, monitor_id, position, buffer)
-            .await;
+        self.submit_buffer(module_id, monitor_id, position, buffer);
     }
 }
 

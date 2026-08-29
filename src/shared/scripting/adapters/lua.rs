@@ -151,7 +151,9 @@ fn parse_pixel_size(table: &mlua::Table) -> mlua::Result<Size> {
 fn parse_image_data(lua: &Lua, table: &mlua::Table) -> BinaryData {
     match table.get::<mlua::Value>("data") {
         Ok(mlua::Value::String(s)) => BinaryData::new(s.as_bytes().to_vec()),
-        Ok(val) => lua.from_value(val).unwrap_or_else(|_| BinaryData::new(vec![])),
+        Ok(val) => lua
+            .from_value(val)
+            .unwrap_or_else(|_| BinaryData::new(vec![])),
         Err(_) => BinaryData::new(vec![]),
     }
 }
@@ -164,9 +166,7 @@ fn parse_image_data_and_size(lua: &Lua, table: &mlua::Table) -> mlua::Result<(Bi
 
 fn parse_text_content(table: &mlua::Table) -> String {
     match table.get::<mlua::Value>("text") {
-        Ok(mlua::Value::String(s)) => {
-            s.to_str().map_or_else(|_| String::new(), |b| b.to_string())
-        }
+        Ok(mlua::Value::String(s)) => s.to_str().map_or_else(|_| String::new(), |b| b.to_string()),
         Ok(mlua::Value::Integer(i)) => i.to_string(),
         Ok(mlua::Value::Number(n)) => n.to_string(),
         _ => String::new(),

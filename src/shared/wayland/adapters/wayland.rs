@@ -125,20 +125,18 @@ pub struct WaylandSurfaceManager {
     notify_tx: tokio::sync::mpsc::Sender<()>,
 }
 
-#[async_trait]
 impl SurfaceManagerPort for WaylandSurfaceManager {
-    async fn submit_buffer(
+    fn submit_buffer(
         &self,
         module_id: crate::shared::primitives::ModuleId,
         monitor_id: crate::shared::primitives::MonitorId,
         position: crate::shared::primitives::geometry::Position,
         buffer: crate::shared::primitives::render::RenderBuffer,
     ) {
-        self.submit_child_buffer(module_id, None, monitor_id, position, buffer)
-            .await;
+        self.submit_child_buffer(module_id, None, monitor_id, position, buffer);
     }
 
-    async fn submit_child_buffer(
+    fn submit_child_buffer(
         &self,
         module_id: crate::shared::primitives::ModuleId,
         parent_id: Option<crate::shared::primitives::ModuleId>,
@@ -1548,14 +1546,12 @@ mod tests {
             crate::shared::primitives::geometry::Size::new(10, 10),
         );
 
-        manager
-            .submit_buffer(
-                module_id,
-                monitor_id.clone(),
-                crate::shared::primitives::geometry::Position::new(0, 0),
-                buffer,
-            )
-            .await;
+        manager.submit_buffer(
+            module_id,
+            monitor_id.clone(),
+            crate::shared::primitives::geometry::Position::new(0, 0),
+            buffer,
+        );
 
         notify_rx
             .recv()
@@ -1591,22 +1587,18 @@ mod tests {
             crate::shared::primitives::geometry::Size::new(20, 20),
         );
 
-        manager
-            .submit_buffer(
-                module_id,
-                monitor_id.clone(),
-                crate::shared::primitives::geometry::Position::new(0, 0),
-                buffer1,
-            )
-            .await;
-        manager
-            .submit_buffer(
-                module_id,
-                monitor_id.clone(),
-                crate::shared::primitives::geometry::Position::new(0, 0),
-                buffer2,
-            )
-            .await;
+        manager.submit_buffer(
+            module_id,
+            monitor_id.clone(),
+            crate::shared::primitives::geometry::Position::new(0, 0),
+            buffer1,
+        );
+        manager.submit_buffer(
+            module_id,
+            monitor_id.clone(),
+            crate::shared::primitives::geometry::Position::new(0, 0),
+            buffer2,
+        );
 
         notify_rx
             .recv()

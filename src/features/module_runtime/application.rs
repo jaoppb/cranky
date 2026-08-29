@@ -133,8 +133,8 @@ impl<F: CanvasFactory + 'static> ModuleActor<F> {
             self.vdom_diff,
         );
 
-        tokio::task::spawn_blocking(move || {
-            event_loop.run();
+        tokio::spawn(async move {
+            event_loop.run().await;
         });
     }
 }
@@ -284,13 +284,8 @@ mod tests {
             .build();
 
         let mut event_loop = fixture.event_loop;
-        let mut event_loop = tokio::task::spawn_blocking(move || {
-            let mut layout_engines = HashMap::new();
-            event_loop.render_all_monitors(&mut layout_engines);
-            event_loop
-        })
-        .await
-        .unwrap();
+        let mut layout_engines = HashMap::new();
+        event_loop.render_all_monitors(&mut layout_engines);
 
         let cmd = fixture
             .cmd_rx
@@ -313,13 +308,7 @@ mod tests {
         );
         fixture.layout_tx.send(layouts).unwrap();
 
-        let _ = tokio::task::spawn_blocking(move || {
-            let mut layout_engines = HashMap::new();
-            event_loop.render_all_monitors(&mut layout_engines);
-            event_loop
-        })
-        .await
-        .unwrap();
+        event_loop.render_all_monitors(&mut layout_engines);
         assert!(fixture.cmd_rx.try_recv().is_err());
     }
 
@@ -384,13 +373,8 @@ mod tests {
         fixture.layout_tx.send(layouts).unwrap();
 
         let mut event_loop = fixture.event_loop;
-        let _ = tokio::task::spawn_blocking(move || {
-            let mut layout_engines = HashMap::new();
-            event_loop.render_all_monitors(&mut layout_engines);
-            event_loop
-        })
-        .await
-        .unwrap();
+        let mut layout_engines = HashMap::new();
+        event_loop.render_all_monitors(&mut layout_engines);
 
         let cmd = fixture
             .cmd_rx
@@ -424,13 +408,8 @@ mod tests {
             .build();
 
         let mut event_loop = fixture.event_loop;
-        let mut event_loop = tokio::task::spawn_blocking(move || {
-            let mut layout_engines = HashMap::new();
-            event_loop.render_all_monitors(&mut layout_engines);
-            event_loop
-        })
-        .await
-        .unwrap();
+        let mut layout_engines = HashMap::new();
+        event_loop.render_all_monitors(&mut layout_engines);
 
         assert!(
             event_loop
@@ -446,13 +425,7 @@ mod tests {
         );
 
         // Second run with identical VDOM triggers early continue
-        let event_loop = tokio::task::spawn_blocking(move || {
-            let mut layout_engines = HashMap::new();
-            event_loop.render_all_monitors(&mut layout_engines);
-            event_loop
-        })
-        .await
-        .unwrap();
+        event_loop.render_all_monitors(&mut layout_engines);
 
         assert!(
             event_loop
@@ -508,13 +481,8 @@ mod tests {
         fixture.layout_tx.send(layouts).unwrap();
 
         let mut event_loop = fixture.event_loop;
-        let _ = tokio::task::spawn_blocking(move || {
-            let mut layout_engines = HashMap::new();
-            event_loop.render_all_monitors(&mut layout_engines);
-            event_loop
-        })
-        .await
-        .unwrap();
+        let mut layout_engines = HashMap::new();
+        event_loop.render_all_monitors(&mut layout_engines);
 
         let mut found_container_layouts = false;
         while let Ok(cmd) = fixture.cmd_rx.try_recv() {

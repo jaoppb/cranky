@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 use crate::features::layout_engine::domain::LayoutError;
 use crate::features::layout_engine::domain::{
     AlignItems, FlexDirection, JustifyContent, PositionType, RenderNode, StyledNode, TextMeasurer,
@@ -46,6 +48,10 @@ pub struct TaffyLayoutAdapter {
     taffy: TaffyTree,
     state: Option<LayoutState>,
 }
+
+#[allow(clippy::non_send_fields_in_send_ty)]
+unsafe impl Send for TaffyLayoutAdapter {}
+unsafe impl Sync for TaffyLayoutAdapter {}
 
 impl Default for TaffyLayoutAdapter {
     fn default() -> Self {
