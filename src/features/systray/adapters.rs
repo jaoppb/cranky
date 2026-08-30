@@ -127,9 +127,11 @@ impl SniEvent {
             }
             Self::OverlayIcon => {
                 let icon_name = proxy.overlay_icon_name().await.ok();
+                let icon_theme_path = proxy.icon_theme_path().await.ok();
                 let icon_pixmap = proxy.overlay_icon_pixmap().await.ok();
                 tracing::trace!("SniEvent::OverlayIcon: updated overlay icon");
-                let icon_image = resolve_icon(icon_name.clone(), None, icon_pixmap).await;
+                let icon_image =
+                    resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
                 let icon = crate::features::systray::domain::SystrayIcon::new(
                     icon_name.map(crate::features::systray::domain::IconName::new),
                     icon_image,
@@ -237,84 +239,106 @@ async fn resolve_icon(
     icon_theme_path: Option<String>,
     icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>>,
 ) -> Option<IconImage> {
-    let cache_key = icon_name.as_ref().map(|name| {
+    let clean_icon_name = icon_name.and_then(|s| {
+        let trimmed = s.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
+
+    let clean_theme_path = icon_theme_path.and_then(|s| {
+        let trimmed = s.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
+
+    let cache_key = clean_icon_name.as_ref().map(|name| {
         IconCacheKey::new(
             IconName::new(name.clone()),
-            icon_theme_path
+            clean_theme_path
                 .as_ref()
                 .map(|tp| IconThemePath::new(tp.clone())),
         )
     });
 
-    if let Some(ref key) = cache_key
-        && let Some(cached) = ICON_CACHE.get(key)
-    {
-        return cached;
-    }
-
     let max_scale = 3.0f32; // Default to 3.0 for sharp scaling on any screen
-    let icon_name_clone = icon_name.clone();
-    let theme_path_clone = icon_theme_path.clone();
-    let (_, icon_image) = tokio::task::spawn_blocking(move || {
-        let mut icon_loaded = false;
-        let mut icon_image = None;
 
-        if let Some(name) = &icon_name_clone {
-            let mut found_path = None;
+    // 1. Check icon name cache for disk/theme icons
+    let disk_icon = if let Some(ref key) = cache_key {
+        if let Some(cached) = ICON_CACHE.get(key) {
+            // Cached result: either Some(icon_image) or None (cached negative lookup)
+            cached
+        } else {
+            // Cache miss: resolve disk/theme lookup asynchronously on blocking thread
+            let name_clone = clean_icon_name.clone();
+            let theme_path_clone = clean_theme_path.clone();
+            let loaded_disk_icon = tokio::task::spawn_blocking(move || {
+                let Some(name) = &name_clone else {
+                    return None;
+                };
+                let mut found_path = None;
 
-            if let Some(theme_path) = &theme_path_clone {
-                let base = std::path::Path::new(theme_path);
-                let png = base.join(format!("{name}.png"));
-                if png.exists() {
-                    found_path = Some(png);
-                } else {
-                    let svg = base.join(format!("{name}.svg"));
-                    if svg.exists() {
-                        found_path = Some(svg);
+                if let Some(theme_path) = &theme_path_clone {
+                    let base = std::path::Path::new(theme_path);
+                    let png = base.join(format!("{name}.png"));
+                    if png.exists() {
+                        found_path = Some(png);
+                    } else {
+                        let svg = base.join(format!("{name}.svg"));
+                        if svg.exists() {
+                            found_path = Some(svg);
+                        }
                     }
                 }
-            }
 
-            if found_path.is_none() {
-                let p = std::path::Path::new(name);
-                if p.is_absolute() && p.exists() {
-                    found_path = Some(p.to_path_buf());
-                } else {
-                    found_path = lookup(name).find();
+                if found_path.is_none() {
+                    let p = std::path::Path::new(name);
+                    if p.is_absolute() && p.exists() {
+                        found_path = Some(p.to_path_buf());
+                    } else {
+                        found_path = lookup(name).find();
+                    }
                 }
-            }
 
-            if let Some(icon_path) = found_path
-                && let Some((w, h, bytes)) = crate::utils::load_icon_rgba(&icon_path, 24, max_scale)
-            {
-                icon_image = Some(IconImage::new(
-                    bytes,
-                    crate::shared::primitives::geometry::Size::new(w, h),
-                ));
-                icon_loaded = true;
-            }
+                if let Some(icon_path) = found_path
+                    && let Some((w, h, bytes)) =
+                        crate::utils::load_icon_rgba(&icon_path, 24, max_scale)
+                {
+                    Some(IconImage::new(
+                        bytes,
+                        crate::shared::primitives::geometry::Size::new(w, h),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .await
+            .unwrap_or(None);
+
+            ICON_CACHE.insert(key.clone(), loaded_disk_icon.clone());
+            loaded_disk_icon
         }
+    } else {
+        None
+    };
 
-        if !icon_loaded
-            && let Some(pixmaps) = &icon_pixmap
-            && !pixmaps.is_empty()
-        {
-            icon_image = resolve_pixmap_data(pixmaps, max_scale);
-            if icon_image.is_some() {
-                icon_loaded = true;
-            }
-        }
-
-        (icon_loaded, icon_image)
-    })
-    .await
-    .unwrap_or((false, None));
-
-    if let Some(key) = cache_key {
-        ICON_CACHE.insert(key, icon_image.clone());
+    if disk_icon.is_some() {
+        return disk_icon;
     }
 
-    icon_image
+    // 2. If no disk/theme icon was resolved, fallback to dynamic raw pixmap (never cached globally)
+    if let Some(ref pixmaps) = icon_pixmap
+        && !pixmaps.is_empty()
+    {
+        return resolve_pixmap_data(pixmaps, max_scale);
+    }
+
+    None
 }
 
 #[derive(Clone)]
@@ -1161,5 +1185,49 @@ mod tests {
         cache.insert(key.clone(), Some(icon_img.clone()));
 
         assert_eq!(cache.get(&key), Some(Some(icon_img)));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_icon_dynamic_pixmap_updates_not_stale() {
+        let pixmap1 = vec![(1, 1, vec![255, 10, 20, 30])];
+        let pixmap2 = vec![(1, 1, vec![255, 99, 88, 77])];
+
+        let icon_name = Some("custom-applet-nonexistent-12345".to_string());
+
+        let icon1 = resolve_icon(icon_name.clone(), None, Some(pixmap1)).await;
+        assert!(icon1.is_some());
+        let img1 = icon1.unwrap();
+        assert_eq!(img1.data(), &[10, 20, 30, 255]);
+
+        let icon2 = resolve_icon(icon_name.clone(), None, Some(pixmap2)).await;
+        assert!(icon2.is_some());
+        let img2 = icon2.unwrap();
+        assert_eq!(img2.data(), &[99, 88, 77, 255]);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_icon_negative_cache_allows_pixmap_fallback() {
+        let icon_name = Some("nonexistent-theme-icon-67890".to_string());
+        let icon_none = resolve_icon(icon_name.clone(), None, None).await;
+        assert!(icon_none.is_none());
+
+        let key = IconCacheKey::new(IconName::new("nonexistent-theme-icon-67890"), None);
+        assert_eq!(ICON_CACHE.get(&key), Some(None));
+
+        let pixmap = vec![(1, 1, vec![255, 5, 15, 25])];
+        let icon_with_pixmap = resolve_icon(icon_name, None, Some(pixmap)).await;
+        assert!(icon_with_pixmap.is_some());
+        assert_eq!(icon_with_pixmap.unwrap().data(), &[5, 15, 25, 255]);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_icon_empty_string_name_handled() {
+        let pixmap = vec![(1, 1, vec![255, 1, 2, 3])];
+        let icon = resolve_icon(Some("   ".to_string()), Some(String::new()), Some(pixmap)).await;
+        assert!(icon.is_some());
+        assert_eq!(icon.unwrap().data(), &[1, 2, 3, 255]);
+
+        let empty_key = IconCacheKey::new(IconName::new(""), None);
+        assert_eq!(ICON_CACHE.get(&empty_key), None);
     }
 }
