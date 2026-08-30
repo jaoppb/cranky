@@ -70,6 +70,7 @@ futures = "0.3.34"
 lightningcss = "1.0.0-alpha.63"
 
 [dev-dependencies]
+arch-lint = "0.5.0"
 mockall = "0.14"
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
 

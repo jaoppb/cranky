@@ -33,6 +33,10 @@ bench *args:
 clippy:
     cargo clippy --all-targets --all-features
 
+# Run architecture lint checks
+arch-lint:
+    cargo test --test architecture
+
 # Check code formatting with rustfmt
 fmt-check:
     cargo fmt --all -- --check

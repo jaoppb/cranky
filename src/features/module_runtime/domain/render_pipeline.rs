@@ -404,9 +404,9 @@ impl RenderPipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::module_runtime::test_support::{MockCanvasFactory, TestModulePort};
-    use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
-    use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
+    use crate::features::module_runtime::test_support::{
+        MockCanvasFactory, MockLayoutEngine, MockStyleResolver, MockVdomDiff, TestModulePort,
+    };
     use crate::features::vdom::domain::VNode;
 
     #[test]
@@ -414,10 +414,10 @@ mod tests {
         let mut pipeline = RenderPipeline::new();
         let mon = MonitorId::new("DP-1");
         let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
-        let diff_adapter = DefaultVdomDiffAdapter::new();
-        let resolver = CompositeStyleResolver::new(vec![]);
+        let diff_adapter = MockVdomDiff;
+        let resolver = MockStyleResolver;
         let mut factory = MockCanvasFactory;
-        let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
+        let mut engine = MockLayoutEngine;
 
         // 1. Diff Phase
         let diff = pipeline.diff(&mon, &port, &diff_adapter, None, None);
@@ -460,10 +460,10 @@ mod tests {
         let mut pipeline = RenderPipeline::new();
         let mon = MonitorId::new("DP-1");
         let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
-        let diff = DefaultVdomDiffAdapter::new();
-        let resolver = CompositeStyleResolver::new(vec![]);
+        let diff = MockVdomDiff;
+        let resolver = MockStyleResolver;
         let mut factory = MockCanvasFactory;
-        let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
+        let mut engine = MockLayoutEngine;
 
         let ctx = LayoutContext {
             style_resolver: &resolver,
@@ -490,10 +490,10 @@ mod tests {
         let mut pipeline = RenderPipeline::new();
         let mon = MonitorId::new("DP-1");
         let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
-        let diff = DefaultVdomDiffAdapter::new();
-        let resolver = CompositeStyleResolver::new(vec![]);
+        let diff = MockVdomDiff;
+        let resolver = MockStyleResolver;
         let mut factory = MockCanvasFactory;
-        let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
+        let mut engine = MockLayoutEngine;
 
         let ctx1 = LayoutContext {
             style_resolver: &resolver,

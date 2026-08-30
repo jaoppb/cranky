@@ -1,0 +1,33 @@
+# arch-lint.toml - Architecture linting rules for Cranky
+preset = "minimal"
+
+# Architectural Scopes
+[[scopes]]
+name = "domain"
+paths = ["src/features/**/domain/**", "src/features/**/domain.rs"]
+
+[[scopes]]
+name = "ports"
+paths = ["src/features/**/ports/**", "src/features/**/ports.rs"]
+
+[[scopes]]
+name = "adapters"
+paths = ["src/features/**/adapters/**", "src/features/**/adapters.rs"]
+
+[[scopes]]
+name = "features"
+paths = ["src/features/**"]
+
+[[scopes]]
+name = "shared"
+paths = ["src/shared/**"]
+
+[[scopes]]
+name = "app"
+paths = ["src/app/**", "src/main.rs"]
+
+# Dependency Restrictions
+[[deny-scope-dep]]
+from = "domain"
+to = ["adapters"]
+message = "Domain layer must not depend on adapters. Use ports."

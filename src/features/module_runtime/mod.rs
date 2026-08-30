@@ -181,4 +181,65 @@ pub mod test_support {
             Ok(())
         }
     }
+
+    #[derive(Debug, Default, Clone)]
+    pub struct MockVdomDiff;
+
+    impl crate::features::vdom::ports::VdomDiffPort for MockVdomDiff {
+        fn diff<'a>(
+            &self,
+            old_tree: Option<&'a VNode>,
+            new_tree: &'a VNode,
+        ) -> crate::features::vdom::domain::DiffResult {
+            if old_tree.is_some_and(|old| old == new_tree) {
+                crate::features::vdom::domain::DiffResult::unchanged()
+            } else {
+                crate::features::vdom::domain::DiffResult::new(
+                    crate::features::vdom::domain::Patch::Replace {
+                        old_node_id: crate::features::vdom::domain::NodeId::new(),
+                        new_node: Box::new(new_tree.clone()),
+                    },
+                )
+            }
+        }
+    }
+
+    #[derive(Debug, Default, Clone)]
+    pub struct MockStyleResolver;
+
+    impl crate::features::styling::ports::StyleResolverPort for MockStyleResolver {
+        fn resolve_style(
+            &self,
+            _query: &crate::features::styling::domain::ElementQuery,
+        ) -> crate::features::styling::domain::ComputedStyle {
+            crate::features::styling::domain::ComputedStyle::default()
+        }
+    }
+
+    #[derive(Debug, Default, Clone)]
+    pub struct MockLayoutEngine;
+
+    impl crate::features::layout_engine::ports::LayoutEnginePort for MockLayoutEngine {
+        fn calculate_layout_with_constraints(
+            &mut self,
+            _node: crate::features::layout_engine::domain::StyledNode,
+            _measurer: &mut dyn TextMeasurer,
+            _start_pos: Position,
+            _available_size: Option<Size>,
+        ) -> Result<
+            crate::features::layout_engine::domain::RenderNode,
+            crate::features::layout_engine::domain::LayoutError,
+        > {
+            Ok(crate::features::layout_engine::domain::RenderNode::Rect {
+                rect: crate::shared::primitives::geometry::Rect::new(
+                    Position::new(0, 0),
+                    Size::new(10, 10),
+                ),
+                style: crate::features::styling::domain::ComputedStyle::default(),
+                on_click: None,
+                on_hover: None,
+                tooltip: None,
+            })
+        }
+    }
 }

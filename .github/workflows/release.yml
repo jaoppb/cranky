@@ -33,6 +33,9 @@ jobs:
         with:
           cache: true
 
+      - name: Run architecture lint gate
+        run: cargo test --test architecture
+
       - name: Sync version and push
         id: sync_version
         run: |

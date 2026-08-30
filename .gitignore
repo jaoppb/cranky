@@ -24,3 +24,8 @@ contrib/arch/*.pkg.tar.*
 contrib/arch/*.tar.gz
 contrib/arch/*.log
 contrib/arch/cranky-git/
+
+# Python
+__pycache__/
+*.pyc
+
