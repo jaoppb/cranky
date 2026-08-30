@@ -545,6 +545,7 @@ impl DisplayServerPort for WaylandAdapter {
                     1,
                     1,
                     crate::features::layout_engine::domain::RenderNode::Rect {
+                        path: crate::features::vdom::domain::NodePath::root(),
                         rect: crate::shared::primitives::geometry::Rect::new(
                             crate::shared::primitives::geometry::Position::new(0, 0),
                             crate::shared::primitives::geometry::Size::new(1, 1),
@@ -1231,7 +1232,8 @@ impl Dispatch<WlPointer, ()> for WaylandState {
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        use crate::shared::events::core::PointerEvent;
+        use crate::shared::events::core::{PointerButton, PointerEvent, ScrollAxis, ScrollDelta};
+        use crate::shared::primitives::geometry::Position;
 
         match event {
             wl_pointer::Event::Enter {
@@ -1274,13 +1276,12 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 if let Some(surface) = &state.pointer_surface
                     && let Some((id, mon_id)) = state.surface_to_id.get(surface)
                 {
+                    #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+                    let pos = Position::new(surface_x as i32, surface_y as i32);
                     let _ = state.hub.pointer_tx().send((
                         *id,
                         mon_id.clone(),
-                        PointerEvent::PointerMotion {
-                            x: surface_x,
-                            y: surface_y,
-                        },
+                        PointerEvent::PointerMotion { pos },
                     ));
                 }
             }
@@ -1290,23 +1291,50 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 ..
             } => {
                 tracing::debug!(button, ?button_state, "wl_pointer Button");
-                if button_state
-                    == wayland_client::WEnum::Value(
-                        wayland_client::protocol::wl_pointer::ButtonState::Released,
-                    )
-                    && let Some(surface) = &state.pointer_surface
+                let ptr_button = PointerButton::from_raw(button);
+                #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+                let pos = Position::new(state.pointer_pos.0 as i32, state.pointer_pos.1 as i32);
+
+                if let Some(surface) = &state.pointer_surface
                     && let Some((id, mon_id)) = state.surface_to_id.get(surface)
                 {
-                    tracing::debug!(module = %id, monitor = %mon_id, "Forwarding Click");
-                    let _ = state.hub.pointer_tx().send((
-                        *id,
-                        mon_id.clone(),
-                        PointerEvent::Click {
-                            button,
-                            x: state.pointer_pos.0,
-                            y: state.pointer_pos.1,
-                        },
-                    ));
+                    match button_state {
+                        wayland_client::WEnum::Value(
+                            wayland_client::protocol::wl_pointer::ButtonState::Pressed,
+                        ) => {
+                            tracing::debug!(module = %id, monitor = %mon_id, "Forwarding ButtonPress");
+                            let _ = state.hub.pointer_tx().send((
+                                *id,
+                                mon_id.clone(),
+                                PointerEvent::ButtonPress {
+                                    button: ptr_button,
+                                    pos,
+                                },
+                            ));
+                        }
+                        wayland_client::WEnum::Value(
+                            wayland_client::protocol::wl_pointer::ButtonState::Released,
+                        ) => {
+                            tracing::debug!(module = %id, monitor = %mon_id, "Forwarding ButtonRelease & Click");
+                            let _ = state.hub.pointer_tx().send((
+                                *id,
+                                mon_id.clone(),
+                                PointerEvent::ButtonRelease {
+                                    button: ptr_button,
+                                    pos,
+                                },
+                            ));
+                            let _ = state.hub.pointer_tx().send((
+                                *id,
+                                mon_id.clone(),
+                                PointerEvent::Click {
+                                    button: ptr_button,
+                                    pos,
+                                },
+                            ));
+                        }
+                        _ => {}
+                    }
                 }
             }
             wl_pointer::Event::Axis { axis, value, .. } => {
@@ -1314,22 +1342,19 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 if let Some(surface) = &state.pointer_surface
                     && let Some((id, mon_id)) = state.surface_to_id.get(surface)
                 {
-                    let axis_val = match axis {
+                    let scroll_axis = match axis {
                         wayland_client::WEnum::Value(
                             wayland_client::protocol::wl_pointer::Axis::VerticalScroll,
-                        ) => 0,
-                        wayland_client::WEnum::Value(
-                            wayland_client::protocol::wl_pointer::Axis::HorizontalScroll,
-                        ) => 1,
-                        _ => 0,
+                        ) => ScrollAxis::Vertical,
+                        _ => ScrollAxis::Horizontal,
                     };
                     tracing::debug!(module = %id, monitor = %mon_id, "Forwarding Scroll");
                     let _ = state.hub.pointer_tx().send((
                         *id,
                         mon_id.clone(),
                         PointerEvent::Scroll {
-                            axis: axis_val,
-                            amount: value,
+                            axis: scroll_axis,
+                            amount: ScrollDelta::new(value),
                         },
                     ));
                 }

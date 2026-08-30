@@ -118,10 +118,13 @@ impl<M: TextMeasurer> TextMeasurer for ModuleSizeMeasurer<'_, M> {
     }
 }
 
+use crate::features::vdom::domain::InteractionContext;
+
 pub struct LayoutContext<'a, F: CanvasFactory> {
     pub style_resolver: &'a dyn StyleResolverPort,
     pub current_bounds: Option<Rect>,
     pub current_child_sizes: Option<&'a ChildSizesMap>,
+    pub interaction_context: Option<InteractionContext>,
     pub canvas_factory: &'a mut F,
     pub layout_engine: &'a mut dyn LayoutEnginePort,
 }
@@ -178,6 +181,7 @@ pub struct RenderPipeline {
     render_trees: HashMap<MonitorId, RenderNode>,
     vdom_trees: HashMap<MonitorId, VNode>,
     last_child_sizes: HashMap<MonitorId, Option<ChildSizesMap>>,
+    last_interactions: HashMap<MonitorId, Option<InteractionContext>>,
 }
 
 impl RenderPipeline {
@@ -212,6 +216,11 @@ impl RenderPipeline {
     }
 
     #[must_use]
+    pub const fn last_interactions(&self) -> &HashMap<MonitorId, Option<InteractionContext>> {
+        &self.last_interactions
+    }
+
+    #[must_use]
     pub fn diff(
         &self,
         monitor_id: &MonitorId,
@@ -219,6 +228,7 @@ impl RenderPipeline {
         vdom_diff: &dyn VdomDiffPort,
         current_bounds: Option<Rect>,
         current_child_sizes: Option<&ChildSizesMap>,
+        interaction: Option<&InteractionContext>,
     ) -> Option<PipelineDiff> {
         let new_vdom = port.render(monitor_id);
         let diff_result = vdom_diff.diff(self.vdom_trees.get(monitor_id), &new_vdom);
@@ -227,20 +237,25 @@ impl RenderPipeline {
         let bounds_changed = current_bounds != self.rendered_bounds.get(monitor_id).copied();
         let child_sizes_changed =
             self.last_child_sizes.get(monitor_id) != Some(&current_child_sizes_owned);
+        let interaction_changed =
+            self.last_interactions.get(monitor_id).map(Option::as_ref) != Some(interaction);
 
         if diff_result.is_unchanged()
             && !bounds_changed
             && !child_sizes_changed
+            && !interaction_changed
             && self.render_trees.contains_key(monitor_id)
         {
             tracing::trace!(
                 monitor = %monitor_id,
-                "VDOM, bounds, and child sizes unchanged; skipping style resolution, layout, and canvas render"
+                "VDOM, bounds, child sizes, and interaction unchanged; skipping style resolution, layout, and canvas render"
             );
             return None;
         }
 
-        let vdom_dirty = !diff_result.is_unchanged() || !self.render_trees.contains_key(monitor_id);
+        let vdom_dirty = !diff_result.is_unchanged()
+            || interaction_changed
+            || !self.render_trees.contains_key(monitor_id);
 
         Some(PipelineDiff::new(
             new_vdom,
@@ -264,6 +279,8 @@ impl RenderPipeline {
         let render_node = if diff.vdom_dirty || diff.bounds_changed || diff.child_sizes_changed {
             self.last_child_sizes
                 .insert(monitor_id.clone(), current_child_sizes_owned);
+            self.last_interactions
+                .insert(monitor_id.clone(), ctx.interaction_context.clone());
             tracing::trace!(
                 monitor = %monitor_id,
                 vdom_dirty = diff.vdom_dirty,
@@ -276,7 +293,11 @@ impl RenderPipeline {
                 .insert(monitor_id.clone(), diff.new_vdom.clone());
 
             tracing::trace!(monitor = %monitor_id, "Resolving styles for module VNode");
-            let styled_node = diff.new_vdom.resolve_styles(ctx.style_resolver, None);
+            let styled_node = diff.new_vdom.resolve_styles(
+                ctx.style_resolver,
+                ctx.interaction_context.as_ref(),
+                None,
+            );
 
             let default_font_family = FontFamily::new(String::new());
             let default_font_size = FontSize::new(14.0);
@@ -385,6 +406,7 @@ impl RenderPipeline {
             vdom_diff,
             ctx.current_bounds,
             ctx.current_child_sizes,
+            ctx.interaction_context.as_ref(),
         )?;
 
         let current_bounds = ctx.current_bounds;
@@ -420,7 +442,7 @@ mod tests {
         let mut engine = MockLayoutEngine;
 
         // 1. Diff Phase
-        let diff = pipeline.diff(&mon, &port, &diff_adapter, None, None);
+        let diff = pipeline.diff(&mon, &port, &diff_adapter, None, None, None);
         assert!(diff.is_some());
         let diff = diff.unwrap();
         assert!(diff.vdom_dirty());
@@ -430,6 +452,7 @@ mod tests {
             style_resolver: &resolver,
             current_bounds: None,
             current_child_sizes: None,
+            interaction_context: None,
             canvas_factory: &mut factory,
             layout_engine: &mut engine,
         };
@@ -469,6 +492,7 @@ mod tests {
             style_resolver: &resolver,
             current_bounds: None,
             current_child_sizes: None,
+            interaction_context: None,
             canvas_factory: &mut factory,
             layout_engine: &mut engine,
         };
@@ -499,6 +523,7 @@ mod tests {
             style_resolver: &resolver,
             current_bounds: None,
             current_child_sizes: None,
+            interaction_context: None,
             canvas_factory: &mut factory,
             layout_engine: &mut engine,
         };
@@ -510,6 +535,7 @@ mod tests {
             style_resolver: &resolver,
             current_bounds: None,
             current_child_sizes: None,
+            interaction_context: None,
             canvas_factory: &mut factory,
             layout_engine: &mut engine,
         };

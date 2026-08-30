@@ -163,13 +163,14 @@ impl FlexStyle {
     }
 }
 
-pub use crate::features::vdom::domain::TextContent;
+pub use crate::features::vdom::domain::{NodePath, TextContent};
 
 use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum StyledNode {
     Flex {
+        path: NodePath,
         children: Vec<Self>,
         style: ComputedStyle,
         on_click: Option<AppCommand>,
@@ -177,6 +178,7 @@ pub enum StyledNode {
         tooltip: Option<Box<Self>>,
     },
     Text {
+        path: NodePath,
         text: TextContent,
         style: ComputedStyle,
         on_click: Option<AppCommand>,
@@ -184,6 +186,7 @@ pub enum StyledNode {
         tooltip: Option<Box<Self>>,
     },
     Progress {
+        path: NodePath,
         value: ProgressValue,
         orientation: Orientation,
         style: ComputedStyle,
@@ -192,18 +195,21 @@ pub enum StyledNode {
         tooltip: Option<Box<Self>>,
     },
     Rect {
+        path: NodePath,
         style: ComputedStyle,
         on_click: Option<AppCommand>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     },
     Image {
+        path: NodePath,
         data: BinaryData,
         pixel_size: Size,
         style: ComputedStyle,
         tooltip: Option<Box<Self>>,
     },
     Module {
+        path: NodePath,
         key: ModuleKey,
         options: ModuleOptions,
         style: ComputedStyle,
@@ -214,6 +220,18 @@ pub enum StyledNode {
 }
 
 impl StyledNode {
+    #[must_use]
+    pub const fn path(&self) -> &NodePath {
+        match self {
+            Self::Flex { path, .. }
+            | Self::Text { path, .. }
+            | Self::Progress { path, .. }
+            | Self::Rect { path, .. }
+            | Self::Image { path, .. }
+            | Self::Module { path, .. } => path,
+        }
+    }
+
     #[must_use]
     pub const fn style(&self) -> &ComputedStyle {
         match self {
@@ -239,6 +257,7 @@ use crate::shared::primitives::geometry::Rect;
 #[derive(Debug, Clone, PartialEq)]
 pub enum RenderNode {
     Flex {
+        path: NodePath,
         rect: Rect,
         children: Vec<Self>,
         style: ComputedStyle,
@@ -247,6 +266,7 @@ pub enum RenderNode {
         tooltip: Option<Box<StyledNode>>,
     },
     Text {
+        path: NodePath,
         rect: Rect,
         text: TextContent,
         style: ComputedStyle,
@@ -255,6 +275,7 @@ pub enum RenderNode {
         tooltip: Option<Box<StyledNode>>,
     },
     Progress {
+        path: NodePath,
         rect: Rect,
         value: ProgressValue,
         orientation: Orientation,
@@ -264,6 +285,7 @@ pub enum RenderNode {
         tooltip: Option<Box<StyledNode>>,
     },
     Rect {
+        path: NodePath,
         rect: Rect,
         style: ComputedStyle,
         on_click: Option<AppCommand>,
@@ -271,12 +293,14 @@ pub enum RenderNode {
         tooltip: Option<Box<StyledNode>>,
     },
     Image {
+        path: NodePath,
         rect: Rect,
         data: BinaryData,
         pixel_size: Size,
         tooltip: Option<Box<StyledNode>>,
     },
     Module {
+        path: NodePath,
         rect: Rect,
         key: ModuleKey,
         style: ComputedStyle,
@@ -287,6 +311,18 @@ pub enum RenderNode {
 }
 
 impl RenderNode {
+    #[must_use]
+    pub const fn path(&self) -> &NodePath {
+        match self {
+            Self::Flex { path, .. }
+            | Self::Text { path, .. }
+            | Self::Progress { path, .. }
+            | Self::Rect { path, .. }
+            | Self::Image { path, .. }
+            | Self::Module { path, .. } => path,
+        }
+    }
+
     #[must_use]
     pub fn collect_module_layouts(&self) -> Vec<ChildModuleLayout> {
         let mut layouts = Vec::new();
@@ -550,7 +586,7 @@ impl RenderNode {
                 rect,
                 data,
                 pixel_size,
-                tooltip: _,
+                ..
             } => {
                 let logical_size =
                     crate::shared::primitives::geometry::Size::new(rect.width(), rect.height());
@@ -589,14 +625,18 @@ impl RenderNode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::primitives::color::Color;
-    use crate::shared::primitives::geometry::Position;
+    use crate::features::styling::domain::Orientation;
+    use crate::shared::primitives::color::{Color, DrawingColor};
+    use crate::shared::primitives::geometry::{LogicalPx, Position, Size};
 
     #[test]
-    fn test_gap_and_margins() {
-        let gap = Gap { value: 10.0 };
-        assert!((gap.value() - 10.0).abs() < f64::EPSILON);
+    fn test_logical_px() {
+        let px = LogicalPx::new(10.0);
+        assert!((px.value() - 10.0).abs() < f32::EPSILON);
+    }
 
+    #[test]
+    fn test_box_margin() {
         let margin = BoxMargin {
             top: 1.0,
             bottom: 2.0,
@@ -645,6 +685,7 @@ mod tests {
     fn test_render_node_accessors() {
         let rect = Rect::new(Position::new(0, 0), Size::new(10, 10));
         let node = RenderNode::Rect {
+            path: NodePath::root(),
             rect,
             style: ComputedStyle::default(),
             on_click: None,
@@ -662,6 +703,7 @@ mod tests {
         let rect2 = Rect::new(Position::new(10, 10), Size::new(50, 50));
 
         let child_node = RenderNode::Rect {
+            path: NodePath::new(vec![0]),
             rect: rect2,
             style: ComputedStyle::default(),
             on_click: None,
@@ -670,6 +712,7 @@ mod tests {
         };
 
         let parent_node = RenderNode::Flex {
+            path: NodePath::root(),
             rect: rect1,
             children: vec![child_node.clone()],
             style: ComputedStyle::default(),
@@ -700,6 +743,7 @@ mod tests {
         let mut rect_style = ComputedStyle::default();
         rect_style.set_background(DrawingColor::Solid(Color::new(255, 255, 255, 255)));
         let rect = RenderNode::Rect {
+            path: NodePath::root(),
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             style: rect_style,
             on_click: None,
@@ -714,6 +758,7 @@ mod tests {
         let mut flex_style = ComputedStyle::default();
         flex_style.set_background(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         let flex = RenderNode::Flex {
+            path: NodePath::root(),
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             children: vec![],
             style: flex_style,
@@ -728,6 +773,7 @@ mod tests {
         let mut text_style = ComputedStyle::default();
         text_style.set_color(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         let text = RenderNode::Text {
+            path: NodePath::root(),
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             text: TextContent::new("test".to_string()),
             style: text_style,
@@ -743,6 +789,7 @@ mod tests {
         prog_style.set_background(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         prog_style.set_accent_color(DrawingColor::Solid(Color::new(255, 0, 0, 255)));
         let progress = RenderNode::Progress {
+            path: NodePath::root(),
             rect: Rect::new(Position::new(0, 0), Size::new(100, 10)),
             value: ProgressValue::new(0.5).unwrap(),
             orientation: Orientation::Horizontal,
@@ -756,6 +803,7 @@ mod tests {
         let mut canvas = MockCanvas::new();
         canvas.expect_draw_image().times(1).return_const(());
         let image = RenderNode::Image {
+            path: NodePath::root(),
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             data: BinaryData::new(vec![0, 0, 0, 0]),
             pixel_size: Size::new(1, 1),

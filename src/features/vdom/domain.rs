@@ -1,7 +1,7 @@
 use crate::app::commands::AppCommand;
 use crate::features::layout_engine::domain::StyledNode;
 use crate::features::styling::domain::{
-    ClassNameList, ElementId, ElementQuery, Orientation, ProgressValue,
+    ClassNameList, ComputedStyle, ElementId, ElementQuery, Orientation, ProgressValue, PseudoClass,
 };
 use crate::features::styling::ports::StyleResolverPort;
 use crate::shared::primitives::geometry::Size;
@@ -48,6 +48,88 @@ impl Default for NodeId {
 impl std::fmt::Display for NodeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub struct NodePath(Vec<usize>);
+
+impl NodePath {
+    #[must_use]
+    pub const fn root() -> Self {
+        Self(Vec::new())
+    }
+
+    #[must_use]
+    pub const fn new(path: Vec<usize>) -> Self {
+        Self(path)
+    }
+
+    #[must_use]
+    pub fn child(&self, index: usize) -> Self {
+        let mut new_path = self.0.clone();
+        new_path.push(index);
+        Self(new_path)
+    }
+
+    #[must_use]
+    pub fn as_slice(&self) -> &[usize] {
+        &self.0
+    }
+
+    #[must_use]
+    pub const fn is_root(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    #[must_use]
+    pub fn starts_with(&self, prefix: &Self) -> bool {
+        self.0.starts_with(&prefix.0)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InteractionContext {
+    hovered_path: Option<NodePath>,
+    active_path: Option<NodePath>,
+    focused_path: Option<NodePath>,
+    is_monitor_focused: bool,
+}
+
+impl InteractionContext {
+    #[must_use]
+    pub const fn new(
+        hovered_path: Option<NodePath>,
+        active_path: Option<NodePath>,
+        focused_path: Option<NodePath>,
+        is_monitor_focused: bool,
+    ) -> Self {
+        Self {
+            hovered_path,
+            active_path,
+            focused_path,
+            is_monitor_focused,
+        }
+    }
+
+    #[must_use]
+    pub const fn hovered_path(&self) -> Option<&NodePath> {
+        self.hovered_path.as_ref()
+    }
+
+    #[must_use]
+    pub const fn active_path(&self) -> Option<&NodePath> {
+        self.active_path.as_ref()
+    }
+
+    #[must_use]
+    pub const fn focused_path(&self) -> Option<&NodePath> {
+        self.focused_path.as_ref()
+    }
+
+    #[must_use]
+    pub const fn is_monitor_focused(&self) -> bool {
+        self.is_monitor_focused
     }
 }
 
@@ -448,40 +530,90 @@ impl VNode {
     }
 
     #[must_use]
+    pub fn is_empty(&self) -> bool {
+        match &self.kind {
+            VNodeKind::Flex { children } => children.is_empty(),
+            VNodeKind::Text { text } => text.as_str().trim().is_empty(),
+            _ => false,
+        }
+    }
+
+    #[must_use]
     pub fn resolve_styles(
         &self,
         resolver: &dyn StyleResolverPort,
+        interaction: Option<&InteractionContext>,
         parent: Option<&ElementQuery>,
     ) -> StyledNode {
+        self.resolve_styles_recursive(resolver, interaction, &NodePath::root(), 0, 1, parent)
+    }
+
+    fn resolve_styles_recursive(
+        &self,
+        resolver: &dyn StyleResolverPort,
+        interaction: Option<&InteractionContext>,
+        path: &NodePath,
+        child_index: usize,
+        total_children: usize,
+        parent: Option<&ElementQuery>,
+    ) -> StyledNode {
+        let pseudo_classes = compute_pseudo_classes(path, interaction);
         let classes_slice = self.class.as_ref().map_or(&[][..], ClassNameList::as_slice);
         let query = ElementQuery::new(
             self.tag().as_str(),
             self.id.as_ref(),
             classes_slice,
-            &[],
+            &pseudo_classes,
             parent,
-        );
-        let style = resolver.resolve_style(&query);
-        let styled_tooltip = self
-            .tooltip
-            .as_ref()
-            .map(|t| Box::new(t.resolve_styles(resolver, None)));
+        )
+        .with_structural_context(child_index, total_children, self.is_empty());
 
+        let style = resolver.resolve_style(&query);
+        let styled_tooltip = self.tooltip.as_ref().map(|t| {
+            Box::new(t.resolve_styles_recursive(resolver, interaction, &path.child(0), 0, 1, None))
+        });
+
+        let styled_children = if let VNodeKind::Flex { children } = &self.kind {
+            let total = children.len();
+            children
+                .iter()
+                .enumerate()
+                .map(|(idx, child)| {
+                    child.resolve_styles_recursive(
+                        resolver,
+                        interaction,
+                        &path.child(idx),
+                        idx,
+                        total,
+                        Some(&query),
+                    )
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        self.map_to_styled_node(path, style, styled_tooltip, styled_children)
+    }
+
+    fn map_to_styled_node(
+        &self,
+        path: &NodePath,
+        style: ComputedStyle,
+        styled_tooltip: Option<Box<StyledNode>>,
+        styled_children: Vec<StyledNode>,
+    ) -> StyledNode {
         match &self.kind {
-            VNodeKind::Flex { children } => {
-                let styled_children = children
-                    .iter()
-                    .map(|child| child.resolve_styles(resolver, Some(&query)))
-                    .collect();
-                StyledNode::Flex {
-                    children: styled_children,
-                    style,
-                    on_click: self.on_click.clone(),
-                    on_hover: self.on_hover.clone(),
-                    tooltip: styled_tooltip,
-                }
-            }
+            VNodeKind::Flex { .. } => StyledNode::Flex {
+                path: path.clone(),
+                children: styled_children,
+                style,
+                on_click: self.on_click.clone(),
+                on_hover: self.on_hover.clone(),
+                tooltip: styled_tooltip,
+            },
             VNodeKind::Text { text } => StyledNode::Text {
+                path: path.clone(),
                 text: text.clone(),
                 style,
                 on_click: self.on_click.clone(),
@@ -489,6 +621,7 @@ impl VNode {
                 tooltip: styled_tooltip,
             },
             VNodeKind::Progress { value, orientation } => StyledNode::Progress {
+                path: path.clone(),
                 value: *value,
                 orientation: *orientation,
                 style,
@@ -497,12 +630,14 @@ impl VNode {
                 tooltip: styled_tooltip,
             },
             VNodeKind::Rect => StyledNode::Rect {
+                path: path.clone(),
                 style,
                 on_click: self.on_click.clone(),
                 on_hover: self.on_hover.clone(),
                 tooltip: styled_tooltip,
             },
             VNodeKind::Image { data, pixel_size } => StyledNode::Image {
+                path: path.clone(),
                 data: data.clone(),
                 pixel_size: *pixel_size,
                 style,
@@ -513,6 +648,7 @@ impl VNode {
                 instance_id,
                 options,
             } => StyledNode::Module {
+                path: path.clone(),
                 key: ModuleKey::new(name.clone(), instance_id.clone()),
                 options: options.clone(),
                 style,
@@ -522,6 +658,38 @@ impl VNode {
             },
         }
     }
+}
+
+fn compute_pseudo_classes(
+    path: &NodePath,
+    interaction: Option<&InteractionContext>,
+) -> Vec<PseudoClass> {
+    let mut pseudo_classes = Vec::new();
+    let Some(ctx) = interaction else {
+        return pseudo_classes;
+    };
+
+    if ctx
+        .hovered_path()
+        .is_some_and(|h| h == path || h.starts_with(path))
+    {
+        pseudo_classes.push(PseudoClass::Hover);
+    }
+    if ctx
+        .active_path()
+        .is_some_and(|a| a == path || a.starts_with(path))
+    {
+        pseudo_classes.push(PseudoClass::Active);
+    }
+    if ctx.focused_path().is_some_and(|f| f == path) {
+        pseudo_classes.push(PseudoClass::Focused);
+    }
+    if path.is_root() && ctx.is_monitor_focused() && !pseudo_classes.contains(&PseudoClass::Focused)
+    {
+        pseudo_classes.push(PseudoClass::Focused);
+    }
+
+    pseudo_classes
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -781,5 +949,105 @@ mod tests {
         let debug_str = format!("{node:?}");
         assert!(debug_str.contains("<Binary Data (8 bytes)>"));
         assert!(!debug_str.contains("1, 2, 3, 4"));
+    }
+
+    #[test]
+    fn test_node_path_operations() {
+        let root = NodePath::root();
+        assert!(root.is_root());
+        let empty: &[usize] = &[];
+        assert_eq!(root.as_slice(), empty);
+
+        let child0 = root.child(0);
+        assert!(!child0.is_root());
+        assert_eq!(child0.as_slice(), &[0]);
+        assert!(child0.starts_with(&root));
+
+        let child0_1 = child0.child(1);
+        assert_eq!(child0_1.as_slice(), &[0, 1]);
+        assert!(child0_1.starts_with(&child0));
+        assert!(child0_1.starts_with(&root));
+
+        let child1 = root.child(1);
+        assert!(!child0_1.starts_with(&child1));
+    }
+
+    #[test]
+    fn test_vnode_is_empty() {
+        let empty_flex = VNode::new_flex(vec![], None, None, None, None, None);
+        assert!(empty_flex.is_empty());
+
+        let empty_text = VNode::new_text(
+            TextContent::new("   ".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(empty_text.is_empty());
+
+        let non_empty_text = VNode::new_text(
+            TextContent::new("hello".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        assert!(!non_empty_text.is_empty());
+
+        let non_empty_flex = VNode::new_flex(vec![non_empty_text], None, None, None, None, None);
+        assert!(!non_empty_flex.is_empty());
+    }
+
+    struct MockResolver;
+    impl StyleResolverPort for MockResolver {
+        fn resolve_style(
+            &self,
+            _query: &ElementQuery,
+        ) -> crate::features::styling::domain::ComputedStyle {
+            crate::features::styling::domain::ComputedStyle::default()
+        }
+    }
+
+    #[test]
+    fn test_resolve_styles_interaction_propagation() {
+        let child1 = VNode::new_text(
+            TextContent::new("c1".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let child2 = VNode::new_text(
+            TextContent::new("c2".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let root = VNode::new_flex(vec![child1, child2], None, None, None, None, None);
+
+        let resolver = MockResolver;
+        let interaction = InteractionContext::new(
+            Some(NodePath::new(vec![0])),
+            Some(NodePath::new(vec![0])),
+            Some(NodePath::new(vec![1])),
+            true,
+        );
+
+        let styled = root.resolve_styles(&resolver, Some(&interaction), None);
+        assert_eq!(styled.path(), &NodePath::root());
+
+        if let StyledNode::Flex { children, .. } = styled {
+            assert_eq!(children.len(), 2);
+            assert_eq!(children[0].path(), &NodePath::new(vec![0]));
+            assert_eq!(children[1].path(), &NodePath::new(vec![1]));
+        } else {
+            panic!("Expected StyledNode::Flex");
+        }
     }
 }

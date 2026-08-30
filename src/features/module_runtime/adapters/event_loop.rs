@@ -145,14 +145,14 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
             "Received pointer event in module actor"
         );
         if let Some(render_tree) = self.render_pipeline.render_trees().get(monitor_id) {
-            let actions = self
+            let outcome = self
                 .pointer_handler
                 .handle_event(event, monitor_id, render_tree);
             let mut changed = false;
-            for action in actions {
+            for action in outcome.actions() {
                 match action {
                     PointerAction::CallFunction(func_name) => {
-                        if let Err(e) = self.port.call_function(&func_name) {
+                        if let Err(e) = self.port.call_function(func_name) {
                             tracing::error!(
                                 module = %ctx_id,
                                 func = %func_name,
@@ -163,7 +163,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
                         }
                     }
                     PointerAction::SendCommand(cmd) => {
-                        self.ctx.command_tx().send_command(cmd);
+                        self.ctx.command_tx().send_command(cmd.clone());
                     }
                 }
             }
@@ -171,7 +171,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
                 let subs = self.port.subscriptions().to_vec();
                 self.port.refresh(self.ctx.hub(), &subs);
             }
-            changed
+            changed || outcome.has_state_changed()
         } else {
             tracing::warn!(
                 module = %ctx_id,
@@ -307,6 +307,18 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
             let module_sizes_guard = self.ctx.hub().module_sizes_rx().borrow().clone();
             let current_child_sizes = module_sizes_guard.get(&monitor_id);
 
+            let is_monitor_focused = self
+                .ctx
+                .hub()
+                .hyprland_rx()
+                .borrow()
+                .focused_monitor()
+                .is_some_and(|m| m.as_str() == monitor_id.as_str());
+            let interaction_context = Some(
+                self.pointer_handler
+                    .interaction_context(&monitor_id, is_monitor_focused),
+            );
+
             let engine = layout_engines
                 .entry(monitor_id.clone())
                 .or_insert_with(|| Box::new(TaffyLayoutAdapter::new()));
@@ -316,6 +328,7 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
                     style_resolver: self.style_resolver.as_ref(),
                     current_bounds,
                     current_child_sizes,
+                    interaction_context,
                     canvas_factory: &mut self.canvas_factory,
                     layout_engine: engine.as_mut(),
                 };
@@ -416,6 +429,7 @@ mod tests {
             Some(SizeChange::new(Size::new(0, 0), Size::new(50, 20))),
             vec![],
             crate::features::layout_engine::domain::RenderNode::Rect {
+                path: crate::features::layout_engine::domain::NodePath::root(),
                 rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
                 style: ComputedStyle::default(),
                 on_click: None,
@@ -462,9 +476,8 @@ mod tests {
         );
 
         let event = crate::shared::events::core::PointerEvent::Click {
-            button: 0,
-            x: 10.0,
-            y: 10.0,
+            button: crate::shared::events::core::PointerButton::Left,
+            pos: Position::new(10, 10),
         };
         let changed = event_loop.handle_pointer_event(&MonitorId::new("DP-1"), &event);
         assert!(!changed);

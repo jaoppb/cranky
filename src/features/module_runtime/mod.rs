@@ -231,6 +231,7 @@ pub mod test_support {
             crate::features::layout_engine::domain::LayoutError,
         > {
             Ok(crate::features::layout_engine::domain::RenderNode::Rect {
+                path: crate::features::layout_engine::domain::NodePath::root(),
                 rect: crate::shared::primitives::geometry::Rect::new(
                     Position::new(0, 0),
                     Size::new(10, 10),

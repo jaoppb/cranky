@@ -59,13 +59,82 @@ pub enum WindowManagerEvent {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PointerButton {
+    Left,
+    Middle,
+    Right,
+    Other(u32),
+}
+
+impl PointerButton {
+    #[must_use]
+    pub const fn from_raw(button: u32) -> Self {
+        match button {
+            0x110 => Self::Left,
+            0x111 => Self::Right,
+            0x112 => Self::Middle,
+            other => Self::Other(other),
+        }
+    }
+
+    #[must_use]
+    pub const fn to_raw(self) -> u32 {
+        match self {
+            Self::Left => 0x110,
+            Self::Right => 0x111,
+            Self::Middle => 0x112,
+            Self::Other(raw) => raw,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ScrollAxis {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+pub struct ScrollDelta(f64);
+
+impl ScrollDelta {
+    #[must_use]
+    pub const fn new(value: f64) -> Self {
+        Self(value)
+    }
+
+    #[must_use]
+    pub const fn value(&self) -> f64 {
+        self.0
+    }
+}
+
+use crate::shared::primitives::geometry::Position;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum PointerEvent {
     PointerEnter,
     PointerLeave,
-    PointerMotion { x: f64, y: f64 },
-    Click { button: u32, x: f64, y: f64 },
-    Scroll { axis: u32, amount: f64 },
+    PointerMotion {
+        pos: Position,
+    },
+    ButtonPress {
+        button: PointerButton,
+        pos: Position,
+    },
+    ButtonRelease {
+        button: PointerButton,
+        pos: Position,
+    },
+    Click {
+        button: PointerButton,
+        pos: Position,
+    },
+    Scroll {
+        axis: ScrollAxis,
+        amount: ScrollDelta,
+    },
 }
 
 pub type PointerSender = tokio::sync::broadcast::Sender<(
@@ -93,5 +162,23 @@ mod tests {
     fn test_window_title() {
         let title = WindowTitle::new("Firefox");
         assert_eq!(title, WindowTitle("Firefox".to_string()));
+    }
+
+    #[test]
+    fn test_pointer_button_conversion() {
+        assert_eq!(PointerButton::from_raw(0x110), PointerButton::Left);
+        assert_eq!(PointerButton::from_raw(0x111), PointerButton::Right);
+        assert_eq!(PointerButton::from_raw(0x112), PointerButton::Middle);
+        assert_eq!(PointerButton::from_raw(999), PointerButton::Other(999));
+        assert_eq!(PointerButton::Left.to_raw(), 0x110);
+        assert_eq!(PointerButton::Right.to_raw(), 0x111);
+        assert_eq!(PointerButton::Middle.to_raw(), 0x112);
+        assert_eq!(PointerButton::Other(999).to_raw(), 999);
+    }
+
+    #[test]
+    fn test_scroll_delta() {
+        let delta = ScrollDelta::new(15.5);
+        assert!((delta.value() - 15.5).abs() < f64::EPSILON);
     }
 }

@@ -655,6 +655,7 @@ fn build_render_tree(
 
     match node {
         StyledNode::Flex {
+            path,
             children,
             style,
             on_click,
@@ -676,6 +677,7 @@ fn build_render_tree(
             }
 
             Ok(RenderNode::Flex {
+                path: path.clone(),
                 rect,
                 children: render_children,
                 style: style.clone(),
@@ -685,12 +687,14 @@ fn build_render_tree(
             })
         }
         StyledNode::Text {
+            path,
             text,
             style,
             on_click,
             on_hover,
             tooltip,
         } => Ok(RenderNode::Text {
+            path: path.clone(),
             rect,
             text: text.clone(),
             style: style.clone(),
@@ -699,6 +703,7 @@ fn build_render_tree(
             tooltip: tooltip.clone(),
         }),
         StyledNode::Progress {
+            path,
             value,
             orientation,
             style,
@@ -706,6 +711,7 @@ fn build_render_tree(
             on_hover,
             tooltip,
         } => Ok(RenderNode::Progress {
+            path: path.clone(),
             rect,
             value: *value,
             orientation: *orientation,
@@ -715,11 +721,13 @@ fn build_render_tree(
             tooltip: tooltip.clone(),
         }),
         StyledNode::Rect {
+            path,
             style,
             on_click,
             on_hover,
             tooltip,
         } => Ok(RenderNode::Rect {
+            path: path.clone(),
             rect,
             style: style.clone(),
             on_click: on_click.clone(),
@@ -727,17 +735,20 @@ fn build_render_tree(
             tooltip: tooltip.clone(),
         }),
         StyledNode::Image {
+            path,
             data,
             pixel_size,
             tooltip,
             ..
         } => Ok(RenderNode::Image {
+            path: path.clone(),
             rect,
             data: data.clone(),
             pixel_size: *pixel_size,
             tooltip: tooltip.clone(),
         }),
         StyledNode::Module {
+            path,
             key,
             style,
             on_click,
@@ -745,6 +756,7 @@ fn build_render_tree(
             tooltip,
             ..
         } => Ok(RenderNode::Module {
+            path: path.clone(),
             rect,
             key: key.clone(),
             style: style.clone(),
@@ -758,7 +770,7 @@ fn build_render_tree(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::layout_engine::domain::{StyledNode, TextContent, TextMeasurer};
+    use crate::features::layout_engine::domain::{NodePath, StyledNode, TextContent, TextMeasurer};
     use crate::features::styling::domain::ComputedStyle;
     use crate::shared::config::domain::{FontFamily, FontSize};
     use crate::shared::primitives::geometry::{Position, Size};
@@ -791,6 +803,7 @@ mod tests {
         let mut measurer = MockMeasurer;
 
         let node = StyledNode::Text {
+            path: NodePath::root(),
             text: TextContent::new("hello".to_string()),
             style: ComputedStyle::default(),
             on_click: None,
@@ -815,6 +828,7 @@ mod tests {
         style.set_height(crate::features::styling::domain::CssLength::Px(30.0));
 
         let node = StyledNode::Module {
+            path: NodePath::root(),
             key: ModuleKey::from_name(ModuleName::new("custom_mod")),
             options: ModuleOptions::default(),
             style,
@@ -838,6 +852,7 @@ mod tests {
         let mut measurer = MockMeasurer;
 
         let node = StyledNode::Module {
+            path: NodePath::root(),
             key: ModuleKey::from_name(ModuleName::new("workspace")),
             options: ModuleOptions::default(),
             style: ComputedStyle::default(),
@@ -859,6 +874,7 @@ mod tests {
         let mut measurer = MockMeasurer;
 
         let child1 = StyledNode::Module {
+            path: NodePath::new(vec![0]),
             key: ModuleKey::from_name(ModuleName::new("workspace")),
             options: ModuleOptions::default(),
             style: ComputedStyle::default(),
@@ -872,6 +888,7 @@ mod tests {
             0.0, 0.0, 16.0, 16.0,
         ));
         let root = StyledNode::Flex {
+            path: NodePath::root(),
             children: vec![child1],
             style: root_style,
             on_click: None,

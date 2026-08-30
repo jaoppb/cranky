@@ -458,6 +458,12 @@ pub enum PseudoClass {
     Hover,
     Active,
     Focused,
+    FirstChild,
+    LastChild,
+    OnlyChild,
+    NthChild { a: i32, b: i32 },
+    NthLastChild { a: i32, b: i32 },
+    Empty,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -763,6 +769,9 @@ pub struct ElementQuery<'a> {
     id: Option<&'a ElementId>,
     classes: &'a [ClassName],
     pseudo_classes: &'a [PseudoClass],
+    child_index: usize,
+    total_children: usize,
+    is_empty: bool,
     parent: Option<&'a Self>,
 }
 
@@ -780,8 +789,24 @@ impl<'a> ElementQuery<'a> {
             id,
             classes,
             pseudo_classes,
+            child_index: 0,
+            total_children: 1,
+            is_empty: false,
             parent,
         }
+    }
+
+    #[must_use]
+    pub const fn with_structural_context(
+        mut self,
+        child_index: usize,
+        total_children: usize,
+        is_empty: bool,
+    ) -> Self {
+        self.child_index = child_index;
+        self.total_children = total_children;
+        self.is_empty = is_empty;
+        self
     }
 
     #[must_use]
@@ -802,6 +827,21 @@ impl<'a> ElementQuery<'a> {
     #[must_use]
     pub const fn pseudo_classes(&self) -> &'a [PseudoClass] {
         self.pseudo_classes
+    }
+
+    #[must_use]
+    pub const fn child_index(&self) -> usize {
+        self.child_index
+    }
+
+    #[must_use]
+    pub const fn total_children(&self) -> usize {
+        self.total_children
+    }
+
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.is_empty
     }
 
     #[must_use]

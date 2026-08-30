@@ -732,6 +732,7 @@ dependencies = [
  "mlua",
  "mockall",
  "notify",
+ "parcel_selectors",
  "resvg",
  "rhai",
  "serde",

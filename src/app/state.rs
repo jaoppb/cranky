@@ -889,6 +889,7 @@ mod tests {
         command_tx
             .send(AppCommand::ShowTooltip {
                 layout: Box::new(crate::features::layout_engine::domain::StyledNode::Text {
+                    path: crate::features::layout_engine::domain::NodePath::root(),
                     text: crate::features::layout_engine::domain::TextContent::new("t".to_string()),
                     style: crate::features::styling::domain::ComputedStyle::default(),
                     on_click: None,

@@ -2,7 +2,7 @@ use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 use cranky::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use cranky::features::layout_engine::domain::{
-    AlignItems, BoxMargin, FlexDirection, JustifyContent, StyledNode,
+    AlignItems, BoxMargin, FlexDirection, JustifyContent, NodePath, StyledNode,
 };
 use cranky::features::layout_engine::ports::LayoutEnginePort;
 use cranky::features::module_runtime::domain::render_pipeline::{LayoutContext, RenderPipeline};
@@ -77,6 +77,7 @@ fn create_styled_node_tree(depth: usize, branching: usize) -> StyledNode {
 
     if depth == 0 {
         StyledNode::Text {
+            path: NodePath::root(),
             text: TextContent::new("Benchmark Text Content".to_string()),
             style,
             on_click: None,
@@ -89,6 +90,7 @@ fn create_styled_node_tree(depth: usize, branching: usize) -> StyledNode {
             children.push(create_styled_node_tree(depth.saturating_sub(1), branching));
         }
         StyledNode::Flex {
+            path: NodePath::root(),
             children,
             style,
             on_click: None,
@@ -520,13 +522,14 @@ fn bench_pipeline(c: &mut Criterion) {
         b.iter(|| {
             let mut pipeline = RenderPipeline::new();
 
-            let diff_opt = pipeline.diff(&monitor_id, &module, &vdom_diff, None, None);
+            let diff_opt = pipeline.diff(&monitor_id, &module, &vdom_diff, None, None, None);
 
             if let Some(diff) = diff_opt {
                 let mut ctx = LayoutContext {
                     style_resolver: &style_resolver,
                     current_bounds: None,
                     current_child_sizes: None,
+                    interaction_context: None,
                     canvas_factory: &mut canvas_factory,
                     layout_engine: &mut layout_engine,
                 };

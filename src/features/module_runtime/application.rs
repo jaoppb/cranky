@@ -348,9 +348,8 @@ mod tests {
             id,
             MonitorId::new("DP-1"),
             crate::shared::events::core::PointerEvent::Click {
-                x: 5.0,
-                y: 5.0,
-                button: 1,
+                button: crate::shared::events::core::PointerButton::Left,
+                pos: crate::shared::primitives::geometry::Position::new(5, 5),
             },
         ));
 

@@ -20,6 +20,7 @@ use lightningcss::stylesheet::{ParserOptions, PrinterOptions, StyleSheet};
 use lightningcss::traits::ToCss;
 use lightningcss::values::color::CssColor as LightningCssColor;
 use lightningcss::values::length::LengthPercentageOrAuto;
+use parcel_selectors::parser::NthType;
 
 #[derive(Debug, Clone)]
 struct RuleEntry {
@@ -38,6 +39,7 @@ struct SelectorStep {
     id: Option<String>,
     classes: Vec<String>,
     pseudo_classes: Vec<PseudoClass>,
+    negations: Vec<CompiledSelector>,
     combinator: Option<Combinator>,
 }
 
@@ -130,6 +132,49 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
     }
 }
 
+fn compile_nth_data(nth_data: &parcel_selectors::parser::NthSelectorData, step: &mut SelectorStep) {
+    match nth_data.ty {
+        NthType::Child => {
+            if nth_data.is_function() {
+                step.pseudo_classes.push(PseudoClass::NthChild {
+                    a: nth_data.a,
+                    b: nth_data.b,
+                });
+            } else {
+                step.pseudo_classes.push(PseudoClass::FirstChild);
+            }
+        }
+        NthType::LastChild => {
+            if nth_data.is_function() {
+                step.pseudo_classes.push(PseudoClass::NthLastChild {
+                    a: nth_data.a,
+                    b: nth_data.b,
+                });
+            } else {
+                step.pseudo_classes.push(PseudoClass::LastChild);
+            }
+        }
+        NthType::OnlyChild => {
+            step.pseudo_classes.push(PseudoClass::OnlyChild);
+        }
+        _ => {}
+    }
+}
+
+fn compile_pseudo_class(pseudo: &LightningPseudoClass, step: &mut SelectorStep) {
+    match pseudo {
+        LightningPseudoClass::Hover => step.pseudo_classes.push(PseudoClass::Hover),
+        LightningPseudoClass::Active => step.pseudo_classes.push(PseudoClass::Active),
+        LightningPseudoClass::Focus | LightningPseudoClass::FocusVisible => {
+            step.pseudo_classes.push(PseudoClass::Focused);
+        }
+        LightningPseudoClass::Custom { name } if name.as_ref() == "focused" => {
+            step.pseudo_classes.push(PseudoClass::Focused);
+        }
+        _ => {}
+    }
+}
+
 fn compile_selector(selector: &Selector) -> CompiledSelector {
     let mut steps = Vec::new();
     let mut current_step = SelectorStep {
@@ -137,6 +182,7 @@ fn compile_selector(selector: &Selector) -> CompiledSelector {
         id: None,
         classes: Vec::new(),
         pseudo_classes: Vec::new(),
+        negations: Vec::new(),
         combinator: None,
     };
 
@@ -151,19 +197,21 @@ fn compile_selector(selector: &Selector) -> CompiledSelector {
             Component::Class(class) => {
                 current_step.classes.push(class.as_ref().to_string());
             }
-            Component::NonTSPseudoClass(pseudo) => match pseudo {
-                LightningPseudoClass::Hover => current_step.pseudo_classes.push(PseudoClass::Hover),
-                LightningPseudoClass::Active => {
-                    current_step.pseudo_classes.push(PseudoClass::Active);
+            Component::Nth(nth_data) => compile_nth_data(nth_data, &mut current_step),
+            Component::NthOf(nth_of_data) => {
+                compile_nth_data(nth_of_data.nth_data(), &mut current_step);
+            }
+            Component::Empty => {
+                current_step.pseudo_classes.push(PseudoClass::Empty);
+            }
+            Component::Negation(selectors) => {
+                for inner_sel in selectors.as_ref() {
+                    current_step.negations.push(compile_selector(inner_sel));
                 }
-                LightningPseudoClass::Focus | LightningPseudoClass::FocusVisible => {
-                    current_step.pseudo_classes.push(PseudoClass::Focused);
-                }
-                LightningPseudoClass::Custom { name } if name.as_ref() == "focused" => {
-                    current_step.pseudo_classes.push(PseudoClass::Focused);
-                }
-                _ => {}
-            },
+            }
+            Component::NonTSPseudoClass(pseudo) => {
+                compile_pseudo_class(pseudo, &mut current_step);
+            }
             Component::Combinator(comb) => {
                 current_step.combinator = Some(*comb);
                 steps.push(current_step);
@@ -172,6 +220,7 @@ fn compile_selector(selector: &Selector) -> CompiledSelector {
                     id: None,
                     classes: Vec::new(),
                     pseudo_classes: Vec::new(),
+                    negations: Vec::new(),
                     combinator: None,
                 };
             }
@@ -265,7 +314,13 @@ fn step_matches(step: &SelectorStep, query: &ElementQuery) -> bool {
     }
 
     for pseudo in &step.pseudo_classes {
-        if !query.pseudo_classes().contains(pseudo) {
+        if !pseudo_matches(pseudo, query) {
+            return false;
+        }
+    }
+
+    for not_sel in &step.negations {
+        if matches_selector(not_sel, query) {
             return false;
         }
     }
@@ -273,7 +328,512 @@ fn step_matches(step: &SelectorStep, query: &ElementQuery) -> bool {
     true
 }
 
-#[allow(clippy::too_many_lines, clippy::match_wildcard_for_single_variants)]
+fn pseudo_matches(pseudo: &PseudoClass, query: &ElementQuery) -> bool {
+    match pseudo {
+        PseudoClass::Hover | PseudoClass::Active | PseudoClass::Focused => {
+            query.pseudo_classes().contains(pseudo)
+        }
+        PseudoClass::FirstChild => query.child_index() == 0,
+        PseudoClass::LastChild => {
+            query.total_children() > 0
+                && query.child_index().saturating_add(1) == query.total_children()
+        }
+        PseudoClass::OnlyChild => query.total_children() == 1,
+        PseudoClass::NthChild { a, b } => {
+            nth_matches(*a, *b, query.child_index().saturating_add(1))
+        }
+        PseudoClass::NthLastChild { a, b } => {
+            let from_end = query.total_children().saturating_sub(query.child_index());
+            nth_matches(*a, *b, from_end)
+        }
+        PseudoClass::Empty => query.is_empty(),
+    }
+}
+
+fn nth_matches(a: i32, b: i32, index_1based: usize) -> bool {
+    let Ok(n_pos) = i32::try_from(index_1based) else {
+        return false;
+    };
+    if a == 0 {
+        return n_pos == b;
+    }
+    let Some(diff) = n_pos.checked_sub(b) else {
+        return false;
+    };
+    if a > 0 {
+        diff >= 0 && diff.checked_rem(a) == Some(0)
+    } else {
+        diff <= 0 && diff.checked_rem(a) == Some(0)
+    }
+}
+
+fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property) -> bool {
+    match prop {
+        Property::BackgroundColor(color) => {
+            if let Some(c) = convert_color(color) {
+                style.set_background(DrawingColor::Solid(c));
+            }
+            true
+        }
+        Property::Color(color) => {
+            if let Some(c) = convert_color(color) {
+                style.set_color(DrawingColor::Solid(c));
+            }
+            true
+        }
+        Property::AccentColor(color) => {
+            let s = color
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Ok(c) = DrawingColor::parse(s.trim()) {
+                style.set_accent_color(c);
+            }
+            true
+        }
+        Property::Custom(custom) => {
+            apply_custom_or_unparsed_property(style, custom.name.as_ref(), prop);
+            true
+        }
+        Property::Unparsed(unparsed) => {
+            apply_custom_or_unparsed_property(style, unparsed.property_id.name(), prop);
+            true
+        }
+        Property::FontFamily(families) => {
+            if let Some(first) = families.first() {
+                let name = first
+                    .to_css_string(PrinterOptions::default())
+                    .unwrap_or_default();
+                let trimmed = name.trim_matches('"').trim_matches('\'').to_string();
+                style.set_font_family(FontFamily::new(trimmed));
+            }
+            true
+        }
+        Property::FontSize(size) => {
+            apply_font_size(style, size);
+            true
+        }
+        Property::Background(bgs) => {
+            let s = bgs
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Ok(c) = DrawingColor::parse(s.trim()) {
+                style.set_background(c);
+            } else if let Some(first) = bgs.first()
+                && let Some(c) = convert_color(&first.color)
+            {
+                style.set_background(DrawingColor::Solid(c));
+            }
+            true
+        }
+        Property::Opacity(op) => {
+            let s = op
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Ok(v) = s.parse::<f32>()
+                && let Ok(val) = Opacity::new(v)
+            {
+                style.set_opacity(val);
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+fn apply_custom_or_unparsed_property(style: &mut ComputedStyle, name: &str, prop: &Property) {
+    if (name == "accent-color" || name == "progress-color" || name == "fill-color")
+        && let Ok(full) = prop.to_css_string(false, PrinterOptions::default())
+    {
+        let val = full.split_once(':').map_or(&*full, |(_, v)| v);
+        if let Ok(c) = DrawingColor::parse(val.trim()) {
+            style.set_accent_color(c);
+        }
+    } else if (name == "border-color" || name == "border")
+        && let Ok(full) = prop.to_css_string(false, PrinterOptions::default())
+    {
+        let val = full.split_once(':').map_or(&*full, |(_, v)| v);
+        if let Ok(c) = DrawingColor::parse(val.trim()) {
+            style.set_border_color(c);
+        }
+    }
+}
+
+fn apply_font_size(style: &mut ComputedStyle, size: &LightningFontSize) {
+    match size {
+        LightningFontSize::Length(l) => {
+            let px = parse_length_str(
+                &l.to_css_string(PrinterOptions::default())
+                    .unwrap_or_default(),
+            );
+            style.set_font_size(FontSize::new(px));
+        }
+        LightningFontSize::Absolute(abs) => {
+            let px = match abs {
+                AbsoluteFontSize::XXSmall => 9.0,
+                AbsoluteFontSize::XSmall => 10.0,
+                AbsoluteFontSize::Small => 12.0,
+                AbsoluteFontSize::Medium => 14.0,
+                AbsoluteFontSize::Large => 18.0,
+                AbsoluteFontSize::XLarge => 24.0,
+                AbsoluteFontSize::XXLarge => 32.0,
+                AbsoluteFontSize::XXXLarge => 48.0,
+            };
+            style.set_font_size(FontSize::new(px));
+        }
+        LightningFontSize::Relative(_) => {}
+    }
+}
+
+fn apply_border_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+    match prop {
+        Property::Border(border) => {
+            apply_border(style, border);
+            true
+        }
+        Property::BorderRadius(radius, _) => {
+            let px = parse_length_str(
+                &radius
+                    .top_left
+                    .0
+                    .to_css_string(PrinterOptions::default())
+                    .unwrap_or_default(),
+            );
+            style.set_border_radius(BorderRadius::new(px));
+            true
+        }
+        Property::BorderWidth(width) => {
+            let px = parse_length_str(
+                &width
+                    .top
+                    .to_css_string(PrinterOptions::default())
+                    .unwrap_or_default(),
+            );
+            style.set_border_size(BorderSize::new(px));
+            true
+        }
+        Property::BorderColor(color) => {
+            let s = color
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Ok(c) = DrawingColor::parse(s.trim()) {
+                style.set_border_color(c);
+            } else if let Some(c) = convert_color(&color.top) {
+                style.set_border_color(DrawingColor::Solid(c));
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+fn apply_padding_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+    match prop {
+        Property::Padding(padding) => {
+            let top = length_to_f64(&padding.top);
+            let right = length_to_f64(&padding.right);
+            let bottom = length_to_f64(&padding.bottom);
+            let left = length_to_f64(&padding.left);
+            style.set_padding(BoxMargin::new(top, bottom, left, right));
+            true
+        }
+        Property::PaddingTop(len) => {
+            let top = length_to_f64(len);
+            let current = style.padding().cloned().unwrap_or_default();
+            style.set_padding(BoxMargin::new(
+                top,
+                current.bottom(),
+                current.left(),
+                current.right(),
+            ));
+            true
+        }
+        Property::PaddingRight(len) => {
+            let right = length_to_f64(len);
+            let current = style.padding().cloned().unwrap_or_default();
+            style.set_padding(BoxMargin::new(
+                current.top(),
+                current.bottom(),
+                current.left(),
+                right,
+            ));
+            true
+        }
+        Property::PaddingBottom(len) => {
+            let bottom = length_to_f64(len);
+            let current = style.padding().cloned().unwrap_or_default();
+            style.set_padding(BoxMargin::new(
+                current.top(),
+                bottom,
+                current.left(),
+                current.right(),
+            ));
+            true
+        }
+        Property::PaddingLeft(len) => {
+            let left = length_to_f64(len);
+            let current = style.padding().cloned().unwrap_or_default();
+            style.set_padding(BoxMargin::new(
+                current.top(),
+                current.bottom(),
+                left,
+                current.right(),
+            ));
+            true
+        }
+        _ => false,
+    }
+}
+
+fn apply_margin_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+    match prop {
+        Property::Margin(margin) => {
+            let top = length_to_f64(&margin.top);
+            let right = length_to_f64(&margin.right);
+            let bottom = length_to_f64(&margin.bottom);
+            let left = length_to_f64(&margin.left);
+            style.set_margin(BoxMargin::new(top, bottom, left, right));
+            true
+        }
+        Property::MarginTop(len) => {
+            let top = length_to_f64(len);
+            let current = style.margin().cloned().unwrap_or_default();
+            style.set_margin(BoxMargin::new(
+                top,
+                current.bottom(),
+                current.left(),
+                current.right(),
+            ));
+            true
+        }
+        Property::MarginRight(len) => {
+            let right = length_to_f64(len);
+            let current = style.margin().cloned().unwrap_or_default();
+            style.set_margin(BoxMargin::new(
+                current.top(),
+                current.bottom(),
+                current.left(),
+                right,
+            ));
+            true
+        }
+        Property::MarginBottom(len) => {
+            let bottom = length_to_f64(len);
+            let current = style.margin().cloned().unwrap_or_default();
+            style.set_margin(BoxMargin::new(
+                current.top(),
+                bottom,
+                current.left(),
+                current.right(),
+            ));
+            true
+        }
+        Property::MarginLeft(len) => {
+            let left = length_to_f64(len);
+            let current = style.margin().cloned().unwrap_or_default();
+            style.set_margin(BoxMargin::new(
+                current.top(),
+                current.bottom(),
+                left,
+                current.right(),
+            ));
+            true
+        }
+        _ => false,
+    }
+}
+
+fn apply_sizing_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+    match prop {
+        Property::Width(size) => {
+            let s = size
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Some(w) = parse_size_str(&s) {
+                style.set_width(w);
+            }
+            true
+        }
+        Property::Height(size) => {
+            let s = size
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Some(h) = parse_size_str(&s) {
+                style.set_height(h);
+            }
+            true
+        }
+        Property::MinWidth(size) => {
+            let s = size
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Some(mw) = parse_size_str(&s) {
+                style.set_min_width(mw);
+            }
+            true
+        }
+        Property::MaxWidth(size) => {
+            let s = size
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Some(mw) = parse_size_str(&s) {
+                style.set_max_width(mw);
+            }
+            true
+        }
+        Property::MinHeight(size) => {
+            let s = size
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Some(mh) = parse_size_str(&s) {
+                style.set_min_height(mh);
+            }
+            true
+        }
+        Property::MaxHeight(size) => {
+            let s = size
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Some(mh) = parse_size_str(&s) {
+                style.set_max_height(mh);
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+fn apply_flex_container_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+    match prop {
+        Property::Gap(gap) => {
+            let row_str = gap
+                .row
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            let row = parse_length_str(&row_str);
+            style.set_gap(Gap::new(f64::from(row)));
+            true
+        }
+        Property::FlexDirection(dir, _) => {
+            let s = dir
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            let fd = match s.as_str() {
+                "column" => Some(FlexDirection::Column),
+                "row" => Some(FlexDirection::Row),
+                _ => None,
+            };
+            if let Some(d) = fd {
+                style.set_flex_direction(d);
+            }
+            true
+        }
+        Property::JustifyContent(jc, _) => {
+            let s = jc
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            let val = if s.contains("space-between") {
+                JustifyContent::SpaceBetween
+            } else if s.contains("space-around") {
+                JustifyContent::SpaceAround
+            } else if s.contains("space-evenly") {
+                JustifyContent::SpaceEvenly
+            } else if s.contains("center") {
+                JustifyContent::Center
+            } else if s.contains("end") || s.contains("flex-end") {
+                JustifyContent::End
+            } else {
+                JustifyContent::Start
+            };
+            style.set_justify_content(val);
+            true
+        }
+        Property::AlignItems(ai, _) => {
+            let s = ai
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            let val = if s.contains("center") {
+                AlignItems::Center
+            } else if s.contains("end") || s.contains("flex-end") {
+                AlignItems::End
+            } else if s.contains("stretch") {
+                AlignItems::Stretch
+            } else {
+                AlignItems::Start
+            };
+            style.set_align_items(val);
+            true
+        }
+        Property::Position(pos) => {
+            let val = match pos {
+                lightningcss::properties::position::Position::Absolute => PositionType::Absolute,
+                _ => PositionType::Relative,
+            };
+            style.set_position(val);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn apply_flex_item_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+    match prop {
+        Property::FlexGrow(fg, _) => {
+            if let Ok(val) = FlexGrow::new(*fg) {
+                style.set_flex_grow(val);
+            }
+            true
+        }
+        Property::FlexShrink(fs, _) => {
+            if let Ok(val) = FlexShrink::new(*fs) {
+                style.set_flex_shrink(val);
+            }
+            true
+        }
+        Property::FlexBasis(fb, _) => {
+            let s = fb
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Some(val) = parse_size_str(&s) {
+                style.set_flex_basis(val);
+            }
+            true
+        }
+        Property::Flex(flex, _) => {
+            if let Ok(val) = FlexGrow::new(flex.grow) {
+                style.set_flex_grow(val);
+            }
+            if let Ok(val) = FlexShrink::new(flex.shrink) {
+                style.set_flex_shrink(val);
+            }
+            let s = flex
+                .basis
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            if let Some(val) = parse_size_str(&s) {
+                style.set_flex_basis(val);
+            }
+            true
+        }
+        Property::AlignSelf(as_, _) => {
+            let s = as_
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            let val = if s.contains("center") {
+                AlignItems::Center
+            } else if s.contains("end") || s.contains("flex-end") {
+                AlignItems::End
+            } else if s.contains("stretch") {
+                AlignItems::Stretch
+            } else {
+                AlignItems::Start
+            };
+            style.set_align_self(val);
+            true
+        }
+        _ => false,
+    }
+}
+
 fn parse_declarations(declarations: &DeclarationBlock) -> ComputedStyle {
     let mut style = ComputedStyle::default();
 
@@ -282,374 +842,13 @@ fn parse_declarations(declarations: &DeclarationBlock) -> ComputedStyle {
         .iter()
         .chain(declarations.important_declarations.iter())
     {
-        match prop {
-            Property::BackgroundColor(color) => {
-                if let Some(c) = convert_color(color) {
-                    style.set_background(DrawingColor::Solid(c));
-                }
-            }
-            Property::Color(color) => {
-                if let Some(c) = convert_color(color) {
-                    style.set_color(DrawingColor::Solid(c));
-                }
-            }
-            Property::AccentColor(color) => {
-                let s = color
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Ok(c) = DrawingColor::parse(s.trim()) {
-                    style.set_accent_color(c);
-                }
-            }
-            Property::Custom(custom) => {
-                let name = custom.name.as_ref();
-                if name == "accent-color" || name == "progress-color" || name == "fill-color" {
-                    for item in &custom.value.0 {
-                        if let lightningcss::properties::custom::TokenOrValue::Color(c) = item
-                            && let Some(col) = convert_color(c)
-                        {
-                            style.set_accent_color(DrawingColor::Solid(col));
-                        }
-                    }
-                }
-            }
-            Property::FontFamily(families) => {
-                if let Some(first) = families.first() {
-                    let name = first
-                        .to_css_string(PrinterOptions::default())
-                        .unwrap_or_default();
-                    let trimmed = name.trim_matches('"').trim_matches('\'').to_string();
-                    style.set_font_family(FontFamily::new(trimmed));
-                }
-            }
-            Property::FontSize(size) => match size {
-                LightningFontSize::Length(l) => {
-                    let px = parse_length_str(
-                        &l.to_css_string(PrinterOptions::default())
-                            .unwrap_or_default(),
-                    );
-                    style.set_font_size(FontSize::new(px));
-                }
-                LightningFontSize::Absolute(abs) => {
-                    let px = match abs {
-                        AbsoluteFontSize::XXSmall => 9.0,
-                        AbsoluteFontSize::XSmall => 10.0,
-                        AbsoluteFontSize::Small => 12.0,
-                        AbsoluteFontSize::Medium => 14.0,
-                        AbsoluteFontSize::Large => 18.0,
-                        AbsoluteFontSize::XLarge => 24.0,
-                        AbsoluteFontSize::XXLarge => 32.0,
-                        AbsoluteFontSize::XXXLarge => 48.0,
-                    };
-                    style.set_font_size(FontSize::new(px));
-                }
-                _ => {}
-            },
-            Property::Border(border) => {
-                apply_border(&mut style, border);
-            }
-            Property::BorderRadius(radius, _) => {
-                let px = parse_length_str(
-                    &radius
-                        .top_left
-                        .0
-                        .to_css_string(PrinterOptions::default())
-                        .unwrap_or_default(),
-                );
-                style.set_border_radius(BorderRadius::new(px));
-            }
-            Property::BorderWidth(width) => {
-                let px = parse_length_str(
-                    &width
-                        .top
-                        .to_css_string(PrinterOptions::default())
-                        .unwrap_or_default(),
-                );
-                style.set_border_size(BorderSize::new(px));
-            }
-            Property::BorderColor(color) => {
-                if let Some(c) = convert_color(&color.top) {
-                    style.set_border_color(DrawingColor::Solid(c));
-                }
-            }
-            Property::Padding(padding) => {
-                let top = length_to_f64(&padding.top);
-                let right = length_to_f64(&padding.right);
-                let bottom = length_to_f64(&padding.bottom);
-                let left = length_to_f64(&padding.left);
-                style.set_padding(BoxMargin::new(top, bottom, left, right));
-            }
-            Property::Margin(margin) => {
-                let top = length_to_f64(&margin.top);
-                let right = length_to_f64(&margin.right);
-                let bottom = length_to_f64(&margin.bottom);
-                let left = length_to_f64(&margin.left);
-                style.set_margin(BoxMargin::new(top, bottom, left, right));
-            }
-            Property::Gap(gap) => {
-                let row_str = gap
-                    .row
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                let row = parse_length_str(&row_str);
-                style.set_gap(Gap::new(f64::from(row)));
-            }
-            Property::FlexDirection(dir, _) => {
-                let s = dir
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                let fd = match s.as_str() {
-                    "column" => Some(FlexDirection::Column),
-                    "row" => Some(FlexDirection::Row),
-                    _ => None,
-                };
-                if let Some(d) = fd {
-                    style.set_flex_direction(d);
-                }
-            }
-            Property::JustifyContent(jc, _) => {
-                let s = jc
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                let val = if s.contains("space-between") {
-                    JustifyContent::SpaceBetween
-                } else if s.contains("space-around") {
-                    JustifyContent::SpaceAround
-                } else if s.contains("space-evenly") {
-                    JustifyContent::SpaceEvenly
-                } else if s.contains("center") {
-                    JustifyContent::Center
-                } else if s.contains("end") || s.contains("flex-end") {
-                    JustifyContent::End
-                } else {
-                    JustifyContent::Start
-                };
-                style.set_justify_content(val);
-            }
-            Property::AlignItems(ai, _) => {
-                let s = ai
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                let val = if s.contains("center") {
-                    AlignItems::Center
-                } else if s.contains("end") || s.contains("flex-end") {
-                    AlignItems::End
-                } else if s.contains("stretch") {
-                    AlignItems::Stretch
-                } else {
-                    AlignItems::Start
-                };
-                style.set_align_items(val);
-            }
-            Property::Position(pos) => {
-                let val = match pos {
-                    lightningcss::properties::position::Position::Absolute => {
-                        PositionType::Absolute
-                    }
-                    _ => PositionType::Relative,
-                };
-                style.set_position(val);
-            }
-            Property::Width(size) => {
-                let s = size
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Some(w) = parse_size_str(&s) {
-                    style.set_width(w);
-                }
-            }
-            Property::Height(size) => {
-                let s = size
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Some(h) = parse_size_str(&s) {
-                    style.set_height(h);
-                }
-            }
-            Property::MinWidth(size) => {
-                let s = size
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Some(mw) = parse_size_str(&s) {
-                    style.set_min_width(mw);
-                }
-            }
-            Property::MaxWidth(size) => {
-                let s = size
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Some(mw) = parse_size_str(&s) {
-                    style.set_max_width(mw);
-                }
-            }
-            Property::MinHeight(size) => {
-                let s = size
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Some(mh) = parse_size_str(&s) {
-                    style.set_min_height(mh);
-                }
-            }
-            Property::MaxHeight(size) => {
-                let s = size
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Some(mh) = parse_size_str(&s) {
-                    style.set_max_height(mh);
-                }
-            }
-            Property::Background(bgs) => {
-                let s = bgs
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Ok(c) = DrawingColor::parse(s.trim()) {
-                    style.set_background(c);
-                } else if let Some(first) = bgs.first()
-                    && let Some(c) = convert_color(&first.color)
-                {
-                    style.set_background(DrawingColor::Solid(c));
-                }
-            }
-            Property::FlexGrow(fg, _) => {
-                if let Ok(val) = FlexGrow::new(*fg) {
-                    style.set_flex_grow(val);
-                }
-            }
-            Property::FlexShrink(fs, _) => {
-                if let Ok(val) = FlexShrink::new(*fs) {
-                    style.set_flex_shrink(val);
-                }
-            }
-            Property::FlexBasis(fb, _) => {
-                let s = fb
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Some(val) = parse_size_str(&s) {
-                    style.set_flex_basis(val);
-                }
-            }
-            Property::Flex(flex, _) => {
-                if let Ok(val) = FlexGrow::new(flex.grow) {
-                    style.set_flex_grow(val);
-                }
-                if let Ok(val) = FlexShrink::new(flex.shrink) {
-                    style.set_flex_shrink(val);
-                }
-                let s = flex
-                    .basis
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Some(val) = parse_size_str(&s) {
-                    style.set_flex_basis(val);
-                }
-            }
-            Property::AlignSelf(as_, _) => {
-                let s = as_
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                let val = if s.contains("center") {
-                    AlignItems::Center
-                } else if s.contains("end") || s.contains("flex-end") {
-                    AlignItems::End
-                } else if s.contains("stretch") {
-                    AlignItems::Stretch
-                } else {
-                    AlignItems::Start
-                };
-                style.set_align_self(val);
-            }
-            Property::PaddingTop(len) => {
-                let top = length_to_f64(len);
-                let current = style.padding().cloned().unwrap_or_default();
-                style.set_padding(BoxMargin::new(
-                    top,
-                    current.bottom(),
-                    current.left(),
-                    current.right(),
-                ));
-            }
-            Property::PaddingRight(len) => {
-                let right = length_to_f64(len);
-                let current = style.padding().cloned().unwrap_or_default();
-                style.set_padding(BoxMargin::new(
-                    current.top(),
-                    current.bottom(),
-                    current.left(),
-                    right,
-                ));
-            }
-            Property::PaddingBottom(len) => {
-                let bottom = length_to_f64(len);
-                let current = style.padding().cloned().unwrap_or_default();
-                style.set_padding(BoxMargin::new(
-                    current.top(),
-                    bottom,
-                    current.left(),
-                    current.right(),
-                ));
-            }
-            Property::PaddingLeft(len) => {
-                let left = length_to_f64(len);
-                let current = style.padding().cloned().unwrap_or_default();
-                style.set_padding(BoxMargin::new(
-                    current.top(),
-                    current.bottom(),
-                    left,
-                    current.right(),
-                ));
-            }
-            Property::MarginTop(len) => {
-                let top = length_to_f64(len);
-                let current = style.margin().cloned().unwrap_or_default();
-                style.set_margin(BoxMargin::new(
-                    top,
-                    current.bottom(),
-                    current.left(),
-                    current.right(),
-                ));
-            }
-            Property::MarginRight(len) => {
-                let right = length_to_f64(len);
-                let current = style.margin().cloned().unwrap_or_default();
-                style.set_margin(BoxMargin::new(
-                    current.top(),
-                    current.bottom(),
-                    current.left(),
-                    right,
-                ));
-            }
-            Property::MarginBottom(len) => {
-                let bottom = length_to_f64(len);
-                let current = style.margin().cloned().unwrap_or_default();
-                style.set_margin(BoxMargin::new(
-                    current.top(),
-                    bottom,
-                    current.left(),
-                    current.right(),
-                ));
-            }
-            Property::MarginLeft(len) => {
-                let left = length_to_f64(len);
-                let current = style.margin().cloned().unwrap_or_default();
-                style.set_margin(BoxMargin::new(
-                    current.top(),
-                    current.bottom(),
-                    left,
-                    current.right(),
-                ));
-            }
-            Property::Opacity(op) => {
-                let s = op
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                if let Ok(v) = s.parse::<f32>()
-                    && let Ok(val) = Opacity::new(v)
-                {
-                    style.set_opacity(val);
-                }
-            }
-            _ => {}
-        }
+        let _ = apply_color_and_font(&mut style, prop)
+            || apply_border_properties(&mut style, prop)
+            || apply_padding_properties(&mut style, prop)
+            || apply_margin_properties(&mut style, prop)
+            || apply_sizing_properties(&mut style, prop)
+            || apply_flex_container_properties(&mut style, prop)
+            || apply_flex_item_properties(&mut style, prop);
     }
 
     style
@@ -680,23 +879,29 @@ fn apply_border(style: &mut ComputedStyle, border: &Border) {
             .unwrap_or_default(),
     );
     style.set_border_size(BorderSize::new(px));
-    if let Some(c) = convert_color(&border.color) {
+    let s = border
+        .color
+        .to_css_string(PrinterOptions::default())
+        .unwrap_or_default();
+    if let Ok(c) = DrawingColor::parse(s.trim()) {
+        style.set_border_color(c);
+    } else if let Some(c) = convert_color(&border.color) {
         style.set_border_color(DrawingColor::Solid(c));
     }
 }
 
-#[allow(clippy::option_if_let_else)]
 fn parse_length_str(s: &str) -> f32 {
     let s = s.trim();
     if let Some(num) = s.strip_suffix("px") {
-        num.trim().parse::<f32>().unwrap_or(0.0)
-    } else if let Some(num) = s.strip_suffix("rem") {
-        num.trim().parse::<f32>().unwrap_or(0.0) * 16.0
-    } else if let Some(num) = s.strip_suffix("em") {
-        num.trim().parse::<f32>().unwrap_or(0.0) * 16.0
-    } else {
-        s.parse::<f32>().unwrap_or(0.0)
+        return num.trim().parse::<f32>().unwrap_or(0.0);
     }
+    if let Some(num) = s.strip_suffix("rem") {
+        return num.trim().parse::<f32>().unwrap_or(0.0) * 16.0;
+    }
+    if let Some(num) = s.strip_suffix("em") {
+        return num.trim().parse::<f32>().unwrap_or(0.0) * 16.0;
+    }
+    s.parse::<f32>().unwrap_or(0.0)
 }
 
 fn convert_color(color: &LightningCssColor) -> Option<Color> {
@@ -885,7 +1090,7 @@ mod tests {
             None,
             None,
         );
-        let styled_clock = clock_node.resolve_styles(&resolver, None);
+        let styled_clock = clock_node.resolve_styles(&resolver, None, None);
         assert!((styled_clock.style().font_size().unwrap().value() - 16.0).abs() < f32::EPSILON);
 
         // 2. Progress bar horizontal & vertical rendering
@@ -898,7 +1103,7 @@ mod tests {
             None,
             None,
         );
-        let styled_h = h_prog.resolve_styles(&resolver, None);
+        let styled_h = h_prog.resolve_styles(&resolver, None, None);
         let mut engine = TaffyLayoutAdapter::new();
 
         let render_h = engine
@@ -940,7 +1145,7 @@ mod tests {
             None,
         );
 
-        let styled_img = img_node.resolve_styles(&resolver, None);
+        let styled_img = img_node.resolve_styles(&resolver, None, None);
         assert_eq!(
             styled_img.style().width(),
             Some(crate::features::styling::domain::CssLength::Px(20.0))
@@ -989,5 +1194,132 @@ mod tests {
         assert!((style.padding().unwrap().left() - 12.0).abs() < f64::EPSILON);
         assert!((style.padding().unwrap().right() - 8.0).abs() < f64::EPSILON);
         assert!((style.border_size().unwrap().value() - 2.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_structural_pseudo_classes() {
+        let parser = LightningCssAdapter::new();
+        let css = r"
+            .item:first-child {
+                padding-left: 10px;
+            }
+            .item:last-child {
+                padding-right: 15px;
+            }
+            .item:only-child {
+                border-radius: 8px;
+            }
+            .item:nth-child(2n+1) {
+                background-color: #111111;
+            }
+            .item:nth-child(2n) {
+                background-color: #222222;
+            }
+            .item:empty {
+                opacity: 0.5;
+            }
+            .item:not(.active) {
+                color: #888888;
+            }
+        ";
+        let parsed = parser
+            .parse_stylesheet(StyleSheetName::new("test").unwrap(), css)
+            .unwrap();
+
+        let class_item = ClassName::new("item").unwrap();
+        let class_active = ClassName::new("active").unwrap();
+
+        // 1. First child in a list of 3 (index 0, total 3)
+        let query_first =
+            ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
+                .with_structural_context(0, 3, false);
+        let style_first = parsed.resolve_style(&query_first);
+        assert_eq!(style_first.padding().map(BoxMargin::left), Some(10.0));
+        assert_eq!(style_first.padding().map(BoxMargin::right), Some(0.0));
+        assert!(style_first.background().is_some());
+        // Odd: 1st is 2n+1 -> #111111
+        if let Some(DrawingColor::Solid(c)) = style_first.background() {
+            assert_eq!(*c, Color::new(17, 17, 17, 255));
+        }
+
+        // 2. Second child (index 1, total 3)
+        let query_second =
+            ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
+                .with_structural_context(1, 3, false);
+        let style_second = parsed.resolve_style(&query_second);
+        assert!(style_second.padding().is_none());
+        // Even: 2nd is 2n -> #222222
+        if let Some(DrawingColor::Solid(c)) = style_second.background() {
+            assert_eq!(*c, Color::new(34, 34, 34, 255));
+        }
+
+        // 3. Last child (index 2, total 3)
+        let query_last =
+            ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
+                .with_structural_context(2, 3, false);
+        let style_last = parsed.resolve_style(&query_last);
+        assert_eq!(style_last.padding().map(BoxMargin::right), Some(15.0));
+
+        // 4. Only child (index 0, total 1)
+        let query_only =
+            ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
+                .with_structural_context(0, 1, false);
+        let style_only = parsed.resolve_style(&query_only);
+        assert_eq!(style_only.border_radius().map(|r| r.value()), Some(8.0));
+
+        // 5. Empty
+        let query_empty =
+            ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
+                .with_structural_context(0, 1, true);
+        let style_empty = parsed.resolve_style(&query_empty);
+        assert!((style_empty.opacity().unwrap().value() - 0.5).abs() < f32::EPSILON);
+
+        // 6. Not active vs Active
+        let query_not_active =
+            ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None);
+        let style_not_active = parsed.resolve_style(&query_not_active);
+        assert!(style_not_active.color().is_some());
+
+        let active_classes = [class_item.clone(), class_active];
+        let query_active = ElementQuery::new("flex", None, &active_classes, &[], None);
+        let style_active = parsed.resolve_style(&query_active);
+        assert!(style_active.color().is_none());
+    }
+
+    #[test]
+    fn test_gradient_border_color_resolution() {
+        let parser = LightningCssAdapter::new();
+        let css = r"
+            bar {
+                border-width: 2px;
+                border-color: #565f89;
+            }
+            bar:focus {
+                border-color: #7aa2f7 #bb9af7 45deg;
+            }
+        ";
+        let parsed = parser
+            .parse_stylesheet(StyleSheetName::new("test").unwrap(), css)
+            .unwrap();
+
+        // 1. Unfocused bar -> Solid #565f89
+        let query_unfocused = ElementQuery::new("bar", None, &[], &[], None);
+        let style_unfocused = parsed.resolve_style(&query_unfocused);
+        assert_eq!(
+            style_unfocused.border_color(),
+            Some(&DrawingColor::Solid(Color::new(86, 95, 137, 255)))
+        );
+
+        // 2. Focused bar -> Gradient #7aa2f7 #bb9af7 45deg
+        let query_focused = ElementQuery::new("bar", None, &[], &[PseudoClass::Focused], None);
+        let style_focused = parsed.resolve_style(&query_focused);
+        if let Some(DrawingColor::Gradient(colors, angle)) = style_focused.border_color() {
+            assert_eq!(colors.len(), 2);
+            assert_eq!(colors[0], Color::new(122, 162, 247, 255));
+            assert_eq!(colors[1], Color::new(187, 154, 247, 255));
+            assert!((angle - 45.0).abs() < f32::EPSILON);
+        } else {
+            panic!("Expected gradient border color on focused bar");
+        }
     }
 }
