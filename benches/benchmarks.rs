@@ -526,6 +526,7 @@ fn bench_pipeline(c: &mut Criterion) {
 
             if let Some(diff) = diff_opt {
                 let mut ctx = LayoutContext {
+                    scale: Scale::new(1.0),
                     style_resolver: &style_resolver,
                     current_bounds: None,
                     current_child_sizes: None,

@@ -580,6 +580,7 @@ impl DisplayServerPort for WaylandAdapter {
                     );
                     render_node.render_to_canvas(&mut actual_canvas);
                 }
+                tooltip.surface.set_buffer_scale(bar_scale);
                 tooltip.layout = layout;
                 tooltip
                     .surface
@@ -616,7 +617,7 @@ impl DisplayServerPort for WaylandAdapter {
             let positioner = xdg_wm_base.create_positioner(&qh, ());
             let width_i32 = i32::try_from(width).unwrap_or_default();
             let height_i32 = i32::try_from(height).unwrap_or_default();
-            positioner.set_size(width_i32, height_i32);
+            positioner.set_size(text_w, text_h);
             #[allow(clippy::cast_possible_truncation)]
             positioner.set_anchor_rect(
                 pointer_x as i32,
@@ -642,6 +643,7 @@ impl DisplayServerPort for WaylandAdapter {
             tooltip.shm_buffer = new_shm_buffer;
             tooltip.size = new_size;
             tooltip.layout = layout;
+            tooltip.surface.set_buffer_scale(bar_scale);
             tooltip
                 .surface
                 .attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
@@ -679,7 +681,7 @@ impl DisplayServerPort for WaylandAdapter {
         }
 
         let positioner = xdg_wm_base.create_positioner(&qh, ());
-        positioner.set_size(width as i32, height as i32);
+        positioner.set_size(text_w, text_h);
         positioner.set_anchor_rect(pointer_x as i32, bar_height as i32, 1, 1);
         positioner
             .set_anchor(wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom);
@@ -692,6 +694,7 @@ impl DisplayServerPort for WaylandAdapter {
         );
 
         let surface = compositor.create_surface(&qh, ());
+        surface.set_buffer_scale(bar_scale);
         let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, &qh, ());
         let xdg_popup = xdg_surface.get_popup(None, &positioner, &qh, ());
         tracing::debug!(
@@ -787,6 +790,7 @@ impl WaylandAdapter {
             let len = std::cmp::min(data.len(), src_data.len());
             data[..len].copy_from_slice(&src_data[..len]);
 
+            bar.surface.set_buffer_scale(bar.scale);
             bar.surface
                 .attach(Some(bar.shm_buffer.current_buffer()), 0, 0);
             bar.surface.damage_buffer(0, 0, width as i32, height as i32);
@@ -805,6 +809,7 @@ impl WaylandAdapter {
                 .entry(cmd.module_id())
                 .or_insert_with(|| {
                     let surface = compositor.create_surface(&qh, ());
+                    surface.set_buffer_scale(bar.scale);
                     let subsurface = subcompositor.get_subsurface(&surface, &bar.surface, &qh, ());
                     subsurface.set_desync();
 
@@ -858,6 +863,7 @@ impl WaylandAdapter {
             let len = std::cmp::min(data.len(), src_data.len());
             data[..len].copy_from_slice(&src_data[..len]);
 
+            ms.surface.set_buffer_scale(bar.scale);
             ms.surface
                 .attach(Some(ms.shm_buffer.current_buffer()), 0, 0);
             ms.surface.damage_buffer(0, 0, width as i32, height as i32);
@@ -1026,6 +1032,7 @@ impl WaylandState {
             })?;
 
         let surface = compositor.create_surface(qh, ());
+        surface.set_buffer_scale(output_scale);
         let layer_surface = layer_shell.get_layer_surface(
             &surface,
             Some(output),
@@ -1058,7 +1065,7 @@ impl WaylandState {
         .expect("Failed to create SHM buffer");
 
         self.bars.push(WaylandBar {
-            output_name,
+            output_name: output_name.clone(),
             surface,
             layer_surface,
             shm_buffer,
@@ -1070,6 +1077,13 @@ impl WaylandState {
             module_surfaces: HashMap::new(),
             configured: false,
         });
+
+        let mut scales = self.hub.monitor_scales_rx().borrow().clone();
+        scales.insert(
+            crate::shared::primitives::MonitorId::new(&output_name),
+            crate::shared::primitives::geometry::Scale::new(output_scale as f32),
+        );
+        let _ = self.hub.monitor_scales_tx().send(scales);
 
         Ok(())
     }
@@ -1193,12 +1207,35 @@ impl Dispatch<WlOutput, ()> for WaylandState {
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
+        let mut scale_updated_output = None;
         if let Some(info) = state.outputs.iter_mut().find(|i| &i.output == proxy) {
             match event {
-                wl_output::Event::Name { name } => info.name = name,
-                wl_output::Event::Scale { factor } => info.scale = factor,
+                wl_output::Event::Name { name } => {
+                    info.name = name;
+                    if !info.name.is_empty() {
+                        scale_updated_output = Some((info.name.clone(), info.scale));
+                    }
+                }
+                wl_output::Event::Scale { factor } => {
+                    info.scale = factor;
+                    if !info.name.is_empty() {
+                        scale_updated_output = Some((info.name.clone(), factor));
+                    }
+                }
                 _ => {}
             }
+        }
+        if let Some((name, factor)) = scale_updated_output {
+            if let Some(bar) = state.bars.iter_mut().find(|b| b.output_name == name) {
+                bar.scale = factor;
+                bar.surface.set_buffer_scale(factor);
+            }
+            let mut scales = state.hub.monitor_scales_rx().borrow().clone();
+            scales.insert(
+                crate::shared::primitives::MonitorId::new(&name),
+                crate::shared::primitives::geometry::Scale::new(factor as f32),
+            );
+            let _ = state.hub.monitor_scales_tx().send(scales);
         }
     }
 }
@@ -1547,6 +1584,7 @@ impl Dispatch<WlSubsurface, ()> for WaylandState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shared::config::domain::Config;
     use std::os::unix::io::AsRawFd;
 
     #[test]
@@ -1801,5 +1839,23 @@ mod tests {
             None,
         ));
         let _ = WaylandAdapter::new(hub, tx, app_env);
+    }
+
+    #[test]
+    fn test_wayland_output_scale_broadcast() {
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let scales_rx = hub.monitor_scales_rx();
+
+        let mut scales = scales_rx.borrow().clone();
+        scales.insert(
+            crate::shared::primitives::MonitorId::new("eDP-1"),
+            crate::shared::primitives::geometry::Scale::new(2.0),
+        );
+        hub.monitor_scales_tx().send(scales).unwrap();
+
+        assert_eq!(
+            scales_rx.borrow().get(&crate::shared::primitives::MonitorId::new("eDP-1")),
+            Some(&crate::shared::primitives::geometry::Scale::new(2.0))
+        );
     }
 }

@@ -121,6 +121,7 @@ impl<M: TextMeasurer> TextMeasurer for ModuleSizeMeasurer<'_, M> {
 use crate::features::vdom::domain::InteractionContext;
 
 pub struct LayoutContext<'a, F: CanvasFactory> {
+    pub scale: Scale,
     pub style_resolver: &'a dyn StyleResolverPort,
     pub current_bounds: Option<Rect>,
     pub current_child_sizes: Option<&'a ChildSizesMap>,
@@ -308,7 +309,7 @@ impl RenderPipeline {
                 .map(|b| *b.size());
 
             let measurer_inner = ctx.canvas_factory.create_text_measurer(
-                Scale::new(1.0),
+                ctx.scale,
                 default_font_family,
                 default_font_size,
             );
@@ -360,11 +361,18 @@ impl RenderPipeline {
         Some((render_node, size_change, child_layouts))
     }
 
+    #[allow(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss
+    )]
     pub fn paint<F: CanvasFactory>(
         &mut self,
         monitor_id: &MonitorId,
         render_node: &RenderNode,
         current_bounds: Option<Rect>,
+        scale: Scale,
         canvas_factory: &mut F,
     ) -> Option<(RenderBuffer, Position)> {
         let bounds = current_bounds.filter(|b| b.width() > 0 && b.height() > 0)?;
@@ -372,22 +380,26 @@ impl RenderPipeline {
         let default_font_family = FontFamily::new(String::new());
         let default_font_size = FontSize::new(14.0);
 
-        let width = usize::try_from(bounds.width()).unwrap_or(0);
-        let height = usize::try_from(bounds.height()).unwrap_or(0);
+        let phys_w = ((bounds.width() as f32) * scale.value()).ceil().max(1.0) as u32;
+        let phys_h = ((bounds.height() as f32) * scale.value()).ceil().max(1.0) as u32;
+        let phys_size = Size::new(phys_w, phys_h);
+
+        let width = usize::try_from(phys_w).unwrap_or(0);
+        let height = usize::try_from(phys_h).unwrap_or(0);
         let len = width.saturating_mul(height).saturating_mul(4);
         let mut data = vec![0u8; len];
         {
             let mut canvas = canvas_factory.create_canvas(
                 &mut data,
-                *bounds.size(),
-                Scale::new(1.0),
+                phys_size,
+                scale,
                 default_font_family,
                 default_font_size,
             );
             render_node.render_to_canvas(&mut canvas);
         }
 
-        let render_buf = RenderBuffer::new(data, *bounds.size());
+        let render_buf = RenderBuffer::new(data, phys_size);
         let position = Position::new(bounds.x(), bounds.y());
         self.rendered_bounds.insert(monitor_id.clone(), bounds);
         Some((render_buf, position))
@@ -412,7 +424,13 @@ impl RenderPipeline {
         let current_bounds = ctx.current_bounds;
         let (render_node, size_change, child_layouts) = self.layout(monitor_id, diff, &mut ctx)?;
 
-        let buffer = self.paint(monitor_id, &render_node, current_bounds, ctx.canvas_factory);
+        let buffer = self.paint(
+            monitor_id,
+            &render_node,
+            current_bounds,
+            ctx.scale,
+            ctx.canvas_factory,
+        );
 
         Some(RenderOutcome::new(
             size_change,
@@ -449,6 +467,7 @@ mod tests {
 
         // 2. Layout Phase
         let mut ctx = LayoutContext {
+            scale: Scale::new(1.0),
             style_resolver: &resolver,
             current_bounds: None,
             current_child_sizes: None,
@@ -467,15 +486,41 @@ mod tests {
         assert_eq!(*node.rect().size(), Size::new(10, 10));
 
         // 3. Paint Phase without bounds returns None
-        let paint_res = pipeline.paint(&mon, &node, None, &mut factory);
+        let paint_res = pipeline.paint(&mon, &node, None, Scale::new(1.0), &mut factory);
         assert!(paint_res.is_none());
 
         // 4. Paint Phase with valid bounds returns buffer
         let bounds = Rect::new(Position::new(0, 0), Size::new(10, 10));
-        let paint_res = pipeline.paint(&mon, &node, Some(bounds), &mut factory);
+        let paint_res = pipeline.paint(&mon, &node, Some(bounds), Scale::new(1.0), &mut factory);
         assert!(paint_res.is_some());
         let (_buf, pos) = paint_res.unwrap();
         assert_eq!(pos, Position::new(0, 0));
+    }
+
+    #[test]
+    fn test_render_pipeline_hidpi_paint_allocates_scaled_buffer() {
+        let mut pipeline = RenderPipeline::new();
+        let mon = MonitorId::new("DP-1");
+        let node = RenderNode::Rect {
+            path: crate::features::vdom::domain::NodePath::root(),
+            rect: Rect::new(Position::new(10, 20), Size::new(100, 30)),
+            style: crate::features::styling::domain::ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+        };
+        let mut factory = MockCanvasFactory;
+
+        let bounds = Rect::new(Position::new(10, 20), Size::new(100, 30));
+        let paint_res = pipeline.paint(&mon, &node, Some(bounds), Scale::new(2.0), &mut factory);
+        assert!(paint_res.is_some());
+        let (buf, pos) = paint_res.unwrap();
+        // Logical position should remain (10, 20)
+        assert_eq!(pos, Position::new(10, 20));
+        // Physical buffer size should be 200x60
+        assert_eq!(buf.width(), 200);
+        assert_eq!(buf.height(), 60);
+        assert_eq!(buf.data().len(), 200 * 60 * 4);
     }
 
     #[test]
@@ -489,6 +534,7 @@ mod tests {
         let mut engine = MockLayoutEngine;
 
         let ctx = LayoutContext {
+            scale: Scale::new(1.0),
             style_resolver: &resolver,
             current_bounds: None,
             current_child_sizes: None,
@@ -520,6 +566,7 @@ mod tests {
         let mut engine = MockLayoutEngine;
 
         let ctx1 = LayoutContext {
+            scale: Scale::new(1.0),
             style_resolver: &resolver,
             current_bounds: None,
             current_child_sizes: None,
@@ -532,6 +579,7 @@ mod tests {
 
         // Second run with no changes should return None (early exit)
         let ctx2 = LayoutContext {
+            scale: Scale::new(1.0),
             style_resolver: &resolver,
             current_bounds: None,
             current_child_sizes: None,

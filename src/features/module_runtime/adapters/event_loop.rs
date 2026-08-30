@@ -323,8 +323,18 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
                 .entry(monitor_id.clone())
                 .or_insert_with(|| Box::new(TaffyLayoutAdapter::new()));
 
+            let scale = self
+                .ctx
+                .hub()
+                .monitor_scales_rx()
+                .borrow()
+                .get(&monitor_id)
+                .copied()
+                .unwrap_or_else(|| crate::shared::primitives::geometry::Scale::new(1.0));
+
             let outcome = {
                 let layout_ctx = crate::features::module_runtime::domain::LayoutContext {
+                    scale,
                     style_resolver: self.style_resolver.as_ref(),
                     current_bounds,
                     current_child_sizes,

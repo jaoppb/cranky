@@ -183,6 +183,11 @@ pub type ModuleSizesMap = std::collections::HashMap<
     crate::shared::primitives::ChildSizesMap,
 >;
 
+pub type MonitorScalesMap = std::collections::HashMap<
+    crate::shared::primitives::MonitorId,
+    crate::shared::primitives::geometry::Scale,
+>;
+
 pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
     hyprland: (watch::Sender<HyprlandState>, watch::Receiver<HyprlandState>),
@@ -208,6 +213,10 @@ pub struct SignalHub {
         watch::Sender<ModuleSizesMap>,
         watch::Receiver<ModuleSizesMap>,
     ),
+    monitor_scales: (
+        watch::Sender<MonitorScalesMap>,
+        watch::Receiver<MonitorScalesMap>,
+    ),
 }
 
 impl SignalHub {
@@ -226,6 +235,7 @@ impl SignalHub {
         let mpris = watch::channel(crate::features::mpris::domain::MprisState::default());
         let pointer = tokio::sync::broadcast::channel(32);
         let module_sizes = watch::channel(std::collections::HashMap::new());
+        let monitor_scales = watch::channel(std::collections::HashMap::new());
 
         Self {
             config,
@@ -237,7 +247,18 @@ impl SignalHub {
             pointer,
             mpris,
             module_sizes,
+            monitor_scales,
         }
+    }
+
+    #[must_use]
+    pub fn monitor_scales_tx(&self) -> watch::Sender<MonitorScalesMap> {
+        self.monitor_scales.0.clone()
+    }
+
+    #[must_use]
+    pub fn monitor_scales_rx(&self) -> watch::Receiver<MonitorScalesMap> {
+        self.monitor_scales.1.clone()
     }
 
     #[must_use]
@@ -633,5 +654,22 @@ mod tests {
             let initial = stream.next().await;
             assert_eq!(initial, Some(kind));
         }
+    }
+
+    #[tokio::test]
+    async fn test_signal_hub_monitor_scales_propagation() {
+        use crate::shared::primitives::geometry::Scale;
+        use crate::shared::primitives::MonitorId;
+
+        let hub = SignalHub::new(Config::default());
+        let mut scales_rx = hub.monitor_scales_rx();
+        let scales_tx = hub.monitor_scales_tx();
+
+        let mut map = std::collections::HashMap::new();
+        map.insert(MonitorId::new("DP-1"), Scale::new(2.0));
+        scales_tx.send(map.clone()).unwrap();
+
+        assert!(scales_rx.changed().await.is_ok());
+        assert_eq!(scales_rx.borrow().get(&MonitorId::new("DP-1")), Some(&Scale::new(2.0)));
     }
 }
