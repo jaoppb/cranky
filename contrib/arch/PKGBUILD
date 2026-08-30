@@ -5,32 +5,35 @@ pkgrel=1
 pkgdesc="A minimalist, performant, and modular bar for Hyprland"
 arch=('x86_64' 'aarch64')
 url="https://github.com/jaoppb/cranky"
-license=('MIT' 'Apache')
-depends=('wayland' 'libxkbcommon' 'fontconfig' 'dbus')
+license=('MIT')
+depends=('gcc-libs' 'glibc' 'wayland' 'libxkbcommon' 'fontconfig' 'dbus')
 optdepends=('uwsm: for systemd session management')
-makedepends=('cargo' 'pkg-config')
+makedepends=('cargo' 'pkgconf')
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
 sha256sums=('a9d13cfcd92beadab82820034dd9b2df3f6765f4776e246fe6f6a3dea1fa55da')
 
 prepare() {
-	cd "$pkgname-$pkgver"
+	cd "${srcdir}/${pkgname}-${pkgver}"
+	export CARGO_HOME="${srcdir}/cargo-home"
 	cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
-	cd "$pkgname-$pkgver"
+	cd "${srcdir}/${pkgname}-${pkgver}"
+	export CARGO_HOME="${srcdir}/cargo-home"
 	export RUSTUP_TOOLCHAIN=stable
 	export CARGO_TARGET_DIR=target
 	cargo build --frozen --release --all-features
 }
 
 check() {
-	cd "$pkgname-$pkgver"
-	cargo test --frozen
+	cd "${srcdir}/${pkgname}-${pkgver}"
+	export CARGO_HOME="${srcdir}/cargo-home"
+	cargo test --frozen --all-features
 }
 
 package() {
-	cd "$pkgname-$pkgver"
+	cd "${srcdir}/${pkgname}-${pkgver}"
 	install -Dm755 "target/release/${pkgname}" "${pkgdir}/usr/bin/${pkgname}"
 	install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
 	install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
@@ -38,3 +41,4 @@ package() {
 	install -Dm644 "contrib/systemd/${pkgname}.service" "${pkgdir}/usr/lib/systemd/user/${pkgname}.service"
 	install -Dm644 "contrib/systemd/${pkgname}-uwsm.service" "${pkgdir}/usr/lib/systemd/user/${pkgname}-uwsm.service"
 }
+
