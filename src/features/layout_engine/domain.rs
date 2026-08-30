@@ -1,4 +1,5 @@
 use crate::app::commands::AppCommand;
+use crate::features::vdom::domain::ClickHandlers;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::Size;
@@ -173,7 +174,7 @@ pub enum StyledNode {
         path: NodePath,
         children: Vec<Self>,
         style: ComputedStyle,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     },
@@ -181,7 +182,7 @@ pub enum StyledNode {
         path: NodePath,
         text: TextContent,
         style: ComputedStyle,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     },
@@ -190,14 +191,14 @@ pub enum StyledNode {
         value: ProgressValue,
         orientation: Orientation,
         style: ComputedStyle,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     },
     Rect {
         path: NodePath,
         style: ComputedStyle,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     },
@@ -213,7 +214,7 @@ pub enum StyledNode {
         key: ModuleKey,
         options: ModuleOptions,
         style: ComputedStyle,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     },
@@ -243,6 +244,18 @@ impl StyledNode {
             | Self::Module { style, .. } => style,
         }
     }
+
+    #[must_use]
+    pub const fn on_click(&self) -> Option<&ClickHandlers> {
+        match self {
+            Self::Text { on_click, .. }
+            | Self::Flex { on_click, .. }
+            | Self::Progress { on_click, .. }
+            | Self::Rect { on_click, .. }
+            | Self::Module { on_click, .. } => on_click.as_ref(),
+            Self::Image { .. } => None,
+        }
+    }
 }
 
 pub trait TextMeasurer: Send + Sync {
@@ -261,7 +274,7 @@ pub enum RenderNode {
         rect: Rect,
         children: Vec<Self>,
         style: ComputedStyle,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<StyledNode>>,
     },
@@ -270,7 +283,7 @@ pub enum RenderNode {
         rect: Rect,
         text: TextContent,
         style: ComputedStyle,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<StyledNode>>,
     },
@@ -280,7 +293,7 @@ pub enum RenderNode {
         value: ProgressValue,
         orientation: Orientation,
         style: ComputedStyle,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<StyledNode>>,
     },
@@ -288,7 +301,7 @@ pub enum RenderNode {
         path: NodePath,
         rect: Rect,
         style: ComputedStyle,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<StyledNode>>,
     },
@@ -304,7 +317,7 @@ pub enum RenderNode {
         rect: Rect,
         key: ModuleKey,
         style: ComputedStyle,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<StyledNode>>,
     },
@@ -359,7 +372,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub const fn on_click(&self) -> Option<&crate::app::commands::AppCommand> {
+    pub const fn on_click(&self) -> Option<&ClickHandlers> {
         match self {
             Self::Text { on_click, .. }
             | Self::Flex { on_click, .. }

@@ -469,4 +469,72 @@ mod tests {
             panic!("Expected Text node");
         }
     }
+
+    #[test]
+    fn test_rhai_module_click_handlers() {
+        use crate::app::commands::AppCommand;
+        use crate::shared::events::core::PointerButton;
+
+        let source = r#"
+            fn subscriptions() { return []; }
+            fn refresh() {}
+            fn render(monitor) {
+                return #{
+                    type: "flex",
+                    children: [
+                        #{
+                            type: "text",
+                            text: "single",
+                            on_click: #{ Exec: "single_cmd" }
+                        },
+                        #{
+                            type: "text",
+                            text: "multi",
+                            on_click: #{
+                                left: #{ Exec: "left_cmd" },
+                                right: #{ Exec: "right_cmd" },
+                                side: #{ Exec: "side_cmd" }
+                            }
+                        }
+                    ]
+                };
+            }
+        "#;
+        let module = RhaiModule::new("test_clicks".into(), source).unwrap();
+        let render_node = module.render(&MonitorId::new("DP-1"));
+        assert_eq!(render_node.children().len(), 2);
+
+        // Single click
+        let single_child = &render_node.children()[0];
+        let single_handlers = single_child.on_click().expect("on_click expected");
+        assert_eq!(
+            single_handlers.get(&PointerButton::Left),
+            Some(&AppCommand::Exec("single_cmd".into()))
+        );
+        assert_eq!(
+            single_handlers.get(&PointerButton::Right),
+            Some(&AppCommand::Exec("single_cmd".into()))
+        );
+        assert_eq!(
+            single_handlers.get(&PointerButton::Middle),
+            Some(&AppCommand::Exec("single_cmd".into()))
+        );
+
+        // Multi click
+        let multi_child = &render_node.children()[1];
+        let multi_handlers = multi_child.on_click().expect("on_click expected");
+        assert_eq!(
+            multi_handlers.get(&PointerButton::Left),
+            Some(&AppCommand::Exec("left_cmd".into()))
+        );
+        assert_eq!(
+            multi_handlers.get(&PointerButton::Right),
+            Some(&AppCommand::Exec("right_cmd".into()))
+        );
+        assert_eq!(
+            multi_handlers.get(&PointerButton::Side),
+            Some(&AppCommand::Exec("side_cmd".into()))
+        );
+        assert_eq!(multi_handlers.get(&PointerButton::Middle), None);
+    }
 }

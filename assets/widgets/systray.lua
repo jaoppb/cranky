@@ -113,9 +113,17 @@ function render(monitor)
 			class = "item",
 			children = item_children,
 			on_click = {
-				SystrayAction = {
-					id = item.id,
-					action = "Primary",
+				left = {
+					SystrayAction = {
+						id = item.id,
+						action = "Primary",
+					},
+				},
+				right = {
+					SystrayAction = {
+						id = item.id,
+						action = "ContextMenu",
+					},
 				},
 			},
 			tooltip = vdom.flex({

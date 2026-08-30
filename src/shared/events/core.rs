@@ -59,11 +59,15 @@ pub enum WindowManagerEvent {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PointerButton {
     Left,
     Middle,
     Right,
+    Side,
+    Extra,
+    Forward,
+    Back,
     Other(u32),
 }
 
@@ -74,6 +78,10 @@ impl PointerButton {
             0x110 => Self::Left,
             0x111 => Self::Right,
             0x112 => Self::Middle,
+            0x113 => Self::Side,
+            0x114 => Self::Extra,
+            0x115 => Self::Forward,
+            0x116 => Self::Back,
             other => Self::Other(other),
         }
     }
@@ -84,7 +92,29 @@ impl PointerButton {
             Self::Left => 0x110,
             Self::Right => 0x111,
             Self::Middle => 0x112,
+            Self::Side => 0x113,
+            Self::Extra => 0x114,
+            Self::Forward => 0x115,
+            Self::Back => 0x116,
             Self::Other(raw) => raw,
+        }
+    }
+
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_ascii_lowercase().as_str() {
+            "left" => Some(Self::Left),
+            "right" => Some(Self::Right),
+            "middle" => Some(Self::Middle),
+            "side" => Some(Self::Side),
+            "extra" => Some(Self::Extra),
+            "forward" => Some(Self::Forward),
+            "back" => Some(Self::Back),
+            s => s.parse::<u32>().ok().map(Self::from_raw).or_else(|| {
+                s.strip_prefix("0x")
+                    .and_then(|hex| u32::from_str_radix(hex, 16).ok())
+                    .map(Self::from_raw)
+            }),
         }
     }
 }
@@ -169,11 +199,47 @@ mod tests {
         assert_eq!(PointerButton::from_raw(0x110), PointerButton::Left);
         assert_eq!(PointerButton::from_raw(0x111), PointerButton::Right);
         assert_eq!(PointerButton::from_raw(0x112), PointerButton::Middle);
+        assert_eq!(PointerButton::from_raw(0x113), PointerButton::Side);
+        assert_eq!(PointerButton::from_raw(0x114), PointerButton::Extra);
+        assert_eq!(PointerButton::from_raw(0x115), PointerButton::Forward);
+        assert_eq!(PointerButton::from_raw(0x116), PointerButton::Back);
         assert_eq!(PointerButton::from_raw(999), PointerButton::Other(999));
+
         assert_eq!(PointerButton::Left.to_raw(), 0x110);
         assert_eq!(PointerButton::Right.to_raw(), 0x111);
         assert_eq!(PointerButton::Middle.to_raw(), 0x112);
+        assert_eq!(PointerButton::Side.to_raw(), 0x113);
+        assert_eq!(PointerButton::Extra.to_raw(), 0x114);
+        assert_eq!(PointerButton::Forward.to_raw(), 0x115);
+        assert_eq!(PointerButton::Back.to_raw(), 0x116);
         assert_eq!(PointerButton::Other(999).to_raw(), 999);
+
+        assert_eq!(PointerButton::from_name("left"), Some(PointerButton::Left));
+        assert_eq!(
+            PointerButton::from_name("RIGHT"),
+            Some(PointerButton::Right)
+        );
+        assert_eq!(
+            PointerButton::from_name("middle"),
+            Some(PointerButton::Middle)
+        );
+        assert_eq!(PointerButton::from_name("side"), Some(PointerButton::Side));
+        assert_eq!(
+            PointerButton::from_name("extra"),
+            Some(PointerButton::Extra)
+        );
+        assert_eq!(
+            PointerButton::from_name("forward"),
+            Some(PointerButton::Forward)
+        );
+        assert_eq!(PointerButton::from_name("back"), Some(PointerButton::Back));
+        assert_eq!(PointerButton::from_name("275"), Some(PointerButton::Side));
+        assert_eq!(PointerButton::from_name("0x113"), Some(PointerButton::Side));
+        assert_eq!(
+            PointerButton::from_name("999"),
+            Some(PointerButton::Other(999))
+        );
+        assert_eq!(PointerButton::from_name("unknown_btn"), None);
     }
 
     #[test]

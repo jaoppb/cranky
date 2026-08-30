@@ -1854,7 +1854,9 @@ mod tests {
         hub.monitor_scales_tx().send(scales).unwrap();
 
         assert_eq!(
-            scales_rx.borrow().get(&crate::shared::primitives::MonitorId::new("eDP-1")),
+            scales_rx
+                .borrow()
+                .get(&crate::shared::primitives::MonitorId::new("eDP-1")),
             Some(&crate::shared::primitives::geometry::Scale::new(2.0))
         );
     }

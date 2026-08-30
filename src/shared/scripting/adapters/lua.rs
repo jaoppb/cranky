@@ -1,9 +1,10 @@
 use crate::app::commands::AppCommand;
 use crate::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
 use crate::features::styling::domain::{ClassNameList, ElementId, Orientation, ProgressValue};
-use crate::features::vdom::domain::{TextContent, VNode};
+use crate::features::vdom::domain::{ClickHandlers, TextContent, VNode};
 use crate::shared::config::domain::ModuleConfig;
 use crate::shared::dbus::domain::{BusType, DBusSubscription};
+use crate::shared::events::core::PointerButton;
 use crate::shared::events::signals::{SignalHub, SignalKind};
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{
@@ -180,10 +181,54 @@ fn parse_module_options(lua: &Lua, table: &mlua::Table) -> mlua::Result<ModuleOp
         .unwrap_or_default())
 }
 
+fn parse_click_handlers(lua: &Lua, val: Option<mlua::Value>) -> Option<ClickHandlers> {
+    let Some(mlua::Value::Table(t)) = val else {
+        return None;
+    };
+
+    let mut handlers = ClickHandlers::new();
+
+    for (k, v) in t.pairs::<mlua::Value, mlua::Value>().flatten() {
+        let button_opt = match k {
+            mlua::Value::String(s) => s
+                .to_str()
+                .ok()
+                .as_deref()
+                .and_then(PointerButton::from_name),
+            mlua::Value::Integer(i) => u32::try_from(i).ok().map(PointerButton::from_raw),
+            mlua::Value::Number(n) => {
+                if n >= 0.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX) {
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss,
+                        clippy::as_conversions
+                    )]
+                    Some(PointerButton::from_raw(n as u32))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+
+        if let Some(btn) = button_opt
+            && let Some(cmd) = parse_app_command(lua, Some(v))
+        {
+            handlers.insert(btn, cmd);
+        }
+    }
+
+    if !handlers.is_empty() {
+        return Some(handlers);
+    }
+
+    parse_app_command(lua, Some(mlua::Value::Table(t))).map(ClickHandlers::from_single)
+}
+
 type CommonProps = (
     Option<ClassNameList>,
     Option<ElementId>,
-    Option<AppCommand>,
+    Option<ClickHandlers>,
     Option<AppCommand>,
     Option<Box<VNode>>,
 );
@@ -195,7 +240,7 @@ fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result<CommonProp
     let id = table
         .get::<Option<String>>("id")?
         .and_then(|s| ElementId::new(s).ok());
-    let on_click = parse_app_command(lua, table.get::<Option<mlua::Value>>("on_click")?);
+    let on_click = parse_click_handlers(lua, table.get::<Option<mlua::Value>>("on_click")?);
     let on_hover = parse_app_command(lua, table.get::<Option<mlua::Value>>("on_hover")?);
     let tooltip = table
         .get::<Option<mlua::Value>>("tooltip")?
@@ -880,5 +925,67 @@ mod tests {
             vnode.children()[2].tag(),
             crate::features::vdom::domain::NodeTag::Progress
         );
+    }
+
+    #[test]
+    fn test_lua_vnode_click_handlers() {
+        let lua = Lua::new();
+        register_vdom_dsl(&lua).expect("DSL registration failed");
+
+        // Single shorthand
+        let single_script = r#"
+            return vdom.text({
+                text = "click me",
+                on_click = { Exec = "echo single" }
+            })
+        "#;
+        let single_val = lua.load(single_script).eval::<mlua::Value>().unwrap();
+        let single_node = value_to_vnode(&lua, single_val).unwrap();
+        let single_handlers = single_node.on_click().expect("on_click expected");
+        assert_eq!(
+            single_handlers.get(&PointerButton::Left),
+            Some(&AppCommand::Exec("echo single".into()))
+        );
+        assert_eq!(
+            single_handlers.get(&PointerButton::Right),
+            Some(&AppCommand::Exec("echo single".into()))
+        );
+        assert_eq!(
+            single_handlers.get(&PointerButton::Middle),
+            Some(&AppCommand::Exec("echo single".into()))
+        );
+
+        // Multi-button map
+        let multi_script = r#"
+            return vdom.text({
+                text = "multi click",
+                on_click = {
+                    left = { Exec = "echo left" },
+                    right = { Exec = "echo right" },
+                    side = { Exec = "echo side" },
+                    [276] = { Exec = "echo extra" }
+                }
+            })
+        "#;
+        let multi_val = lua.load(multi_script).eval::<mlua::Value>().unwrap();
+        let multi_node = value_to_vnode(&lua, multi_val).unwrap();
+        let multi_handlers = multi_node.on_click().expect("on_click expected");
+        assert_eq!(
+            multi_handlers.get(&PointerButton::Left),
+            Some(&AppCommand::Exec("echo left".into()))
+        );
+        assert_eq!(
+            multi_handlers.get(&PointerButton::Right),
+            Some(&AppCommand::Exec("echo right".into()))
+        );
+        assert_eq!(
+            multi_handlers.get(&PointerButton::Side),
+            Some(&AppCommand::Exec("echo side".into()))
+        );
+        assert_eq!(
+            multi_handlers.get(&PointerButton::Extra),
+            Some(&AppCommand::Exec("echo extra".into()))
+        );
+        assert_eq!(multi_handlers.get(&PointerButton::Middle), None);
     }
 }

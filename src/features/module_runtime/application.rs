@@ -318,7 +318,9 @@ mod tests {
         let click_node = VNode::new_rect(
             None,
             None,
-            Some(AppCommand::RequestRender),
+            Some(crate::features::vdom::domain::ClickHandlers::from_single(
+                AppCommand::RequestRender,
+            )),
             Some(AppCommand::RequestRender),
             None,
         );

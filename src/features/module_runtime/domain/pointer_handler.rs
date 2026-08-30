@@ -1,7 +1,7 @@
 use crate::app::commands::AppCommand;
 use crate::features::layout_engine::domain::{NodePath, RenderNode, StyledNode};
 use crate::features::vdom::domain::InteractionContext;
-use crate::shared::events::core::PointerEvent;
+use crate::shared::events::core::{PointerButton, PointerEvent};
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::{FunctionName, MonitorId};
 use std::collections::HashMap;
@@ -105,107 +105,170 @@ impl PointerHandler {
         self.last_pointer_pos.as_ref()
     }
 
+    fn handle_button_press(
+        &mut self,
+        monitor_id: &MonitorId,
+        pos: Position,
+        render_tree: &RenderNode,
+    ) -> bool {
+        self.last_pointer_pos = Some((monitor_id.clone(), pos));
+        let hit = render_tree.hit_test(pos);
+        let target_path = hit.last().map(|n| n.path().clone());
+        let old_active = self.active_nodes.get(monitor_id).cloned();
+        if old_active == target_path {
+            false
+        } else {
+            if let Some(p) = &target_path {
+                self.active_nodes.insert(monitor_id.clone(), p.clone());
+            } else {
+                self.active_nodes.remove(monitor_id);
+            }
+            true
+        }
+    }
+
+    fn handle_button_release(
+        &mut self,
+        monitor_id: &MonitorId,
+        pos: Position,
+        render_tree: &RenderNode,
+    ) -> bool {
+        let had_active = self.active_nodes.remove(monitor_id).is_some();
+        let hit = render_tree.hit_test(pos);
+        let target_path = hit.last().map(|n| n.path().clone());
+        let old_focused = self.focused_nodes.get(monitor_id).cloned();
+        let focus_changed = old_focused != target_path;
+        if focus_changed {
+            if let Some(p) = &target_path {
+                self.focused_nodes.insert(monitor_id.clone(), p.clone());
+            } else {
+                self.focused_nodes.remove(monitor_id);
+            }
+        }
+        had_active || focus_changed
+    }
+
+    fn handle_click(
+        &mut self,
+        monitor_id: &MonitorId,
+        button: PointerButton,
+        pos: Position,
+        render_tree: &RenderNode,
+    ) -> Vec<PointerAction> {
+        self.last_pointer_pos = Some((monitor_id.clone(), pos));
+        let hit = render_tree.hit_test(pos);
+        let hit_cmd = hit
+            .iter()
+            .rev()
+            .find_map(|n| n.on_click().and_then(|h| h.get(&button)));
+
+        let mut actions = Vec::new();
+        if let Some(cmd) = hit_cmd {
+            match cmd {
+                AppCommand::ScriptCall(func_name) => {
+                    actions.push(PointerAction::CallFunction(func_name.clone()));
+                }
+                AppCommand::SystrayAction { id, action, .. } => {
+                    actions.push(PointerAction::SendCommand(AppCommand::SystrayAction {
+                        id: id.clone(),
+                        action: action.clone(),
+                        pos: Some(pos),
+                    }));
+                }
+                other => {
+                    actions.push(PointerAction::SendCommand(other.clone()));
+                }
+            }
+        }
+        actions
+    }
+
+    fn handle_pointer_motion(
+        &mut self,
+        monitor_id: &MonitorId,
+        pos: Position,
+        render_tree: &RenderNode,
+    ) -> (Vec<PointerAction>, bool) {
+        let mut actions = Vec::new();
+        let mut state_changed = false;
+
+        self.last_pointer_pos = Some((monitor_id.clone(), pos));
+        let hit = render_tree.hit_test(pos);
+        let target_path = hit.last().map(|n| n.path().clone());
+        let old_hover = self.hovered_nodes.get(monitor_id).cloned();
+        if old_hover != target_path {
+            if let Some(p) = &target_path {
+                self.hovered_nodes.insert(monitor_id.clone(), p.clone());
+            } else {
+                self.hovered_nodes.remove(monitor_id);
+            }
+            state_changed = true;
+        }
+
+        if let Some(cmd) = hit.iter().rev().find_map(|n| n.on_hover()) {
+            actions.push(PointerAction::SendCommand(cmd.clone()));
+        }
+
+        let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
+        if hit_tooltip != self.last_tooltip {
+            if let Some(layout) = &hit_tooltip {
+                actions.push(PointerAction::SendCommand(AppCommand::ShowTooltip {
+                    layout: Box::new(layout.clone()),
+                }));
+            } else {
+                actions.push(PointerAction::SendCommand(AppCommand::HideTooltip));
+            }
+            self.last_tooltip = hit_tooltip;
+        }
+
+        (actions, state_changed)
+    }
+
+    fn handle_pointer_leave(&mut self, monitor_id: &MonitorId) -> (Vec<PointerAction>, bool) {
+        self.last_pointer_pos = None;
+        let had_hover = self.hovered_nodes.remove(monitor_id).is_some();
+        let had_active = self.active_nodes.remove(monitor_id).is_some();
+        let state_changed = had_hover || had_active;
+
+        let mut actions = Vec::new();
+        if self.last_tooltip.is_some() {
+            actions.push(PointerAction::SendCommand(AppCommand::HideTooltip));
+            self.last_tooltip = None;
+        }
+
+        (actions, state_changed)
+    }
+
     pub fn handle_event(
         &mut self,
         event: &PointerEvent,
         monitor_id: &MonitorId,
         render_tree: &RenderNode,
     ) -> PointerOutcome {
-        let mut actions = Vec::new();
-        let mut state_changed = false;
-
         match event {
             PointerEvent::ButtonPress { pos, .. } => {
-                self.last_pointer_pos = Some((monitor_id.clone(), *pos));
-                let hit = render_tree.hit_test(*pos);
-                let target_path = hit.last().map(|n| n.path().clone());
-                let old_active = self.active_nodes.get(monitor_id).cloned();
-                if old_active != target_path {
-                    if let Some(p) = &target_path {
-                        self.active_nodes.insert(monitor_id.clone(), p.clone());
-                    } else {
-                        self.active_nodes.remove(monitor_id);
-                    }
-                    state_changed = true;
-                }
+                let state_changed = self.handle_button_press(monitor_id, *pos, render_tree);
+                PointerOutcome::new(Vec::new(), state_changed)
             }
             PointerEvent::ButtonRelease { pos, .. } => {
-                let had_active = self.active_nodes.remove(monitor_id).is_some();
-                let hit = render_tree.hit_test(*pos);
-                let target_path = hit.last().map(|n| n.path().clone());
-                let old_focused = self.focused_nodes.get(monitor_id).cloned();
-                let focus_changed = old_focused != target_path;
-                if focus_changed {
-                    if let Some(p) = &target_path {
-                        self.focused_nodes.insert(monitor_id.clone(), p.clone());
-                    } else {
-                        self.focused_nodes.remove(monitor_id);
-                    }
-                }
-                if had_active || focus_changed {
-                    state_changed = true;
-                }
+                let state_changed = self.handle_button_release(monitor_id, *pos, render_tree);
+                PointerOutcome::new(Vec::new(), state_changed)
             }
-            PointerEvent::Click { pos, .. } => {
-                self.last_pointer_pos = Some((monitor_id.clone(), *pos));
-                let hit = render_tree.hit_test(*pos);
-                let hit_cmd = hit.iter().rev().find_map(|n| n.on_click());
-
-                if let Some(cmd) = hit_cmd {
-                    if let AppCommand::ScriptCall(func_name) = cmd {
-                        actions.push(PointerAction::CallFunction(func_name.clone()));
-                    } else {
-                        actions.push(PointerAction::SendCommand(cmd.clone()));
-                    }
-                }
+            PointerEvent::Click { button, pos } => {
+                let actions = self.handle_click(monitor_id, *button, *pos, render_tree);
+                PointerOutcome::new(actions, false)
             }
             PointerEvent::PointerMotion { pos } => {
-                self.last_pointer_pos = Some((monitor_id.clone(), *pos));
-                let hit = render_tree.hit_test(*pos);
-                let target_path = hit.last().map(|n| n.path().clone());
-                let old_hover = self.hovered_nodes.get(monitor_id).cloned();
-                if old_hover != target_path {
-                    if let Some(p) = &target_path {
-                        self.hovered_nodes.insert(monitor_id.clone(), p.clone());
-                    } else {
-                        self.hovered_nodes.remove(monitor_id);
-                    }
-                    state_changed = true;
-                }
-
-                let hit_cmd = hit.iter().rev().find_map(|n| n.on_hover());
-                if let Some(cmd) = hit_cmd {
-                    actions.push(PointerAction::SendCommand(cmd.clone()));
-                }
-
-                let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
-                if hit_tooltip != self.last_tooltip {
-                    if let Some(layout) = &hit_tooltip {
-                        actions.push(PointerAction::SendCommand(AppCommand::ShowTooltip {
-                            layout: Box::new(layout.clone()),
-                        }));
-                    } else {
-                        actions.push(PointerAction::SendCommand(AppCommand::HideTooltip));
-                    }
-                    self.last_tooltip = hit_tooltip;
-                }
+                let (actions, state_changed) =
+                    self.handle_pointer_motion(monitor_id, *pos, render_tree);
+                PointerOutcome::new(actions, state_changed)
             }
             PointerEvent::PointerLeave => {
-                self.last_pointer_pos = None;
-                let had_hover = self.hovered_nodes.remove(monitor_id).is_some();
-                let had_active = self.active_nodes.remove(monitor_id).is_some();
-                if had_hover || had_active {
-                    state_changed = true;
-                }
-                if self.last_tooltip.is_some() {
-                    actions.push(PointerAction::SendCommand(AppCommand::HideTooltip));
-                    self.last_tooltip = None;
-                }
+                let (actions, state_changed) = self.handle_pointer_leave(monitor_id);
+                PointerOutcome::new(actions, state_changed)
             }
-            _ => {}
+            _ => PointerOutcome::empty(),
         }
-
-        PointerOutcome::new(actions, state_changed)
     }
 
     pub fn update_after_render(
@@ -243,8 +306,10 @@ mod tests {
     use crate::shared::events::core::PointerButton;
     use crate::shared::primitives::geometry::{Rect, Size};
 
+    use crate::features::vdom::domain::ClickHandlers;
+
     fn make_test_tree(
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<StyledNode>,
     ) -> RenderNode {
@@ -259,11 +324,16 @@ mod tests {
     }
 
     #[test]
-    fn test_click_hit_returns_send_command() {
+    fn test_click_hit_returns_send_command_single_shorthand() {
         let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
-        let tree = make_test_tree(Some(AppCommand::RequestRender), None, None);
+        let tree = make_test_tree(
+            Some(ClickHandlers::from_single(AppCommand::RequestRender)),
+            None,
+            None,
+        );
 
+        // Left click
         let outcome = handler.handle_event(
             &PointerEvent::Click {
                 button: PointerButton::Left,
@@ -272,13 +342,122 @@ mod tests {
             &mon,
             &tree,
         );
-
         assert_eq!(outcome.actions().len(), 1);
         assert_eq!(
             outcome.actions()[0],
             PointerAction::SendCommand(AppCommand::RequestRender)
         );
-        assert!(!outcome.has_state_changed());
+
+        // Right click also triggers on single action shorthand
+        let outcome_right = handler.handle_event(
+            &PointerEvent::Click {
+                button: PointerButton::Right,
+                pos: Position::new(10, 10),
+            },
+            &mon,
+            &tree,
+        );
+        assert_eq!(outcome_right.actions().len(), 1);
+        assert_eq!(
+            outcome_right.actions()[0],
+            PointerAction::SendCommand(AppCommand::RequestRender)
+        );
+
+        // Middle click also triggers
+        let outcome_middle = handler.handle_event(
+            &PointerEvent::Click {
+                button: PointerButton::Middle,
+                pos: Position::new(10, 10),
+            },
+            &mon,
+            &tree,
+        );
+        assert_eq!(outcome_middle.actions().len(), 1);
+        assert_eq!(
+            outcome_middle.actions()[0],
+            PointerAction::SendCommand(AppCommand::RequestRender)
+        );
+
+        // Auxiliary button does not trigger single shorthand (unless mapped)
+        let outcome_side = handler.handle_event(
+            &PointerEvent::Click {
+                button: PointerButton::Side,
+                pos: Position::new(10, 10),
+            },
+            &mon,
+            &tree,
+        );
+        assert!(outcome_side.actions().is_empty());
+    }
+
+    #[test]
+    fn test_click_hit_returns_distinct_button_actions() {
+        let mut handler = PointerHandler::new();
+        let mon = MonitorId::new("DP-1");
+        let mut handlers = ClickHandlers::new();
+        handlers.insert(PointerButton::Left, AppCommand::Exec("left_clicked".into()));
+        handlers.insert(
+            PointerButton::Right,
+            AppCommand::Exec("right_clicked".into()),
+        );
+        handlers.insert(PointerButton::Side, AppCommand::Exec("side_clicked".into()));
+
+        let tree = make_test_tree(Some(handlers), None, None);
+
+        let outcome_left = handler.handle_event(
+            &PointerEvent::Click {
+                button: PointerButton::Left,
+                pos: Position::new(10, 10),
+            },
+            &mon,
+            &tree,
+        );
+        assert_eq!(
+            outcome_left.into_actions(),
+            vec![PointerAction::SendCommand(AppCommand::Exec(
+                "left_clicked".into()
+            ))]
+        );
+
+        let outcome_right = handler.handle_event(
+            &PointerEvent::Click {
+                button: PointerButton::Right,
+                pos: Position::new(10, 10),
+            },
+            &mon,
+            &tree,
+        );
+        assert_eq!(
+            outcome_right.into_actions(),
+            vec![PointerAction::SendCommand(AppCommand::Exec(
+                "right_clicked".into()
+            ))]
+        );
+
+        let outcome_side = handler.handle_event(
+            &PointerEvent::Click {
+                button: PointerButton::Side,
+                pos: Position::new(10, 10),
+            },
+            &mon,
+            &tree,
+        );
+        assert_eq!(
+            outcome_side.into_actions(),
+            vec![PointerAction::SendCommand(AppCommand::Exec(
+                "side_clicked".into()
+            ))]
+        );
+
+        let outcome_middle = handler.handle_event(
+            &PointerEvent::Click {
+                button: PointerButton::Middle,
+                pos: Position::new(10, 10),
+            },
+            &mon,
+            &tree,
+        );
+        assert!(outcome_middle.actions().is_empty());
     }
 
     #[test]
@@ -286,7 +465,13 @@ mod tests {
         let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
         let func_name = FunctionName::new("toggle_menu");
-        let tree = make_test_tree(Some(AppCommand::ScriptCall(func_name.clone())), None, None);
+        let tree = make_test_tree(
+            Some(ClickHandlers::from_single(AppCommand::ScriptCall(
+                func_name.clone(),
+            ))),
+            None,
+            None,
+        );
 
         let outcome = handler.handle_event(
             &PointerEvent::Click {
@@ -440,6 +625,36 @@ mod tests {
             }
             _ => panic!("Expected ShowTooltip"),
         }
+    }
+
+    #[test]
+    fn test_click_systray_action_forwards_position() {
+        let mut handler = PointerHandler::new();
+        let mon = MonitorId::new("DP-1");
+        let systray_cmd = AppCommand::SystrayAction {
+            id: crate::features::systray::domain::SystrayId::new("test_item"),
+            action: crate::features::systray::domain::SystrayActionName::ContextMenu,
+            pos: None,
+        };
+        let tree = make_test_tree(Some(ClickHandlers::from_single(systray_cmd)), None, None);
+
+        let outcome = handler.handle_event(
+            &PointerEvent::Click {
+                button: PointerButton::Right,
+                pos: Position::new(42, 84),
+            },
+            &mon,
+            &tree,
+        );
+
+        assert_eq!(
+            outcome.into_actions(),
+            vec![PointerAction::SendCommand(AppCommand::SystrayAction {
+                id: crate::features::systray::domain::SystrayId::new("test_item"),
+                action: crate::features::systray::domain::SystrayActionName::ContextMenu,
+                pos: Some(Position::new(42, 84)),
+            })]
+        );
     }
 
     #[test]

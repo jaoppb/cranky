@@ -983,7 +983,27 @@ impl SniPort for SniAdapter {
                     match proxy.call_method("ContextMenu", &(pos_x, pos_y)).await {
                         Ok(_) => debug!("trigger_action: ContextMenu({pos_x}, {pos_y}) succeeded"),
                         Err(e) => {
-                            error!("trigger_action: ContextMenu({pos_x}, {pos_y}) failed: {e}");
+                            warn!(
+                                "trigger_action: ContextMenu({pos_x}, {pos_y}) failed: {e}, attempting SecondaryActivate({pos_x}, {pos_y})"
+                            );
+                            match proxy
+                                .call_method("SecondaryActivate", &(pos_x, pos_y))
+                                .await
+                            {
+                                Ok(_) => debug!(
+                                    "trigger_action: SecondaryActivate({pos_x}, {pos_y}) succeeded"
+                                ),
+                                Err(e2) => {
+                                    match proxy.call_method("Activate", &(pos_x, pos_y)).await {
+                                        Ok(_) => debug!(
+                                            "trigger_action: Activate({pos_x}, {pos_y}) succeeded"
+                                        ),
+                                        Err(e3) => error!(
+                                            "trigger_action: ContextMenu({pos_x}, {pos_y}) failed: {e} (fallback SecondaryActivate: {e2}, Activate: {e3})"
+                                        ),
+                                    }
+                                }
+                            }
                         }
                     }
                 }

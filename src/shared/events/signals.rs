@@ -658,8 +658,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_signal_hub_monitor_scales_propagation() {
-        use crate::shared::primitives::geometry::Scale;
         use crate::shared::primitives::MonitorId;
+        use crate::shared::primitives::geometry::Scale;
 
         let hub = SignalHub::new(Config::default());
         let mut scales_rx = hub.monitor_scales_rx();
@@ -670,6 +670,9 @@ mod tests {
         scales_tx.send(map.clone()).unwrap();
 
         assert!(scales_rx.changed().await.is_ok());
-        assert_eq!(scales_rx.borrow().get(&MonitorId::new("DP-1")), Some(&Scale::new(2.0)));
+        assert_eq!(
+            scales_rx.borrow().get(&MonitorId::new("DP-1")),
+            Some(&Scale::new(2.0))
+        );
     }
 }

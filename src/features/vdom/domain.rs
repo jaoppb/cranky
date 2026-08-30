@@ -4,13 +4,83 @@ use crate::features::styling::domain::{
     ClassNameList, ComputedStyle, ElementId, ElementQuery, Orientation, ProgressValue, PseudoClass,
 };
 use crate::features::styling::ports::StyleResolverPort;
+use crate::shared::events::core::PointerButton;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{
     BinaryData, ModuleInstanceId, ModuleKey, ModuleName, ModuleOptions,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use thiserror::Error;
 use uuid::Uuid;
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ClickHandlers {
+    handlers: HashMap<PointerButton, AppCommand>,
+}
+
+impl ClickHandlers {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            handlers: HashMap::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn from_single(cmd: AppCommand) -> Self {
+        let mut handlers = HashMap::new();
+        handlers.insert(PointerButton::Left, cmd.clone());
+        handlers.insert(PointerButton::Middle, cmd.clone());
+        handlers.insert(PointerButton::Right, cmd);
+        Self { handlers }
+    }
+
+    #[must_use]
+    pub fn get(&self, button: &PointerButton) -> Option<&AppCommand> {
+        self.handlers.get(button)
+    }
+
+    pub fn insert(&mut self, button: PointerButton, cmd: AppCommand) {
+        self.handlers.insert(button, cmd);
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.handlers.is_empty()
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&PointerButton, &AppCommand)> {
+        self.handlers.iter()
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ClickHandlersHelper {
+    Single(AppCommand),
+    Map(HashMap<String, AppCommand>),
+}
+
+impl<'de> Deserialize<'de> for ClickHandlers {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        match ClickHandlersHelper::deserialize(deserializer)? {
+            ClickHandlersHelper::Single(cmd) => Ok(Self::from_single(cmd)),
+            ClickHandlersHelper::Map(map) => {
+                let mut handlers = HashMap::new();
+                for (k, v) in map {
+                    if let Some(btn) = PointerButton::from_name(&k) {
+                        handlers.insert(btn, v);
+                    }
+                }
+                Ok(Self { handlers })
+            }
+        }
+    }
+}
 
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum VdomError {
@@ -301,7 +371,7 @@ pub struct VNode {
     #[serde(default)]
     class: Option<ClassNameList>,
     #[serde(default)]
-    on_click: Option<AppCommand>,
+    on_click: Option<ClickHandlers>,
     #[serde(default)]
     on_hover: Option<AppCommand>,
     #[serde(default)]
@@ -316,7 +386,7 @@ impl VNode {
         children: Vec<Self>,
         class: Option<ClassNameList>,
         id: Option<ElementId>,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
@@ -337,7 +407,7 @@ impl VNode {
         text: TextContent,
         class: Option<ClassNameList>,
         id: Option<ElementId>,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
@@ -359,7 +429,7 @@ impl VNode {
         orientation: Orientation,
         class: Option<ClassNameList>,
         id: Option<ElementId>,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
@@ -379,7 +449,7 @@ impl VNode {
     pub fn new_rect(
         class: Option<ClassNameList>,
         id: Option<ElementId>,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
@@ -426,7 +496,7 @@ impl VNode {
         options: ModuleOptions,
         class: Option<ClassNameList>,
         id: Option<ElementId>,
-        on_click: Option<AppCommand>,
+        on_click: Option<ClickHandlers>,
         on_hover: Option<AppCommand>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
@@ -479,7 +549,7 @@ impl VNode {
     }
 
     #[must_use]
-    pub const fn on_click(&self) -> Option<&AppCommand> {
+    pub const fn on_click(&self) -> Option<&ClickHandlers> {
         self.on_click.as_ref()
     }
 
@@ -1049,5 +1119,80 @@ mod tests {
         } else {
             panic!("Expected StyledNode::Flex");
         }
+    }
+
+    #[test]
+    fn test_click_handlers_operations() {
+        let mut handlers = ClickHandlers::new();
+        assert!(handlers.is_empty());
+        assert_eq!(handlers.get(&PointerButton::Left), None);
+
+        handlers.insert(PointerButton::Left, AppCommand::Exec("left_cmd".into()));
+        assert!(!handlers.is_empty());
+        assert_eq!(
+            handlers.get(&PointerButton::Left),
+            Some(&AppCommand::Exec("left_cmd".into()))
+        );
+        assert_eq!(handlers.get(&PointerButton::Right), None);
+
+        let single = ClickHandlers::from_single(AppCommand::Exec("single_cmd".into()));
+        assert_eq!(
+            single.get(&PointerButton::Left),
+            Some(&AppCommand::Exec("single_cmd".into()))
+        );
+        assert_eq!(
+            single.get(&PointerButton::Middle),
+            Some(&AppCommand::Exec("single_cmd".into()))
+        );
+        assert_eq!(
+            single.get(&PointerButton::Right),
+            Some(&AppCommand::Exec("single_cmd".into()))
+        );
+        assert_eq!(single.get(&PointerButton::Side), None);
+    }
+
+    #[test]
+    fn test_click_handlers_deserialization() {
+        // Single command format
+        let single_json = r#"{"Exec": "single_cmd"}"#;
+        let single_handlers: ClickHandlers = serde_json::from_str(single_json).unwrap();
+        assert_eq!(
+            single_handlers.get(&PointerButton::Left),
+            Some(&AppCommand::Exec("single_cmd".into()))
+        );
+        assert_eq!(
+            single_handlers.get(&PointerButton::Right),
+            Some(&AppCommand::Exec("single_cmd".into()))
+        );
+
+        // Map format with named and numeric keys
+        let map_json = r#"{
+            "left": {"Exec": "left_cmd"},
+            "right": {"Exec": "right_cmd"},
+            "middle": {"Exec": "mid_cmd"},
+            "side": {"Exec": "side_cmd"},
+            "276": {"Exec": "extra_cmd"}
+        }"#;
+        let map_handlers: ClickHandlers = serde_json::from_str(map_json).unwrap();
+        assert_eq!(
+            map_handlers.get(&PointerButton::Left),
+            Some(&AppCommand::Exec("left_cmd".into()))
+        );
+        assert_eq!(
+            map_handlers.get(&PointerButton::Right),
+            Some(&AppCommand::Exec("right_cmd".into()))
+        );
+        assert_eq!(
+            map_handlers.get(&PointerButton::Middle),
+            Some(&AppCommand::Exec("mid_cmd".into()))
+        );
+        assert_eq!(
+            map_handlers.get(&PointerButton::Side),
+            Some(&AppCommand::Exec("side_cmd".into()))
+        );
+        assert_eq!(
+            map_handlers.get(&PointerButton::Extra),
+            Some(&AppCommand::Exec("extra_cmd".into()))
+        );
     }
 }
