@@ -86,29 +86,48 @@ impl HyprlandState {
         self.focused_monitor.as_ref()
     }
 
+    #[must_use]
+    pub fn effective_focused_monitor(
+        &self,
+    ) -> Option<crate::features::workspaces::domain::MonitorName> {
+        if let Some(focused) = &self.focused_monitor {
+            return Some(focused.clone());
+        }
+        if self.monitors.len() == 1 {
+            return self.monitors.keys().next().cloned();
+        }
+        None
+    }
+
     pub fn apply_event(&mut self, event: &crate::shared::events::core::WindowManagerEvent) {
         use crate::features::workspaces::domain::Workspace;
         use crate::shared::events::core::WindowManagerEvent;
 
         match event {
             WindowManagerEvent::WorkspaceActivated { id, name } => {
-                let mon = self.focused_monitor.clone();
-                if !self.workspaces.contains_key(id) {
-                    // Do not assume the monitor, leave it as None so inconsistency check catches it
+                let mon = self.effective_focused_monitor();
+                if let Some(mon_name) = mon {
+                    if let Some(ws) = self.workspaces.get_mut(id) {
+                        ws.set_monitor(mon_name.clone());
+                    } else {
+                        self.workspaces.insert(
+                            id.clone(),
+                            Workspace::new(id.clone(), name.clone(), Some(mon_name.clone())),
+                        );
+                    }
+                    if let Some(m) = self.monitors.get_mut(&mon_name) {
+                        m.set_active_workspace(id.clone());
+                    }
+                } else if !self.workspaces.contains_key(id) {
                     self.workspaces
                         .insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
-                }
-
-                if let Some(mon_name) = mon
-                    && let Some(m) = self.monitors.get_mut(&mon_name)
-                {
-                    m.set_active_workspace(id.clone());
                 }
             }
             WindowManagerEvent::WorkspaceCreated { id, name } => {
                 if !self.workspaces.contains_key(id) {
+                    let mon = self.effective_focused_monitor();
                     self.workspaces
-                        .insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
+                        .insert(id.clone(), Workspace::new(id.clone(), name.clone(), mon));
                 }
             }
             WindowManagerEvent::WorkspaceDestroyed { id, name: _ } => {
@@ -555,6 +574,94 @@ mod tests {
                 .monitor(),
             Some(&MonitorName::new("DP-1"))
         );
+    }
+
+    #[test]
+    fn test_effective_focused_monitor() {
+        use crate::features::workspaces::domain::{Monitor, MonitorName, WorkspaceId};
+
+        let mut monitors = std::collections::BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("DP-1"),
+            Monitor::new(MonitorName::new("DP-1"), WorkspaceId::new(1), None),
+        );
+
+        // 1. None focused, single monitor -> returns DP-1
+        let state1 = HyprlandState::new(std::collections::BTreeMap::new(), monitors.clone(), None);
+        assert_eq!(
+            state1.effective_focused_monitor(),
+            Some(MonitorName::new("DP-1"))
+        );
+
+        // 2. Focused explicitly set -> returns focused
+        let state2 = HyprlandState::new(
+            std::collections::BTreeMap::new(),
+            monitors.clone(),
+            Some(MonitorName::new("DP-2")),
+        );
+        assert_eq!(
+            state2.effective_focused_monitor(),
+            Some(MonitorName::new("DP-2"))
+        );
+
+        // 3. None focused, multiple monitors -> returns None
+        monitors.insert(
+            MonitorName::new("HDMI-1"),
+            Monitor::new(MonitorName::new("HDMI-1"), WorkspaceId::new(2), None),
+        );
+        let state3 = HyprlandState::new(std::collections::BTreeMap::new(), monitors, None);
+        assert_eq!(state3.effective_focused_monitor(), None);
+    }
+
+    #[test]
+    fn test_workspace_creation_and_activation_with_monitor_inference() {
+        use crate::features::workspaces::adapters::hyprland::HyprlandAdapter;
+        use crate::features::workspaces::domain::{Monitor, MonitorName, WorkspaceId, WorkspaceName};
+        use crate::shared::events::core::WindowManagerEvent;
+
+        let mut monitors = std::collections::BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("HEADLESS-1"),
+            Monitor::new(MonitorName::new("HEADLESS-1"), WorkspaceId::new(1), None),
+        );
+
+        let mut state = HyprlandState::new(
+            std::collections::BTreeMap::new(),
+            monitors,
+            Some(MonitorName::new("HEADLESS-1")),
+        );
+
+        // createworkspacev2>>4,4
+        state.apply_event(&WindowManagerEvent::WorkspaceCreated {
+            id: WorkspaceId::new(4),
+            name: WorkspaceName::new("4"),
+        });
+        assert_eq!(
+            state
+                .workspaces()
+                .get(&WorkspaceId::new(4))
+                .unwrap()
+                .monitor(),
+            Some(&MonitorName::new("HEADLESS-1"))
+        );
+
+        // workspacev2>>4,4
+        state.apply_event(&WindowManagerEvent::WorkspaceActivated {
+            id: WorkspaceId::new(4),
+            name: WorkspaceName::new("4"),
+        });
+        assert_eq!(
+            state
+                .monitors()
+                .get(&MonitorName::new("HEADLESS-1"))
+                .unwrap()
+                .active_workspace_id(),
+            &WorkspaceId::new(4)
+        );
+
+        // Inconsistency validator must pass with zero inconsistencies
+        let incs = HyprlandAdapter::find_state_inconsistencies(&state);
+        assert!(incs.is_empty(), "Expected no inconsistencies, got: {incs:?}");
     }
 
     #[test]
