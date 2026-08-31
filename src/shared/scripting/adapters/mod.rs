@@ -2,9 +2,8 @@ use crate::shared::config::domain::{EngineId, FileExtension};
 pub mod lua;
 pub mod rhai;
 
-use crate::app::registry::ModuleError;
 use crate::features::module_runtime::ports::AnyModulePort;
-use crate::shared::scripting::ports::ScriptEnginePort;
+use crate::shared::scripting::ports::{ModuleError, ScriptEnginePort};
 
 pub struct RhaiEngineAdapter;
 

@@ -1,11 +1,10 @@
-use crate::app::commands::AppCommand;
 use crate::features::layout_engine::domain::StyledNode;
 use crate::features::styling::domain::{
     ClassNameList, ComputedStyle, ElementId, ElementQuery, Orientation, ProgressValue, PseudoClass,
 };
 use crate::features::styling::ports::StyleResolverPort;
 use crate::shared::events::core::PointerButton;
-use crate::shared::primitives::geometry::Size;
+use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{
     BinaryData, ModuleInstanceId, ModuleKey, ModuleName, ModuleOptions,
 };
@@ -14,9 +13,60 @@ use std::collections::HashMap;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub enum UiAction {
+    Exec(String),
+    SystrayAction {
+        id: crate::features::systray::domain::SystrayId,
+        action: crate::features::systray::domain::SystrayActionName,
+        #[serde(default)]
+        pos: Option<Position>,
+    },
+    ScriptCall(crate::shared::primitives::FunctionName),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UiCommand {
+    Exec(String),
+    SystrayAction {
+        id: crate::features::systray::domain::SystrayId,
+        action: crate::features::systray::domain::SystrayActionName,
+        pos: Option<Position>,
+    },
+}
+
+pub trait UiCommandSender: Send + Sync {
+    fn send_ui_command(&self, cmd: UiCommand);
+}
+
+impl<F> UiCommandSender for F
+where
+    F: Fn(UiCommand) + Send + Sync,
+{
+    fn send_ui_command(&self, cmd: UiCommand) {
+        self(cmd);
+    }
+}
+
+impl UiCommandSender for tokio::sync::mpsc::Sender<UiCommand> {
+    fn send_ui_command(&self, cmd: UiCommand) {
+        if let Err(e) = self.try_send(cmd) {
+            tracing::error!(?e, "failed to send ui command via tokio channel");
+        }
+    }
+}
+
+impl UiCommandSender for std::sync::mpsc::Sender<UiCommand> {
+    fn send_ui_command(&self, cmd: UiCommand) {
+        if let Err(e) = self.send(cmd) {
+            tracing::error!(?e, "failed to send ui command via std channel");
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ClickHandlers {
-    handlers: HashMap<PointerButton, AppCommand>,
+    handlers: HashMap<PointerButton, UiAction>,
 }
 
 impl ClickHandlers {
@@ -28,21 +78,21 @@ impl ClickHandlers {
     }
 
     #[must_use]
-    pub fn from_single(cmd: AppCommand) -> Self {
+    pub fn from_single(action: UiAction) -> Self {
         let mut handlers = HashMap::new();
-        handlers.insert(PointerButton::Left, cmd.clone());
-        handlers.insert(PointerButton::Middle, cmd.clone());
-        handlers.insert(PointerButton::Right, cmd);
+        handlers.insert(PointerButton::Left, action.clone());
+        handlers.insert(PointerButton::Middle, action.clone());
+        handlers.insert(PointerButton::Right, action);
         Self { handlers }
     }
 
     #[must_use]
-    pub fn get(&self, button: &PointerButton) -> Option<&AppCommand> {
+    pub fn get(&self, button: &PointerButton) -> Option<&UiAction> {
         self.handlers.get(button)
     }
 
-    pub fn insert(&mut self, button: PointerButton, cmd: AppCommand) {
-        self.handlers.insert(button, cmd);
+    pub fn insert(&mut self, button: PointerButton, action: UiAction) {
+        self.handlers.insert(button, action);
     }
 
     #[must_use]
@@ -50,7 +100,7 @@ impl ClickHandlers {
         self.handlers.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&PointerButton, &AppCommand)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&PointerButton, &UiAction)> {
         self.handlers.iter()
     }
 }
@@ -58,8 +108,8 @@ impl ClickHandlers {
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum ClickHandlersHelper {
-    Single(AppCommand),
-    Map(HashMap<String, AppCommand>),
+    Single(UiAction),
+    Map(HashMap<String, UiAction>),
 }
 
 impl<'de> Deserialize<'de> for ClickHandlers {
@@ -68,7 +118,7 @@ impl<'de> Deserialize<'de> for ClickHandlers {
         D: serde::Deserializer<'de>,
     {
         match ClickHandlersHelper::deserialize(deserializer)? {
-            ClickHandlersHelper::Single(cmd) => Ok(Self::from_single(cmd)),
+            ClickHandlersHelper::Single(action) => Ok(Self::from_single(action)),
             ClickHandlersHelper::Map(map) => {
                 let mut handlers = HashMap::new();
                 for (k, v) in map {
@@ -373,7 +423,7 @@ pub struct VNode {
     #[serde(default)]
     on_click: Option<ClickHandlers>,
     #[serde(default)]
-    on_hover: Option<AppCommand>,
+    on_hover: Option<UiAction>,
     #[serde(default)]
     tooltip: Option<Box<Self>>,
     #[serde(flatten)]
@@ -387,7 +437,7 @@ impl VNode {
         class: Option<ClassNameList>,
         id: Option<ElementId>,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
@@ -408,7 +458,7 @@ impl VNode {
         class: Option<ClassNameList>,
         id: Option<ElementId>,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
@@ -430,7 +480,7 @@ impl VNode {
         class: Option<ClassNameList>,
         id: Option<ElementId>,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
@@ -450,7 +500,7 @@ impl VNode {
         class: Option<ClassNameList>,
         id: Option<ElementId>,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
@@ -497,7 +547,7 @@ impl VNode {
         class: Option<ClassNameList>,
         id: Option<ElementId>,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
         Self {
@@ -554,7 +604,7 @@ impl VNode {
     }
 
     #[must_use]
-    pub const fn on_hover(&self) -> Option<&AppCommand> {
+    pub const fn on_hover(&self) -> Option<&UiAction> {
         self.on_hover.as_ref()
     }
 
@@ -1127,26 +1177,26 @@ mod tests {
         assert!(handlers.is_empty());
         assert_eq!(handlers.get(&PointerButton::Left), None);
 
-        handlers.insert(PointerButton::Left, AppCommand::Exec("left_cmd".into()));
+        handlers.insert(PointerButton::Left, UiAction::Exec("left_cmd".into()));
         assert!(!handlers.is_empty());
         assert_eq!(
             handlers.get(&PointerButton::Left),
-            Some(&AppCommand::Exec("left_cmd".into()))
+            Some(&UiAction::Exec("left_cmd".into()))
         );
         assert_eq!(handlers.get(&PointerButton::Right), None);
 
-        let single = ClickHandlers::from_single(AppCommand::Exec("single_cmd".into()));
+        let single = ClickHandlers::from_single(UiAction::Exec("single_cmd".into()));
         assert_eq!(
             single.get(&PointerButton::Left),
-            Some(&AppCommand::Exec("single_cmd".into()))
+            Some(&UiAction::Exec("single_cmd".into()))
         );
         assert_eq!(
             single.get(&PointerButton::Middle),
-            Some(&AppCommand::Exec("single_cmd".into()))
+            Some(&UiAction::Exec("single_cmd".into()))
         );
         assert_eq!(
             single.get(&PointerButton::Right),
-            Some(&AppCommand::Exec("single_cmd".into()))
+            Some(&UiAction::Exec("single_cmd".into()))
         );
         assert_eq!(single.get(&PointerButton::Side), None);
     }
@@ -1158,11 +1208,11 @@ mod tests {
         let single_handlers: ClickHandlers = serde_json::from_str(single_json).unwrap();
         assert_eq!(
             single_handlers.get(&PointerButton::Left),
-            Some(&AppCommand::Exec("single_cmd".into()))
+            Some(&UiAction::Exec("single_cmd".into()))
         );
         assert_eq!(
             single_handlers.get(&PointerButton::Right),
-            Some(&AppCommand::Exec("single_cmd".into()))
+            Some(&UiAction::Exec("single_cmd".into()))
         );
 
         // Map format with named and numeric keys
@@ -1176,23 +1226,23 @@ mod tests {
         let map_handlers: ClickHandlers = serde_json::from_str(map_json).unwrap();
         assert_eq!(
             map_handlers.get(&PointerButton::Left),
-            Some(&AppCommand::Exec("left_cmd".into()))
+            Some(&UiAction::Exec("left_cmd".into()))
         );
         assert_eq!(
             map_handlers.get(&PointerButton::Right),
-            Some(&AppCommand::Exec("right_cmd".into()))
+            Some(&UiAction::Exec("right_cmd".into()))
         );
         assert_eq!(
             map_handlers.get(&PointerButton::Middle),
-            Some(&AppCommand::Exec("mid_cmd".into()))
+            Some(&UiAction::Exec("mid_cmd".into()))
         );
         assert_eq!(
             map_handlers.get(&PointerButton::Side),
-            Some(&AppCommand::Exec("side_cmd".into()))
+            Some(&UiAction::Exec("side_cmd".into()))
         );
         assert_eq!(
             map_handlers.get(&PointerButton::Extra),
-            Some(&AppCommand::Exec("extra_cmd".into()))
+            Some(&UiAction::Exec("extra_cmd".into()))
         );
     }
 }

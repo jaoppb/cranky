@@ -1,40 +1,40 @@
-use serde::Deserialize;
+use crate::features::styling::domain::StyleSheetName;
+use crate::shared::primitives::ModuleName;
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub enum AppCommand {
-    RequestRender,
-    Exec(String),
-    SystrayAction {
-        id: crate::features::systray::domain::SystrayId,
-        action: crate::features::systray::domain::SystrayActionName,
-        #[serde(default)]
-        pos: Option<crate::shared::primitives::geometry::Position>,
-    },
-    ModuleSizeChanged(
-        crate::shared::primitives::MonitorId,
-        crate::shared::primitives::ModuleId,
-        crate::shared::primitives::geometry::Size,
-    ),
-    ChildModuleSizeChanged {
-        parent_id: crate::shared::primitives::ModuleId,
-        child_key: crate::shared::primitives::ModuleKey,
-        monitor_id: crate::shared::primitives::MonitorId,
-        size: crate::shared::primitives::geometry::Size,
-    },
-    #[serde(skip_deserializing)]
-    ContainerLayoutsCalculated {
-        parent_id: crate::shared::primitives::ModuleId,
-        monitor_id: crate::shared::primitives::MonitorId,
-        layouts: Vec<crate::shared::primitives::ChildModuleLayout>,
-    },
-    #[serde(skip_deserializing)]
-    ShowTooltip {
-        layout: Box<crate::features::layout_engine::domain::StyledNode>,
-    },
-    HideTooltip,
-    ReloadModule(crate::shared::primitives::ModuleName),
-    ReloadStyle(crate::features::styling::domain::StyleSheetName),
-    ScriptCall(crate::shared::primitives::FunctionName),
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SystemCommand {
+    ReloadModule(ModuleName),
+    ReloadStyle(StyleSheetName),
+}
+
+pub trait SystemCommandSender: Send + Sync {
+    fn send_system_command(&self, cmd: SystemCommand);
+}
+
+impl<F> SystemCommandSender for F
+where
+    F: Fn(SystemCommand) + Send + Sync,
+{
+    fn send_system_command(&self, cmd: SystemCommand) {
+        self(cmd);
+    }
+}
+
+pub struct ChannelSystemSender {
+    pub tx: tokio::sync::mpsc::Sender<SystemCommand>,
+}
+
+impl ChannelSystemSender {
+    #[must_use]
+    pub const fn new(tx: tokio::sync::mpsc::Sender<SystemCommand>) -> Self {
+        Self { tx }
+    }
+}
+
+impl SystemCommandSender for ChannelSystemSender {
+    fn send_system_command(&self, cmd: SystemCommand) {
+        let _ = self.tx.try_send(cmd);
+    }
 }
 
 #[cfg(test)]
@@ -42,39 +42,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_app_command_systray_action_deserialization_without_pos() {
-        let json = r#"{"SystrayAction": {"id": "test_systray", "action": "Primary"}}"#;
-        let cmd: AppCommand = serde_json::from_str(json).unwrap();
-        match cmd {
-            AppCommand::SystrayAction { id, action, pos } => {
-                assert_eq!(id.as_str(), "test_systray");
-                assert_eq!(
-                    action,
-                    crate::features::systray::domain::SystrayActionName::Primary
-                );
-                assert!(pos.is_none());
-            }
-            _ => panic!("Expected SystrayAction"),
-        }
+    fn test_system_command_equality() {
+        let cmd1 = SystemCommand::ReloadModule(ModuleName::new("hour"));
+        let cmd2 = SystemCommand::ReloadModule(ModuleName::new("hour"));
+        let cmd3 = SystemCommand::ReloadStyle(StyleSheetName::new("bar").unwrap());
+        assert_eq!(cmd1, cmd2);
+        assert_ne!(cmd1, cmd3);
     }
 
-    #[test]
-    fn test_app_command_systray_action_deserialization_with_pos() {
-        let json = r#"{"SystrayAction": {"id": "test_systray", "action": "ContextMenu", "pos": {"x": 100, "y": 200}}}"#;
-        let cmd: AppCommand = serde_json::from_str(json).unwrap();
-        match cmd {
-            AppCommand::SystrayAction { id, action, pos } => {
-                assert_eq!(id.as_str(), "test_systray");
-                assert_eq!(
-                    action,
-                    crate::features::systray::domain::SystrayActionName::ContextMenu
-                );
-                assert_eq!(
-                    pos,
-                    Some(crate::shared::primitives::geometry::Position::new(100, 200))
-                );
-            }
-            _ => panic!("Expected SystrayAction"),
-        }
+    #[tokio::test]
+    async fn test_channel_system_sender() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+        let sender = ChannelSystemSender::new(tx);
+        sender.send_system_command(SystemCommand::ReloadModule(ModuleName::new("hour")));
+        let received = rx.try_recv().unwrap();
+        assert_eq!(
+            received,
+            SystemCommand::ReloadModule(ModuleName::new("hour"))
+        );
     }
 }

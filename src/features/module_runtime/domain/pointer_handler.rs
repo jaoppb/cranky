@@ -1,6 +1,5 @@
-use crate::app::commands::AppCommand;
-use crate::features::layout_engine::domain::{NodePath, RenderNode, StyledNode};
-use crate::features::vdom::domain::InteractionContext;
+use crate::features::layout_engine::domain::{DisplayCommand, NodePath, RenderNode, StyledNode};
+use crate::features::vdom::domain::{InteractionContext, UiAction, UiCommand};
 use crate::shared::events::core::{PointerButton, PointerEvent};
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::{FunctionName, MonitorId};
@@ -8,8 +7,9 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PointerAction {
-    SendCommand(AppCommand),
     CallFunction(FunctionName),
+    SendUi(UiCommand),
+    SendDisplay(DisplayCommand),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,7 +105,7 @@ impl PointerHandler {
         self.last_pointer_pos.as_ref()
     }
 
-    fn handle_button_press(
+    pub fn handle_button_press(
         &mut self,
         monitor_id: &MonitorId,
         pos: Position,
@@ -118,8 +118,8 @@ impl PointerHandler {
         if old_active == target_path {
             false
         } else {
-            if let Some(p) = &target_path {
-                self.active_nodes.insert(monitor_id.clone(), p.clone());
+            if let Some(p) = target_path {
+                self.active_nodes.insert(monitor_id.clone(), p);
             } else {
                 self.active_nodes.remove(monitor_id);
             }
@@ -127,25 +127,30 @@ impl PointerHandler {
         }
     }
 
-    fn handle_button_release(
+    pub fn handle_button_release(
         &mut self,
         monitor_id: &MonitorId,
         pos: Position,
         render_tree: &RenderNode,
     ) -> bool {
-        let had_active = self.active_nodes.remove(monitor_id).is_some();
+        self.last_pointer_pos = Some((monitor_id.clone(), pos));
+        let mut changed = self.active_nodes.remove(monitor_id).is_some();
+
         let hit = render_tree.hit_test(pos);
         let target_path = hit.last().map(|n| n.path().clone());
-        let old_focused = self.focused_nodes.get(monitor_id).cloned();
-        let focus_changed = old_focused != target_path;
-        if focus_changed {
-            if let Some(p) = &target_path {
-                self.focused_nodes.insert(monitor_id.clone(), p.clone());
+        let old_focus = self.focused_nodes.get(monitor_id).cloned();
+        if old_focus == target_path {
+            // focus unchanged
+        } else {
+            if let Some(p) = target_path {
+                self.focused_nodes.insert(monitor_id.clone(), p);
             } else {
                 self.focused_nodes.remove(monitor_id);
             }
+            changed = true;
         }
-        had_active || focus_changed
+
+        changed
     }
 
     fn handle_click(
@@ -165,18 +170,18 @@ impl PointerHandler {
         let mut actions = Vec::new();
         if let Some(cmd) = hit_cmd {
             match cmd {
-                AppCommand::ScriptCall(func_name) => {
+                UiAction::ScriptCall(func_name) => {
                     actions.push(PointerAction::CallFunction(func_name.clone()));
                 }
-                AppCommand::SystrayAction { id, action, .. } => {
-                    actions.push(PointerAction::SendCommand(AppCommand::SystrayAction {
+                UiAction::SystrayAction { id, action, .. } => {
+                    actions.push(PointerAction::SendUi(UiCommand::SystrayAction {
                         id: id.clone(),
                         action: action.clone(),
                         pos: Some(pos),
                     }));
                 }
-                other => {
-                    actions.push(PointerAction::SendCommand(other.clone()));
+                UiAction::Exec(cmd_str) => {
+                    actions.push(PointerAction::SendUi(UiCommand::Exec(cmd_str.clone())));
                 }
             }
         }
@@ -206,17 +211,31 @@ impl PointerHandler {
         }
 
         if let Some(cmd) = hit.iter().rev().find_map(|n| n.on_hover()) {
-            actions.push(PointerAction::SendCommand(cmd.clone()));
+            match cmd {
+                UiAction::ScriptCall(func_name) => {
+                    actions.push(PointerAction::CallFunction(func_name.clone()));
+                }
+                UiAction::SystrayAction { id, action, .. } => {
+                    actions.push(PointerAction::SendUi(UiCommand::SystrayAction {
+                        id: id.clone(),
+                        action: action.clone(),
+                        pos: Some(pos),
+                    }));
+                }
+                UiAction::Exec(cmd_str) => {
+                    actions.push(PointerAction::SendUi(UiCommand::Exec(cmd_str.clone())));
+                }
+            }
         }
 
         let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
         if hit_tooltip != self.last_tooltip {
             if let Some(layout) = &hit_tooltip {
-                actions.push(PointerAction::SendCommand(AppCommand::ShowTooltip {
+                actions.push(PointerAction::SendDisplay(DisplayCommand::ShowTooltip {
                     layout: Box::new(layout.clone()),
                 }));
             } else {
-                actions.push(PointerAction::SendCommand(AppCommand::HideTooltip));
+                actions.push(PointerAction::SendDisplay(DisplayCommand::HideTooltip));
             }
             self.last_tooltip = hit_tooltip;
         }
@@ -232,7 +251,7 @@ impl PointerHandler {
 
         let mut actions = Vec::new();
         if self.last_tooltip.is_some() {
-            actions.push(PointerAction::SendCommand(AppCommand::HideTooltip));
+            actions.push(PointerAction::SendDisplay(DisplayCommand::HideTooltip));
             self.last_tooltip = None;
         }
 
@@ -284,11 +303,11 @@ impl PointerHandler {
             let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
             if hit_tooltip != self.last_tooltip {
                 if let Some(layout) = &hit_tooltip {
-                    actions.push(PointerAction::SendCommand(AppCommand::ShowTooltip {
+                    actions.push(PointerAction::SendDisplay(DisplayCommand::ShowTooltip {
                         layout: Box::new(layout.clone()),
                     }));
                 } else {
-                    actions.push(PointerAction::SendCommand(AppCommand::HideTooltip));
+                    actions.push(PointerAction::SendDisplay(DisplayCommand::HideTooltip));
                 }
                 self.last_tooltip = hit_tooltip;
             }
@@ -310,7 +329,7 @@ mod tests {
 
     fn make_test_tree(
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<StyledNode>,
     ) -> RenderNode {
         RenderNode::Rect {
@@ -328,7 +347,7 @@ mod tests {
         let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
         let tree = make_test_tree(
-            Some(ClickHandlers::from_single(AppCommand::RequestRender)),
+            Some(ClickHandlers::from_single(UiAction::Exec("render".into()))),
             None,
             None,
         );
@@ -345,7 +364,7 @@ mod tests {
         assert_eq!(outcome.actions().len(), 1);
         assert_eq!(
             outcome.actions()[0],
-            PointerAction::SendCommand(AppCommand::RequestRender)
+            PointerAction::SendUi(UiCommand::Exec("render".into()))
         );
 
         // Right click also triggers on single action shorthand
@@ -360,7 +379,7 @@ mod tests {
         assert_eq!(outcome_right.actions().len(), 1);
         assert_eq!(
             outcome_right.actions()[0],
-            PointerAction::SendCommand(AppCommand::RequestRender)
+            PointerAction::SendUi(UiCommand::Exec("render".into()))
         );
 
         // Middle click also triggers
@@ -375,7 +394,7 @@ mod tests {
         assert_eq!(outcome_middle.actions().len(), 1);
         assert_eq!(
             outcome_middle.actions()[0],
-            PointerAction::SendCommand(AppCommand::RequestRender)
+            PointerAction::SendUi(UiCommand::Exec("render".into()))
         );
 
         // Auxiliary button does not trigger single shorthand (unless mapped)
@@ -395,12 +414,9 @@ mod tests {
         let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
         let mut handlers = ClickHandlers::new();
-        handlers.insert(PointerButton::Left, AppCommand::Exec("left_clicked".into()));
-        handlers.insert(
-            PointerButton::Right,
-            AppCommand::Exec("right_clicked".into()),
-        );
-        handlers.insert(PointerButton::Side, AppCommand::Exec("side_clicked".into()));
+        handlers.insert(PointerButton::Left, UiAction::Exec("left_clicked".into()));
+        handlers.insert(PointerButton::Right, UiAction::Exec("right_clicked".into()));
+        handlers.insert(PointerButton::Side, UiAction::Exec("side_clicked".into()));
 
         let tree = make_test_tree(Some(handlers), None, None);
 
@@ -414,7 +430,7 @@ mod tests {
         );
         assert_eq!(
             outcome_left.into_actions(),
-            vec![PointerAction::SendCommand(AppCommand::Exec(
+            vec![PointerAction::SendUi(UiCommand::Exec(
                 "left_clicked".into()
             ))]
         );
@@ -429,7 +445,7 @@ mod tests {
         );
         assert_eq!(
             outcome_right.into_actions(),
-            vec![PointerAction::SendCommand(AppCommand::Exec(
+            vec![PointerAction::SendUi(UiCommand::Exec(
                 "right_clicked".into()
             ))]
         );
@@ -444,7 +460,7 @@ mod tests {
         );
         assert_eq!(
             outcome_side.into_actions(),
-            vec![PointerAction::SendCommand(AppCommand::Exec(
+            vec![PointerAction::SendUi(UiCommand::Exec(
                 "side_clicked".into()
             ))]
         );
@@ -466,7 +482,7 @@ mod tests {
         let mon = MonitorId::new("DP-1");
         let func_name = FunctionName::new("toggle_menu");
         let tree = make_test_tree(
-            Some(ClickHandlers::from_single(AppCommand::ScriptCall(
+            Some(ClickHandlers::from_single(UiAction::ScriptCall(
                 func_name.clone(),
             ))),
             None,
@@ -563,7 +579,7 @@ mod tests {
         );
         assert_eq!(outcome.actions().len(), 1);
         match &outcome.actions()[0] {
-            PointerAction::SendCommand(AppCommand::ShowTooltip { layout }) => {
+            PointerAction::SendDisplay(DisplayCommand::ShowTooltip { layout }) => {
                 assert_eq!(**layout, tooltip_node);
             }
             _ => panic!("Expected ShowTooltip"),
@@ -584,7 +600,7 @@ mod tests {
         assert_eq!(outcome3.actions().len(), 1);
         assert_eq!(
             outcome3.actions()[0],
-            PointerAction::SendCommand(AppCommand::HideTooltip)
+            PointerAction::SendDisplay(DisplayCommand::HideTooltip)
         );
         assert!(handler.last_tooltip().is_none());
     }
@@ -620,7 +636,7 @@ mod tests {
         let actions = handler.update_after_render(&render_trees);
         assert_eq!(actions.len(), 1);
         match &actions[0] {
-            PointerAction::SendCommand(AppCommand::ShowTooltip { layout }) => {
+            PointerAction::SendDisplay(DisplayCommand::ShowTooltip { layout }) => {
                 assert_eq!(**layout, tooltip_node);
             }
             _ => panic!("Expected ShowTooltip"),
@@ -631,12 +647,12 @@ mod tests {
     fn test_click_systray_action_forwards_position() {
         let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
-        let systray_cmd = AppCommand::SystrayAction {
+        let systray_action = UiAction::SystrayAction {
             id: crate::features::systray::domain::SystrayId::new("test_item"),
             action: crate::features::systray::domain::SystrayActionName::ContextMenu,
             pos: None,
         };
-        let tree = make_test_tree(Some(ClickHandlers::from_single(systray_cmd)), None, None);
+        let tree = make_test_tree(Some(ClickHandlers::from_single(systray_action)), None, None);
 
         let outcome = handler.handle_event(
             &PointerEvent::Click {
@@ -649,7 +665,7 @@ mod tests {
 
         assert_eq!(
             outcome.into_actions(),
-            vec![PointerAction::SendCommand(AppCommand::SystrayAction {
+            vec![PointerAction::SendUi(UiCommand::SystrayAction {
                 id: crate::features::systray::domain::SystrayId::new("test_item"),
                 action: crate::features::systray::domain::SystrayActionName::ContextMenu,
                 pos: Some(Position::new(42, 84)),

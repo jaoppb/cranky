@@ -190,7 +190,7 @@ pub struct WaylandState {
     seat: Option<WlSeat>,
     pointer: Option<WlPointer>,
 
-    command_tx: tokio::sync::mpsc::Sender<crate::app::commands::AppCommand>,
+    command_tx: tokio::sync::mpsc::Sender<crate::features::layout_engine::domain::DisplayCommand>,
 
     surface_to_id: HashMap<
         WlSurface,
@@ -269,7 +269,9 @@ impl WaylandAdapter {
     /// Returns `DisplayServerError::ConnectionFailed` if connecting to Wayland environment fails.
     pub fn new(
         hub: Arc<SignalHub>,
-        command_tx: tokio::sync::mpsc::Sender<crate::app::commands::AppCommand>,
+        command_tx: tokio::sync::mpsc::Sender<
+            crate::features::layout_engine::domain::DisplayCommand,
+        >,
         app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
     ) -> Result<(Self, WaylandSurfaceManager), DisplayServerError> {
         let connection =
@@ -418,7 +420,7 @@ impl DisplayServerPort for WaylandAdapter {
 
     fn render_all(
         &mut self,
-        read_model: &crate::app::state::AppReadModel,
+        read_model: &crate::shared::wayland::ports::AppReadModel,
         layout_senders: &std::collections::HashMap<
             crate::shared::primitives::ModuleId,
             Box<dyn crate::features::module_runtime::ports::LayoutSender>,
@@ -884,7 +886,7 @@ impl WaylandAdapter {
 
     fn render_all_outputs(
         &mut self,
-        read_model: &crate::app::state::AppReadModel,
+        read_model: &crate::shared::wayland::ports::AppReadModel,
         layout_senders: &std::collections::HashMap<
             crate::shared::primitives::ModuleId,
             Box<dyn crate::features::module_runtime::ports::LayoutSender>,
@@ -1144,7 +1146,7 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                     let tx = state.command_tx.clone();
                     tokio::spawn(async move {
                         let _ = tx
-                            .send(crate::app::commands::AppCommand::RequestRender)
+                            .send(crate::features::layout_engine::domain::DisplayCommand::RequestRender)
                             .await;
                     });
                 }
@@ -1454,7 +1456,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
                     let tx = state.command_tx.clone();
                     tokio::spawn(async move {
                         let _ = tx
-                            .send(crate::app::commands::AppCommand::RequestRender)
+                            .send(crate::features::layout_engine::domain::DisplayCommand::RequestRender)
                             .await;
                     });
                 }

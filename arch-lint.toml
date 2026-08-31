@@ -29,5 +29,20 @@ paths = ["src/app/**", "src/main.rs"]
 # Dependency Restrictions
 [[deny-scope-dep]]
 from = "domain"
-to = ["adapters"]
-message = "Domain layer must not depend on adapters. Use ports."
+to = ["adapters", "app"]
+message = "Domain layer must not depend on adapters or app."
+
+[[deny-scope-dep]]
+from = "ports"
+to = ["adapters", "app"]
+message = "Ports layer must not depend on adapters or app."
+
+[[deny-scope-dep]]
+from = "features"
+to = ["app"]
+message = "Features must not depend on app (composition layer)."
+
+[[deny-scope-dep]]
+from = "shared"
+to = ["app"]
+message = "Shared infrastructure must not depend on app."

@@ -1,10 +1,45 @@
-use crate::app::commands::AppCommand;
-use crate::features::vdom::domain::ClickHandlers;
+use crate::features::vdom::domain::{ClickHandlers, UiAction};
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{BinaryData, ChildModuleLayout, ModuleKey, ModuleOptions};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum DisplayCommand {
+    RequestRender,
+    ShowTooltip { layout: Box<StyledNode> },
+    HideTooltip,
+}
+
+pub trait DisplayCommandSender: Send + Sync {
+    fn send_display_command(&self, cmd: DisplayCommand);
+}
+
+impl<F> DisplayCommandSender for F
+where
+    F: Fn(DisplayCommand) + Send + Sync,
+{
+    fn send_display_command(&self, cmd: DisplayCommand) {
+        self(cmd);
+    }
+}
+
+impl DisplayCommandSender for tokio::sync::mpsc::Sender<DisplayCommand> {
+    fn send_display_command(&self, cmd: DisplayCommand) {
+        if let Err(e) = self.try_send(cmd) {
+            tracing::error!(?e, "failed to send display command via tokio channel");
+        }
+    }
+}
+
+impl DisplayCommandSender for std::sync::mpsc::Sender<DisplayCommand> {
+    fn send_display_command(&self, cmd: DisplayCommand) {
+        if let Err(e) = self.send(cmd) {
+            tracing::error!(?e, "failed to send display command via std channel");
+        }
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum LayoutError {
@@ -175,7 +210,7 @@ pub enum StyledNode {
         children: Vec<Self>,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     },
     Text {
@@ -183,7 +218,7 @@ pub enum StyledNode {
         text: TextContent,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     },
     Progress {
@@ -192,14 +227,14 @@ pub enum StyledNode {
         orientation: Orientation,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     },
     Rect {
         path: NodePath,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     },
     Image {
@@ -215,7 +250,7 @@ pub enum StyledNode {
         options: ModuleOptions,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     },
 }
@@ -256,6 +291,30 @@ impl StyledNode {
             Self::Image { .. } => None,
         }
     }
+
+    #[must_use]
+    pub const fn on_hover(&self) -> Option<&UiAction> {
+        match self {
+            Self::Flex { on_hover, .. }
+            | Self::Text { on_hover, .. }
+            | Self::Progress { on_hover, .. }
+            | Self::Rect { on_hover, .. }
+            | Self::Module { on_hover, .. } => on_hover.as_ref(),
+            Self::Image { .. } => None,
+        }
+    }
+
+    #[must_use]
+    pub fn tooltip(&self) -> Option<&Self> {
+        match self {
+            Self::Flex { tooltip, .. }
+            | Self::Text { tooltip, .. }
+            | Self::Progress { tooltip, .. }
+            | Self::Rect { tooltip, .. }
+            | Self::Image { tooltip, .. }
+            | Self::Module { tooltip, .. } => tooltip.as_deref(),
+        }
+    }
 }
 
 pub trait TextMeasurer: Send + Sync {
@@ -275,7 +334,7 @@ pub enum RenderNode {
         children: Vec<Self>,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<StyledNode>>,
     },
     Text {
@@ -284,7 +343,7 @@ pub enum RenderNode {
         text: TextContent,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<StyledNode>>,
     },
     Progress {
@@ -294,7 +353,7 @@ pub enum RenderNode {
         orientation: Orientation,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<StyledNode>>,
     },
     Rect {
@@ -302,7 +361,7 @@ pub enum RenderNode {
         rect: Rect,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<StyledNode>>,
     },
     Image {
@@ -318,7 +377,7 @@ pub enum RenderNode {
         key: ModuleKey,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
-        on_hover: Option<AppCommand>,
+        on_hover: Option<UiAction>,
         tooltip: Option<Box<StyledNode>>,
     },
 }
@@ -384,7 +443,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub const fn on_hover(&self) -> Option<&crate::app::commands::AppCommand> {
+    pub const fn on_hover(&self) -> Option<&UiAction> {
         match self {
             Self::Text { on_hover, .. }
             | Self::Flex { on_hover, .. }

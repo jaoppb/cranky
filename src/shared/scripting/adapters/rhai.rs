@@ -1,10 +1,10 @@
 #![allow(unsafe_code)]
 
-use crate::app::registry::ModuleError;
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::shared::config::domain::ModuleConfig;
 use crate::shared::events::signals::{SignalHub, SignalKind};
 use crate::shared::primitives::MonitorId;
+use crate::shared::scripting::ports::ModuleError;
 use rhai::{AST, Dynamic, Engine, Scope};
 use std::sync::Mutex;
 
@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn test_rhai_module_click_handlers() {
-        use crate::app::commands::AppCommand;
+        use crate::features::vdom::domain::UiAction;
         use crate::shared::events::core::PointerButton;
 
         let source = r#"
@@ -509,15 +509,15 @@ mod tests {
         let single_handlers = single_child.on_click().expect("on_click expected");
         assert_eq!(
             single_handlers.get(&PointerButton::Left),
-            Some(&AppCommand::Exec("single_cmd".into()))
+            Some(&UiAction::Exec("single_cmd".into()))
         );
         assert_eq!(
             single_handlers.get(&PointerButton::Right),
-            Some(&AppCommand::Exec("single_cmd".into()))
+            Some(&UiAction::Exec("single_cmd".into()))
         );
         assert_eq!(
             single_handlers.get(&PointerButton::Middle),
-            Some(&AppCommand::Exec("single_cmd".into()))
+            Some(&UiAction::Exec("single_cmd".into()))
         );
 
         // Multi click
@@ -525,15 +525,15 @@ mod tests {
         let multi_handlers = multi_child.on_click().expect("on_click expected");
         assert_eq!(
             multi_handlers.get(&PointerButton::Left),
-            Some(&AppCommand::Exec("left_cmd".into()))
+            Some(&UiAction::Exec("left_cmd".into()))
         );
         assert_eq!(
             multi_handlers.get(&PointerButton::Right),
-            Some(&AppCommand::Exec("right_cmd".into()))
+            Some(&UiAction::Exec("right_cmd".into()))
         );
         assert_eq!(
             multi_handlers.get(&PointerButton::Side),
-            Some(&AppCommand::Exec("side_cmd".into()))
+            Some(&UiAction::Exec("side_cmd".into()))
         );
         assert_eq!(multi_handlers.get(&PointerButton::Middle), None);
     }

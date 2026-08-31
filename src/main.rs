@@ -1,12 +1,15 @@
 #![deny(unsafe_code)]
 #![warn(clippy::type_complexity, clippy::needless_lifetimes)]
 
-use cranky::app::commands::AppCommand;
+use cranky::app::commands::{ChannelSystemSender, SystemCommand};
 use cranky::app::state::CrankyApp;
+use cranky::features::layout_engine::domain::DisplayCommand;
 use cranky::features::metrics::adapters::SysinfoAdapter;
+use cranky::features::module_runtime::ports::LayoutEvent;
 use cranky::features::styling::ports::StyleLoaderPort;
 use cranky::features::systray::adapters::SniAdapter;
 use cranky::features::systray::ports::SniPort;
+use cranky::features::vdom::domain::UiCommand;
 use cranky::features::workspaces::adapters::hyprland::HyprlandAdapter;
 use cranky::shared::config::adapters::ConfigAdapter;
 use cranky::shared::events::signals::SignalHub;
@@ -22,13 +25,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 use cranky::shared::env::domain::AppEnvironment;
 use cranky::shared::env::ports::EnvironmentPort;
-
-struct MainCommandSender(mpsc::Sender<AppCommand>);
-impl cranky::features::module_runtime::ports::CommandSender for MainCommandSender {
-    fn send_command(&self, cmd: AppCommand) {
-        let _ = self.0.try_send(cmd);
-    }
-}
 
 fn init_tracing(env: &AppEnvironment) -> tracing_appender::non_blocking::WorkerGuard {
     let file_appender = tracing_appender::rolling::daily(
@@ -148,10 +144,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hub = Arc::new(SignalHub::new(initial_config.clone()));
 
     // 2. Initialize Wayland and Core App
-    let (command_tx, command_rx) = mpsc::channel::<AppCommand>(100);
+    let (display_tx, display_rx) = mpsc::channel::<DisplayCommand>(100);
+    let (layout_tx, layout_rx) = mpsc::channel::<LayoutEvent>(100);
+    let (ui_tx, ui_rx) = mpsc::channel::<UiCommand>(100);
+    let (system_tx, system_rx) = mpsc::channel::<SystemCommand>(100);
 
     let (wayland_adapter, surface_manager) =
-        WaylandAdapter::new(hub.clone(), command_tx.clone(), app_env.clone())?;
+        WaylandAdapter::new(hub.clone(), display_tx.clone(), app_env.clone())?;
     let surface_manager: cranky::shared::wayland::ports::DynSurfaceManager =
         std::sync::Arc::new(surface_manager);
 
@@ -160,11 +159,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let canvas_factory =
         cranky::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
+    let display_sender = std::sync::Arc::new(display_tx);
+    let layout_sender = std::sync::Arc::new(layout_tx);
+    let ui_sender = std::sync::Arc::new(ui_tx);
+
     let mut app = CrankyApp::new(
         hub.clone(),
         initial_config.clone(),
-        command_rx,
-        command_tx.clone(),
+        display_rx,
+        display_sender,
+        layout_rx,
+        layout_sender,
+        ui_rx,
+        ui_sender,
+        system_rx,
         surface_manager,
         canvas_factory,
         registry,
@@ -189,17 +197,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         error!("Failed to deploy builtin styles: {e}");
     }
 
-    let _style_watcher =
-        match style_loader.watch_styles(Arc::new(MainCommandSender(command_tx.clone()))) {
-            Ok(w) => Some(w),
-            Err(e) => {
-                error!("Failed to watch style directories: {e}");
-                None
-            }
-        };
+    let style_system_tx = system_tx.clone();
+    let _style_watcher = match style_loader.watch_styles(Arc::new(move |sheet| {
+        let _ = style_system_tx.try_send(SystemCommand::ReloadStyle(sheet));
+    })) {
+        Ok(w) => Some(w),
+        Err(e) => {
+            error!("Failed to watch style directories: {e}");
+            None
+        }
+    };
 
     let _script_watcher = cranky::app::builtins::BuiltinModules::watch_scripts(
-        Arc::new(MainCommandSender(command_tx.clone())),
+        Arc::new(ChannelSystemSender::new(system_tx)),
         &app_env,
     )?;
 

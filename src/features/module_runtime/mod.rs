@@ -5,10 +5,13 @@ pub mod ports;
 
 #[cfg(test)]
 pub mod test_support {
-    use crate::app::commands::AppCommand;
-    use crate::features::layout_engine::domain::TextMeasurer;
-    use crate::features::module_runtime::ports::{AnyModulePort, CommandSender, ModuleInitError};
-    use crate::features::vdom::domain::VNode;
+    use crate::features::layout_engine::domain::{
+        DisplayCommand, DisplayCommandSender, TextMeasurer,
+    };
+    use crate::features::module_runtime::ports::{
+        AnyModulePort, LayoutEvent, LayoutEventSender, ModuleInitError,
+    };
+    use crate::features::vdom::domain::{UiCommand, UiCommandSender, VNode};
     use crate::shared::config::domain::{Config, FontFamily, FontSize, ModuleConfig};
     use crate::shared::events::signals::{SignalHub, SignalKind};
     use crate::shared::primitives::geometry::{Position, Scale, Size};
@@ -16,25 +19,62 @@ pub mod test_support {
     use crate::shared::primitives::{FunctionName, ModuleId, MonitorId};
     use crate::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
 
-    pub struct MockCommandSender;
-
-    impl CommandSender for MockCommandSender {
-        fn send_command(&self, _cmd: AppCommand) {}
+    pub struct MockLayoutSender;
+    impl LayoutEventSender for MockLayoutSender {
+        fn send_layout_event(&self, _event: LayoutEvent) {}
     }
 
-    pub struct ChannelCommandSender {
-        pub tx: std::sync::mpsc::Sender<AppCommand>,
+    pub struct ChannelLayoutSender {
+        pub tx: std::sync::mpsc::Sender<LayoutEvent>,
     }
-
-    impl ChannelCommandSender {
+    impl ChannelLayoutSender {
         #[must_use]
-        pub const fn new(tx: std::sync::mpsc::Sender<AppCommand>) -> Self {
+        pub const fn new(tx: std::sync::mpsc::Sender<LayoutEvent>) -> Self {
             Self { tx }
         }
     }
+    impl LayoutEventSender for ChannelLayoutSender {
+        fn send_layout_event(&self, event: LayoutEvent) {
+            let _ = self.tx.send(event);
+        }
+    }
 
-    impl CommandSender for ChannelCommandSender {
-        fn send_command(&self, cmd: AppCommand) {
+    pub struct MockDisplaySender;
+    impl DisplayCommandSender for MockDisplaySender {
+        fn send_display_command(&self, _cmd: DisplayCommand) {}
+    }
+
+    pub struct ChannelDisplaySender {
+        pub tx: std::sync::mpsc::Sender<DisplayCommand>,
+    }
+    impl ChannelDisplaySender {
+        #[must_use]
+        pub const fn new(tx: std::sync::mpsc::Sender<DisplayCommand>) -> Self {
+            Self { tx }
+        }
+    }
+    impl DisplayCommandSender for ChannelDisplaySender {
+        fn send_display_command(&self, cmd: DisplayCommand) {
+            let _ = self.tx.send(cmd);
+        }
+    }
+
+    pub struct MockUiSender;
+    impl UiCommandSender for MockUiSender {
+        fn send_ui_command(&self, _cmd: UiCommand) {}
+    }
+
+    pub struct ChannelUiSender {
+        pub tx: std::sync::mpsc::Sender<UiCommand>,
+    }
+    impl ChannelUiSender {
+        #[must_use]
+        pub const fn new(tx: std::sync::mpsc::Sender<UiCommand>) -> Self {
+            Self { tx }
+        }
+    }
+    impl UiCommandSender for ChannelUiSender {
+        fn send_ui_command(&self, cmd: UiCommand) {
             let _ = self.tx.send(cmd);
         }
     }

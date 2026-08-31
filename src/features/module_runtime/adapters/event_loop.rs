@@ -1,10 +1,11 @@
-use crate::app::commands::AppCommand;
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
+use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::{PointerAction, PointerHandler, RenderPipeline};
-use crate::features::module_runtime::ports::AnyModulePort;
+use crate::features::module_runtime::ports::{AnyModulePort, LayoutEvent, LayoutEventSender};
 use crate::features::styling::ports::StyleResolverPort;
+use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::events::signals::SignalKind;
 use crate::shared::primitives::MonitorId;
@@ -23,9 +24,14 @@ pub enum EventLoopEvent {
     Shutdown,
 }
 
-pub struct EventLoop<F: CanvasFactory + 'static> {
+pub struct EventLoop<
+    F: CanvasFactory + 'static,
+    LS: LayoutEventSender + 'static,
+    DS: DisplayCommandSender + 'static,
+    US: UiCommandSender + 'static,
+> {
     port: Box<dyn AnyModulePort>,
-    ctx: ModuleContext,
+    ctx: ModuleContext<LS, DS, US>,
     pointer_handler: PointerHandler,
     render_pipeline: RenderPipeline,
     canvas_factory: F,
@@ -33,11 +39,17 @@ pub struct EventLoop<F: CanvasFactory + 'static> {
     style_resolver: Arc<dyn StyleResolverPort>,
 }
 
-impl<F: CanvasFactory + 'static> EventLoop<F> {
+impl<
+    F: CanvasFactory + 'static,
+    LS: LayoutEventSender + 'static,
+    DS: DisplayCommandSender + 'static,
+    US: UiCommandSender + 'static,
+> EventLoop<F, LS, DS, US>
+{
     #[must_use]
     pub fn new(
         port: Box<dyn AnyModulePort>,
-        ctx: ModuleContext,
+        ctx: ModuleContext<LS, DS, US>,
         pointer_handler: PointerHandler,
         render_pipeline: RenderPipeline,
         canvas_factory: F,
@@ -65,7 +77,9 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
     }
 
     #[must_use]
-    pub fn into_actor(self) -> crate::features::module_runtime::application::ModuleActor<F> {
+    pub fn into_actor(
+        self,
+    ) -> crate::features::module_runtime::application::ModuleActor<F, LS, DS, US> {
         crate::features::module_runtime::application::ModuleActor::new(
             self.port,
             self.ctx,
@@ -162,8 +176,11 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
                             changed = true;
                         }
                     }
-                    PointerAction::SendCommand(cmd) => {
-                        self.ctx.command_tx().send_command(cmd.clone());
+                    PointerAction::SendUi(cmd) => {
+                        self.ctx.ui_sender().send_ui_command(cmd.clone());
+                    }
+                    PointerAction::SendDisplay(cmd) => {
+                        self.ctx.display_sender().send_display_command(cmd.clone());
                     }
                 }
             }
@@ -236,8 +253,16 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
                     .pointer_handler
                     .update_after_render(self.render_pipeline.render_trees());
                 for action in post_actions {
-                    if let PointerAction::SendCommand(cmd) = action {
-                        self.ctx.command_tx().send_command(cmd);
+                    match action {
+                        PointerAction::CallFunction(func_name) => {
+                            let _ = self.port.call_function(&func_name);
+                        }
+                        PointerAction::SendUi(cmd) => {
+                            self.ctx.ui_sender().send_ui_command(cmd);
+                        }
+                        PointerAction::SendDisplay(cmd) => {
+                            self.ctx.display_sender().send_display_command(cmd);
+                        }
                     }
                 }
             }
@@ -266,8 +291,8 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
     ) {
         if !outcome.child_layouts().is_empty() {
             self.ctx
-                .command_tx()
-                .send_command(AppCommand::ContainerLayoutsCalculated {
+                .layout_sender()
+                .send_layout_event(LayoutEvent::ContainerLayoutsCalculated {
                     parent_id: self.ctx.id(),
                     monitor_id: monitor_id.clone(),
                     layouts: outcome.child_layouts().to_vec(),
@@ -276,12 +301,12 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
 
         if let Some(size_change) = outcome.size_change() {
             self.ctx
-                .command_tx()
-                .send_command(AppCommand::ModuleSizeChanged(
-                    monitor_id.clone(),
-                    self.ctx.id(),
-                    size_change.new_size(),
-                ));
+                .layout_sender()
+                .send_layout_event(LayoutEvent::ModuleSizeChanged {
+                    monitor_id: monitor_id.clone(),
+                    module_id: self.ctx.id(),
+                    size: size_change.new_size(),
+                });
         }
 
         if let Some((buffer, position)) = outcome.into_buffer() {
@@ -368,7 +393,8 @@ impl<F: CanvasFactory + 'static> EventLoop<F> {
 mod tests {
     use super::*;
     use crate::features::module_runtime::test_support::{
-        MockCanvasFactory, MockCommandSender, MockSurfaceManager, TestModulePort,
+        ChannelLayoutSender, MockCanvasFactory, MockDisplaySender, MockLayoutSender,
+        MockSurfaceManager, MockUiSender, TestModulePort,
     };
     use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
     use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
@@ -383,9 +409,11 @@ mod tests {
         let id = ModuleId::new(1);
         let hub = Arc::new(SignalHub::new(Config::default()));
         let sm = Arc::new(MockSurfaceManager);
-        let cmd = Arc::new(MockCommandSender);
+        let layout_sender = Arc::new(MockLayoutSender);
+        let display_sender = Arc::new(MockDisplaySender);
+        let ui_sender = Arc::new(MockUiSender);
         let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub, sm, cmd, rx);
+        let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
 
         let event_loop = EventLoop::new(
             Box::new(TestModulePort::new(VNode::new_rect(
@@ -412,16 +440,17 @@ mod tests {
     #[tokio::test]
     async fn test_dispatch_render_outcome_sends_commands() {
         use crate::features::module_runtime::domain::SizeChange;
-        use crate::features::module_runtime::test_support::ChannelCommandSender;
         use crate::features::styling::domain::ComputedStyle;
 
         let id = ModuleId::new(1);
         let hub = Arc::new(SignalHub::new(Config::default()));
         let sm = Arc::new(MockSurfaceManager);
-        let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
-        let cmd = Arc::new(ChannelCommandSender::new(cmd_tx));
+        let (layout_tx, layout_rx) = std::sync::mpsc::channel();
+        let layout_sender = Arc::new(ChannelLayoutSender::new(layout_tx));
+        let display_sender = Arc::new(MockDisplaySender);
+        let ui_sender = Arc::new(MockUiSender);
         let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub, sm, cmd, rx);
+        let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
 
         let mut event_loop = EventLoop::new(
             Box::new(TestModulePort::new(VNode::new_rect(
@@ -451,16 +480,20 @@ mod tests {
 
         event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), outcome);
 
-        let received = cmd_rx
+        let received = layout_rx
             .try_recv()
             .expect("Should have sent ModuleSizeChanged");
         match received {
-            AppCommand::ModuleSizeChanged(mon, mod_id, size) => {
-                assert_eq!(mon.as_str(), "DP-1");
-                assert_eq!(mod_id, id);
+            LayoutEvent::ModuleSizeChanged {
+                monitor_id,
+                module_id,
+                size,
+            } => {
+                assert_eq!(monitor_id.as_str(), "DP-1");
+                assert_eq!(module_id, id);
                 assert_eq!(size, Size::new(50, 20));
             }
-            _ => panic!("Unexpected command"),
+            _ => panic!("Unexpected event"),
         }
     }
 
@@ -469,9 +502,11 @@ mod tests {
         let id = ModuleId::new(1);
         let hub = Arc::new(SignalHub::new(Config::default()));
         let sm = Arc::new(MockSurfaceManager);
-        let cmd = Arc::new(MockCommandSender);
+        let layout_sender = Arc::new(MockLayoutSender);
+        let display_sender = Arc::new(MockDisplaySender);
+        let ui_sender = Arc::new(MockUiSender);
         let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub, sm, cmd, rx);
+        let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
 
         let mut event_loop = EventLoop::new(
             Box::new(TestModulePort::new(VNode::new_rect(

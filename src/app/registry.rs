@@ -1,14 +1,7 @@
 use crate::shared::config::domain::ModuleConfig;
 
 use crate::features::module_runtime::ports::{AnyModulePort, ModuleRegistryPort};
-use crate::shared::events::signals::SignalHub;
-use thiserror::Error;
-
-#[derive(Error, Debug, PartialEq, Eq)]
-pub enum ModuleError {
-    #[error("Internal module error: {message}")]
-    Internal { message: String },
-}
+pub use crate::shared::scripting::ports::ModuleError;
 
 use crate::shared::primitives::{DynamicValue, ModuleId, ModuleOptions};
 use std::collections::HashMap;
@@ -219,8 +212,12 @@ impl crate::features::module_runtime::ports::LayoutSender for WatchLayoutSender 
 }
 
 #[async_trait::async_trait]
-impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
-    ModuleRegistryPort<Fact> for ModuleRegistry
+impl<
+    Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
+    LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
+    DS: crate::features::layout_engine::domain::DisplayCommandSender + 'static,
+    US: crate::features::vdom::domain::UiCommandSender + 'static,
+> ModuleRegistryPort<Fact, LS, DS, US> for ModuleRegistry
 {
     fn root_module(&self) -> Option<ModuleId> {
         self.root_module
@@ -291,10 +288,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
 
     fn spawn_all(
         &mut self,
-        hub: std::sync::Arc<SignalHub>,
-        surface_manager: crate::shared::wayland::ports::DynSurfaceManager,
-        command_tx: std::sync::Arc<dyn crate::features::module_runtime::ports::CommandSender>,
-        canvas_factory: Fact,
+        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> std::collections::HashMap<
         ModuleId,
         Box<dyn crate::features::module_runtime::ports::LayoutSender>,
@@ -317,9 +311,11 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
 
             let ctx = crate::features::module_runtime::application::ModuleContext::new(
                 id,
-                hub.clone(),
-                surface_manager.clone(),
-                command_tx.clone(),
+                deps.hub.clone(),
+                deps.surface_manager.clone(),
+                deps.layout_sender.clone(),
+                deps.display_sender.clone(),
+                deps.ui_sender.clone(),
                 layout_rx,
             )
             .with_parent(parent_id);
@@ -332,7 +328,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
             crate::features::module_runtime::application::ModuleActor::new(
                 module,
                 ctx,
-                canvas_factory.clone(),
+                deps.canvas_factory.clone(),
                 style_resolver,
                 vdom_diff,
             )
@@ -346,10 +342,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
         &mut self,
         name: &crate::shared::primitives::ModuleName,
         config: &crate::shared::config::domain::Config,
-        hub: std::sync::Arc<SignalHub>,
-        surface_manager: crate::shared::wayland::ports::DynSurfaceManager,
-        command_tx: std::sync::Arc<dyn crate::features::module_runtime::ports::CommandSender>,
-        canvas_factory: Fact,
+        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> Result<
         std::collections::HashMap<
             ModuleId,
@@ -416,9 +409,11 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
 
             let ctx = crate::features::module_runtime::application::ModuleContext::new(
                 id,
-                hub.clone(),
-                surface_manager.clone(),
-                command_tx.clone(),
+                deps.hub.clone(),
+                deps.surface_manager.clone(),
+                deps.layout_sender.clone(),
+                deps.display_sender.clone(),
+                deps.ui_sender.clone(),
                 layout_rx,
             );
 
@@ -429,7 +424,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
             crate::features::module_runtime::application::ModuleActor::new(
                 module,
                 ctx,
-                canvas_factory.clone(),
+                deps.canvas_factory.clone(),
                 style_resolver,
                 vdom_diff,
             )
@@ -472,6 +467,7 @@ impl<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>
 mod tests {
     use super::*;
     use crate::shared::config::adapters::dto::ConfigDto;
+    use crate::shared::events::signals::SignalHub;
     use crate::shared::rendering::ports::font::FontValidatorPort;
 
     struct MockValidator;
@@ -481,10 +477,12 @@ mod tests {
         }
     }
 
-    struct MockSender;
-    impl crate::features::module_runtime::ports::CommandSender for MockSender {
-        fn send_command(&self, _cmd: crate::app::commands::AppCommand) {}
-    }
+    type TestRegistryPort = dyn ModuleRegistryPort<
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
+            crate::features::module_runtime::test_support::MockLayoutSender,
+            crate::features::module_runtime::test_support::MockDisplaySender,
+            crate::features::module_runtime::test_support::MockUiSender,
+        >;
 
     #[test]
     fn test_module_registry_load() {
@@ -504,23 +502,9 @@ mod tests {
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
 
-        crate::features::module_runtime::ports::ModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::load(&mut registry, &config)
-        .unwrap();
-        assert_eq!(
-            crate::features::module_runtime::ports::ModuleRegistryPort::<
-                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-            >::module_ids(&registry)
-            .len(),
-            2
-        );
-        assert!(
-            crate::features::module_runtime::ports::ModuleRegistryPort::<
-                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-            >::root_module(&registry)
-            .is_some()
-        );
+        TestRegistryPort::load(&mut registry, &config).unwrap();
+        assert_eq!(TestRegistryPort::module_ids(&registry).len(), 2);
+        assert!(TestRegistryPort::root_module(&registry).is_some());
     }
 
     #[test]
@@ -569,9 +553,7 @@ mod tests {
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
 
-        let result = crate::features::module_runtime::ports::ModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::load(&mut registry, &config);
+        let result = TestRegistryPort::load(&mut registry, &config);
         assert!(result.is_err());
         assert!(matches!(
             result.unwrap_err(),
@@ -597,14 +579,8 @@ mod tests {
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
 
-        crate::features::module_runtime::ports::ModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::load(&mut registry, &config)
-        .unwrap();
-
-        crate::features::module_runtime::ports::ModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::clear(&mut registry);
+        TestRegistryPort::load(&mut registry, &config).unwrap();
+        TestRegistryPort::clear(&mut registry);
 
         assert!(registry.module_ids.is_empty());
         assert!(registry.modules.is_empty());
@@ -627,10 +603,7 @@ mod tests {
         "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
-        crate::features::module_runtime::ports::ModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::load(&mut registry, &config)
-        .unwrap();
+        TestRegistryPort::load(&mut registry, &config).unwrap();
 
         let hub = std::sync::Arc::new(crate::shared::events::signals::SignalHub::new(
             config.clone(),
@@ -640,10 +613,7 @@ mod tests {
             std::sync::Arc::new(mock_conn),
             &hub,
         );
-        crate::features::module_runtime::ports::ModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::register_dbus_subscriptions(&registry, &mut mock_dbus)
-        .await;
+        TestRegistryPort::register_dbus_subscriptions(&registry, &mut mock_dbus).await;
     }
 
     #[tokio::test]
@@ -663,36 +633,34 @@ mod tests {
         "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
-        crate::features::module_runtime::ports::ModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::load(&mut registry, &config)
-        .unwrap();
 
         let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
         let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
             std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
 
-        let command_tx = std::sync::Arc::new(MockSender);
+        let layout_sender = std::sync::Arc::new(|_| ());
+        let display_sender = std::sync::Arc::new(|_| ());
+        let ui_sender = std::sync::Arc::new(|_| ());
         let canvas_factory =
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
-        let senders = crate::features::module_runtime::ports::ModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::spawn_all(
-            &mut registry,
+        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
             hub,
             surface_manager,
-            command_tx,
+            layout_sender,
+            display_sender,
+            ui_sender,
             canvas_factory,
         );
+
+        TestRegistryPort::load(&mut registry, &config).unwrap();
+        let senders = registry.spawn_all(&deps);
 
         assert_eq!(senders.len(), 2); // bar + hour
         assert!(registry.modules.is_empty());
         assert!(
-            crate::features::module_runtime::ports::ModuleRegistryPort::<
-                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-            >::active_signal_subscriptions(&registry)
-            .contains(&crate::shared::events::signals::SignalKind::Time)
+            TestRegistryPort::active_signal_subscriptions(&registry)
+                .contains(&crate::shared::events::signals::SignalKind::Time)
         );
     }
 }

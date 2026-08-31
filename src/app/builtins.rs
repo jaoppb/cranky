@@ -158,7 +158,7 @@ impl BuiltinModules {
     ///
     /// Returns [`BuiltinError::Io`] if creating the file watcher fails.
     pub fn watch_scripts(
-        command_tx: std::sync::Arc<dyn crate::features::module_runtime::ports::CommandSender>,
+        command_tx: std::sync::Arc<dyn crate::app::commands::SystemCommandSender>,
         app_env: &crate::shared::env::domain::AppEnvironment,
     ) -> Result<Box<dyn notify::Watcher>, BuiltinError> {
         use notify::{Event, RecursiveMode, Watcher};
@@ -174,9 +174,11 @@ impl BuiltinModules {
                 for path in event.paths {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                         tracing::debug!("Script modified: {path:?}");
-                        command_tx.send_command(crate::app::commands::AppCommand::ReloadModule(
-                            crate::shared::primitives::ModuleName::new(stem),
-                        ));
+                        command_tx.send_system_command(
+                            crate::app::commands::SystemCommand::ReloadModule(
+                                crate::shared::primitives::ModuleName::new(stem),
+                            ),
+                        );
                     }
                 }
             }

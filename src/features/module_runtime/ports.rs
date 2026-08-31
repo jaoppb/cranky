@@ -1,7 +1,9 @@
-use crate::app::commands::AppCommand;
+use crate::features::layout_engine::domain::DisplayCommandSender;
+use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::config::domain::{Config, ModuleConfig};
 use crate::shared::events::signals::{SignalHub, SignalKind};
-use crate::shared::primitives::{ModuleId, MonitorId, geometry::Rect};
+use crate::shared::primitives::geometry::{Rect, Size};
+use crate::shared::primitives::{ChildModuleLayout, ModuleId, ModuleKey, MonitorId};
 use crate::shared::wayland::ports::DynSurfaceManager;
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -36,13 +38,101 @@ pub enum RegistryLoadError {
     Internal(String),
 }
 
-pub trait CommandSender: Send + Sync {
-    fn send_command(&self, cmd: AppCommand);
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LayoutEvent {
+    ModuleSizeChanged {
+        monitor_id: MonitorId,
+        module_id: ModuleId,
+        size: Size,
+    },
+    ChildModuleSizeChanged {
+        parent_id: ModuleId,
+        child_key: ModuleKey,
+        monitor_id: MonitorId,
+        size: Size,
+    },
+    ContainerLayoutsCalculated {
+        parent_id: ModuleId,
+        monitor_id: MonitorId,
+        layouts: Vec<ChildModuleLayout>,
+    },
+}
+
+pub trait LayoutEventSender: Send + Sync {
+    fn send_layout_event(&self, event: LayoutEvent);
+}
+
+impl<F> LayoutEventSender for F
+where
+    F: Fn(LayoutEvent) + Send + Sync,
+{
+    fn send_layout_event(&self, event: LayoutEvent) {
+        self(event);
+    }
+}
+
+impl LayoutEventSender for tokio::sync::mpsc::Sender<LayoutEvent> {
+    fn send_layout_event(&self, event: LayoutEvent) {
+        if let Err(e) = self.try_send(event) {
+            tracing::error!(?e, "failed to send layout event via tokio channel");
+        }
+    }
+}
+
+impl LayoutEventSender for std::sync::mpsc::Sender<LayoutEvent> {
+    fn send_layout_event(&self, event: LayoutEvent) {
+        if let Err(e) = self.send(event) {
+            tracing::error!(?e, "failed to send layout event via std channel");
+        }
+    }
 }
 
 pub trait LayoutSender: Send + Sync {
     fn send_layout(&self, layout: std::collections::HashMap<MonitorId, Rect>);
 }
+
+#[derive(Clone)]
+pub struct ModuleRuntimeDependencies<
+    Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
+    LS: LayoutEventSender + 'static,
+    DS: DisplayCommandSender + 'static,
+    US: UiCommandSender + 'static,
+> {
+    pub hub: Arc<SignalHub>,
+    pub surface_manager: DynSurfaceManager,
+    pub layout_sender: Arc<LS>,
+    pub display_sender: Arc<DS>,
+    pub ui_sender: Arc<US>,
+    pub canvas_factory: Fact,
+}
+
+impl<
+    Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
+    LS: LayoutEventSender + 'static,
+    DS: DisplayCommandSender + 'static,
+    US: UiCommandSender + 'static,
+> ModuleRuntimeDependencies<Fact, LS, DS, US>
+{
+    #[must_use]
+    pub fn new(
+        hub: Arc<SignalHub>,
+        surface_manager: DynSurfaceManager,
+        layout_sender: Arc<LS>,
+        display_sender: Arc<DS>,
+        ui_sender: Arc<US>,
+        canvas_factory: Fact,
+    ) -> Self {
+        Self {
+            hub,
+            surface_manager,
+            layout_sender,
+            display_sender,
+            ui_sender,
+            canvas_factory,
+        }
+    }
+}
+
 #[async_trait]
 pub trait AnyModulePort: Send + Sync {
     /// Initialize module with configuration.
@@ -73,8 +163,12 @@ pub trait AnyModulePort: Send + Sync {
 
 #[async_trait]
 #[cfg_attr(test, mockall::automock)]
-pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static>:
-    Send + Sync
+pub trait ModuleRegistryPort<
+    Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
+    LS: LayoutEventSender + 'static,
+    DS: DisplayCommandSender + 'static,
+    US: UiCommandSender + 'static,
+>: Send + Sync
 {
     /// Load module configurations into registry.
     ///
@@ -82,12 +176,10 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
     ///
     /// Returns `RegistryLoadError` if module loading fails.
     fn load(&mut self, config: &Config) -> Result<(), RegistryLoadError>;
+
     fn spawn_all(
         &mut self,
-        hub: Arc<SignalHub>,
-        surface_manager: DynSurfaceManager,
-        command_tx: Arc<dyn CommandSender>,
-        canvas_factory: Fact,
+        deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>;
 
     /// Reload a specific module by name.
@@ -99,10 +191,7 @@ pub trait ModuleRegistryPort<Fact: crate::shared::rendering::ports::canvas::Canv
         &mut self,
         name: &crate::shared::primitives::ModuleName,
         config: &Config,
-        hub: Arc<SignalHub>,
-        surface_manager: DynSurfaceManager,
-        command_tx: Arc<dyn CommandSender>,
-        canvas_factory: Fact,
+        deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> Result<std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>, RegistryLoadError>;
 
     fn root_module(&self) -> Option<ModuleId>;

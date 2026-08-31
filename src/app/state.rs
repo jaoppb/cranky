@@ -1,10 +1,10 @@
-use crate::app::commands::AppCommand;
+use crate::app::commands::SystemCommand;
+use crate::features::layout_engine::domain::DisplayCommand;
+use crate::features::module_runtime::ports::LayoutEvent;
+use crate::features::vdom::domain::UiCommand;
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::{
-    ModuleId, MonitorId,
-    geometry::{BarWidth, Position, Rect, Size},
-};
+use crate::shared::primitives::{ModuleId, MonitorId, geometry::Size};
 use crate::shared::wayland::ports::DisplayServerPort;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
@@ -20,193 +20,38 @@ pub enum AppError {
     Internal { message: String },
 }
 
-pub struct ModuleLayout {
-    id: ModuleId,
-    bounds: Rect,
-}
-
-impl ModuleLayout {
-    #[must_use]
-    pub const fn id(&self) -> crate::shared::primitives::ModuleId {
-        self.id
-    }
-
-    #[must_use]
-    pub const fn bounds(&self) -> &Rect {
-        &self.bounds
-    }
-}
-
-pub struct AppReadModel {
-    config: Config,
-    root_module: Option<ModuleId>,
-    module_ids: Vec<ModuleId>,
-    module_names: HashMap<ModuleId, crate::shared::primitives::ModuleName>,
-    name_to_ids: HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>,
-    module_sizes: HashMap<MonitorId, HashMap<ModuleId, Size>>,
-    computed_layouts: HashMap<MonitorId, HashMap<ModuleId, Rect>>,
-}
-
-impl AppReadModel {
-    #[must_use]
-    pub const fn config(&self) -> &crate::shared::config::domain::Config {
-        &self.config
-    }
-
-    #[must_use]
-    pub const fn root_module(&self) -> Option<ModuleId> {
-        self.root_module
-    }
-
-    #[allow(
-        clippy::as_conversions,
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation
-    )]
-    #[must_use]
-    pub fn calculate_layout(
-        &self,
-        monitor: &MonitorId,
-        bar_width: BarWidth,
-        root_config: &crate::shared::config::domain::RootConfig,
-    ) -> Vec<ModuleLayout> {
-        let mut layouts = Vec::new();
-        let bar_height = root_config.height();
-        let available_height = bar_height.value() as f32;
-
-        if let Some(root_id) = self.root_module {
-            layouts.push(ModuleLayout {
-                id: root_id,
-                bounds: Rect::new(
-                    Position::new(0, 0),
-                    Size::new(bar_width.value(), bar_height.value()),
-                ),
-            });
-        }
-
-        if let Some(mon_layouts) = self.computed_layouts.get(monitor) {
-            for (&mod_id, &bounds) in mon_layouts {
-                if Some(mod_id) != self.root_module {
-                    layouts.push(ModuleLayout { id: mod_id, bounds });
-                }
-            }
-            return layouts;
-        }
-
-        let get_size = |id: &ModuleId| {
-            self.module_sizes
-                .get(monitor)
-                .and_then(|m| m.get(id))
-                .copied()
-                .unwrap_or(Size::new(0, 0))
-        };
-
-        let gap = 8.0f32;
-        let padding_h = 8.0f32;
-
-        let get_module_ids = |key: &str| -> Vec<ModuleId> {
-            let mut ids = Vec::new();
-            if let Some(crate::shared::primitives::DynamicValue::Array(arr)) =
-                root_config.options().get(key)
-            {
-                for v in arr {
-                    if let Some(name_str) = v.as_str() {
-                        let mod_name = crate::shared::primitives::ModuleName::new(name_str);
-                        if let Some(mod_ids) = self.name_to_ids.get(&mod_name) {
-                            ids.extend(mod_ids.iter().copied());
-                        }
-                    }
-                }
-            }
-            ids
-        };
-
-        let left_ids = get_module_ids("left");
-        let center_ids = get_module_ids("center");
-        let right_ids = get_module_ids("right");
-
-        // Calculate left modules
-        let mut left_x = padding_h;
-        for id in left_ids {
-            let size = get_size(&id);
-            let y = (available_height - size.height() as f32).max(0.0) / 2.0;
-            layouts.push(ModuleLayout {
-                id,
-                bounds: Rect::new(Position::new(left_x as i32, y as i32), size),
-            });
-            left_x += size.width() as f32 + gap;
-        }
-
-        // Calculate right modules
-        let mut right_x = bar_width.value() as f32 - padding_h;
-        let mut right_layouts = Vec::new();
-        for id in right_ids.into_iter().rev() {
-            let size = get_size(&id);
-            right_x -= size.width() as f32;
-            let y = (available_height - size.height() as f32).max(0.0) / 2.0;
-            right_layouts.push(ModuleLayout {
-                id,
-                bounds: Rect::new(Position::new(right_x as i32, y as i32), size),
-            });
-            right_x -= gap;
-        }
-        layouts.extend(right_layouts.into_iter().rev());
-
-        // Calculate center modules
-        let mut center_width = 0.0;
-        let mut center_sizes = Vec::new();
-        for id in center_ids {
-            let size = get_size(&id);
-            center_width += size.width() as f32;
-            center_sizes.push((id, size));
-        }
-        if !center_sizes.is_empty() {
-            center_width =
-                ((center_sizes.len().saturating_sub(1)) as f32).mul_add(gap, center_width);
-        }
-
-        let mut center_x = (bar_width.value() as f32 - center_width) / 2.0;
-        for (id, size) in center_sizes {
-            let y = (available_height - size.height() as f32).max(0.0) / 2.0;
-            layouts.push(ModuleLayout {
-                id,
-                bounds: Rect::new(Position::new(center_x as i32, y as i32), size),
-            });
-            center_x += size.width() as f32 + gap;
-        }
-
-        layouts
-    }
-}
+pub use crate::shared::wayland::domain::{AppReadModel, ModuleLayout};
 
 pub struct CrankyApp<
-    R: crate::features::module_runtime::ports::ModuleRegistryPort<F> + 'static,
+    R: crate::features::module_runtime::ports::ModuleRegistryPort<F, LS, DS, US> + 'static,
     F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
+    LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
+    DS: crate::features::layout_engine::domain::DisplayCommandSender + 'static,
+    US: crate::features::vdom::domain::UiCommandSender + 'static,
 > {
     hub: Arc<SignalHub>,
     read_model: AppReadModel,
-    command_rx: mpsc::Receiver<AppCommand>,
+    display_rx: mpsc::Receiver<DisplayCommand>,
+    layout_rx: mpsc::Receiver<LayoutEvent>,
+    ui_rx: mpsc::Receiver<UiCommand>,
+    system_rx: mpsc::Receiver<SystemCommand>,
     layout_senders:
         HashMap<ModuleId, Box<dyn crate::features::module_runtime::ports::LayoutSender>>,
     surface_manager: DynSurfaceManager,
-    command_tx_clone: mpsc::Sender<AppCommand>,
+    display_sender: Arc<DS>,
+    layout_sender: Arc<LS>,
+    ui_sender: Arc<US>,
     registry: Box<R>,
     canvas_factory: F,
 }
 
-struct MpscCommandSender(mpsc::Sender<AppCommand>);
-impl crate::features::module_runtime::ports::CommandSender for MpscCommandSender {
-    fn send_command(&self, cmd: AppCommand) {
-        if let Err(e) = self.0.try_send(cmd) {
-            tracing::error!(?e, "MpscCommandSender failed to send command");
-        }
-    }
-}
-
 impl<
-    R: crate::features::module_runtime::ports::ModuleRegistryPort<F> + 'static,
+    R: crate::features::module_runtime::ports::ModuleRegistryPort<F, LS, DS, US> + 'static,
     F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
-> CrankyApp<R, F>
+    LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
+    DS: crate::features::layout_engine::domain::DisplayCommandSender + 'static,
+    US: crate::features::vdom::domain::UiCommandSender + 'static,
+> CrankyApp<R, F, LS, DS, US>
 {
     /// Creates a new [`CrankyApp`] instance and initializes modules from config.
     ///
@@ -214,11 +59,17 @@ impl<
     ///
     /// Returns [`AppError::Module`] if initial module loading fails.
     #[allow(clippy::needless_pass_by_value)]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         hub: Arc<SignalHub>,
         config: Config,
-        command_rx: mpsc::Receiver<AppCommand>,
-        command_tx: mpsc::Sender<AppCommand>,
+        display_rx: mpsc::Receiver<DisplayCommand>,
+        display_sender: Arc<DS>,
+        layout_rx: mpsc::Receiver<LayoutEvent>,
+        layout_sender: Arc<LS>,
+        ui_rx: mpsc::Receiver<UiCommand>,
+        ui_sender: Arc<US>,
+        system_rx: mpsc::Receiver<SystemCommand>,
         surface_manager: DynSurfaceManager,
         canvas_factory: F,
         mut registry: Box<R>,
@@ -229,13 +80,15 @@ impl<
         let module_ids = registry.module_ids().to_vec();
         let module_names = registry.module_names().clone();
         let name_to_ids = registry.name_to_ids().clone();
-        let command_tx_arc = Arc::new(MpscCommandSender(command_tx.clone()));
-        let layout_senders = registry.spawn_all(
+        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
             hub.clone(),
             surface_manager.clone(),
-            command_tx_arc,
+            layout_sender.clone(),
+            display_sender.clone(),
+            ui_sender.clone(),
             canvas_factory.clone(),
         );
+        let layout_senders = registry.spawn_all(&deps);
 
         let read_model = AppReadModel {
             config,
@@ -250,10 +103,15 @@ impl<
         Ok(Self {
             hub,
             read_model,
-            command_rx,
+            display_rx,
+            layout_rx,
+            ui_rx,
+            system_rx,
             layout_senders,
-            surface_manager: surface_manager.clone(),
-            command_tx_clone: command_tx,
+            surface_manager,
+            display_sender,
+            layout_sender,
+            ui_sender,
             registry,
             canvas_factory,
         })
@@ -293,13 +151,44 @@ impl<
                     res.map_err(|e| AppError::Internal { message: e.to_string() })?;
                     display.dispatch_pending().map_err(|e| AppError::Internal { message: e.to_string() })?;
                 }
-                Some(mut command) = self.command_rx.recv() => {
+                Some(display_cmd) = self.display_rx.recv() => {
                     let mut needs_render = false;
-                    let mut process_count: usize = 0;
+                    let mut cmd = display_cmd;
                     loop {
-                        process_count = process_count.saturating_add(1);
-                        match command {
-                            AppCommand::ContainerLayoutsCalculated {
+                        match cmd {
+                            DisplayCommand::RequestRender => {
+                                needs_render = true;
+                            }
+                            DisplayCommand::ShowTooltip { layout } => {
+                                tracing::debug!(?layout, "Received DisplayCommand::ShowTooltip, calling display.show_tooltip");
+                                match display.show_tooltip(*layout) {
+                                    Ok(()) => tracing::debug!("display.show_tooltip succeeded"),
+                                    Err(e) => tracing::error!(err = ?e, "display.show_tooltip failed"),
+                                }
+                            }
+                            DisplayCommand::HideTooltip => {
+                                tracing::debug!("Received DisplayCommand::HideTooltip, calling display.hide_tooltip");
+                                match display.hide_tooltip() {
+                                    Ok(()) => tracing::debug!("display.hide_tooltip succeeded"),
+                                    Err(e) => tracing::error!(err = ?e, "display.hide_tooltip failed"),
+                                }
+                            }
+                        }
+                        if let Ok(next) = self.display_rx.try_recv() {
+                            cmd = next;
+                        } else {
+                            break;
+                        }
+                    }
+                    if needs_render {
+                        let _ = display.render_all(&self.read_model, &self.layout_senders);
+                    }
+                }
+                Some(layout_event) = self.layout_rx.recv() => {
+                    let mut event = layout_event;
+                    loop {
+                        match event {
+                            LayoutEvent::ContainerLayoutsCalculated {
                                 parent_id: _,
                                 monitor_id,
                                 layouts,
@@ -332,9 +221,8 @@ impl<
                                         }
                                     }
                                 }
-                                needs_render = true;
                             }
-                            AppCommand::ChildModuleSizeChanged {
+                            LayoutEvent::ChildModuleSizeChanged {
                                 parent_id: _,
                                 child_key,
                                 monitor_id,
@@ -344,43 +232,62 @@ impl<
                                 let mon_entry = sizes_map.entry(monitor_id.clone()).or_default();
                                 mon_entry.insert(child_key, size);
                                 let _ = self.hub.module_sizes_tx().send(sizes_map);
-                                needs_render = true;
                             }
-                            AppCommand::RequestRender => {
-                                needs_render = true;
-                            },
-                            AppCommand::Exec(cmd) => {
-                                tracing::debug!("Executing shell command: {cmd}");
-                                let _ = std::process::Command::new("sh").arg("-c").arg(cmd).spawn();
-                            },
-                            AppCommand::SystrayAction { id, action, pos } => {
-                                tracing::debug!(?id, ?action, ?pos, "Received AppCommand::SystrayAction, triggering SNI action");
+                            LayoutEvent::ModuleSizeChanged {
+                                monitor_id,
+                                module_id,
+                                size,
+                            } => {
+                                self.handle_size_changed(monitor_id, module_id, size);
+                            }
+                        }
+                        if let Ok(next) = self.layout_rx.try_recv() {
+                            event = next;
+                        } else {
+                            break;
+                        }
+                    }
+                    let _ = display.render_all(&self.read_model, &self.layout_senders);
+                }
+                Some(ui_cmd) = self.ui_rx.recv() => {
+                    let mut cmd = ui_cmd;
+                    loop {
+                        match cmd {
+                            UiCommand::Exec(cmd_str) => {
+                                tracing::debug!("Executing shell command: {cmd_str}");
+                                let _ = std::process::Command::new("sh").arg("-c").arg(cmd_str).spawn();
+                            }
+                            UiCommand::SystrayAction { id, action, pos } => {
+                                tracing::debug!(?id, ?action, ?pos, "Received UiCommand::SystrayAction, triggering SNI action");
                                 match sni.trigger_action(&id, &action, pos).await {
                                     Ok(()) => tracing::debug!(?id, ?action, "SNI trigger_action succeeded"),
                                     Err(e) => tracing::error!(?id, ?action, err = ?e, "SNI trigger_action failed"),
                                 }
                             }
-                            AppCommand::ModuleSizeChanged(monitor_id, module_id, size) => {
-                                self.handle_size_changed(monitor_id, module_id, size);
-                                needs_render = true;
-                            }
-                            AppCommand::ShowTooltip { layout } => {
-                                tracing::debug!(?layout, "Received AppCommand::ShowTooltip, calling display.show_tooltip");
-                                match display.show_tooltip(*layout) {
-                                    Ok(()) => tracing::debug!("display.show_tooltip succeeded"),
-                                    Err(e) => tracing::error!(err = ?e, "display.show_tooltip failed"),
-                                }
-                            }
-                            AppCommand::HideTooltip => {
-                                tracing::debug!("Received AppCommand::HideTooltip, calling display.hide_tooltip");
-                                match display.hide_tooltip() {
-                                    Ok(()) => tracing::debug!("display.hide_tooltip succeeded"),
-                                    Err(e) => tracing::error!(err = ?e, "display.hide_tooltip failed"),
-                                }
-                            }
-                            AppCommand::ReloadModule(name) => {
+                        }
+                        if let Ok(next) = self.ui_rx.try_recv() {
+                            cmd = next;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                Some(sys_cmd) = self.system_rx.recv() => {
+                    let mut needs_render = false;
+                    let mut cmd = sys_cmd;
+                    let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+                        self.hub.clone(),
+                        self.surface_manager.clone(),
+                        self.layout_sender.clone(),
+                        self.display_sender.clone(),
+                        self.ui_sender.clone(),
+                        self.canvas_factory.clone(),
+                    );
+                    loop {
+                        match cmd {
+                            SystemCommand::ReloadModule(name) => {
                                 tracing::info!("Reloading module: {name}");
-                                match self.registry.reload_module(&name, &self.read_model.config, self.hub.clone(), self.surface_manager.clone(), Arc::new(MpscCommandSender(self.command_tx_clone.clone())), self.canvas_factory.clone()) {
+                                match self.registry.reload_module(&name, &self.read_model.config, &deps) {
                                     Ok(new_senders) => {
                                         for (id, sender) in new_senders {
                                             self.layout_senders.insert(id, sender);
@@ -390,13 +297,13 @@ impl<
                                     Err(e) => tracing::error!("Failed to reload module {name}: {e}"),
                                 }
                             }
-                            AppCommand::ReloadStyle(sheet_name) => {
+                            SystemCommand::ReloadStyle(sheet_name) => {
                                 tracing::info!("Reloading style: {sheet_name}");
                                 if sheet_name.as_str() == "base" {
                                     tracing::debug!("Base stylesheet changed; reloading all active modules");
                                     let all_modules: Vec<_> = self.read_model.module_names.values().cloned().collect();
                                     for mod_name in all_modules {
-                                        if let Ok(new_senders) = self.registry.reload_module(&mod_name, &self.read_model.config, self.hub.clone(), self.surface_manager.clone(), Arc::new(MpscCommandSender(self.command_tx_clone.clone())), self.canvas_factory.clone()) {
+                                        if let Ok(new_senders) = self.registry.reload_module(&mod_name, &self.read_model.config, &deps) {
                                             for (id, sender) in new_senders {
                                                 self.layout_senders.insert(id, sender);
                                             }
@@ -407,11 +314,11 @@ impl<
                                     let mods = self.registry.modules_using_style(&sheet_name);
                                     tracing::debug!(
                                         stylesheet = %sheet_name.as_str(),
-                                        dependent_modules = ?mods.iter().map(super::super::shared::primitives::ModuleName::as_str).collect::<Vec<_>>(),
+                                        dependent_modules = ?mods.iter().map(crate::shared::primitives::ModuleName::as_str).collect::<Vec<_>>(),
                                         "Reloading modules dependent on modified stylesheet"
                                     );
                                     for mod_name in mods {
-                                        match self.registry.reload_module(&mod_name, &self.read_model.config, self.hub.clone(), self.surface_manager.clone(), Arc::new(MpscCommandSender(self.command_tx_clone.clone())), self.canvas_factory.clone()) {
+                                        match self.registry.reload_module(&mod_name, &self.read_model.config, &deps) {
                                             Ok(new_senders) => {
                                                 for (id, sender) in new_senders {
                                                     self.layout_senders.insert(id, sender);
@@ -423,23 +330,13 @@ impl<
                                     }
                                 }
                             }
-                            AppCommand::ScriptCall(_) => {
-                                // ScriptCall is handled locally by ModuleActor — should not reach here
-                                tracing::warn!("Received ScriptCall at application state level; ignoring");
-                            }
                         }
-
-                        if process_count > 50 {
-                            break;
-                        }
-
-                        if let Ok(next_cmd) = self.command_rx.try_recv() {
-                            command = next_cmd;
+                        if let Ok(next) = self.system_rx.try_recv() {
+                            cmd = next;
                         } else {
                             break;
                         }
                     }
-
                     if needs_render {
                         let _ = display.render_all(&self.read_model, &self.layout_senders);
                     }
@@ -458,12 +355,15 @@ impl<
                         self.read_model.module_ids = self.registry.module_ids().to_vec();
                         self.read_model.module_names.clone_from(self.registry.module_names());
                         self.read_model.name_to_ids.clone_from(self.registry.name_to_ids());
-                        self.layout_senders = self.registry.spawn_all(
+                        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
                             self.hub.clone(),
                             self.surface_manager.clone(),
-                            Arc::new(MpscCommandSender(self.command_tx_clone.clone())),
-                            self.canvas_factory.clone()
+                            self.layout_sender.clone(),
+                            self.display_sender.clone(),
+                            self.ui_sender.clone(),
+                            self.canvas_factory.clone(),
                         );
+                        self.layout_senders = self.registry.spawn_all(&deps);
                     }
                 }
                 Ok(()) = hyprland_rx.changed() => {
@@ -505,23 +405,31 @@ mod tests {
     #![allow(clippy::similar_names)]
     use super::*;
     use crate::features::module_runtime::ports::MockModuleRegistryPort;
+    use crate::shared::primitives::geometry::{BarWidth, Position, Rect};
     use crate::shared::wayland::ports::MockDisplayServerPort;
     use crate::shared::wayland::ports::MockSurfaceManagerPort;
     use std::sync::Arc;
     use tokio::sync::mpsc;
 
+    type TestMockRegistry = MockModuleRegistryPort<
+        crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
+        tokio::sync::mpsc::Sender<LayoutEvent>,
+        tokio::sync::mpsc::Sender<DisplayCommand>,
+        tokio::sync::mpsc::Sender<UiCommand>,
+    >;
+
     #[tokio::test]
     async fn test_app_initialization() {
         let config = Config::default();
         let hub = Arc::new(SignalHub::new(config.clone()));
-        let (_, command_rx) = mpsc::channel(32);
-        let (command_tx, _) = mpsc::channel(32);
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
 
         let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
 
-        let mut mock_registry = MockModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::new();
+        let mut mock_registry = TestMockRegistry::new();
         mock_registry.expect_load().returning(|_| Ok(()));
         mock_registry.expect_root_module().return_const(None);
         mock_registry.expect_module_ids().return_const(Vec::new());
@@ -533,16 +441,25 @@ mod tests {
             .return_const(HashMap::new());
         mock_registry
             .expect_spawn_all()
-            .returning(|_, _, _, _| HashMap::new());
+            .returning(|_| HashMap::new());
 
         let canvas_factory =
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
+        let display_sender = Arc::new(display_tx);
+        let layout_sender = Arc::new(layout_tx);
+        let ui_sender = Arc::new(ui_tx);
+
         let app_result = CrankyApp::new(
             hub,
             config,
-            command_rx,
-            command_tx,
+            display_rx,
+            display_sender,
+            layout_rx,
+            layout_sender,
+            ui_rx,
+            ui_sender,
+            system_rx,
             surface_manager,
             canvas_factory,
             Box::new(mock_registry),
@@ -555,13 +472,14 @@ mod tests {
     async fn test_app_run_exit_on_display_error() {
         let config = Config::default();
         let hub = Arc::new(SignalHub::new(config.clone()));
-        let (command_tx, command_rx) = mpsc::channel(32);
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
 
         let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
 
-        let mut mock_registry = MockModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::new();
+        let mut mock_registry = TestMockRegistry::new();
         mock_registry.expect_load().returning(|_| Ok(()));
         mock_registry.expect_root_module().return_const(None);
         mock_registry.expect_module_ids().return_const(Vec::new());
@@ -573,7 +491,7 @@ mod tests {
             .return_const(HashMap::new());
         mock_registry
             .expect_spawn_all()
-            .returning(|_, _, _, _| HashMap::new());
+            .returning(|_| HashMap::new());
         mock_registry
             .expect_register_dbus_subscriptions()
             .returning(|_| Box::pin(std::future::ready(())));
@@ -582,11 +500,20 @@ mod tests {
         let canvas_factory =
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
+        let display_sender = Arc::new(display_tx);
+        let layout_sender = Arc::new(layout_tx);
+        let ui_sender = Arc::new(ui_tx);
+
         let mut app = CrankyApp::new(
             hub.clone(),
             config,
-            command_rx,
-            command_tx.clone(),
+            display_rx,
+            display_sender,
+            layout_rx,
+            layout_sender,
+            ui_rx,
+            ui_sender,
+            system_rx,
             surface_manager,
             canvas_factory,
             Box::new(mock_registry),
@@ -806,17 +733,19 @@ mod tests {
         assert_eq!(l3.bounds().x(), 1920 - padding_h - 80);
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn test_app_run_commands_and_signals() {
         let config = Config::default();
         let hub = Arc::new(SignalHub::new(config.clone()));
-        let (command_tx, command_rx) = mpsc::channel(32);
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
 
         let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
 
-        let mut mock_registry = MockModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::new();
+        let mut mock_registry = TestMockRegistry::new();
         mock_registry.expect_load().returning(|_| Ok(()));
         mock_registry.expect_root_module().return_const(None);
         mock_registry.expect_module_ids().return_const(Vec::new());
@@ -828,7 +757,7 @@ mod tests {
             .return_const(HashMap::new());
         mock_registry
             .expect_spawn_all()
-            .returning(|_, _, _, _| HashMap::new());
+            .returning(|_| HashMap::new());
         mock_registry
             .expect_register_dbus_subscriptions()
             .returning(|_| Box::pin(std::future::ready(())));
@@ -837,11 +766,20 @@ mod tests {
         let canvas_factory =
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
+        let display_sender = Arc::new(display_tx.clone());
+        let layout_sender = Arc::new(layout_tx.clone());
+        let ui_sender = Arc::new(ui_tx.clone());
+
         let mut app = CrankyApp::new(
             hub.clone(),
             config,
-            command_rx,
-            command_tx.clone(),
+            display_rx,
+            display_sender,
+            layout_rx,
+            layout_sender,
+            ui_rx,
+            ui_sender,
+            system_rx,
             surface_manager,
             canvas_factory,
             Box::new(mock_registry),
@@ -877,20 +815,23 @@ mod tests {
         mock_sni.expect_trigger_action().returning(|_, _, _| Ok(()));
 
         // Queue commands
-        command_tx.send(AppCommand::RequestRender).await.unwrap();
-        command_tx
-            .send(AppCommand::ModuleSizeChanged(
-                MonitorId::new("1"),
-                ModuleId::new(1),
-                Size::new(10, 10),
-            ))
+        display_tx
+            .send(DisplayCommand::RequestRender)
             .await
             .unwrap();
-        command_tx
-            .send(AppCommand::ShowTooltip {
+        layout_tx
+            .send(LayoutEvent::ModuleSizeChanged {
+                monitor_id: MonitorId::new("1"),
+                module_id: ModuleId::new(1),
+                size: Size::new(10, 10),
+            })
+            .await
+            .unwrap();
+        display_tx
+            .send(DisplayCommand::ShowTooltip {
                 layout: Box::new(crate::features::layout_engine::domain::StyledNode::Text {
                     path: crate::features::layout_engine::domain::NodePath::root(),
-                    text: crate::features::layout_engine::domain::TextContent::new("t".to_string()),
+                    text: crate::features::vdom::domain::TextContent::new("t".to_string()),
                     style: crate::features::styling::domain::ComputedStyle::default(),
                     on_click: None,
                     on_hover: None,
@@ -899,9 +840,9 @@ mod tests {
             })
             .await
             .unwrap();
-        command_tx.send(AppCommand::HideTooltip).await.unwrap();
-        command_tx
-            .send(AppCommand::SystrayAction {
+        display_tx.send(DisplayCommand::HideTooltip).await.unwrap();
+        ui_tx
+            .send(UiCommand::SystrayAction {
                 id: "a".into(),
                 action: "b".into(),
                 pos: None,
@@ -928,12 +869,13 @@ mod tests {
     async fn test_container_layouts_calculated_preserves_multi_monitors() {
         let config = Config::default();
         let hub = Arc::new(SignalHub::new(config.clone()));
-        let (command_tx, command_rx) = mpsc::channel(32);
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
         let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
 
-        let mut mock_registry = MockModuleRegistryPort::<
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-        >::new();
+        let mut mock_registry = TestMockRegistry::new();
         mock_registry.expect_load().returning(|_| Ok(()));
         mock_registry
             .expect_root_module()
@@ -977,9 +919,7 @@ mod tests {
             Box::new(crate::app::registry::WatchLayoutSender::new(layout_tx_1)),
         );
 
-        mock_registry
-            .expect_spawn_all()
-            .return_once(|_, _, _, _| senders);
+        mock_registry.expect_spawn_all().return_once(|_| senders);
         mock_registry
             .expect_register_dbus_subscriptions()
             .returning(|_| Box::pin(std::future::ready(())));
@@ -988,11 +928,20 @@ mod tests {
         let canvas_factory =
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
+        let display_sender = Arc::new(display_tx);
+        let layout_sender = Arc::new(layout_tx.clone());
+        let ui_sender = Arc::new(ui_tx);
+
         let mut app = CrankyApp::new(
             hub.clone(),
             config,
-            command_rx,
-            command_tx.clone(),
+            display_rx,
+            display_sender,
+            layout_rx,
+            layout_sender,
+            ui_rx,
+            ui_sender,
+            system_rx,
             surface_manager,
             canvas_factory,
             Box::new(mock_registry),
@@ -1000,8 +949,8 @@ mod tests {
         .unwrap();
 
         // 1. Send ContainerLayoutsCalculated for DP-1
-        command_tx
-            .send(AppCommand::ContainerLayoutsCalculated {
+        layout_tx
+            .send(LayoutEvent::ContainerLayoutsCalculated {
                 parent_id: ModuleId::new(0),
                 monitor_id: MonitorId::new("DP-1"),
                 layouts: vec![crate::shared::primitives::ChildModuleLayout::new(
@@ -1015,8 +964,8 @@ mod tests {
             .unwrap();
 
         // 2. Send ContainerLayoutsCalculated for DP-2
-        command_tx
-            .send(AppCommand::ContainerLayoutsCalculated {
+        layout_tx
+            .send(LayoutEvent::ContainerLayoutsCalculated {
                 parent_id: ModuleId::new(0),
                 monitor_id: MonitorId::new("DP-2"),
                 layouts: vec![crate::shared::primitives::ChildModuleLayout::new(

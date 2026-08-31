@@ -1,6 +1,12 @@
-use crate::app::registry::ModuleError;
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::shared::config::domain::{EngineId, FileExtension};
+use thiserror::Error;
+
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum ModuleError {
+    #[error("Internal module error: {message}")]
+    Internal { message: String },
+}
 
 pub trait ScriptEnginePort: Send + Sync {
     #[must_use]

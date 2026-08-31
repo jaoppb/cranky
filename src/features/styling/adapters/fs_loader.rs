@@ -1,6 +1,7 @@
-use crate::features::module_runtime::ports::CommandSender;
 use crate::features::styling::domain::{ComputedStyle, ElementQuery, StyleSheetName, StylingError};
-use crate::features::styling::ports::{ParsedStyleSheetPort, StyleLoaderPort, StyleResolverPort};
+use crate::features::styling::ports::{
+    ParsedStyleSheetPort, StyleLoaderPort, StyleReloadSender, StyleResolverPort,
+};
 use crate::shared::env::domain::AppEnvironment;
 use std::fs;
 use std::path::PathBuf;
@@ -120,7 +121,7 @@ impl StyleLoaderPort for FsStyleLoader {
 
     fn watch_styles(
         &self,
-        command_tx: Arc<dyn CommandSender>,
+        command_tx: Arc<dyn StyleReloadSender>,
     ) -> Result<Box<dyn notify::Watcher>, StylingError> {
         use notify::{Event, RecursiveMode, Watcher};
 
@@ -136,9 +137,7 @@ impl StyleLoaderPort for FsStyleLoader {
                     if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
                         tracing::debug!("Stylesheet modified: {:?}", path);
                         if let Ok(sheet_name) = StyleSheetName::new(stem) {
-                            command_tx.send_command(crate::app::commands::AppCommand::ReloadStyle(
-                                sheet_name,
-                            ));
+                            command_tx.reload_style(sheet_name);
                         }
                     }
                 }

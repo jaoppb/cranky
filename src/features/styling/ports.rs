@@ -1,6 +1,18 @@
-use crate::features::module_runtime::ports::CommandSender;
 use crate::features::styling::domain::{ComputedStyle, ElementQuery, StyleSheetName, StylingError};
 use std::sync::Arc;
+
+pub trait StyleReloadSender: Send + Sync {
+    fn reload_style(&self, name: StyleSheetName);
+}
+
+impl<F> StyleReloadSender for F
+where
+    F: Fn(StyleSheetName) + Send + Sync,
+{
+    fn reload_style(&self, name: StyleSheetName) {
+        self(name);
+    }
+}
 
 pub trait ParsedStyleSheetPort: Send + Sync {
     fn name(&self) -> &StyleSheetName;
@@ -42,7 +54,7 @@ pub trait StyleLoaderPort: Send + Sync {
     /// Returns `StylingError` if watcher initialization fails.
     fn watch_styles(
         &self,
-        command_tx: Arc<dyn CommandSender>,
+        command_tx: Arc<dyn StyleReloadSender>,
     ) -> Result<Box<dyn notify::Watcher>, StylingError>;
 }
 

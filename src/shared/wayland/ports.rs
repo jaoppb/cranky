@@ -1,6 +1,7 @@
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};
+pub use crate::shared::wayland::domain::{AppReadModel, ModuleLayout};
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -67,7 +68,7 @@ pub trait DisplayServerPort: Send + Sync {
     /// Returns `DisplayServerError` if rendering fails.
     fn render_all(
         &mut self,
-        read_model: &crate::app::state::AppReadModel,
+        read_model: &AppReadModel,
         layout_senders: &std::collections::HashMap<
             crate::shared::primitives::ModuleId,
             Box<dyn crate::features::module_runtime::ports::LayoutSender>,

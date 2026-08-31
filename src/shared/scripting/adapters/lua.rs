@@ -1,7 +1,6 @@
-use crate::app::commands::AppCommand;
 use crate::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
 use crate::features::styling::domain::{ClassNameList, ElementId, Orientation, ProgressValue};
-use crate::features::vdom::domain::{ClickHandlers, TextContent, VNode};
+use crate::features::vdom::domain::{ClickHandlers, TextContent, UiAction, VNode};
 use crate::shared::config::domain::ModuleConfig;
 use crate::shared::dbus::domain::{BusType, DBusSubscription};
 use crate::shared::events::core::PointerButton;
@@ -130,10 +129,10 @@ impl LuaStateSynchronizer {
     }
 }
 
-fn parse_app_command(lua: &Lua, val: Option<mlua::Value>) -> Option<AppCommand> {
+fn parse_ui_action(lua: &Lua, val: Option<mlua::Value>) -> Option<UiAction> {
     match val {
         Some(mlua::Value::Table(t)) => {
-            let cmd: Result<AppCommand, _> = lua.from_value(mlua::Value::Table(t));
+            let cmd: Result<UiAction, _> = lua.from_value(mlua::Value::Table(t));
             cmd.ok()
         }
         _ => None,
@@ -212,7 +211,7 @@ fn parse_click_handlers(lua: &Lua, val: Option<mlua::Value>) -> Option<ClickHand
         };
 
         if let Some(btn) = button_opt
-            && let Some(cmd) = parse_app_command(lua, Some(v))
+            && let Some(cmd) = parse_ui_action(lua, Some(v))
         {
             handlers.insert(btn, cmd);
         }
@@ -222,14 +221,14 @@ fn parse_click_handlers(lua: &Lua, val: Option<mlua::Value>) -> Option<ClickHand
         return Some(handlers);
     }
 
-    parse_app_command(lua, Some(mlua::Value::Table(t))).map(ClickHandlers::from_single)
+    parse_ui_action(lua, Some(mlua::Value::Table(t))).map(ClickHandlers::from_single)
 }
 
 type CommonProps = (
     Option<ClassNameList>,
     Option<ElementId>,
     Option<ClickHandlers>,
-    Option<AppCommand>,
+    Option<UiAction>,
     Option<Box<VNode>>,
 );
 
@@ -241,7 +240,7 @@ fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result<CommonProp
         .get::<Option<String>>("id")?
         .and_then(|s| ElementId::new(s).ok());
     let on_click = parse_click_handlers(lua, table.get::<Option<mlua::Value>>("on_click")?);
-    let on_hover = parse_app_command(lua, table.get::<Option<mlua::Value>>("on_hover")?);
+    let on_hover = parse_ui_action(lua, table.get::<Option<mlua::Value>>("on_hover")?);
     let tooltip = table
         .get::<Option<mlua::Value>>("tooltip")?
         .map(|tt| value_to_vnode(lua, tt).map(Box::new))
@@ -944,15 +943,15 @@ mod tests {
         let single_handlers = single_node.on_click().expect("on_click expected");
         assert_eq!(
             single_handlers.get(&PointerButton::Left),
-            Some(&AppCommand::Exec("echo single".into()))
+            Some(&UiAction::Exec("echo single".into()))
         );
         assert_eq!(
             single_handlers.get(&PointerButton::Right),
-            Some(&AppCommand::Exec("echo single".into()))
+            Some(&UiAction::Exec("echo single".into()))
         );
         assert_eq!(
             single_handlers.get(&PointerButton::Middle),
-            Some(&AppCommand::Exec("echo single".into()))
+            Some(&UiAction::Exec("echo single".into()))
         );
 
         // Multi-button map
@@ -972,19 +971,19 @@ mod tests {
         let multi_handlers = multi_node.on_click().expect("on_click expected");
         assert_eq!(
             multi_handlers.get(&PointerButton::Left),
-            Some(&AppCommand::Exec("echo left".into()))
+            Some(&UiAction::Exec("echo left".into()))
         );
         assert_eq!(
             multi_handlers.get(&PointerButton::Right),
-            Some(&AppCommand::Exec("echo right".into()))
+            Some(&UiAction::Exec("echo right".into()))
         );
         assert_eq!(
             multi_handlers.get(&PointerButton::Side),
-            Some(&AppCommand::Exec("echo side".into()))
+            Some(&UiAction::Exec("echo side".into()))
         );
         assert_eq!(
             multi_handlers.get(&PointerButton::Extra),
-            Some(&AppCommand::Exec("echo extra".into()))
+            Some(&UiAction::Exec("echo extra".into()))
         );
         assert_eq!(multi_handlers.get(&PointerButton::Middle), None);
     }
