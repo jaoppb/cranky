@@ -47,7 +47,7 @@ Cranky looks for its configuration file at `~/.config/cranky/config.toml`.
 name = "bar"
 height = 40
 left = ["workspace"]
-center = ["hour"]
+center = ["clock"]
 right = ["metrics", "systray"]
 
 [root.margin]
@@ -64,7 +64,7 @@ fps_limit = 30
 border_radius = 4.0
 active = { background_color = "#565f89" }
 
-[modules.hour]
+[modules.clock]
 format = "%H:%M:%S %d/%m/%Y"
 
 [modules.metrics]
@@ -85,7 +85,7 @@ show_icon = true
 Cranky is split into two main components:
 
 1. **Core Service:** Handles monitor discovery, Wayland surface management, configuration hot-reloading, and the module registry.
-2. **Module System:** An "addon-like" trait-based system where each module (`workspace`, `systray`, `hour`, etc.) implements a standard lifecycle: `init`, `update`, `measure`, and `render`.
+2. **Module System:** An "addon-like" trait-based system where each module (`workspace`, `systray`, `clock`, etc.) implements a standard lifecycle: `init`, `update`, `measure`, and `render`.
 
 ## 🧪 Development
 

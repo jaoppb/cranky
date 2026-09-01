@@ -1083,7 +1083,7 @@ mod tests {
         );
         let opts = ModuleOptions::new(opts_map);
         let module_node = VNode::new_module(
-            ModuleName::new("hour"),
+            ModuleName::new("clock"),
             Some(ModuleInstanceId::new("h1")),
             opts,
             None,
@@ -1096,7 +1096,7 @@ mod tests {
 
         let json = r#"{
             "type": "module",
-            "name": "hour",
+            "name": "clock",
             "instance_id": "h1",
             "options": {
                 "format": "%H:%M:%S"
@@ -1110,7 +1110,7 @@ mod tests {
             options,
         } = deserialized.kind()
         {
-            assert_eq!(name.as_str(), "hour");
+            assert_eq!(name.as_str(), "clock");
             assert_eq!(
                 instance_id
                     .as_ref()
@@ -1390,10 +1390,19 @@ mod tests {
 
         let resolver = MockResolver;
         let styled = grid_node.resolve_styles(&resolver, None, None);
-        if let StyledNode::Grid { children, style, .. } = styled {
+        if let StyledNode::Grid {
+            children, style, ..
+        } = styled
+        {
             assert_eq!(children.len(), 2);
-            assert_eq!(style.display(), Some(crate::features::styling::domain::DisplayMode::Grid));
-            assert_eq!(style.grid_auto_flow(), Some(crate::features::styling::domain::GridAutoFlow::Row));
+            assert_eq!(
+                style.display(),
+                Some(crate::features::styling::domain::DisplayMode::Grid)
+            );
+            assert_eq!(
+                style.grid_auto_flow(),
+                Some(crate::features::styling::domain::GridAutoFlow::Row)
+            );
         } else {
             panic!("Expected StyledNode::Grid");
         }

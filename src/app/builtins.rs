@@ -27,8 +27,11 @@ impl BuiltinModules {
     const BUILTINS: &[(&'static str, &'static str)] = &[
         ("bar.lua", include_str!("../../assets/widgets/bar.lua")),
         ("bar.rhai", include_str!("../../assets/widgets/bar.rhai")),
-        ("hour.lua", include_str!("../../assets/widgets/hour.lua")),
-        ("hour.rhai", include_str!("../../assets/widgets/hour.rhai")),
+        ("clock.lua", include_str!("../../assets/widgets/clock.lua")),
+        (
+            "clock.rhai",
+            include_str!("../../assets/widgets/clock.rhai"),
+        ),
         (
             "workspace.lua",
             include_str!("../../assets/widgets/workspace.lua"),
@@ -217,8 +220,8 @@ mod tests {
     fn test_ensure_builtins() {
         let env = get_test_env();
         let dir = BuiltinModules::ensure_builtins(&env).expect("ensure_builtins failed");
-        assert!(dir.join("hour.rhai").exists());
-        assert!(dir.join("hour.lua").exists());
+        assert!(dir.join("clock.rhai").exists());
+        assert!(dir.join("clock.lua").exists());
         assert!(dir.join("workspace.rhai").exists());
         assert!(dir.join("workspace.lua").exists());
         assert!(dir.join("systray.lua").exists());
@@ -266,22 +269,22 @@ mod tests {
     }
 
     #[test]
-    fn test_find_module_hour_rhai_format() {
+    fn test_find_module_clock_rhai_format() {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let mut hour_mod =
-            BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env).unwrap();
+        let mut clock_mod =
+            BuiltinModules::find_module(&ModuleName::new("clock"), &selection, &env).unwrap();
         let mut options_map = std::collections::HashMap::new();
         options_map.insert(
             "format".to_string(),
             crate::shared::primitives::DynamicValue::String("%H:%M".to_string()),
         );
         let options = crate::shared::primitives::ModuleOptions::new(options_map);
-        hour_mod
+        clock_mod
             .init(
                 &crate::shared::config::domain::ModuleConfig::new(
-                    ModuleName::new("hour"),
+                    ModuleName::new("clock"),
                     true,
                     selection.clone(),
                     options,
@@ -296,8 +299,8 @@ mod tests {
             .unwrap()
             .with_timezone(&chrono::Local);
         hub.time_tx().send(test_time).unwrap();
-        hour_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
-        let node = hour_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+        clock_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
+        let node = clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
         assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Text);
         if let crate::features::vdom::domain::VNodeKind::Text { text } = node.kind() {
             let expected = test_time.format("%H:%M").to_string();
@@ -312,7 +315,7 @@ mod tests {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
         let module =
-            BuiltinModules::find_module(&ModuleName::new("hour"), &EngineSelection::Auto, &env);
+            BuiltinModules::find_module(&ModuleName::new("clock"), &EngineSelection::Auto, &env);
         assert!(module.is_ok());
     }
 
@@ -321,7 +324,7 @@ mod tests {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let module = BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env);
+        let module = BuiltinModules::find_module(&ModuleName::new("clock"), &selection, &env);
         assert!(module.is_ok());
     }
 
@@ -330,7 +333,7 @@ mod tests {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("lua"));
-        let module = BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env);
+        let module = BuiltinModules::find_module(&ModuleName::new("clock"), &selection, &env);
         assert!(module.is_ok());
     }
 
@@ -339,14 +342,14 @@ mod tests {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();
         let selection = EngineSelection::Explicit(EngineId::new("python"));
-        let err = BuiltinModules::find_module(&ModuleName::new("hour"), &selection, &env)
+        let err = BuiltinModules::find_module(&ModuleName::new("clock"), &selection, &env)
             .err()
             .expect("Expected error");
         assert_eq!(
             err,
             BuiltinError::UnsupportedEngine {
                 engine: "python".to_string(),
-                module_name: ModuleName::new("hour"),
+                module_name: ModuleName::new("clock"),
             }
         );
     }

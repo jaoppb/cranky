@@ -534,7 +534,7 @@ mod tests {
 
         let adapter = DefaultVdomDiffAdapter::new();
         let m1 = VNode::new_module(
-            crate::shared::primitives::ModuleName::new("hour"),
+            crate::shared::primitives::ModuleName::new("clock"),
             None,
             ModuleOptions::default(),
             None,
@@ -546,7 +546,7 @@ mod tests {
         let mut opts_map = HashMap::new();
         opts_map.insert("format".to_string(), DynamicValue::from("%H:%M"));
         let m2 = VNode::new_module(
-            crate::shared::primitives::ModuleName::new("hour"),
+            crate::shared::primitives::ModuleName::new("clock"),
             None,
             ModuleOptions::new(opts_map),
             None,

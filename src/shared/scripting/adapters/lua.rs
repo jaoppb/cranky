@@ -34,7 +34,7 @@ impl LuaScriptLoader {
     #[must_use]
     pub fn load_built_in(name: &str) -> Option<String> {
         match name {
-            "hour" => Some(include_str!("../../../../assets/widgets/hour.lua").to_string()),
+            "clock" => Some(include_str!("../../../../assets/widgets/clock.lua").to_string()),
             "workspace" => {
                 Some(include_str!("../../../../assets/widgets/workspace.lua").to_string())
             }
@@ -269,15 +269,32 @@ fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
     let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
 
     let mut node = match typ.as_str() {
-        "flex" | "" => {
-            VNode::new_flex(parse_table_children(lua, &table)?, class, id, on_click, on_hover, tooltip)
-        }
-        "grid" => {
-            VNode::new_grid(parse_table_children(lua, &table)?, class, id, on_click, on_hover, tooltip)
-        }
+        "flex" | "" => VNode::new_flex(
+            parse_table_children(lua, &table)?,
+            class,
+            id,
+            on_click,
+            on_hover,
+            tooltip,
+        ),
+        "grid" => VNode::new_grid(
+            parse_table_children(lua, &table)?,
+            class,
+            id,
+            on_click,
+            on_hover,
+            tooltip,
+        ),
         "text" => {
             let text_str = parse_text_content(&table);
-            VNode::new_text(TextContent::new(text_str), class, id, on_click, on_hover, tooltip)
+            VNode::new_text(
+                TextContent::new(text_str),
+                class,
+                id,
+                on_click,
+                on_hover,
+                tooltip,
+            )
         }
         "progress" => {
             let value_num = table.get::<Option<f32>>("value")?.unwrap_or(0.0);
@@ -362,16 +379,8 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
         "flex",
         lua.create_function(|lua, table: mlua::Table| {
             let children_vec = parse_table_children(lua, &table)?;
-            let (class, id, on_click, on_hover, tooltip, popup) =
-                parse_common_props(lua, &table)?;
-            let mut node = VNode::new_flex(
-                children_vec,
-                class,
-                id,
-                on_click,
-                on_hover,
-                tooltip,
-            );
+            let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
+            let mut node = VNode::new_flex(children_vec, class, id, on_click, on_hover, tooltip);
             if let Some(p) = popup {
                 node = node.with_popup(p);
             }
@@ -383,16 +392,8 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
         "grid",
         lua.create_function(|lua, table: mlua::Table| {
             let children_vec = parse_table_children(lua, &table)?;
-            let (class, id, on_click, on_hover, tooltip, popup) =
-                parse_common_props(lua, &table)?;
-            let mut node = VNode::new_grid(
-                children_vec,
-                class,
-                id,
-                on_click,
-                on_hover,
-                tooltip,
-            );
+            let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
+            let mut node = VNode::new_grid(children_vec, class, id, on_click, on_hover, tooltip);
             if let Some(p) = popup {
                 node = node.with_popup(p);
             }
@@ -404,8 +405,7 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
         "text",
         lua.create_function(|lua, table: mlua::Table| {
             let text_str = parse_text_content(&table);
-            let (class, id, on_click, on_hover, tooltip, popup) =
-                parse_common_props(lua, &table)?;
+            let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
             let mut node = VNode::new_text(
                 TextContent::new(text_str),
                 class,
@@ -432,8 +432,7 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
                 "vertical" => Orientation::Vertical,
                 _ => Orientation::Horizontal,
             };
-            let (class, id, on_click, on_hover, tooltip, popup) =
-                parse_common_props(lua, &table)?;
+            let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
             let mut node = VNode::new_progress(
                 ProgressValue::new(value_num).unwrap_or_default(),
                 orientation,
@@ -453,8 +452,7 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
     vdom.set(
         "rect",
         lua.create_function(|lua, table: mlua::Table| {
-            let (class, id, on_click, on_hover, tooltip, popup) =
-                parse_common_props(lua, &table)?;
+            let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
             let mut node = VNode::new_rect(class, id, on_click, on_hover, tooltip);
             if let Some(p) = popup {
                 node = node.with_popup(p);
@@ -482,8 +480,7 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
             let name_str = table.get::<String>("name")?;
             let instance_id_str = table.get::<Option<String>>("instance_id")?;
             let options = parse_module_options(lua, &table)?;
-            let (class, id, on_click, on_hover, tooltip, popup) =
-                parse_common_props(lua, &table)?;
+            let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
             let mut node = VNode::new_module(
                 ModuleName::new(name_str),
                 instance_id_str.map(ModuleInstanceId::new),

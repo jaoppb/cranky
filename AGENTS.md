@@ -26,7 +26,7 @@ Architecture principles.
 
 ### The Module System
 
-Cranky is entirely modular. Every visual element (`workspace`, `hour`, `systray`,
+Cranky is entirely modular. Every visual element (`workspace`, `clock`, `systray`,
 `metrics`) is an isolated module.
 
 - **Scripting:** Built-in modules are written in either **Lua** or **Rhai**. The

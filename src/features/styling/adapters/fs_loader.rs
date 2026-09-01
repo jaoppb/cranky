@@ -37,7 +37,7 @@ impl FsStyleLoader {
     pub const BUILTIN_STYLES: &[(&'static str, &'static str)] = &[
         ("base", include_str!("../../../../assets/styles/base.css")),
         ("bar", include_str!("../../../../assets/styles/bar.css")),
-        ("hour", include_str!("../../../../assets/styles/hour.css")),
+        ("clock", include_str!("../../../../assets/styles/clock.css")),
         (
             "workspace",
             include_str!("../../../../assets/styles/workspace.css"),

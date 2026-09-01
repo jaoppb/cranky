@@ -516,7 +516,7 @@ mod tests {
     #[test]
     fn test_modules_config_dto() {
         let toml_str = r#"
-            [hour]
+            [clock]
             format = "%H:%M:%S"
 
             [workspace]
@@ -526,11 +526,11 @@ mod tests {
         "#;
         let dto: ModulesConfigDto = toml::from_str(toml_str).unwrap();
         let domain = dto.into_domain();
-        let hour = domain
-            .get(&crate::shared::primitives::ModuleName::new("hour"))
+        let clock = domain
+            .get(&crate::shared::primitives::ModuleName::new("clock"))
             .unwrap();
         assert_eq!(
-            hour.options().get("format").and_then(|v| v.as_str()),
+            clock.options().get("format").and_then(|v| v.as_str()),
             Some("%H:%M:%S")
         );
 

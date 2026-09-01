@@ -584,7 +584,7 @@ mod tests {
         opts_map.insert(
             "center".to_string(),
             crate::shared::primitives::DynamicValue::Array(vec![
-                crate::shared::primitives::DynamicValue::String("hour".to_string()),
+                crate::shared::primitives::DynamicValue::String("clock".to_string()),
             ]),
         );
         let opts = crate::shared::primitives::ModuleOptions::new(opts_map);
@@ -610,7 +610,7 @@ mod tests {
 
         let mut name_to_ids = HashMap::new();
         name_to_ids.insert(
-            crate::shared::primitives::ModuleName::new("hour"),
+            crate::shared::primitives::ModuleName::new("clock"),
             vec![crate::shared::primitives::ModuleId::new(1)],
         );
 
@@ -622,7 +622,7 @@ mod tests {
                 let mut m = HashMap::new();
                 m.insert(
                     crate::shared::primitives::ModuleId::new(1),
-                    crate::shared::primitives::ModuleName::new("hour"),
+                    crate::shared::primitives::ModuleName::new("clock"),
                 );
                 m
             },
@@ -935,7 +935,7 @@ mod tests {
         );
         names.insert(
             ModuleId::new(1),
-            crate::shared::primitives::ModuleName::new("hour"),
+            crate::shared::primitives::ModuleName::new("clock"),
         );
         mock_registry.expect_module_names().return_const(names);
         let mut name_to_ids = HashMap::new();
@@ -944,7 +944,7 @@ mod tests {
             vec![ModuleId::new(0)],
         );
         name_to_ids.insert(
-            crate::shared::primitives::ModuleName::new("hour"),
+            crate::shared::primitives::ModuleName::new("clock"),
             vec![ModuleId::new(1)],
         );
         mock_registry.expect_name_to_ids().return_const(name_to_ids);
@@ -1000,7 +1000,7 @@ mod tests {
                 monitor_id: MonitorId::new("DP-1"),
                 layouts: vec![crate::shared::primitives::ChildModuleLayout::new(
                     crate::shared::primitives::ModuleKey::from_name(
-                        crate::shared::primitives::ModuleName::new("hour"),
+                        crate::shared::primitives::ModuleName::new("clock"),
                     ),
                     Rect::new(Position::new(100, 0), Size::new(80, 24)),
                 )],
@@ -1015,7 +1015,7 @@ mod tests {
                 monitor_id: MonitorId::new("DP-2"),
                 layouts: vec![crate::shared::primitives::ChildModuleLayout::new(
                     crate::shared::primitives::ModuleKey::from_name(
-                        crate::shared::primitives::ModuleName::new("hour"),
+                        crate::shared::primitives::ModuleName::new("clock"),
                     ),
                     Rect::new(Position::new(150, 0), Size::new(80, 24)),
                 )],

@@ -403,7 +403,10 @@ impl HyprlandAdapter {
                                     Ok(_) => {
                                         let trimmed = line.trim();
                                         if !trimmed.is_empty() {
-                                            tracing::trace!(event = trimmed, "Hyprland event received");
+                                            tracing::trace!(
+                                                event = trimmed,
+                                                "Hyprland event received"
+                                            );
                                             batch_events.push(trimmed.to_string());
                                         }
                                         if let Some(event) = Self::parse_event(&line) {

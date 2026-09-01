@@ -561,7 +561,10 @@ mod tests {
         "#;
         let module = RhaiModule::new("test_grid".into(), source).unwrap();
         let render_node = module.render(&MonitorId::new("DP-1"));
-        assert_eq!(render_node.tag(), crate::features::vdom::domain::NodeTag::Grid);
+        assert_eq!(
+            render_node.tag(),
+            crate::features::vdom::domain::NodeTag::Grid
+        );
         assert_eq!(render_node.children().len(), 2);
     }
 }

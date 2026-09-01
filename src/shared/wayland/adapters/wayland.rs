@@ -204,10 +204,8 @@ pub struct WaylandState {
 
     font_system: FontSystem,
     swash_cache: SwashCache,
-    floating_surfaces: HashMap<
-        crate::features::layout_engine::domain::FloatingKind,
-        FloatingSurface,
-    >,
+    floating_surfaces:
+        HashMap<crate::features::layout_engine::domain::FloatingKind, FloatingSurface>,
     app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
 }
 

@@ -186,14 +186,16 @@ fn grid_track_to_max_track(track: &GridTrack) -> taffy::style::MaxTrackSizingFun
     }
 }
 
-fn grid_track_to_track_sizing_function(
-    track: &GridTrack,
-) -> taffy::style::TrackSizingFunction {
+fn grid_track_to_track_sizing_function(track: &GridTrack) -> taffy::style::TrackSizingFunction {
     match track {
-        GridTrack::MinMax(min_t, max_t) => {
-            minmax(grid_track_to_min_track(min_t), grid_track_to_max_track(max_t))
-        }
-        _ => minmax(grid_track_to_min_track(track), grid_track_to_max_track(track)),
+        GridTrack::MinMax(min_t, max_t) => minmax(
+            grid_track_to_min_track(min_t),
+            grid_track_to_max_track(max_t),
+        ),
+        _ => minmax(
+            grid_track_to_min_track(track),
+            grid_track_to_max_track(track),
+        ),
     }
 }
 
@@ -208,9 +210,9 @@ fn grid_track_to_template_component(
                 .collect();
             repeat(*count, non_rep)
         }
-        _ => taffy::style::GridTemplateComponent::Single(grid_track_to_track_sizing_function(
-            track,
-        )),
+        _ => {
+            taffy::style::GridTemplateComponent::Single(grid_track_to_track_sizing_function(track))
+        }
     }
 }
 
@@ -251,15 +253,14 @@ fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
     let col_gap = computed
         .column_gap()
         .or_else(|| computed.gap())
-        .map_or_else(|| LengthPercentage::length(0.0), |g| {
-            LengthPercentage::length(g.value() as f32)
-        });
-    let row_gap = computed
-        .row_gap()
-        .or_else(|| computed.gap())
-        .map_or_else(|| LengthPercentage::length(0.0), |g| {
-            LengthPercentage::length(g.value() as f32)
-        });
+        .map_or_else(
+            || LengthPercentage::length(0.0),
+            |g| LengthPercentage::length(g.value() as f32),
+        );
+    let row_gap = computed.row_gap().or_else(|| computed.gap()).map_or_else(
+        || LengthPercentage::length(0.0),
+        |g| LengthPercentage::length(g.value() as f32),
+    );
 
     let mut style = Style {
         position: computed.position().unwrap_or_default().into(),

@@ -43,8 +43,8 @@ mod tests {
 
     #[test]
     fn test_system_command_equality() {
-        let cmd1 = SystemCommand::ReloadModule(ModuleName::new("hour"));
-        let cmd2 = SystemCommand::ReloadModule(ModuleName::new("hour"));
+        let cmd1 = SystemCommand::ReloadModule(ModuleName::new("clock"));
+        let cmd2 = SystemCommand::ReloadModule(ModuleName::new("clock"));
         let cmd3 = SystemCommand::ReloadStyle(StyleSheetName::new("bar").unwrap());
         assert_eq!(cmd1, cmd2);
         assert_ne!(cmd1, cmd3);
@@ -54,11 +54,11 @@ mod tests {
     async fn test_channel_system_sender() {
         let (tx, mut rx) = tokio::sync::mpsc::channel(10);
         let sender = ChannelSystemSender::new(tx);
-        sender.send_system_command(SystemCommand::ReloadModule(ModuleName::new("hour")));
+        sender.send_system_command(SystemCommand::ReloadModule(ModuleName::new("clock")));
         let received = rx.try_recv().unwrap();
         assert_eq!(
             received,
-            SystemCommand::ReloadModule(ModuleName::new("hour"))
+            SystemCommand::ReloadModule(ModuleName::new("clock"))
         );
     }
 }

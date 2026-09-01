@@ -1075,7 +1075,9 @@ fn parse_track_list(s: &str) -> Vec<GridTrack> {
     }
 
     for token in tokens {
-        if let Some(inner) = token.strip_prefix("repeat(").and_then(|r| r.strip_suffix(')'))
+        if let Some(inner) = token
+            .strip_prefix("repeat(")
+            .and_then(|r| r.strip_suffix(')'))
             && let Some((count_str, track_str)) = inner.split_once(',')
             && let Ok(count) = count_str.trim().parse::<u16>()
         {
@@ -1637,7 +1639,13 @@ mod tests {
             .unwrap();
 
         let class_container = ClassName::new("container").unwrap();
-        let query_grid = ElementQuery::new("grid", None, std::slice::from_ref(&class_container), &[], None);
+        let query_grid = ElementQuery::new(
+            "grid",
+            None,
+            std::slice::from_ref(&class_container),
+            &[],
+            None,
+        );
         let style_grid = parsed.resolve_style(&query_grid);
 
         assert_eq!(style_grid.display(), Some(DisplayMode::Grid));
@@ -1647,29 +1655,41 @@ mod tests {
         );
         assert_eq!(
             style_grid.grid_template_rows(),
-            Some(&[
-                GridTrack::Px(50.0),
-                GridTrack::Auto,
-                GridTrack::MinMax(Box::new(GridTrack::Px(20.0)), Box::new(GridTrack::Fr(1.0))),
-            ][..])
+            Some(
+                &[
+                    GridTrack::Px(50.0),
+                    GridTrack::Auto,
+                    GridTrack::MinMax(Box::new(GridTrack::Px(20.0)), Box::new(GridTrack::Fr(1.0))),
+                ][..]
+            )
         );
         assert_eq!(style_grid.grid_auto_flow(), Some(GridAutoFlow::ColumnDense));
         assert_eq!(style_grid.column_gap().map(Gap::value), Some(12.0));
         assert_eq!(style_grid.row_gap().map(Gap::value), Some(8.0));
         assert_eq!(style_grid.justify_items(), Some(AlignItems::Center));
-        assert_eq!(style_grid.align_content(), Some(JustifyContent::SpaceBetween));
+        assert_eq!(
+            style_grid.align_content(),
+            Some(JustifyContent::SpaceBetween)
+        );
 
         let class_item = ClassName::new("item").unwrap();
-        let query_item = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None);
+        let query_item =
+            ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None);
         let style_item = parsed.resolve_style(&query_item);
 
         assert_eq!(
             style_item.grid_column(),
-            Some(&GridLinePlacement::new(GridPlacement::Line(1), GridPlacement::Span(2)))
+            Some(&GridLinePlacement::new(
+                GridPlacement::Line(1),
+                GridPlacement::Span(2)
+            ))
         );
         assert_eq!(
             style_item.grid_row(),
-            Some(&GridLinePlacement::new(GridPlacement::Span(3), GridPlacement::Auto))
+            Some(&GridLinePlacement::new(
+                GridPlacement::Span(3),
+                GridPlacement::Auto
+            ))
         );
         assert_eq!(style_item.justify_self(), Some(AlignItems::End));
     }

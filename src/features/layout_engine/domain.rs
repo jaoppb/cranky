@@ -2,15 +2,15 @@ use crate::features::vdom::domain::{ClickHandlers, UiAction};
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::{Rect, Size};
-use crate::shared::primitives::{BinaryData, ChildModuleLayout, ModuleId, ModuleKey, ModuleOptions, MonitorId};
+use crate::shared::primitives::{
+    BinaryData, ChildModuleLayout, ModuleId, ModuleKey, ModuleOptions, MonitorId,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FloatingKind {
     Tooltip,
-    Popup {
-        module_id: ModuleId,
-    },
+    Popup { module_id: ModuleId },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -381,7 +381,10 @@ pub struct AnchoredPopup<'a> {
 impl<'a> AnchoredPopup<'a> {
     #[must_use]
     pub const fn new(anchor_rect: Rect, layout: &'a StyledNode) -> Self {
-        Self { anchor_rect, layout }
+        Self {
+            anchor_rect,
+            layout,
+        }
     }
 
     #[must_use]
@@ -1053,7 +1056,10 @@ mod tests {
         let found = root.find_popup_with_anchor();
         assert!(found.is_some());
         let anchored = found.unwrap();
-        assert_eq!(*anchored.anchor_rect(), Rect::new(Position::new(10, 10), Size::new(40, 20)));
+        assert_eq!(
+            *anchored.anchor_rect(),
+            Rect::new(Position::new(10, 10), Size::new(40, 20))
+        );
         assert_eq!(anchored.layout(), &popup_styled);
     }
 }

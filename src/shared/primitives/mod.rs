@@ -417,10 +417,10 @@ mod tests {
             ModuleName::new("workspace"),
             Some(ModuleInstanceId::new("ws1")),
         );
-        let key2 = ModuleKey::from_name("hour");
+        let key2 = ModuleKey::from_name("clock");
 
         assert_eq!(key1.to_string(), "workspace:ws1");
-        assert_eq!(key2.to_string(), "hour");
+        assert_eq!(key2.to_string(), "clock");
 
         let mut sizes = ChildSizesMap::new();
         sizes.insert(key1.clone(), Size::new(100, 30));
@@ -428,7 +428,7 @@ mod tests {
 
         assert_eq!(sizes.get(&key1), Some(&Size::new(100, 30)));
         assert_eq!(
-            sizes.get_by_name_or_key(&ModuleName::new("hour"), None),
+            sizes.get_by_name_or_key(&ModuleName::new("clock"), None),
             Some(&Size::new(80, 25))
         );
         assert_eq!(

@@ -777,7 +777,7 @@ mod tests {
     fn test_module_config_engine() {
         let explicit = EngineSelection::Explicit(EngineId::new("rhai"));
         let cfg = ModuleConfig::new(
-            "hour".into(),
+            "clock".into(),
             true,
             explicit.clone(),
             ModuleOptions::default(),
@@ -788,7 +788,7 @@ mod tests {
             Some("rhai")
         );
         assert!(!cfg.engine().is_auto());
-        assert_eq!(cfg.name(), "hour");
+        assert_eq!(cfg.name(), "clock");
         assert!(cfg.is_enabled());
         assert!(cfg.options().is_empty());
 

@@ -611,7 +611,9 @@ mod tests {
         );
         event_loop.dispatch_render_outcome(&mon, &outcome1);
 
-        let cmd1 = display_rx.try_recv().expect("Should have sent ShowFloatingSurface");
+        let cmd1 = display_rx
+            .try_recv()
+            .expect("Should have sent ShowFloatingSurface");
         match cmd1 {
             DisplayCommand::ShowFloatingSurface {
                 kind,
@@ -621,7 +623,10 @@ mod tests {
             } => {
                 assert_eq!(kind, FloatingKind::Popup { module_id: id });
                 assert_eq!(monitor_id, Some(mon.clone()));
-                assert_eq!(anchor_rect, Some(Rect::new(Position::new(0, 0), Size::new(50, 20))));
+                assert_eq!(
+                    anchor_rect,
+                    Some(Rect::new(Position::new(0, 0), Size::new(50, 20)))
+                );
                 assert_eq!(*layout, popup_styled);
             }
             _ => panic!("Expected ShowFloatingSurface, got {cmd1:?}"),
@@ -645,7 +650,9 @@ mod tests {
         );
         event_loop.dispatch_render_outcome(&mon, &outcome2);
 
-        let cmd2 = display_rx.try_recv().expect("Should have sent HideFloatingSurface");
+        let cmd2 = display_rx
+            .try_recv()
+            .expect("Should have sent HideFloatingSurface");
         match cmd2 {
             DisplayCommand::HideFloatingSurface { kind } => {
                 assert_eq!(kind, FloatingKind::Popup { module_id: id });

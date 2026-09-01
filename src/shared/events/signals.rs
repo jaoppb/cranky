@@ -616,7 +616,9 @@ mod tests {
     #[test]
     fn test_workspace_creation_and_activation_with_monitor_inference() {
         use crate::features::workspaces::adapters::hyprland::HyprlandAdapter;
-        use crate::features::workspaces::domain::{Monitor, MonitorName, WorkspaceId, WorkspaceName};
+        use crate::features::workspaces::domain::{
+            Monitor, MonitorName, WorkspaceId, WorkspaceName,
+        };
         use crate::shared::events::core::WindowManagerEvent;
 
         let mut monitors = std::collections::BTreeMap::new();
@@ -661,7 +663,10 @@ mod tests {
 
         // Inconsistency validator must pass with zero inconsistencies
         let incs = HyprlandAdapter::find_state_inconsistencies(&state);
-        assert!(incs.is_empty(), "Expected no inconsistencies, got: {incs:?}");
+        assert!(
+            incs.is_empty(),
+            "Expected no inconsistencies, got: {incs:?}"
+        );
     }
 
     #[test]

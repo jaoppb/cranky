@@ -14,7 +14,7 @@ end
 function metadata()
 	return {
 		subscriptions = { "time" },
-		styles = { "hour" },
+		styles = { "clock" },
 	}
 end
 

@@ -4,7 +4,7 @@
 name = "bar"
 height = 40
 left = ["workspace"]
-center = ["hour"]
+center = ["clock"]
 right = ["metrics", "systray"]
 
 [root.margin]
@@ -30,7 +30,7 @@ temp_fahrenheit = false
 border_radius = 4.0
 active = { background_color = "#565f89" }
 
-[modules.hour]
+[modules.clock]
 format = "%H:%M:%S %d/%m/%Y"
 
 [modules.metrics]

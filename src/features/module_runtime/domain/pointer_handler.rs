@@ -301,12 +301,12 @@ impl PointerHandler {
                 let (actions, state_changed) = self.handle_pointer_leave(monitor_id);
                 PointerOutcome::new(actions, state_changed)
             }
-            PointerEvent::PopupDismissed => {
-                PointerOutcome::new(
-                    vec![PointerAction::CallFunction(FunctionName::new("on_popup_dismiss"))],
-                    true,
-                )
-            }
+            PointerEvent::PopupDismissed => PointerOutcome::new(
+                vec![PointerAction::CallFunction(FunctionName::new(
+                    "on_popup_dismiss",
+                ))],
+                true,
+            ),
             _ => PointerOutcome::empty(),
         }
     }

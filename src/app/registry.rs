@@ -497,7 +497,7 @@ mod tests {
         let toml_str = r#"
             [root]
             name = "bar"
-            left = ["hour"]
+            left = ["clock"]
         "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
@@ -574,7 +574,7 @@ mod tests {
         let toml_str = r#"
             [root]
             name = "bar"
-            left = ["hour"]
+            left = ["clock"]
         "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
@@ -599,7 +599,7 @@ mod tests {
         let toml_str = r#"
             [root]
             name = "bar"
-            left = ["hour"]
+            left = ["clock"]
         "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
@@ -629,7 +629,7 @@ mod tests {
         let toml_str = r#"
             [root]
             name = "bar"
-            left = ["hour"]
+            left = ["clock"]
         "#;
         let dto: ConfigDto = toml::from_str(toml_str).unwrap();
         let config = dto.into_domain(&MockValidator);
@@ -656,7 +656,7 @@ mod tests {
         TestRegistryPort::load(&mut registry, &config).unwrap();
         let senders = registry.spawn_all(&deps);
 
-        assert_eq!(senders.len(), 2); // bar + hour
+        assert_eq!(senders.len(), 2); // bar + clock
         assert!(registry.modules.is_empty());
         assert!(
             TestRegistryPort::active_signal_subscriptions(&registry)

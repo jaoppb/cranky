@@ -530,7 +530,7 @@ mod tests {
     async fn test_container_module_emits_container_layouts_calculated() {
         let id = ModuleId::new(0);
         let child_node = VNode::new_module(
-            crate::shared::primitives::ModuleName::new("hour"),
+            crate::shared::primitives::ModuleName::new("clock"),
             None,
             crate::shared::primitives::ModuleOptions::default(),
             None,
@@ -551,7 +551,7 @@ mod tests {
         let mut mon_map = crate::shared::primitives::ChildSizesMap::new();
         mon_map.insert(
             crate::shared::primitives::ModuleKey::from_name(
-                crate::shared::primitives::ModuleName::new("hour"),
+                crate::shared::primitives::ModuleName::new("clock"),
             ),
             Size::new(80, 24),
         );
@@ -580,7 +580,7 @@ mod tests {
                 assert_eq!(parent_id, id);
                 assert_eq!(monitor_id.as_str(), "DP-1");
                 assert_eq!(layouts.len(), 1);
-                assert_eq!(layouts[0].key().name().as_str(), "hour");
+                assert_eq!(layouts[0].key().name().as_str(), "clock");
                 assert_eq!(layouts[0].bounds().width(), 80);
                 assert_eq!(layouts[0].bounds().height(), 24);
                 found_container_layouts = true;

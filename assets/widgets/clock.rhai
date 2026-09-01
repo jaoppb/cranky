@@ -10,7 +10,7 @@ fn init() {
 fn metadata() {
     #{
         subscriptions: ["time"],
-        styles: ["hour"]
+        styles: ["clock"]
     }
 }
 
