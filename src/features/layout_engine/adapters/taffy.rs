@@ -5,7 +5,9 @@ use crate::features::layout_engine::domain::{
     AlignItems, FlexDirection, JustifyContent, PositionType, RenderNode, StyledNode, TextMeasurer,
 };
 use crate::features::layout_engine::ports::LayoutEnginePort;
-use crate::features::styling::domain::Orientation;
+use crate::features::styling::domain::{
+    DisplayMode, GridAutoFlow, GridLinePlacement, GridPlacement, GridTrack, Orientation,
+};
 use crate::shared::primitives::geometry::{Position, Rect, Size};
 use taffy::prelude::TaffyMaxContent;
 use taffy::{
@@ -159,6 +161,85 @@ impl From<crate::features::styling::domain::CssLength> for Dimension {
     }
 }
 
+use taffy::style_helpers::{
+    auto, fr, length, line, max_content, min_content, minmax, percent, repeat, span,
+};
+
+fn grid_track_to_min_track(track: &GridTrack) -> taffy::style::MinTrackSizingFunction {
+    match track {
+        GridTrack::Px(px) => length(*px),
+        GridTrack::Percent(pct) => percent(*pct / 100.0),
+        GridTrack::MinContent => min_content(),
+        GridTrack::MaxContent => max_content(),
+        _ => auto(),
+    }
+}
+
+fn grid_track_to_max_track(track: &GridTrack) -> taffy::style::MaxTrackSizingFunction {
+    match track {
+        GridTrack::Px(px) => length(*px),
+        GridTrack::Percent(pct) => percent(*pct / 100.0),
+        GridTrack::Fr(fr_val) => fr(*fr_val),
+        GridTrack::MinContent => min_content(),
+        GridTrack::MaxContent => max_content(),
+        _ => auto(),
+    }
+}
+
+fn grid_track_to_track_sizing_function(
+    track: &GridTrack,
+) -> taffy::style::TrackSizingFunction {
+    match track {
+        GridTrack::MinMax(min_t, max_t) => {
+            minmax(grid_track_to_min_track(min_t), grid_track_to_max_track(max_t))
+        }
+        _ => minmax(grid_track_to_min_track(track), grid_track_to_max_track(track)),
+    }
+}
+
+fn grid_track_to_template_component(
+    track: &GridTrack,
+) -> taffy::style::GridTemplateComponent<String> {
+    match track {
+        GridTrack::Repeat(count, sub_tracks) => {
+            let non_rep: Vec<taffy::style::TrackSizingFunction> = sub_tracks
+                .iter()
+                .map(grid_track_to_track_sizing_function)
+                .collect();
+            repeat(*count, non_rep)
+        }
+        _ => taffy::style::GridTemplateComponent::Single(grid_track_to_track_sizing_function(
+            track,
+        )),
+    }
+}
+
+fn grid_placement_to_taffy(placement: GridPlacement) -> taffy::style::GridPlacement<String> {
+    match placement {
+        GridPlacement::Auto => taffy::style::GridPlacement::Auto,
+        GridPlacement::Line(l) => line(l),
+        GridPlacement::Span(s) => span(s),
+    }
+}
+
+fn grid_line_placement_to_taffy(
+    line_placement: GridLinePlacement,
+) -> taffy::geometry::Line<taffy::style::GridPlacement<String>> {
+    taffy::geometry::Line {
+        start: grid_placement_to_taffy(line_placement.start()),
+        end: grid_placement_to_taffy(line_placement.end()),
+    }
+}
+
+const fn grid_auto_flow_to_taffy(flow: GridAutoFlow) -> taffy::style::GridAutoFlow {
+    match flow {
+        GridAutoFlow::Row => taffy::style::GridAutoFlow::Row,
+        GridAutoFlow::Column => taffy::style::GridAutoFlow::Column,
+        GridAutoFlow::RowDense => taffy::style::GridAutoFlow::RowDense,
+        GridAutoFlow::ColumnDense => taffy::style::GridAutoFlow::ColumnDense,
+    }
+}
+
 #[allow(
     clippy::as_conversions,
     clippy::cast_precision_loss,
@@ -167,10 +248,20 @@ impl From<crate::features::styling::domain::CssLength> for Dimension {
 )]
 fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
     let computed = node.style();
+    let col_gap = computed
+        .column_gap()
+        .or_else(|| computed.gap())
+        .map_or_else(|| LengthPercentage::length(0.0), |g| {
+            LengthPercentage::length(g.value() as f32)
+        });
+    let row_gap = computed
+        .row_gap()
+        .or_else(|| computed.gap())
+        .map_or_else(|| LengthPercentage::length(0.0), |g| {
+            LengthPercentage::length(g.value() as f32)
+        });
+
     let mut style = Style {
-        flex_direction: computed.flex_direction().unwrap_or_default().into(),
-        justify_content: computed.justify_content().map(Into::into),
-        align_items: computed.align_items().map(Into::into),
         position: computed.position().unwrap_or_default().into(),
         padding: computed
             .padding()
@@ -178,9 +269,72 @@ fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
         margin: computed
             .margin()
             .map_or_else(taffy::geometry::Rect::zero, Into::into),
-        gap: computed.gap().map_or_else(TaffySize::zero, Into::into),
+        gap: TaffySize {
+            width: col_gap,
+            height: row_gap,
+        },
+        justify_content: computed.justify_content().map(Into::into),
+        align_items: computed.align_items().map(Into::into),
         ..Default::default()
     };
+
+    let display_mode = match (computed.display(), node) {
+        (Some(mode), _) => mode,
+        (None, StyledNode::Grid { .. }) => DisplayMode::Grid,
+        (None, _) => DisplayMode::Flex,
+    };
+
+    match display_mode {
+        DisplayMode::Grid => {
+            style.display = taffy::style::Display::Grid;
+            if let Some(cols) = computed.grid_template_columns() {
+                style.grid_template_columns =
+                    cols.iter().map(grid_track_to_template_component).collect();
+            }
+            if let Some(rows) = computed.grid_template_rows() {
+                style.grid_template_rows =
+                    rows.iter().map(grid_track_to_template_component).collect();
+            }
+            if let Some(auto_cols) = computed.grid_auto_columns() {
+                style.grid_auto_columns = auto_cols
+                    .iter()
+                    .map(grid_track_to_track_sizing_function)
+                    .collect();
+            }
+            if let Some(auto_rows) = computed.grid_auto_rows() {
+                style.grid_auto_rows = auto_rows
+                    .iter()
+                    .map(grid_track_to_track_sizing_function)
+                    .collect();
+            }
+            if let Some(flow) = computed.grid_auto_flow() {
+                style.grid_auto_flow = grid_auto_flow_to_taffy(flow);
+            }
+            if let Some(ji) = computed.justify_items() {
+                style.justify_items = Some(ji.into());
+            }
+            if let Some(ac) = computed.align_content() {
+                style.align_content = Some(ac.into());
+            }
+        }
+        DisplayMode::Flex => {
+            style.display = taffy::style::Display::Flex;
+            style.flex_direction = computed.flex_direction().unwrap_or_default().into();
+        }
+        DisplayMode::None => {
+            style.display = taffy::style::Display::None;
+        }
+    }
+
+    if let Some(col) = computed.grid_column() {
+        style.grid_column = grid_line_placement_to_taffy(*col);
+    }
+    if let Some(row) = computed.grid_row() {
+        style.grid_row = grid_line_placement_to_taffy(*row);
+    }
+    if let Some(js) = computed.justify_self() {
+        style.justify_self = Some(js.into());
+    }
 
     if let Some(w) = computed.width() {
         style.size.width = w.into();
@@ -214,7 +368,7 @@ fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
     }
 
     match node {
-        StyledNode::Flex { .. } => style,
+        StyledNode::Flex { .. } | StyledNode::Grid { .. } => style,
         StyledNode::Text { text, style: s, .. } => {
             let text_size = measurer.measure(text.as_str(), s.font_family(), s.font_size());
             if computed.width().is_none() {
@@ -365,7 +519,7 @@ fn build_layout_state(
 ) -> Result<LayoutState, LayoutError> {
     let style = node_to_style(node, measurer);
 
-    if let StyledNode::Flex { children, .. } = node {
+    if let StyledNode::Flex { children, .. } | StyledNode::Grid { children, .. } = node {
         let mut state_children = Vec::new();
         let mut child_ids = Vec::new();
         for child in children {
@@ -410,6 +564,16 @@ fn diff<'a>(
                 style: old_style, ..
             },
             StyledNode::Flex {
+                style: new_style,
+                children: new_children,
+                ..
+            },
+        )
+        | (
+            StyledNode::Grid {
+                style: old_style, ..
+            },
+            StyledNode::Grid {
                 style: new_style,
                 children: new_children,
                 ..
@@ -688,6 +852,40 @@ fn build_render_tree(
                 popup: popup.clone(),
             })
         }
+        StyledNode::Grid {
+            path,
+            children,
+            style,
+            on_click,
+            on_hover,
+            tooltip,
+            popup,
+        } => {
+            let child_ids = taffy
+                .children(node_id)
+                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+            let mut render_children = Vec::new();
+
+            for (child, &child_id) in children.iter().zip(child_ids.iter()) {
+                render_children.push(build_render_tree(
+                    taffy,
+                    child_id,
+                    child,
+                    Position::new(abs_x, abs_y),
+                )?);
+            }
+
+            Ok(RenderNode::Grid {
+                path: path.clone(),
+                rect,
+                children: render_children,
+                style: style.clone(),
+                on_click: on_click.clone(),
+                on_hover: on_hover.clone(),
+                tooltip: tooltip.clone(),
+                popup: popup.clone(),
+            })
+        }
         StyledNode::Text {
             path,
             text,
@@ -921,5 +1119,61 @@ mod tests {
         assert_eq!(layouts.len(), 1);
         assert_eq!(layouts[0].key().name().as_str(), "workspace");
         assert_eq!(layouts[0].bounds().x(), 16);
+    }
+
+    #[test]
+    fn test_calculate_layout_grid() {
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+
+        let mut child1_style = ComputedStyle::default();
+        child1_style.set_width(crate::features::styling::domain::CssLength::Percent(100.0));
+        let child1 = StyledNode::Rect {
+            path: NodePath::new(vec![0]),
+            style: child1_style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+        };
+
+        let mut child2_style = ComputedStyle::default();
+        child2_style.set_width(crate::features::styling::domain::CssLength::Percent(100.0));
+        let child2 = StyledNode::Rect {
+            path: NodePath::new(vec![1]),
+            style: child2_style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+        };
+
+        let mut grid_style = ComputedStyle::default_for_grid();
+        grid_style.set_grid_template_columns(vec![GridTrack::Px(50.0), GridTrack::Px(100.0)]);
+        grid_style.set_column_gap(crate::features::layout_engine::domain::Gap::new(10.0));
+
+        let grid = StyledNode::Grid {
+            path: NodePath::root(),
+            children: vec![child1, child2],
+            style: grid_style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+        };
+
+        let render_tree = adapter
+            .calculate_layout(grid, &mut measurer, Position::new(0, 0))
+            .unwrap();
+
+        if let RenderNode::Grid { children, .. } = render_tree {
+            assert_eq!(children.len(), 2);
+            assert_eq!(children[0].rect().x(), 0);
+            assert_eq!(children[0].rect().width(), 50);
+            assert_eq!(children[1].rect().x(), 60); // 50 + 10 gap
+            assert_eq!(children[1].rect().width(), 100);
+        } else {
+            panic!("Expected RenderNode::Grid");
+        }
     }
 }

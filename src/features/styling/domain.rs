@@ -453,6 +453,66 @@ impl CssLength {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DisplayMode {
+    Flex,
+    Grid,
+    None,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum GridAutoFlow {
+    #[default]
+    Row,
+    Column,
+    RowDense,
+    ColumnDense,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum GridTrack {
+    Px(f32),
+    Percent(f32),
+    Fr(f32),
+    Auto,
+    MinContent,
+    MaxContent,
+    MinMax(Box<Self>, Box<Self>),
+    Repeat(u16, Vec<Self>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub enum GridPlacement {
+    #[default]
+    Auto,
+    Line(i16),
+    Span(u16),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
+pub struct GridLinePlacement {
+    start: GridPlacement,
+    end: GridPlacement,
+}
+
+impl GridLinePlacement {
+    #[must_use]
+    pub const fn new(start: GridPlacement, end: GridPlacement) -> Self {
+        Self { start, end }
+    }
+
+    #[must_use]
+    pub const fn start(&self) -> GridPlacement {
+        self.start
+    }
+
+    #[must_use]
+    pub const fn end(&self) -> GridPlacement {
+        self.end
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PseudoClass {
     Hover,
@@ -485,9 +545,22 @@ pub struct ComputedStyle {
     padding: Option<BoxMargin>,
     margin: Option<BoxMargin>,
     gap: Option<Gap>,
+    column_gap: Option<Gap>,
+    row_gap: Option<Gap>,
+    display: Option<DisplayMode>,
     flex_direction: Option<FlexDirection>,
     justify_content: Option<JustifyContent>,
     align_items: Option<AlignItems>,
+    justify_items: Option<AlignItems>,
+    justify_self: Option<AlignItems>,
+    align_content: Option<JustifyContent>,
+    grid_template_columns: Option<Vec<GridTrack>>,
+    grid_template_rows: Option<Vec<GridTrack>>,
+    grid_auto_columns: Option<Vec<GridTrack>>,
+    grid_auto_rows: Option<Vec<GridTrack>>,
+    grid_auto_flow: Option<GridAutoFlow>,
+    grid_column: Option<GridLinePlacement>,
+    grid_row: Option<GridLinePlacement>,
     position: Option<PositionType>,
     opacity: Option<Opacity>,
     flex_grow: Option<FlexGrow>,
@@ -497,6 +570,25 @@ pub struct ComputedStyle {
 }
 
 impl ComputedStyle {
+    #[must_use]
+    pub fn default_for_flex() -> Self {
+        Self {
+            display: Some(DisplayMode::Flex),
+            flex_direction: Some(FlexDirection::Row),
+            align_items: Some(AlignItems::Start),
+            ..Default::default()
+        }
+    }
+
+    #[must_use]
+    pub fn default_for_grid() -> Self {
+        Self {
+            display: Some(DisplayMode::Grid),
+            grid_auto_flow: Some(GridAutoFlow::Row),
+            ..Default::default()
+        }
+    }
+
     #[must_use]
     pub const fn background(&self) -> Option<&DrawingColor> {
         self.background.as_ref()
@@ -566,6 +658,18 @@ impl ComputedStyle {
         self.gap.as_ref()
     }
     #[must_use]
+    pub const fn column_gap(&self) -> Option<&Gap> {
+        self.column_gap.as_ref()
+    }
+    #[must_use]
+    pub const fn row_gap(&self) -> Option<&Gap> {
+        self.row_gap.as_ref()
+    }
+    #[must_use]
+    pub const fn display(&self) -> Option<DisplayMode> {
+        self.display
+    }
+    #[must_use]
     pub const fn flex_direction(&self) -> Option<FlexDirection> {
         self.flex_direction
     }
@@ -576,6 +680,46 @@ impl ComputedStyle {
     #[must_use]
     pub const fn align_items(&self) -> Option<AlignItems> {
         self.align_items
+    }
+    #[must_use]
+    pub const fn justify_items(&self) -> Option<AlignItems> {
+        self.justify_items
+    }
+    #[must_use]
+    pub const fn justify_self(&self) -> Option<AlignItems> {
+        self.justify_self
+    }
+    #[must_use]
+    pub const fn align_content(&self) -> Option<JustifyContent> {
+        self.align_content
+    }
+    #[must_use]
+    pub fn grid_template_columns(&self) -> Option<&[GridTrack]> {
+        self.grid_template_columns.as_deref()
+    }
+    #[must_use]
+    pub fn grid_template_rows(&self) -> Option<&[GridTrack]> {
+        self.grid_template_rows.as_deref()
+    }
+    #[must_use]
+    pub fn grid_auto_columns(&self) -> Option<&[GridTrack]> {
+        self.grid_auto_columns.as_deref()
+    }
+    #[must_use]
+    pub fn grid_auto_rows(&self) -> Option<&[GridTrack]> {
+        self.grid_auto_rows.as_deref()
+    }
+    #[must_use]
+    pub const fn grid_auto_flow(&self) -> Option<GridAutoFlow> {
+        self.grid_auto_flow
+    }
+    #[must_use]
+    pub const fn grid_column(&self) -> Option<&GridLinePlacement> {
+        self.grid_column.as_ref()
+    }
+    #[must_use]
+    pub const fn grid_row(&self) -> Option<&GridLinePlacement> {
+        self.grid_row.as_ref()
     }
     #[must_use]
     pub const fn position(&self) -> Option<PositionType> {
@@ -653,6 +797,15 @@ impl ComputedStyle {
     pub const fn set_gap(&mut self, gap: Gap) {
         self.gap = Some(gap);
     }
+    pub const fn set_column_gap(&mut self, column_gap: Gap) {
+        self.column_gap = Some(column_gap);
+    }
+    pub const fn set_row_gap(&mut self, row_gap: Gap) {
+        self.row_gap = Some(row_gap);
+    }
+    pub const fn set_display(&mut self, display: DisplayMode) {
+        self.display = Some(display);
+    }
     pub const fn set_flex_direction(&mut self, flex_direction: FlexDirection) {
         self.flex_direction = Some(flex_direction);
     }
@@ -661,6 +814,36 @@ impl ComputedStyle {
     }
     pub const fn set_align_items(&mut self, align_items: AlignItems) {
         self.align_items = Some(align_items);
+    }
+    pub const fn set_justify_items(&mut self, justify_items: AlignItems) {
+        self.justify_items = Some(justify_items);
+    }
+    pub const fn set_justify_self(&mut self, justify_self: AlignItems) {
+        self.justify_self = Some(justify_self);
+    }
+    pub const fn set_align_content(&mut self, align_content: JustifyContent) {
+        self.align_content = Some(align_content);
+    }
+    pub fn set_grid_template_columns(&mut self, grid_template_columns: Vec<GridTrack>) {
+        self.grid_template_columns = Some(grid_template_columns);
+    }
+    pub fn set_grid_template_rows(&mut self, grid_template_rows: Vec<GridTrack>) {
+        self.grid_template_rows = Some(grid_template_rows);
+    }
+    pub fn set_grid_auto_columns(&mut self, grid_auto_columns: Vec<GridTrack>) {
+        self.grid_auto_columns = Some(grid_auto_columns);
+    }
+    pub fn set_grid_auto_rows(&mut self, grid_auto_rows: Vec<GridTrack>) {
+        self.grid_auto_rows = Some(grid_auto_rows);
+    }
+    pub const fn set_grid_auto_flow(&mut self, grid_auto_flow: GridAutoFlow) {
+        self.grid_auto_flow = Some(grid_auto_flow);
+    }
+    pub const fn set_grid_column(&mut self, grid_column: GridLinePlacement) {
+        self.grid_column = Some(grid_column);
+    }
+    pub const fn set_grid_row(&mut self, grid_row: GridLinePlacement) {
+        self.grid_row = Some(grid_row);
     }
     pub const fn set_position(&mut self, position: PositionType) {
         self.position = Some(position);
@@ -682,84 +865,57 @@ impl ComputedStyle {
     }
 
     pub fn merge_with(&mut self, other: &Self) {
-        if other.background.is_some() {
-            self.background.clone_from(&other.background);
+        macro_rules! merge_fields {
+            ($($field:ident),* $(,)?) => {
+                $(
+                    if other.$field.is_some() {
+                        self.$field.clone_from(&other.$field);
+                    }
+                )*
+            };
         }
-        if other.color.is_some() {
-            self.color.clone_from(&other.color);
-        }
-        if other.accent_color.is_some() {
-            self.accent_color.clone_from(&other.accent_color);
-        }
-        if other.font_family.is_some() {
-            self.font_family.clone_from(&other.font_family);
-        }
-        if other.font_size.is_some() {
-            self.font_size = other.font_size;
-        }
-        if other.border_size.is_some() {
-            self.border_size = other.border_size;
-        }
-        if other.border_color.is_some() {
-            self.border_color.clone_from(&other.border_color);
-        }
-        if other.border_radius.is_some() {
-            self.border_radius = other.border_radius;
-        }
-        if other.width.is_some() {
-            self.width = other.width;
-        }
-        if other.height.is_some() {
-            self.height = other.height;
-        }
-        if other.min_width.is_some() {
-            self.min_width = other.min_width;
-        }
-        if other.min_height.is_some() {
-            self.min_height = other.min_height;
-        }
-        if other.max_width.is_some() {
-            self.max_width = other.max_width;
-        }
-        if other.max_height.is_some() {
-            self.max_height = other.max_height;
-        }
-        if other.padding.is_some() {
-            self.padding.clone_from(&other.padding);
-        }
-        if other.margin.is_some() {
-            self.margin.clone_from(&other.margin);
-        }
-        if other.gap.is_some() {
-            self.gap.clone_from(&other.gap);
-        }
-        if other.flex_direction.is_some() {
-            self.flex_direction = other.flex_direction;
-        }
-        if other.justify_content.is_some() {
-            self.justify_content = other.justify_content;
-        }
-        if other.align_items.is_some() {
-            self.align_items = other.align_items;
-        }
-        if other.position.is_some() {
-            self.position = other.position;
-        }
-        if other.opacity.is_some() {
-            self.opacity = other.opacity;
-        }
-        if other.flex_grow.is_some() {
-            self.flex_grow = other.flex_grow;
-        }
-        if other.flex_shrink.is_some() {
-            self.flex_shrink = other.flex_shrink;
-        }
-        if other.flex_basis.is_some() {
-            self.flex_basis = other.flex_basis;
-        }
-        if other.align_self.is_some() {
-            self.align_self = other.align_self;
-        }
+
+        merge_fields!(
+            background,
+            color,
+            accent_color,
+            font_family,
+            font_size,
+            border_size,
+            border_color,
+            border_radius,
+            width,
+            height,
+            min_width,
+            min_height,
+            max_width,
+            max_height,
+            padding,
+            margin,
+            gap,
+            column_gap,
+            row_gap,
+            display,
+            flex_direction,
+            justify_content,
+            align_items,
+            justify_items,
+            justify_self,
+            align_content,
+            grid_template_columns,
+            grid_template_rows,
+            grid_auto_columns,
+            grid_auto_rows,
+            grid_auto_flow,
+            grid_column,
+            grid_row,
+            position,
+            opacity,
+            flex_grow,
+            flex_shrink,
+            flex_basis,
+            align_self,
+        );
     }
 }
 

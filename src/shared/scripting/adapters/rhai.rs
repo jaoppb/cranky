@@ -537,4 +537,31 @@ mod tests {
         );
         assert_eq!(multi_handlers.get(&PointerButton::Middle), None);
     }
+
+    #[test]
+    fn test_rhai_render_grid() {
+        let source = r#"
+            fn init() {}
+            fn refresh() {}
+            fn render(monitor) {
+                return #{
+                    type: "grid",
+                    children: [
+                        #{
+                            type: "text",
+                            text: "Grid item 1"
+                        },
+                        #{
+                            type: "text",
+                            text: "Grid item 2"
+                        }
+                    ]
+                };
+            }
+        "#;
+        let module = RhaiModule::new("test_grid".into(), source).unwrap();
+        let render_node = module.render(&MonitorId::new("DP-1"));
+        assert_eq!(render_node.tag(), crate::features::vdom::domain::NodeTag::Grid);
+        assert_eq!(render_node.children().len(), 2);
+    }
 }

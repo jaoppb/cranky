@@ -298,6 +298,7 @@ impl<'de> Deserialize<'de> for NodeKey {
 #[serde(rename_all = "snake_case")]
 pub enum NodeTag {
     Flex,
+    Grid,
     Text,
     Progress,
     Rect,
@@ -310,6 +311,7 @@ impl NodeTag {
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Flex => "flex",
+            Self::Grid => "grid",
             Self::Text => "text",
             Self::Progress => "progress",
             Self::Rect => "rect",
@@ -320,7 +322,7 @@ impl NodeTag {
 
     #[must_use]
     pub const fn is_container(&self) -> bool {
-        matches!(self, Self::Flex)
+        matches!(self, Self::Flex | Self::Grid)
     }
 
     #[must_use]
@@ -384,6 +386,11 @@ impl std::fmt::Display for TextContent {
 pub enum VNodeKind {
     #[serde(rename = "flex")]
     Flex {
+        #[serde(default)]
+        children: Vec<VNode>,
+    },
+    #[serde(rename = "grid")]
+    Grid {
         #[serde(default)]
         children: Vec<VNode>,
     },
@@ -452,6 +459,28 @@ impl VNode {
             tooltip,
             popup: None,
             kind: VNodeKind::Flex { children },
+        }
+    }
+
+    #[must_use]
+    pub fn new_grid(
+        children: Vec<Self>,
+        class: Option<ClassNameList>,
+        id: Option<ElementId>,
+        on_click: Option<ClickHandlers>,
+        on_hover: Option<UiAction>,
+        tooltip: Option<Box<Self>>,
+    ) -> Self {
+        Self {
+            node_id: NodeId::new(),
+            key: None,
+            id,
+            class,
+            on_click,
+            on_hover,
+            tooltip,
+            popup: None,
+            kind: VNodeKind::Grid { children },
         }
     }
 
@@ -636,6 +665,7 @@ impl VNode {
     pub const fn tag(&self) -> NodeTag {
         match &self.kind {
             VNodeKind::Flex { .. } => NodeTag::Flex,
+            VNodeKind::Grid { .. } => NodeTag::Grid,
             VNodeKind::Text { .. } => NodeTag::Text,
             VNodeKind::Progress { .. } => NodeTag::Progress,
             VNodeKind::Rect => NodeTag::Rect,
@@ -656,14 +686,14 @@ impl VNode {
     #[must_use]
     pub const fn children(&self) -> &[Self] {
         match &self.kind {
-            VNodeKind::Flex { children } => children.as_slice(),
+            VNodeKind::Flex { children } | VNodeKind::Grid { children } => children.as_slice(),
             _ => &[],
         }
     }
 
     pub const fn children_mut(&mut self) -> Option<&mut Vec<Self>> {
         match &mut self.kind {
-            VNodeKind::Flex { children } => Some(children),
+            VNodeKind::Flex { children } | VNodeKind::Grid { children } => Some(children),
             _ => None,
         }
     }
@@ -671,7 +701,7 @@ impl VNode {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         match &self.kind {
-            VNodeKind::Flex { children } => children.is_empty(),
+            VNodeKind::Flex { children } | VNodeKind::Grid { children } => children.is_empty(),
             VNodeKind::Text { text } => text.as_str().trim().is_empty(),
             _ => false,
         }
@@ -707,7 +737,13 @@ impl VNode {
         )
         .with_structural_context(child_index, total_children, self.is_empty());
 
-        let style = resolver.resolve_style(&query);
+        let mut style = match &self.kind {
+            VNodeKind::Flex { .. } => ComputedStyle::default_for_flex(),
+            VNodeKind::Grid { .. } => ComputedStyle::default_for_grid(),
+            _ => ComputedStyle::default(),
+        };
+        style.merge_with(&resolver.resolve_style(&query));
+
         let styled_tooltip = self.tooltip.as_ref().map(|t| {
             Box::new(t.resolve_styles_recursive(resolver, interaction, &path.child(0), 0, 1, None))
         });
@@ -715,24 +751,25 @@ impl VNode {
             Box::new(p.resolve_styles_recursive(resolver, interaction, &path.child(0), 0, 1, None))
         });
 
-        let styled_children = if let VNodeKind::Flex { children } = &self.kind {
-            let total = children.len();
-            children
-                .iter()
-                .enumerate()
-                .map(|(idx, child)| {
-                    child.resolve_styles_recursive(
-                        resolver,
-                        interaction,
-                        &path.child(idx),
-                        idx,
-                        total,
-                        Some(&query),
-                    )
-                })
-                .collect()
-        } else {
-            Vec::new()
+        let styled_children = match &self.kind {
+            VNodeKind::Flex { children } | VNodeKind::Grid { children } => {
+                let total = children.len();
+                children
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, child)| {
+                        child.resolve_styles_recursive(
+                            resolver,
+                            interaction,
+                            &path.child(idx),
+                            idx,
+                            total,
+                            Some(&query),
+                        )
+                    })
+                    .collect()
+            }
+            _ => Vec::new(),
         };
 
         self.map_to_styled_node(path, style, styled_tooltip, styled_popup, styled_children)
@@ -748,6 +785,15 @@ impl VNode {
     ) -> StyledNode {
         match &self.kind {
             VNodeKind::Flex { .. } => StyledNode::Flex {
+                path: path.clone(),
+                children: styled_children,
+                style,
+                on_click: self.on_click.clone(),
+                on_hover: self.on_hover.clone(),
+                tooltip: styled_tooltip,
+                popup: styled_popup,
+            },
+            VNodeKind::Grid { .. } => StyledNode::Grid {
                 path: path.clone(),
                 children: styled_children,
                 style,
@@ -1309,5 +1355,60 @@ mod tests {
         let resolver = MockResolver;
         let styled = button.resolve_styles(&resolver, None, None);
         assert!(styled.popup().is_some());
+    }
+
+    #[test]
+    fn test_vnode_grid_creation_and_resolution() {
+        struct MockResolver;
+        impl StyleResolverPort for MockResolver {
+            fn resolve_style(&self, _query: &ElementQuery) -> ComputedStyle {
+                ComputedStyle::default()
+            }
+        }
+
+        let child1 = VNode::new_text(
+            TextContent::new("Item 1".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let child2 = VNode::new_text(
+            TextContent::new("Item 2".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let grid_node = VNode::new_grid(vec![child1, child2], None, None, None, None, None);
+        assert_eq!(grid_node.tag(), NodeTag::Grid);
+        assert!(grid_node.tag().is_container());
+        assert_eq!(grid_node.children().len(), 2);
+
+        let resolver = MockResolver;
+        let styled = grid_node.resolve_styles(&resolver, None, None);
+        if let StyledNode::Grid { children, style, .. } = styled {
+            assert_eq!(children.len(), 2);
+            assert_eq!(style.display(), Some(crate::features::styling::domain::DisplayMode::Grid));
+            assert_eq!(style.grid_auto_flow(), Some(crate::features::styling::domain::GridAutoFlow::Row));
+        } else {
+            panic!("Expected StyledNode::Grid");
+        }
+    }
+
+    #[test]
+    fn test_grid_json_deserialization() {
+        let json = r#"{
+            "type": "grid",
+            "children": [
+                { "type": "text", "text": "Cell 1" }
+            ]
+        }"#;
+        let node: VNode = serde_json::from_str(json).unwrap();
+        assert_eq!(node.tag(), NodeTag::Grid);
+        assert_eq!(node.children().len(), 1);
     }
 }

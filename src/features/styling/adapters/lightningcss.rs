@@ -2,8 +2,9 @@ use crate::features::layout_engine::domain::{
     AlignItems, BoxMargin, FlexDirection, Gap, JustifyContent, PositionType,
 };
 use crate::features::styling::domain::{
-    ComputedStyle, CssLength, ElementQuery, FlexGrow, FlexShrink, Opacity, PseudoClass,
-    StyleSheetName, StylingError,
+    ComputedStyle, CssLength, DisplayMode, ElementQuery, FlexGrow, FlexShrink, GridAutoFlow,
+    GridLinePlacement, GridPlacement, GridTrack, Opacity, PseudoClass, StyleSheetName,
+    StylingError,
 };
 use crate::features::styling::ports::{CssParserPort, ParsedStyleSheetPort};
 use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSize};
@@ -711,6 +712,13 @@ fn apply_flex_container_properties(style: &mut ComputedStyle, prop: &Property) -
                 .unwrap_or_default();
             let row = parse_length_str(&row_str);
             style.set_gap(Gap::new(f64::from(row)));
+            style.set_row_gap(Gap::new(f64::from(row)));
+            let col_str = gap
+                .column
+                .to_css_string(PrinterOptions::default())
+                .unwrap_or_default();
+            let col = parse_length_str(&col_str);
+            style.set_column_gap(Gap::new(f64::from(col)));
             true
         }
         Property::FlexDirection(dir, _) => {
@@ -834,6 +842,284 @@ fn apply_flex_item_properties(style: &mut ComputedStyle, prop: &Property) -> boo
     }
 }
 
+fn apply_display_and_gap_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+    let Ok(full) = prop.to_css_string(false, PrinterOptions::default()) else {
+        return false;
+    };
+    let (name, val) = full
+        .split_once(':')
+        .map_or(("", full.as_str()), |(k, v)| (k.trim(), v.trim()));
+
+    if name == "display" {
+        let mode = match val {
+            "grid" => Some(DisplayMode::Grid),
+            "flex" => Some(DisplayMode::Flex),
+            "none" => Some(DisplayMode::None),
+            _ => None,
+        };
+        if let Some(m) = mode {
+            style.set_display(m);
+            return true;
+        }
+    } else if name == "column-gap" {
+        let len = parse_length_str(val);
+        style.set_column_gap(Gap::new(f64::from(len)));
+        return true;
+    } else if name == "row-gap" {
+        let len = parse_length_str(val);
+        style.set_row_gap(Gap::new(f64::from(len)));
+        return true;
+    }
+    false
+}
+
+fn apply_grid_container_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+    let Ok(full) = prop.to_css_string(false, PrinterOptions::default()) else {
+        return false;
+    };
+    let (name, val) = full
+        .split_once(':')
+        .map_or(("", full.as_str()), |(k, v)| (k.trim(), v.trim()));
+
+    match name {
+        "grid-template-columns" => {
+            let tracks = parse_track_list(val);
+            style.set_grid_template_columns(tracks);
+            true
+        }
+        "grid-template-rows" => {
+            let tracks = parse_track_list(val);
+            style.set_grid_template_rows(tracks);
+            true
+        }
+        "grid-auto-columns" => {
+            let tracks = parse_track_list(val);
+            style.set_grid_auto_columns(tracks);
+            true
+        }
+        "grid-auto-rows" => {
+            let tracks = parse_track_list(val);
+            style.set_grid_auto_rows(tracks);
+            true
+        }
+        "grid-auto-flow" => {
+            let flow = match val {
+                "column" => GridAutoFlow::Column,
+                "row dense" | "dense row" => GridAutoFlow::RowDense,
+                "column dense" | "dense column" => GridAutoFlow::ColumnDense,
+                _ => GridAutoFlow::Row,
+            };
+            style.set_grid_auto_flow(flow);
+            true
+        }
+        "justify-items" => {
+            let align = match val {
+                "center" => AlignItems::Center,
+                "end" | "flex-end" => AlignItems::End,
+                "stretch" => AlignItems::Stretch,
+                _ => AlignItems::Start,
+            };
+            style.set_justify_items(align);
+            true
+        }
+        "align-content" => {
+            let jc = if val.contains("space-between") {
+                JustifyContent::SpaceBetween
+            } else if val.contains("space-around") {
+                JustifyContent::SpaceAround
+            } else if val.contains("space-evenly") {
+                JustifyContent::SpaceEvenly
+            } else if val.contains("center") {
+                JustifyContent::Center
+            } else if val.contains("end") || val.contains("flex-end") {
+                JustifyContent::End
+            } else {
+                JustifyContent::Start
+            };
+            style.set_align_content(jc);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn apply_grid_item_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+    let Ok(full) = prop.to_css_string(false, PrinterOptions::default()) else {
+        return false;
+    };
+    let (name, val) = full
+        .split_once(':')
+        .map_or(("", full.as_str()), |(k, v)| (k.trim(), v.trim()));
+
+    match name {
+        "grid-column" => {
+            style.set_grid_column(parse_line_placement(val));
+            true
+        }
+        "grid-column-start" => {
+            let start = parse_single_placement(val);
+            let end = style
+                .grid_column()
+                .map_or(GridPlacement::Auto, GridLinePlacement::end);
+            style.set_grid_column(GridLinePlacement::new(start, end));
+            true
+        }
+        "grid-column-end" => {
+            let end = parse_single_placement(val);
+            let start = style
+                .grid_column()
+                .map_or(GridPlacement::Auto, GridLinePlacement::start);
+            style.set_grid_column(GridLinePlacement::new(start, end));
+            true
+        }
+        "grid-row" => {
+            style.set_grid_row(parse_line_placement(val));
+            true
+        }
+        "grid-row-start" => {
+            let start = parse_single_placement(val);
+            let end = style
+                .grid_row()
+                .map_or(GridPlacement::Auto, GridLinePlacement::end);
+            style.set_grid_row(GridLinePlacement::new(start, end));
+            true
+        }
+        "grid-row-end" => {
+            let end = parse_single_placement(val);
+            let start = style
+                .grid_row()
+                .map_or(GridPlacement::Auto, GridLinePlacement::start);
+            style.set_grid_row(GridLinePlacement::new(start, end));
+            true
+        }
+        "justify-self" => {
+            let align = match val {
+                "center" => AlignItems::Center,
+                "end" | "flex-end" => AlignItems::End,
+                "stretch" => AlignItems::Stretch,
+                _ => AlignItems::Start,
+            };
+            style.set_justify_self(align);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn parse_single_track(s: &str) -> Option<GridTrack> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    if s.eq_ignore_ascii_case("auto") {
+        return Some(GridTrack::Auto);
+    }
+    if s.eq_ignore_ascii_case("min-content") {
+        return Some(GridTrack::MinContent);
+    }
+    if s.eq_ignore_ascii_case("max-content") {
+        return Some(GridTrack::MaxContent);
+    }
+    if let Some(rest) = s.strip_suffix("fr")
+        && let Ok(v) = rest.trim().parse::<f32>()
+    {
+        return Some(GridTrack::Fr(v));
+    }
+    if let Some(rest) = s.strip_suffix('%')
+        && let Ok(v) = rest.trim().parse::<f32>()
+    {
+        return Some(GridTrack::Percent(v));
+    }
+    if let Some(rest) = s.strip_suffix("px")
+        && let Ok(v) = rest.trim().parse::<f32>()
+    {
+        return Some(GridTrack::Px(v));
+    }
+    if let Ok(v) = s.parse::<f32>() {
+        return Some(GridTrack::Px(v));
+    }
+    if let Some(inner) = s.strip_prefix("minmax(").and_then(|r| r.strip_suffix(')'))
+        && let Some((min_str, max_str)) = inner.split_once(',')
+    {
+        let min_t = parse_single_track(min_str.trim())?;
+        let max_t = parse_single_track(max_str.trim())?;
+        return Some(GridTrack::MinMax(Box::new(min_t), Box::new(max_t)));
+    }
+    None
+}
+
+fn parse_track_list(s: &str) -> Vec<GridTrack> {
+    let mut tracks = Vec::new();
+    let mut tokens = Vec::new();
+    let mut current_token = String::new();
+    let mut paren_depth = 0usize;
+
+    for c in s.chars() {
+        if c == '(' {
+            paren_depth = paren_depth.saturating_add(1);
+            current_token.push(c);
+        } else if c == ')' {
+            paren_depth = paren_depth.saturating_sub(1);
+            current_token.push(c);
+        } else if c.is_whitespace() && paren_depth == 0 {
+            if !current_token.trim().is_empty() {
+                tokens.push(current_token.trim().to_string());
+                current_token.clear();
+            }
+        } else {
+            current_token.push(c);
+        }
+    }
+    if !current_token.trim().is_empty() {
+        tokens.push(current_token.trim().to_string());
+    }
+
+    for token in tokens {
+        if let Some(inner) = token.strip_prefix("repeat(").and_then(|r| r.strip_suffix(')'))
+            && let Some((count_str, track_str)) = inner.split_once(',')
+            && let Ok(count) = count_str.trim().parse::<u16>()
+        {
+            let sub_tracks = parse_track_list(track_str.trim());
+            if !sub_tracks.is_empty() {
+                tracks.push(GridTrack::Repeat(count, sub_tracks));
+                continue;
+            }
+        }
+        if let Some(t) = parse_single_track(&token) {
+            tracks.push(t);
+        }
+    }
+    tracks
+}
+
+fn parse_single_placement(s: &str) -> GridPlacement {
+    let s = s.trim();
+    if s.is_empty() || s.eq_ignore_ascii_case("auto") {
+        return GridPlacement::Auto;
+    }
+    if let Some(rest) = s.strip_prefix("span ")
+        && let Ok(count) = rest.trim().parse::<u16>()
+    {
+        return GridPlacement::Span(count);
+    }
+    if let Ok(line) = s.parse::<i16>() {
+        return GridPlacement::Line(line);
+    }
+    GridPlacement::Auto
+}
+
+fn parse_line_placement(s: &str) -> GridLinePlacement {
+    let s = s.trim();
+    if let Some((start_s, end_s)) = s.split_once('/') {
+        let start = parse_single_placement(start_s);
+        let end = parse_single_placement(end_s);
+        GridLinePlacement::new(start, end)
+    } else {
+        let p = parse_single_placement(s);
+        GridLinePlacement::new(p, GridPlacement::Auto)
+    }
+}
+
 fn parse_declarations(declarations: &DeclarationBlock) -> ComputedStyle {
     let mut style = ComputedStyle::default();
 
@@ -847,8 +1133,11 @@ fn parse_declarations(declarations: &DeclarationBlock) -> ComputedStyle {
             || apply_padding_properties(&mut style, prop)
             || apply_margin_properties(&mut style, prop)
             || apply_sizing_properties(&mut style, prop)
+            || apply_display_and_gap_properties(&mut style, prop)
             || apply_flex_container_properties(&mut style, prop)
-            || apply_flex_item_properties(&mut style, prop);
+            || apply_flex_item_properties(&mut style, prop)
+            || apply_grid_container_properties(&mut style, prop)
+            || apply_grid_item_properties(&mut style, prop);
     }
 
     style
@@ -1321,5 +1610,67 @@ mod tests {
         } else {
             panic!("Expected gradient border color on focused bar");
         }
+    }
+
+    #[test]
+    fn test_grid_properties_parsing() {
+        let parser = LightningCssAdapter::new();
+        let css = r"
+            grid.container {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                grid-template-rows: 50px auto minmax(20px, 1fr);
+                grid-auto-flow: column dense;
+                column-gap: 12px;
+                row-gap: 8px;
+                justify-items: center;
+                align-content: space-between;
+            }
+            .item {
+                grid-column: 1 / span 2;
+                grid-row: span 3;
+                justify-self: end;
+            }
+        ";
+        let parsed = parser
+            .parse_stylesheet(StyleSheetName::new("test_grid").unwrap(), css)
+            .unwrap();
+
+        let class_container = ClassName::new("container").unwrap();
+        let query_grid = ElementQuery::new("grid", None, std::slice::from_ref(&class_container), &[], None);
+        let style_grid = parsed.resolve_style(&query_grid);
+
+        assert_eq!(style_grid.display(), Some(DisplayMode::Grid));
+        assert_eq!(
+            style_grid.grid_template_columns(),
+            Some(&[GridTrack::Repeat(3, vec![GridTrack::Fr(1.0)])][..])
+        );
+        assert_eq!(
+            style_grid.grid_template_rows(),
+            Some(&[
+                GridTrack::Px(50.0),
+                GridTrack::Auto,
+                GridTrack::MinMax(Box::new(GridTrack::Px(20.0)), Box::new(GridTrack::Fr(1.0))),
+            ][..])
+        );
+        assert_eq!(style_grid.grid_auto_flow(), Some(GridAutoFlow::ColumnDense));
+        assert_eq!(style_grid.column_gap().map(Gap::value), Some(12.0));
+        assert_eq!(style_grid.row_gap().map(Gap::value), Some(8.0));
+        assert_eq!(style_grid.justify_items(), Some(AlignItems::Center));
+        assert_eq!(style_grid.align_content(), Some(JustifyContent::SpaceBetween));
+
+        let class_item = ClassName::new("item").unwrap();
+        let query_item = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None);
+        let style_item = parsed.resolve_style(&query_item);
+
+        assert_eq!(
+            style_item.grid_column(),
+            Some(&GridLinePlacement::new(GridPlacement::Line(1), GridPlacement::Span(2)))
+        );
+        assert_eq!(
+            style_item.grid_row(),
+            Some(&GridLinePlacement::new(GridPlacement::Span(3), GridPlacement::Auto))
+        );
+        assert_eq!(style_item.justify_self(), Some(AlignItems::End));
     }
 }

@@ -253,6 +253,80 @@ fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result<CommonProp
     Ok((class, id, on_click, on_hover, tooltip, popup))
 }
 
+fn parse_table_children(lua: &Lua, table: &mlua::Table) -> mlua::Result<Vec<VNode>> {
+    let mut children_vec = Vec::new();
+    if let Ok(children) = table.get::<mlua::Table>("children") {
+        for pair in children.sequence_values::<mlua::Value>() {
+            let child_val = pair?;
+            children_vec.push(value_to_vnode(lua, child_val)?);
+        }
+    }
+    Ok(children_vec)
+}
+
+fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
+    let typ: String = table.get::<Option<String>>("type")?.unwrap_or_default();
+    let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
+
+    let mut node = match typ.as_str() {
+        "flex" | "" => {
+            VNode::new_flex(parse_table_children(lua, &table)?, class, id, on_click, on_hover, tooltip)
+        }
+        "grid" => {
+            VNode::new_grid(parse_table_children(lua, &table)?, class, id, on_click, on_hover, tooltip)
+        }
+        "text" => {
+            let text_str = parse_text_content(&table);
+            VNode::new_text(TextContent::new(text_str), class, id, on_click, on_hover, tooltip)
+        }
+        "progress" => {
+            let value_num = table.get::<Option<f32>>("value")?.unwrap_or(0.0);
+            let orientation_str = table
+                .get::<Option<String>>("orientation")?
+                .unwrap_or_default();
+            let orientation = match orientation_str.to_lowercase().as_str() {
+                "vertical" => Orientation::Vertical,
+                _ => Orientation::Horizontal,
+            };
+            VNode::new_progress(
+                ProgressValue::new(value_num).unwrap_or_default(),
+                orientation,
+                class,
+                id,
+                on_click,
+                on_hover,
+                tooltip,
+            )
+        }
+        "rect" => VNode::new_rect(class, id, on_click, on_hover, tooltip),
+        "image" => {
+            let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
+            VNode::new_image(data, pixel_size, class, id, tooltip)
+        }
+        "module" => {
+            let name_str = table.get::<String>("name")?;
+            let instance_id_str = table.get::<Option<String>>("instance_id")?;
+            let options = parse_module_options(lua, &table)?;
+            VNode::new_module(
+                ModuleName::new(name_str),
+                instance_id_str.map(ModuleInstanceId::new),
+                options,
+                class,
+                id,
+                on_click,
+                on_hover,
+                tooltip,
+            )
+        }
+        _ => return lua.from_value::<VNode>(mlua::Value::Table(table)),
+    };
+
+    if let Some(p) = popup {
+        node = node.with_popup(p);
+    }
+    Ok(node)
+}
+
 /// Converts a Lua value (either `LuaVNode` `UserData` or a table) into a `VNode`.
 ///
 /// # Errors
@@ -270,87 +344,7 @@ pub fn value_to_vnode(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
                 message: Some("UserData is not a LuaVNode".to_string()),
             })
         }
-        mlua::Value::Table(table) => {
-            let typ: String = table.get::<Option<String>>("type")?.unwrap_or_default();
-            let (class, id, on_click, on_hover, tooltip, popup) =
-                parse_common_props(lua, &table)?;
-
-            let mut node = match typ.as_str() {
-                "flex" | "" => {
-                    let mut children_vec = Vec::new();
-                    if let Ok(children) = table.get::<mlua::Table>("children") {
-                        for pair in children.sequence_values::<mlua::Value>() {
-                            let child_val = pair?;
-                            children_vec.push(value_to_vnode(lua, child_val)?);
-                        }
-                    }
-                    VNode::new_flex(
-                        children_vec,
-                        class,
-                        id,
-                        on_click,
-                        on_hover,
-                        tooltip,
-                    )
-                }
-                "text" => {
-                    let text_str = parse_text_content(&table);
-                    VNode::new_text(
-                        TextContent::new(text_str),
-                        class,
-                        id,
-                        on_click,
-                        on_hover,
-                        tooltip,
-                    )
-                }
-                "progress" => {
-                    let value_num = table.get::<Option<f32>>("value")?.unwrap_or(0.0);
-                    let orientation_str = table
-                        .get::<Option<String>>("orientation")?
-                        .unwrap_or_default();
-                    let orientation = match orientation_str.to_lowercase().as_str() {
-                        "vertical" => Orientation::Vertical,
-                        _ => Orientation::Horizontal,
-                    };
-                    VNode::new_progress(
-                        ProgressValue::new(value_num).unwrap_or_default(),
-                        orientation,
-                        class,
-                        id,
-                        on_click,
-                        on_hover,
-                        tooltip,
-                    )
-                }
-                "rect" => VNode::new_rect(class, id, on_click, on_hover, tooltip),
-                "image" => {
-                    let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
-                    VNode::new_image(data, pixel_size, class, id, tooltip)
-                }
-                "module" => {
-                    let name_str = table.get::<String>("name")?;
-                    let instance_id_str = table.get::<Option<String>>("instance_id")?;
-                    let options = parse_module_options(lua, &table)?;
-                    VNode::new_module(
-                        ModuleName::new(name_str),
-                        instance_id_str.map(ModuleInstanceId::new),
-                        options,
-                        class,
-                        id,
-                        on_click,
-                        on_hover,
-                        tooltip,
-                    )
-                }
-                _ => return lua.from_value::<VNode>(mlua::Value::Table(table)),
-            };
-
-            if let Some(p) = popup {
-                node = node.with_popup(p);
-            }
-            Ok(node)
-        }
+        mlua::Value::Table(table) => table_to_vnode(lua, table),
         other => lua.from_value::<VNode>(other),
     }
 }
@@ -367,16 +361,31 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
     vdom.set(
         "flex",
         lua.create_function(|lua, table: mlua::Table| {
-            let mut children_vec = Vec::new();
-            if let Ok(children) = table.get::<mlua::Table>("children") {
-                for pair in children.sequence_values::<mlua::Value>() {
-                    let val = pair?;
-                    children_vec.push(value_to_vnode(lua, val)?);
-                }
-            }
+            let children_vec = parse_table_children(lua, &table)?;
             let (class, id, on_click, on_hover, tooltip, popup) =
                 parse_common_props(lua, &table)?;
             let mut node = VNode::new_flex(
+                children_vec,
+                class,
+                id,
+                on_click,
+                on_hover,
+                tooltip,
+            );
+            if let Some(p) = popup {
+                node = node.with_popup(p);
+            }
+            Ok(LuaVNode(node))
+        })?,
+    )?;
+
+    vdom.set(
+        "grid",
+        lua.create_function(|lua, table: mlua::Table| {
+            let children_vec = parse_table_children(lua, &table)?;
+            let (class, id, on_click, on_hover, tooltip, popup) =
+                parse_common_props(lua, &table)?;
+            let mut node = VNode::new_grid(
                 children_vec,
                 class,
                 id,
@@ -1052,5 +1061,25 @@ mod tests {
         let popup = button_node.popup().unwrap();
         assert_eq!(popup.children().len(), 1);
         assert_eq!(popup.tag(), crate::features::vdom::domain::NodeTag::Flex);
+    }
+
+    #[test]
+    fn test_lua_vnode_grid() {
+        let lua = Lua::new();
+        register_vdom_dsl(&lua).expect("DSL registration failed");
+
+        let script = r#"
+            return vdom.grid({
+                class = "my-grid",
+                children = {
+                    vdom.text({ text = "Cell 1" }),
+                    vdom.text({ text = "Cell 2" })
+                }
+            })
+        "#;
+        let val = lua.load(script).eval::<mlua::Value>().unwrap();
+        let node = value_to_vnode(&lua, val).unwrap();
+        assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Grid);
+        assert_eq!(node.children().len(), 2);
     }
 }

@@ -229,6 +229,15 @@ pub enum StyledNode {
         tooltip: Option<Box<Self>>,
         popup: Option<Box<Self>>,
     },
+    Grid {
+        path: NodePath,
+        children: Vec<Self>,
+        style: ComputedStyle,
+        on_click: Option<ClickHandlers>,
+        on_hover: Option<UiAction>,
+        tooltip: Option<Box<Self>>,
+        popup: Option<Box<Self>>,
+    },
     Text {
         path: NodePath,
         text: TextContent,
@@ -281,6 +290,7 @@ impl StyledNode {
     pub const fn path(&self) -> &NodePath {
         match self {
             Self::Flex { path, .. }
+            | Self::Grid { path, .. }
             | Self::Text { path, .. }
             | Self::Progress { path, .. }
             | Self::Rect { path, .. }
@@ -293,6 +303,7 @@ impl StyledNode {
     pub const fn style(&self) -> &ComputedStyle {
         match self {
             Self::Flex { style, .. }
+            | Self::Grid { style, .. }
             | Self::Text { style, .. }
             | Self::Progress { style, .. }
             | Self::Rect { style, .. }
@@ -306,6 +317,7 @@ impl StyledNode {
         match self {
             Self::Text { on_click, .. }
             | Self::Flex { on_click, .. }
+            | Self::Grid { on_click, .. }
             | Self::Progress { on_click, .. }
             | Self::Rect { on_click, .. }
             | Self::Module { on_click, .. } => on_click.as_ref(),
@@ -317,6 +329,7 @@ impl StyledNode {
     pub const fn on_hover(&self) -> Option<&UiAction> {
         match self {
             Self::Flex { on_hover, .. }
+            | Self::Grid { on_hover, .. }
             | Self::Text { on_hover, .. }
             | Self::Progress { on_hover, .. }
             | Self::Rect { on_hover, .. }
@@ -329,6 +342,7 @@ impl StyledNode {
     pub fn tooltip(&self) -> Option<&Self> {
         match self {
             Self::Flex { tooltip, .. }
+            | Self::Grid { tooltip, .. }
             | Self::Text { tooltip, .. }
             | Self::Progress { tooltip, .. }
             | Self::Rect { tooltip, .. }
@@ -341,6 +355,7 @@ impl StyledNode {
     pub fn popup(&self) -> Option<&Self> {
         match self {
             Self::Flex { popup, .. }
+            | Self::Grid { popup, .. }
             | Self::Text { popup, .. }
             | Self::Progress { popup, .. }
             | Self::Rect { popup, .. }
@@ -383,6 +398,16 @@ impl<'a> AnchoredPopup<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum RenderNode {
     Flex {
+        path: NodePath,
+        rect: Rect,
+        children: Vec<Self>,
+        style: ComputedStyle,
+        on_click: Option<ClickHandlers>,
+        on_hover: Option<UiAction>,
+        tooltip: Option<Box<StyledNode>>,
+        popup: Option<Box<StyledNode>>,
+    },
+    Grid {
         path: NodePath,
         rect: Rect,
         children: Vec<Self>,
@@ -447,6 +472,7 @@ impl RenderNode {
     pub const fn path(&self) -> &NodePath {
         match self {
             Self::Flex { path, .. }
+            | Self::Grid { path, .. }
             | Self::Text { path, .. }
             | Self::Progress { path, .. }
             | Self::Rect { path, .. }
@@ -464,7 +490,7 @@ impl RenderNode {
 
     fn collect_module_layouts_recursive(&self, out: &mut Vec<ChildModuleLayout>) {
         match self {
-            Self::Flex { children, .. } => {
+            Self::Flex { children, .. } | Self::Grid { children, .. } => {
                 for child in children {
                     child.collect_module_layouts_recursive(out);
                 }
@@ -482,6 +508,7 @@ impl RenderNode {
     pub const fn rect(&self) -> Rect {
         match self {
             Self::Flex { rect, .. }
+            | Self::Grid { rect, .. }
             | Self::Text { rect, .. }
             | Self::Progress { rect, .. }
             | Self::Rect { rect, .. }
@@ -495,6 +522,7 @@ impl RenderNode {
         match self {
             Self::Text { on_click, .. }
             | Self::Flex { on_click, .. }
+            | Self::Grid { on_click, .. }
             | Self::Progress { on_click, .. }
             | Self::Rect { on_click, .. }
             | Self::Module { on_click, .. } => on_click.as_ref(),
@@ -507,6 +535,7 @@ impl RenderNode {
         match self {
             Self::Text { on_hover, .. }
             | Self::Flex { on_hover, .. }
+            | Self::Grid { on_hover, .. }
             | Self::Progress { on_hover, .. }
             | Self::Rect { on_hover, .. }
             | Self::Module { on_hover, .. } => on_hover.as_ref(),
@@ -533,7 +562,7 @@ impl RenderNode {
         let max_y = r.y().saturating_add(height_i32);
         if pos.x() >= r.x() && pos.x() < max_x && pos.y() >= r.y() && pos.y() < max_y {
             path.push(self);
-            if let Self::Flex { children, .. } = self {
+            if let Self::Flex { children, .. } | Self::Grid { children, .. } = self {
                 for child in children {
                     child.hit_test_internal(pos, path);
                 }
@@ -545,6 +574,7 @@ impl RenderNode {
     pub fn tooltip(&self) -> Option<&StyledNode> {
         match self {
             Self::Flex { tooltip, .. }
+            | Self::Grid { tooltip, .. }
             | Self::Text { tooltip, .. }
             | Self::Progress { tooltip, .. }
             | Self::Rect { tooltip, .. }
@@ -557,6 +587,7 @@ impl RenderNode {
     pub fn popup(&self) -> Option<&StyledNode> {
         match self {
             Self::Flex { popup, .. }
+            | Self::Grid { popup, .. }
             | Self::Text { popup, .. }
             | Self::Progress { popup, .. }
             | Self::Rect { popup, .. }
@@ -570,7 +601,7 @@ impl RenderNode {
         if let Some(popup) = self.popup() {
             return Some(AnchoredPopup::new(self.rect(), popup));
         }
-        if let Self::Flex { children, .. } = self {
+        if let Self::Flex { children, .. } | Self::Grid { children, .. } = self {
             for child in children {
                 if let Some(found) = child.find_popup_with_anchor() {
                     return Some(found);
@@ -595,6 +626,12 @@ impl RenderNode {
         use crate::shared::primitives::geometry::LogicalPx;
         match self {
             Self::Flex {
+                rect,
+                children,
+                style,
+                ..
+            }
+            | Self::Grid {
                 rect,
                 children,
                 style,

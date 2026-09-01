@@ -150,6 +150,14 @@ impl DefaultVdomDiffAdapter {
                 VNodeKind::Flex {
                     children: new_children,
                 },
+            )
+            | (
+                VNodeKind::Grid {
+                    children: old_children,
+                },
+                VNodeKind::Grid {
+                    children: new_children,
+                },
             ) => self.diff_children(old_node.node_id(), old_children, new_children),
             _ => Patch::Replace {
                 old_node_id: old_node.node_id(),
@@ -597,5 +605,36 @@ mod tests {
             }
             _ => panic!("Expected UpdateProps with popup_patch"),
         }
+    }
+
+    #[test]
+    fn test_diff_grid_children() {
+        let adapter = DefaultVdomDiffAdapter::new();
+        let child1 = VNode::new_text(
+            TextContent::new("A".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let child2 = VNode::new_text(
+            TextContent::new("B".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let grid1 = VNode::new_grid(vec![child1.clone()], None, None, None, None, None);
+        let grid2 = VNode::new_grid(vec![child1, child2], None, None, None, None, None);
+
+        let unchanged = adapter.diff(Some(&grid1), &grid1);
+        assert!(unchanged.is_unchanged());
+
+        let changed = adapter.diff(Some(&grid1), &grid2);
+        assert!(!changed.is_unchanged());
+        assert!(matches!(changed.patch(), Patch::UpdateChildren { .. }));
     }
 }
