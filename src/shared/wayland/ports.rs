@@ -77,14 +77,20 @@ pub trait DisplayServerPort: Send + Sync {
 
     /// # Errors
     ///
-    /// Returns `DisplayServerError` if displaying the tooltip fails.
-    fn show_tooltip(
+    /// Returns `DisplayServerError` if displaying the floating surface fails.
+    fn show_floating_surface(
         &mut self,
+        kind: crate::features::layout_engine::domain::FloatingKind,
+        monitor_id: Option<crate::shared::primitives::MonitorId>,
+        anchor_rect: Option<crate::shared::primitives::geometry::Rect>,
         layout: crate::features::layout_engine::domain::StyledNode,
     ) -> Result<(), DisplayServerError>;
 
     /// # Errors
     ///
-    /// Returns `DisplayServerError` if hiding the tooltip fails.
-    fn hide_tooltip(&mut self) -> Result<(), DisplayServerError>;
+    /// Returns `DisplayServerError` if hiding the floating surface fails.
+    fn hide_floating_surface(
+        &mut self,
+        kind: &crate::features::layout_engine::domain::FloatingKind,
+    ) -> Result<(), DisplayServerError>;
 }

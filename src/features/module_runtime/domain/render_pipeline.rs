@@ -508,6 +508,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
         let mut factory = MockCanvasFactory;
 

@@ -83,6 +83,7 @@ fn create_styled_node_tree(depth: usize, branching: usize) -> StyledNode {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         }
     } else {
         let mut children = Vec::with_capacity(branching);
@@ -96,6 +97,7 @@ fn create_styled_node_tree(depth: usize, branching: usize) -> StyledNode {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         }
     }
 }

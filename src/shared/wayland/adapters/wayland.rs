@@ -204,11 +204,14 @@ pub struct WaylandState {
 
     font_system: FontSystem,
     swash_cache: SwashCache,
-    tooltip: Option<TooltipSurface>,
+    floating_surfaces: HashMap<
+        crate::features::layout_engine::domain::FloatingKind,
+        FloatingSurface,
+    >,
     app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
 }
 
-struct TooltipSurface {
+struct FloatingSurface {
     surface: WlSurface,
     xdg_surface: XdgSurface,
     xdg_popup: XdgPopup,
@@ -216,6 +219,14 @@ struct TooltipSurface {
     size: crate::shared::primitives::geometry::Size,
     layout: crate::features::layout_engine::domain::StyledNode,
     reposition_token: u32,
+}
+
+impl Drop for FloatingSurface {
+    fn drop(&mut self) {
+        self.xdg_popup.destroy();
+        self.xdg_surface.destroy();
+        self.surface.destroy();
+    }
 }
 
 struct WaylandOutputInfo {
@@ -307,7 +318,7 @@ impl WaylandAdapter {
             pointer_pos: (0.0, 0.0),
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
-            tooltip: None,
+            floating_surfaces: HashMap::new(),
             app_env,
         };
 
@@ -431,92 +442,126 @@ impl DisplayServerPort for WaylandAdapter {
     }
 
     #[allow(
+        clippy::too_many_lines,
         clippy::as_conversions,
         clippy::cast_possible_truncation,
         clippy::cast_precision_loss
     )]
-    fn show_tooltip(
+    fn show_floating_surface(
         &mut self,
+        kind: crate::features::layout_engine::domain::FloatingKind,
+        monitor_id: Option<crate::shared::primitives::MonitorId>,
+        anchor_rect: Option<crate::shared::primitives::geometry::Rect>,
         layout: crate::features::layout_engine::domain::StyledNode,
     ) -> Result<(), DisplayServerError> {
-        tracing::debug!("Requested show_tooltip");
-        if let Some(tooltip) = &self.state.tooltip
-            && tooltip.layout == layout
+        tracing::debug!(?kind, "Requested show_floating_surface");
+        if let Some(existing) = self.state.floating_surfaces.get(&kind)
+            && existing.layout == layout
         {
-            tracing::trace!("Tooltip layout hasn't changed, skipping update");
+            tracing::trace!("Floating surface layout hasn't changed, skipping update");
             return Ok(());
         }
 
         let state = &mut self.state;
 
-        let Some(parent_surface) = state.pointer_surface.clone() else {
-            tracing::debug!("show_tooltip skipped: state.pointer_surface is None");
-            return Ok(());
-        };
-
         let Some(compositor) = state.compositor.as_ref() else {
-            tracing::debug!("show_tooltip skipped: state.compositor is None");
-            return Ok(());
-        };
-        let Some(_layer_shell) = state.layer_shell.as_ref() else {
-            tracing::debug!("show_tooltip skipped: state.layer_shell is None");
+            tracing::debug!("show_floating_surface skipped: state.compositor is None");
             return Ok(());
         };
         let Some(shm) = state.shm.as_ref() else {
-            tracing::debug!("show_tooltip skipped: state.shm is None");
+            tracing::debug!("show_floating_surface skipped: state.shm is None");
             return Ok(());
         };
-
         let Some(xdg_wm_base) = state.xdg_wm_base.as_ref() else {
-            tracing::debug!("show_tooltip skipped: state.xdg_wm_base is None");
+            tracing::debug!("show_floating_surface skipped: state.xdg_wm_base is None");
             return Ok(());
         };
 
         let mut bar_scale = 1;
-        let mut output_name = String::new();
-        let (mut pointer_x, mut _pointer_y) = (state.pointer_pos.0, state.pointer_pos.1);
         let mut bar_height = 0;
-        let mut _bar_margin_left: i32 = 0;
-        let mut _bar_margin_top: i32 = 0;
         let mut bar_layer_surface = None;
+        let mut anchor_x = 0;
+        let mut anchor_y = 0;
+        let mut anchor_w = 1;
+        let mut anchor_h = 1;
+        let mut target_monitor_id = monitor_id
+            .clone()
+            .unwrap_or_else(|| crate::shared::primitives::MonitorId::new(""));
 
-        for bar in &state.bars {
-            if bar.surface == parent_surface {
-                bar_scale = bar.scale;
-                output_name = bar.output_name.clone();
-                bar_height = bar.height;
-                _bar_margin_left = bar.config_margin.left().value();
-                _bar_margin_top = bar.config_margin.top().value();
-                bar_layer_surface = Some(bar.layer_surface.clone());
-                break;
+        match &kind {
+            crate::features::layout_engine::domain::FloatingKind::Tooltip => {
+                let Some(parent_surface) = state.pointer_surface.clone() else {
+                    tracing::debug!(
+                        "show_floating_surface (tooltip) skipped: state.pointer_surface is None"
+                    );
+                    return Ok(());
+                };
+                let mut pointer_x = state.pointer_pos.0;
+                for bar in &state.bars {
+                    if bar.surface == parent_surface {
+                        bar_scale = bar.scale;
+                        bar_height = bar.height;
+                        bar_layer_surface = Some(bar.layer_surface.clone());
+                        target_monitor_id =
+                            crate::shared::primitives::MonitorId::new(&bar.output_name);
+                        break;
+                    }
+                    if let Some(ms) = bar
+                        .module_surfaces
+                        .values()
+                        .find(|m| m.surface == parent_surface)
+                    {
+                        bar_scale = bar.scale;
+                        bar_height = bar.height;
+                        bar_layer_surface = Some(bar.layer_surface.clone());
+                        pointer_x += ms.x as f64;
+                        target_monitor_id =
+                            crate::shared::primitives::MonitorId::new(&bar.output_name);
+                        break;
+                    }
+                }
+                anchor_x = pointer_x as i32;
+                anchor_y = bar_height as i32;
+                anchor_w = 1;
+                anchor_h = 1;
             }
-            if let Some(ms) = bar
-                .module_surfaces
-                .values()
-                .find(|m| m.surface == parent_surface)
-            {
-                bar_scale = bar.scale;
-                output_name = bar.output_name.clone();
-                bar_height = bar.height;
-                _bar_margin_left = bar.config_margin.left().value();
-                _bar_margin_top = bar.config_margin.top().value();
-                bar_layer_surface = Some(bar.layer_surface.clone());
-                // pointer_pos is relative to the module, add module offset
-                pointer_x += ms.x as f64;
-                _pointer_y += ms.y as f64;
-                break;
+            crate::features::layout_engine::domain::FloatingKind::Popup { module_id } => {
+                for bar in &state.bars {
+                    let matches_mon = monitor_id
+                        .as_ref()
+                        .is_some_and(|m| m.as_str() == bar.output_name);
+                    let matches_mod = bar.module_surfaces.contains_key(module_id);
+                    if matches_mon || matches_mod {
+                        bar_scale = bar.scale;
+                        bar_layer_surface = Some(bar.layer_surface.clone());
+                        target_monitor_id =
+                            crate::shared::primitives::MonitorId::new(&bar.output_name);
+                        if let Some(ms) = bar.module_surfaces.get(module_id) {
+                            if let Some(r) = anchor_rect {
+                                anchor_x = ms.x + r.x();
+                                anchor_y = ms.y + r.y();
+                                anchor_w = r.width() as i32;
+                                anchor_h = r.height() as i32;
+                            } else {
+                                anchor_x = ms.x;
+                                anchor_y = ms.y;
+                                anchor_w = ms.size.width() as i32;
+                                anchor_h = ms.size.height() as i32;
+                            }
+                        } else if let Some(r) = anchor_rect {
+                            anchor_x = r.x();
+                            anchor_y = r.y();
+                            anchor_w = r.width() as i32;
+                            anchor_h = r.height() as i32;
+                        }
+                        break;
+                    }
+                }
             }
-        }
-
-        if output_name.is_empty() {
-            tracing::debug!(
-                "show_tooltip skipped: output_name is empty (parent_surface not found in bars)"
-            );
-            return Ok(());
         }
 
         let Some(bar_layer_surface) = bar_layer_surface else {
-            tracing::debug!("show_tooltip skipped: bar_layer_surface is None");
+            tracing::debug!("show_floating_surface skipped: bar_layer_surface is None");
             return Ok(());
         };
 
@@ -556,6 +601,7 @@ impl DisplayServerPort for WaylandAdapter {
                         on_click: None,
                         on_hover: None,
                         tooltip: None,
+                        popup: None,
                     },
                 )
             }
@@ -568,9 +614,9 @@ impl DisplayServerPort for WaylandAdapter {
         let height = height.max(1);
         let new_size = crate::shared::primitives::geometry::Size::new(width, height);
 
-        if let Some(tooltip) = &mut state.tooltip {
-            if tooltip.size == new_size {
-                let data = tooltip.shm_buffer.mmap_mut();
+        if let Some(floating) = state.floating_surfaces.get_mut(&kind) {
+            if floating.size == new_size {
+                let data = floating.shm_buffer.mmap_mut();
                 if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(data, width, height) {
                     let mut actual_canvas = TinySkiaCosmicCanvas::new(
                         pixmap,
@@ -582,17 +628,20 @@ impl DisplayServerPort for WaylandAdapter {
                     );
                     render_node.render_to_canvas(&mut actual_canvas);
                 }
-                tooltip.surface.set_buffer_scale(bar_scale);
-                tooltip.layout = layout;
-                tooltip
+                floating.surface.set_buffer_scale(bar_scale);
+                floating.layout = layout;
+                floating
                     .surface
-                    .attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
-                tooltip
+                    .attach(Some(floating.shm_buffer.current_buffer()), 0, 0);
+                floating
                     .surface
                     .damage_buffer(0, 0, width as i32, height as i32);
-                tooltip.surface.commit();
-                tooltip.shm_buffer.swap_buffers();
-                tracing::debug!(size = ?new_size, "Redrew tooltip in-place (same Size VO)");
+                floating.surface.commit();
+                floating.shm_buffer.swap_buffers();
+                tracing::debug!(
+                    size = ?new_size,
+                    "Redrew floating surface in-place (same Size VO)"
+                );
                 return Ok(());
             }
             let qh = self.event_queue.handle();
@@ -620,39 +669,37 @@ impl DisplayServerPort for WaylandAdapter {
             let width_i32 = i32::try_from(width).unwrap_or_default();
             let height_i32 = i32::try_from(height).unwrap_or_default();
             positioner.set_size(text_w, text_h);
-            #[allow(clippy::cast_possible_truncation)]
-            positioner.set_anchor_rect(
-                pointer_x as i32,
-                i32::try_from(bar_height).unwrap_or_default(),
-                1,
-                1,
-            );
+            positioner.set_anchor_rect(anchor_x, anchor_y, anchor_w.max(1), anchor_h.max(1));
             positioner
                 .set_anchor(wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom);
             positioner.set_gravity(
                 wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::Bottom,
             );
             positioner.set_constraint_adjustment(
-                wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideX |
-                wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideY |
-                wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::FlipY
+                wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideX
+                    | wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideY
+                    | wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::FlipY,
             );
-            tooltip.reposition_token = tooltip.reposition_token.wrapping_add(1);
-            tooltip
+            floating.reposition_token = floating.reposition_token.wrapping_add(1);
+            floating
                 .xdg_popup
-                .reposition(&positioner, tooltip.reposition_token);
+                .reposition(&positioner, floating.reposition_token);
             positioner.destroy();
-            tooltip.shm_buffer = new_shm_buffer;
-            tooltip.size = new_size;
-            tooltip.layout = layout;
-            tooltip.surface.set_buffer_scale(bar_scale);
-            tooltip
+            floating.shm_buffer = new_shm_buffer;
+            floating.size = new_size;
+            floating.layout = layout;
+            floating.surface.set_buffer_scale(bar_scale);
+            floating
                 .surface
-                .attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
-            tooltip.surface.damage_buffer(0, 0, width_i32, height_i32);
-            tooltip.surface.commit();
-            tooltip.shm_buffer.swap_buffers();
-            tracing::debug!(size = ?new_size, token = tooltip.reposition_token, "Redrew and repositioned tooltip in-place (new Size VO)");
+                .attach(Some(floating.shm_buffer.current_buffer()), 0, 0);
+            floating.surface.damage_buffer(0, 0, width_i32, height_i32);
+            floating.surface.commit();
+            floating.shm_buffer.swap_buffers();
+            tracing::debug!(
+                size = ?new_size,
+                token = floating.reposition_token,
+                "Redrew and repositioned floating surface in-place"
+            );
             return Ok(());
         }
 
@@ -684,15 +731,15 @@ impl DisplayServerPort for WaylandAdapter {
 
         let positioner = xdg_wm_base.create_positioner(&qh, ());
         positioner.set_size(text_w, text_h);
-        positioner.set_anchor_rect(pointer_x as i32, bar_height as i32, 1, 1);
+        positioner.set_anchor_rect(anchor_x, anchor_y, anchor_w.max(1), anchor_h.max(1));
         positioner
             .set_anchor(wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom);
         positioner
             .set_gravity(wayland_protocols::xdg::shell::client::xdg_positioner::Gravity::Bottom);
         positioner.set_constraint_adjustment(
-            wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideX |
-            wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideY |
-            wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::FlipY
+            wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideX
+                | wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::SlideY
+                | wayland_protocols::xdg::shell::client::xdg_positioner::ConstraintAdjustment::FlipY,
         );
 
         let surface = compositor.create_surface(&qh, ());
@@ -702,9 +749,9 @@ impl DisplayServerPort for WaylandAdapter {
         tracing::debug!(
             width,
             height,
-            pointer_x,
-            bar_height,
-            "Creating tooltip surface"
+            anchor_x,
+            anchor_y,
+            "Creating floating surface"
         );
 
         bar_layer_surface.get_popup(&xdg_popup);
@@ -712,26 +759,36 @@ impl DisplayServerPort for WaylandAdapter {
         positioner.destroy();
         surface.commit();
 
-        state.tooltip = Some(TooltipSurface {
-            surface,
-            xdg_surface,
-            xdg_popup,
-            shm_buffer,
-            size: new_size,
-            layout,
-            reposition_token: 0,
-        });
+        if let crate::features::layout_engine::domain::FloatingKind::Popup { module_id } = kind {
+            state
+                .surface_to_id
+                .insert(surface.clone(), (module_id, target_monitor_id));
+        }
+
+        state.floating_surfaces.insert(
+            kind,
+            FloatingSurface {
+                surface,
+                xdg_surface,
+                xdg_popup,
+                shm_buffer,
+                size: new_size,
+                layout,
+                reposition_token: 0,
+            },
+        );
 
         Ok(())
     }
 
-    fn hide_tooltip(&mut self) -> Result<(), DisplayServerError> {
+    fn hide_floating_surface(
+        &mut self,
+        kind: &crate::features::layout_engine::domain::FloatingKind,
+    ) -> Result<(), DisplayServerError> {
         let state = &mut self.state;
-        if let Some(tooltip) = state.tooltip.take() {
-            tracing::debug!("Hiding tooltip");
-            tooltip.xdg_popup.destroy();
-            tooltip.xdg_surface.destroy();
-            tooltip.surface.destroy();
+        if let Some(floating) = state.floating_surfaces.remove(kind) {
+            tracing::debug!(?kind, "Hiding floating surface");
+            state.surface_to_id.remove(&floating.surface);
         }
         Ok(())
     }
@@ -1509,21 +1566,23 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
         {
             tracing::debug!("xdg_surface Configure serial={serial}");
             proxy.ack_configure(serial);
-            if let Some(tooltip) = &mut state.tooltip
-                && &tooltip.xdg_surface == proxy
+            if let Some(floating) = state
+                .floating_surfaces
+                .values_mut()
+                .find(|f| &f.xdg_surface == proxy)
             {
-                tracing::debug!("Attaching buffer to tooltip surface");
-                tooltip
+                tracing::debug!("Attaching buffer to floating surface");
+                floating
                     .surface
-                    .attach(Some(tooltip.shm_buffer.current_buffer()), 0, 0);
-                tooltip.surface.damage_buffer(
+                    .attach(Some(floating.shm_buffer.current_buffer()), 0, 0);
+                floating.surface.damage_buffer(
                     0,
                     0,
-                    tooltip.size.width() as i32,
-                    tooltip.size.height() as i32,
+                    floating.size.width() as i32,
+                    floating.size.height() as i32,
                 );
-                tooltip.surface.commit();
-                tooltip.shm_buffer.swap_buffers();
+                floating.surface.commit();
+                floating.shm_buffer.swap_buffers();
             } else {
                 tracing::debug!("Configure event for unknown xdg_surface");
             }
@@ -1533,8 +1592,8 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
 
 impl Dispatch<XdgPopup, ()> for WaylandState {
     fn event(
-        _state: &mut Self,
-        _proxy: &XdgPopup,
+        state: &mut Self,
+        proxy: &XdgPopup,
         event: wayland_protocols::xdg::shell::client::xdg_popup::Event,
         _data: &(),
         _conn: &Connection,
@@ -1542,9 +1601,32 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
     ) {
         match event {
             wayland_protocols::xdg::shell::client::xdg_popup::Event::Repositioned { token } => {
-                tracing::debug!("Tooltip popup repositioned (token={token})");
+                tracing::debug!("Floating surface popup repositioned (token={token})");
             }
-            other => tracing::debug!("xdg_popup Event: {:?}", other),
+            wayland_protocols::xdg::shell::client::xdg_popup::Event::PopupDone => {
+                tracing::debug!("xdg_popup Event: PopupDone");
+                let matching_kind = state
+                    .floating_surfaces
+                    .iter()
+                    .find(|(_, f)| &f.xdg_popup == proxy)
+                    .map(|(k, _)| k.clone());
+                if let Some(kind) = matching_kind
+                    && let Some(floating) = state.floating_surfaces.remove(&kind)
+                {
+                    state.surface_to_id.remove(&floating.surface);
+                    if let crate::features::layout_engine::domain::FloatingKind::Popup {
+                        module_id,
+                    } = kind
+                    {
+                        let _ = state.hub.pointer_tx().send((
+                            module_id,
+                            crate::shared::primitives::MonitorId::new(""),
+                            crate::shared::events::core::PointerEvent::PopupDismissed,
+                        ));
+                    }
+                }
+            }
+            other => tracing::debug!("xdg_popup Event: {other:?}"),
         }
     }
 }
@@ -1742,7 +1824,7 @@ mod tests {
             pointer_pos: (0.0, 0.0),
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
-            tooltip: None,
+            floating_surfaces: HashMap::new(),
             app_env,
         };
         assert!(state.bars.is_empty());
@@ -1799,7 +1881,7 @@ mod tests {
             pointer_pos: (0.0, 0.0),
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
-            tooltip: None,
+            floating_surfaces: HashMap::new(),
             app_env,
         };
 

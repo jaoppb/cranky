@@ -37,6 +37,7 @@ pub struct EventLoop<
     canvas_factory: F,
     vdom_diff: Arc<dyn VdomDiffPort>,
     style_resolver: Arc<dyn StyleResolverPort>,
+    active_popups: HashSet<MonitorId>,
 }
 
 impl<
@@ -64,6 +65,7 @@ impl<
             canvas_factory,
             vdom_diff,
             style_resolver,
+            active_popups: HashSet::new(),
         }
     }
 
@@ -287,7 +289,7 @@ impl<
     pub fn dispatch_render_outcome(
         &mut self,
         monitor_id: &MonitorId,
-        outcome: crate::features::module_runtime::domain::RenderOutcome,
+        outcome: &crate::features::module_runtime::domain::RenderOutcome,
     ) {
         if !outcome.child_layouts().is_empty() {
             self.ctx
@@ -309,12 +311,34 @@ impl<
                 });
         }
 
-        if let Some((buffer, position)) = outcome.into_buffer() {
+        if let Some((buffer, position)) = outcome.buffer().cloned() {
             let sm = self.ctx.surface_manager().clone();
             let module_id = self.ctx.id();
             let parent_id = self.ctx.parent_id();
             let target_monitor_id = monitor_id.clone();
             sm.submit_child_buffer(module_id, parent_id, target_monitor_id, position, buffer);
+        }
+
+        if let Some(anchored_popup) = outcome.render_tree().find_popup_with_anchor() {
+            self.active_popups.insert(monitor_id.clone());
+            self.ctx.display_sender().send_display_command(
+                crate::features::layout_engine::domain::DisplayCommand::ShowFloatingSurface {
+                    kind: crate::features::layout_engine::domain::FloatingKind::Popup {
+                        module_id: self.ctx.id(),
+                    },
+                    monitor_id: Some(monitor_id.clone()),
+                    anchor_rect: Some(*anchored_popup.anchor_rect()),
+                    layout: Box::new(anchored_popup.layout().clone()),
+                },
+            );
+        } else if self.active_popups.remove(monitor_id) {
+            self.ctx.display_sender().send_display_command(
+                crate::features::layout_engine::domain::DisplayCommand::HideFloatingSurface {
+                    kind: crate::features::layout_engine::domain::FloatingKind::Popup {
+                        module_id: self.ctx.id(),
+                    },
+                },
+            );
         }
     }
 
@@ -376,7 +400,7 @@ impl<
             };
 
             if let Some(outcome) = outcome {
-                self.dispatch_render_outcome(&monitor_id, outcome);
+                self.dispatch_render_outcome(&monitor_id, &outcome);
             }
         }
 
@@ -429,16 +453,15 @@ mod tests {
 
         let mut layouts = HashMap::new();
         layouts.insert(
-            MonitorId::new("DP-1"),
-            Rect::new(Position::new(0, 0), Size::new(100, 30)),
+            MonitorId::new("HDMI-A-1"),
+            Rect::new(Position::new(0, 0), Size::new(1920, 30)),
         );
-
-        let monitors = event_loop.discover_monitors(&layouts);
-        assert!(monitors.contains(&MonitorId::new("DP-1")));
+        let discovered = event_loop.discover_monitors(&layouts);
+        assert!(discovered.contains(&MonitorId::new("HDMI-A-1")));
     }
 
     #[tokio::test]
-    async fn test_dispatch_render_outcome_sends_commands() {
+    async fn test_dispatch_render_outcome_emits_layout_events() {
         use crate::features::module_runtime::domain::SizeChange;
         use crate::features::styling::domain::ComputedStyle;
 
@@ -474,11 +497,12 @@ mod tests {
                 on_click: None,
                 on_hover: None,
                 tooltip: None,
+                popup: None,
             },
             None,
         );
 
-        event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), outcome);
+        event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &outcome);
 
         let received = layout_rx
             .try_recv()
@@ -526,5 +550,107 @@ mod tests {
         };
         let changed = event_loop.handle_pointer_event(&MonitorId::new("DP-1"), &event);
         assert!(!changed);
+    }
+
+    #[test]
+    fn test_event_loop_popup_floating_surface_lifecycle() {
+        use crate::features::layout_engine::domain::{
+            DisplayCommand, FloatingKind, RenderNode, StyledNode,
+        };
+        use crate::features::module_runtime::test_support::ChannelDisplaySender;
+        use crate::features::styling::domain::ComputedStyle;
+
+        let id = ModuleId::new(42);
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let sm = Arc::new(MockSurfaceManager);
+        let layout_sender = Arc::new(MockLayoutSender);
+        let (display_tx, display_rx) = std::sync::mpsc::channel();
+        let display_sender = Arc::new(ChannelDisplaySender::new(display_tx));
+        let ui_sender = Arc::new(MockUiSender);
+        let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
+        let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
+
+        let mut event_loop = EventLoop::new(
+            Box::new(TestModulePort::new(VNode::new_rect(
+                None, None, None, None, None,
+            ))),
+            ctx,
+            PointerHandler::new(),
+            RenderPipeline::new(),
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        );
+
+        let mon = MonitorId::new("DP-1");
+
+        // 1. Outcome with popup emits ShowFloatingSurface
+        let popup_styled = StyledNode::Text {
+            path: crate::features::layout_engine::domain::NodePath::root(),
+            text: crate::features::vdom::domain::TextContent::new("popup".to_string()),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+        };
+        let tree_with_popup = RenderNode::Rect {
+            path: crate::features::layout_engine::domain::NodePath::root(),
+            rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: Some(Box::new(popup_styled.clone())),
+        };
+        let outcome1 = crate::features::module_runtime::domain::RenderOutcome::new(
+            None,
+            vec![],
+            tree_with_popup,
+            None,
+        );
+        event_loop.dispatch_render_outcome(&mon, &outcome1);
+
+        let cmd1 = display_rx.try_recv().expect("Should have sent ShowFloatingSurface");
+        match cmd1 {
+            DisplayCommand::ShowFloatingSurface {
+                kind,
+                monitor_id,
+                anchor_rect,
+                layout,
+            } => {
+                assert_eq!(kind, FloatingKind::Popup { module_id: id });
+                assert_eq!(monitor_id, Some(mon.clone()));
+                assert_eq!(anchor_rect, Some(Rect::new(Position::new(0, 0), Size::new(50, 20))));
+                assert_eq!(*layout, popup_styled);
+            }
+            _ => panic!("Expected ShowFloatingSurface, got {cmd1:?}"),
+        }
+
+        // 2. Outcome without popup emits HideFloatingSurface
+        let tree_without_popup = RenderNode::Rect {
+            path: crate::features::layout_engine::domain::NodePath::root(),
+            rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+        };
+        let outcome2 = crate::features::module_runtime::domain::RenderOutcome::new(
+            None,
+            vec![],
+            tree_without_popup,
+            None,
+        );
+        event_loop.dispatch_render_outcome(&mon, &outcome2);
+
+        let cmd2 = display_rx.try_recv().expect("Should have sent HideFloatingSurface");
+        match cmd2 {
+            DisplayCommand::HideFloatingSurface { kind } => {
+                assert_eq!(kind, FloatingKind::Popup { module_id: id });
+            }
+            _ => panic!("Expected HideFloatingSurface, got {cmd2:?}"),
+        }
     }
 }

@@ -426,6 +426,8 @@ pub struct VNode {
     on_hover: Option<UiAction>,
     #[serde(default)]
     tooltip: Option<Box<Self>>,
+    #[serde(default)]
+    popup: Option<Box<Self>>,
     #[serde(flatten)]
     kind: VNodeKind,
 }
@@ -448,6 +450,7 @@ impl VNode {
             on_click,
             on_hover,
             tooltip,
+            popup: None,
             kind: VNodeKind::Flex { children },
         }
     }
@@ -469,6 +472,7 @@ impl VNode {
             on_click,
             on_hover,
             tooltip,
+            popup: None,
             kind: VNodeKind::Text { text },
         }
     }
@@ -491,6 +495,7 @@ impl VNode {
             on_click,
             on_hover,
             tooltip,
+            popup: None,
             kind: VNodeKind::Progress { value, orientation },
         }
     }
@@ -511,6 +516,7 @@ impl VNode {
             on_click,
             on_hover,
             tooltip,
+            popup: None,
             kind: VNodeKind::Rect,
         }
     }
@@ -531,6 +537,7 @@ impl VNode {
             on_click: None,
             on_hover: None,
             tooltip,
+            popup: None,
             kind: VNodeKind::Image {
                 data: data.into(),
                 pixel_size,
@@ -558,6 +565,7 @@ impl VNode {
             on_click,
             on_hover,
             tooltip,
+            popup: None,
             kind: VNodeKind::Module {
                 name,
                 instance_id,
@@ -611,6 +619,17 @@ impl VNode {
     #[must_use]
     pub fn tooltip(&self) -> Option<&Self> {
         self.tooltip.as_deref()
+    }
+
+    #[must_use]
+    pub fn popup(&self) -> Option<&Self> {
+        self.popup.as_deref()
+    }
+
+    #[must_use]
+    pub fn with_popup(mut self, popup: Box<Self>) -> Self {
+        self.popup = Some(popup);
+        self
     }
 
     #[must_use]
@@ -692,6 +711,9 @@ impl VNode {
         let styled_tooltip = self.tooltip.as_ref().map(|t| {
             Box::new(t.resolve_styles_recursive(resolver, interaction, &path.child(0), 0, 1, None))
         });
+        let styled_popup = self.popup.as_ref().map(|p| {
+            Box::new(p.resolve_styles_recursive(resolver, interaction, &path.child(0), 0, 1, None))
+        });
 
         let styled_children = if let VNodeKind::Flex { children } = &self.kind {
             let total = children.len();
@@ -713,7 +735,7 @@ impl VNode {
             Vec::new()
         };
 
-        self.map_to_styled_node(path, style, styled_tooltip, styled_children)
+        self.map_to_styled_node(path, style, styled_tooltip, styled_popup, styled_children)
     }
 
     fn map_to_styled_node(
@@ -721,6 +743,7 @@ impl VNode {
         path: &NodePath,
         style: ComputedStyle,
         styled_tooltip: Option<Box<StyledNode>>,
+        styled_popup: Option<Box<StyledNode>>,
         styled_children: Vec<StyledNode>,
     ) -> StyledNode {
         match &self.kind {
@@ -731,6 +754,7 @@ impl VNode {
                 on_click: self.on_click.clone(),
                 on_hover: self.on_hover.clone(),
                 tooltip: styled_tooltip,
+                popup: styled_popup,
             },
             VNodeKind::Text { text } => StyledNode::Text {
                 path: path.clone(),
@@ -739,6 +763,7 @@ impl VNode {
                 on_click: self.on_click.clone(),
                 on_hover: self.on_hover.clone(),
                 tooltip: styled_tooltip,
+                popup: styled_popup,
             },
             VNodeKind::Progress { value, orientation } => StyledNode::Progress {
                 path: path.clone(),
@@ -748,6 +773,7 @@ impl VNode {
                 on_click: self.on_click.clone(),
                 on_hover: self.on_hover.clone(),
                 tooltip: styled_tooltip,
+                popup: styled_popup,
             },
             VNodeKind::Rect => StyledNode::Rect {
                 path: path.clone(),
@@ -755,6 +781,7 @@ impl VNode {
                 on_click: self.on_click.clone(),
                 on_hover: self.on_hover.clone(),
                 tooltip: styled_tooltip,
+                popup: styled_popup,
             },
             VNodeKind::Image { data, pixel_size } => StyledNode::Image {
                 path: path.clone(),
@@ -762,6 +789,7 @@ impl VNode {
                 pixel_size: *pixel_size,
                 style,
                 tooltip: styled_tooltip,
+                popup: styled_popup,
             },
             VNodeKind::Module {
                 name,
@@ -775,6 +803,7 @@ impl VNode {
                 on_click: self.on_click.clone(),
                 on_hover: self.on_hover.clone(),
                 tooltip: styled_tooltip,
+                popup: styled_popup,
             },
         }
     }
@@ -825,6 +854,7 @@ pub enum Patch {
         id_changed: bool,
         handlers_changed: bool,
         tooltip_patch: Option<Box<Self>>,
+        popup_patch: Option<Box<Self>>,
         kind_patch: Box<Self>,
     },
     UpdateText {
@@ -1244,5 +1274,40 @@ mod tests {
             map_handlers.get(&PointerButton::Extra),
             Some(&UiAction::Exec("extra_cmd".into()))
         );
+    }
+
+    #[test]
+    fn test_vnode_with_popup_and_style_resolution() {
+        struct MockResolver;
+        impl StyleResolverPort for MockResolver {
+            fn resolve_style(&self, _query: &ElementQuery) -> ComputedStyle {
+                ComputedStyle::default()
+            }
+        }
+
+        let popup_content = VNode::new_text(
+            TextContent::new("popup body".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let button = VNode::new_text(
+            TextContent::new("Open".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .with_popup(Box::new(popup_content.clone()));
+
+        assert!(button.popup().is_some());
+        assert_eq!(button.popup().unwrap(), &popup_content);
+
+        let resolver = MockResolver;
+        let styled = button.resolve_styles(&resolver, None, None);
+        assert!(styled.popup().is_some());
     }
 }

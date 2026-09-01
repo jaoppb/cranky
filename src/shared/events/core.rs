@@ -165,6 +165,7 @@ pub enum PointerEvent {
         axis: ScrollAxis,
         amount: ScrollDelta,
     },
+    PopupDismissed,
 }
 
 pub type PointerSender = tokio::sync::broadcast::Sender<(

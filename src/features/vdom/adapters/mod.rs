@@ -45,6 +45,26 @@ impl DefaultVdomDiffAdapter {
             })),
         };
 
+        let popup_patch = match (old_node.popup(), new_node.popup()) {
+            (None, None) => None,
+            (Some(old_p), Some(new_p)) => {
+                let p = self.diff_nodes(old_p, new_p);
+                if p.is_no_change() {
+                    None
+                } else {
+                    Some(Box::new(p))
+                }
+            }
+            (None, Some(new_p)) => Some(Box::new(Patch::Replace {
+                old_node_id: NodeId::new(),
+                new_node: Box::new(new_p.clone()),
+            })),
+            (Some(old_p), None) => Some(Box::new(Patch::Replace {
+                old_node_id: old_p.node_id(),
+                new_node: Box::new(VNode::new_rect(None, None, None, None, None)),
+            })),
+        };
+
         let kind_patch = match (old_node.kind(), new_node.kind()) {
             (VNodeKind::Text { text: old_text }, VNodeKind::Text { text: new_text }) => {
                 if old_text != new_text {
@@ -137,8 +157,11 @@ impl DefaultVdomDiffAdapter {
             },
         };
 
-        let props_dirty =
-            class_changed || id_changed || handlers_changed || tooltip_patch.is_some();
+        let props_dirty = class_changed
+            || id_changed
+            || handlers_changed
+            || tooltip_patch.is_some()
+            || popup_patch.is_some();
 
         if props_dirty {
             Patch::UpdateProps {
@@ -147,6 +170,7 @@ impl DefaultVdomDiffAdapter {
                 id_changed,
                 handlers_changed,
                 tooltip_patch,
+                popup_patch,
                 kind_patch: Box::new(kind_patch),
             }
         } else {
@@ -530,5 +554,48 @@ mod tests {
         let changed = adapter.diff(Some(&m1), &m2);
         assert!(!changed.is_unchanged());
         assert!(matches!(changed.patch(), Patch::UpdateModule { .. }));
+    }
+
+    #[test]
+    fn test_diff_popup_node_change() {
+        let adapter = DefaultVdomDiffAdapter::new();
+        let base = VNode::new_text(
+            TextContent::new("btn".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let popup1 = VNode::new_text(
+            TextContent::new("pop1".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let with_pop1 = base.clone().with_popup(Box::new(popup1));
+
+        // 1. None -> Some(popup)
+        let diff1 = adapter.diff(Some(&base), &with_pop1);
+        assert!(!diff1.is_unchanged());
+        match diff1.patch() {
+            Patch::UpdateProps { popup_patch, .. } => {
+                assert!(popup_patch.is_some());
+            }
+            _ => panic!("Expected UpdateProps with popup_patch"),
+        }
+
+        // 2. Some(popup) -> None
+        let diff2 = adapter.diff(Some(&with_pop1), &base);
+        assert!(!diff2.is_unchanged());
+        match diff2.patch() {
+            Patch::UpdateProps { popup_patch, .. } => {
+                assert!(popup_patch.is_some());
+            }
+            _ => panic!("Expected UpdateProps with popup_patch"),
+        }
     }
 }

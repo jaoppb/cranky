@@ -280,6 +280,7 @@ pub mod test_support {
                 on_click: None,
                 on_hover: None,
                 tooltip: None,
+                popup: None,
             })
         }
     }

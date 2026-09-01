@@ -159,18 +159,50 @@ impl<
                             DisplayCommand::RequestRender => {
                                 needs_render = true;
                             }
-                            DisplayCommand::ShowTooltip { layout } => {
-                                tracing::debug!(?layout, "Received DisplayCommand::ShowTooltip, calling display.show_tooltip");
-                                match display.show_tooltip(*layout) {
-                                    Ok(()) => tracing::debug!("display.show_tooltip succeeded"),
-                                    Err(e) => tracing::error!(err = ?e, "display.show_tooltip failed"),
+                            DisplayCommand::ShowFloatingSurface {
+                                kind,
+                                monitor_id,
+                                anchor_rect,
+                                layout,
+                            } => {
+                                tracing::debug!(
+                                    ?kind,
+                                    ?monitor_id,
+                                    ?anchor_rect,
+                                    "Received DisplayCommand::ShowFloatingSurface, calling display.show_floating_surface"
+                                );
+                                match display.show_floating_surface(
+                                    kind,
+                                    monitor_id,
+                                    anchor_rect,
+                                    *layout,
+                                ) {
+                                    Ok(()) => {
+                                        tracing::debug!("display.show_floating_surface succeeded");
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            err = ?e,
+                                            "display.show_floating_surface failed"
+                                        );
+                                    }
                                 }
                             }
-                            DisplayCommand::HideTooltip => {
-                                tracing::debug!("Received DisplayCommand::HideTooltip, calling display.hide_tooltip");
-                                match display.hide_tooltip() {
-                                    Ok(()) => tracing::debug!("display.hide_tooltip succeeded"),
-                                    Err(e) => tracing::error!(err = ?e, "display.hide_tooltip failed"),
+                            DisplayCommand::HideFloatingSurface { kind } => {
+                                tracing::debug!(
+                                    ?kind,
+                                    "Received DisplayCommand::HideFloatingSurface, calling display.hide_floating_surface"
+                                );
+                                match display.hide_floating_surface(&kind) {
+                                    Ok(()) => {
+                                        tracing::debug!("display.hide_floating_surface succeeded");
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            err = ?e,
+                                            "display.hide_floating_surface failed"
+                                        );
+                                    }
                                 }
                             }
                         }
@@ -803,8 +835,12 @@ mod tests {
         });
         mock_display.expect_dispatch_pending().returning(|| Ok(()));
         mock_display.expect_render_all().returning(|_, _| Ok(()));
-        mock_display.expect_show_tooltip().returning(|_| Ok(()));
-        mock_display.expect_hide_tooltip().returning(|| Ok(()));
+        mock_display
+            .expect_show_floating_surface()
+            .returning(|_, _, _, _| Ok(()));
+        mock_display
+            .expect_hide_floating_surface()
+            .returning(|_| Ok(()));
 
         let mock_conn = crate::shared::dbus::ports::MockDbusConnectionPort::new();
         let mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
@@ -828,7 +864,10 @@ mod tests {
             .await
             .unwrap();
         display_tx
-            .send(DisplayCommand::ShowTooltip {
+            .send(DisplayCommand::ShowFloatingSurface {
+                kind: crate::features::layout_engine::domain::FloatingKind::Tooltip,
+                monitor_id: None,
+                anchor_rect: None,
                 layout: Box::new(crate::features::layout_engine::domain::StyledNode::Text {
                     path: crate::features::layout_engine::domain::NodePath::root(),
                     text: crate::features::vdom::domain::TextContent::new("t".to_string()),
@@ -836,11 +875,17 @@ mod tests {
                     on_click: None,
                     on_hover: None,
                     tooltip: None,
+                    popup: None,
                 }),
             })
             .await
             .unwrap();
-        display_tx.send(DisplayCommand::HideTooltip).await.unwrap();
+        display_tx
+            .send(DisplayCommand::HideFloatingSurface {
+                kind: crate::features::layout_engine::domain::FloatingKind::Tooltip,
+            })
+            .await
+            .unwrap();
         ui_tx
             .send(UiCommand::SystrayAction {
                 id: "a".into(),
@@ -992,8 +1037,12 @@ mod tests {
         });
         mock_display.expect_dispatch_pending().returning(|| Ok(()));
         mock_display.expect_render_all().returning(|_, _| Ok(()));
-        mock_display.expect_show_tooltip().returning(|_| Ok(()));
-        mock_display.expect_hide_tooltip().returning(|| Ok(()));
+        mock_display
+            .expect_show_floating_surface()
+            .returning(|_, _, _, _| Ok(()));
+        mock_display
+            .expect_hide_floating_surface()
+            .returning(|_| Ok(()));
 
         let mock_conn = crate::shared::dbus::ports::MockDbusConnectionPort::new();
         let mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(

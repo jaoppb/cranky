@@ -1,4 +1,6 @@
-use crate::features::layout_engine::domain::{DisplayCommand, NodePath, RenderNode, StyledNode};
+use crate::features::layout_engine::domain::{
+    DisplayCommand, FloatingKind, NodePath, RenderNode, StyledNode,
+};
 use crate::features::vdom::domain::{InteractionContext, UiAction, UiCommand};
 use crate::shared::events::core::{PointerButton, PointerEvent};
 use crate::shared::primitives::geometry::Position;
@@ -231,11 +233,20 @@ impl PointerHandler {
         let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
         if hit_tooltip != self.last_tooltip {
             if let Some(layout) = &hit_tooltip {
-                actions.push(PointerAction::SendDisplay(DisplayCommand::ShowTooltip {
-                    layout: Box::new(layout.clone()),
-                }));
+                actions.push(PointerAction::SendDisplay(
+                    DisplayCommand::ShowFloatingSurface {
+                        kind: FloatingKind::Tooltip,
+                        monitor_id: Some(monitor_id.clone()),
+                        anchor_rect: None,
+                        layout: Box::new(layout.clone()),
+                    },
+                ));
             } else {
-                actions.push(PointerAction::SendDisplay(DisplayCommand::HideTooltip));
+                actions.push(PointerAction::SendDisplay(
+                    DisplayCommand::HideFloatingSurface {
+                        kind: FloatingKind::Tooltip,
+                    },
+                ));
             }
             self.last_tooltip = hit_tooltip;
         }
@@ -251,7 +262,11 @@ impl PointerHandler {
 
         let mut actions = Vec::new();
         if self.last_tooltip.is_some() {
-            actions.push(PointerAction::SendDisplay(DisplayCommand::HideTooltip));
+            actions.push(PointerAction::SendDisplay(
+                DisplayCommand::HideFloatingSurface {
+                    kind: FloatingKind::Tooltip,
+                },
+            ));
             self.last_tooltip = None;
         }
 
@@ -286,6 +301,12 @@ impl PointerHandler {
                 let (actions, state_changed) = self.handle_pointer_leave(monitor_id);
                 PointerOutcome::new(actions, state_changed)
             }
+            PointerEvent::PopupDismissed => {
+                PointerOutcome::new(
+                    vec![PointerAction::CallFunction(FunctionName::new("on_popup_dismiss"))],
+                    true,
+                )
+            }
             _ => PointerOutcome::empty(),
         }
     }
@@ -303,11 +324,20 @@ impl PointerHandler {
             let hit_tooltip = hit.iter().rev().find_map(|n| n.tooltip()).cloned();
             if hit_tooltip != self.last_tooltip {
                 if let Some(layout) = &hit_tooltip {
-                    actions.push(PointerAction::SendDisplay(DisplayCommand::ShowTooltip {
-                        layout: Box::new(layout.clone()),
-                    }));
+                    actions.push(PointerAction::SendDisplay(
+                        DisplayCommand::ShowFloatingSurface {
+                            kind: FloatingKind::Tooltip,
+                            monitor_id: Some(monitor_id.clone()),
+                            anchor_rect: None,
+                            layout: Box::new(layout.clone()),
+                        },
+                    ));
                 } else {
-                    actions.push(PointerAction::SendDisplay(DisplayCommand::HideTooltip));
+                    actions.push(PointerAction::SendDisplay(
+                        DisplayCommand::HideFloatingSurface {
+                            kind: FloatingKind::Tooltip,
+                        },
+                    ));
                 }
                 self.last_tooltip = hit_tooltip;
             }
@@ -339,6 +369,7 @@ mod tests {
             on_click,
             on_hover,
             tooltip: tooltip.map(Box::new),
+            popup: None,
         }
     }
 
@@ -566,10 +597,11 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
         let tree = make_test_tree(None, None, Some(tooltip_node.clone()));
 
-        // Motion inside -> ShowTooltip
+        // Motion inside -> ShowFloatingSurface
         let outcome = handler.handle_event(
             &PointerEvent::PointerMotion {
                 pos: Position::new(10, 10),
@@ -579,13 +611,18 @@ mod tests {
         );
         assert_eq!(outcome.actions().len(), 1);
         match &outcome.actions()[0] {
-            PointerAction::SendDisplay(DisplayCommand::ShowTooltip { layout }) => {
+            PointerAction::SendDisplay(DisplayCommand::ShowFloatingSurface {
+                kind,
+                layout,
+                ..
+            }) => {
+                assert_eq!(*kind, FloatingKind::Tooltip);
                 assert_eq!(**layout, tooltip_node);
             }
-            _ => panic!("Expected ShowTooltip"),
+            _ => panic!("Expected ShowFloatingSurface"),
         }
 
-        // Motion again on same tooltip -> no new ShowTooltip action
+        // Motion again on same tooltip -> no new ShowFloatingSurface action
         let outcome2 = handler.handle_event(
             &PointerEvent::PointerMotion {
                 pos: Position::new(12, 12),
@@ -595,12 +632,14 @@ mod tests {
         );
         assert!(outcome2.actions().is_empty());
 
-        // PointerLeave -> HideTooltip
+        // PointerLeave -> HideFloatingSurface
         let outcome3 = handler.handle_event(&PointerEvent::PointerLeave, &mon, &tree);
         assert_eq!(outcome3.actions().len(), 1);
         assert_eq!(
             outcome3.actions()[0],
-            PointerAction::SendDisplay(DisplayCommand::HideTooltip)
+            PointerAction::SendDisplay(DisplayCommand::HideFloatingSurface {
+                kind: FloatingKind::Tooltip,
+            })
         );
         assert!(handler.last_tooltip().is_none());
     }
@@ -628,6 +667,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
         let tree2 = make_test_tree(None, None, Some(tooltip_node.clone()));
         let mut render_trees = HashMap::new();
@@ -636,11 +676,32 @@ mod tests {
         let actions = handler.update_after_render(&render_trees);
         assert_eq!(actions.len(), 1);
         match &actions[0] {
-            PointerAction::SendDisplay(DisplayCommand::ShowTooltip { layout }) => {
+            PointerAction::SendDisplay(DisplayCommand::ShowFloatingSurface {
+                kind,
+                layout,
+                ..
+            }) => {
+                assert_eq!(*kind, FloatingKind::Tooltip);
                 assert_eq!(**layout, tooltip_node);
             }
-            _ => panic!("Expected ShowTooltip"),
+            _ => panic!("Expected ShowFloatingSurface"),
         }
+    }
+
+    #[test]
+    fn test_popup_dismissed_event() {
+        let mut handler = PointerHandler::new();
+        let mon = MonitorId::new("DP-1");
+        let tree = make_test_tree(None, None, None);
+
+        let outcome = handler.handle_event(&PointerEvent::PopupDismissed, &mon, &tree);
+        assert!(outcome.has_state_changed());
+        assert_eq!(
+            outcome.into_actions(),
+            vec![PointerAction::CallFunction(FunctionName::new(
+                "on_popup_dismiss"
+            ))]
+        );
     }
 
     #[test]

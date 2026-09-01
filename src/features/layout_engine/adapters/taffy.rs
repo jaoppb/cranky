@@ -661,6 +661,7 @@ fn build_render_tree(
             on_click,
             on_hover,
             tooltip,
+            popup,
         } => {
             let child_ids = taffy
                 .children(node_id)
@@ -684,6 +685,7 @@ fn build_render_tree(
                 on_click: on_click.clone(),
                 on_hover: on_hover.clone(),
                 tooltip: tooltip.clone(),
+                popup: popup.clone(),
             })
         }
         StyledNode::Text {
@@ -693,6 +695,7 @@ fn build_render_tree(
             on_click,
             on_hover,
             tooltip,
+            popup,
         } => Ok(RenderNode::Text {
             path: path.clone(),
             rect,
@@ -701,6 +704,7 @@ fn build_render_tree(
             on_click: on_click.clone(),
             on_hover: on_hover.clone(),
             tooltip: tooltip.clone(),
+            popup: popup.clone(),
         }),
         StyledNode::Progress {
             path,
@@ -710,6 +714,7 @@ fn build_render_tree(
             on_click,
             on_hover,
             tooltip,
+            popup,
         } => Ok(RenderNode::Progress {
             path: path.clone(),
             rect,
@@ -719,6 +724,7 @@ fn build_render_tree(
             on_click: on_click.clone(),
             on_hover: on_hover.clone(),
             tooltip: tooltip.clone(),
+            popup: popup.clone(),
         }),
         StyledNode::Rect {
             path,
@@ -726,6 +732,7 @@ fn build_render_tree(
             on_click,
             on_hover,
             tooltip,
+            popup,
         } => Ok(RenderNode::Rect {
             path: path.clone(),
             rect,
@@ -733,12 +740,14 @@ fn build_render_tree(
             on_click: on_click.clone(),
             on_hover: on_hover.clone(),
             tooltip: tooltip.clone(),
+            popup: popup.clone(),
         }),
         StyledNode::Image {
             path,
             data,
             pixel_size,
             tooltip,
+            popup,
             ..
         } => Ok(RenderNode::Image {
             path: path.clone(),
@@ -746,6 +755,7 @@ fn build_render_tree(
             data: data.clone(),
             pixel_size: *pixel_size,
             tooltip: tooltip.clone(),
+            popup: popup.clone(),
         }),
         StyledNode::Module {
             path,
@@ -754,6 +764,7 @@ fn build_render_tree(
             on_click,
             on_hover,
             tooltip,
+            popup,
             ..
         } => Ok(RenderNode::Module {
             path: path.clone(),
@@ -763,6 +774,7 @@ fn build_render_tree(
             on_click: on_click.clone(),
             on_hover: on_hover.clone(),
             tooltip: tooltip.clone(),
+            popup: popup.clone(),
         }),
     }
 }
@@ -809,6 +821,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
 
         let render_tree = adapter
@@ -835,6 +848,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
 
         let render_tree = adapter
@@ -859,6 +873,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
 
         let render_tree = adapter
@@ -881,6 +896,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
 
         let mut root_style = ComputedStyle::default();
@@ -894,6 +910,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
 
         let render_tree = adapter

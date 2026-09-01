@@ -230,6 +230,7 @@ type CommonProps = (
     Option<ClickHandlers>,
     Option<UiAction>,
     Option<Box<VNode>>,
+    Option<Box<VNode>>,
 );
 
 fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result<CommonProps> {
@@ -245,7 +246,11 @@ fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result<CommonProp
         .get::<Option<mlua::Value>>("tooltip")?
         .map(|tt| value_to_vnode(lua, tt).map(Box::new))
         .transpose()?;
-    Ok((class, id, on_click, on_hover, tooltip))
+    let popup = table
+        .get::<Option<mlua::Value>>("popup")?
+        .map(|p| value_to_vnode(lua, p).map(Box::new))
+        .transpose()?;
+    Ok((class, id, on_click, on_hover, tooltip, popup))
 }
 
 /// Converts a Lua value (either `LuaVNode` `UserData` or a table) into a `VNode`.
@@ -267,9 +272,10 @@ pub fn value_to_vnode(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
         }
         mlua::Value::Table(table) => {
             let typ: String = table.get::<Option<String>>("type")?.unwrap_or_default();
-            let (class, id, on_click, on_hover, tooltip) = parse_common_props(lua, &table)?;
+            let (class, id, on_click, on_hover, tooltip, popup) =
+                parse_common_props(lua, &table)?;
 
-            match typ.as_str() {
+            let mut node = match typ.as_str() {
                 "flex" | "" => {
                     let mut children_vec = Vec::new();
                     if let Ok(children) = table.get::<mlua::Table>("children") {
@@ -278,25 +284,25 @@ pub fn value_to_vnode(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
                             children_vec.push(value_to_vnode(lua, child_val)?);
                         }
                     }
-                    Ok(VNode::new_flex(
+                    VNode::new_flex(
                         children_vec,
                         class,
                         id,
                         on_click,
                         on_hover,
                         tooltip,
-                    ))
+                    )
                 }
                 "text" => {
                     let text_str = parse_text_content(&table);
-                    Ok(VNode::new_text(
+                    VNode::new_text(
                         TextContent::new(text_str),
                         class,
                         id,
                         on_click,
                         on_hover,
                         tooltip,
-                    ))
+                    )
                 }
                 "progress" => {
                     let value_num = table.get::<Option<f32>>("value")?.unwrap_or(0.0);
@@ -307,7 +313,7 @@ pub fn value_to_vnode(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
                         "vertical" => Orientation::Vertical,
                         _ => Orientation::Horizontal,
                     };
-                    Ok(VNode::new_progress(
+                    VNode::new_progress(
                         ProgressValue::new(value_num).unwrap_or_default(),
                         orientation,
                         class,
@@ -315,18 +321,18 @@ pub fn value_to_vnode(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
                         on_click,
                         on_hover,
                         tooltip,
-                    ))
+                    )
                 }
-                "rect" => Ok(VNode::new_rect(class, id, on_click, on_hover, tooltip)),
+                "rect" => VNode::new_rect(class, id, on_click, on_hover, tooltip),
                 "image" => {
                     let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
-                    Ok(VNode::new_image(data, pixel_size, class, id, tooltip))
+                    VNode::new_image(data, pixel_size, class, id, tooltip)
                 }
                 "module" => {
                     let name_str = table.get::<String>("name")?;
                     let instance_id_str = table.get::<Option<String>>("instance_id")?;
                     let options = parse_module_options(lua, &table)?;
-                    Ok(VNode::new_module(
+                    VNode::new_module(
                         ModuleName::new(name_str),
                         instance_id_str.map(ModuleInstanceId::new),
                         options,
@@ -335,10 +341,15 @@ pub fn value_to_vnode(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
                         on_click,
                         on_hover,
                         tooltip,
-                    ))
+                    )
                 }
-                _ => lua.from_value::<VNode>(mlua::Value::Table(table)),
+                _ => return lua.from_value::<VNode>(mlua::Value::Table(table)),
+            };
+
+            if let Some(p) = popup {
+                node = node.with_popup(p);
             }
+            Ok(node)
         }
         other => lua.from_value::<VNode>(other),
     }
@@ -363,15 +374,20 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
                     children_vec.push(value_to_vnode(lua, val)?);
                 }
             }
-            let (class, id, on_click, on_hover, tooltip) = parse_common_props(lua, &table)?;
-            Ok(LuaVNode(VNode::new_flex(
+            let (class, id, on_click, on_hover, tooltip, popup) =
+                parse_common_props(lua, &table)?;
+            let mut node = VNode::new_flex(
                 children_vec,
                 class,
                 id,
                 on_click,
                 on_hover,
                 tooltip,
-            )))
+            );
+            if let Some(p) = popup {
+                node = node.with_popup(p);
+            }
+            Ok(LuaVNode(node))
         })?,
     )?;
 
@@ -379,15 +395,20 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
         "text",
         lua.create_function(|lua, table: mlua::Table| {
             let text_str = parse_text_content(&table);
-            let (class, id, on_click, on_hover, tooltip) = parse_common_props(lua, &table)?;
-            Ok(LuaVNode(VNode::new_text(
+            let (class, id, on_click, on_hover, tooltip, popup) =
+                parse_common_props(lua, &table)?;
+            let mut node = VNode::new_text(
                 TextContent::new(text_str),
                 class,
                 id,
                 on_click,
                 on_hover,
                 tooltip,
-            )))
+            );
+            if let Some(p) = popup {
+                node = node.with_popup(p);
+            }
+            Ok(LuaVNode(node))
         })?,
     )?;
 
@@ -402,8 +423,9 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
                 "vertical" => Orientation::Vertical,
                 _ => Orientation::Horizontal,
             };
-            let (class, id, on_click, on_hover, tooltip) = parse_common_props(lua, &table)?;
-            Ok(LuaVNode(VNode::new_progress(
+            let (class, id, on_click, on_hover, tooltip, popup) =
+                parse_common_props(lua, &table)?;
+            let mut node = VNode::new_progress(
                 ProgressValue::new(value_num).unwrap_or_default(),
                 orientation,
                 class,
@@ -411,17 +433,24 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
                 on_click,
                 on_hover,
                 tooltip,
-            )))
+            );
+            if let Some(p) = popup {
+                node = node.with_popup(p);
+            }
+            Ok(LuaVNode(node))
         })?,
     )?;
 
     vdom.set(
         "rect",
         lua.create_function(|lua, table: mlua::Table| {
-            let (class, id, on_click, on_hover, tooltip) = parse_common_props(lua, &table)?;
-            Ok(LuaVNode(VNode::new_rect(
-                class, id, on_click, on_hover, tooltip,
-            )))
+            let (class, id, on_click, on_hover, tooltip, popup) =
+                parse_common_props(lua, &table)?;
+            let mut node = VNode::new_rect(class, id, on_click, on_hover, tooltip);
+            if let Some(p) = popup {
+                node = node.with_popup(p);
+            }
+            Ok(LuaVNode(node))
         })?,
     )?;
 
@@ -429,10 +458,12 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
         "image",
         lua.create_function(|lua, table: mlua::Table| {
             let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
-            let (class, id, _, _, tooltip) = parse_common_props(lua, &table)?;
-            Ok(LuaVNode(VNode::new_image(
-                data, pixel_size, class, id, tooltip,
-            )))
+            let (class, id, _, _, tooltip, popup) = parse_common_props(lua, &table)?;
+            let mut node = VNode::new_image(data, pixel_size, class, id, tooltip);
+            if let Some(p) = popup {
+                node = node.with_popup(p);
+            }
+            Ok(LuaVNode(node))
         })?,
     )?;
 
@@ -442,8 +473,9 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
             let name_str = table.get::<String>("name")?;
             let instance_id_str = table.get::<Option<String>>("instance_id")?;
             let options = parse_module_options(lua, &table)?;
-            let (class, id, on_click, on_hover, tooltip) = parse_common_props(lua, &table)?;
-            Ok(LuaVNode(VNode::new_module(
+            let (class, id, on_click, on_hover, tooltip, popup) =
+                parse_common_props(lua, &table)?;
+            let mut node = VNode::new_module(
                 ModuleName::new(name_str),
                 instance_id_str.map(ModuleInstanceId::new),
                 options,
@@ -452,7 +484,11 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
                 on_click,
                 on_hover,
                 tooltip,
-            )))
+            );
+            if let Some(p) = popup {
+                node = node.with_popup(p);
+            }
+            Ok(LuaVNode(node))
         })?,
     )?;
 
@@ -986,5 +1022,35 @@ mod tests {
             Some(&UiAction::Exec("echo extra".into()))
         );
         assert_eq!(multi_handlers.get(&PointerButton::Middle), None);
+    }
+
+    #[test]
+    fn test_lua_vnode_with_popup() {
+        let lua = Lua::new();
+        register_vdom_dsl(&lua).expect("DSL registration failed");
+
+        let script = r#"
+            return vdom.flex({
+                children = {
+                    vdom.text({
+                        text = "Show Popup",
+                        popup = vdom.flex({
+                            class = "popup-menu",
+                            children = {
+                                vdom.text({ text = "Item 1" })
+                            }
+                        })
+                    })
+                }
+            })
+        "#;
+        let val = lua.load(script).eval::<mlua::Value>().unwrap();
+        let node = value_to_vnode(&lua, val).unwrap();
+        assert_eq!(node.children().len(), 1);
+        let button_node = &node.children()[0];
+        assert!(button_node.popup().is_some());
+        let popup = button_node.popup().unwrap();
+        assert_eq!(popup.children().len(), 1);
+        assert_eq!(popup.tag(), crate::features::vdom::domain::NodeTag::Flex);
     }
 }

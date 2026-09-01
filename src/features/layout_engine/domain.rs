@@ -1,15 +1,30 @@
 use crate::features::vdom::domain::{ClickHandlers, UiAction};
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
-use crate::shared::primitives::geometry::Size;
-use crate::shared::primitives::{BinaryData, ChildModuleLayout, ModuleKey, ModuleOptions};
+use crate::shared::primitives::geometry::{Rect, Size};
+use crate::shared::primitives::{BinaryData, ChildModuleLayout, ModuleId, ModuleKey, ModuleOptions, MonitorId};
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FloatingKind {
+    Tooltip,
+    Popup {
+        module_id: ModuleId,
+    },
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DisplayCommand {
     RequestRender,
-    ShowTooltip { layout: Box<StyledNode> },
-    HideTooltip,
+    ShowFloatingSurface {
+        kind: FloatingKind,
+        monitor_id: Option<MonitorId>,
+        anchor_rect: Option<Rect>,
+        layout: Box<StyledNode>,
+    },
+    HideFloatingSurface {
+        kind: FloatingKind,
+    },
 }
 
 pub trait DisplayCommandSender: Send + Sync {
@@ -212,6 +227,7 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
+        popup: Option<Box<Self>>,
     },
     Text {
         path: NodePath,
@@ -220,6 +236,7 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
+        popup: Option<Box<Self>>,
     },
     Progress {
         path: NodePath,
@@ -229,6 +246,7 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
+        popup: Option<Box<Self>>,
     },
     Rect {
         path: NodePath,
@@ -236,6 +254,7 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
+        popup: Option<Box<Self>>,
     },
     Image {
         path: NodePath,
@@ -243,6 +262,7 @@ pub enum StyledNode {
         pixel_size: Size,
         style: ComputedStyle,
         tooltip: Option<Box<Self>>,
+        popup: Option<Box<Self>>,
     },
     Module {
         path: NodePath,
@@ -252,6 +272,7 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
+        popup: Option<Box<Self>>,
     },
 }
 
@@ -315,6 +336,18 @@ impl StyledNode {
             | Self::Module { tooltip, .. } => tooltip.as_deref(),
         }
     }
+
+    #[must_use]
+    pub fn popup(&self) -> Option<&Self> {
+        match self {
+            Self::Flex { popup, .. }
+            | Self::Text { popup, .. }
+            | Self::Progress { popup, .. }
+            | Self::Rect { popup, .. }
+            | Self::Image { popup, .. }
+            | Self::Module { popup, .. } => popup.as_deref(),
+        }
+    }
 }
 
 pub trait TextMeasurer: Send + Sync {
@@ -324,7 +357,28 @@ pub trait TextMeasurer: Send + Sync {
     }
 }
 
-use crate::shared::primitives::geometry::Rect;
+#[derive(Debug, Clone, PartialEq)]
+pub struct AnchoredPopup<'a> {
+    anchor_rect: Rect,
+    layout: &'a StyledNode,
+}
+
+impl<'a> AnchoredPopup<'a> {
+    #[must_use]
+    pub const fn new(anchor_rect: Rect, layout: &'a StyledNode) -> Self {
+        Self { anchor_rect, layout }
+    }
+
+    #[must_use]
+    pub const fn anchor_rect(&self) -> &Rect {
+        &self.anchor_rect
+    }
+
+    #[must_use]
+    pub const fn layout(&self) -> &'a StyledNode {
+        self.layout
+    }
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RenderNode {
@@ -336,6 +390,7 @@ pub enum RenderNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<StyledNode>>,
+        popup: Option<Box<StyledNode>>,
     },
     Text {
         path: NodePath,
@@ -345,6 +400,7 @@ pub enum RenderNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<StyledNode>>,
+        popup: Option<Box<StyledNode>>,
     },
     Progress {
         path: NodePath,
@@ -355,6 +411,7 @@ pub enum RenderNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<StyledNode>>,
+        popup: Option<Box<StyledNode>>,
     },
     Rect {
         path: NodePath,
@@ -363,6 +420,7 @@ pub enum RenderNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<StyledNode>>,
+        popup: Option<Box<StyledNode>>,
     },
     Image {
         path: NodePath,
@@ -370,6 +428,7 @@ pub enum RenderNode {
         data: BinaryData,
         pixel_size: Size,
         tooltip: Option<Box<StyledNode>>,
+        popup: Option<Box<StyledNode>>,
     },
     Module {
         path: NodePath,
@@ -379,6 +438,7 @@ pub enum RenderNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<StyledNode>>,
+        popup: Option<Box<StyledNode>>,
     },
 }
 
@@ -491,6 +551,33 @@ impl RenderNode {
             | Self::Image { tooltip, .. }
             | Self::Module { tooltip, .. } => tooltip.as_deref(),
         }
+    }
+
+    #[must_use]
+    pub fn popup(&self) -> Option<&StyledNode> {
+        match self {
+            Self::Flex { popup, .. }
+            | Self::Text { popup, .. }
+            | Self::Progress { popup, .. }
+            | Self::Rect { popup, .. }
+            | Self::Image { popup, .. }
+            | Self::Module { popup, .. } => popup.as_deref(),
+        }
+    }
+
+    #[must_use]
+    pub fn find_popup_with_anchor(&self) -> Option<AnchoredPopup<'_>> {
+        if let Some(popup) = self.popup() {
+            return Some(AnchoredPopup::new(self.rect(), popup));
+        }
+        if let Self::Flex { children, .. } = self {
+            for child in children {
+                if let Some(found) = child.find_popup_with_anchor() {
+                    return Some(found);
+                }
+            }
+        }
+        None
     }
 
     #[allow(
@@ -763,6 +850,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
         assert_eq!(node.rect(), rect);
         assert_eq!(node.on_click(), None);
@@ -781,6 +869,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
 
         let parent_node = RenderNode::Flex {
@@ -791,6 +880,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
 
         // Hit child
@@ -821,6 +911,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
 
         rect.render_to_canvas(&mut canvas);
@@ -837,6 +928,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
         flex.render_to_canvas(&mut canvas);
 
@@ -852,6 +944,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
         text.render_to_canvas(&mut canvas);
 
@@ -869,6 +962,7 @@ mod tests {
             on_click: None,
             on_hover: None,
             tooltip: None,
+            popup: None,
         };
         progress.render_to_canvas(&mut canvas);
 
@@ -880,7 +974,49 @@ mod tests {
             data: BinaryData::new(vec![0, 0, 0, 0]),
             pixel_size: Size::new(1, 1),
             tooltip: None,
+            popup: None,
         };
         image.render_to_canvas(&mut canvas);
+    }
+
+    #[test]
+    fn test_render_node_find_popup_with_anchor() {
+        let popup_styled = StyledNode::Text {
+            path: NodePath::root(),
+            text: TextContent::new("popup".to_string()),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+        };
+
+        let child = RenderNode::Text {
+            path: NodePath::new(vec![0]),
+            rect: Rect::new(Position::new(10, 10), Size::new(40, 20)),
+            text: TextContent::new("click me".to_string()),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: Some(Box::new(popup_styled.clone())),
+        };
+
+        let root = RenderNode::Flex {
+            path: NodePath::root(),
+            rect: Rect::new(Position::new(0, 0), Size::new(100, 100)),
+            children: vec![child],
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+        };
+
+        let found = root.find_popup_with_anchor();
+        assert!(found.is_some());
+        let anchored = found.unwrap();
+        assert_eq!(*anchored.anchor_rect(), Rect::new(Position::new(10, 10), Size::new(40, 20)));
+        assert_eq!(anchored.layout(), &popup_styled);
     }
 }
