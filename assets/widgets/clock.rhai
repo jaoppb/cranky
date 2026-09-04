@@ -33,12 +33,13 @@ fn day_of_week(y, m, d) {
 }
 
 fn init() {
-    if "format" in config { format_str = config["format"]; }
-    if "first_day_of_week" in config { first_day_of_week = config["first_day_of_week"].to_lower(); }
-    if "on_click" in config {
-        on_click_val = #{ Exec: config["on_click"] };
+    let options = if "options" in config { config.options } else if "module" in config { config["module"] } else { config };
+    if "format" in options { format_str = options["format"]; }
+    if "first_day_of_week" in options { first_day_of_week = options["first_day_of_week"].to_lower(); }
+    if "on_click" in options {
+        on_click_val = ui.action.exec(options["on_click"]);
     } else {
-        on_click_val = #{ ScriptCall: "toggle_popup" };
+        on_click_val = ui.action.script_call("toggle_popup");
     }
 }
 
@@ -99,8 +100,8 @@ fn parse_dec(s) {
 }
 
 fn refresh() {
-    if current_time != () {
-        let t = current_time.to_string();
+    if "time" in signals && signals.time != () {
+        let t = signals.time.to_string();
         if t.len() >= 19 {
             let yr = t.sub_string(0, 4);
             let mo = t.sub_string(5, 2);
@@ -148,7 +149,7 @@ fn refresh() {
     }
 }
 
-fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) {
+fn build_calendar_vnode(ui, v_year, v_month, t_year, t_month, t_day, first_dow_cfg) {
     let view_y = v_year;
     let view_m = v_month;
     if view_y == 0 {
@@ -162,30 +163,26 @@ fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) 
     ];
 
     // Header
-    let header_node = #{
-        type: "flex",
+    let header_node = ui.flex(#{
         class: "header",
         children: [
-            #{
-                type: "text",
+            ui.text(#{
                 class: "btn nav-btn",
                 text: "<",
-                on_click: #{ ScriptCall: "prev_month" }
-            },
-            #{
-                type: "text",
+                on_click: ui.action.script_call("prev_month")
+            }),
+            ui.text(#{
                 class: "title",
                 text: `${month_names[view_m - 1]} ${view_y}`,
-                on_click: #{ ScriptCall: "reset_today" }
-            },
-            #{
-                type: "text",
+                on_click: ui.action.script_call("reset_today")
+            }),
+            ui.text(#{
                 class: "btn nav-btn",
                 text: ">",
-                on_click: #{ ScriptCall: "next_month" }
-            }
+                on_click: ui.action.script_call("next_month")
+            })
         ]
-    };
+    });
 
     // Weekdays
     let weekday_labels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -195,18 +192,16 @@ fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) 
 
     let weekday_children = [];
     for label in weekday_labels {
-        weekday_children.push(#{
-            type: "text",
+        weekday_children.push(ui.text(#{
             class: "weekday",
             text: label
-        });
+        }));
     }
 
-    let weekdays_node = #{
-        type: "grid",
+    let weekdays_node = ui.grid(#{
         class: "weekdays",
         children: weekday_children
-    };
+    });
 
     // Days matrix
     let first_dow = day_of_week(view_y, view_m, 1);
@@ -231,11 +226,10 @@ fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) 
         let i = leading_count - 1;
         while i >= 0 {
             let day_num = prev_m_days - i;
-            day_children.push(#{
-                type: "text",
+            day_children.push(ui.text(#{
                 class: "day other-month",
                 text: `${day_num}`
-            });
+            }));
             i = i - 1;
         }
     }
@@ -248,11 +242,10 @@ fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) 
         if is_today {
             class_name = "day today";
         }
-        day_children.push(#{
-            type: "text",
+        day_children.push(ui.text(#{
             class: class_name,
             text: `${d}`
-        });
+        }));
         d = d + 1;
     }
 
@@ -260,34 +253,30 @@ fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) 
     let trailing_count = 42 - day_children.len();
     let td = 1;
     while td <= trailing_count {
-        day_children.push(#{
-            type: "text",
+        day_children.push(ui.text(#{
             class: "day other-month",
             text: `${td}`
-        });
+        }));
         td = td + 1;
     }
 
-    let days_grid_node = #{
-        type: "grid",
+    let days_grid_node = ui.grid(#{
         class: "grid",
         children: day_children
-    };
+    });
 
-    return #{
-        type: "flex",
+    ui.flex(#{
         class: "root",
         children: [
             header_node,
             weekdays_node,
             days_grid_node
         ]
-    };
+    })
 }
 
-fn render(monitor_id) {
+fn render(monitor) {
     let node = #{
-        type: "text",
         class: "time",
         text: time_str
     };
@@ -295,7 +284,7 @@ fn render(monitor_id) {
         node.on_click = on_click_val;
     }
     if show_popup {
-        node.popup = build_calendar_vnode(view_year, view_month, today_year, today_month, today_day, first_day_of_week);
+        node.popup = build_calendar_vnode(ui, view_year, view_month, today_year, today_month, today_day, first_day_of_week);
     }
-    return node;
+    return ui.text(node);
 }

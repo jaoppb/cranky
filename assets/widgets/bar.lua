@@ -3,14 +3,15 @@ local center = {}
 local right = {}
 
 function init()
-	if config.left then
-		left = config.left
+	local options = config.module or config.options or {}
+	if options.left then
+		left = options.left
 	end
-	if config.center then
-		center = config.center
+	if options.center then
+		center = options.center
 	end
-	if config.right then
-		right = config.right
+	if options.right then
+		right = options.right
 	end
 end
 
@@ -26,46 +27,31 @@ function refresh() end
 function render(monitor)
 	local left_children = {}
 	for _, mod_name in ipairs(left) do
-		table.insert(
-			left_children,
-			vdom.module({
-				name = mod_name,
-			})
-		)
+		table.insert(left_children, ui.module(mod_name))
 	end
 
 	local center_children = {}
 	for _, mod_name in ipairs(center) do
-		table.insert(
-			center_children,
-			vdom.module({
-				name = mod_name,
-			})
-		)
+		table.insert(center_children, ui.module(mod_name))
 	end
 
 	local right_children = {}
 	for _, mod_name in ipairs(right) do
-		table.insert(
-			right_children,
-			vdom.module({
-				name = mod_name,
-			})
-		)
+		table.insert(right_children, ui.module(mod_name))
 	end
 
-	return vdom.flex({
+	return ui.flex({
 		class = "root",
 		children = {
-			vdom.flex({
+			ui.flex({
 				class = "left",
 				children = left_children,
 			}),
-			vdom.flex({
+			ui.flex({
 				class = "center",
 				children = center_children,
 			}),
-			vdom.flex({
+			ui.flex({
 				class = "right",
 				children = right_children,
 			}),

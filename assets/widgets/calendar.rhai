@@ -28,8 +28,9 @@ fn day_of_week(y, m, d) {
 }
 
 fn init() {
-    if "first_day_of_week" in config {
-        first_day_of_week = config["first_day_of_week"].to_lower();
+    let options = if "options" in config { config.options } else if "module" in config { config["module"] } else { config };
+    if "first_day_of_week" in options {
+        first_day_of_week = options["first_day_of_week"].to_lower();
     }
 }
 
@@ -82,8 +83,8 @@ fn parse_dec(s) {
 }
 
 fn refresh() {
-    if current_time != () {
-        let t = current_time.to_string();
+    if "time" in signals && signals.time != () {
+        let t = signals.time.to_string();
         if t.len() >= 10 {
             let y_str = t.sub_string(0, 4);
             let m_str = t.sub_string(5, 2);
@@ -102,7 +103,7 @@ fn refresh() {
     }
 }
 
-fn render(monitor_id) {
+fn render(monitor) {
     if view_year == 0 {
         view_year = 2026;
         view_month = 1;
@@ -114,30 +115,26 @@ fn render(monitor_id) {
     ];
 
     // Header
-    let header_node = #{
-        type: "flex",
+    let header_node = ui.flex(#{
         class: "header",
         children: [
-            #{
-                type: "text",
+            ui.text(#{
                 class: "btn nav-btn",
                 text: "<",
-                on_click: #{ ScriptCall: "prev_month" }
-            },
-            #{
-                type: "text",
+                on_click: ui.action.script_call("prev_month")
+            }),
+            ui.text(#{
                 class: "title",
                 text: `${month_names[view_month - 1]} ${view_year}`,
-                on_click: #{ ScriptCall: "reset_today" }
-            },
-            #{
-                type: "text",
+                on_click: ui.action.script_call("reset_today")
+            }),
+            ui.text(#{
                 class: "btn nav-btn",
                 text: ">",
-                on_click: #{ ScriptCall: "next_month" }
-            }
+                on_click: ui.action.script_call("next_month")
+            })
         ]
-    };
+    });
 
     // Weekdays
     let weekday_labels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -147,18 +144,16 @@ fn render(monitor_id) {
 
     let weekday_children = [];
     for label in weekday_labels {
-        weekday_children.push(#{
-            type: "text",
+        weekday_children.push(ui.text(#{
             class: "weekday",
             text: label
-        });
+        }));
     }
 
-    let weekdays_node = #{
-        type: "grid",
+    let weekdays_node = ui.grid(#{
         class: "weekdays",
         children: weekday_children
-    };
+    });
 
     // Days matrix
     let first_dow = day_of_week(view_year, view_month, 1);
@@ -183,11 +178,10 @@ fn render(monitor_id) {
         let i = leading_count - 1;
         while i >= 0 {
             let day_num = prev_m_days - i;
-            day_children.push(#{
-                type: "text",
+            day_children.push(ui.text(#{
                 class: "day other-month",
                 text: `${day_num}`
-            });
+            }));
             i = i - 1;
         }
     }
@@ -200,11 +194,10 @@ fn render(monitor_id) {
         if is_today {
             class_name = "day today";
         }
-        day_children.push(#{
-            type: "text",
+        day_children.push(ui.text(#{
             class: class_name,
             text: `${d}`
-        });
+        }));
         d = d + 1;
     }
 
@@ -212,27 +205,24 @@ fn render(monitor_id) {
     let trailing_count = 42 - day_children.len();
     let td = 1;
     while td <= trailing_count {
-        day_children.push(#{
-            type: "text",
+        day_children.push(ui.text(#{
             class: "day other-month",
             text: `${td}`
-        });
+        }));
         td = td + 1;
     }
 
-    let days_grid_node = #{
-        type: "grid",
+    let days_grid_node = ui.grid(#{
         class: "grid",
         children: day_children
-    };
+    });
 
-    return #{
-        type: "flex",
+    ui.flex(#{
         class: "root",
         children: [
             header_node,
             weekdays_node,
             days_grid_node
         ]
-    };
+    })
 }

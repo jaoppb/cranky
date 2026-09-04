@@ -6,10 +6,11 @@ let empty_label = "systray: none";
 let items = [];
 
 fn init() {
-    if "show_titles" in config { show_titles = config["show_titles"]; }
-    if "show_icons" in config { show_icons = config["show_icons"]; }
-    if "max_items" in config { max_items = config["max_items"].to_int(); }
-    if "empty_label" in config { empty_label = config["empty_label"]; }
+    let options = if "options" in config { config.options } else if "module" in config { config["module"] } else { config };
+    if "show_titles" in options { show_titles = options["show_titles"]; }
+    if "show_icons" in options { show_icons = options["show_icons"]; }
+    if "max_items" in options { max_items = options["max_items"].to_int(); }
+    if "empty_label" in options { empty_label = options["empty_label"]; }
 }
 
 fn metadata() {
@@ -20,27 +21,25 @@ fn metadata() {
 }
 
 fn refresh() {
-    if systray != () {
-        items = systray;
+    if "systray" in signals && signals.systray != () {
+        items = signals.systray;
     } else {
         items = [];
     }
 }
 
-fn render(monitor_id) {
+fn render(monitor) {
     if items.len() == 0 {
-        return #{
-            type: "text",
+        return ui.text(#{
             class: "empty",
             text: empty_label,
-            tooltip: #{
-                type: "flex",
+            tooltip: ui.flex(#{
                 class: "tooltip",
                 children: [
-                    #{ type: "text", text: "No systray items are currently active" }
+                    ui.text(#{ text: "No systray items are currently active" })
                 ]
-            }
-        };
+            })
+        });
     }
 
     let children = [];
@@ -60,17 +59,15 @@ fn render(monitor_id) {
                 }
             }
             if img != () && type_of(img) == "map" {
-                item_children.push(#{
-                    type: "image",
+                item_children.push(ui.image(#{
                     class: "icon",
                     data: img.data,
                     pixel_size: img.size
-                });
+                }));
             } else {
-                item_children.push(#{
-                    type: "rect",
+                item_children.push(ui.rect(#{
                     class: "icon-placeholder"
-                });
+                }));
             }
         }
         
@@ -81,11 +78,10 @@ fn render(monitor_id) {
             } else if "item_id" in item && item.item_id != () && item.item_id != "" {
                 label = item.item_id;
             }
-            item_children.push(#{
-                type: "text",
+            item_children.push(ui.text(#{
                 class: "title",
                 text: label
-            });
+            }));
         }
         
         let tooltip_children = [];
@@ -99,10 +95,10 @@ fn render(monitor_id) {
                 d = item.tooltip.description;
             }
             if t != "" {
-                tooltip_children.push(#{ type: "text", class: "tooltip-title", text: t });
+                tooltip_children.push(ui.text(#{ class: "tooltip-title", text: t }));
             }
             if d != "" && d != t {
-                tooltip_children.push(#{ type: "text", class: "tooltip-desc", text: d });
+                tooltip_children.push(ui.text(#{ class: "tooltip-desc", text: d }));
             }
         }
         if tooltip_children.len() == 0 {
@@ -112,39 +108,27 @@ fn render(monitor_id) {
             } else if "item_id" in item && item.item_id != () && item.item_id != "" {
                 fallback = item.item_id;
             }
-            tooltip_children.push(#{ type: "text", class: "tooltip-title", text: fallback });
+            tooltip_children.push(ui.text(#{ class: "tooltip-title", text: fallback }));
         }
         
-        let item_node = #{
-            type: "flex",
+        let item_node = ui.flex(#{
             class: "item",
             children: item_children,
             on_click: #{
-                left: #{
-                    SystrayAction: #{
-                        id: item.id,
-                        action: "Primary"
-                    }
-                },
-                right: #{
-                    SystrayAction: #{
-                        id: item.id,
-                        action: "ContextMenu"
-                    }
-                }
+                left: ui.action.systray(item.id, "Primary"),
+                right: ui.action.systray(item.id, "ContextMenu")
             },
-            tooltip: #{
-                type: "flex",
+            tooltip: ui.flex(#{
                 class: "tooltip",
                 children: tooltip_children
-            }
-        };
+            })
+        });
+        
         children.push(item_node);
     }
     
-    #{
-        type: "flex",
+    ui.flex(#{
         class: "container",
         children: children
-    }
+    })
 }

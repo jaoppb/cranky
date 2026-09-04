@@ -134,7 +134,7 @@ impl PhysicalPx {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Scale(f32);
 
 impl Scale {

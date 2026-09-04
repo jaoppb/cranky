@@ -3,9 +3,10 @@ let center = [];
 let right = [];
 
 fn init() {
-    if "left" in config { left = config["left"]; }
-    if "center" in config { center = config["center"]; }
-    if "right" in config { right = config["right"]; }
+    let options = if "options" in config { config.options } else if "module" in config { config["module"] } else { config };
+    if "left" in options { left = options.left; }
+    if "center" in options { center = options.center; }
+    if "right" in options { right = options.right; }
 }
 
 fn metadata() {
@@ -15,53 +16,39 @@ fn metadata() {
     }
 }
 
-fn refresh() {
-}
+fn refresh() {}
 
-fn render(monitor_id) {
+fn render(monitor) {
     let left_children = [];
     for mod_name in left {
-        left_children.push(#{
-            type: "module",
-            name: mod_name
-        });
+        left_children.push(ui.widget(mod_name));
     }
 
     let center_children = [];
     for mod_name in center {
-        center_children.push(#{
-            type: "module",
-            name: mod_name
-        });
+        center_children.push(ui.widget(mod_name));
     }
 
     let right_children = [];
     for mod_name in right {
-        right_children.push(#{
-            type: "module",
-            name: mod_name
-        });
+        right_children.push(ui.widget(mod_name));
     }
 
-    #{
-        type: "flex",
+    ui.flex(#{
         class: "root",
         children: [
-            #{
-                type: "flex",
+            ui.flex(#{
                 class: "left",
                 children: left_children
-            },
-            #{
-                type: "flex",
+            }),
+            ui.flex(#{
                 class: "center",
                 children: center_children
-            },
-            #{
-                type: "flex",
+            }),
+            ui.flex(#{
                 class: "right",
                 children: right_children
-            }
+            })
         ]
-    }
+    })
 }

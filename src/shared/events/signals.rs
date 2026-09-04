@@ -281,6 +281,42 @@ impl SignalHub {
     }
 
     #[must_use]
+    pub fn get_monitor_infos(&self) -> Vec<crate::shared::primitives::ScriptMonitorInfo> {
+        let hypr = self.hyprland.1.borrow();
+        let scales = self.monitor_scales.1.borrow();
+        let focused_opt = hypr.effective_focused_monitor();
+
+        let mut infos = Vec::new();
+        for (name, monitor) in hypr.monitors() {
+            let id_str = name.as_str().to_string();
+            let mon_id = crate::shared::primitives::MonitorId::new(&id_str);
+            let scale_val = scales
+                .get(&mon_id)
+                .copied()
+                .unwrap_or_else(|| crate::shared::primitives::geometry::Scale::new(1.0));
+            let is_focused = focused_opt.as_ref() == Some(name);
+            let active_ws = Some(monitor.active_workspace_id().value());
+            let special_ws = monitor
+                .special_workspace_id()
+                .map(crate::features::workspaces::domain::WorkspaceId::value);
+
+            infos.push(crate::shared::primitives::ScriptMonitorInfo::new(
+                mon_id,
+                id_str,
+                crate::shared::primitives::geometry::Size::new(0, 0),
+                scale_val,
+                is_focused,
+                active_ws,
+                special_ws,
+            ));
+        }
+        drop(scales);
+        drop(hypr);
+
+        infos
+    }
+
+    #[must_use]
     pub fn module_sizes_tx(&self) -> watch::Sender<ModuleSizesMap> {
         self.module_sizes.0.clone()
     }

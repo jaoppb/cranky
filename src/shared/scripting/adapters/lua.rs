@@ -7,9 +7,9 @@ use crate::shared::events::core::PointerButton;
 use crate::shared::events::signals::{SignalHub, SignalKind};
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{
-    BinaryData, ModuleInstanceId, ModuleName, ModuleOptions, MonitorId,
+    BinaryData, ModuleInstanceId, ModuleName, ModuleOptions, MonitorId, ScriptMonitorInfo,
 };
-use mlua::{Function, Lua, LuaSerdeExt, UserData, UserDataMethods};
+use mlua::{Function, Lua, LuaSerdeExt, UserData, UserDataFields, UserDataMethods};
 use std::sync::Mutex;
 
 #[derive(Clone)]
@@ -18,11 +18,28 @@ pub struct LuaVNode(pub VNode);
 impl UserData for LuaVNode {}
 
 #[derive(Clone)]
-pub struct LuaMonitor(pub MonitorId);
+pub struct LuaMonitor(pub ScriptMonitorInfo);
 
 impl UserData for LuaMonitor {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("id", |_, this| Ok(this.0.id().as_str().to_string()));
+        fields.add_field_method_get("name", |_, this| Ok(this.0.name().to_string()));
+        fields.add_field_method_get("width", |_, this| Ok(this.0.size().width()));
+        fields.add_field_method_get("height", |_, this| Ok(this.0.size().height()));
+        fields.add_field_method_get("scale", |_, this| Ok(this.0.scale().value()));
+        fields.add_field_method_get("is_focused", |_, this| Ok(this.0.is_focused()));
+        fields.add_field_method_get("active_workspace_id", |_, this| {
+            Ok(this.0.active_workspace_id())
+        });
+        fields.add_field_method_get("special_workspace_id", |_, this| {
+            Ok(this.0.special_workspace_id())
+        });
+    }
+
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
-        methods.add_method("id", |_, this, ()| Ok(this.0.as_str().to_string()));
+        methods.add_meta_method(mlua::MetaMethod::ToString, |_, this, ()| {
+            Ok(this.0.id().as_str().to_string())
+        });
     }
 }
 
@@ -54,24 +71,31 @@ impl LuaStateSynchronizer {
     /// Returns `mlua::Error` if setting globals fails.
     pub fn sync(lua: &Lua, hub: &SignalHub, changed: &[SignalKind]) -> mlua::Result<()> {
         let globals = lua.globals();
+        let signals_table = if let Some(t) = globals.get::<Option<mlua::Table>>("signals")? {
+            t
+        } else {
+            let t = lua.create_table()?;
+            globals.set("signals", t.clone())?;
+            t
+        };
         let mut dbus_handled = false;
 
         for signal in changed {
             match signal {
                 SignalKind::Time => {
                     let time = *hub.time_rx().borrow();
-                    globals.set("current_time", time.to_rfc3339())?;
+                    signals_table.set("time", time.to_rfc3339())?;
                 }
                 SignalKind::Hyprland => {
                     let hypr = hub.hyprland_rx().borrow().clone();
                     if let Ok(val) = lua.to_value(&hypr) {
-                        globals.set("hyprland", val)?;
+                        signals_table.set("hyprland", val)?;
                     }
                 }
                 SignalKind::DBus if !dbus_handled => {
                     let dbus_state = hub.dbus_rx().borrow().clone();
                     if let Ok(val) = lua.to_value(&dbus_state.properties()) {
-                        globals.set("dbus", val)?;
+                        signals_table.set("dbus", val)?;
                     }
                     dbus_handled = true;
                 }
@@ -83,7 +107,7 @@ impl LuaStateSynchronizer {
                     tracing::debug!(item_count, "Serializing systray to Lua");
                     match lua.to_value(&items) {
                         Ok(val) => {
-                            globals.set("systray", val)?;
+                            signals_table.set("systray", val)?;
                             tracing::debug!(
                                 item_count,
                                 duration_ms = t0.elapsed().as_millis(),
@@ -97,18 +121,31 @@ impl LuaStateSynchronizer {
                 SignalKind::Metrics => {
                     let metrics = hub.metrics_rx().borrow().clone();
                     if let Ok(val) = lua.to_value(&metrics) {
-                        globals.set("metrics", val)?;
+                        signals_table.set("metrics", val)?;
                     }
                 }
                 SignalKind::Mpris => {
                     let mpris = hub.mpris_rx().borrow().clone();
                     if let Ok(val) = lua.to_value(&mpris) {
-                        let _ = globals.set("mpris", val);
+                        let _ = signals_table.set("mpris", val);
                     }
                 }
                 SignalKind::DBus => {}
             }
         }
+
+        // Update raw monitors
+        let monitor_infos = hub.get_monitor_infos();
+        let mon_table = lua.create_table()?;
+        let mut focused_mon = None;
+        for (i, info) in monitor_infos.into_iter().enumerate() {
+            if info.is_focused() {
+                focused_mon = Some(LuaMonitor(info.clone()));
+            }
+            mon_table.set(i.saturating_add(1), LuaMonitor(info))?;
+        }
+        globals.set("_raw_monitors", mon_table)?;
+        globals.set("_raw_focused_monitor", focused_mon)?;
 
         if let Ok(refresh_fn) = globals.get::<Function>("refresh") {
             let t0 = std::time::Instant::now();
@@ -367,44 +404,75 @@ pub fn value_to_vnode(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
     }
 }
 
-/// Registers the `vdom` DSL table in Lua globals.
-///
-/// # Errors
-///
-/// Returns `mlua::Error` if table creation or function registration fails.
-#[allow(clippy::too_many_lines)]
-pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
-    let vdom = lua.create_table()?;
+fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
+    let mlua::Value::Table(table) = val else {
+        return Ok(VNode::new_flex(Vec::new(), None, None, None, None, None));
+    };
 
-    vdom.set(
-        "flex",
-        lua.create_function(|lua, table: mlua::Table| {
-            let children_vec = parse_table_children(lua, &table)?;
-            let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
-            let mut node = VNode::new_flex(children_vec, class, id, on_click, on_hover, tooltip);
-            if let Some(p) = popup {
-                node = node.with_popup(p);
-            }
-            Ok(LuaVNode(node))
-        })?,
-    )?;
+    let is_full_spec = table.contains_key("type")?
+        || table.contains_key("class")?
+        || table.contains_key("children")?
+        || table.contains_key("id")?
+        || table.contains_key("on_click")?
+        || table.contains_key("on_hover")?
+        || table.contains_key("tooltip")?
+        || table.contains_key("popup")?;
 
-    vdom.set(
-        "grid",
-        lua.create_function(|lua, table: mlua::Table| {
-            let children_vec = parse_table_children(lua, &table)?;
-            let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
-            let mut node = VNode::new_grid(children_vec, class, id, on_click, on_hover, tooltip);
-            if let Some(p) = popup {
-                node = node.with_popup(p);
-            }
-            Ok(LuaVNode(node))
-        })?,
-    )?;
+    if is_full_spec {
+        let children_vec = parse_table_children(lua, &table)?;
+        let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
+        let mut node = VNode::new_flex(children_vec, class, id, on_click, on_hover, tooltip);
+        if let Some(p) = popup {
+            node = node.with_popup(p);
+        }
+        return Ok(node);
+    }
 
-    vdom.set(
-        "text",
-        lua.create_function(|lua, table: mlua::Table| {
+    let mut children_vec = Vec::new();
+    for pair in table.sequence_values::<mlua::Value>() {
+        children_vec.push(value_to_vnode(lua, pair?)?);
+    }
+    Ok(VNode::new_flex(children_vec, None, None, None, None, None))
+}
+
+fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
+    let mlua::Value::Table(table) = val else {
+        return Ok(VNode::new_grid(Vec::new(), None, None, None, None, None));
+    };
+
+    let is_full_spec = table.contains_key("type")?
+        || table.contains_key("class")?
+        || table.contains_key("children")?
+        || table.contains_key("id")?
+        || table.contains_key("on_click")?
+        || table.contains_key("on_hover")?
+        || table.contains_key("tooltip")?
+        || table.contains_key("popup")?;
+
+    if is_full_spec {
+        let children_vec = parse_table_children(lua, &table)?;
+        let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
+        let mut node = VNode::new_grid(children_vec, class, id, on_click, on_hover, tooltip);
+        if let Some(p) = popup {
+            node = node.with_popup(p);
+        }
+        return Ok(node);
+    }
+
+    let mut children_vec = Vec::new();
+    for pair in table.sequence_values::<mlua::Value>() {
+        children_vec.push(value_to_vnode(lua, pair?)?);
+    }
+    Ok(VNode::new_grid(children_vec, None, None, None, None, None))
+}
+
+fn parse_text_node(
+    lua: &Lua,
+    val: mlua::Value,
+    class_opt: Option<String>,
+) -> mlua::Result<VNode> {
+    match val {
+        mlua::Value::Table(table) => {
             let text_str = parse_text_content(&table);
             let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
             let mut node = VNode::new_text(
@@ -418,13 +486,62 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
             if let Some(p) = popup {
                 node = node.with_popup(p);
             }
-            Ok(LuaVNode(node))
-        })?,
-    )?;
+            Ok(node)
+        }
+        mlua::Value::String(s) => {
+            let text_str = s.to_str().map_or_else(|_| String::new(), |b| b.to_string());
+            let class = class_opt.and_then(|c| ClassNameList::parse(&c).ok());
+            Ok(VNode::new_text(
+                TextContent::new(text_str),
+                class,
+                None,
+                None,
+                None,
+                None,
+            ))
+        }
+        mlua::Value::Integer(i) => {
+            let class = class_opt.and_then(|c| ClassNameList::parse(&c).ok());
+            Ok(VNode::new_text(
+                TextContent::new(i.to_string()),
+                class,
+                None,
+                None,
+                None,
+                None,
+            ))
+        }
+        mlua::Value::Number(n) => {
+            let class = class_opt.and_then(|c| ClassNameList::parse(&c).ok());
+            Ok(VNode::new_text(
+                TextContent::new(n.to_string()),
+                class,
+                None,
+                None,
+                None,
+                None,
+            ))
+        }
+        _ => Ok(VNode::new_text(
+            TextContent::new(String::new()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )),
+    }
+}
 
-    vdom.set(
-        "progress",
-        lua.create_function(|lua, table: mlua::Table| {
+#[allow(clippy::needless_pass_by_value)]
+fn parse_progress_node(
+    lua: &Lua,
+    val: mlua::Value,
+    orientation_opt: Option<String>,
+    class_opt: Option<String>,
+) -> mlua::Result<VNode> {
+    match val {
+        mlua::Value::Table(table) => {
             let value_num = table.get::<Option<f32>>("value")?.unwrap_or(0.0);
             let orientation_str = table
                 .get::<Option<String>>("orientation")?
@@ -446,38 +563,91 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
             if let Some(p) = popup {
                 node = node.with_popup(p);
             }
-            Ok(LuaVNode(node))
-        })?,
-    )?;
+            Ok(node)
+        }
+        mlua::Value::Number(n) => {
+            #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+            let val_f32 = n as f32;
+            let orientation = match orientation_opt
+                .as_deref()
+                .unwrap_or("horizontal")
+                .to_lowercase()
+                .as_str()
+            {
+                "vertical" => Orientation::Vertical,
+                _ => Orientation::Horizontal,
+            };
+            let class = class_opt.and_then(|c| ClassNameList::parse(&c).ok());
+            Ok(VNode::new_progress(
+                ProgressValue::new(val_f32).unwrap_or_default(),
+                orientation,
+                class,
+                None,
+                None,
+                None,
+                None,
+            ))
+        }
+        mlua::Value::Integer(i) => {
+            #[allow(
+                clippy::as_conversions,
+                clippy::cast_possible_truncation,
+                clippy::cast_precision_loss
+            )]
+            let val_f32 = i as f32;
+            let orientation = match orientation_opt
+                .as_deref()
+                .unwrap_or("horizontal")
+                .to_lowercase()
+                .as_str()
+            {
+                "vertical" => Orientation::Vertical,
+                _ => Orientation::Horizontal,
+            };
+            let class = class_opt.and_then(|c| ClassNameList::parse(&c).ok());
+            Ok(VNode::new_progress(
+                ProgressValue::new(val_f32).unwrap_or_default(),
+                orientation,
+                class,
+                None,
+                None,
+                None,
+                None,
+            ))
+        }
+        _ => Ok(VNode::new_progress(
+            ProgressValue::default(),
+            Orientation::Horizontal,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )),
+    }
+}
 
-    vdom.set(
-        "rect",
-        lua.create_function(|lua, table: mlua::Table| {
+fn parse_rect_node(lua: &Lua, val: Option<mlua::Value>) -> mlua::Result<VNode> {
+    match val {
+        Some(mlua::Value::Table(table)) => {
             let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
             let mut node = VNode::new_rect(class, id, on_click, on_hover, tooltip);
             if let Some(p) = popup {
                 node = node.with_popup(p);
             }
-            Ok(LuaVNode(node))
-        })?,
-    )?;
+            Ok(node)
+        }
+        Some(mlua::Value::String(s)) => {
+            let class = s.to_str().ok().and_then(|c| ClassNameList::parse(c.as_ref()).ok());
+            Ok(VNode::new_rect(class, None, None, None, None))
+        }
+        _ => Ok(VNode::new_rect(None, None, None, None, None)),
+    }
+}
 
-    vdom.set(
-        "image",
-        lua.create_function(|lua, table: mlua::Table| {
-            let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
-            let (class, id, _, _, tooltip, popup) = parse_common_props(lua, &table)?;
-            let mut node = VNode::new_image(data, pixel_size, class, id, tooltip);
-            if let Some(p) = popup {
-                node = node.with_popup(p);
-            }
-            Ok(LuaVNode(node))
-        })?,
-    )?;
-
-    vdom.set(
-        "module",
-        lua.create_function(|lua, table: mlua::Table| {
+fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
+    match val {
+        mlua::Value::Table(table) => {
             let name_str = table.get::<String>("name")?;
             let instance_id_str = table.get::<Option<String>>("instance_id")?;
             let options = parse_module_options(lua, &table)?;
@@ -495,12 +665,314 @@ pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
             if let Some(p) = popup {
                 node = node.with_popup(p);
             }
-            Ok(LuaVNode(node))
+            Ok(node)
+        }
+        mlua::Value::String(s) => {
+            let name_str = s.to_str().map_or_else(|_| String::new(), |b| b.to_string());
+            Ok(VNode::new_module(
+                ModuleName::new(name_str),
+                None,
+                ModuleOptions::default(),
+                None,
+                None,
+                None,
+                None,
+                None,
+            ))
+        }
+        _ => Ok(VNode::new_module(
+            ModuleName::new(String::new()),
+            None,
+            ModuleOptions::default(),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )),
+    }
+}
+
+macro_rules! set_table_aliases {
+    ($table:expr, $value:expr, $($key:literal),*) => {
+        $(
+            $table.set($key, $value.clone())?;
+        )*
+    };
+}
+
+macro_rules! register_lua_log_methods {
+    ($lua:expr, $table:expr, $(($name:literal, $level:ident)),*) => {
+        $(
+            $table.set(
+                $name,
+                $lua.create_function(|_, msg: String| {
+                    tracing::$level!("{msg}");
+                    Ok(())
+                })?,
+            )?;
+        )*
+    };
+}
+
+fn create_ui_action_table(lua: &Lua) -> mlua::Result<mlua::Table> {
+    let action_table = lua.create_table()?;
+
+    action_table.set(
+        "exec",
+        lua.create_function(|lua, cmd: String| {
+            let t = lua.create_table()?;
+            t.set("Exec", cmd)?;
+            Ok(t)
         })?,
     )?;
 
-    lua.globals().set("vdom", vdom)?;
+    let call_fn = lua.create_function(|lua, name: String| {
+        let t = lua.create_table()?;
+        t.set("ScriptCall", name)?;
+        Ok(t)
+    })?;
+
+    set_table_aliases!(
+        action_table,
+        call_fn,
+        "call",
+        "script_call",
+        "call_script",
+        "func"
+    );
+
+    action_table.set(
+        "systray",
+        lua.create_function(|lua, (id, action): (mlua::Value, Option<String>)| {
+            let id_str = match id {
+                mlua::Value::String(s) => {
+                    s.to_str().map_or_else(|_| String::new(), |b| b.to_string())
+                }
+                mlua::Value::Integer(i) => i.to_string(),
+                mlua::Value::Number(n) => n.to_string(),
+                _ => String::new(),
+            };
+            let action_str = action.unwrap_or_else(|| "Primary".to_string());
+            let t = lua.create_table()?;
+            let sub = lua.create_table()?;
+            sub.set("id", id_str)?;
+            sub.set("action", action_str)?;
+            t.set("SystrayAction", sub)?;
+            Ok(t)
+        })?,
+    )?;
+
+    Ok(action_table)
+}
+
+fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
+    let element_table = lua.create_table()?;
+
+    let flex_fn = lua.create_function(|lua, val: mlua::Value| {
+        let node = parse_flex_node(lua, val)?;
+        Ok(LuaVNode(node))
+    })?;
+
+    let grid_fn = lua.create_function(|lua, val: mlua::Value| {
+        let node = parse_grid_node(lua, val)?;
+        Ok(LuaVNode(node))
+    })?;
+
+    let text_fn = lua.create_function(
+        |lua, (val, class_opt): (mlua::Value, Option<String>)| {
+            let node = parse_text_node(lua, val, class_opt)?;
+            Ok(LuaVNode(node))
+        },
+    )?;
+
+    let progress_fn = lua.create_function(
+        |lua, (val, orientation_opt, class_opt): (mlua::Value, Option<String>, Option<String>)| {
+            let node = parse_progress_node(lua, val, orientation_opt, class_opt)?;
+            Ok(LuaVNode(node))
+        },
+    )?;
+
+    let rect_fn = lua.create_function(|lua, val: Option<mlua::Value>| {
+        let node = parse_rect_node(lua, val)?;
+        Ok(LuaVNode(node))
+    })?;
+
+    let image_fn = lua.create_function(|lua, table: mlua::Table| {
+        let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
+        let (class, id, _, _, tooltip, popup) = parse_common_props(lua, &table)?;
+        let mut node = VNode::new_image(data, pixel_size, class, id, tooltip);
+        if let Some(p) = popup {
+            node = node.with_popup(p);
+        }
+        Ok(LuaVNode(node))
+    })?;
+
+    let module_fn = lua.create_function(|lua, val: mlua::Value| {
+        let node = parse_module_node(lua, val)?;
+        Ok(LuaVNode(node))
+    })?;
+
+    element_table.set("flex", flex_fn)?;
+    element_table.set("grid", grid_fn)?;
+    element_table.set("text", text_fn)?;
+    element_table.set("progress", progress_fn)?;
+    element_table.set("rect", rect_fn)?;
+    element_table.set("image", image_fn)?;
+    set_table_aliases!(
+        element_table,
+        module_fn,
+        "module",
+        "widget",
+        "load_module"
+    );
+
+    Ok(element_table)
+}
+
+fn create_sys_log_table(lua: &Lua) -> mlua::Result<mlua::Table> {
+    let log_table = lua.create_table()?;
+    register_lua_log_methods!(
+        lua,
+        log_table,
+        ("debug", debug),
+        ("info", info),
+        ("warn", warn),
+        ("error", error)
+    );
+    Ok(log_table)
+}
+
+fn create_sys_monitors_table(lua: &Lua) -> mlua::Result<mlua::Table> {
+    let monitors_table = lua.create_table()?;
+    monitors_table.set(
+        "all",
+        lua.create_function(|lua, ()| {
+            let globals = lua.globals();
+            let raw_monitors = globals.get::<Option<mlua::Table>>("_raw_monitors")?;
+            if let Some(t) = raw_monitors {
+                return Ok(t);
+            }
+            lua.create_table()
+        })?,
+    )?;
+    monitors_table.set(
+        "focused",
+        lua.create_function(|lua, ()| {
+            let globals = lua.globals();
+            let raw_focused = globals.get::<Option<mlua::Value>>("_raw_focused_monitor")?;
+            Ok(raw_focused)
+        })?,
+    )?;
+    monitors_table.set(
+        "current",
+        lua.create_function(|lua, ()| {
+            let globals = lua.globals();
+            let raw_focused = globals.get::<Option<mlua::Value>>("_raw_focused_monitor")?;
+            Ok(raw_focused)
+        })?,
+    )?;
+    monitors_table.set(
+        "get",
+        lua.create_function(|lua, id: String| {
+            let globals = lua.globals();
+            let raw_monitors = globals.get::<Option<mlua::Table>>("_raw_monitors")?;
+            let Some(t) = raw_monitors else {
+                return Ok(None);
+            };
+            for pair in t.sequence_values::<mlua::Value>() {
+                if let Ok(mlua::Value::UserData(ud)) = pair
+                    && let Ok(mon) = ud.borrow::<LuaMonitor>()
+                    && mon.0.id().as_str() == id.as_str()
+                {
+                    return Ok(Some(mlua::Value::UserData(ud)));
+                }
+            }
+            Ok(None)
+        })?,
+    )?;
+    Ok(monitors_table)
+}
+
+fn create_sys_table(lua: &Lua) -> mlua::Result<mlua::Table> {
+    let sys = lua.create_table()?;
+
+    sys.set(
+        "exec",
+        lua.create_function(|_, cmd: String| {
+            let _ = std::process::Command::new("sh").arg("-c").arg(&cmd).spawn();
+            Ok(())
+        })?,
+    )?;
+
+    sys.set(
+        "env",
+        lua.create_function(|_, name: String| Ok(std::env::var(&name).ok()))?,
+    )?;
+
+    sys.set(
+        "hostname",
+        lua.create_function(|_, ()| {
+            let name = std::fs::read_to_string("/etc/hostname").map_or_else(
+                |_| std::env::var("HOSTNAME").unwrap_or_else(|_| "localhost".to_string()),
+                |s| s.trim().to_string(),
+            );
+            Ok(name)
+        })?,
+    )?;
+
+    let log_table = create_sys_log_table(lua)?;
+    sys.set("log", log_table)?;
+
+    let monitors_table = create_sys_monitors_table(lua)?;
+    sys.set("monitors", monitors_table)?;
+
+    Ok(sys)
+}
+
+/// Registers the `cranky`, `ui`, `signals`, `config`, and `sys` APIs in Lua globals.
+///
+/// # Errors
+///
+/// Returns `mlua::Error` if table creation or function registration fails.
+pub fn register_cranky_api(lua: &Lua) -> mlua::Result<()> {
+    let ui_table = lua.create_table()?;
+    let element_table = create_ui_element_table(lua)?;
+    let action_table = create_ui_action_table(lua)?;
+
+    ui_table.set("element", element_table.clone())?;
+    ui_table.set("action", action_table)?;
+    for (k, v) in element_table.pairs::<String, mlua::Function>().flatten() {
+        ui_table.set(k, v)?;
+    }
+
+    let signals_table = lua.create_table()?;
+    let config_table = lua.create_table()?;
+    let sys_table = create_sys_table(lua)?;
+
+    let cranky_table = lua.create_table()?;
+    cranky_table.set("ui", ui_table.clone())?;
+    cranky_table.set("signals", signals_table.clone())?;
+    cranky_table.set("config", config_table.clone())?;
+    cranky_table.set("sys", sys_table.clone())?;
+
+    let globals = lua.globals();
+    globals.set("cranky", cranky_table)?;
+    globals.set("ui", ui_table)?;
+    globals.set("signals", signals_table)?;
+    globals.set("config", config_table)?;
+    globals.set("sys", sys_table)?;
+
     Ok(())
+}
+
+/// Legacy alias for `register_cranky_api`.
+///
+/// # Errors
+///
+/// Returns `mlua::Error` if table creation or function registration fails.
+pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
+    register_cranky_api(lua)
 }
 
 pub struct LuaModule {
@@ -656,7 +1128,22 @@ impl AnyModulePort for LuaModule {
 
             let root_config = full_config.root();
 
-            // Expose root config
+            // Set up config table
+            let config_table = if let Some(t) = globals
+                .get::<Option<mlua::Table>>("config")
+                .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?
+            {
+                t
+            } else {
+                let t = lua
+                    .create_table()
+                    .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+                globals
+                    .set("config", t.clone())
+                    .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+                t
+            };
+
             let root_config_table = lua
                 .create_table()
                 .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
@@ -666,16 +1153,19 @@ impl AnyModulePort for LuaModule {
             root_config_table
                 .set("height", root_config.height().value())
                 .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
-            globals
-                .set("root_config", root_config_table)
+            config_table
+                .set("root", root_config_table)
                 .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
 
             // Expose module config options using mlua's serde support
             let options_lua = lua.to_value(config.options()).map_err(|e| {
                 ModuleInitError::ConfigError(format!("Failed to convert config to Lua: {e}"))
             })?;
-            globals
-                .set("config", options_lua)
+            config_table
+                .set("module", options_lua.clone())
+                .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+            config_table
+                .set("options", options_lua)
                 .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
 
             // Load the script
@@ -745,7 +1235,22 @@ impl AnyModulePort for LuaModule {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let globals = lua.globals();
-        let lua_monitor = LuaMonitor(monitor.clone());
+
+        let lua_monitor = {
+            let mut mon_info = None;
+            if let Ok(Some(raw_monitors)) = globals.get::<Option<mlua::Table>>("_raw_monitors") {
+                for pair in raw_monitors.sequence_values::<mlua::Value>() {
+                    if let Ok(mlua::Value::UserData(ud)) = pair
+                        && let Ok(mon) = ud.borrow::<LuaMonitor>()
+                        && mon.0.id() == monitor
+                    {
+                        mon_info = Some(mon.0.clone());
+                        break;
+                    }
+                }
+            }
+            LuaMonitor(mon_info.unwrap_or_else(|| ScriptMonitorInfo::from_id(monitor)))
+        };
 
         if let Ok(render_fn) = globals.get::<mlua::Function>("render") {
             match render_fn.call::<mlua::Value>(lua_monitor) {
@@ -939,13 +1444,13 @@ mod tests {
     #[test]
     fn test_vdom_dsl_constructors() {
         let lua = Lua::new();
-        register_vdom_dsl(&lua).expect("DSL registration failed");
+        register_cranky_api(&lua).expect("DSL registration failed");
 
         let script = r#"
-            local txt = vdom.text({ text = "hello", class = "greeting" })
-            local rect = vdom.rect({ class = "box" })
-            local prog = vdom.progress({ value = 0.75, orientation = "vertical" })
-            local flex = vdom.flex({
+            local txt = ui.text({ text = "hello", class = "greeting" })
+            local rect = ui.rect({ class = "box" })
+            local prog = ui.progress({ value = 0.75, orientation = "vertical" })
+            local flex = ui.flex({
                 class = "root",
                 children = { txt, rect, prog }
             })
@@ -972,11 +1477,11 @@ mod tests {
     #[test]
     fn test_lua_vnode_click_handlers() {
         let lua = Lua::new();
-        register_vdom_dsl(&lua).expect("DSL registration failed");
+        register_cranky_api(&lua).expect("DSL registration failed");
 
         // Single shorthand
         let single_script = r#"
-            return vdom.text({
+            return ui.text({
                 text = "click me",
                 on_click = { Exec = "echo single" }
             })
@@ -999,7 +1504,7 @@ mod tests {
 
         // Multi-button map
         let multi_script = r#"
-            return vdom.text({
+            return ui.text({
                 text = "multi click",
                 on_click = {
                     left = { Exec = "echo left" },
@@ -1034,17 +1539,17 @@ mod tests {
     #[test]
     fn test_lua_vnode_with_popup() {
         let lua = Lua::new();
-        register_vdom_dsl(&lua).expect("DSL registration failed");
+        register_cranky_api(&lua).expect("DSL registration failed");
 
         let script = r#"
-            return vdom.flex({
+            return ui.flex({
                 children = {
-                    vdom.text({
+                    ui.text({
                         text = "Show Popup",
-                        popup = vdom.flex({
+                        popup = ui.flex({
                             class = "popup-menu",
                             children = {
-                                vdom.text({ text = "Item 1" })
+                                ui.text({ text = "Item 1" })
                             }
                         })
                     })
@@ -1064,14 +1569,14 @@ mod tests {
     #[test]
     fn test_lua_vnode_grid() {
         let lua = Lua::new();
-        register_vdom_dsl(&lua).expect("DSL registration failed");
+        register_cranky_api(&lua).expect("DSL registration failed");
 
         let script = r#"
-            return vdom.grid({
+            return ui.grid({
                 class = "my-grid",
                 children = {
-                    vdom.text({ text = "Cell 1" }),
-                    vdom.text({ text = "Cell 2" })
+                    ui.text({ text = "Cell 1" }),
+                    ui.text({ text = "Cell 2" })
                 }
             })
         "#;
@@ -1119,5 +1624,117 @@ mod tests {
         } else {
             panic!("Expected text node for weekday");
         }
+    }
+
+    #[test]
+    fn test_lua_cranky_namespaces_and_aliases() {
+        let lua = Lua::new();
+        register_cranky_api(&lua).expect("Registration failed");
+
+        let script = r#"
+            assert(type(cranky) == "table", "cranky must be table")
+            assert(type(cranky.ui) == "table", "cranky.ui must be table")
+            assert(type(cranky.ui.element) == "table", "cranky.ui.element must be table")
+            assert(type(cranky.ui.action) == "table", "cranky.ui.action must be table")
+            assert(type(cranky.signals) == "table", "cranky.signals must be table")
+            assert(type(cranky.config) == "table", "cranky.config must be table")
+            assert(type(cranky.sys) == "table", "cranky.sys must be table")
+
+            -- Direct aliases
+            assert(ui == cranky.ui, "ui must alias cranky.ui")
+            assert(signals == cranky.signals, "signals must alias cranky.signals")
+            assert(config == cranky.config, "config must alias cranky.config")
+            assert(sys == cranky.sys, "sys must alias cranky.sys")
+
+            -- Direct element aliases on ui
+            assert(type(ui.flex) == "function", "ui.flex must be function")
+            assert(type(ui.text) == "function", "ui.text must be function")
+            assert(type(ui.grid) == "function", "ui.grid must be function")
+            assert(type(ui.progress) == "function", "ui.progress must be function")
+            assert(type(ui.rect) == "function", "ui.rect must be function")
+            assert(type(ui.image) == "function", "ui.image must be function")
+            assert(type(ui.module) == "function", "ui.module must be function")
+            return true
+        "#;
+        let result = lua.load(script).eval::<bool>().expect("Script evaluation failed");
+        assert!(result);
+    }
+
+    #[test]
+    fn test_lua_shorthand_dsl() {
+        let lua = Lua::new();
+        register_cranky_api(&lua).expect("Registration failed");
+
+        let script = r#"
+            local t = ui.text("Hello World", "greeting-cls")
+            local p = ui.progress(0.75, "vertical", "cpu-bar")
+            local r = ui.rect("separator")
+            local m = ui.module("clock")
+            local root = ui.flex({ t, p, r, m })
+            return root
+        "#;
+        let val = lua.load(script).eval::<mlua::Value>().unwrap();
+        let vnode = value_to_vnode(&lua, val).unwrap();
+        assert_eq!(vnode.tag(), crate::features::vdom::domain::NodeTag::Flex);
+        assert_eq!(vnode.children().len(), 4);
+        assert_eq!(vnode.children()[0].tag(), crate::features::vdom::domain::NodeTag::Text);
+        assert_eq!(vnode.children()[1].tag(), crate::features::vdom::domain::NodeTag::Progress);
+        assert_eq!(vnode.children()[2].tag(), crate::features::vdom::domain::NodeTag::Rect);
+        assert_eq!(vnode.children()[3].tag(), crate::features::vdom::domain::NodeTag::Module);
+    }
+
+    #[test]
+    fn test_lua_ui_actions() {
+        let lua = Lua::new();
+        register_cranky_api(&lua).expect("Registration failed");
+
+        let script = r#"
+            local a1 = ui.action.exec("echo 123")
+            local a2 = ui.action.call("toggle_popup")
+            local a3 = ui.action.systray(5, "Primary")
+            return { a1 = a1, a2 = a2, a3 = a3 }
+        "#;
+        let table = lua.load(script).eval::<mlua::Table>().unwrap();
+        let a1: mlua::Table = table.get("a1").unwrap();
+        assert_eq!(a1.get::<String>("Exec").unwrap(), "echo 123");
+
+        let a2: mlua::Table = table.get("a2").unwrap();
+        assert_eq!(a2.get::<String>("ScriptCall").unwrap(), "toggle_popup");
+
+        let a3: mlua::Table = table.get("a3").unwrap();
+        let sub: mlua::Table = a3.get("SystrayAction").unwrap();
+        assert_eq!(sub.get::<u32>("id").unwrap(), 5);
+        assert_eq!(sub.get::<String>("action").unwrap(), "Primary");
+    }
+
+    #[test]
+    fn test_lua_rich_monitor_userdata() {
+        let lua = Lua::new();
+        let info = crate::shared::primitives::ScriptMonitorInfo::new(
+            MonitorId::new("DP-1"),
+            "DP-1".to_string(),
+            crate::shared::primitives::geometry::Size::new(1920, 1080),
+            crate::shared::primitives::geometry::Scale::new(1.5),
+            true,
+            Some(1),
+            Some(2),
+        );
+        let mon = LuaMonitor(info);
+        lua.globals().set("test_mon", mon).unwrap();
+
+        let script = r#"
+            assert(test_mon.id == "DP-1", "id field")
+            assert(test_mon.name == "DP-1", "name field")
+            assert(test_mon.width == 1920, "width field")
+            assert(test_mon.height == 1080, "height field")
+            assert(test_mon.scale == 1.5, "scale field")
+            assert(test_mon.is_focused == true, "is_focused field")
+            assert(test_mon.active_workspace_id == 1, "active_workspace_id field")
+            assert(test_mon.special_workspace_id == 2, "special_workspace_id field")
+            assert(tostring(test_mon) == "DP-1", "tostring()")
+            return true
+        "#;
+        let result = lua.load(script).eval::<bool>().unwrap();
+        assert!(result);
     }
 }

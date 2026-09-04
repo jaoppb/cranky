@@ -2,8 +2,7 @@ let workspaces = [];
 let active_workspaces = #{};
 let focused_monitor = "";
 
-fn init() {
-}
+fn init() {}
 
 fn metadata() {
     #{
@@ -13,17 +12,18 @@ fn metadata() {
 }
 
 fn refresh() {
-    if hyprland == () { return; }
+    if !("hyprland" in signals) || signals.hyprland == () { return; }
+    let hypr = signals.hyprland;
     
-    workspaces = hyprland.workspaces;
-    if hyprland.focused_monitor != () {
-        focused_monitor = hyprland.focused_monitor;
+    workspaces = hypr.workspaces;
+    if "focused_monitor" in hypr && hypr.focused_monitor != () {
+        focused_monitor = hypr.focused_monitor;
     } else {
         focused_monitor = "";
     }
     
     active_workspaces.clear();
-    for m in hyprland.monitors {
+    for m in hypr.monitors {
         let state = #{};
         state.active = m.active_workspace_id;
         let t = type_of(m.special_workspace_id);
@@ -78,7 +78,8 @@ fn refresh() {
     });
 }
 
-fn render(monitor_id) {
+fn render(monitor) {
+    let monitor_id = monitor.id;
     let active_id = -1;
     let special_id = -1;
     if monitor_id in active_workspaces {
@@ -105,26 +106,23 @@ fn render(monitor_id) {
             let current_active = if special_id != -1 && special_id != 0 { special_id } else { active_id };
             let is_visible = (ws.id == current_active);
             
-            let on_click_cmd = #{};
-            if is_special {
-                on_click_cmd["Exec"] = "hyprctl dispatch 'hl.dsp.workspace.toggle_special(\"" + label + "\")'";
+            let on_click_cmd = if is_special {
+                ui.action.exec("hyprctl dispatch 'hl.dsp.workspace.toggle_special(\"" + label + "\")'")
             } else {
-                on_click_cmd["Exec"] = "hyprctl dispatch 'hl.dsp.focus({ workspace = \"" + ws.id.to_string() + "\"})'";
-            }
+                ui.action.exec("hyprctl dispatch 'hl.dsp.focus({ workspace = \"" + ws.id.to_string() + "\"})'")
+            };
             
-            let text_node = #{
-                type: "text",
+            let text_node = ui.text(#{
                 class: "label",
                 text: label
-            };
+            });
             
-            let tooltip_node = #{
-                type: "flex",
+            let tooltip_node = ui.flex(#{
                 class: "tooltip",
                 children: [
-                    #{ type: "text", text: "Switch to workspace " + label }
+                    ui.text(#{ text: "Switch to workspace " + label })
                 ]
-            };
+            });
             
             let classes = "item";
             if is_visible {
@@ -135,22 +133,20 @@ fn render(monitor_id) {
                 }
             }
 
-            let box_node = #{
-                type: "flex",
+            let box_node = ui.flex(#{
                 class: classes,
                 id: "ws-" + ws.id.to_string(),
                 children: [text_node],
                 on_click: on_click_cmd,
                 tooltip: tooltip_node
-            };
+            });
             
             children.push(box_node);
         }
     }
     
-    #{
-        type: "flex",
+    ui.flex(#{
         class: "container",
         children: children
-    }
+    })
 }

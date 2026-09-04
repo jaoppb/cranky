@@ -19,15 +19,15 @@ function metadata()
 end
 
 function refresh()
-	if metrics then
-		state.cpu = metrics.cpu_usage
-		state.ram_used = metrics.memory_used
-		state.ram_total = metrics.memory_total
-		state.net_tx = metrics.network_tx
-		state.net_rx = metrics.network_rx
-		state.temp = metrics.temperature
-		state.disks = metrics.disks
-		state.config = metrics.config
+	if signals.metrics then
+		state.cpu = signals.metrics.cpu_usage
+		state.ram_used = signals.metrics.memory_used
+		state.ram_total = signals.metrics.memory_total
+		state.net_tx = signals.metrics.network_tx
+		state.net_rx = signals.metrics.network_rx
+		state.temp = signals.metrics.temperature
+		state.disks = signals.metrics.disks
+		state.config = signals.metrics.config
 	end
 end
 
@@ -53,7 +53,8 @@ local function get_progress_class(percent)
 end
 
 local function is_enabled(metric_name, global_mode)
-	if config and config[metric_name] == false then
+	local options = config.module or config.options or {}
+	if options[metric_name] == false then
 		return false
 	end
 	if global_mode == nil or global_mode == "disabled" then
@@ -118,12 +119,12 @@ end
 
 function render(monitor)
 	if not state.config then
-		return vdom.flex({ class = "container" })
+		return ui.flex({ class = "container" })
 	end
 
 	local widgets = get_widgets()
 	if #widgets == 0 then
-		return vdom.flex({ class = "container" })
+		return ui.flex({ class = "container" })
 	end
 
 	local children = {}
@@ -133,7 +134,7 @@ function render(monitor)
 
 		table.insert(
 			widget_children,
-			vdom.text({
+			ui.text({
 				class = "label",
 				text = w.label,
 			})
@@ -143,7 +144,7 @@ function render(monitor)
 			local percent = math.min(100, math.max(0, w.value))
 			table.insert(
 				widget_children,
-				vdom.progress({
+				ui.progress({
 					class = get_progress_class(percent),
 					value = percent / 100.0,
 					orientation = "horizontal",
@@ -152,7 +153,7 @@ function render(monitor)
 		elseif w.type == "text" then
 			table.insert(
 				widget_children,
-				vdom.text({
+				ui.text({
 					class = "value",
 					text = w.text,
 				})
@@ -161,14 +162,14 @@ function render(monitor)
 
 		table.insert(
 			children,
-			vdom.flex({
+			ui.flex({
 				class = "item",
 				children = widget_children,
 			})
 		)
 	end
 
-	return vdom.flex({
+	return ui.flex({
 		class = "container",
 		children = children,
 	})

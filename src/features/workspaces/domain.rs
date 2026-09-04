@@ -8,6 +8,11 @@ impl WorkspaceId {
     pub const fn new(id: i32) -> Self {
         Self(id)
     }
+
+    #[must_use]
+    pub const fn value(&self) -> i32 {
+        self.0
+    }
 }
 
 impl std::fmt::Display for WorkspaceId {

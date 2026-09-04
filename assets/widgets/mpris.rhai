@@ -13,8 +13,8 @@ fn metadata() {
 }
 
 fn refresh() {
-    if "players" in mpris {
-        player_map = mpris.players;
+    if "mpris" in signals && signals.mpris != () && "players" in signals.mpris {
+        player_map = signals.mpris.players;
         player_list = player_map.keys();
         player_list.sort();
 
@@ -70,33 +70,31 @@ fn next_player_name() {
     return get_player_display_name(idx);
 }
 
-fn create_button(icon, click_action, tooltip_text, class_name) {
+fn create_button(ui, icon, click_action, tooltip_text, class_name) {
     let ttip = ();
     if tooltip_text != () {
-        ttip = #{
-            type: "flex",
+        ttip = ui.flex(#{
             class: "tooltip",
             children: [
-                #{ type: "text", text: tooltip_text }
+                ui.text(#{ text: tooltip_text })
             ]
-        };
+        });
     }
 
-    return #{
-        type: "flex",
+    return ui.flex(#{
         class: class_name,
         on_click: click_action,
         tooltip: ttip,
         children: [
-            #{ type: "text", text: icon }
+            ui.text(#{ text: icon })
         ]
-    };
+    });
 }
 
 fn render(monitor) {
     let p_res = get_active_player();
     if p_res == () {
-        return #{ type: "flex", class: "container", children: [] };
+        return ui.flex(#{ class: "container", children: [] });
     }
     
     let p = p_res[0];
@@ -128,26 +126,26 @@ fn render(monitor) {
     // Player cycling: left arrow
     if player_list.len() > 1 {
         let prev_name = prev_player_name();
-        children.push(create_button("󰅁", #{ ScriptCall: "cycle_prev" }, prev_name, "btn-cycle"));
+        children.push(create_button(ui, "󰅁", ui.action.script_call("cycle_prev"), prev_name, "btn-cycle"));
     }
 
     // Prev Track button
-    children.push(create_button("󰒮", #{ Exec: "playerctl --player=" + bus_name + " previous" }, "Previous Track", "btn-prev"));
+    children.push(create_button(ui, "󰒮", ui.action.exec("playerctl --player=" + bus_name + " previous"), "Previous Track", "btn-prev"));
 
     // Play/Pause button
     let status_icon = "󰐊";
     if is_playing { status_icon = "󰏤"; }
     let play_pause_ttip = "Play";
     if is_playing { play_pause_ttip = "Pause"; }
-    children.push(create_button(status_icon, #{ Exec: "playerctl --player=" + bus_name + " play-pause" }, play_pause_ttip, "btn-play"));
+    children.push(create_button(ui, status_icon, ui.action.exec("playerctl --player=" + bus_name + " play-pause"), play_pause_ttip, "btn-play"));
 
     // Next Track button
-    children.push(create_button("󰒭", #{ Exec: "playerctl --player=" + bus_name + " next" }, "Next Track", "btn-next"));
+    children.push(create_button(ui, "󰒭", ui.action.exec("playerctl --player=" + bus_name + " next"), "Next Track", "btn-next"));
 
     // Player cycling: right arrow
     if player_list.len() > 1 {
         let nxt = next_player_name();
-        children.push(create_button("󰅂", #{ ScriptCall: "cycle_next" }, nxt, "btn-cycle"));
+        children.push(create_button(ui, "󰅂", ui.action.script_call("cycle_next"), nxt, "btn-cycle"));
     }
 
     let max_width = 30;
@@ -165,27 +163,24 @@ fn render(monitor) {
     }
 
     // Track info
-    children.push(#{
-        type: "flex",
+    children.push(ui.flex(#{
         class: "track-info",
-        tooltip: #{
-            type: "flex",
+        tooltip: ui.flex(#{
             class: "tooltip",
             children: [
-                #{ type: "text", class: "title", text: "Title: " + title },
-                #{ type: "text", class: "artist", text: "Artist: " + artist_disp },
-                #{ type: "text", class: "status", text: "Status: " + p.status },
-                #{ type: "text", class: "player", text: "Player: " + player_disp }
+                ui.text(#{ class: "title", text: "Title: " + title }),
+                ui.text(#{ class: "artist", text: "Artist: " + artist_disp }),
+                ui.text(#{ class: "status", text: "Status: " + p.status }),
+                ui.text(#{ class: "player", text: "Player: " + player_disp })
             ]
-        },
+        }),
         children: [
-            #{ type: "text", text: truncated_text }
+            ui.text(#{ text: truncated_text })
         ]
-    });
+    }));
 
-    return #{
-        type: "flex",
+    return ui.flex(#{
         class: "container",
         children: children,
-    };
+    });
 }

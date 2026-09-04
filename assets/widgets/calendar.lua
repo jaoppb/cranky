@@ -43,8 +43,9 @@ local function day_of_week(y, m, d)
 end
 
 function init()
-	if config.first_day_of_week then
-		first_day_of_week = string.lower(config.first_day_of_week)
+	local options = config.module or config.options or {}
+	if options.first_day_of_week then
+		first_day_of_week = string.lower(options.first_day_of_week)
 	end
 end
 
@@ -77,13 +78,11 @@ function reset_today()
 end
 
 function refresh()
-	if current_time then
-		local y, m, d = current_time:match("^(%d+)%-(%d+)%-(%d+)")
+	if signals.time then
+		local y, m, d = signals.time:match("^(%d+)%-(%d+)%-(%d+)")
 		if y then
 			local ny, nm, nd = tonumber(y), tonumber(m), tonumber(d)
-			today_year = ny
-			today_month = nm
-			today_day = nd
+			today_year, today_month, today_day = ny, nm, nd
 			if view_year == 0 then
 				view_year = ny
 				view_month = nm
@@ -99,23 +98,23 @@ function render(monitor)
 	end
 
 	-- Header with navigation buttons and month/year title
-	local header_node = vdom.flex({
+	local header_node = ui.flex({
 		class = "header",
 		children = {
-			vdom.text({
+			ui.text({
 				class = "btn nav-btn",
 				text = "<",
-				on_click = { ScriptCall = "prev_month" },
+				on_click = ui.action.call("prev_month"),
 			}),
-			vdom.text({
+			ui.text({
 				class = "title",
 				text = string.format("%s %d", month_names[view_month], view_year),
-				on_click = { ScriptCall = "reset_today" },
+				on_click = ui.action.call("reset_today"),
 			}),
-			vdom.text({
+			ui.text({
 				class = "btn nav-btn",
 				text = ">",
-				on_click = { ScriptCall = "next_month" },
+				on_click = ui.action.call("next_month"),
 			}),
 		},
 	})
@@ -129,14 +128,14 @@ function render(monitor)
 	for _, label in ipairs(weekday_labels) do
 		table.insert(
 			weekday_children,
-			vdom.text({
+			ui.text({
 				class = "weekday",
 				text = label,
 			})
 		)
 	end
 
-	local weekdays_node = vdom.grid({
+	local weekdays_node = ui.grid({
 		class = "weekdays",
 		children = weekday_children,
 	})
@@ -156,7 +155,7 @@ function render(monitor)
 	for i = leading_count - 1, 0, -1 do
 		table.insert(
 			day_children,
-			vdom.text({
+			ui.text({
 				class = "day other-month",
 				text = tostring(prev_m_days - i),
 			})
@@ -169,7 +168,7 @@ function render(monitor)
 		local class_name = is_today and "day today" or "day"
 		table.insert(
 			day_children,
-			vdom.text({
+			ui.text({
 				class = class_name,
 				text = tostring(d),
 			})
@@ -182,19 +181,19 @@ function render(monitor)
 	for d = 1, trailing_count do
 		table.insert(
 			day_children,
-			vdom.text({
+			ui.text({
 				class = "day other-month",
 				text = tostring(d),
 			})
 		)
 	end
 
-	local days_grid_node = vdom.grid({
+	local days_grid_node = ui.grid({
 		class = "grid",
 		children = day_children,
 	})
 
-	return vdom.flex({
+	return ui.flex({
 		class = "root",
 		children = {
 			header_node,

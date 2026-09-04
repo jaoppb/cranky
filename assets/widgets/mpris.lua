@@ -12,8 +12,8 @@ function metadata()
 end
 
 function refresh()
-	if mpris and mpris.players then
-		player_map = mpris.players
+	if signals.mpris and signals.mpris.players then
+		player_map = signals.mpris.players
 		player_list = {}
 		for name, _ in pairs(player_map) do
 			table.insert(player_list, name)
@@ -94,10 +94,10 @@ end
 local function create_button(icon, cmd, tooltip_text, class_name)
 	local ttip = nil
 	if tooltip_text then
-		ttip = vdom.flex({
+		ttip = ui.flex({
 			class = "tooltip",
 			children = {
-				vdom.text({ text = tooltip_text }),
+				ui.text({ text = tooltip_text }),
 			},
 		})
 	end
@@ -105,20 +105,20 @@ local function create_button(icon, cmd, tooltip_text, class_name)
 	local click_action
 	if type(cmd) == "string" then
 		if cmd:match("^playerctl") then
-			click_action = { Exec = cmd }
+			click_action = ui.action.exec(cmd)
 		else
-			click_action = { ScriptCall = cmd }
+			click_action = ui.action.call(cmd)
 		end
 	else
 		click_action = cmd
 	end
 
-	return vdom.flex({
+	return ui.flex({
 		class = class_name or "btn",
 		on_click = click_action,
 		tooltip = ttip,
 		children = {
-			vdom.text({ text = icon }),
+			ui.text({ text = icon }),
 		},
 	})
 end
@@ -126,7 +126,7 @@ end
 function render(monitor)
 	local p, bus_name = get_active_player()
 	if not p then
-		return vdom.flex({ class = "container" })
+		return ui.flex({ class = "container" })
 	end
 
 	local title = p.track_name or "Unknown"
@@ -185,24 +185,24 @@ function render(monitor)
 	-- Track info
 	table.insert(
 		children,
-		vdom.flex({
+		ui.flex({
 			class = "track-info",
-			tooltip = vdom.flex({
+			tooltip = ui.flex({
 				class = "tooltip",
 				children = {
-					vdom.text({ class = "title", text = "Title: " .. title }),
-					vdom.text({ class = "artist", text = "Artist: " .. (artist ~= "" and artist or "Unknown") }),
-					vdom.text({ class = "status", text = "Status: " .. p.status }),
-					vdom.text({ class = "player", text = "Player: " .. (p.name or bus_name) }),
+					ui.text({ class = "title", text = "Title: " .. title }),
+					ui.text({ class = "artist", text = "Artist: " .. (artist ~= "" and artist or "Unknown") }),
+					ui.text({ class = "status", text = "Status: " .. p.status }),
+					ui.text({ class = "player", text = "Player: " .. (p.name or bus_name) }),
 				},
 			}),
 			children = {
-				vdom.text({ text = truncated_text }),
+				ui.text({ text = truncated_text }),
 			},
 		})
 	)
 
-	return vdom.flex({
+	return ui.flex({
 		class = "container",
 		children = children,
 	})

@@ -12,6 +12,7 @@ function metadata()
 end
 
 function refresh()
+	local hyprland = signals.hyprland
 	if not hyprland then
 		return
 	end
@@ -70,7 +71,7 @@ function refresh()
 end
 
 function render(monitor)
-	local monitor_id = monitor:id()
+	local monitor_id = monitor.id or tostring(monitor)
 	local active_ids = active_workspaces[monitor_id] or { active = -1 }
 
 	local children = {}
@@ -96,7 +97,7 @@ function render(monitor)
 				exec_cmd = "hyprctl dispatch 'hl.dsp.focus({ workspace = \"" .. ws.id .. "\"})'"
 			end
 
-			local text_node = vdom.text({
+			local text_node = ui.text({
 				class = "label",
 				text = label,
 			})
@@ -112,14 +113,14 @@ function render(monitor)
 
 			table.insert(
 				children,
-				vdom.flex({
+				ui.flex({
 					class = classes,
 					id = "ws-" .. ws.id,
-					on_click = { Exec = exec_cmd },
-					tooltip = vdom.flex({
+					on_click = ui.action.exec(exec_cmd),
+					tooltip = ui.flex({
 						class = "tooltip",
 						children = {
-							vdom.text({ text = "Switch to workspace " .. label }),
+							ui.text({ text = "Switch to workspace " .. label }),
 						},
 					}),
 					children = { text_node },
@@ -128,7 +129,7 @@ function render(monitor)
 		end
 	end
 
-	return vdom.flex({
+	return ui.flex({
 		class = "container",
 		children = children,
 	})

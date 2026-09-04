@@ -47,16 +47,17 @@ local function day_of_week(y, m, d)
 end
 
 function init()
-	if config.format then
-		format = config.format
+	local options = config.module or config.options or {}
+	if options.format then
+		format = options.format
 	end
-	if config.first_day_of_week then
-		first_day_of_week = string.lower(config.first_day_of_week)
+	if options.first_day_of_week then
+		first_day_of_week = string.lower(options.first_day_of_week)
 	end
-	if config.on_click then
-		on_click = { Exec = config.on_click }
+	if options.on_click then
+		on_click = ui.action.exec(options.on_click)
 	else
-		on_click = { ScriptCall = "toggle_popup" }
+		on_click = ui.action.call("toggle_popup")
 	end
 end
 
@@ -97,8 +98,8 @@ function reset_today()
 end
 
 function refresh()
-	if current_time then
-		local y, m, d, h, min, s = current_time:match("^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)")
+	if signals.time then
+		local y, m, d, h, min, s = signals.time:match("^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)")
 		if y then
 			local ts = os.time({ year = y, month = m, day = d, hour = h, min = min, sec = s })
 			time_str = os.date(format, ts)
@@ -109,7 +110,7 @@ function refresh()
 				view_month = nm
 			end
 		else
-			time_str = current_time
+			time_str = signals.time
 		end
 	else
 		time_str = os.date(format)
@@ -123,23 +124,23 @@ local function build_calendar_vnode()
 	end
 
 	-- Header
-	local header_node = vdom.flex({
+	local header_node = ui.flex({
 		class = "header",
 		children = {
-			vdom.text({
+			ui.text({
 				class = "btn nav-btn",
 				text = "<",
-				on_click = { ScriptCall = "prev_month" },
+				on_click = ui.action.call("prev_month"),
 			}),
-			vdom.text({
+			ui.text({
 				class = "title",
 				text = string.format("%s %d", month_names[view_month], view_year),
-				on_click = { ScriptCall = "reset_today" },
+				on_click = ui.action.call("reset_today"),
 			}),
-			vdom.text({
+			ui.text({
 				class = "btn nav-btn",
 				text = ">",
-				on_click = { ScriptCall = "next_month" },
+				on_click = ui.action.call("next_month"),
 			}),
 		},
 	})
@@ -153,14 +154,14 @@ local function build_calendar_vnode()
 	for _, label in ipairs(weekday_labels) do
 		table.insert(
 			weekday_children,
-			vdom.text({
+			ui.text({
 				class = "weekday",
 				text = label,
 			})
 		)
 	end
 
-	local weekdays_node = vdom.grid({
+	local weekdays_node = ui.grid({
 		class = "weekdays",
 		children = weekday_children,
 	})
@@ -180,7 +181,7 @@ local function build_calendar_vnode()
 	for i = leading_count - 1, 0, -1 do
 		table.insert(
 			day_children,
-			vdom.text({
+			ui.text({
 				class = "day other-month",
 				text = tostring(prev_m_days - i),
 			})
@@ -193,7 +194,7 @@ local function build_calendar_vnode()
 		local class_name = is_today and "day today" or "day"
 		table.insert(
 			day_children,
-			vdom.text({
+			ui.text({
 				class = class_name,
 				text = tostring(d),
 			})
@@ -206,19 +207,19 @@ local function build_calendar_vnode()
 	for d = 1, trailing_count do
 		table.insert(
 			day_children,
-			vdom.text({
+			ui.text({
 				class = "day other-month",
 				text = tostring(d),
 			})
 		)
 	end
 
-	local days_grid_node = vdom.grid({
+	local days_grid_node = ui.grid({
 		class = "grid",
 		children = day_children,
 	})
 
-	return vdom.flex({
+	return ui.flex({
 		class = "root",
 		children = {
 			header_node,
@@ -237,5 +238,5 @@ function render(monitor)
 	if show_popup then
 		node.popup = build_calendar_vnode()
 	end
-	return vdom.text(node)
+	return ui.text(node)
 end

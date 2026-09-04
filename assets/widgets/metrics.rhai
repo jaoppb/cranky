@@ -20,15 +20,16 @@ fn metadata() {
 }
 
 fn refresh() {
-    if metrics != () {
-        state.cpu = metrics.cpu_usage;
-        state.ram_used = metrics.memory_used;
-        state.ram_total = metrics.memory_total;
-        state.net_tx = metrics.network_tx;
-        state.net_rx = metrics.network_rx;
-        state.temp = metrics.temperature;
-        state.disks = metrics.disks;
-        state.config = metrics.config;
+    if "metrics" in signals && signals.metrics != () {
+        let m = signals.metrics;
+        state.cpu = m.cpu_usage;
+        state.ram_used = m.memory_used;
+        state.ram_total = m.memory_total;
+        state.net_tx = m.network_tx;
+        state.net_rx = m.network_rx;
+        state.temp = m.temperature;
+        state.disks = m.disks;
+        state.config = m.config;
     }
 }
 
@@ -55,7 +56,8 @@ fn get_progress_class(percent) {
 }
 
 fn is_enabled(metric_name, global_mode, cfg) {
-    if metric_name in cfg && cfg[metric_name] == false {
+    let options = if "options" in cfg { cfg.options } else if "module" in cfg { cfg["module"] } else { cfg };
+    if metric_name in options && options[metric_name] == false {
         return false;
     }
     if global_mode == () || global_mode == "disabled" {
@@ -112,54 +114,49 @@ fn get_widgets(s, cfg) {
     widgets
 }
 
-fn render(monitor_id) {
+fn render(monitor) {
     if state.config == () {
-        return #{ type: "flex", class: "container", children: [] };
+        return ui.flex(#{ class: "container", children: [] });
     }
     
     let widgets = get_widgets(state, config);
     if widgets.len() == 0 {
-        return #{ type: "flex", class: "container", children: [] };
+        return ui.flex(#{ class: "container", children: [] });
     }
 
     let children = [];
 
     for w in widgets {
         let widget_children = [];
-        widget_children.push(#{
-            type: "text",
+        widget_children.push(ui.text(#{
             class: "label",
             text: w.label,
-        });
+        }));
 
         if w.type == "bar" {
             let percent = w.value;
             if percent > 100.0 { percent = 100.0; }
             if percent < 0.0 { percent = 0.0; }
-            widget_children.push(#{
-                type: "progress",
+            widget_children.push(ui.progress(#{
                 class: get_progress_class(percent),
                 value: percent / 100.0,
                 orientation: "horizontal"
-            });
+            }));
         } else if w.type == "text" {
-            widget_children.push(#{
-                type: "text",
+            widget_children.push(ui.text(#{
                 class: "value",
                 text: w.text,
-            });
+            }));
         }
 
-        children.push(#{
-            type: "flex",
+        children.push(ui.flex(#{
             class: "item",
             children: widget_children
-        });
+        }));
     }
 
-    #{
-        type: "flex",
+    ui.flex(#{
         class: "container",
         children: children
-    }
+    })
 }

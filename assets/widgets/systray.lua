@@ -6,17 +6,18 @@ local empty_label = "systray: none"
 local items = {}
 
 function init()
-	if config.show_titles ~= nil then
-		show_titles = config.show_titles
+	local options = config.module or config.options or {}
+	if options.show_titles ~= nil then
+		show_titles = options.show_titles
 	end
-	if config.show_icons ~= nil then
-		show_icons = config.show_icons
+	if options.show_icons ~= nil then
+		show_icons = options.show_icons
 	end
-	if config.max_items ~= nil then
-		max_items = config.max_items
+	if options.max_items ~= nil then
+		max_items = options.max_items
 	end
-	if config.empty_label ~= nil then
-		empty_label = config.empty_label
+	if options.empty_label ~= nil then
+		empty_label = options.empty_label
 	end
 end
 
@@ -28,18 +29,18 @@ function metadata()
 end
 
 function refresh()
-	items = systray or {}
+	items = signals.systray or {}
 end
 
 function render(monitor)
 	if #items == 0 then
-		return vdom.text({
+		return ui.text({
 			class = "empty",
 			text = empty_label,
-			tooltip = vdom.flex({
+			tooltip = ui.flex({
 				class = "tooltip",
 				children = {
-					vdom.text({ text = "No systray items are currently active" }),
+					ui.text({ text = "No systray items are currently active" }),
 				},
 			}),
 		})
@@ -61,7 +62,7 @@ function render(monitor)
 			if type(img) == "table" then
 				table.insert(
 					item_children,
-					vdom.image({
+					ui.image({
 						class = "icon",
 						data = img.data,
 						pixel_size = img.size,
@@ -70,7 +71,7 @@ function render(monitor)
 			else
 				table.insert(
 					item_children,
-					vdom.rect({
+					ui.rect({
 						class = "icon-placeholder",
 					})
 				)
@@ -81,7 +82,7 @@ function render(monitor)
 			local label = (item.title and item.title ~= "") and item.title or item.item_id or "app"
 			table.insert(
 				item_children,
-				vdom.text({
+				ui.text({
 					class = "title",
 					text = label,
 				})
@@ -93,40 +94,30 @@ function render(monitor)
 			local t = item.tooltip.title or ""
 			local d = item.tooltip.description or ""
 			if t ~= "" then
-				table.insert(tooltip_children, vdom.text({ class = "tooltip-title", text = t }))
+				table.insert(tooltip_children, ui.text({ class = "tooltip-title", text = t }))
 			end
 			if d ~= "" and d ~= t then
-				table.insert(tooltip_children, vdom.text({ class = "tooltip-desc", text = d }))
+				table.insert(tooltip_children, ui.text({ class = "tooltip-desc", text = d }))
 			end
 		end
 		if #tooltip_children == 0 then
 			table.insert(
 				tooltip_children,
-				vdom.text({
+				ui.text({
 					class = "tooltip-title",
 					text = (item.title and item.title ~= "") and item.title or item.item_id or "app",
 				})
 			)
 		end
 
-		local item_node = vdom.flex({
+		local item_node = ui.flex({
 			class = "item",
 			children = item_children,
 			on_click = {
-				left = {
-					SystrayAction = {
-						id = item.id,
-						action = "Primary",
-					},
-				},
-				right = {
-					SystrayAction = {
-						id = item.id,
-						action = "ContextMenu",
-					},
-				},
+				left = ui.action.systray(item.id, "Primary"),
+				right = ui.action.systray(item.id, "ContextMenu"),
 			},
-			tooltip = vdom.flex({
+			tooltip = ui.flex({
 				class = "tooltip",
 				children = tooltip_children,
 			}),
@@ -134,7 +125,7 @@ function render(monitor)
 		table.insert(children, item_node)
 	end
 
-	return vdom.flex({
+	return ui.flex({
 		class = "container",
 		children = children,
 	})
