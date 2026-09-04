@@ -1,9 +1,4 @@
-local format = "%H:%M:%S"
-local time_str = ""
-local on_click = nil
-local show_popup = false
 local first_day_of_week = "sunday"
-
 local today_year = 0
 local today_month = 0
 local today_day = 0
@@ -24,6 +19,7 @@ local month_names = {
 	"November",
 	"December",
 }
+
 local month_days = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
 
 local function is_leap_year(y)
@@ -47,32 +43,16 @@ local function day_of_week(y, m, d)
 end
 
 function init()
-	if config.format then
-		format = config.format
-	end
 	if config.first_day_of_week then
 		first_day_of_week = string.lower(config.first_day_of_week)
-	end
-	if config.on_click then
-		on_click = { Exec = config.on_click }
-	else
-		on_click = { ScriptCall = "toggle_popup" }
 	end
 end
 
 function metadata()
 	return {
 		subscriptions = { "time" },
-		styles = { "clock", "calendar" },
+		styles = { "calendar" },
 	}
-end
-
-function toggle_popup()
-	show_popup = not show_popup
-end
-
-function on_popup_dismiss()
-	show_popup = false
 end
 
 function prev_month()
@@ -98,31 +78,27 @@ end
 
 function refresh()
 	if current_time then
-		local y, m, d, h, min, s = current_time:match("^(%d+)%-(%d+)%-(%d+)T(%d+):(%d+):(%d+)")
+		local y, m, d = current_time:match("^(%d+)%-(%d+)%-(%d+)")
 		if y then
-			local ts = os.time({ year = y, month = m, day = d, hour = h, min = min, sec = s })
-			time_str = os.date(format, ts)
 			local ny, nm, nd = tonumber(y), tonumber(m), tonumber(d)
-			today_year, today_month, today_day = ny, nm, nd
+			today_year = ny
+			today_month = nm
+			today_day = nd
 			if view_year == 0 then
 				view_year = ny
 				view_month = nm
 			end
-		else
-			time_str = current_time
 		end
-	else
-		time_str = os.date(format)
 	end
 end
 
-local function build_calendar_vnode()
+function render(monitor)
 	if view_year == 0 then
 		view_year = 2026
 		view_month = 1
 	end
 
-	-- Header
+	-- Header with navigation buttons and month/year title
 	local header_node = vdom.flex({
 		class = "header",
 		children = {
@@ -144,7 +120,7 @@ local function build_calendar_vnode()
 		},
 	})
 
-	-- Weekdays
+	-- Weekday headers
 	local weekday_labels = (first_day_of_week == "monday")
 			and { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" }
 		or { "Su", "Mo", "Tu", "We", "Th", "Fr", "Sa" }
@@ -165,7 +141,7 @@ local function build_calendar_vnode()
 		children = weekday_children,
 	})
 
-	-- Days matrix
+	-- Days matrix calculation
 	local first_dow = day_of_week(view_year, view_month, 1)
 	local leading_count = (first_day_of_week == "monday") and ((first_dow + 6) % 7) or first_dow
 
@@ -176,7 +152,7 @@ local function build_calendar_vnode()
 
 	local day_children = {}
 
-	-- Leading days
+	-- Leading days (previous month)
 	for i = leading_count - 1, 0, -1 do
 		table.insert(
 			day_children,
@@ -200,7 +176,7 @@ local function build_calendar_vnode()
 		)
 	end
 
-	-- Trailing days
+	-- Trailing days (next month) to fill 42 cells (6 rows x 7 cols)
 	local total_so_far = #day_children
 	local trailing_count = 42 - total_so_far
 	for d = 1, trailing_count do
@@ -226,16 +202,4 @@ local function build_calendar_vnode()
 			days_grid_node,
 		},
 	})
-end
-
-function render(monitor)
-	local node = {
-		class = "time",
-		text = time_str,
-		on_click = on_click,
-	}
-	if show_popup then
-		node.popup = build_calendar_vnode()
-	end
-	return vdom.text(node)
 end

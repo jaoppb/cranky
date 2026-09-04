@@ -217,6 +217,7 @@ struct FloatingSurface {
     size: crate::shared::primitives::geometry::Size,
     layout: crate::features::layout_engine::domain::StyledNode,
     reposition_token: u32,
+    monitor_id: crate::shared::primitives::MonitorId,
 }
 
 impl Drop for FloatingSurface {
@@ -666,7 +667,7 @@ impl DisplayServerPort for WaylandAdapter {
             let positioner = xdg_wm_base.create_positioner(&qh, ());
             let width_i32 = i32::try_from(width).unwrap_or_default();
             let height_i32 = i32::try_from(height).unwrap_or_default();
-            positioner.set_size(text_w, text_h);
+            positioner.set_size(text_w.max(1), text_h.max(1));
             positioner.set_anchor_rect(anchor_x, anchor_y, anchor_w.max(1), anchor_h.max(1));
             positioner
                 .set_anchor(wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom);
@@ -728,7 +729,7 @@ impl DisplayServerPort for WaylandAdapter {
         }
 
         let positioner = xdg_wm_base.create_positioner(&qh, ());
-        positioner.set_size(text_w, text_h);
+        positioner.set_size(text_w.max(1), text_h.max(1));
         positioner.set_anchor_rect(anchor_x, anchor_y, anchor_w.max(1), anchor_h.max(1));
         positioner
             .set_anchor(wayland_protocols::xdg::shell::client::xdg_positioner::Anchor::Bottom);
@@ -760,7 +761,7 @@ impl DisplayServerPort for WaylandAdapter {
         if let crate::features::layout_engine::domain::FloatingKind::Popup { module_id } = kind {
             state
                 .surface_to_id
-                .insert(surface.clone(), (module_id, target_monitor_id));
+                .insert(surface.clone(), (module_id, target_monitor_id.clone()));
         }
 
         state.floating_surfaces.insert(
@@ -773,6 +774,7 @@ impl DisplayServerPort for WaylandAdapter {
                 size: new_size,
                 layout,
                 reposition_token: 0,
+                monitor_id: target_monitor_id,
             },
         );
 
@@ -1618,7 +1620,7 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
                     {
                         let _ = state.hub.pointer_tx().send((
                             module_id,
-                            crate::shared::primitives::MonitorId::new(""),
+                            floating.monitor_id.clone(),
                             crate::shared::events::core::PointerEvent::PopupDismissed,
                         ));
                     }

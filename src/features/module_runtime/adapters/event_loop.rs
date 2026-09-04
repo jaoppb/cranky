@@ -7,6 +7,7 @@ use crate::features::module_runtime::ports::{AnyModulePort, LayoutEvent, LayoutE
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
+use crate::shared::events::core::PointerEvent;
 use crate::shared::events::signals::SignalKind;
 use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::Rect;
@@ -160,6 +161,9 @@ impl<
             event = ?event,
             "Received pointer event in module actor"
         );
+        if matches!(event, PointerEvent::PopupDismissed) {
+            self.active_popups.remove(monitor_id);
+        }
         if let Some(render_tree) = self.render_pipeline.render_trees().get(monitor_id) {
             let outcome = self
                 .pointer_handler

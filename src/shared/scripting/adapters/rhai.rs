@@ -359,6 +359,11 @@ impl AnyModulePort for RhaiModule {
         match engine.call_fn::<()>(&mut scope, &self.ast, name.as_str(), ()) {
             Ok(()) => Ok(()),
             Err(e) => {
+                if let rhai::EvalAltResult::ErrorFunctionNotFound(f, ..) = &*e
+                    && f == name.as_str()
+                {
+                    return Ok(());
+                }
                 tracing::error!("Function call '{}' failed: {e}", name.as_str());
                 Err(
                     crate::features::module_runtime::ports::ModuleInitError::ScriptError(
@@ -566,5 +571,25 @@ mod tests {
             crate::features::vdom::domain::NodeTag::Grid
         );
         assert_eq!(render_node.children().len(), 2);
+    }
+
+    #[test]
+    fn test_rhai_call_function_optional_not_found() {
+        use crate::features::module_runtime::ports::AnyModulePort;
+        use crate::shared::primitives::FunctionName;
+
+        let source = r#"
+            fn init() {}
+            fn refresh() {}
+            fn render(monitor) {
+                return #{ type: "text", text: "hi" };
+            }
+        "#;
+        let mut module = RhaiModule::new("test_optional".into(), source).unwrap();
+        let res = module.call_function(&FunctionName::new("non_existent_fn"));
+        assert!(
+            res.is_ok(),
+            "Calling undefined function should return Ok(())"
+        );
     }
 }

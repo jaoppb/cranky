@@ -33,6 +33,14 @@ impl BuiltinModules {
             include_str!("../../assets/widgets/clock.rhai"),
         ),
         (
+            "calendar.lua",
+            include_str!("../../assets/widgets/calendar.lua"),
+        ),
+        (
+            "calendar.rhai",
+            include_str!("../../assets/widgets/calendar.rhai"),
+        ),
+        (
             "workspace.lua",
             include_str!("../../assets/widgets/workspace.lua"),
         ),
@@ -222,6 +230,8 @@ mod tests {
         let dir = BuiltinModules::ensure_builtins(&env).expect("ensure_builtins failed");
         assert!(dir.join("clock.rhai").exists());
         assert!(dir.join("clock.lua").exists());
+        assert!(dir.join("calendar.rhai").exists());
+        assert!(dir.join("calendar.lua").exists());
         assert!(dir.join("workspace.rhai").exists());
         assert!(dir.join("workspace.lua").exists());
         assert!(dir.join("systray.lua").exists());
@@ -335,6 +345,187 @@ mod tests {
         let selection = EngineSelection::Explicit(EngineId::new("lua"));
         let module = BuiltinModules::find_module(&ModuleName::new("clock"), &selection, &env);
         assert!(module.is_ok());
+    }
+
+    #[test]
+    fn test_find_module_calendar_lua_and_rhai() {
+        use crate::shared::primitives::{FunctionName, ModuleName};
+        let env = get_test_env();
+
+        for engine_name in ["lua", "rhai"] {
+            let selection = EngineSelection::Explicit(EngineId::new(engine_name));
+            let mut cal_mod =
+                BuiltinModules::find_module(&ModuleName::new("calendar"), &selection, &env)
+                    .unwrap_or_else(|_| panic!("Failed to find calendar for {engine_name}"));
+
+            cal_mod
+                .init(
+                    &crate::shared::config::domain::ModuleConfig::new(
+                        ModuleName::new("calendar"),
+                        true,
+                        selection.clone(),
+                        crate::shared::primitives::ModuleOptions::default(),
+                    ),
+                    &crate::shared::config::domain::Config::default(),
+                )
+                .unwrap();
+
+            let hub = crate::shared::events::signals::SignalHub::new(
+                crate::shared::config::domain::Config::default(),
+            );
+            let test_time = chrono::DateTime::parse_from_rfc3339("2026-09-01T12:00:00+00:00")
+                .unwrap()
+                .with_timezone(&chrono::Local);
+            hub.time_tx().send(test_time).unwrap();
+            cal_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
+
+            let root = cal_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            assert_eq!(
+                root.tag(),
+                crate::features::vdom::domain::NodeTag::Flex,
+                "Root should be Flex for {engine_name}"
+            );
+            assert_eq!(
+                root.children().len(),
+                3,
+                "Root should have 3 children (Header, Weekdays, Grid) for {engine_name}"
+            );
+
+            let header = &root.children()[0];
+            assert_eq!(header.children().len(), 3, "Header has prev, title, next");
+
+            let weekdays = &root.children()[1];
+            assert_eq!(
+                weekdays.tag(),
+                crate::features::vdom::domain::NodeTag::Grid,
+                "Weekdays should be Grid for {engine_name}"
+            );
+            assert_eq!(weekdays.children().len(), 7, "Weekdays has 7 items");
+
+            let days_grid = &root.children()[2];
+            assert_eq!(
+                days_grid.tag(),
+                crate::features::vdom::domain::NodeTag::Grid,
+                "Days should be Grid for {engine_name}"
+            );
+            assert_eq!(days_grid.children().len(), 42, "Days grid has 42 cells");
+
+            // Test navigation function calls
+            assert!(
+                cal_mod
+                    .call_function(&FunctionName::new("prev_month"))
+                    .is_ok()
+            );
+            let prev_root = cal_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            assert_eq!(prev_root.children().len(), 3);
+
+            assert!(
+                cal_mod
+                    .call_function(&FunctionName::new("next_month"))
+                    .is_ok()
+            );
+            assert!(
+                cal_mod
+                    .call_function(&FunctionName::new("reset_today"))
+                    .is_ok()
+            );
+        }
+    }
+
+    #[test]
+    fn test_clock_popup_toggle_lua_and_rhai() {
+        use crate::shared::primitives::{FunctionName, ModuleName};
+        let env = get_test_env();
+
+        for engine_name in ["lua", "rhai"] {
+            let selection = EngineSelection::Explicit(EngineId::new(engine_name));
+            let mut clock_mod =
+                BuiltinModules::find_module(&ModuleName::new("clock"), &selection, &env)
+                    .unwrap_or_else(|_| panic!("Failed to find clock for {engine_name}"));
+
+            clock_mod
+                .init(
+                    &crate::shared::config::domain::ModuleConfig::new(
+                        ModuleName::new("clock"),
+                        true,
+                        selection.clone(),
+                        crate::shared::primitives::ModuleOptions::default(),
+                    ),
+                    &crate::shared::config::domain::Config::default(),
+                )
+                .unwrap();
+
+            let hub = crate::shared::events::signals::SignalHub::new(
+                crate::shared::config::domain::Config::default(),
+            );
+            let test_time = chrono::DateTime::parse_from_rfc3339("2026-09-01T12:00:00+00:00")
+                .unwrap()
+                .with_timezone(&chrono::Local);
+            hub.time_tx().send(test_time).unwrap();
+            clock_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
+
+            // Initial state: popup is None
+            let node_before = clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            assert!(
+                node_before.popup().is_none(),
+                "Popup should initially be None for {engine_name}"
+            );
+
+            // Toggle popup on
+            clock_mod
+                .call_function(&FunctionName::new("toggle_popup"))
+                .expect("Failed to call toggle_popup");
+            let node_after_toggle_on =
+                clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            assert!(
+                node_after_toggle_on.popup().is_some(),
+                "Popup should be Some after toggle_popup on {engine_name}"
+            );
+            let popup = node_after_toggle_on.popup().unwrap();
+            assert_eq!(
+                popup.tag(),
+                crate::features::vdom::domain::NodeTag::Flex,
+                "Popup should be a Flex node for {engine_name}"
+            );
+            assert_eq!(
+                popup.children().len(),
+                3,
+                "Popup should contain Header, Weekdays, and Grid for {engine_name}"
+            );
+
+            // Dismiss popup via on_popup_dismiss
+            clock_mod
+                .call_function(&FunctionName::new("on_popup_dismiss"))
+                .expect("Failed to call on_popup_dismiss");
+            let node_after_dismiss =
+                clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            assert!(
+                node_after_dismiss.popup().is_none(),
+                "Popup should be None after on_popup_dismiss on {engine_name}"
+            );
+
+            // Re-open popup
+            clock_mod
+                .call_function(&FunctionName::new("toggle_popup"))
+                .expect("Failed to call toggle_popup after dismiss");
+            let node_reopened =
+                clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            assert!(
+                node_reopened.popup().is_some(),
+                "Popup should be Some after re-opening on {engine_name}"
+            );
+
+            // Toggle popup off
+            clock_mod
+                .call_function(&FunctionName::new("toggle_popup"))
+                .expect("Failed to call toggle_popup second time");
+            let node_after_toggle_off =
+                clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            assert!(
+                node_after_toggle_off.popup().is_none(),
+                "Popup should be None after toggle_popup off on {engine_name}"
+            );
+        }
     }
 
     #[test]

@@ -35,6 +35,7 @@ impl LuaScriptLoader {
     pub fn load_built_in(name: &str) -> Option<String> {
         match name {
             "clock" => Some(include_str!("../../../../assets/widgets/clock.lua").to_string()),
+            "calendar" => Some(include_str!("../../../../assets/widgets/calendar.lua").to_string()),
             "workspace" => {
                 Some(include_str!("../../../../assets/widgets/workspace.lua").to_string())
             }
@@ -242,14 +243,14 @@ fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result<CommonProp
         .and_then(|s| ElementId::new(s).ok());
     let on_click = parse_click_handlers(lua, table.get::<Option<mlua::Value>>("on_click")?);
     let on_hover = parse_ui_action(lua, table.get::<Option<mlua::Value>>("on_hover")?);
-    let tooltip = table
-        .get::<Option<mlua::Value>>("tooltip")?
-        .map(|tt| value_to_vnode(lua, tt).map(Box::new))
-        .transpose()?;
-    let popup = table
-        .get::<Option<mlua::Value>>("popup")?
-        .map(|p| value_to_vnode(lua, p).map(Box::new))
-        .transpose()?;
+    let tooltip = match table.get::<Option<mlua::Value>>("tooltip")? {
+        Some(mlua::Value::Nil) | None => None,
+        Some(val) => Some(Box::new(value_to_vnode(lua, val)?)),
+    };
+    let popup = match table.get::<Option<mlua::Value>>("popup")? {
+        Some(mlua::Value::Nil) | None => None,
+        Some(val) => Some(Box::new(value_to_vnode(lua, val)?)),
+    };
     Ok((class, id, on_click, on_hover, tooltip, popup))
 }
 
@@ -1078,5 +1079,45 @@ mod tests {
         let node = value_to_vnode(&lua, val).unwrap();
         assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Grid);
         assert_eq!(node.children().len(), 2);
+    }
+
+    #[test]
+    fn test_calendar_lua_config_monday() {
+        let mut module = LuaModule::built_in("calendar").expect("Failed to load calendar module");
+        let mut opts = std::collections::HashMap::new();
+        opts.insert(
+            "first_day_of_week".to_string(),
+            crate::shared::primitives::DynamicValue::String("monday".to_string()),
+        );
+        let module_config = ModuleConfig::new(
+            "calendar".into(),
+            true,
+            crate::shared::config::domain::EngineSelection::Auto,
+            crate::shared::primitives::ModuleOptions::new(opts),
+        );
+        let config = crate::shared::config::domain::Config::default();
+        module.init(&module_config, &config).expect("Init failed");
+
+        let hub = SignalHub::new(crate::shared::config::domain::Config::default());
+        let test_time = chrono::DateTime::parse_from_rfc3339("2026-09-01T12:00:00+00:00")
+            .unwrap()
+            .with_timezone(&chrono::Local);
+        hub.time_tx().send(test_time).unwrap();
+        let subs = module.subscriptions().to_vec();
+        module.refresh(&hub, &subs);
+
+        let node = module.render(&MonitorId::new("DP-1"));
+        let weekdays = &node.children()[1];
+        if let crate::features::vdom::domain::VNodeKind::Text { text } =
+            weekdays.children()[0].kind()
+        {
+            assert_eq!(
+                text.as_str(),
+                "Mo",
+                "First weekday should be Mo for monday config"
+            );
+        } else {
+            panic!("Expected text node for weekday");
+        }
     }
 }

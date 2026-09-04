@@ -1,9 +1,4 @@
-let format_str = "%H:%M:%S";
-let time_str = "";
-let on_click_val = ();
-let show_popup = false;
 let first_day_of_week = "sunday";
-
 let today_year = 0;
 let today_month = 0;
 let today_day = 0;
@@ -33,28 +28,16 @@ fn day_of_week(y, m, d) {
 }
 
 fn init() {
-    if "format" in config { format_str = config["format"]; }
-    if "first_day_of_week" in config { first_day_of_week = config["first_day_of_week"].to_lower(); }
-    if "on_click" in config {
-        on_click_val = #{ Exec: config["on_click"] };
-    } else {
-        on_click_val = #{ ScriptCall: "toggle_popup" };
+    if "first_day_of_week" in config {
+        first_day_of_week = config["first_day_of_week"].to_lower();
     }
 }
 
 fn metadata() {
     #{
         subscriptions: ["time"],
-        styles: ["clock", "calendar"]
+        styles: ["calendar"]
     }
-}
-
-fn toggle_popup() {
-    show_popup = !show_popup;
-}
-
-fn on_popup_dismiss() {
-    show_popup = false;
 }
 
 fn prev_month() {
@@ -101,17 +84,13 @@ fn parse_dec(s) {
 fn refresh() {
     if current_time != () {
         let t = current_time.to_string();
-        if t.len() >= 19 {
-            let yr = t.sub_string(0, 4);
-            let mo = t.sub_string(5, 2);
-            let da = t.sub_string(8, 2);
-            let h_24 = t.sub_string(11, 2);
-            let m = t.sub_string(14, 2);
-            let s = t.sub_string(17, 2);
-
-            let ny = parse_dec(yr);
-            let nm = parse_dec(mo);
-            let nd = parse_dec(da);
+        if t.len() >= 10 {
+            let y_str = t.sub_string(0, 4);
+            let m_str = t.sub_string(5, 2);
+            let d_str = t.sub_string(8, 2);
+            let ny = parse_dec(y_str);
+            let nm = parse_dec(m_str);
+            let nd = parse_dec(d_str);
             today_year = ny;
             today_month = nm;
             today_day = nd;
@@ -119,41 +98,14 @@ fn refresh() {
                 view_year = ny;
                 view_month = nm;
             }
-
-            let h_val = parse_dec(h_24);
-            let p = "AM";
-            let h_12 = h_val;
-            if h_val >= 12 { p = "PM"; }
-            if h_12 > 12 { h_12 = h_12 - 12; }
-            if h_12 == 0 { h_12 = 12; }
-            let h_12_str = h_12.to_string();
-            if h_12_str.len() == 1 { h_12_str = "0" + h_12_str; }
-
-            let result = format_str;
-            result.replace("%Y", yr);
-            result.replace("%m", mo);
-            result.replace("%d", da);
-            result.replace("%H", h_24);
-            result.replace("%M", m);
-            result.replace("%S", s);
-            result.replace("%I", h_12_str);
-            result.replace("%p", p);
-            result.replace("%R", `${h_24}:${m}`);
-            result.replace("%T", `${h_24}:${m}:${s}`);
-
-            time_str = result;
-        } else {
-            time_str = t;
         }
     }
 }
 
-fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) {
-    let view_y = v_year;
-    let view_m = v_month;
-    if view_y == 0 {
-        view_y = 2026;
-        view_m = 1;
+fn render(monitor_id) {
+    if view_year == 0 {
+        view_year = 2026;
+        view_month = 1;
     }
 
     let month_names = [
@@ -175,7 +127,7 @@ fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) 
             #{
                 type: "text",
                 class: "title",
-                text: `${month_names[view_m - 1]} ${view_y}`,
+                text: `${month_names[view_month - 1]} ${view_year}`,
                 on_click: #{ ScriptCall: "reset_today" }
             },
             #{
@@ -189,7 +141,7 @@ fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) 
 
     // Weekdays
     let weekday_labels = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-    if first_dow_cfg == "monday" {
+    if first_day_of_week == "monday" {
         weekday_labels = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
     }
 
@@ -209,20 +161,20 @@ fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) 
     };
 
     // Days matrix
-    let first_dow = day_of_week(view_y, view_m, 1);
+    let first_dow = day_of_week(view_year, view_month, 1);
     let leading_count = first_dow;
-    if first_dow_cfg == "monday" {
+    if first_day_of_week == "monday" {
         leading_count = (first_dow + 6) % 7;
     }
 
-    let prev_m = view_m - 1;
-    let prev_y = view_y;
-    if view_m == 1 {
+    let prev_m = view_month - 1;
+    let prev_y = view_year;
+    if view_month == 1 {
         prev_m = 12;
-        prev_y = view_y - 1;
+        prev_y = view_year - 1;
     }
     let prev_m_days = get_days_in_month(prev_y, prev_m);
-    let cur_m_days = get_days_in_month(view_y, view_m);
+    let cur_m_days = get_days_in_month(view_year, view_month);
 
     let day_children = [];
 
@@ -243,7 +195,7 @@ fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) 
     // Current month days
     let d = 1;
     while d <= cur_m_days {
-        let is_today = (view_y == t_year && view_m == t_month && d == t_day);
+        let is_today = (view_year == today_year && view_month == today_month && d == today_day);
         let class_name = "day";
         if is_today {
             class_name = "day today";
@@ -283,19 +235,4 @@ fn build_calendar_vnode(v_year, v_month, t_year, t_month, t_day, first_dow_cfg) 
             days_grid_node
         ]
     };
-}
-
-fn render(monitor_id) {
-    let node = #{
-        type: "text",
-        class: "time",
-        text: time_str
-    };
-    if on_click_val != () {
-        node.on_click = on_click_val;
-    }
-    if show_popup {
-        node.popup = build_calendar_vnode(view_year, view_month, today_year, today_month, today_day, first_day_of_week);
-    }
-    return node;
 }

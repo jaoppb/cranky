@@ -39,6 +39,10 @@ impl FsStyleLoader {
         ("bar", include_str!("../../../../assets/styles/bar.css")),
         ("clock", include_str!("../../../../assets/styles/clock.css")),
         (
+            "calendar",
+            include_str!("../../../../assets/styles/calendar.css"),
+        ),
+        (
             "workspace",
             include_str!("../../../../assets/styles/workspace.css"),
         ),
