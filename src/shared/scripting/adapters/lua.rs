@@ -466,11 +466,7 @@ fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
     Ok(VNode::new_grid(children_vec, None, None, None, None, None))
 }
 
-fn parse_text_node(
-    lua: &Lua,
-    val: mlua::Value,
-    class_opt: Option<String>,
-) -> mlua::Result<VNode> {
+fn parse_text_node(lua: &Lua, val: mlua::Value, class_opt: Option<String>) -> mlua::Result<VNode> {
     match val {
         mlua::Value::Table(table) => {
             let text_str = parse_text_content(&table);
@@ -638,7 +634,10 @@ fn parse_rect_node(lua: &Lua, val: Option<mlua::Value>) -> mlua::Result<VNode> {
             Ok(node)
         }
         Some(mlua::Value::String(s)) => {
-            let class = s.to_str().ok().and_then(|c| ClassNameList::parse(c.as_ref()).ok());
+            let class = s
+                .to_str()
+                .ok()
+                .and_then(|c| ClassNameList::parse(c.as_ref()).ok());
             Ok(VNode::new_rect(class, None, None, None, None))
         }
         _ => Ok(VNode::new_rect(None, None, None, None, None)),
@@ -779,12 +778,10 @@ fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
         Ok(LuaVNode(node))
     })?;
 
-    let text_fn = lua.create_function(
-        |lua, (val, class_opt): (mlua::Value, Option<String>)| {
-            let node = parse_text_node(lua, val, class_opt)?;
-            Ok(LuaVNode(node))
-        },
-    )?;
+    let text_fn = lua.create_function(|lua, (val, class_opt): (mlua::Value, Option<String>)| {
+        let node = parse_text_node(lua, val, class_opt)?;
+        Ok(LuaVNode(node))
+    })?;
 
     let progress_fn = lua.create_function(
         |lua, (val, orientation_opt, class_opt): (mlua::Value, Option<String>, Option<String>)| {
@@ -819,13 +816,7 @@ fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
     element_table.set("progress", progress_fn)?;
     element_table.set("rect", rect_fn)?;
     element_table.set("image", image_fn)?;
-    set_table_aliases!(
-        element_table,
-        module_fn,
-        "module",
-        "widget",
-        "load_module"
-    );
+    set_table_aliases!(element_table, module_fn, "module", "widget", "load_module");
 
     Ok(element_table)
 }
@@ -1292,9 +1283,10 @@ impl AnyModulePort for LuaModule {
     }
 
     #[allow(clippy::significant_drop_tightening)]
-    fn call_function(
+    fn call_function_with_args(
         &mut self,
         name: &crate::shared::primitives::FunctionName,
+        args: &[&str],
     ) -> Result<(), ModuleInitError> {
         let lua = self
             .lua
@@ -1305,7 +1297,10 @@ impl AnyModulePort for LuaModule {
         globals
             .get::<mlua::Function>(name.as_str())
             .map_or(Ok(()), |func| {
-                func.call::<()>(()).map_err(|e| {
+                let res = args
+                    .first()
+                    .map_or_else(|| func.call::<()>(()), |arg0| func.call::<()>(*arg0));
+                res.map_err(|e| {
                     ModuleInitError::ScriptError(format!("Failed to call function '{name}': {e}"))
                 })
             })
@@ -1656,7 +1651,10 @@ mod tests {
             assert(type(ui.module) == "function", "ui.module must be function")
             return true
         "#;
-        let result = lua.load(script).eval::<bool>().expect("Script evaluation failed");
+        let result = lua
+            .load(script)
+            .eval::<bool>()
+            .expect("Script evaluation failed");
         assert!(result);
     }
 
@@ -1677,10 +1675,22 @@ mod tests {
         let vnode = value_to_vnode(&lua, val).unwrap();
         assert_eq!(vnode.tag(), crate::features::vdom::domain::NodeTag::Flex);
         assert_eq!(vnode.children().len(), 4);
-        assert_eq!(vnode.children()[0].tag(), crate::features::vdom::domain::NodeTag::Text);
-        assert_eq!(vnode.children()[1].tag(), crate::features::vdom::domain::NodeTag::Progress);
-        assert_eq!(vnode.children()[2].tag(), crate::features::vdom::domain::NodeTag::Rect);
-        assert_eq!(vnode.children()[3].tag(), crate::features::vdom::domain::NodeTag::Module);
+        assert_eq!(
+            vnode.children()[0].tag(),
+            crate::features::vdom::domain::NodeTag::Text
+        );
+        assert_eq!(
+            vnode.children()[1].tag(),
+            crate::features::vdom::domain::NodeTag::Progress
+        );
+        assert_eq!(
+            vnode.children()[2].tag(),
+            crate::features::vdom::domain::NodeTag::Rect
+        );
+        assert_eq!(
+            vnode.children()[3].tag(),
+            crate::features::vdom::domain::NodeTag::Module
+        );
     }
 
     #[test]

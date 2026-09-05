@@ -3,7 +3,7 @@ use crate::shared::primitives::geometry::BarHeight;
 use crate::shared::primitives::{ModuleName, ModuleOptions};
 use std::collections::HashMap;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct FontFamily(String);
@@ -95,6 +95,33 @@ impl PaddingOffset {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PopupBehavior {
+    PerMonitor,
+    PerModule,
+    PerModuleAndMonitor,
+    #[default]
+    Global,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PopupConfig {
+    behavior: PopupBehavior,
+}
+
+impl PopupConfig {
+    #[must_use]
+    pub const fn new(behavior: PopupBehavior) -> Self {
+        Self { behavior }
+    }
+
+    #[must_use]
+    pub const fn behavior(&self) -> PopupBehavior {
+        self.behavior
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Config {
     root: RootConfig,
@@ -102,6 +129,7 @@ pub struct Config {
     rendering: RenderingMode,
     metrics: crate::features::metrics::domain::MetricsConfig,
     tooltip: TooltipConfig,
+    popup: PopupConfig,
 }
 
 impl Config {
@@ -112,6 +140,7 @@ impl Config {
         rendering: RenderingMode,
         metrics: crate::features::metrics::domain::MetricsConfig,
         tooltip: TooltipConfig,
+        popup: PopupConfig,
     ) -> Self {
         Self {
             root,
@@ -119,6 +148,7 @@ impl Config {
             rendering,
             metrics,
             tooltip,
+            popup,
         }
     }
 
@@ -135,6 +165,16 @@ impl Config {
     #[must_use]
     pub const fn metrics(&self) -> &crate::features::metrics::domain::MetricsConfig {
         &self.metrics
+    }
+
+    #[must_use]
+    pub const fn tooltip(&self) -> &TooltipConfig {
+        &self.tooltip
+    }
+
+    #[must_use]
+    pub const fn popup(&self) -> &PopupConfig {
+        &self.popup
     }
 }
 
@@ -761,6 +801,7 @@ mod tests {
             RenderingMode::default(),
             crate::features::metrics::domain::MetricsConfig::default(),
             TooltipConfig::default(),
+            PopupConfig::default(),
         );
         assert!(config.modules().get(&ModuleName::new("time")).is_some());
         assert_eq!(
@@ -771,6 +812,14 @@ mod tests {
                 .name(),
             "time"
         );
+        assert_eq!(config.popup().behavior(), PopupBehavior::Global);
+    }
+
+    #[test]
+    fn test_popup_config() {
+        let popup = PopupConfig::new(PopupBehavior::PerMonitor);
+        assert_eq!(popup.behavior(), PopupBehavior::PerMonitor);
+        assert_eq!(PopupBehavior::default(), PopupBehavior::Global);
     }
 
     #[test]

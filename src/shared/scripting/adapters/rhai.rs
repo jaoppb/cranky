@@ -21,8 +21,14 @@ fn monitor_info_to_rhai_map(info: &ScriptMonitorInfo) -> rhai::Map {
     let mut map = rhai::Map::new();
     map.insert("id".into(), Dynamic::from(info.id().as_str().to_string()));
     map.insert("name".into(), Dynamic::from(info.name().to_string()));
-    map.insert("width".into(), Dynamic::from(i64::from(info.size().width())));
-    map.insert("height".into(), Dynamic::from(i64::from(info.size().height())));
+    map.insert(
+        "width".into(),
+        Dynamic::from(i64::from(info.size().width())),
+    );
+    map.insert(
+        "height".into(),
+        Dynamic::from(i64::from(info.size().height())),
+    );
     map.insert(
         "scale".into(),
         Dynamic::from(f64::from(info.scale().value())),
@@ -118,23 +124,29 @@ fn register_rhai_text_and_progress(engine: &mut Engine) {
     register_text_elements!(engine, String, i64, f64);
 
     // progress
-    engine.register_fn("progress", |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-        props.insert("type".into(), Dynamic::from("progress"));
-        props
-    });
+    engine.register_fn(
+        "progress",
+        |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+            props.insert("type".into(), Dynamic::from("progress"));
+            props
+        },
+    );
     engine.register_fn("progress", |_target: rhai::Map, val: f64| -> rhai::Map {
         let mut m = rhai::Map::new();
         m.insert("type".into(), Dynamic::from("progress"));
         m.insert("value".into(), Dynamic::from(val));
         m
     });
-    engine.register_fn("progress", |_target: rhai::Map, val: f64, class: String| -> rhai::Map {
-        let mut m = rhai::Map::new();
-        m.insert("type".into(), Dynamic::from("progress"));
-        m.insert("value".into(), Dynamic::from(val));
-        m.insert("class".into(), Dynamic::from(class));
-        m
-    });
+    engine.register_fn(
+        "progress",
+        |_target: rhai::Map, val: f64, class: String| -> rhai::Map {
+            let mut m = rhai::Map::new();
+            m.insert("type".into(), Dynamic::from("progress"));
+            m.insert("value".into(), Dynamic::from(val));
+            m.insert("class".into(), Dynamic::from(class));
+            m
+        },
+    );
     engine.register_fn(
         "progress",
         |_target: rhai::Map, val: f64, orientation: String, class: String| -> rhai::Map {
@@ -153,14 +165,17 @@ fn register_rhai_text_and_progress(engine: &mut Engine) {
         m.insert("value".into(), Dynamic::from(val as f64));
         m
     });
-    engine.register_fn("progress", |_target: rhai::Map, val: i64, class: String| -> rhai::Map {
-        let mut m = rhai::Map::new();
-        m.insert("type".into(), Dynamic::from("progress"));
-        #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
-        m.insert("value".into(), Dynamic::from(val as f64));
-        m.insert("class".into(), Dynamic::from(class));
-        m
-    });
+    engine.register_fn(
+        "progress",
+        |_target: rhai::Map, val: i64, class: String| -> rhai::Map {
+            let mut m = rhai::Map::new();
+            m.insert("type".into(), Dynamic::from("progress"));
+            #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
+            m.insert("value".into(), Dynamic::from(val as f64));
+            m.insert("class".into(), Dynamic::from(class));
+            m
+        },
+    );
     engine.register_fn(
         "progress",
         |_target: rhai::Map, val: i64, orientation: String, class: String| -> rhai::Map {
@@ -177,10 +192,13 @@ fn register_rhai_text_and_progress(engine: &mut Engine) {
 
 fn register_rhai_rect_image_module(engine: &mut Engine) {
     // rect
-    engine.register_fn("rect", |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-        props.insert("type".into(), Dynamic::from("rect"));
-        props
-    });
+    engine.register_fn(
+        "rect",
+        |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+            props.insert("type".into(), Dynamic::from("rect"));
+            props
+        },
+    );
     engine.register_fn("rect", |_target: rhai::Map, class: String| -> rhai::Map {
         let mut m = rhai::Map::new();
         m.insert("type".into(), Dynamic::from("rect"));
@@ -194,17 +212,23 @@ fn register_rhai_rect_image_module(engine: &mut Engine) {
     });
 
     // image
-    engine.register_fn("image", |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-        props.insert("type".into(), Dynamic::from("image"));
-        props
-    });
+    engine.register_fn(
+        "image",
+        |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+            props.insert("type".into(), Dynamic::from("image"));
+            props
+        },
+    );
 
     // module / widget / load_module
     for fn_name in ["module", "widget", "load_module", "mod_element"] {
-        engine.register_fn(fn_name, |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-            props.insert("type".into(), Dynamic::from("module"));
-            props
-        });
+        engine.register_fn(
+            fn_name,
+            |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+                props.insert("type".into(), Dynamic::from("module"));
+                props
+            },
+        );
         engine.register_fn(fn_name, |_target: rhai::Map, name: String| -> rhai::Map {
             let mut m = rhai::Map::new();
             m.insert("type".into(), Dynamic::from("module"));
@@ -316,9 +340,10 @@ fn register_rhai_sys(engine: &mut Engine) {
             .and_then(|v| v.clone().try_cast::<rhai::Array>())
             .unwrap_or_default()
     });
-    engine.register_fn("current", |_target: rhai::Map, cur: rhai::Map| -> rhai::Map {
-        cur
-    });
+    engine.register_fn(
+        "current",
+        |_target: rhai::Map, cur: rhai::Map| -> rhai::Map { cur },
+    );
     engine.register_fn("focused", |target: rhai::Map| -> Dynamic {
         let list = target
             .get("_list")
@@ -347,9 +372,7 @@ fn register_rhai_sys(engine: &mut Engine) {
             let Some(map) = item.clone().try_cast::<rhai::Map>() else {
                 continue;
             };
-            let item_name = map
-                .get("name")
-                .and_then(|v| v.clone().try_cast::<String>());
+            let item_name = map.get("name").and_then(|v| v.clone().try_cast::<String>());
             if item_name.as_deref() == Some(name.as_str()) {
                 return Dynamic::from(map);
             }
@@ -376,16 +399,19 @@ pub fn register_rhai_cranky_api(engine: &mut Engine) {
     });
 
     // Script assertions
-    engine.register_fn("assert", |cond: bool| -> Result<(), Box<rhai::EvalAltResult>> {
-        if !cond {
-            return Err(rhai::EvalAltResult::ErrorRuntime(
-                Dynamic::from("Assertion failed in Rhai script"),
-                rhai::Position::NONE,
-            )
-            .into());
-        }
-        Ok(())
-    });
+    engine.register_fn(
+        "assert",
+        |cond: bool| -> Result<(), Box<rhai::EvalAltResult>> {
+            if !cond {
+                return Err(rhai::EvalAltResult::ErrorRuntime(
+                    Dynamic::from("Assertion failed in Rhai script"),
+                    rhai::Position::NONE,
+                )
+                .into());
+            }
+            Ok(())
+        },
+    );
     engine.register_fn(
         "assert",
         |cond: bool, msg: String| -> Result<(), Box<rhai::EvalAltResult>> {
@@ -845,9 +871,10 @@ impl AnyModulePort for RhaiModule {
     }
 
     #[allow(clippy::significant_drop_tightening)]
-    fn call_function(
+    fn call_function_with_args(
         &mut self,
         name: &crate::shared::primitives::FunctionName,
+        args: &[&str],
     ) -> Result<(), crate::features::module_runtime::ports::ModuleInitError> {
         let mut scope = self
             .scope
@@ -858,8 +885,32 @@ impl AnyModulePort for RhaiModule {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        match engine.call_fn::<()>(&mut scope, &self.ast, name.as_str(), ()) {
-            Ok(()) => Ok(()),
+        if let Some(first_arg) = args.first() {
+            let param_str = (*first_arg).to_string();
+            match engine.call_fn::<rhai::Dynamic>(
+                &mut scope,
+                &self.ast,
+                name.as_str(),
+                (param_str,),
+            ) {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    if let rhai::EvalAltResult::ErrorFunctionNotFound(..) = &*e {
+                        // Fallback to 0-argument function call for backwards compatibility
+                    } else {
+                        tracing::error!("Function call '{}' failed: {e}", name.as_str());
+                        return Err(
+                            crate::features::module_runtime::ports::ModuleInitError::ScriptError(
+                                e.to_string(),
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+
+        match engine.call_fn::<rhai::Dynamic>(&mut scope, &self.ast, name.as_str(), ()) {
+            Ok(_) => Ok(()),
             Err(e) => {
                 if let rhai::EvalAltResult::ErrorFunctionNotFound(f, ..) = &*e
                     && f == name.as_str()
@@ -1091,20 +1142,41 @@ mod tests {
     #[test]
     fn test_rhai_all_builtins() {
         for (name, source) in [
-            ("clock", include_str!("../../../../assets/widgets/clock.rhai")),
-            ("calendar", include_str!("../../../../assets/widgets/calendar.rhai")),
-            ("workspace", include_str!("../../../../assets/widgets/workspace.rhai")),
-            ("systray", include_str!("../../../../assets/widgets/systray.rhai")),
-            ("metrics", include_str!("../../../../assets/widgets/metrics.rhai")),
-            ("mpris", include_str!("../../../../assets/widgets/mpris.rhai")),
+            (
+                "clock",
+                include_str!("../../../../assets/widgets/clock.rhai"),
+            ),
+            (
+                "calendar",
+                include_str!("../../../../assets/widgets/calendar.rhai"),
+            ),
+            (
+                "workspace",
+                include_str!("../../../../assets/widgets/workspace.rhai"),
+            ),
+            (
+                "systray",
+                include_str!("../../../../assets/widgets/systray.rhai"),
+            ),
+            (
+                "metrics",
+                include_str!("../../../../assets/widgets/metrics.rhai"),
+            ),
+            (
+                "mpris",
+                include_str!("../../../../assets/widgets/mpris.rhai"),
+            ),
             ("bar", include_str!("../../../../assets/widgets/bar.rhai")),
         ] {
             let res = RhaiModule::new(name.into(), source);
             if let Err(e) = &res {
                 eprintln!("ERROR for {name}: {e:?}");
             }
-            assert!(res.is_ok(), "Failed to load builtin rhai module {name}: {:?}", res.err());
+            assert!(
+                res.is_ok(),
+                "Failed to load builtin rhai module {name}: {:?}",
+                res.err()
+            );
         }
     }
 }
-

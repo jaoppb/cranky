@@ -16,6 +16,8 @@ pub struct ConfigDto {
     metrics: crate::features::metrics::domain::MetricsConfig,
     #[serde(default)]
     tooltip: TooltipConfigDto,
+    #[serde(default)]
+    popup: PopupConfigDto,
 }
 
 impl ConfigDto {
@@ -25,8 +27,9 @@ impl ConfigDto {
         let modules = self.modules.into_domain();
         let rendering = self.rendering.into_domain();
         let tooltip = self.tooltip.into_domain();
+        let popup = self.popup.into_domain();
 
-        domain::Config::new(root, modules, rendering, self.metrics, tooltip)
+        domain::Config::new(root, modules, rendering, self.metrics, tooltip, popup)
     }
 }
 
@@ -447,6 +450,41 @@ impl TooltipConfigDto {
     }
 }
 
+#[derive(Debug, Deserialize, Default)]
+pub struct PopupConfigDto {
+    #[serde(default)]
+    behavior: PopupBehaviorDto,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PopupBehaviorDto {
+    PerMonitor,
+    PerModule,
+    PerModuleAndMonitor,
+    #[default]
+    Global,
+}
+
+impl PopupConfigDto {
+    #[must_use]
+    pub const fn into_domain(self) -> domain::PopupConfig {
+        domain::PopupConfig::new(self.behavior.into_domain())
+    }
+}
+
+impl PopupBehaviorDto {
+    #[must_use]
+    pub const fn into_domain(self) -> domain::PopupBehavior {
+        match self {
+            Self::PerMonitor => domain::PopupBehavior::PerMonitor,
+            Self::PerModule => domain::PopupBehavior::PerModule,
+            Self::PerModuleAndMonitor => domain::PopupBehavior::PerModuleAndMonitor,
+            Self::Global => domain::PopupBehavior::Global,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -539,5 +577,48 @@ mod tests {
             .unwrap();
         assert!(ws.is_enabled());
         assert_eq!(ws.engine().as_explicit().unwrap().as_str(), "rhai");
+    }
+
+    #[test]
+    fn test_popup_config_dto() {
+        let toml_str = r#"
+            behavior = "global"
+        "#;
+        let dto: PopupConfigDto = toml::from_str(toml_str).unwrap();
+        let domain = dto.into_domain();
+        assert_eq!(domain.behavior(), domain::PopupBehavior::Global);
+
+        let default_dto: PopupConfigDto = toml::from_str("").unwrap();
+        assert_eq!(
+            default_dto.into_domain().behavior(),
+            domain::PopupBehavior::Global
+        );
+
+        let toml_per_monitor = r#"
+            behavior = "per_monitor"
+        "#;
+        let dto: PopupConfigDto = toml::from_str(toml_per_monitor).unwrap();
+        assert_eq!(
+            dto.into_domain().behavior(),
+            domain::PopupBehavior::PerMonitor
+        );
+
+        let toml_per_module = r#"
+            behavior = "per_module"
+        "#;
+        let dto: PopupConfigDto = toml::from_str(toml_per_module).unwrap();
+        assert_eq!(
+            dto.into_domain().behavior(),
+            domain::PopupBehavior::PerModule
+        );
+
+        let toml_per_module_and_monitor = r#"
+            behavior = "per_module_and_monitor"
+        "#;
+        let dto: PopupConfigDto = toml::from_str(toml_per_module_and_monitor).unwrap();
+        assert_eq!(
+            dto.into_domain().behavior(),
+            domain::PopupBehavior::PerModuleAndMonitor
+        );
     }
 }

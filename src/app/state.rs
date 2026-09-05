@@ -606,6 +606,7 @@ mod tests {
             crate::shared::config::domain::RenderingMode::default(),
             crate::features::metrics::domain::MetricsConfig::default(),
             crate::shared::config::domain::TooltipConfig::default(),
+            crate::shared::config::domain::PopupConfig::default(),
         );
 
         let mut name_to_ids = HashMap::new();
@@ -711,6 +712,7 @@ mod tests {
             crate::shared::config::domain::RenderingMode::default(),
             crate::features::metrics::domain::MetricsConfig::default(),
             crate::shared::config::domain::TooltipConfig::default(),
+            crate::shared::config::domain::PopupConfig::default(),
         );
 
         let mut name_to_ids = HashMap::new();

@@ -158,6 +158,19 @@ pub trait AnyModulePort: Send + Sync {
     fn call_function(
         &mut self,
         name: &crate::shared::primitives::FunctionName,
+    ) -> Result<(), ModuleInitError> {
+        self.call_function_with_args(name, &[])
+    }
+
+    /// Invoke a named function on the script with string arguments (e.g. monitor name).
+    ///
+    /// # Errors
+    ///
+    /// Returns `ModuleInitError` if the function execution fails.
+    fn call_function_with_args(
+        &mut self,
+        name: &crate::shared::primitives::FunctionName,
+        args: &[&str],
     ) -> Result<(), ModuleInitError>;
 }
 

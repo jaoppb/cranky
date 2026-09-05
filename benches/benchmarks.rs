@@ -143,7 +143,11 @@ impl AnyModulePort for BenchMockModule {
         self.vnode.clone()
     }
 
-    fn call_function(&mut self, _name: &FunctionName) -> Result<(), ModuleInitError> {
+    fn call_function_with_args(
+        &mut self,
+        _name: &FunctionName,
+        _args: &[&str],
+    ) -> Result<(), ModuleInitError> {
         Ok(())
     }
 }

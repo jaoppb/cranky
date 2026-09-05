@@ -171,8 +171,13 @@ impl<
             let mut changed = false;
             for action in outcome.actions() {
                 match action {
-                    PointerAction::CallFunction(func_name) => {
-                        if let Err(e) = self.port.call_function(func_name) {
+                    PointerAction::CallFunction(func_name, mon_id) => {
+                        let res = if let Some(m) = mon_id {
+                            self.port.call_function_with_args(func_name, &[m.as_str()])
+                        } else {
+                            self.port.call_function(func_name)
+                        };
+                        if let Err(e) = res {
                             tracing::error!(
                                 module = %ctx_id,
                                 func = %func_name,
@@ -260,8 +265,12 @@ impl<
                     .update_after_render(self.render_pipeline.render_trees());
                 for action in post_actions {
                     match action {
-                        PointerAction::CallFunction(func_name) => {
-                            let _ = self.port.call_function(&func_name);
+                        PointerAction::CallFunction(func_name, mon_id) => {
+                            let _ = if let Some(m) = mon_id {
+                                self.port.call_function_with_args(&func_name, &[m.as_str()])
+                            } else {
+                                self.port.call_function(&func_name)
+                            };
                         }
                         PointerAction::SendUi(cmd) => {
                             self.ctx.ui_sender().send_ui_command(cmd);
@@ -327,9 +336,12 @@ impl<
             self.active_popups.insert(monitor_id.clone());
             self.ctx.display_sender().send_display_command(
                 crate::features::layout_engine::domain::DisplayCommand::ShowFloatingSurface {
-                    kind: crate::features::layout_engine::domain::FloatingKind::Popup {
-                        module_id: self.ctx.id(),
-                    },
+                    kind: crate::features::layout_engine::domain::FloatingKind::Popup(
+                        crate::features::layout_engine::domain::PopupTarget::new(
+                            self.ctx.id(),
+                            monitor_id.clone(),
+                        ),
+                    ),
                     monitor_id: Some(monitor_id.clone()),
                     anchor_rect: Some(*anchored_popup.anchor_rect()),
                     layout: Box::new(anchored_popup.layout().clone()),
@@ -338,9 +350,12 @@ impl<
         } else if self.active_popups.remove(monitor_id) {
             self.ctx.display_sender().send_display_command(
                 crate::features::layout_engine::domain::DisplayCommand::HideFloatingSurface {
-                    kind: crate::features::layout_engine::domain::FloatingKind::Popup {
-                        module_id: self.ctx.id(),
-                    },
+                    kind: crate::features::layout_engine::domain::FloatingKind::Popup(
+                        crate::features::layout_engine::domain::PopupTarget::new(
+                            self.ctx.id(),
+                            monitor_id.clone(),
+                        ),
+                    ),
                 },
             );
         }
@@ -556,14 +571,19 @@ mod tests {
         assert!(!changed);
     }
 
-    #[test]
-    fn test_event_loop_popup_floating_surface_lifecycle() {
-        use crate::features::layout_engine::domain::{
-            DisplayCommand, FloatingKind, RenderNode, StyledNode,
-        };
-        use crate::features::module_runtime::test_support::ChannelDisplaySender;
-        use crate::features::styling::domain::ComputedStyle;
+    type TestEventLoop = EventLoop<
+        MockCanvasFactory,
+        MockLayoutSender,
+        crate::features::module_runtime::test_support::ChannelDisplaySender,
+        MockUiSender,
+    >;
 
+    fn create_test_event_loop_and_channel() -> (
+        TestEventLoop,
+        ModuleId,
+        std::sync::mpsc::Receiver<crate::features::layout_engine::domain::DisplayCommand>,
+    ) {
+        use crate::features::module_runtime::test_support::ChannelDisplaySender;
         let id = ModuleId::new(42);
         let hub = Arc::new(SignalHub::new(Config::default()));
         let sm = Arc::new(MockSurfaceManager);
@@ -574,7 +594,7 @@ mod tests {
         let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
         let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
 
-        let mut event_loop = EventLoop::new(
+        let event_loop = EventLoop::new(
             Box::new(TestModulePort::new(VNode::new_rect(
                 None, None, None, None, None,
             ))),
@@ -586,6 +606,29 @@ mod tests {
             Arc::new(DefaultVdomDiffAdapter::new()),
         );
 
+        (event_loop, id, display_rx)
+    }
+
+    fn make_test_rect_node(
+        popup: Option<Box<crate::features::layout_engine::domain::StyledNode>>,
+    ) -> crate::features::layout_engine::domain::RenderNode {
+        crate::features::layout_engine::domain::RenderNode::Rect {
+            path: crate::features::layout_engine::domain::NodePath::root(),
+            rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
+            style: crate::features::styling::domain::ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup,
+        }
+    }
+
+    #[test]
+    fn test_event_loop_popup_floating_surface_lifecycle() {
+        use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, StyledNode};
+        use crate::features::styling::domain::ComputedStyle;
+
+        let (mut event_loop, id, display_rx) = create_test_event_loop_and_channel();
         let mon = MonitorId::new("DP-1");
 
         // 1. Outcome with popup emits ShowFloatingSurface
@@ -598,19 +641,10 @@ mod tests {
             tooltip: None,
             popup: None,
         };
-        let tree_with_popup = RenderNode::Rect {
-            path: crate::features::layout_engine::domain::NodePath::root(),
-            rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
-            style: ComputedStyle::default(),
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: Some(Box::new(popup_styled.clone())),
-        };
         let outcome1 = crate::features::module_runtime::domain::RenderOutcome::new(
             None,
             vec![],
-            tree_with_popup,
+            make_test_rect_node(Some(Box::new(popup_styled.clone()))),
             None,
         );
         event_loop.dispatch_render_outcome(&mon, &outcome1);
@@ -625,7 +659,13 @@ mod tests {
                 anchor_rect,
                 layout,
             } => {
-                assert_eq!(kind, FloatingKind::Popup { module_id: id });
+                assert_eq!(
+                    kind,
+                    FloatingKind::Popup(crate::features::layout_engine::domain::PopupTarget::new(
+                        id,
+                        mon.clone(),
+                    ),)
+                );
                 assert_eq!(monitor_id, Some(mon.clone()));
                 assert_eq!(
                     anchor_rect,
@@ -637,19 +677,10 @@ mod tests {
         }
 
         // 2. Outcome without popup emits HideFloatingSurface
-        let tree_without_popup = RenderNode::Rect {
-            path: crate::features::layout_engine::domain::NodePath::root(),
-            rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
-            style: ComputedStyle::default(),
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: None,
-        };
         let outcome2 = crate::features::module_runtime::domain::RenderOutcome::new(
             None,
             vec![],
-            tree_without_popup,
+            make_test_rect_node(None),
             None,
         );
         event_loop.dispatch_render_outcome(&mon, &outcome2);
@@ -659,7 +690,12 @@ mod tests {
             .expect("Should have sent HideFloatingSurface");
         match cmd2 {
             DisplayCommand::HideFloatingSurface { kind } => {
-                assert_eq!(kind, FloatingKind::Popup { module_id: id });
+                assert_eq!(
+                    kind,
+                    FloatingKind::Popup(crate::features::layout_engine::domain::PopupTarget::new(
+                        id, mon,
+                    ),)
+                );
             }
             _ => panic!("Expected HideFloatingSurface, got {cmd2:?}"),
         }

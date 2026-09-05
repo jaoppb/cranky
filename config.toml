@@ -17,6 +17,15 @@ right = 8
 mode = "immediate"
 fps_limit = 30
 
+[popup]
+# Controls popup exclusivity behavior across modules and monitors.
+# Options:
+#   "global"                  - Only 1 popup across all modules and monitors (default)
+#   "per_monitor"             - 1 popup per monitor across modules
+#   "per_module"              - 1 popup per module across monitors
+#   "per_module_and_monitor"  - Independent popups per module per monitor
+behavior = "global"
+
 [metrics]
 update_interval_ms = 1000
 cpu_mode = "gauge"

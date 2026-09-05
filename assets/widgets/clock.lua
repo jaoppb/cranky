@@ -1,7 +1,7 @@
 local format = "%H:%M:%S"
 local time_str = ""
 local on_click = nil
-local show_popup = false
+local show_popups = {}
 local first_day_of_week = "sunday"
 
 local today_year = 0
@@ -68,12 +68,34 @@ function metadata()
 	}
 end
 
-function toggle_popup()
-	show_popup = not show_popup
+local function get_monitor_key(mon)
+	if type(mon) == "string" then
+		return mon
+	elseif type(mon) == "table" or type(mon) == "userdata" then
+		return mon.name or mon.id or tostring(mon)
+	end
+	return "default"
 end
 
-function on_popup_dismiss()
-	show_popup = false
+function toggle_popup(mon)
+	if mon == nil or mon == "default" then
+		show_popups["default"] = not show_popups["default"]
+	else
+		local key = get_monitor_key(mon)
+		show_popups[key] = not show_popups[key]
+	end
+end
+
+function on_popup_dismiss(mon)
+	if mon == nil or mon == "default" then
+		show_popups["default"] = false
+		for k in pairs(show_popups) do
+			show_popups[k] = false
+		end
+	else
+		local key = get_monitor_key(mon)
+		show_popups[key] = false
+	end
 end
 
 function prev_month()
@@ -235,7 +257,12 @@ function render(monitor)
 		text = time_str,
 		on_click = on_click,
 	}
-	if show_popup then
+	local key = get_monitor_key(monitor)
+	local is_open = show_popups[key]
+	if is_open == nil then
+		is_open = show_popups["default"]
+	end
+	if is_open then
 		node.popup = build_calendar_vnode()
 	end
 	return ui.text(node)

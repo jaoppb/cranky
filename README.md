@@ -60,6 +60,9 @@ right = 8
 mode = "immediate"
 fps_limit = 30
 
+[popup]
+behavior = "global"
+
 [modules.workspace]
 border_radius = 4.0
 active = { background_color = "#565f89" }

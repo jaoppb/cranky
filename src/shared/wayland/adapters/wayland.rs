@@ -217,7 +217,6 @@ struct FloatingSurface {
     size: crate::shared::primitives::geometry::Size,
     layout: crate::features::layout_engine::domain::StyledNode,
     reposition_token: u32,
-    monitor_id: crate::shared::primitives::MonitorId,
 }
 
 impl Drop for FloatingSurface {
@@ -463,6 +462,42 @@ impl DisplayServerPort for WaylandAdapter {
 
         let state = &mut self.state;
 
+        if let crate::features::layout_engine::domain::FloatingKind::Popup(ref target) = kind {
+            let behavior = state.hub.config_rx().borrow().popup().behavior();
+            let active_targets: Vec<crate::features::layout_engine::domain::PopupTarget> = state
+                .floating_surfaces
+                .keys()
+                .filter_map(|k| match k {
+                    crate::features::layout_engine::domain::FloatingKind::Popup(t) => {
+                        Some(t.clone())
+                    }
+                    _ => None,
+                })
+                .collect();
+            let conflicts =
+                crate::features::layout_engine::domain::PopupExclusivity::compute_conflicts(
+                    &active_targets,
+                    target,
+                    behavior,
+                );
+            for conf in conflicts {
+                let conf_kind =
+                    crate::features::layout_engine::domain::FloatingKind::Popup(conf.clone());
+                if let Some(floating) = state.floating_surfaces.remove(&conf_kind) {
+                    state.surface_to_id.remove(&floating.surface);
+                    if conf.module_id() != target.module_id()
+                        || conf.monitor_id() != target.monitor_id()
+                    {
+                        let _ = state.hub.pointer_tx().send((
+                            conf.module_id(),
+                            conf.monitor_id().clone(),
+                            crate::shared::events::core::PointerEvent::PopupDismissed,
+                        ));
+                    }
+                }
+            }
+        }
+
         let Some(compositor) = state.compositor.as_ref() else {
             tracing::debug!("show_floating_surface skipped: state.compositor is None");
             return Ok(());
@@ -524,18 +559,15 @@ impl DisplayServerPort for WaylandAdapter {
                 anchor_w = 1;
                 anchor_h = 1;
             }
-            crate::features::layout_engine::domain::FloatingKind::Popup { module_id } => {
+            crate::features::layout_engine::domain::FloatingKind::Popup(target) => {
+                let module_id = target.module_id();
+                let mon_name = target.monitor_id().as_str();
                 for bar in &state.bars {
-                    let matches_mon = monitor_id
-                        .as_ref()
-                        .is_some_and(|m| m.as_str() == bar.output_name);
-                    let matches_mod = bar.module_surfaces.contains_key(module_id);
-                    if matches_mon || matches_mod {
+                    if bar.output_name == mon_name {
                         bar_scale = bar.scale;
                         bar_layer_surface = Some(bar.layer_surface.clone());
-                        target_monitor_id =
-                            crate::shared::primitives::MonitorId::new(&bar.output_name);
-                        if let Some(ms) = bar.module_surfaces.get(module_id) {
+                        target_monitor_id = target.monitor_id().clone();
+                        if let Some(ms) = bar.module_surfaces.get(&module_id) {
                             if let Some(r) = anchor_rect {
                                 anchor_x = ms.x + r.x();
                                 anchor_y = ms.y + r.y();
@@ -758,10 +790,11 @@ impl DisplayServerPort for WaylandAdapter {
         positioner.destroy();
         surface.commit();
 
-        if let crate::features::layout_engine::domain::FloatingKind::Popup { module_id } = kind {
-            state
-                .surface_to_id
-                .insert(surface.clone(), (module_id, target_monitor_id.clone()));
+        if let crate::features::layout_engine::domain::FloatingKind::Popup(ref target) = kind {
+            state.surface_to_id.insert(
+                surface.clone(),
+                (target.module_id(), target_monitor_id.clone()),
+            );
         }
 
         state.floating_surfaces.insert(
@@ -774,7 +807,6 @@ impl DisplayServerPort for WaylandAdapter {
                 size: new_size,
                 layout,
                 reposition_token: 0,
-                monitor_id: target_monitor_id,
             },
         );
 
@@ -1614,13 +1646,12 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
                     && let Some(floating) = state.floating_surfaces.remove(&kind)
                 {
                     state.surface_to_id.remove(&floating.surface);
-                    if let crate::features::layout_engine::domain::FloatingKind::Popup {
-                        module_id,
-                    } = kind
+                    if let crate::features::layout_engine::domain::FloatingKind::Popup(target) =
+                        kind
                     {
                         let _ = state.hub.pointer_tx().send((
-                            module_id,
-                            floating.monitor_id.clone(),
+                            target.module_id(),
+                            target.monitor_id().clone(),
                             crate::shared::events::core::PointerEvent::PopupDismissed,
                         ));
                     }

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PointerAction {
-    CallFunction(FunctionName),
+    CallFunction(FunctionName, Option<MonitorId>),
     SendUi(UiCommand),
     SendDisplay(DisplayCommand),
 }
@@ -173,7 +173,10 @@ impl PointerHandler {
         if let Some(cmd) = hit_cmd {
             match cmd {
                 UiAction::ScriptCall(func_name) => {
-                    actions.push(PointerAction::CallFunction(func_name.clone()));
+                    actions.push(PointerAction::CallFunction(
+                        func_name.clone(),
+                        Some(monitor_id.clone()),
+                    ));
                 }
                 UiAction::SystrayAction { id, action, .. } => {
                     actions.push(PointerAction::SendUi(UiCommand::SystrayAction {
@@ -215,7 +218,10 @@ impl PointerHandler {
         if let Some(cmd) = hit.iter().rev().find_map(|n| n.on_hover()) {
             match cmd {
                 UiAction::ScriptCall(func_name) => {
-                    actions.push(PointerAction::CallFunction(func_name.clone()));
+                    actions.push(PointerAction::CallFunction(
+                        func_name.clone(),
+                        Some(monitor_id.clone()),
+                    ));
                 }
                 UiAction::SystrayAction { id, action, .. } => {
                     actions.push(PointerAction::SendUi(UiCommand::SystrayAction {
@@ -302,9 +308,10 @@ impl PointerHandler {
                 PointerOutcome::new(actions, state_changed)
             }
             PointerEvent::PopupDismissed => PointerOutcome::new(
-                vec![PointerAction::CallFunction(FunctionName::new(
-                    "on_popup_dismiss",
-                ))],
+                vec![PointerAction::CallFunction(
+                    FunctionName::new("on_popup_dismiss"),
+                    Some(monitor_id.clone()),
+                )],
                 true,
             ),
             _ => PointerOutcome::empty(),
@@ -532,7 +539,7 @@ mod tests {
         assert_eq!(outcome.actions().len(), 1);
         assert_eq!(
             outcome.into_actions(),
-            vec![PointerAction::CallFunction(func_name)]
+            vec![PointerAction::CallFunction(func_name, Some(mon))]
         );
     }
 
@@ -698,9 +705,10 @@ mod tests {
         assert!(outcome.has_state_changed());
         assert_eq!(
             outcome.into_actions(),
-            vec![PointerAction::CallFunction(FunctionName::new(
-                "on_popup_dismiss"
-            ))]
+            vec![PointerAction::CallFunction(
+                FunctionName::new("on_popup_dismiss"),
+                Some(mon)
+            )]
         );
     }
 

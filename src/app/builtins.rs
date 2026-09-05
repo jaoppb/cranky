@@ -529,6 +529,66 @@ mod tests {
     }
 
     #[test]
+    fn test_clock_popup_multi_monitor_isolation() {
+        use crate::shared::primitives::{FunctionName, ModuleName};
+        let env = get_test_env();
+
+        for engine_name in ["lua", "rhai"] {
+            let selection = EngineSelection::Explicit(EngineId::new(engine_name));
+            let mut clock_mod =
+                BuiltinModules::find_module(&ModuleName::new("clock"), &selection, &env)
+                    .unwrap_or_else(|_| panic!("Failed to find clock for {engine_name}"));
+
+            clock_mod
+                .init(
+                    &crate::shared::config::domain::ModuleConfig::new(
+                        ModuleName::new("clock"),
+                        true,
+                        selection.clone(),
+                        crate::shared::primitives::ModuleOptions::default(),
+                    ),
+                    &crate::shared::config::domain::Config::default(),
+                )
+                .unwrap();
+
+            let hub = crate::shared::events::signals::SignalHub::new(
+                crate::shared::config::domain::Config::default(),
+            );
+            let test_time = chrono::DateTime::parse_from_rfc3339("2026-09-01T12:00:00+00:00")
+                .unwrap()
+                .with_timezone(&chrono::Local);
+            hub.time_tx().send(test_time).unwrap();
+            clock_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
+
+            // Multi-monitor per-monitor popup test
+            clock_mod
+                .call_function_with_args(&FunctionName::new("toggle_popup"), &["DP-1"])
+                .expect("Failed to call toggle_popup for DP-1");
+            let node_dp1 = clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            let node_dp2 = clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-2"));
+            assert!(
+                node_dp1.popup().is_some(),
+                "DP-1 should have popup on {engine_name}"
+            );
+            assert!(
+                node_dp2.popup().is_none(),
+                "DP-2 should NOT have popup on {engine_name}"
+            );
+
+            // Dismiss DP-1
+            clock_mod
+                .call_function_with_args(&FunctionName::new("on_popup_dismiss"), &["DP-1"])
+                .expect("Failed to call on_popup_dismiss for DP-1");
+            let node_dp1_dismissed =
+                clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            assert!(
+                node_dp1_dismissed.popup().is_none(),
+                "DP-1 popup should be None after dismiss on {engine_name}"
+            );
+        }
+    }
+
+    #[test]
     fn test_find_module_unsupported_engine() {
         use crate::shared::primitives::ModuleName;
         let env = get_test_env();

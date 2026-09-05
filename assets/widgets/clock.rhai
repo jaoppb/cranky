@@ -1,7 +1,7 @@
 let format_str = "%H:%M:%S";
 let time_str = "";
 let on_click_val = ();
-let show_popup = false;
+let popup_monitors = #{};
 let first_day_of_week = "sunday";
 
 let today_year = 0;
@@ -33,6 +33,7 @@ fn day_of_week(y, m, d) {
 }
 
 fn init() {
+    popup_monitors = #{};
     let options = if "options" in config { config.options } else if "module" in config { config["module"] } else { config };
     if "format" in options { format_str = options["format"]; }
     if "first_day_of_week" in options { first_day_of_week = options["first_day_of_week"].to_lower(); }
@@ -50,12 +51,49 @@ fn metadata() {
     }
 }
 
+fn get_monitor_key(mon) {
+    if type_of(mon) == "string" {
+        mon
+    } else if type_of(mon) == "map" && "name" in mon {
+        mon.name
+    } else if type_of(mon) == "map" && "id" in mon {
+        mon.id
+    } else {
+        "default"
+    }
+}
+
+fn toggle_popup(mon) {
+    let key = get_monitor_key(mon);
+    if key in popup_monitors {
+        popup_monitors.remove(key);
+    } else {
+        popup_monitors[key] = true;
+    }
+}
+
 fn toggle_popup() {
-    show_popup = !show_popup;
+    let key = "default";
+    if key in popup_monitors {
+        popup_monitors.remove(key);
+    } else {
+        popup_monitors[key] = true;
+    }
+}
+
+fn on_popup_dismiss(mon) {
+    if mon == () || mon == "default" {
+        popup_monitors = #{};
+    } else {
+        let key = get_monitor_key(mon);
+        if key in popup_monitors {
+            popup_monitors.remove(key);
+        }
+    }
 }
 
 fn on_popup_dismiss() {
-    show_popup = false;
+    popup_monitors = #{};
 }
 
 fn prev_month() {
@@ -283,7 +321,8 @@ fn render(monitor) {
     if on_click_val != () {
         node.on_click = on_click_val;
     }
-    if show_popup {
+    let key = get_monitor_key(monitor);
+    if key in popup_monitors || "default" in popup_monitors {
         node.popup = build_calendar_vnode(ui, view_year, view_month, today_year, today_month, today_day, first_day_of_week);
     }
     return ui.text(node);
