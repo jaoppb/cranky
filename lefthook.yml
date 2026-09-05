@@ -11,6 +11,9 @@ pre-commit:
     arch-lint:
       glob: "*.rs"
       run: cargo test --test architecture
+    loc-lint:
+      glob: "*.rs"
+      run: ./scripts/lint-loc.sh
 
 pre-push:
   parallel: false
