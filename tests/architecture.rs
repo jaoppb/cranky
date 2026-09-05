@@ -15,8 +15,6 @@ const MAX_PROD_LOC: usize = 200;
 const ALLOWLIST: &[&str] = &[
     "src/shared/wayland/adapters/wayland.rs",
     "src/shared/scripting/adapters/lua.rs",
-    "src/features/styling/adapters/lightningcss.rs",
-    "src/features/styling/domain.rs",
     "src/features/systray/adapters.rs",
     "src/shared/scripting/adapters/rhai.rs",
     "src/shared/config/domain.rs",
