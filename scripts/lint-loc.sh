@@ -6,7 +6,6 @@ FAILED=0
 
 ALLOWLIST=(
     "src/shared/wayland/adapters/wayland.rs"
-    "src/shared/wayland/adapters/shm.rs"
 )
 
 is_allowlisted() {

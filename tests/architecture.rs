@@ -14,7 +14,6 @@ const MAX_PROD_LOC: usize = 200;
 
 const ALLOWLIST: &[&str] = &[
     "src/shared/wayland/adapters/wayland.rs",
-    "src/shared/wayland/adapters/shm.rs",
 ];
 
 fn count_prod_lines(path: &std::path::Path) -> usize {
