@@ -24,7 +24,6 @@ const ALLOWLIST: &[&str] = &[
     "src/shared/dbus/adapters/connection.rs",
     "src/shared/wayland/adapters/shm.rs",
     "src/shared/primitives/color.rs",
-    "src/features/mpris/adapters/zbus.rs",
     "src/shared/dbus/domain.rs",
 ];
 
