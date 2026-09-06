@@ -19,10 +19,8 @@ const ALLOWLIST: &[&str] = &[
     "src/shared/rendering/adapters/tiny_skia.rs",
     "src/shared/primitives/mod.rs",
     "src/shared/events/signals.rs",
-    "src/shared/dbus/adapters/connection.rs",
     "src/shared/wayland/adapters/shm.rs",
     "src/shared/primitives/color.rs",
-    "src/shared/dbus/domain.rs",
 ];
 
 fn count_prod_lines(path: &std::path::Path) -> usize {
