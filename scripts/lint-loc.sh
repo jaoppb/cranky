@@ -8,7 +8,6 @@ ALLOWLIST=(
     "src/shared/wayland/adapters/wayland.rs"
     "src/shared/scripting/adapters/lua.rs"
     "src/shared/scripting/adapters/rhai.rs"
-    "src/shared/rendering/adapters/tiny_skia.rs"
     "src/shared/wayland/adapters/shm.rs"
 )
 
