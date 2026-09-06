@@ -1,0 +1,92 @@
+use super::state::WaylandState;
+use crate::features::module_runtime::ports::LayoutSender;
+use crate::shared::primitives::geometry::{Position, Rect, Size};
+use crate::shared::primitives::{ModuleId, MonitorId};
+use crate::shared::wayland::ports::{AppReadModel, DisplayServerError};
+use std::collections::HashMap;
+use tracing::{debug, info_span};
+use wayland_client::Connection;
+
+pub(crate) fn render_outputs(
+    state: &mut WaylandState,
+    connection: &Connection,
+    read_model: &AppReadModel,
+    layout_senders: &HashMap<ModuleId, Box<dyn LayoutSender>>,
+) -> Result<(), DisplayServerError> {
+    let span = info_span!("render_all_outputs");
+    let _enter = span.enter();
+
+    if state.bars.is_empty() {
+        debug!("No bars available for rendering.");
+        return Ok(());
+    }
+
+    let mut all_layouts_by_module: HashMap<ModuleId, HashMap<MonitorId, Rect>> = HashMap::new();
+
+    for bar in &mut state.bars {
+        if !bar.configured {
+            debug!("Skipping render for unconfigured bar: {}", bar.output_name);
+            continue;
+        }
+        let width = bar.width;
+
+        let hypr_rx = state.hub.hyprland_rx();
+        let hyprland_state = hypr_rx.borrow();
+        let is_focused = hyprland_state
+            .focused_monitor()
+            .is_some_and(|name| name.as_str() == bar.output_name);
+
+        let mut root_config = read_model.config().root().clone();
+        if !is_focused {
+            root_config = root_config.as_unfocused();
+        }
+
+        // Check if hot-reload of height or margin is needed
+        if bar.config_height != root_config.height().value()
+            || bar.config_margin != *root_config.margin()
+        {
+            debug!(
+                "Hot-reloading bar height/margin for output: {}",
+                bar.output_name
+            );
+            bar.config_height = root_config.height().value();
+            bar.config_margin = root_config.margin().clone();
+
+            let margin = root_config.margin();
+            bar.layer_surface.set_size(0, bar.config_height);
+            bar.layer_surface.set_margin(
+                margin.top().value(),
+                margin.right().value(),
+                margin.bottom().value(),
+                margin.left().value(),
+            );
+            #[allow(clippy::as_conversions)]
+            bar.layer_surface.set_exclusive_zone(
+                bar.config_height as i32 + margin.top().value() + margin.bottom().value(),
+            );
+            bar.surface.commit();
+        }
+
+        let monitor_id = MonitorId::new(&bar.output_name);
+        if let Some(root_id) = read_model.root_module() {
+            let bar_rect = Rect::new(
+                Position::new(0, 0),
+                Size::new(width, bar.config_height),
+            );
+            all_layouts_by_module
+                .entry(root_id)
+                .or_default()
+                .insert(monitor_id, bar_rect);
+        }
+    }
+
+    // Broadcast root layout bounds to the root module for ALL active monitors
+    for (id, sender) in layout_senders {
+        if let Some(rects) = all_layouts_by_module.get(id) {
+            sender.send_layout(rects.clone());
+        }
+    }
+
+    let _ = connection.flush();
+    Ok(())
+}

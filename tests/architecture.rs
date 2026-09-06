@@ -12,9 +12,7 @@ arch_lint::check!();
 
 const MAX_PROD_LOC: usize = 200;
 
-const ALLOWLIST: &[&str] = &[
-    "src/shared/wayland/adapters/wayland.rs",
-];
+const ALLOWLIST: &[&str] = &[];
 
 fn count_prod_lines(path: &std::path::Path) -> usize {
     let content = std::fs::read_to_string(path).expect("Failed to read file");

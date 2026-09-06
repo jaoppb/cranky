@@ -4,9 +4,7 @@ set -euo pipefail
 MAX_LOC=200
 FAILED=0
 
-ALLOWLIST=(
-    "src/shared/wayland/adapters/wayland.rs"
-)
+ALLOWLIST=()
 
 is_allowlisted() {
     local target="$1"
