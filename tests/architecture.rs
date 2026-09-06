@@ -15,25 +15,17 @@ const MAX_PROD_LOC: usize = 200;
 const ALLOWLIST: &[&str] = &[
     "src/shared/wayland/adapters/wayland.rs",
     "src/shared/scripting/adapters/lua.rs",
-    "src/features/systray/adapters.rs",
     "src/shared/scripting/adapters/rhai.rs",
     "src/shared/config/domain.rs",
-    "src/features/systray/domain.rs",
     "src/shared/rendering/adapters/tiny_skia.rs",
-    "src/features/workspaces/adapters/hyprland.rs",
     "src/shared/config/adapters/dto.rs",
     "src/shared/primitives/mod.rs",
     "src/shared/events/signals.rs",
-    "src/features/module_runtime/domain/render_pipeline.rs",
-    "src/features/module_runtime/adapters/event_loop.rs",
     "src/shared/dbus/adapters/connection.rs",
-    "src/features/metrics/domain.rs",
-    "src/features/module_runtime/domain/pointer_handler.rs",
     "src/shared/wayland/adapters/shm.rs",
     "src/shared/primitives/color.rs",
     "src/features/mpris/adapters/zbus.rs",
     "src/shared/dbus/domain.rs",
-    "src/features/module_runtime/ports.rs",
 ];
 
 fn count_prod_lines(path: &std::path::Path) -> usize {
