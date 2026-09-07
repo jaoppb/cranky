@@ -26,7 +26,43 @@ impl DefaultVdomDiffAdapter {
             || old_node.on_hover() != new_node.on_hover();
 
         let tooltip_patch = self.diff_optional_subnode(old_node.tooltip(), new_node.tooltip());
-        let popup_patch = self.diff_optional_subnode(old_node.popup(), new_node.popup());
+        let popup_props_changed = old_node.popup().map(|p| (p.anchor_direction(), p.offset(), p.dismiss_on_unfocus()))
+            != new_node.popup().map(|p| (p.anchor_direction(), p.offset(), p.dismiss_on_unfocus()));
+        let popup_content_patch = self.diff_optional_subnode(
+            old_node.popup().map(crate::features::vdom::domain::PopupSpec::content),
+            new_node.popup().map(crate::features::vdom::domain::PopupSpec::content),
+        );
+        let popup_patch = if popup_props_changed {
+            popup_content_patch.or_else(|| {
+                new_node.popup().map(|p| {
+                    Box::new(Patch::Replace {
+                        old_node_id: NodeId::new(),
+                        new_node: Box::new(p.content().clone()),
+                    })
+                })
+            })
+        } else {
+            popup_content_patch
+        };
+
+        let panel_props_changed = old_node.panel().map(|p| (p.layer(), p.anchor(), *p.margin(), p.exclusive_zone(), p.keyboard()))
+            != new_node.panel().map(|p| (p.layer(), p.anchor(), *p.margin(), p.exclusive_zone(), p.keyboard()));
+        let panel_content_patch = self.diff_optional_subnode(
+            old_node.panel().map(crate::features::vdom::domain::PanelSpec::content),
+            new_node.panel().map(crate::features::vdom::domain::PanelSpec::content),
+        );
+        let panel_patch = if panel_props_changed {
+            panel_content_patch.or_else(|| {
+                new_node.panel().map(|p| {
+                    Box::new(Patch::Replace {
+                        old_node_id: NodeId::new(),
+                        new_node: Box::new(p.content().clone()),
+                    })
+                })
+            })
+        } else {
+            panel_content_patch
+        };
 
         let kind_patch = diff_node_kinds(old_node.node_id(), old_node.kind(), new_node.kind())
             .unwrap_or_else(|| {
@@ -53,7 +89,8 @@ impl DefaultVdomDiffAdapter {
             || id_changed
             || handlers_changed
             || tooltip_patch.is_some()
-            || popup_patch.is_some();
+            || popup_patch.is_some()
+            || panel_patch.is_some();
 
         if props_dirty {
             Patch::UpdateProps {
@@ -63,6 +100,7 @@ impl DefaultVdomDiffAdapter {
                 handlers_changed,
                 tooltip_patch,
                 popup_patch,
+                panel_patch,
                 kind_patch: Box::new(kind_patch),
             }
         } else {
@@ -389,7 +427,9 @@ mod tests {
             None,
             None,
         );
-        let with_pop1 = base.clone().with_popup(Box::new(popup1));
+        let with_pop1 = base
+            .clone()
+            .with_popup(crate::features::vdom::domain::PopupSpec::new(Box::new(popup1)));
 
         // 1. None -> Some(popup)
         let diff1 = adapter.diff(Some(&base), &with_pop1);

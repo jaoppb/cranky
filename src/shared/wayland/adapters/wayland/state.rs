@@ -1,6 +1,7 @@
 use super::types::{FloatingSurface, WaylandBar, WaylandOutputInfo};
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
 use crate::shared::env::domain::AppEnvironment;
+use crate::shared::events::core::SurfaceKind;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::adapters::shm::ShmBuffer;
@@ -34,13 +35,14 @@ pub struct WaylandState {
 
     pub(crate) command_tx: tokio::sync::mpsc::Sender<DisplayCommand>,
 
-    pub(crate) surface_to_id: HashMap<WlSurface, (ModuleId, MonitorId)>,
+    pub(crate) surface_to_id: HashMap<WlSurface, (ModuleId, MonitorId, SurfaceKind)>,
     pub(crate) pointer_surface: Option<WlSurface>,
     pub(crate) pointer_pos: (f64, f64),
 
     pub(crate) font_system: FontSystem,
     pub(crate) swash_cache: SwashCache,
     pub(crate) floating_surfaces: HashMap<FloatingKind, FloatingSurface>,
+    pub(crate) last_button_serial: Option<crate::shared::events::core::PointerSerial>,
     pub(crate) app_env: Arc<AppEnvironment>,
 }
 
@@ -139,7 +141,7 @@ impl WaylandState {
             width: 1920,
             height: bar_height.value(),
             config_height: bar_height.value(),
-            config_margin: margin.clone(),
+            config_margin: *margin,
             scale: output_scale,
             module_surfaces: HashMap::new(),
             configured: false,

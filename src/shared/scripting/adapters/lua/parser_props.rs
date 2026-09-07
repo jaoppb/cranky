@@ -1,6 +1,7 @@
+pub(crate) use super::parser_floating::{parse_panel_spec, parse_popup_spec};
 use super::vnode_parser::value_to_vnode;
 use crate::features::styling::domain::{ClassNameList, ElementId};
-use crate::features::vdom::domain::{ClickHandlers, UiAction, VNode};
+use crate::features::vdom::domain::{ClickHandlers, PanelSpec, PopupSpec, UiAction, VNode};
 use crate::shared::events::core::PointerButton;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{BinaryData, ModuleOptions};
@@ -110,7 +111,8 @@ pub(crate) type CommonProps = (
     Option<ClickHandlers>,
     Option<UiAction>,
     Option<Box<VNode>>,
-    Option<Box<VNode>>,
+    Option<PopupSpec>,
+    Option<PanelSpec>,
 );
 
 pub(crate) fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result<CommonProps> {
@@ -126,9 +128,7 @@ pub(crate) fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result
         Some(mlua::Value::Nil) | None => None,
         Some(val) => Some(Box::new(value_to_vnode(lua, val)?)),
     };
-    let popup = match table.get::<Option<mlua::Value>>("popup")? {
-        Some(mlua::Value::Nil) | None => None,
-        Some(val) => Some(Box::new(value_to_vnode(lua, val)?)),
-    };
-    Ok((class, id, on_click, on_hover, tooltip, popup))
+    let popup = parse_popup_spec(lua, table.get::<Option<mlua::Value>>("popup")?)?;
+    let panel = parse_panel_spec(lua, table.get::<Option<mlua::Value>>("panel")?)?;
+    Ok((class, id, on_click, on_hover, tooltip, popup, panel))
 }

@@ -7,6 +7,7 @@ pub mod metadata;
 pub mod module;
 pub mod module_impl;
 pub mod module_port;
+pub mod parser_floating;
 pub mod parser_props;
 pub mod sync;
 pub mod userdata;

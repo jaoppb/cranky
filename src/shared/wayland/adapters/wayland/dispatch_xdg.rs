@@ -89,7 +89,9 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
                         let _ = state.hub.pointer_tx().send((
                             target.module_id(),
                             target.monitor_id().clone(),
-                            crate::shared::events::core::PointerEvent::PopupDismissed,
+                            crate::shared::events::core::InteractionEvent::Lifecycle(
+                                crate::shared::events::core::SurfaceLifecycleEvent::PopupDismissed,
+                            ),
                         ));
                     }
                 }

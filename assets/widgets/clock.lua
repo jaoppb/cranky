@@ -263,7 +263,11 @@ function render(monitor)
 		is_open = show_popups["default"]
 	end
 	if is_open then
-		node.popup = build_calendar_vnode()
+		node.popup = ui.popup({
+			content = build_calendar_vnode(),
+			anchor = "bottom",
+			dismiss_on_unfocus = true,
+		})
 	end
 	return ui.text(node)
 end

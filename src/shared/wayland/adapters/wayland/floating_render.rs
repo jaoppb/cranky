@@ -54,6 +54,7 @@ pub(crate) fn calculate_floating_layout(
                 on_hover: None,
                 tooltip: None,
                 popup: None,
+                panel: None,
             },
         )
     }

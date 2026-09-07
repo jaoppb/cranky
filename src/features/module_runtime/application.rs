@@ -429,10 +429,13 @@ mod tests {
         let _ = fixture.hub.pointer_tx().send((
             id,
             MonitorId::new("DP-1"),
-            crate::shared::events::core::PointerEvent::Click {
-                button: crate::shared::events::core::PointerButton::Left,
-                pos: crate::shared::primitives::geometry::Position::new(5, 5),
-            },
+            crate::shared::events::core::InteractionEvent::Pointer(
+                crate::shared::events::core::PointerEvent::Click {
+                    surface: crate::shared::events::core::SurfaceKind::Bar,
+                    button: crate::shared::events::core::PointerButton::Left,
+                    pos: crate::shared::primitives::geometry::Position::new(5, 5),
+                },
+            ),
         ));
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;

@@ -6,6 +6,7 @@
 use super::command::SurfaceCommand;
 use super::state::WaylandState;
 use super::types::ModuleSurface;
+use crate::shared::events::core::SurfaceKind;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
@@ -25,17 +26,16 @@ pub(crate) fn handle_cmd(
         return Ok(());
     };
 
-    let bar = match state
+    let Some(bar) = state
         .bars
         .iter_mut()
         .find(|b| b.output_name == cmd.monitor_id().as_str())
-    {
-        Some(b) => b,
-        None => return Ok(()),
+    else {
+        return Ok(());
     };
 
-    let width = cmd.buffer().width().max(1);
-    let height = cmd.buffer().height().max(1);
+    let width = cmd.buffer().size().width();
+    let height = cmd.buffer().size().height();
     let src_data = cmd.buffer().data();
 
     if cmd.parent_id().is_none() {
@@ -63,7 +63,7 @@ pub(crate) fn handle_cmd(
 
         state.surface_to_id.insert(
             bar.surface.clone(),
-            (cmd.module_id(), cmd.monitor_id().clone()),
+            (cmd.module_id(), cmd.monitor_id().clone(), SurfaceKind::Bar),
         );
     } else {
         let mut new_surface_to_register = None;
@@ -100,7 +100,7 @@ pub(crate) fn handle_cmd(
         if let Some(surface) = new_surface_to_register {
             state
                 .surface_to_id
-                .insert(surface, (cmd.module_id(), cmd.monitor_id().clone()));
+                .insert(surface, (cmd.module_id(), cmd.monitor_id().clone(), SurfaceKind::Bar));
         }
 
         if ms.size != *cmd.buffer().size() {
@@ -138,7 +138,7 @@ pub(crate) fn handle_cmd(
 
         state.surface_to_id.insert(
             ms.surface.clone(),
-            (cmd.module_id(), cmd.monitor_id().clone()),
+            (cmd.module_id(), cmd.monitor_id().clone(), SurfaceKind::Bar),
         );
     }
 

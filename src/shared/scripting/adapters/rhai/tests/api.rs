@@ -1,8 +1,10 @@
-use crate::features::module_runtime::ports::AnyModulePort;
-use crate::features::vdom::domain::UiAction;
-use crate::shared::events::core::PointerButton;
-use crate::shared::primitives::{MonitorId, ScriptMonitorInfo};
-use crate::shared::scripting::adapters::rhai::RhaiModule;
+#[cfg(test)]
+mod tests {
+    use crate::features::module_runtime::ports::AnyModulePort;
+    use crate::features::vdom::domain::UiAction;
+    use crate::shared::events::core::PointerButton;
+    use crate::shared::primitives::{MonitorId, ScriptMonitorInfo};
+    use crate::shared::scripting::adapters::rhai::RhaiModule;
 
 #[test]
 fn test_rhai_cranky_namespaces_and_aliases() {
@@ -152,4 +154,54 @@ fn test_rhai_render_grid() {
         crate::features::vdom::domain::NodeTag::Grid
     );
     assert_eq!(render_node.children().len(), 2);
+}
+
+#[test]
+fn test_rhai_vnode_with_popup_and_panel() {
+    let source = r#"
+        fn init() {}
+        fn refresh() {}
+        fn render(monitor) {
+            let p_content = ui.text("Popup content");
+            let pop = ui.popup(#{
+                content: p_content,
+                anchor: "bottom",
+                offset: [5, 10],
+                dismiss_on_unfocus: true,
+            });
+
+            let panel_content = ui.text("Panel content");
+            let pan = ui.panel(#{
+                content: panel_content,
+                layer: "overlay",
+                anchor: ["top", "right"],
+                margin: #{ top: 15, right: 25 },
+                exclusive_zone: 0,
+                keyboard: "none",
+            });
+
+            return ui.rect(#{
+                popup: pop,
+                panel: pan,
+            });
+        }
+    "#;
+    let module = RhaiModule::new("test_pop_pan".into(), source).unwrap();
+    let node = module.render(&MonitorId::new("DP-1"));
+    assert!(node.popup().is_some());
+    let popup = node.popup().unwrap();
+    assert_eq!(popup.anchor_direction(), crate::features::vdom::domain::AnchorDirection::Bottom);
+    assert_eq!(popup.offset().dx(), 5);
+    assert_eq!(popup.offset().dy(), 10);
+    assert!(popup.dismiss_on_unfocus());
+
+    assert!(node.panel().is_some());
+    let panel = node.panel().unwrap();
+    assert_eq!(panel.layer(), crate::features::vdom::domain::PanelLayer::Overlay);
+    assert!(panel.anchor().top());
+    assert!(panel.anchor().right());
+    assert!(!panel.anchor().bottom());
+    assert_eq!(panel.margin().top().value(), 15);
+    assert_eq!(panel.margin().right().value(), 25);
+}
 }

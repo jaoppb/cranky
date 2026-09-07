@@ -1,11 +1,12 @@
 use super::dispatch::{
-    discover_monitors, dispatch_outcome_buffer, dispatch_outcome_layouts, dispatch_outcome_popups,
+    discover_monitors, dispatch_outcome_buffer, dispatch_outcome_layouts, dispatch_outcome_panels,
+    dispatch_outcome_popups, dispatch_post_actions, update_floating_trees,
 };
 use super::events::EventLoopEvent;
-use crate::features::layout_engine::domain::DisplayCommandSender;
+use crate::features::layout_engine::domain::{DisplayCommandSender, RenderNode};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::{PointerAction, PointerHandler, RenderPipeline};
+use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
 use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender};
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
@@ -30,6 +31,9 @@ pub struct EventLoop<
     pub(crate) vdom_diff: Arc<dyn VdomDiffPort>,
     pub(crate) style_resolver: Arc<dyn StyleResolverPort>,
     pub(crate) active_popups: HashSet<MonitorId>,
+    pub(crate) active_panels: HashSet<MonitorId>,
+    pub(crate) popup_render_trees: HashMap<MonitorId, RenderNode>,
+    pub(crate) panel_render_trees: HashMap<MonitorId, RenderNode>,
 }
 
 impl<
@@ -58,6 +62,9 @@ impl<
             vdom_diff,
             style_resolver,
             active_popups: HashSet::new(),
+            active_panels: HashSet::new(),
+            popup_render_trees: HashMap::new(),
+            panel_render_trees: HashMap::new(),
         }
     }
 
@@ -112,6 +119,20 @@ impl<
             monitor_id,
             outcome,
         );
+        dispatch_outcome_panels(
+            self.ctx.display_sender(),
+            &mut self.active_panels,
+            self.ctx.id(),
+            monitor_id,
+            outcome,
+        );
+        update_floating_trees(
+            &mut self.canvas_factory,
+            &mut self.popup_render_trees,
+            &mut self.panel_render_trees,
+            monitor_id,
+            outcome,
+        );
     }
 
     pub async fn run(mut self) {
@@ -141,8 +162,7 @@ impl<
                 EventLoopEvent::ModuleSizesChanged => {
                     let current_sizes = self.ctx.hub().module_sizes_rx().borrow().clone();
                     for (mon_id, last_sizes) in self.render_pipeline.last_child_sizes() {
-                        let current_mon_sizes = current_sizes.get(mon_id);
-                        if last_sizes.as_ref() != current_mon_sizes {
+                        if last_sizes.as_ref() != current_sizes.get(mon_id) {
                             should_render = true;
                             break;
                         }
@@ -152,8 +172,15 @@ impl<
                     self.port.refresh(self.ctx.hub(), &subs);
                     should_render = true;
                 }
-                EventLoopEvent::Pointer(monitor_id, event) => {
-                    let changed = self.handle_pointer_event(&monitor_id, &event);
+                EventLoopEvent::Interaction(monitor_id, interaction) => {
+                    let changed = match interaction {
+                        crate::shared::events::core::InteractionEvent::Pointer(ev) => {
+                            self.handle_pointer_event(&monitor_id, &ev)
+                        }
+                        crate::shared::events::core::InteractionEvent::Lifecycle(ev) => {
+                            self.handle_lifecycle_event(&monitor_id, ev)
+                        }
+                    };
                     if changed {
                         should_render = true;
                     }
@@ -162,27 +189,10 @@ impl<
 
             if should_render {
                 self.render_all_monitors(&mut layout_engines);
-
                 let post_actions = self
                     .pointer_handler
                     .update_after_render(self.render_pipeline.render_trees());
-                for action in post_actions {
-                    match action {
-                        PointerAction::CallFunction(func_name, mon_id) => {
-                            let _ = if let Some(m) = mon_id {
-                                self.port.call_function_with_args(&func_name, &[m.as_str()])
-                            } else {
-                                self.port.call_function(&func_name)
-                            };
-                        }
-                        PointerAction::SendUi(cmd) => {
-                            self.ctx.ui_sender().send_ui_command(cmd);
-                        }
-                        PointerAction::SendDisplay(cmd) => {
-                            self.ctx.display_sender().send_display_command(cmd);
-                        }
-                    }
-                }
+                dispatch_post_actions(&mut self.port, &self.ctx, post_actions);
             }
         }
     }

@@ -7,6 +7,28 @@ use taffy::TaffyTree;
     clippy::as_conversions,
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
+    clippy::cast_sign_loss
+)]
+fn build_children(
+    taffy: &TaffyTree,
+    node_id: NodeId,
+    children: &[StyledNode],
+    pos: Position,
+) -> Result<Vec<RenderNode>, LayoutError> {
+    let child_ids = taffy
+        .children(node_id)
+        .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+    let mut render_children = Vec::new();
+    for (child, &child_id) in children.iter().zip(child_ids.iter()) {
+        render_children.push(build_render_tree(taffy, child_id, child, pos)?);
+    }
+    Ok(render_children)
+}
+
+#[allow(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
     clippy::cast_sign_loss,
     clippy::too_many_lines
 )]
@@ -36,32 +58,18 @@ pub(super) fn build_render_tree(
             on_hover,
             tooltip,
             popup,
-        } => {
-            let child_ids = taffy
-                .children(node_id)
-                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
-            let mut render_children = Vec::new();
-
-            for (child, &child_id) in children.iter().zip(child_ids.iter()) {
-                render_children.push(build_render_tree(
-                    taffy,
-                    child_id,
-                    child,
-                    Position::new(abs_x, abs_y),
-                )?);
-            }
-
-            Ok(RenderNode::Flex {
-                path: path.clone(),
-                rect,
-                children: render_children,
-                style: style.clone(),
-                on_click: on_click.clone(),
-                on_hover: on_hover.clone(),
-                tooltip: tooltip.clone(),
-                popup: popup.clone(),
-            })
-        }
+            panel,
+        } => Ok(RenderNode::Flex {
+            path: path.clone(),
+            rect,
+            children: build_children(taffy, node_id, children, Position::new(abs_x, abs_y))?,
+            style: style.clone(),
+            on_click: on_click.clone(),
+            on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(),
+            popup: popup.clone(),
+            panel: panel.clone(),
+        }),
         StyledNode::Grid {
             path,
             children,
@@ -70,32 +78,18 @@ pub(super) fn build_render_tree(
             on_hover,
             tooltip,
             popup,
-        } => {
-            let child_ids = taffy
-                .children(node_id)
-                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
-            let mut render_children = Vec::new();
-
-            for (child, &child_id) in children.iter().zip(child_ids.iter()) {
-                render_children.push(build_render_tree(
-                    taffy,
-                    child_id,
-                    child,
-                    Position::new(abs_x, abs_y),
-                )?);
-            }
-
-            Ok(RenderNode::Grid {
-                path: path.clone(),
-                rect,
-                children: render_children,
-                style: style.clone(),
-                on_click: on_click.clone(),
-                on_hover: on_hover.clone(),
-                tooltip: tooltip.clone(),
-                popup: popup.clone(),
-            })
-        }
+            panel,
+        } => Ok(RenderNode::Grid {
+            path: path.clone(),
+            rect,
+            children: build_children(taffy, node_id, children, Position::new(abs_x, abs_y))?,
+            style: style.clone(),
+            on_click: on_click.clone(),
+            on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(),
+            popup: popup.clone(),
+            panel: panel.clone(),
+        }),
         StyledNode::Text {
             path,
             text,
@@ -104,6 +98,7 @@ pub(super) fn build_render_tree(
             on_hover,
             tooltip,
             popup,
+            panel,
         } => Ok(RenderNode::Text {
             path: path.clone(),
             rect,
@@ -113,6 +108,7 @@ pub(super) fn build_render_tree(
             on_hover: on_hover.clone(),
             tooltip: tooltip.clone(),
             popup: popup.clone(),
+            panel: panel.clone(),
         }),
         StyledNode::Progress {
             path,
@@ -123,6 +119,7 @@ pub(super) fn build_render_tree(
             on_hover,
             tooltip,
             popup,
+            panel,
         } => Ok(RenderNode::Progress {
             path: path.clone(),
             rect,
@@ -133,6 +130,7 @@ pub(super) fn build_render_tree(
             on_hover: on_hover.clone(),
             tooltip: tooltip.clone(),
             popup: popup.clone(),
+            panel: panel.clone(),
         }),
         StyledNode::Rect {
             path,
@@ -141,6 +139,7 @@ pub(super) fn build_render_tree(
             on_hover,
             tooltip,
             popup,
+            panel,
         } => Ok(RenderNode::Rect {
             path: path.clone(),
             rect,
@@ -149,6 +148,7 @@ pub(super) fn build_render_tree(
             on_hover: on_hover.clone(),
             tooltip: tooltip.clone(),
             popup: popup.clone(),
+            panel: panel.clone(),
         }),
         StyledNode::Image {
             path,
@@ -156,6 +156,7 @@ pub(super) fn build_render_tree(
             pixel_size,
             tooltip,
             popup,
+            panel,
             ..
         } => Ok(RenderNode::Image {
             path: path.clone(),
@@ -164,6 +165,7 @@ pub(super) fn build_render_tree(
             pixel_size: *pixel_size,
             tooltip: tooltip.clone(),
             popup: popup.clone(),
+            panel: panel.clone(),
         }),
         StyledNode::Module {
             path,
@@ -173,6 +175,7 @@ pub(super) fn build_render_tree(
             on_hover,
             tooltip,
             popup,
+            panel,
             ..
         } => Ok(RenderNode::Module {
             path: path.clone(),
@@ -183,6 +186,7 @@ pub(super) fn build_render_tree(
             on_hover: on_hover.clone(),
             tooltip: tooltip.clone(),
             popup: popup.clone(),
+            panel: panel.clone(),
         }),
     }
 }

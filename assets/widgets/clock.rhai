@@ -323,7 +323,12 @@ fn render(monitor) {
     }
     let key = get_monitor_key(monitor);
     if key in popup_monitors || "default" in popup_monitors {
-        node.popup = build_calendar_vnode(ui, view_year, view_month, today_year, today_month, today_day, first_day_of_week);
+        let cal = build_calendar_vnode(ui, view_year, view_month, today_year, today_month, today_day, first_day_of_week);
+        node.popup = ui.popup(#{
+            content: cal,
+            anchor: "bottom",
+            dismiss_on_unfocus: true
+        });
     }
     return ui.text(node);
 }

@@ -55,7 +55,7 @@ impl<
                 match res {
                     Ok((target_id, monitor_id, event)) => {
                         if target_id == ctx_id {
-                            EventLoopEvent::Pointer(monitor_id, event)
+                            EventLoopEvent::Interaction(monitor_id, event)
                         } else {
                             EventLoopEvent::Signals(Vec::new())
                         }

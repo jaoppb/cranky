@@ -131,6 +131,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
 
         let render_tree = adapter
@@ -158,6 +159,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
 
         let render_tree = adapter
@@ -183,6 +185,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
 
         let render_tree = adapter
@@ -206,6 +209,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
 
         let mut root_style = ComputedStyle::default();
@@ -220,6 +224,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
 
         let render_tree = adapter
@@ -246,6 +251,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
 
         let mut child2_style = ComputedStyle::default();
@@ -257,6 +263,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
 
         let mut grid_style = ComputedStyle::default_for_grid();
@@ -271,6 +278,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
 
         let render_tree = adapter

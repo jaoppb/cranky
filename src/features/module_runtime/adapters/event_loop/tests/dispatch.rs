@@ -87,6 +87,7 @@ async fn test_dispatch_render_outcome_emits_layout_events() {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         },
         None,
     );
@@ -134,9 +135,40 @@ fn test_handle_pointer_event_no_tree_returns_false() {
     );
 
     let event = crate::shared::events::core::PointerEvent::Click {
+        surface: crate::shared::events::core::SurfaceKind::Bar,
         button: crate::shared::events::core::PointerButton::Left,
         pos: Position::new(10, 10),
     };
     let changed = event_loop.handle_pointer_event(&MonitorId::new("DP-1"), &event);
     assert!(!changed);
+}
+
+#[test]
+fn test_handle_lifecycle_event_popup_dismissed_returns_true() {
+    let id = ModuleId::new(1);
+    let hub = Arc::new(SignalHub::new(Config::default()));
+    let sm = Arc::new(MockSurfaceManager);
+    let layout_sender = Arc::new(MockLayoutSender);
+    let display_sender = Arc::new(MockDisplaySender);
+    let ui_sender = Arc::new(MockUiSender);
+    let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
+    let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
+
+    let mut event_loop = EventLoop::new(
+        Box::new(TestModulePort::new(VNode::new_rect(
+            None, None, None, None, None,
+        ))),
+        ctx,
+        PointerHandler::new(),
+        RenderPipeline::new(),
+        MockCanvasFactory,
+        Arc::new(CompositeStyleResolver::new(vec![])),
+        Arc::new(DefaultVdomDiffAdapter::new()),
+    );
+
+    let changed = event_loop.handle_lifecycle_event(
+        &MonitorId::new("DP-1"),
+        crate::shared::events::core::SurfaceLifecycleEvent::PopupDismissed,
+    );
+    assert!(changed);
 }

@@ -54,29 +54,23 @@ fn register_rhai_flex_and_grid(engine: &mut Engine) {
 fn register_rhai_text_and_progress(engine: &mut Engine) {
     register_text_elements!(engine, String, i64, f64);
 
-    engine.register_fn(
-        "progress",
-        |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-            props.insert("type".into(), Dynamic::from("progress"));
-            props
-        },
-    );
+    engine.register_fn("progress", |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+        props.insert("type".into(), Dynamic::from("progress"));
+        props
+    });
     engine.register_fn("progress", |_target: rhai::Map, val: f64| -> rhai::Map {
         let mut m = rhai::Map::new();
         m.insert("type".into(), Dynamic::from("progress"));
         m.insert("value".into(), Dynamic::from(val));
         m
     });
-    engine.register_fn(
-        "progress",
-        |_target: rhai::Map, val: f64, class: String| -> rhai::Map {
-            let mut m = rhai::Map::new();
-            m.insert("type".into(), Dynamic::from("progress"));
-            m.insert("value".into(), Dynamic::from(val));
-            m.insert("class".into(), Dynamic::from(class));
-            m
-        },
-    );
+    engine.register_fn("progress", |_target: rhai::Map, val: f64, class: String| -> rhai::Map {
+        let mut m = rhai::Map::new();
+        m.insert("type".into(), Dynamic::from("progress"));
+        m.insert("value".into(), Dynamic::from(val));
+        m.insert("class".into(), Dynamic::from(class));
+        m
+    });
     engine.register_fn(
         "progress",
         |_target: rhai::Map, val: f64, orientation: String, class: String| -> rhai::Map {
@@ -95,17 +89,14 @@ fn register_rhai_text_and_progress(engine: &mut Engine) {
         m.insert("value".into(), Dynamic::from(val as f64));
         m
     });
-    engine.register_fn(
-        "progress",
-        |_target: rhai::Map, val: i64, class: String| -> rhai::Map {
-            let mut m = rhai::Map::new();
-            m.insert("type".into(), Dynamic::from("progress"));
-            #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
-            m.insert("value".into(), Dynamic::from(val as f64));
-            m.insert("class".into(), Dynamic::from(class));
-            m
-        },
-    );
+    engine.register_fn("progress", |_target: rhai::Map, val: i64, class: String| -> rhai::Map {
+        let mut m = rhai::Map::new();
+        m.insert("type".into(), Dynamic::from("progress"));
+        #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
+        m.insert("value".into(), Dynamic::from(val as f64));
+        m.insert("class".into(), Dynamic::from(class));
+        m
+    });
     engine.register_fn(
         "progress",
         |_target: rhai::Map, val: i64, orientation: String, class: String| -> rhai::Map {
@@ -121,13 +112,10 @@ fn register_rhai_text_and_progress(engine: &mut Engine) {
 }
 
 fn register_rhai_rect_image_module(engine: &mut Engine) {
-    engine.register_fn(
-        "rect",
-        |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-            props.insert("type".into(), Dynamic::from("rect"));
-            props
-        },
-    );
+    engine.register_fn("rect", |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+        props.insert("type".into(), Dynamic::from("rect"));
+        props
+    });
     engine.register_fn("rect", |_target: rhai::Map, class: String| -> rhai::Map {
         let mut m = rhai::Map::new();
         m.insert("type".into(), Dynamic::from("rect"));
@@ -140,22 +128,16 @@ fn register_rhai_rect_image_module(engine: &mut Engine) {
         m
     });
 
-    engine.register_fn(
-        "image",
-        |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-            props.insert("type".into(), Dynamic::from("image"));
-            props
-        },
-    );
+    engine.register_fn("image", |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+        props.insert("type".into(), Dynamic::from("image"));
+        props
+    });
 
     for fn_name in ["module", "widget", "load_module", "mod_element"] {
-        engine.register_fn(
-            fn_name,
-            |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-                props.insert("type".into(), Dynamic::from("module"));
-                props
-            },
-        );
+        engine.register_fn(fn_name, |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+            props.insert("type".into(), Dynamic::from("module"));
+            props
+        });
         engine.register_fn(fn_name, |_target: rhai::Map, name: String| -> rhai::Map {
             let mut m = rhai::Map::new();
             m.insert("type".into(), Dynamic::from("module"));
@@ -173,6 +155,23 @@ fn register_rhai_rect_image_module(engine: &mut Engine) {
             },
         );
     }
+
+    engine.register_fn("popup", |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+        props.insert("type".into(), Dynamic::from("popup"));
+        props
+    });
+    engine.register_fn("panel", |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+        props.insert("type".into(), Dynamic::from("panel"));
+        props
+    });
+    engine.register_fn("popup", |mut props: rhai::Map| -> rhai::Map {
+        props.insert("type".into(), Dynamic::from("popup"));
+        props
+    });
+    engine.register_fn("panel", |mut props: rhai::Map| -> rhai::Map {
+        props.insert("type".into(), Dynamic::from("panel"));
+        props
+    });
 }
 
 pub(crate) fn register_rhai_ui_elements(engine: &mut Engine) {

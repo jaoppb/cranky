@@ -91,7 +91,7 @@ impl RootConfig {
             name: cmd.name().clone(),
             height: cmd.height(),
             vertical_alignment: cmd.vertical_alignment(),
-            margin: cmd.margin().clone(),
+            margin: *cmd.margin(),
             unfocused: cmd.unfocused().cloned(),
             options: cmd.options().clone(),
         }

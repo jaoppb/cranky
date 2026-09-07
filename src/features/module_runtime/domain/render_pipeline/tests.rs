@@ -69,6 +69,7 @@ fn test_render_pipeline_hidpi_paint_allocates_scaled_buffer() {
         on_hover: None,
         tooltip: None,
         popup: None,
+        panel: None,
     };
     let mut factory = MockCanvasFactory;
 

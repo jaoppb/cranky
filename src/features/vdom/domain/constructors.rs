@@ -28,6 +28,7 @@ impl VNode {
             on_hover,
             tooltip,
             popup: None,
+            panel: None,
             kind: VNodeKind::Flex { children },
         }
     }
@@ -50,6 +51,7 @@ impl VNode {
             on_hover,
             tooltip,
             popup: None,
+            panel: None,
             kind: VNodeKind::Grid { children },
         }
     }
@@ -72,6 +74,7 @@ impl VNode {
             on_hover,
             tooltip,
             popup: None,
+            panel: None,
             kind: VNodeKind::Text { text },
         }
     }
@@ -95,6 +98,7 @@ impl VNode {
             on_hover,
             tooltip,
             popup: None,
+            panel: None,
             kind: VNodeKind::Progress { value, orientation },
         }
     }
@@ -116,6 +120,7 @@ impl VNode {
             on_hover,
             tooltip,
             popup: None,
+            panel: None,
             kind: VNodeKind::Rect,
         }
     }
@@ -137,6 +142,7 @@ impl VNode {
             on_hover: None,
             tooltip,
             popup: None,
+            panel: None,
             kind: VNodeKind::Image {
                 data: data.into(),
                 pixel_size,
@@ -165,6 +171,7 @@ impl VNode {
             on_hover,
             tooltip,
             popup: None,
+            panel: None,
             kind: VNodeKind::Module {
                 name,
                 instance_id,

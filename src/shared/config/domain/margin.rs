@@ -1,6 +1,7 @@
 use super::types::MarginOffset;
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
+#[serde(default)]
 pub struct MarginConfig {
     top: MarginOffset,
     bottom: MarginOffset,

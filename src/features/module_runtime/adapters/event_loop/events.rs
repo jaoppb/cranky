@@ -6,6 +6,6 @@ pub enum EventLoopEvent {
     Signals(Vec<SignalKind>),
     ModuleSizesChanged,
     LayoutChanged,
-    Pointer(MonitorId, crate::shared::events::core::PointerEvent),
+    Interaction(MonitorId, crate::shared::events::core::InteractionEvent),
     Shutdown,
 }

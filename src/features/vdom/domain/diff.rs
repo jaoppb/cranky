@@ -19,6 +19,7 @@ pub enum Patch {
         handlers_changed: bool,
         tooltip_patch: Option<Box<Self>>,
         popup_patch: Option<Box<Self>>,
+        panel_patch: Option<Box<Self>>,
         kind_patch: Box<Self>,
     },
     UpdateText {

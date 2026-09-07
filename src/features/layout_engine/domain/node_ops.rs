@@ -1,4 +1,4 @@
-use super::popup::AnchoredPopup;
+use super::popup::{ActivePanel, AnchoredPopup};
 use super::render_node::RenderNode;
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::ChildModuleLayout;
@@ -56,6 +56,21 @@ impl RenderNode {
         if let Self::Flex { children, .. } | Self::Grid { children, .. } = self {
             for child in children {
                 if let Some(found) = child.find_popup_with_anchor() {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
+    #[must_use]
+    pub fn find_panel(&self) -> Option<ActivePanel<'_>> {
+        if let Some(panel) = self.panel() {
+            return Some(ActivePanel::new(panel));
+        }
+        if let Self::Flex { children, .. } | Self::Grid { children, .. } = self {
+            for child in children {
+                if let Some(found) = child.find_panel() {
                     return Some(found);
                 }
             }

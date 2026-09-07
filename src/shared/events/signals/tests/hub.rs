@@ -9,7 +9,7 @@ mod tests {
     use crate::features::systray::domain::SystrayState;
     use crate::shared::config::domain::Config;
     use crate::shared::dbus::domain::DBusState;
-    use crate::shared::events::core::PointerEvent;
+    use crate::shared::events::core::{PointerEvent, SurfaceKind};
     use crate::shared::events::signals::hub::SignalHub;
     use crate::shared::events::signals::hyprland::HyprlandState;
     use crate::shared::events::signals::kind::SignalKind;
@@ -81,7 +81,11 @@ mod tests {
             .send((
                 ModuleId::new(1),
                 MonitorId::new("1"),
-                PointerEvent::PointerLeave,
+                crate::shared::events::core::InteractionEvent::Pointer(
+                    PointerEvent::PointerLeave {
+                        surface: SurfaceKind::Bar,
+                    },
+                ),
             ))
             .unwrap();
         assert!(ptr_rx.recv().await.is_ok());

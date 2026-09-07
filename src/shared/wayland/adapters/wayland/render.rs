@@ -50,7 +50,7 @@ pub(crate) fn render_outputs(
                 bar.output_name
             );
             bar.config_height = root_config.height().value();
-            bar.config_margin = root_config.margin().clone();
+            bar.config_margin = *root_config.margin();
 
             let margin = root_config.margin();
             bar.layer_surface.set_size(0, bar.config_height);

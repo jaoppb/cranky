@@ -2,8 +2,10 @@ use super::dsl_container::{
     parse_flex_node, parse_grid_node, parse_module_node, parse_rect_node,
 };
 use super::dsl_leaf::{parse_progress_node, parse_text_node};
-use super::parser_props::{parse_common_props, parse_image_data_and_size};
-use super::userdata::LuaVNode;
+use super::parser_props::{
+    parse_common_props, parse_image_data_and_size, parse_panel_spec, parse_popup_spec,
+};
+use super::userdata::{LuaPanel, LuaPopup, LuaVNode};
 use crate::features::vdom::domain::VNode;
 use mlua::Lua;
 
@@ -103,10 +105,13 @@ pub(crate) fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
 
     let image_fn = lua.create_function(|lua, table: mlua::Table| {
         let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
-        let (class, id, _, _, tooltip, popup) = parse_common_props(lua, &table)?;
+        let (class, id, _, _, tooltip, popup, panel) = parse_common_props(lua, &table)?;
         let mut node = VNode::new_image(data, pixel_size, class, id, tooltip);
         if let Some(p) = popup {
             node = node.with_popup(p);
+        }
+        if let Some(p) = panel {
+            node = node.with_panel(p);
         }
         Ok(LuaVNode(node))
     })?;
@@ -116,12 +121,28 @@ pub(crate) fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
         Ok(LuaVNode(node))
     })?;
 
+    let popup_fn = lua.create_function(|lua, val: mlua::Value| {
+        let spec_opt = parse_popup_spec(lua, Some(val))?;
+        spec_opt
+            .map(LuaPopup)
+            .ok_or_else(|| mlua::Error::RuntimeError("Invalid popup specification".to_string()))
+    })?;
+
+    let panel_fn = lua.create_function(|lua, val: mlua::Value| {
+        let spec_opt = parse_panel_spec(lua, Some(val))?;
+        spec_opt
+            .map(LuaPanel)
+            .ok_or_else(|| mlua::Error::RuntimeError("Invalid panel specification".to_string()))
+    })?;
+
     element_table.set("flex", flex_fn)?;
     element_table.set("grid", grid_fn)?;
     element_table.set("text", text_fn)?;
     element_table.set("progress", progress_fn)?;
     element_table.set("rect", rect_fn)?;
     element_table.set("image", image_fn)?;
+    element_table.set("popup", popup_fn)?;
+    element_table.set("panel", panel_fn)?;
     set_table_aliases!(element_table, module_fn, "module", "widget", "load_module");
 
     Ok(element_table)

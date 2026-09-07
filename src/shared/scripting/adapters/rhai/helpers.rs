@@ -12,8 +12,13 @@ pub(crate) fn get_hostname() -> String {
 
 pub(crate) fn monitor_info_to_rhai_map(info: &ScriptMonitorInfo) -> rhai::Map {
     let mut map = rhai::Map::new();
+    let name_str = if info.name().is_empty() {
+        info.id().as_str().to_string()
+    } else {
+        info.name().to_string()
+    };
     map.insert("id".into(), Dynamic::from(info.id().as_str().to_string()));
-    map.insert("name".into(), Dynamic::from(info.name().to_string()));
+    map.insert("name".into(), Dynamic::from(name_str));
     map.insert(
         "width".into(),
         Dynamic::from(i64::from(info.size().width())),

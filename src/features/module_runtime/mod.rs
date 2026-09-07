@@ -285,6 +285,7 @@ pub mod test_support {
                 on_hover: None,
                 tooltip: None,
                 popup: None,
+                panel: None,
             })
         }
     }

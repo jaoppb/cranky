@@ -1,3 +1,4 @@
+use super::popup::{StyledPanel, StyledPopup};
 use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
 use crate::features::vdom::domain::{ClickHandlers, NodePath, TextContent, UiAction};
 use crate::shared::primitives::geometry::Size;
@@ -12,7 +13,8 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
-        popup: Option<Box<Self>>,
+        popup: Option<StyledPopup>,
+        panel: Option<StyledPanel>,
     },
     Grid {
         path: NodePath,
@@ -21,7 +23,8 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
-        popup: Option<Box<Self>>,
+        popup: Option<StyledPopup>,
+        panel: Option<StyledPanel>,
     },
     Text {
         path: NodePath,
@@ -30,7 +33,8 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
-        popup: Option<Box<Self>>,
+        popup: Option<StyledPopup>,
+        panel: Option<StyledPanel>,
     },
     Progress {
         path: NodePath,
@@ -40,7 +44,8 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
-        popup: Option<Box<Self>>,
+        popup: Option<StyledPopup>,
+        panel: Option<StyledPanel>,
     },
     Rect {
         path: NodePath,
@@ -48,7 +53,8 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
-        popup: Option<Box<Self>>,
+        popup: Option<StyledPopup>,
+        panel: Option<StyledPanel>,
     },
     Image {
         path: NodePath,
@@ -56,7 +62,8 @@ pub enum StyledNode {
         pixel_size: Size,
         style: ComputedStyle,
         tooltip: Option<Box<Self>>,
-        popup: Option<Box<Self>>,
+        popup: Option<StyledPopup>,
+        panel: Option<StyledPanel>,
     },
     Module {
         path: NodePath,
@@ -66,7 +73,8 @@ pub enum StyledNode {
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
-        popup: Option<Box<Self>>,
+        popup: Option<StyledPopup>,
+        panel: Option<StyledPanel>,
     },
 }
 
@@ -137,7 +145,7 @@ impl StyledNode {
     }
 
     #[must_use]
-    pub fn popup(&self) -> Option<&Self> {
+    pub const fn popup(&self) -> Option<&StyledPopup> {
         match self {
             Self::Flex { popup, .. }
             | Self::Grid { popup, .. }
@@ -145,7 +153,20 @@ impl StyledNode {
             | Self::Progress { popup, .. }
             | Self::Rect { popup, .. }
             | Self::Image { popup, .. }
-            | Self::Module { popup, .. } => popup.as_deref(),
+            | Self::Module { popup, .. } => popup.as_ref(),
+        }
+    }
+
+    #[must_use]
+    pub const fn panel(&self) -> Option<&StyledPanel> {
+        match self {
+            Self::Flex { panel, .. }
+            | Self::Grid { panel, .. }
+            | Self::Text { panel, .. }
+            | Self::Progress { panel, .. }
+            | Self::Rect { panel, .. }
+            | Self::Image { panel, .. }
+            | Self::Module { panel, .. } => panel.as_ref(),
         }
     }
 }

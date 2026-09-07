@@ -45,6 +45,7 @@ async fn test_wayland_state_initialization() {
         font_system: FontSystem::new(),
         swash_cache: SwashCache::new(),
         floating_surfaces: HashMap::new(),
+        last_button_serial: None,
         app_env,
     };
     assert!(state.bars.is_empty());
@@ -96,6 +97,7 @@ async fn test_wayland_adapter_methods() {
         font_system: FontSystem::new(),
         swash_cache: SwashCache::new(),
         floating_surfaces: HashMap::new(),
+        last_button_serial: None,
         app_env,
     };
 

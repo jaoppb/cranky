@@ -174,6 +174,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
 
         rect.render_to_canvas(&mut canvas);
@@ -191,6 +192,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
         flex.render_to_canvas(&mut canvas);
 
@@ -207,6 +209,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
         text.render_to_canvas(&mut canvas);
 
@@ -225,6 +228,7 @@ mod tests {
             on_hover: None,
             tooltip: None,
             popup: None,
+            panel: None,
         };
         progress.render_to_canvas(&mut canvas);
 
@@ -237,6 +241,7 @@ mod tests {
             pixel_size: Size::new(1, 1),
             tooltip: None,
             popup: None,
+            panel: None,
         };
         image.render_to_canvas(&mut canvas);
     }

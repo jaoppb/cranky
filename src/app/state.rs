@@ -878,6 +878,7 @@ mod tests {
                     on_hover: None,
                     tooltip: None,
                     popup: None,
+                    panel: None,
                 }),
             })
             .await

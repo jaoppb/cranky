@@ -1,7 +1,9 @@
-use crate::features::vdom::domain::UiAction;
-use crate::shared::events::core::PointerButton;
-use crate::shared::scripting::adapters::lua::{register_cranky_api, value_to_vnode};
-use mlua::Lua;
+#[cfg(test)]
+mod tests {
+    use crate::features::vdom::domain::UiAction;
+    use crate::shared::events::core::PointerButton;
+    use crate::shared::scripting::adapters::lua::{register_cranky_api, value_to_vnode};
+    use mlua::Lua;
 
 #[test]
 fn test_vdom_dsl_constructors() {
@@ -106,11 +108,15 @@ fn test_lua_vnode_with_popup() {
             children = {
                 ui.text({
                     text = "Show Popup",
-                    popup = ui.flex({
-                        class = "popup-menu",
-                        children = {
-                            ui.text({ text = "Item 1" })
-                        }
+                    popup = ui.popup({
+                        anchor = "bottom",
+                        offset = { x = 0, y = 8 },
+                        content = ui.flex({
+                            class = "popup-menu",
+                            children = {
+                                ui.text({ text = "Item 1" })
+                            }
+                        })
                     })
                 })
             }
@@ -122,8 +128,57 @@ fn test_lua_vnode_with_popup() {
     let button_node = &node.children()[0];
     assert!(button_node.popup().is_some());
     let popup = button_node.popup().unwrap();
-    assert_eq!(popup.children().len(), 1);
-    assert_eq!(popup.tag(), crate::features::vdom::domain::NodeTag::Flex);
+    assert_eq!(popup.content().children().len(), 1);
+    assert_eq!(
+        popup.content().tag(),
+        crate::features::vdom::domain::NodeTag::Flex
+    );
+    assert_eq!(
+        popup.anchor_direction(),
+        crate::features::vdom::domain::AnchorDirection::Bottom
+    );
+    assert_eq!(
+        popup.offset(),
+        crate::features::vdom::domain::PopupOffset::new(0, 8)
+    );
+}
+
+#[test]
+fn test_lua_vnode_with_panel() {
+    let lua = Lua::new();
+    register_cranky_api(&lua).expect("DSL registration failed");
+
+    let script = r#"
+        return ui.text({
+            text = "Panel Trigger",
+            panel = ui.panel({
+                layer = "overlay",
+                anchor = { "top", "right" },
+                margin = { top = 10, right = 20 },
+                exclusive_zone = 0,
+                content = ui.flex({
+                    class = "control-center",
+                    children = {
+                        ui.text({ text = "Volume" })
+                    }
+                })
+            })
+        })
+    "#;
+    let val = lua.load(script).eval::<mlua::Value>().unwrap();
+    let node = value_to_vnode(&lua, val).unwrap();
+    assert!(node.panel().is_some());
+    let panel = node.panel().unwrap();
+    assert_eq!(
+        panel.layer(),
+        crate::features::vdom::domain::PanelLayer::Overlay
+    );
+    assert!(panel.anchor().top());
+    assert!(panel.anchor().right());
+    assert!(!panel.anchor().bottom());
+    assert_eq!(panel.margin().top().value(), 10);
+    assert_eq!(panel.margin().right().value(), 20);
+    assert_eq!(panel.content().children().len(), 1);
 }
 
 #[test]
@@ -179,4 +234,5 @@ fn test_lua_shorthand_dsl() {
         vnode.children()[3].tag(),
         crate::features::vdom::domain::NodeTag::Module
     );
+}
 }

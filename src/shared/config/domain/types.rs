@@ -60,7 +60,7 @@ impl BorderRadius {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
 pub struct MarginOffset(i32);
 
 impl MarginOffset {

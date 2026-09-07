@@ -54,7 +54,7 @@ fn create_test_event_loop_and_channel() -> (
 }
 
 fn make_test_rect_node(
-    popup: Option<Box<crate::features::layout_engine::domain::StyledNode>>,
+    popup: Option<crate::features::layout_engine::domain::StyledPopup>,
 ) -> crate::features::layout_engine::domain::RenderNode {
     crate::features::layout_engine::domain::RenderNode::Rect {
         path: crate::features::layout_engine::domain::NodePath::root(),
@@ -64,12 +64,13 @@ fn make_test_rect_node(
         on_hover: None,
         tooltip: None,
         popup,
+        panel: None,
     }
 }
 
 #[test]
 fn test_event_loop_popup_floating_surface_lifecycle() {
-    use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, StyledNode};
+    use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, StyledNode, StyledPopup};
     use crate::features::styling::domain::ComputedStyle;
 
     let (mut event_loop, id, display_rx) = create_test_event_loop_and_channel();
@@ -83,11 +84,18 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
         on_hover: None,
         tooltip: None,
         popup: None,
+        panel: None,
     };
+    let styled_popup = StyledPopup::new(
+        Box::new(popup_styled.clone()),
+        crate::features::vdom::domain::AnchorDirection::default(),
+        crate::features::vdom::domain::PopupOffset::default(),
+        true,
+    );
     let outcome1 = crate::features::module_runtime::domain::RenderOutcome::new(
         None,
         vec![],
-        make_test_rect_node(Some(Box::new(popup_styled.clone()))),
+        make_test_rect_node(Some(styled_popup)),
         None,
     );
     event_loop.dispatch_render_outcome(&mon, &outcome1);

@@ -9,6 +9,7 @@ use super::floating_render::{calculate_floating_layout, create_positioner, rende
 use super::state::WaylandState;
 use super::types::FloatingSurface;
 use crate::features::layout_engine::domain::{FloatingKind, StyledNode};
+use crate::shared::events::core::SurfaceKind;
 use crate::shared::primitives::geometry::{Scale, Size};
 use crate::shared::primitives::MonitorId;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
@@ -112,12 +113,30 @@ pub(crate) fn show_floating(
     let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, qh, ());
     let xdg_popup = xdg_surface.get_popup(None, &positioner, qh, ());
 
+    if let FloatingKind::Popup(_) = &kind
+        && let (Some(seat), Some(serial)) = (state.seat.as_ref(), state.last_button_serial)
+    {
+        xdg_popup.grab(seat, serial.value());
+    }
+
     anchor_info.bar_layer_surface.get_popup(&xdg_popup);
     positioner.destroy();
     surface.commit();
 
-    if let FloatingKind::Popup(ref target) = kind {
-        state.surface_to_id.insert(surface.clone(), (target.module_id(), anchor_info.target_monitor_id));
+    match &kind {
+        FloatingKind::Popup(target) => {
+            state.surface_to_id.insert(
+                surface.clone(),
+                (target.module_id(), anchor_info.target_monitor_id, SurfaceKind::Popup),
+            );
+        }
+        FloatingKind::Panel(target) => {
+            state.surface_to_id.insert(
+                surface.clone(),
+                (target.module_id(), anchor_info.target_monitor_id, SurfaceKind::Panel),
+            );
+        }
+        FloatingKind::Tooltip => {}
     }
 
     state.floating_surfaces.insert(

@@ -20,27 +20,47 @@ impl PointerHandler {
                 let state_changed = self.handle_button_release(monitor_id, *pos, render_tree);
                 PointerOutcome::new(Vec::new(), state_changed)
             }
-            PointerEvent::Click { button, pos } => {
+            PointerEvent::Click { button, pos, .. } => {
                 let actions = self.handle_click(monitor_id, *button, *pos, render_tree);
                 PointerOutcome::new(actions, false)
             }
-            PointerEvent::PointerMotion { pos } => {
+            PointerEvent::PointerMotion { pos, .. } => {
                 let (actions, state_changed) =
                     self.handle_pointer_motion(monitor_id, *pos, render_tree);
                 PointerOutcome::new(actions, state_changed)
             }
-            PointerEvent::PointerLeave => {
+            PointerEvent::PointerLeave { .. } => {
                 let (actions, state_changed) = self.handle_pointer_leave(monitor_id);
                 PointerOutcome::new(actions, state_changed)
             }
-            PointerEvent::PopupDismissed => PointerOutcome::new(
-                vec![PointerAction::CallFunction(
-                    FunctionName::new("on_popup_dismiss"),
-                    Some(monitor_id.clone()),
-                )],
-                true,
-            ),
             _ => PointerOutcome::empty(),
+        }
+    }
+
+    pub fn handle_dismissal(
+        &mut self,
+        event: crate::shared::events::core::SurfaceLifecycleEvent,
+        monitor_id: &MonitorId,
+    ) -> PointerOutcome {
+        match event {
+            crate::shared::events::core::SurfaceLifecycleEvent::PopupDismissed => {
+                PointerOutcome::new(
+                    vec![PointerAction::CallFunction(
+                        FunctionName::new("on_popup_dismiss"),
+                        Some(monitor_id.clone()),
+                    )],
+                    true,
+                )
+            }
+            crate::shared::events::core::SurfaceLifecycleEvent::PanelDismissed => {
+                PointerOutcome::new(
+                    vec![PointerAction::CallFunction(
+                        FunctionName::new("on_panel_dismiss"),
+                        Some(monitor_id.clone()),
+                    )],
+                    true,
+                )
+            }
         }
     }
 }

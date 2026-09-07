@@ -36,13 +36,13 @@ pub(crate) fn handle_conflicts(
         let conf_kind = FloatingKind::Popup(conf.clone());
         if let Some(floating) = state.floating_surfaces.remove(&conf_kind) {
             state.surface_to_id.remove(&floating.surface);
-            if conf.module_id() != target.module_id() || conf.monitor_id() != target.monitor_id() {
-                let _ = state.hub.pointer_tx().send((
-                    conf.module_id(),
-                    conf.monitor_id().clone(),
-                    crate::shared::events::core::PointerEvent::PopupDismissed,
-                ));
-            }
+            let _ = state.hub.pointer_tx().send((
+                conf.module_id(),
+                conf.monitor_id().clone(),
+                crate::shared::events::core::InteractionEvent::Lifecycle(
+                    crate::shared::events::core::SurfaceLifecycleEvent::PopupDismissed,
+                ),
+            ));
         }
     }
 }
@@ -91,7 +91,7 @@ pub(crate) fn resolve_anchor(
             anchor_x = pointer_x as i32;
             anchor_y = bar_height as i32;
         }
-        FloatingKind::Popup(target) => {
+        FloatingKind::Popup(target) | FloatingKind::Panel(target) => {
             let module_id = target.module_id();
             let mon_name = target.monitor_id().as_str();
             for bar in &state.bars {

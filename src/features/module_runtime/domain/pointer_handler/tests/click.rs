@@ -3,7 +3,7 @@ use crate::features::module_runtime::domain::pointer_handler::action::PointerAct
 use crate::features::module_runtime::domain::pointer_handler::handler::PointerHandler;
 use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::{ClickHandlers, UiAction, UiCommand};
-use crate::shared::events::core::{PointerButton, PointerEvent};
+use crate::shared::events::core::{PointerButton, PointerEvent, SurfaceKind};
 use crate::shared::primitives::geometry::{Position, Rect, Size};
 use crate::shared::primitives::{FunctionName, MonitorId};
 
@@ -16,6 +16,7 @@ fn make_test_tree(on_click: Option<ClickHandlers>) -> RenderNode {
         on_hover: None,
         tooltip: None,
         popup: None,
+        panel: None,
     }
 }
 
@@ -30,6 +31,7 @@ fn test_click_hit_returns_send_command_single_shorthand() {
     // Left click
     let outcome = handler.handle_event(
         &PointerEvent::Click {
+            surface: SurfaceKind::Bar,
             button: PointerButton::Left,
             pos: Position::new(10, 10),
         },
@@ -45,6 +47,7 @@ fn test_click_hit_returns_send_command_single_shorthand() {
     // Right click also triggers on single action shorthand
     let outcome_right = handler.handle_event(
         &PointerEvent::Click {
+            surface: SurfaceKind::Bar,
             button: PointerButton::Right,
             pos: Position::new(10, 10),
         },
@@ -74,6 +77,7 @@ fn test_click_hit_returns_distinct_button_actions() {
 
     let outcome_left = handler.handle_event(
         &PointerEvent::Click {
+            surface: SurfaceKind::Bar,
             button: PointerButton::Left,
             pos: Position::new(10, 10),
         },
@@ -89,6 +93,7 @@ fn test_click_hit_returns_distinct_button_actions() {
 
     let outcome_right = handler.handle_event(
         &PointerEvent::Click {
+            surface: SurfaceKind::Bar,
             button: PointerButton::Right,
             pos: Position::new(10, 10),
         },
@@ -114,6 +119,7 @@ fn test_click_script_call_returns_call_function() {
 
     let outcome = handler.handle_event(
         &PointerEvent::Click {
+            surface: SurfaceKind::Bar,
             button: PointerButton::Left,
             pos: Position::new(10, 10),
         },

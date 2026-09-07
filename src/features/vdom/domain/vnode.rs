@@ -22,7 +22,9 @@ pub struct VNode {
     #[serde(default)]
     pub(crate) tooltip: Option<Box<Self>>,
     #[serde(default)]
-    pub(crate) popup: Option<Box<Self>>,
+    pub(crate) popup: Option<super::floating::PopupSpec>,
+    #[serde(default)]
+    pub(crate) panel: Option<super::floating::PanelSpec>,
     #[serde(flatten)]
     pub(crate) kind: VNodeKind,
 }
@@ -76,13 +78,24 @@ impl VNode {
     }
 
     #[must_use]
-    pub fn popup(&self) -> Option<&Self> {
-        self.popup.as_deref()
+    pub const fn popup(&self) -> Option<&super::floating::PopupSpec> {
+        self.popup.as_ref()
     }
 
     #[must_use]
-    pub fn with_popup(mut self, popup: Box<Self>) -> Self {
+    pub fn with_popup(mut self, popup: super::floating::PopupSpec) -> Self {
         self.popup = Some(popup);
+        self
+    }
+
+    #[must_use]
+    pub const fn panel(&self) -> Option<&super::floating::PanelSpec> {
+        self.panel.as_ref()
+    }
+
+    #[must_use]
+    pub fn with_panel(mut self, panel: super::floating::PanelSpec) -> Self {
+        self.panel = Some(panel);
         self
     }
 

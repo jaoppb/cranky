@@ -483,12 +483,12 @@ mod tests {
             );
             let popup = node_after_toggle_on.popup().unwrap();
             assert_eq!(
-                popup.tag(),
+                popup.content().tag(),
                 crate::features::vdom::domain::NodeTag::Flex,
                 "Popup should be a Flex node for {engine_name}"
             );
             assert_eq!(
-                popup.children().len(),
+                popup.content().children().len(),
                 3,
                 "Popup should contain Header, Weekdays, and Grid for {engine_name}"
             );

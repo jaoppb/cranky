@@ -68,6 +68,7 @@ impl WaylandAdapter {
             font_system: FontSystem::new(),
             swash_cache: SwashCache::new(),
             floating_surfaces: HashMap::new(),
+            last_button_serial: None,
             app_env,
         };
 

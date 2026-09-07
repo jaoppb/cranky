@@ -17,14 +17,19 @@ pub(crate) fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
         || table.contains_key("on_click")?
         || table.contains_key("on_hover")?
         || table.contains_key("tooltip")?
-        || table.contains_key("popup")?;
+        || table.contains_key("popup")?
+        || table.contains_key("panel")?;
 
     if is_full_spec {
         let children_vec = parse_table_children(lua, &table)?;
-        let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
+        let (class, id, on_click, on_hover, tooltip, popup, panel) =
+            parse_common_props(lua, &table)?;
         let mut node = VNode::new_flex(children_vec, class, id, on_click, on_hover, tooltip);
         if let Some(p) = popup {
             node = node.with_popup(p);
+        }
+        if let Some(p) = panel {
+            node = node.with_panel(p);
         }
         return Ok(node);
     }
@@ -48,14 +53,19 @@ pub(crate) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
         || table.contains_key("on_click")?
         || table.contains_key("on_hover")?
         || table.contains_key("tooltip")?
-        || table.contains_key("popup")?;
+        || table.contains_key("popup")?
+        || table.contains_key("panel")?;
 
     if is_full_spec {
         let children_vec = parse_table_children(lua, &table)?;
-        let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
+        let (class, id, on_click, on_hover, tooltip, popup, panel) =
+            parse_common_props(lua, &table)?;
         let mut node = VNode::new_grid(children_vec, class, id, on_click, on_hover, tooltip);
         if let Some(p) = popup {
             node = node.with_popup(p);
+        }
+        if let Some(p) = panel {
+            node = node.with_panel(p);
         }
         return Ok(node);
     }
@@ -70,10 +80,14 @@ pub(crate) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
 pub(crate) fn parse_rect_node(lua: &Lua, val: Option<mlua::Value>) -> mlua::Result<VNode> {
     match val {
         Some(mlua::Value::Table(table)) => {
-            let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
+            let (class, id, on_click, on_hover, tooltip, popup, panel) =
+                parse_common_props(lua, &table)?;
             let mut node = VNode::new_rect(class, id, on_click, on_hover, tooltip);
             if let Some(p) = popup {
                 node = node.with_popup(p);
+            }
+            if let Some(p) = panel {
+                node = node.with_panel(p);
             }
             Ok(node)
         }
@@ -94,7 +108,8 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
             let name_str = table.get::<String>("name")?;
             let instance_id_str = table.get::<Option<String>>("instance_id")?;
             let options = parse_module_options(lua, &table)?;
-            let (class, id, on_click, on_hover, tooltip, popup) = parse_common_props(lua, &table)?;
+            let (class, id, on_click, on_hover, tooltip, popup, panel) =
+                parse_common_props(lua, &table)?;
             let mut node = VNode::new_module(
                 ModuleName::new(name_str),
                 instance_id_str.map(ModuleInstanceId::new),
@@ -107,6 +122,9 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
             );
             if let Some(p) = popup {
                 node = node.with_popup(p);
+            }
+            if let Some(p) = panel {
+                node = node.with_panel(p);
             }
             Ok(node)
         }
