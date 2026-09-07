@@ -139,8 +139,28 @@ fn test_lua_vnode_with_popup() {
     );
     assert_eq!(
         popup.offset(),
-        crate::features::vdom::domain::PopupOffset::new(0, 8)
+        Some(crate::features::vdom::domain::PopupOffset::new(0, 8))
     );
+}
+
+#[test]
+fn test_lua_vnode_with_popup_default_offset_none() {
+    let lua = Lua::new();
+    register_cranky_api(&lua).expect("DSL registration failed");
+
+    let script = r#"
+        return ui.text({
+            text = "Trigger",
+            popup = ui.popup({
+                content = ui.text({ text = "Popup Content" })
+            })
+        })
+    "#;
+    let val = lua.load(script).eval::<mlua::Value>().unwrap();
+    let node = value_to_vnode(&lua, val).unwrap();
+    assert!(node.popup().is_some());
+    let popup = node.popup().unwrap();
+    assert_eq!(popup.offset(), None);
 }
 
 #[test]

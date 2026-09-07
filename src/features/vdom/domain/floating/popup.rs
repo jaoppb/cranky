@@ -12,64 +12,14 @@ pub enum AnchorDirection {
     Auto,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, Deserialize)]
-#[serde(from = "PopupOffsetHelper")]
-pub struct PopupOffset {
-    dx: i32,
-    dy: i32,
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum PopupOffsetHelper {
-    Map {
-        #[serde(alias = "x", default)]
-        dx: i32,
-        #[serde(alias = "y", default)]
-        dy: i32,
-    },
-    Tuple((i32, i32)),
-    List(Vec<i32>),
-}
-
-impl From<PopupOffsetHelper> for PopupOffset {
-    fn from(helper: PopupOffsetHelper) -> Self {
-        match helper {
-            PopupOffsetHelper::Map { dx, dy } | PopupOffsetHelper::Tuple((dx, dy)) => {
-                Self::new(dx, dy)
-            }
-            PopupOffsetHelper::List(list) => {
-                let dx = list.first().copied().unwrap_or(0);
-                let dy = list.get(1).copied().unwrap_or(0);
-                Self::new(dx, dy)
-            }
-        }
-    }
-}
-
-impl PopupOffset {
-    #[must_use]
-    pub const fn new(dx: i32, dy: i32) -> Self {
-        Self { dx, dy }
-    }
-
-    #[must_use]
-    pub const fn dx(&self) -> i32 {
-        self.dx
-    }
-
-    #[must_use]
-    pub const fn dy(&self) -> i32 {
-        self.dy
-    }
-}
+pub use crate::shared::primitives::PopupOffset;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(from = "PopupSpecHelper")]
 pub struct PopupSpec {
     content: Box<VNode>,
     anchor_direction: AnchorDirection,
-    offset: PopupOffset,
+    offset: Option<PopupOffset>,
     dismiss_on_unfocus: bool,
 }
 
@@ -82,7 +32,7 @@ enum PopupSpecHelper {
         #[serde(alias = "anchor", default)]
         anchor_direction: AnchorDirection,
         #[serde(default)]
-        offset: PopupOffset,
+        offset: Option<PopupOffset>,
         #[serde(default = "default_true")]
         dismiss_on_unfocus: bool,
     },
@@ -114,11 +64,11 @@ impl From<PopupSpecHelper> for PopupSpec {
 
 impl PopupSpec {
     #[must_use]
-    pub fn new(content: Box<VNode>) -> Self {
+    pub const fn new(content: Box<VNode>) -> Self {
         Self {
             content,
             anchor_direction: AnchorDirection::Auto,
-            offset: PopupOffset::default(),
+            offset: None,
             dismiss_on_unfocus: true,
         }
     }
@@ -130,7 +80,7 @@ impl PopupSpec {
     }
 
     #[must_use]
-    pub const fn with_offset(mut self, offset: PopupOffset) -> Self {
+    pub const fn with_offset(mut self, offset: Option<PopupOffset>) -> Self {
         self.offset = offset;
         self
     }
@@ -152,7 +102,7 @@ impl PopupSpec {
     }
 
     #[must_use]
-    pub const fn offset(&self) -> PopupOffset {
+    pub const fn offset(&self) -> Option<PopupOffset> {
         self.offset
     }
 

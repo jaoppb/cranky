@@ -25,6 +25,8 @@ fps_limit = 30
 #   "per_module"              - 1 popup per module across monitors
 #   "per_module_and_monitor"  - Independent popups per module per monitor
 behavior = "global"
+# Offset from the bar outer edge (x = horizontal, y = vertical gap)
+offset = { x = 0, y = 8 }
 
 [metrics]
 update_interval_ms = 1000

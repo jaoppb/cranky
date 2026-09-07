@@ -105,3 +105,39 @@ fn test_json_value_to_dynamic_nested() {
         panic!("expected map");
     }
 }
+
+#[test]
+fn test_popup_config_dto_offset_default() {
+    let toml_str = r#"
+        behavior = "global"
+    "#;
+    let dto: PopupConfigDto = toml::from_str(toml_str).unwrap();
+    let domain = dto.into_domain();
+    assert_eq!(domain.offset().dx(), 0);
+    assert_eq!(domain.offset().dy(), 8);
+}
+
+#[test]
+fn test_popup_config_dto_offset_map() {
+    let toml_str = r#"
+        behavior = "per_monitor"
+        offset = { x = 4, y = 16 }
+    "#;
+    let dto: PopupConfigDto = toml::from_str(toml_str).unwrap();
+    let domain = dto.into_domain();
+    assert_eq!(domain.behavior(), crate::shared::config::domain::PopupBehavior::PerMonitor);
+    assert_eq!(domain.offset().dx(), 4);
+    assert_eq!(domain.offset().dy(), 16);
+}
+
+#[test]
+fn test_popup_config_dto_offset_list() {
+    let toml_str = r#"
+        behavior = "global"
+        offset = [2, 10]
+    "#;
+    let dto: PopupConfigDto = toml::from_str(toml_str).unwrap();
+    let domain = dto.into_domain();
+    assert_eq!(domain.offset().dx(), 2);
+    assert_eq!(domain.offset().dy(), 10);
+}

@@ -109,9 +109,10 @@ impl DisplayServerPort for WaylandAdapter {
         monitor_id: Option<MonitorId>,
         anchor_rect: Option<Rect>,
         layout: StyledNode,
+        offset: Option<crate::shared::primitives::PopupOffset>,
     ) -> Result<(), DisplayServerError> {
         let qh = self.event_queue.handle();
-        show_floating(&mut self.state, &qh, kind, monitor_id, anchor_rect, layout)
+        show_floating(&mut self.state, &qh, kind, monitor_id, anchor_rect, layout, offset)
     }
 
     fn hide_floating_surface(&mut self, kind: &FloatingKind) -> Result<(), DisplayServerError> {

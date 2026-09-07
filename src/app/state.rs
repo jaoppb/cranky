@@ -164,11 +164,13 @@ impl<
                                 monitor_id,
                                 anchor_rect,
                                 layout,
+                                offset,
                             } => {
                                 tracing::debug!(
                                     ?kind,
                                     ?monitor_id,
                                     ?anchor_rect,
+                                    ?offset,
                                     "Received DisplayCommand::ShowFloatingSurface, calling display.show_floating_surface"
                                 );
                                 match display.show_floating_surface(
@@ -176,6 +178,7 @@ impl<
                                     monitor_id,
                                     anchor_rect,
                                     *layout,
+                                    offset,
                                 ) {
                                     Ok(()) => {
                                         tracing::debug!("display.show_floating_surface succeeded");
@@ -839,7 +842,7 @@ mod tests {
         mock_display.expect_render_all().returning(|_, _| Ok(()));
         mock_display
             .expect_show_floating_surface()
-            .returning(|_, _, _, _| Ok(()));
+            .returning(|_, _, _, _, _| Ok(()));
         mock_display
             .expect_hide_floating_surface()
             .returning(|_| Ok(()));
@@ -880,6 +883,7 @@ mod tests {
                     popup: None,
                     panel: None,
                 }),
+                offset: None,
             })
             .await
             .unwrap();
@@ -1042,7 +1046,7 @@ mod tests {
         mock_display.expect_render_all().returning(|_, _| Ok(()));
         mock_display
             .expect_show_floating_surface()
-            .returning(|_, _, _, _| Ok(()));
+            .returning(|_, _, _, _, _| Ok(()));
         mock_display
             .expect_hide_floating_surface()
             .returning(|_| Ok(()));

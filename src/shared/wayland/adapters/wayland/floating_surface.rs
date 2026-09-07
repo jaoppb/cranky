@@ -23,6 +23,7 @@ pub(crate) fn show_floating(
     monitor_id: Option<MonitorId>,
     anchor_rect: Option<crate::shared::primitives::geometry::Rect>,
     layout: StyledNode,
+    offset: Option<crate::shared::primitives::PopupOffset>,
 ) -> Result<(), DisplayServerError> {
     if let Some(existing) = state.floating_surfaces.get(&kind)
         && existing.layout == layout
@@ -36,6 +37,13 @@ pub(crate) fn show_floating(
 
     let Some(anchor_info) = resolve_anchor(state, &kind, monitor_id, anchor_rect) else {
         return Ok(());
+    };
+
+    let effective_offset = match kind {
+        FloatingKind::Popup(_) => offset.unwrap_or_else(|| {
+            state.hub.config_rx().borrow().popup().offset()
+        }),
+        _ => offset.unwrap_or_default(),
     };
 
     let font_family = crate::shared::config::domain::FontFamily::new("Inter".to_string());
@@ -75,7 +83,7 @@ pub(crate) fn show_floating(
         let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
             reason: "XDG WM Base not bound".to_string(),
         })?;
-        let positioner = create_positioner(xdg_wm_base, qh, text_w, text_h, &anchor_info);
+        let positioner = create_positioner(xdg_wm_base, qh, text_w, text_h, &anchor_info, effective_offset);
         floating.reposition_token = floating.reposition_token.wrapping_add(1);
         floating.xdg_popup.reposition(&positioner, floating.reposition_token);
         positioner.destroy();
@@ -103,7 +111,7 @@ pub(crate) fn show_floating(
     let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
         reason: "XDG WM Base not bound".to_string(),
     })?;
-    let positioner = create_positioner(xdg_wm_base, qh, text_w, text_h, &anchor_info);
+    let positioner = create_positioner(xdg_wm_base, qh, text_w, text_h, &anchor_info, effective_offset);
 
     let compositor = state.compositor.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
         reason: "Compositor not bound".to_string(),

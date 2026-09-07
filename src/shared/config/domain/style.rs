@@ -1,4 +1,5 @@
 use crate::shared::primitives::color::{Color, DrawingColor};
+use crate::shared::primitives::PopupOffset;
 use serde::{Deserialize, Serialize};
 
 use super::types::{BorderRadius, BorderSize, FontFamily, FontSize, PaddingOffset};
@@ -13,20 +14,35 @@ pub enum PopupBehavior {
     Global,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PopupConfig {
     behavior: PopupBehavior,
+    offset: PopupOffset,
+}
+
+impl Default for PopupConfig {
+    fn default() -> Self {
+        Self {
+            behavior: PopupBehavior::default(),
+            offset: PopupOffset::new(0, 8),
+        }
+    }
 }
 
 impl PopupConfig {
     #[must_use]
-    pub const fn new(behavior: PopupBehavior) -> Self {
-        Self { behavior }
+    pub const fn new(behavior: PopupBehavior, offset: PopupOffset) -> Self {
+        Self { behavior, offset }
     }
 
     #[must_use]
     pub const fn behavior(&self) -> PopupBehavior {
         self.behavior
+    }
+
+    #[must_use]
+    pub const fn offset(&self) -> PopupOffset {
+        self.offset
     }
 }
 

@@ -83,6 +83,7 @@ pub(super) fn dispatch_outcome_popups<DS: DisplayCommandSender>(
             monitor_id: Some(monitor_id.clone()),
             anchor_rect: Some(*anchored_popup.anchor_rect()),
             layout: Box::new(anchored_popup.layout().clone()),
+            offset: anchored_popup.popup().offset(),
         });
     } else if active_popups.remove(monitor_id) {
         display_sender.send_display_command(DisplayCommand::HideFloatingSurface {
@@ -105,6 +106,7 @@ pub(super) fn dispatch_outcome_panels<DS: DisplayCommandSender>(
             monitor_id: Some(monitor_id.clone()),
             anchor_rect: None,
             layout: Box::new(active_panel.layout().clone()),
+            offset: None,
         });
     } else if active_panels.remove(monitor_id) {
         display_sender.send_display_command(DisplayCommand::HideFloatingSurface {

@@ -84,6 +84,7 @@ pub trait DisplayServerPort: Send + Sync {
         monitor_id: Option<crate::shared::primitives::MonitorId>,
         anchor_rect: Option<crate::shared::primitives::geometry::Rect>,
         layout: crate::features::layout_engine::domain::StyledNode,
+        offset: Option<crate::shared::primitives::PopupOffset>,
     ) -> Result<(), DisplayServerError>;
 
     /// # Errors

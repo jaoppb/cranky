@@ -84,9 +84,11 @@ fn test_modules_config() {
 
 #[test]
 fn test_popup_config() {
-    let popup = PopupConfig::new(PopupBehavior::PerMonitor);
+    let popup = PopupConfig::new(PopupBehavior::PerMonitor, crate::shared::primitives::PopupOffset::new(0, 8));
     assert_eq!(popup.behavior(), PopupBehavior::PerMonitor);
+    assert_eq!(popup.offset(), crate::shared::primitives::PopupOffset::new(0, 8));
     assert_eq!(PopupBehavior::default(), PopupBehavior::Global);
+    assert_eq!(PopupConfig::default().offset(), crate::shared::primitives::PopupOffset::new(0, 8));
 }
 
 #[test]

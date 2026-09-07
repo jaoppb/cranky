@@ -66,6 +66,7 @@ pub(crate) fn create_positioner(
     text_w: i32,
     text_h: i32,
     anchor_info: &AnchorInfo,
+    offset: crate::shared::primitives::PopupOffset,
 ) -> XdgPositioner {
     let positioner = xdg_wm_base.create_positioner(qh, ());
     positioner.set_size(text_w.max(1), text_h.max(1));
@@ -77,6 +78,7 @@ pub(crate) fn create_positioner(
     );
     positioner.set_anchor(XdgAnchor::Bottom);
     positioner.set_gravity(XdgGravity::Bottom);
+    positioner.set_offset(offset.dx(), offset.dy());
     positioner.set_constraint_adjustment(
         ConstraintAdjustment::SlideX | ConstraintAdjustment::SlideY | ConstraintAdjustment::FlipY,
     );

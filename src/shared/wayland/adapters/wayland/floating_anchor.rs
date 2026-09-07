@@ -91,7 +91,33 @@ pub(crate) fn resolve_anchor(
             anchor_x = pointer_x as i32;
             anchor_y = bar_height as i32;
         }
-        FloatingKind::Popup(target) | FloatingKind::Panel(target) => {
+        FloatingKind::Popup(target) => {
+            let module_id = target.module_id();
+            let mon_name = target.monitor_id().as_str();
+            for bar in &state.bars {
+                if bar.output_name == mon_name {
+                    bar_scale = bar.scale;
+                    bar_layer_surface = Some(bar.layer_surface.clone());
+                    target_monitor_id = target.monitor_id().clone();
+                    if let Some(ms) = bar.module_surfaces.get(&module_id) {
+                        if let Some(r) = anchor_rect {
+                            anchor_x = ms.x + r.x();
+                            anchor_w = r.width() as i32;
+                        } else {
+                            anchor_x = ms.x;
+                            anchor_w = ms.size.width() as i32;
+                        }
+                    } else if let Some(r) = anchor_rect {
+                        anchor_x = r.x();
+                        anchor_w = r.width() as i32;
+                    }
+                    anchor_y = 0;
+                    anchor_h = bar.height as i32;
+                    break;
+                }
+            }
+        }
+        FloatingKind::Panel(target) => {
             let module_id = target.module_id();
             let mon_name = target.monitor_id().as_str();
             for bar in &state.bars {

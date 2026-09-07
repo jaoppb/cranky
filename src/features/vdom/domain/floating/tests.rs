@@ -16,12 +16,12 @@ fn test_popup_spec_builder_and_accessors() {
     ));
     let spec = PopupSpec::new(content.clone())
         .with_anchor(AnchorDirection::Bottom)
-        .with_offset(PopupOffset::new(0, 10))
+        .with_offset(Some(PopupOffset::new(0, 10)))
         .with_dismiss_on_unfocus(false);
 
     assert_eq!(spec.content(), content.as_ref());
     assert_eq!(spec.anchor_direction(), AnchorDirection::Bottom);
-    assert_eq!(spec.offset(), PopupOffset::new(0, 10));
+    assert_eq!(spec.offset(), Some(PopupOffset::new(0, 10)));
     assert!(!spec.dismiss_on_unfocus());
 }
 

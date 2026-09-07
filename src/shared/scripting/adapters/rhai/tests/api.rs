@@ -191,8 +191,8 @@ fn test_rhai_vnode_with_popup_and_panel() {
     assert!(node.popup().is_some());
     let popup = node.popup().unwrap();
     assert_eq!(popup.anchor_direction(), crate::features::vdom::domain::AnchorDirection::Bottom);
-    assert_eq!(popup.offset().dx(), 5);
-    assert_eq!(popup.offset().dy(), 10);
+    assert_eq!(popup.offset().unwrap().dx(), 5);
+    assert_eq!(popup.offset().unwrap().dy(), 10);
     assert!(popup.dismiss_on_unfocus());
 
     assert!(node.panel().is_some());
@@ -203,5 +203,29 @@ fn test_rhai_vnode_with_popup_and_panel() {
     assert!(!panel.anchor().bottom());
     assert_eq!(panel.margin().top().value(), 15);
     assert_eq!(panel.margin().right().value(), 25);
+}
+
+#[test]
+fn test_rhai_vnode_with_popup_default_offset_none() {
+    let source = r#"
+        fn init() {}
+        fn refresh() {}
+        fn render(monitor) {
+            let p_content = ui.text("Popup content");
+            let pop = ui.popup(#{
+                content: p_content,
+                anchor: "bottom",
+                dismiss_on_unfocus: true,
+            });
+            return ui.rect(#{
+                popup: pop,
+            });
+        }
+    "#;
+    let module = RhaiModule::new("test_pop_none".into(), source).unwrap();
+    let node = module.render(&MonitorId::new("DP-1"));
+    assert!(node.popup().is_some());
+    let popup = node.popup().unwrap();
+    assert_eq!(popup.offset(), None);
 }
 }

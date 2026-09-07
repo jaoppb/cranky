@@ -6,25 +6,22 @@ use crate::features::vdom::domain::{
 use crate::shared::config::domain::{MarginConfig, MarginOffset};
 use mlua::Lua;
 
-fn parse_offset(table: &mlua::Table) -> PopupOffset {
-    table.get::<mlua::Table>("offset").map_or_else(
-        |_| PopupOffset::default(),
-        |offset_table| {
-            let dx = offset_table
-                .get::<Option<i32>>("x")
-                .ok()
-                .flatten()
-                .or_else(|| offset_table.get::<Option<i32>>("dx").ok().flatten())
-                .unwrap_or(0);
-            let dy = offset_table
-                .get::<Option<i32>>("y")
-                .ok()
-                .flatten()
-                .or_else(|| offset_table.get::<Option<i32>>("dy").ok().flatten())
-                .unwrap_or(0);
-            PopupOffset::new(dx, dy)
-        },
-    )
+fn parse_offset(table: &mlua::Table) -> Option<PopupOffset> {
+    table.get::<mlua::Table>("offset").ok().map(|offset_table| {
+        let dx = offset_table
+            .get::<Option<i32>>("x")
+            .ok()
+            .flatten()
+            .or_else(|| offset_table.get::<Option<i32>>("dx").ok().flatten())
+            .unwrap_or(0);
+        let dy = offset_table
+            .get::<Option<i32>>("y")
+            .ok()
+            .flatten()
+            .or_else(|| offset_table.get::<Option<i32>>("dy").ok().flatten())
+            .unwrap_or(0);
+        PopupOffset::new(dx, dy)
+    })
 }
 
 fn parse_margin(table: &mlua::Table) -> MarginConfig {

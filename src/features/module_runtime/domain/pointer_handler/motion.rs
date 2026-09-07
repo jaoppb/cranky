@@ -59,6 +59,7 @@ impl PointerHandler {
                         monitor_id: Some(monitor_id.clone()),
                         anchor_rect: None,
                         layout: Box::new(layout.clone()),
+                        offset: None,
                     },
                 ));
             } else {
@@ -115,6 +116,7 @@ impl PointerHandler {
                             monitor_id: Some(monitor_id.clone()),
                             anchor_rect: None,
                             layout: Box::new(layout.clone()),
+                            offset: None,
                         },
                     ));
                 } else {

@@ -9,7 +9,7 @@ use crate::shared::primitives::geometry::Rect;
 pub struct StyledPopup {
     content: Box<StyledNode>,
     anchor_direction: AnchorDirection,
-    offset: PopupOffset,
+    offset: Option<PopupOffset>,
     dismiss_on_unfocus: bool,
 }
 
@@ -18,7 +18,7 @@ impl StyledPopup {
     pub const fn new(
         content: Box<StyledNode>,
         anchor_direction: AnchorDirection,
-        offset: PopupOffset,
+        offset: Option<PopupOffset>,
         dismiss_on_unfocus: bool,
     ) -> Self {
         Self {
@@ -40,7 +40,7 @@ impl StyledPopup {
     }
 
     #[must_use]
-    pub const fn offset(&self) -> PopupOffset {
+    pub const fn offset(&self) -> Option<PopupOffset> {
         self.offset
     }
 

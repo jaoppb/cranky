@@ -80,6 +80,8 @@ impl TooltipConfigDto {
 pub struct PopupConfigDto {
     #[serde(default)]
     behavior: PopupBehaviorDto,
+    #[serde(default)]
+    offset: Option<crate::shared::primitives::PopupOffset>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -95,7 +97,11 @@ pub enum PopupBehaviorDto {
 impl PopupConfigDto {
     #[must_use]
     pub const fn into_domain(self) -> domain::PopupConfig {
-        domain::PopupConfig::new(self.behavior.into_domain())
+        let offset = match self.offset {
+            Some(off) => off,
+            None => crate::shared::primitives::PopupOffset::new(0, 8),
+        };
+        domain::PopupConfig::new(self.behavior.into_domain(), offset)
     }
 }
 

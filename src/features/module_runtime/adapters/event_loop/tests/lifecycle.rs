@@ -89,7 +89,7 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
     let styled_popup = StyledPopup::new(
         Box::new(popup_styled.clone()),
         crate::features::vdom::domain::AnchorDirection::default(),
-        crate::features::vdom::domain::PopupOffset::default(),
+        None,
         true,
     );
     let outcome1 = crate::features::module_runtime::domain::RenderOutcome::new(
@@ -109,7 +109,9 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
             monitor_id,
             anchor_rect,
             layout,
+            offset,
         } => {
+            assert_eq!(offset, None);
             assert_eq!(
                 kind,
                 FloatingKind::Popup(crate::features::layout_engine::domain::PopupTarget::new(

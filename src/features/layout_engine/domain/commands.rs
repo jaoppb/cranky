@@ -11,6 +11,7 @@ pub enum DisplayCommand {
         monitor_id: Option<MonitorId>,
         anchor_rect: Option<Rect>,
         layout: Box<StyledNode>,
+        offset: Option<crate::shared::primitives::PopupOffset>,
     },
     HideFloatingSurface {
         kind: FloatingKind,
