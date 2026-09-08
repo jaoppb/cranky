@@ -33,10 +33,10 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                 "wl_compositor" => state.compositor = Some(proxy.bind(name, version, qh, ())),
                 "wl_shm" => state.shm = Some(proxy.bind(name, version, qh, ())),
                 "zwlr_layer_shell_v1" => {
-                    state.layer_shell = Some(proxy.bind(name, version, qh, ()))
+                    state.layer_shell = Some(proxy.bind(name, version, qh, ()));
                 }
                 "xdg_wm_base" => {
-                    state.xdg_wm_base = Some(proxy.bind(name, u32::min(version, 5), qh, ()))
+                    state.xdg_wm_base = Some(proxy.bind(name, u32::min(version, 5), qh, ()));
                 }
                 "wl_subcompositor" => state.subcompositor = Some(proxy.bind(name, version, qh, ())),
                 "wl_output" => {
@@ -85,7 +85,7 @@ impl Dispatch<WlCompositor, ()> for WaylandState {
         _: &mut Self,
         _: &WlCompositor,
         _: wl_compositor::Event,
-        _: &(),
+        (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
@@ -97,7 +97,7 @@ impl Dispatch<WlShm, ()> for WaylandState {
         _: &mut Self,
         _: &WlShm,
         _: wl_shm::Event,
-        _: &(),
+        (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
@@ -109,7 +109,7 @@ impl Dispatch<ZwlrLayerShellV1, ()> for WaylandState {
         _: &mut Self,
         _: &ZwlrLayerShellV1,
         _: zwlr_layer_shell_v1::Event,
-        _: &(),
+        (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
@@ -121,7 +121,7 @@ impl Dispatch<WlSubcompositor, ()> for WaylandState {
         _: &mut Self,
         _: &WlSubcompositor,
         _: wl_subcompositor::Event,
-        _: &(),
+        (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
@@ -133,7 +133,7 @@ impl Dispatch<WlSubsurface, ()> for WaylandState {
         _: &mut Self,
         _: &WlSubsurface,
         _: wl_subsurface::Event,
-        _: &(),
+        (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
@@ -145,7 +145,7 @@ impl Dispatch<WlSurface, ()> for WaylandState {
         _: &mut Self,
         _: &WlSurface,
         _: wl_surface::Event,
-        _: &(),
+        (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
@@ -161,7 +161,7 @@ impl Dispatch<WlBuffer, BufferUserData> for WaylandState {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        if let wl_buffer::Event::Release = event {
+        if matches!(event, wl_buffer::Event::Release) {
             data.set_busy(false);
             tracing::trace!("WlBuffer released by compositor");
         }
@@ -173,7 +173,7 @@ impl Dispatch<WlShmPool, ()> for WaylandState {
         _: &mut Self,
         _: &WlShmPool,
         _: wl_shm_pool::Event,
-        _: &(),
+        (): &(),
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {

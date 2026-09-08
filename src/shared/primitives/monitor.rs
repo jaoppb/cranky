@@ -16,25 +16,34 @@ pub struct ScriptMonitorInfo {
 
 impl ScriptMonitorInfo {
     #[must_use]
-    #[allow(clippy::too_many_arguments, clippy::missing_const_for_fn)]
-    pub fn new(
-        id: MonitorId,
-        name: String,
-        size: Size,
-        scale: geometry::Scale,
-        is_focused: bool,
-        active_workspace_id: Option<i32>,
-        special_workspace_id: Option<i32>,
-    ) -> Self {
-        Self {
-            id,
-            name,
-            size,
-            scale,
-            is_focused,
-            active_workspace_id,
-            special_workspace_id,
-        }
+    pub fn with_name(mut self, name: String) -> Self {
+        self.name = name;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_size(mut self, size: Size) -> Self {
+        self.size = size;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_scale(mut self, scale: geometry::Scale) -> Self {
+        self.scale = scale;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_focused(mut self, is_focused: bool) -> Self {
+        self.is_focused = is_focused;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_workspaces(mut self, active: Option<i32>, special: Option<i32>) -> Self {
+        self.active_workspace_id = active;
+        self.special_workspace_id = special;
+        self
     }
 
     #[must_use]

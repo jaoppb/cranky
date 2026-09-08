@@ -59,28 +59,52 @@ pub struct TooltipConfig {
 }
 
 impl TooltipConfig {
-    #[allow(clippy::too_many_arguments)]
     #[must_use]
-    pub const fn new(
-        background: DrawingColor,
-        border_color: DrawingColor,
-        text_color: DrawingColor,
-        font: Option<FontFamily>,
-        size: Option<FontSize>,
-        radius: BorderRadius,
-        border_width: BorderSize,
-        padding: PaddingOffset,
-    ) -> Self {
-        Self {
-            background,
-            border_color,
-            text_color,
-            font,
-            size,
-            radius,
-            border_width,
-            padding,
-        }
+    pub fn with_background(mut self, background: DrawingColor) -> Self {
+        self.background = background;
+        self
+    }
+
+    #[must_use]
+    pub fn with_border_color(mut self, border_color: DrawingColor) -> Self {
+        self.border_color = border_color;
+        self
+    }
+
+    #[must_use]
+    pub fn with_text_color(mut self, text_color: DrawingColor) -> Self {
+        self.text_color = text_color;
+        self
+    }
+
+    #[must_use]
+    pub fn with_font(mut self, font: Option<FontFamily>) -> Self {
+        self.font = font;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_size(mut self, size: Option<FontSize>) -> Self {
+        self.size = size;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_radius(mut self, radius: BorderRadius) -> Self {
+        self.radius = radius;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_border_width(mut self, border_width: BorderSize) -> Self {
+        self.border_width = border_width;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_padding(mut self, padding: PaddingOffset) -> Self {
+        self.padding = padding;
+        self
     }
 
     #[must_use]

@@ -75,7 +75,11 @@ impl Watcher {
 }
 
 impl Watcher {
-    #[allow(clippy::missing_errors_doc)]
+    /// Tracks a new status notifier item, fetching its initial state and spawning its event loop.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`zbus::Error`] if creating the proxy or establishing D-Bus tracking fails.
     #[tracing::instrument(skip(conn, items, hub))]
     pub async fn track_item(
         conn: Connection,

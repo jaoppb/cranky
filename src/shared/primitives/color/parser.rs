@@ -35,15 +35,14 @@ pub fn parse_single_color(s: &str) -> Option<Color> {
         .or_else(|| parse_hex(s))
 }
 
-#[allow(clippy::many_single_char_names)]
 fn parse_rgba_hex(s: &str) -> Option<Color> {
     let content = s.strip_prefix("rgba(")?.strip_suffix(')')?;
     if content.len() == 8 {
-        let r = u8::from_str_radix(content.get(0..2)?, 16).ok()?;
-        let g = u8::from_str_radix(content.get(2..4)?, 16).ok()?;
-        let b = u8::from_str_radix(content.get(4..6)?, 16).ok()?;
-        let a = u8::from_str_radix(content.get(6..8)?, 16).ok()?;
-        return Some(Color::new(r, g, b, a));
+        let red = u8::from_str_radix(content.get(0..2)?, 16).ok()?;
+        let green = u8::from_str_radix(content.get(2..4)?, 16).ok()?;
+        let blue = u8::from_str_radix(content.get(4..6)?, 16).ok()?;
+        let alpha = u8::from_str_radix(content.get(6..8)?, 16).ok()?;
+        return Some(Color::new(red, green, blue, alpha));
     }
     None
 }
@@ -51,28 +50,27 @@ fn parse_rgba_hex(s: &str) -> Option<Color> {
 fn parse_rgb_hex(s: &str) -> Option<Color> {
     let content = s.strip_prefix("rgb(")?.strip_suffix(')')?;
     if content.len() == 6 {
-        let r = u8::from_str_radix(content.get(0..2)?, 16).ok()?;
-        let g = u8::from_str_radix(content.get(2..4)?, 16).ok()?;
-        let b = u8::from_str_radix(content.get(4..6)?, 16).ok()?;
-        return Some(Color::new(r, g, b, 255));
+        let red = u8::from_str_radix(content.get(0..2)?, 16).ok()?;
+        let green = u8::from_str_radix(content.get(2..4)?, 16).ok()?;
+        let blue = u8::from_str_radix(content.get(4..6)?, 16).ok()?;
+        return Some(Color::new(red, green, blue, 255));
     }
     None
 }
 
-#[allow(clippy::many_single_char_names)]
 fn parse_hex(s: &str) -> Option<Color> {
     let hex = s.strip_prefix('#')?;
     if hex.len() == 6 {
-        let r = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
-        let g = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
-        let b = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
-        Some(Color::new(r, g, b, 255))
+        let red = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
+        let green = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
+        let blue = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
+        Some(Color::new(red, green, blue, 255))
     } else if hex.len() == 8 {
-        let r = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
-        let g = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
-        let b = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
-        let a = u8::from_str_radix(hex.get(6..8)?, 16).ok()?;
-        Some(Color::new(r, g, b, a))
+        let red = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
+        let green = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
+        let blue = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
+        let alpha = u8::from_str_radix(hex.get(6..8)?, 16).ok()?;
+        Some(Color::new(red, green, blue, alpha))
     } else {
         None
     }
@@ -81,38 +79,32 @@ fn parse_hex(s: &str) -> Option<Color> {
 fn parse_css_rgb(s: &str) -> Option<Color> {
     let content = s.strip_prefix("rgb(")?.strip_suffix(')')?;
     let mut parts = content.split(',').map(str::trim);
-    let r_str = parts.next()?;
-    let g_str = parts.next()?;
-    let b_str = parts.next()?;
+    let red_str = parts.next()?;
+    let green_str = parts.next()?;
+    let blue_str = parts.next()?;
     if parts.next().is_none() {
-        let r = r_str.parse::<u8>().ok()?;
-        let g = g_str.parse::<u8>().ok()?;
-        let b = b_str.parse::<u8>().ok()?;
-        return Some(Color::new(r, g, b, 255));
+        let red = red_str.parse::<u8>().ok()?;
+        let green = green_str.parse::<u8>().ok()?;
+        let blue = blue_str.parse::<u8>().ok()?;
+        return Some(Color::new(red, green, blue, 255));
     }
     None
 }
 
-#[allow(
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::many_single_char_names
-)]
 fn parse_css_rgba(s: &str) -> Option<Color> {
     let content = s.strip_prefix("rgba(")?.strip_suffix(')')?;
     let mut parts = content.split(',').map(str::trim);
-    let r_str = parts.next()?;
-    let g_str = parts.next()?;
-    let b_str = parts.next()?;
-    let a_str = parts.next()?;
+    let red_str = parts.next()?;
+    let green_str = parts.next()?;
+    let blue_str = parts.next()?;
+    let alpha_str = parts.next()?;
     if parts.next().is_none() {
-        let r = r_str.parse::<u8>().ok()?;
-        let g = g_str.parse::<u8>().ok()?;
-        let b = b_str.parse::<u8>().ok()?;
-        let a_f = a_str.parse::<f32>().ok()?;
-        let a = (a_f * 255.0).round() as u8;
-        return Some(Color::new(r, g, b, a));
+        let red = red_str.parse::<u8>().ok()?;
+        let green = green_str.parse::<u8>().ok()?;
+        let blue = blue_str.parse::<u8>().ok()?;
+        let alpha_f = alpha_str.parse::<f32>().ok()?;
+        let alpha = u8::try_from(crate::utils::f32_to_u32((alpha_f * 255.0).round())).unwrap_or(255);
+        return Some(Color::new(red, green, blue, alpha));
     }
     None
 }

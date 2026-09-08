@@ -26,15 +26,14 @@ impl SignalHub {
                 .special_workspace_id()
                 .map(crate::features::workspaces::domain::WorkspaceId::value);
 
-            infos.push(ScriptMonitorInfo::new(
-                mon_id,
-                id_str,
-                Size::new(0, 0),
-                scale_val,
-                is_focused,
-                active_ws,
-                special_ws,
-            ));
+            infos.push(
+                ScriptMonitorInfo::from_id(&mon_id)
+                    .with_name(id_str)
+                    .with_size(Size::new(0, 0))
+                    .with_scale(scale_val)
+                    .with_focused(is_focused)
+                    .with_workspaces(active_ws, special_ws),
+            );
         }
         drop(scales_guard);
         drop(hypr_guard);

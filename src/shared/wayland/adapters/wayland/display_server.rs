@@ -39,7 +39,7 @@ impl DisplayServerPort for WaylandAdapter {
                     };
                     let qh = self.event_queue.handle();
                     for cmd in cmds {
-                        handle_cmd(&mut self.state, &qh, cmd)?;
+                        handle_cmd(&mut self.state, &qh, &cmd)?;
                     }
                     return Ok(());
                 }
@@ -100,7 +100,8 @@ impl DisplayServerPort for WaylandAdapter {
         read_model: &AppReadModel,
         layout_senders: &HashMap<ModuleId, Box<dyn LayoutSender>>,
     ) -> Result<(), DisplayServerError> {
-        render_outputs(&mut self.state, &self.connection, read_model, layout_senders)
+        render_outputs(&mut self.state, &self.connection, read_model, layout_senders);
+        Ok(())
     }
 
     fn show_floating_surface(
@@ -116,6 +117,7 @@ impl DisplayServerPort for WaylandAdapter {
     }
 
     fn hide_floating_surface(&mut self, kind: &FloatingKind) -> Result<(), DisplayServerError> {
-        hide_floating(&mut self.state, kind)
+        hide_floating(&mut self.state, kind);
+        Ok(())
     }
 }

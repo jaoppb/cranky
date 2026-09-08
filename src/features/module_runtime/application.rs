@@ -533,9 +533,11 @@ mod tests {
     async fn test_container_module_emits_container_layouts_calculated() {
         let id = ModuleId::new(0);
         let child_node = VNode::new_module(
-            crate::shared::primitives::ModuleName::new("clock"),
-            None,
-            crate::shared::primitives::ModuleOptions::default(),
+            crate::features::vdom::domain::ModuleParams::new(
+                crate::shared::primitives::ModuleName::new("clock"),
+                None,
+                crate::shared::primitives::ModuleOptions::default(),
+            ),
             None,
             None,
             None,

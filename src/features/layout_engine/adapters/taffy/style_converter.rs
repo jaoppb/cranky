@@ -52,36 +52,35 @@ impl From<PositionType> for taffy::style::Position {
     }
 }
 
-#[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+use crate::utils::f64_to_f32;
+
 impl From<&BoxMargin> for taffy::geometry::Rect<LengthPercentage> {
     fn from(padding: &BoxMargin) -> Self {
         Self {
-            left: LengthPercentage::length(padding.left() as f32),
-            right: LengthPercentage::length(padding.right() as f32),
-            top: LengthPercentage::length(padding.top() as f32),
-            bottom: LengthPercentage::length(padding.bottom() as f32),
+            left: LengthPercentage::length(f64_to_f32(padding.left())),
+            right: LengthPercentage::length(f64_to_f32(padding.right())),
+            top: LengthPercentage::length(f64_to_f32(padding.top())),
+            bottom: LengthPercentage::length(f64_to_f32(padding.bottom())),
         }
     }
 }
 
-#[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
 impl From<&BoxMargin> for taffy::geometry::Rect<taffy::style::LengthPercentageAuto> {
     fn from(margin: &BoxMargin) -> Self {
         Self {
-            left: LengthPercentage::length(margin.left() as f32).into(),
-            right: LengthPercentage::length(margin.right() as f32).into(),
-            top: LengthPercentage::length(margin.top() as f32).into(),
-            bottom: LengthPercentage::length(margin.bottom() as f32).into(),
+            left: LengthPercentage::length(f64_to_f32(margin.left())).into(),
+            right: LengthPercentage::length(f64_to_f32(margin.right())).into(),
+            top: LengthPercentage::length(f64_to_f32(margin.top())).into(),
+            bottom: LengthPercentage::length(f64_to_f32(margin.bottom())).into(),
         }
     }
 }
 
-#[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
 impl From<&Gap> for TaffySize<LengthPercentage> {
     fn from(gap: &Gap) -> Self {
         Self {
-            width: LengthPercentage::length(gap.value() as f32),
-            height: LengthPercentage::length(gap.value() as f32),
+            width: LengthPercentage::length(f64_to_f32(gap.value())),
+            height: LengthPercentage::length(f64_to_f32(gap.value())),
         }
     }
 }

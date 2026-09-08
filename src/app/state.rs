@@ -10,7 +10,6 @@ use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{error, info};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
@@ -45,6 +44,61 @@ pub struct CrankyApp<
     canvas_factory: F,
 }
 
+pub struct StateServices<F, LS, DS, US> {
+    hub: Arc<SignalHub>,
+    surface_manager: DynSurfaceManager,
+    canvas_factory: F,
+    display_sender: Arc<DS>,
+    layout_sender: Arc<LS>,
+    ui_sender: Arc<US>,
+}
+
+impl<F, LS, DS, US> StateServices<F, LS, DS, US> {
+    #[must_use]
+    pub const fn new(
+        hub: Arc<SignalHub>,
+        surface_manager: DynSurfaceManager,
+        canvas_factory: F,
+        display_sender: Arc<DS>,
+        layout_sender: Arc<LS>,
+        ui_sender: Arc<US>,
+    ) -> Self {
+        Self {
+            hub,
+            surface_manager,
+            canvas_factory,
+            display_sender,
+            layout_sender,
+            ui_sender,
+        }
+    }
+}
+
+#[allow(clippy::struct_field_names)]
+pub struct StateChannels {
+    display_rx: mpsc::Receiver<DisplayCommand>,
+    layout_rx: mpsc::Receiver<LayoutEvent>,
+    ui_rx: mpsc::Receiver<UiCommand>,
+    system_rx: mpsc::Receiver<SystemCommand>,
+}
+
+impl StateChannels {
+    #[must_use]
+    pub const fn new(
+        display_rx: mpsc::Receiver<DisplayCommand>,
+        layout_rx: mpsc::Receiver<LayoutEvent>,
+        ui_rx: mpsc::Receiver<UiCommand>,
+        system_rx: mpsc::Receiver<SystemCommand>,
+    ) -> Self {
+        Self {
+            display_rx,
+            layout_rx,
+            ui_rx,
+            system_rx,
+        }
+    }
+}
+
 impl<
     R: crate::features::module_runtime::ports::ModuleRegistryPort<F, LS, DS, US> + 'static,
     F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
@@ -58,20 +112,10 @@ impl<
     /// # Errors
     ///
     /// Returns [`AppError::Module`] if initial module loading fails.
-    #[allow(clippy::needless_pass_by_value)]
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        hub: Arc<SignalHub>,
         config: Config,
-        display_rx: mpsc::Receiver<DisplayCommand>,
-        display_sender: Arc<DS>,
-        layout_rx: mpsc::Receiver<LayoutEvent>,
-        layout_sender: Arc<LS>,
-        ui_rx: mpsc::Receiver<UiCommand>,
-        ui_sender: Arc<US>,
-        system_rx: mpsc::Receiver<SystemCommand>,
-        surface_manager: DynSurfaceManager,
-        canvas_factory: F,
+        services: StateServices<F, LS, DS, US>,
+        channels: StateChannels,
         mut registry: Box<R>,
     ) -> Result<Self, AppError> {
         registry.load(&config).map_err(AppError::Module)?;
@@ -81,12 +125,12 @@ impl<
         let module_names = registry.module_names().clone();
         let name_to_ids = registry.name_to_ids().clone();
         let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            hub.clone(),
-            surface_manager.clone(),
-            layout_sender.clone(),
-            display_sender.clone(),
-            ui_sender.clone(),
-            canvas_factory.clone(),
+            services.hub.clone(),
+            services.surface_manager.clone(),
+            services.layout_sender.clone(),
+            services.display_sender.clone(),
+            services.ui_sender.clone(),
+            services.canvas_factory.clone(),
         );
         let layout_senders = registry.spawn_all(&deps);
 
@@ -101,19 +145,19 @@ impl<
         };
 
         Ok(Self {
-            hub,
+            hub: services.hub,
             read_model,
-            display_rx,
-            layout_rx,
-            ui_rx,
-            system_rx,
+            display_rx: channels.display_rx,
+            layout_rx: channels.layout_rx,
+            ui_rx: channels.ui_rx,
+            system_rx: channels.system_rx,
             layout_senders,
-            surface_manager,
-            display_sender,
-            layout_sender,
-            ui_sender,
+            surface_manager: services.surface_manager,
+            display_sender: services.display_sender,
+            layout_sender: services.layout_sender,
+            ui_sender: services.ui_sender,
             registry,
-            canvas_factory,
+            canvas_factory: services.canvas_factory,
         })
     }
 
@@ -124,12 +168,305 @@ impl<
         self.registry.active_signal_subscriptions()
     }
 
+    fn handle_display_commands(
+        &mut self,
+        initial: DisplayCommand,
+        display: &mut impl DisplayServerPort,
+    ) {
+        let mut needs_render = false;
+        let mut cmd = initial;
+        loop {
+            match cmd {
+                DisplayCommand::RequestRender => {
+                    needs_render = true;
+                }
+                DisplayCommand::ShowFloatingSurface {
+                    kind,
+                    monitor_id,
+                    anchor_rect,
+                    layout,
+                    offset,
+                } => {
+                    tracing::debug!(
+                        ?kind,
+                        ?monitor_id,
+                        ?anchor_rect,
+                        ?offset,
+                        "Received DisplayCommand::ShowFloatingSurface, calling display.show_floating_surface"
+                    );
+                    if let Err(e) = display.show_floating_surface(
+                        kind,
+                        monitor_id,
+                        anchor_rect,
+                        *layout,
+                        offset,
+                    ) {
+                        tracing::error!(err = ?e, "display.show_floating_surface failed");
+                    } else {
+                        tracing::debug!("display.show_floating_surface succeeded");
+                    }
+                }
+                DisplayCommand::HideFloatingSurface { kind } => {
+                    tracing::debug!(
+                        ?kind,
+                        "Received DisplayCommand::HideFloatingSurface, calling display.hide_floating_surface"
+                    );
+                    if let Err(e) = display.hide_floating_surface(&kind) {
+                        tracing::error!(err = ?e, "display.hide_floating_surface failed");
+                    } else {
+                        tracing::debug!("display.hide_floating_surface succeeded");
+                    }
+                }
+            }
+            if let Ok(next) = self.display_rx.try_recv() {
+                cmd = next;
+            } else {
+                break;
+            }
+        }
+        if needs_render {
+            let _ = display.render_all(&self.read_model, &self.layout_senders);
+        }
+    }
+
+    fn handle_container_layouts(
+        &mut self,
+        monitor_id: &MonitorId,
+        layouts: &[crate::shared::primitives::ChildModuleLayout],
+    ) {
+        for child_layout in layouts {
+            if let Some(ids) = self.read_model.name_to_ids.get(child_layout.key().name())
+                && let Some(&child_id) = ids.first()
+            {
+                self.read_model
+                    .computed_layouts
+                    .entry(monitor_id.clone())
+                    .or_default()
+                    .insert(child_id, *child_layout.bounds());
+
+                tracing::trace!(
+                    child = %child_id,
+                    monitor = %monitor_id,
+                    bounds = ?child_layout.bounds(),
+                    "Updating computed_layouts for child module"
+                );
+                if let Some(sender) = self.layout_senders.get(&child_id) {
+                    let mut child_monitors = HashMap::new();
+                    for (mon, mod_map) in &self.read_model.computed_layouts {
+                        if let Some(&bounds) = mod_map.get(&child_id) {
+                            child_monitors.insert(mon.clone(), bounds);
+                        }
+                    }
+                    sender.send_layout(child_monitors);
+                }
+            }
+        }
+    }
+
+    fn handle_layout_events(
+        &mut self,
+        initial: LayoutEvent,
+        display: &mut impl DisplayServerPort,
+    ) {
+        let mut event = initial;
+        loop {
+            match event {
+                LayoutEvent::ContainerLayoutsCalculated {
+                    parent_id: _,
+                    monitor_id,
+                    layouts,
+                } => {
+                    self.handle_container_layouts(&monitor_id, &layouts);
+                }
+                LayoutEvent::ChildModuleSizeChanged {
+                    parent_id: _,
+                    child_key,
+                    monitor_id,
+                    size,
+                } => {
+                    let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
+                    let mon_entry = sizes_map.entry(monitor_id).or_default();
+                    mon_entry.insert(child_key, size);
+                    let _ = self.hub.module_sizes_tx().send(sizes_map);
+                }
+                LayoutEvent::ModuleSizeChanged {
+                    monitor_id,
+                    module_id,
+                    size,
+                } => {
+                    self.handle_size_changed(&monitor_id, module_id, size);
+                }
+            }
+            if let Ok(next) = self.layout_rx.try_recv() {
+                event = next;
+            } else {
+                break;
+            }
+        }
+        let _ = display.render_all(&self.read_model, &self.layout_senders);
+    }
+
+    async fn handle_ui_commands(
+        &mut self,
+        initial: UiCommand,
+        sni: &impl crate::features::systray::ports::SniPort,
+    ) {
+        let mut cmd = initial;
+        loop {
+            match cmd {
+                UiCommand::Exec(cmd_str) => {
+                    tracing::debug!("Executing shell command: {cmd_str}");
+                    let _ = std::process::Command::new("sh").arg("-c").arg(cmd_str).spawn();
+                }
+                UiCommand::SystrayAction { id, action, pos } => {
+                    tracing::debug!(?id, ?action, ?pos, "Received UiCommand::SystrayAction, triggering SNI action");
+                    match sni.trigger_action(&id, &action, pos).await {
+                        Ok(()) => tracing::debug!(?id, ?action, "SNI trigger_action succeeded"),
+                        Err(e) => tracing::error!(?id, ?action, err = ?e, "SNI trigger_action failed"),
+                    }
+                }
+            }
+            if let Ok(next) = self.ui_rx.try_recv() {
+                cmd = next;
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn handle_reload_style(
+        &mut self,
+        sheet_name: &crate::features::styling::domain::StyleSheetName,
+        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<F, LS, DS, US>,
+    ) -> bool {
+        tracing::info!("Reloading style: {sheet_name}");
+        if sheet_name.as_str() == "base" {
+            tracing::debug!("Base stylesheet changed; reloading all active modules");
+            let all_modules: Vec<_> = self.read_model.module_names.values().cloned().collect();
+            for mod_name in all_modules {
+                if let Ok(new_senders) = self.registry.reload_module(&mod_name, &self.read_model.config, deps) {
+                    for (id, sender) in new_senders {
+                        self.layout_senders.insert(id, sender);
+                    }
+                }
+            }
+            true
+        } else {
+            let mods = self.registry.modules_using_style(sheet_name);
+            tracing::debug!(
+                stylesheet = %sheet_name.as_str(),
+                dependent_modules = ?mods.iter().map(crate::shared::primitives::ModuleName::as_str).collect::<Vec<_>>(),
+                "Reloading modules dependent on modified stylesheet"
+            );
+            let mut any_reloaded = false;
+            for mod_name in mods {
+                match self.registry.reload_module(&mod_name, &self.read_model.config, deps) {
+                    Ok(new_senders) => {
+                        for (id, sender) in new_senders {
+                            self.layout_senders.insert(id, sender);
+                        }
+                        any_reloaded = true;
+                    }
+                    Err(e) => tracing::error!("Failed to reload module {mod_name}: {e}"),
+                }
+            }
+            any_reloaded
+        }
+    }
+
+    fn handle_system_commands(
+        &mut self,
+        initial: SystemCommand,
+        display: &mut impl DisplayServerPort,
+    ) {
+        let mut needs_render = false;
+        let mut cmd = initial;
+        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+            self.hub.clone(),
+            self.surface_manager.clone(),
+            self.layout_sender.clone(),
+            self.display_sender.clone(),
+            self.ui_sender.clone(),
+            self.canvas_factory.clone(),
+        );
+        loop {
+            match cmd {
+                SystemCommand::ReloadModule(name) => {
+                    tracing::info!("Reloading module: {name}");
+                    match self.registry.reload_module(&name, &self.read_model.config, &deps) {
+                        Ok(new_senders) => {
+                            for (id, sender) in new_senders {
+                                self.layout_senders.insert(id, sender);
+                            }
+                            needs_render = true;
+                        }
+                        Err(e) => tracing::error!("Failed to reload module {name}: {e}"),
+                    }
+                }
+                SystemCommand::ReloadStyle(sheet_name) => {
+                    if self.handle_reload_style(&sheet_name, &deps) {
+                        needs_render = true;
+                    }
+                }
+            }
+            if let Ok(next) = self.system_rx.try_recv() {
+                cmd = next;
+            } else {
+                break;
+            }
+        }
+        if needs_render {
+            let _ = display.render_all(&self.read_model, &self.layout_senders);
+        }
+    }
+
+    fn handle_config_changed(&mut self, new_config: Config) {
+        tracing::info!("Config hot-reload triggered in App");
+        self.read_model.config = new_config;
+        self.read_model.module_sizes.clear();
+
+        self.registry.clear();
+        if let Err(e) = self.registry.load(&self.read_model.config) {
+            tracing::error!("Failed to reload registry on config change: {e}");
+        } else {
+            self.read_model.root_module = self.registry.root_module();
+            self.read_model.module_ids = self.registry.module_ids().to_vec();
+            self.read_model.module_names.clone_from(self.registry.module_names());
+            self.read_model.name_to_ids.clone_from(self.registry.name_to_ids());
+            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+                self.hub.clone(),
+                self.surface_manager.clone(),
+                self.layout_sender.clone(),
+                self.display_sender.clone(),
+                self.ui_sender.clone(),
+                self.canvas_factory.clone(),
+            );
+            self.layout_senders = self.registry.spawn_all(&deps);
+        }
+    }
+
+    fn handle_hyprland_changed(
+        &self,
+        state: &crate::shared::events::signals::HyprlandState,
+        current_focused_monitor: &mut String,
+        display: &mut impl DisplayServerPort,
+    ) {
+        let new_focused = state
+            .focused_monitor()
+            .map(|n| n.as_str().to_string())
+            .unwrap_or_default();
+
+        if new_focused != *current_focused_monitor {
+            *current_focused_monitor = new_focused;
+            let _ = display.render_all(&self.read_model, &self.layout_senders);
+        }
+    }
+
     /// Runs the main event loop, listening for display events, commands, and signals.
     ///
     /// # Errors
     ///
     /// Returns [`AppError::Internal`] if display server communication or event dispatching fails.
-    #[allow(clippy::too_many_lines)]
     pub async fn run(
         &mut self,
         mut display: impl DisplayServerPort,
@@ -152,272 +489,30 @@ impl<
                     display.dispatch_pending().map_err(|e| AppError::Internal { message: e.to_string() })?;
                 }
                 Some(display_cmd) = self.display_rx.recv() => {
-                    let mut needs_render = false;
-                    let mut cmd = display_cmd;
-                    loop {
-                        match cmd {
-                            DisplayCommand::RequestRender => {
-                                needs_render = true;
-                            }
-                            DisplayCommand::ShowFloatingSurface {
-                                kind,
-                                monitor_id,
-                                anchor_rect,
-                                layout,
-                                offset,
-                            } => {
-                                tracing::debug!(
-                                    ?kind,
-                                    ?monitor_id,
-                                    ?anchor_rect,
-                                    ?offset,
-                                    "Received DisplayCommand::ShowFloatingSurface, calling display.show_floating_surface"
-                                );
-                                match display.show_floating_surface(
-                                    kind,
-                                    monitor_id,
-                                    anchor_rect,
-                                    *layout,
-                                    offset,
-                                ) {
-                                    Ok(()) => {
-                                        tracing::debug!("display.show_floating_surface succeeded");
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(
-                                            err = ?e,
-                                            "display.show_floating_surface failed"
-                                        );
-                                    }
-                                }
-                            }
-                            DisplayCommand::HideFloatingSurface { kind } => {
-                                tracing::debug!(
-                                    ?kind,
-                                    "Received DisplayCommand::HideFloatingSurface, calling display.hide_floating_surface"
-                                );
-                                match display.hide_floating_surface(&kind) {
-                                    Ok(()) => {
-                                        tracing::debug!("display.hide_floating_surface succeeded");
-                                    }
-                                    Err(e) => {
-                                        tracing::error!(
-                                            err = ?e,
-                                            "display.hide_floating_surface failed"
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        if let Ok(next) = self.display_rx.try_recv() {
-                            cmd = next;
-                        } else {
-                            break;
-                        }
-                    }
-                    if needs_render {
-                        let _ = display.render_all(&self.read_model, &self.layout_senders);
-                    }
+                    self.handle_display_commands(display_cmd, &mut display);
                 }
                 Some(layout_event) = self.layout_rx.recv() => {
-                    let mut event = layout_event;
-                    loop {
-                        match event {
-                            LayoutEvent::ContainerLayoutsCalculated {
-                                parent_id: _,
-                                monitor_id,
-                                layouts,
-                            } => {
-                                for child_layout in layouts {
-                                    if let Some(ids) =
-                                        self.read_model.name_to_ids.get(child_layout.key().name())
-                                        && let Some(&child_id) = ids.first()
-                                    {
-                                        self.read_model
-                                            .computed_layouts
-                                            .entry(monitor_id.clone())
-                                            .or_default()
-                                            .insert(child_id, *child_layout.bounds());
-
-                                        tracing::trace!(
-                                            child = %child_id,
-                                            monitor = %monitor_id,
-                                            bounds = ?child_layout.bounds(),
-                                            "Updating computed_layouts for child module"
-                                        );
-                                        if let Some(sender) = self.layout_senders.get(&child_id) {
-                                            let mut child_monitors = HashMap::new();
-                                            for (mon, mod_map) in &self.read_model.computed_layouts {
-                                                if let Some(&bounds) = mod_map.get(&child_id) {
-                                                    child_monitors.insert(mon.clone(), bounds);
-                                                }
-                                            }
-                                            sender.send_layout(child_monitors);
-                                        }
-                                    }
-                                }
-                            }
-                            LayoutEvent::ChildModuleSizeChanged {
-                                parent_id: _,
-                                child_key,
-                                monitor_id,
-                                size,
-                            } => {
-                                let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
-                                let mon_entry = sizes_map.entry(monitor_id.clone()).or_default();
-                                mon_entry.insert(child_key, size);
-                                let _ = self.hub.module_sizes_tx().send(sizes_map);
-                            }
-                            LayoutEvent::ModuleSizeChanged {
-                                monitor_id,
-                                module_id,
-                                size,
-                            } => {
-                                self.handle_size_changed(monitor_id, module_id, size);
-                            }
-                        }
-                        if let Ok(next) = self.layout_rx.try_recv() {
-                            event = next;
-                        } else {
-                            break;
-                        }
-                    }
-                    let _ = display.render_all(&self.read_model, &self.layout_senders);
+                    self.handle_layout_events(layout_event, &mut display);
                 }
                 Some(ui_cmd) = self.ui_rx.recv() => {
-                    let mut cmd = ui_cmd;
-                    loop {
-                        match cmd {
-                            UiCommand::Exec(cmd_str) => {
-                                tracing::debug!("Executing shell command: {cmd_str}");
-                                let _ = std::process::Command::new("sh").arg("-c").arg(cmd_str).spawn();
-                            }
-                            UiCommand::SystrayAction { id, action, pos } => {
-                                tracing::debug!(?id, ?action, ?pos, "Received UiCommand::SystrayAction, triggering SNI action");
-                                match sni.trigger_action(&id, &action, pos).await {
-                                    Ok(()) => tracing::debug!(?id, ?action, "SNI trigger_action succeeded"),
-                                    Err(e) => tracing::error!(?id, ?action, err = ?e, "SNI trigger_action failed"),
-                                }
-                            }
-                        }
-                        if let Ok(next) = self.ui_rx.try_recv() {
-                            cmd = next;
-                        } else {
-                            break;
-                        }
-                    }
+                    self.handle_ui_commands(ui_cmd, &sni).await;
                 }
                 Some(sys_cmd) = self.system_rx.recv() => {
-                    let mut needs_render = false;
-                    let mut cmd = sys_cmd;
-                    let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                        self.hub.clone(),
-                        self.surface_manager.clone(),
-                        self.layout_sender.clone(),
-                        self.display_sender.clone(),
-                        self.ui_sender.clone(),
-                        self.canvas_factory.clone(),
-                    );
-                    loop {
-                        match cmd {
-                            SystemCommand::ReloadModule(name) => {
-                                tracing::info!("Reloading module: {name}");
-                                match self.registry.reload_module(&name, &self.read_model.config, &deps) {
-                                    Ok(new_senders) => {
-                                        for (id, sender) in new_senders {
-                                            self.layout_senders.insert(id, sender);
-                                        }
-                                        needs_render = true;
-                                    }
-                                    Err(e) => tracing::error!("Failed to reload module {name}: {e}"),
-                                }
-                            }
-                            SystemCommand::ReloadStyle(sheet_name) => {
-                                tracing::info!("Reloading style: {sheet_name}");
-                                if sheet_name.as_str() == "base" {
-                                    tracing::debug!("Base stylesheet changed; reloading all active modules");
-                                    let all_modules: Vec<_> = self.read_model.module_names.values().cloned().collect();
-                                    for mod_name in all_modules {
-                                        if let Ok(new_senders) = self.registry.reload_module(&mod_name, &self.read_model.config, &deps) {
-                                            for (id, sender) in new_senders {
-                                                self.layout_senders.insert(id, sender);
-                                            }
-                                        }
-                                    }
-                                    needs_render = true;
-                                } else {
-                                    let mods = self.registry.modules_using_style(&sheet_name);
-                                    tracing::debug!(
-                                        stylesheet = %sheet_name.as_str(),
-                                        dependent_modules = ?mods.iter().map(crate::shared::primitives::ModuleName::as_str).collect::<Vec<_>>(),
-                                        "Reloading modules dependent on modified stylesheet"
-                                    );
-                                    for mod_name in mods {
-                                        match self.registry.reload_module(&mod_name, &self.read_model.config, &deps) {
-                                            Ok(new_senders) => {
-                                                for (id, sender) in new_senders {
-                                                    self.layout_senders.insert(id, sender);
-                                                }
-                                                needs_render = true;
-                                            }
-                                            Err(e) => tracing::error!("Failed to reload module {mod_name}: {e}"),
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if let Ok(next) = self.system_rx.try_recv() {
-                            cmd = next;
-                        } else {
-                            break;
-                        }
-                    }
-                    if needs_render {
-                        let _ = display.render_all(&self.read_model, &self.layout_senders);
-                    }
+                    self.handle_system_commands(sys_cmd, &mut display);
                 }
                 Ok(()) = config_rx.changed() => {
-                    info!("Config hot-reload triggered in App");
                     let new_config = config_rx.borrow().clone();
-                    self.read_model.config = new_config;
-                    self.read_model.module_sizes.clear();
-
-                    self.registry.clear();
-                    if let Err(e) = self.registry.load(&self.read_model.config) {
-                        error!("Failed to reload registry on config change: {e}");
-                    } else {
-                        self.read_model.root_module = self.registry.root_module();
-                        self.read_model.module_ids = self.registry.module_ids().to_vec();
-                        self.read_model.module_names.clone_from(self.registry.module_names());
-                        self.read_model.name_to_ids.clone_from(self.registry.name_to_ids());
-                        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                            self.hub.clone(),
-                            self.surface_manager.clone(),
-                            self.layout_sender.clone(),
-                            self.display_sender.clone(),
-                            self.ui_sender.clone(),
-                            self.canvas_factory.clone(),
-                        );
-                        self.layout_senders = self.registry.spawn_all(&deps);
-                    }
+                    self.handle_config_changed(new_config);
                 }
                 Ok(()) = hyprland_rx.changed() => {
                     let state = hyprland_rx.borrow().clone();
-                    let new_focused = state.focused_monitor()
-                        .map(|n| n.as_str().to_string())
-                        .unwrap_or_default();
-
-                    if new_focused != current_focused_monitor {
-                        current_focused_monitor = new_focused;
-                        let _ = display.render_all(&self.read_model, &self.layout_senders);
-                    }
+                    self.handle_hyprland_changed(&state, &mut current_focused_monitor, &mut display);
                 }
             }
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn handle_size_changed(&mut self, monitor_id: MonitorId, module_id: ModuleId, size: Size) {
+    pub fn handle_size_changed(&mut self, monitor_id: &MonitorId, module_id: ModuleId, size: Size) {
         let name = self.read_model.module_names.get(&module_id).cloned();
         tracing::trace!(monitor = %monitor_id, module = %module_id, ?size, ?name, "handle_size_changed called");
         self.read_model
@@ -428,7 +523,7 @@ impl<
 
         if let Some(name) = name {
             let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
-            let mon_entry = sizes_map.entry(monitor_id).or_default();
+            let mon_entry = sizes_map.entry(monitor_id.clone()).or_default();
             mon_entry.insert(crate::shared::primitives::ModuleKey::new(name, None), size);
             let _ = self.hub.module_sizes_tx().send(sizes_map);
         }
@@ -485,18 +580,24 @@ mod tests {
         let layout_sender = Arc::new(layout_tx);
         let ui_sender = Arc::new(ui_tx);
 
-        let app_result = CrankyApp::new(
+        let services = StateServices::new(
             hub,
-            config,
-            display_rx,
-            display_sender,
-            layout_rx,
-            layout_sender,
-            ui_rx,
-            ui_sender,
-            system_rx,
             surface_manager,
             canvas_factory,
+            display_sender,
+            layout_sender,
+            ui_sender,
+        );
+        let channels = StateChannels::new(
+            display_rx,
+            layout_rx,
+            ui_rx,
+            system_rx,
+        );
+        let app_result = CrankyApp::new(
+            config,
+            services,
+            channels,
             Box::new(mock_registry),
         );
 
@@ -539,18 +640,24 @@ mod tests {
         let layout_sender = Arc::new(layout_tx);
         let ui_sender = Arc::new(ui_tx);
 
-        let mut app = CrankyApp::new(
+        let services = StateServices::new(
             hub.clone(),
-            config,
-            display_rx,
-            display_sender,
-            layout_rx,
-            layout_sender,
-            ui_rx,
-            ui_sender,
-            system_rx,
             surface_manager,
             canvas_factory,
+            display_sender,
+            layout_sender,
+            ui_sender,
+        );
+        let channels = StateChannels::new(
+            display_rx,
+            layout_rx,
+            ui_rx,
+            system_rx,
+        );
+        let mut app = CrankyApp::new(
+            config,
+            services,
+            channels,
             Box::new(mock_registry),
         )
         .unwrap();
@@ -807,18 +914,24 @@ mod tests {
         let layout_sender = Arc::new(layout_tx.clone());
         let ui_sender = Arc::new(ui_tx.clone());
 
-        let mut app = CrankyApp::new(
+        let services = StateServices::new(
             hub.clone(),
-            config,
-            display_rx,
-            display_sender,
-            layout_rx,
-            layout_sender,
-            ui_rx,
-            ui_sender,
-            system_rx,
             surface_manager,
             canvas_factory,
+            display_sender,
+            layout_sender,
+            ui_sender,
+        );
+        let channels = StateChannels::new(
+            display_rx,
+            layout_rx,
+            ui_rx,
+            system_rx,
+        );
+        let mut app = CrankyApp::new(
+            config,
+            services,
+            channels,
             Box::new(mock_registry),
         )
         .unwrap();
@@ -984,18 +1097,24 @@ mod tests {
         let layout_sender = Arc::new(layout_tx.clone());
         let ui_sender = Arc::new(ui_tx);
 
-        let mut app = CrankyApp::new(
+        let services = StateServices::new(
             hub.clone(),
-            config,
-            display_rx,
-            display_sender,
-            layout_rx,
-            layout_sender,
-            ui_rx,
-            ui_sender,
-            system_rx,
             surface_manager,
             canvas_factory,
+            display_sender,
+            layout_sender,
+            ui_sender,
+        );
+        let channels = StateChannels::new(
+            display_rx,
+            layout_rx,
+            ui_rx,
+            system_rx,
+        );
+        let mut app = CrankyApp::new(
+            config,
+            services,
+            channels,
             Box::new(mock_registry),
         )
         .unwrap();

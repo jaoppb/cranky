@@ -27,12 +27,9 @@ impl<'a> CosmicTextMeasurer<'a> {
     }
 }
 
+use crate::utils::f32_to_u32;
+
 impl crate::features::layout_engine::domain::TextMeasurer for CosmicTextMeasurer<'_> {
-    #[allow(
-        clippy::as_conversions,
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss
-    )]
     fn measure(
         &mut self,
         text: &str,
@@ -61,8 +58,8 @@ impl crate::features::layout_engine::domain::TextMeasurer for CosmicTextMeasurer
         let h = PhysicalPx::new(physical_height).apply_inverse_scale(&self.scale);
 
         Size::new(
-            w.value().ceil().max(0.0) as u32,
-            h.value().ceil().max(0.0) as u32,
+            f32_to_u32(w.value().ceil().max(0.0)),
+            f32_to_u32(h.value().ceil().max(0.0)),
         )
     }
 }

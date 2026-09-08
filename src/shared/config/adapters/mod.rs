@@ -25,11 +25,10 @@ pub struct ConfigAdapter<V: FontValidatorPort + Send + Sync + 'static> {
 }
 
 impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
-    #[allow(clippy::needless_pass_by_value)]
     #[must_use]
     pub fn new(
         validator: V,
-        app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
+        app_env: &crate::shared::env::domain::AppEnvironment,
     ) -> Self {
         let config_path = app_env.home().as_path().join(".config/cranky/config.toml");
         Self {
@@ -85,8 +84,7 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
     /// # Errors
     ///
     /// Returns `ConfigAdapterError` if creating or starting the filesystem watcher fails.
-    #[allow(clippy::needless_pass_by_value)]
-    pub fn watch(&self, hub: Arc<SignalHub>) -> Result<Box<dyn Watcher>, ConfigAdapterError> {
+    pub fn watch(&self, hub: &SignalHub) -> Result<Box<dyn Watcher>, ConfigAdapterError> {
         let config_tx = hub.config_tx();
         let path = self.config_path.clone();
         let validator = self.validator.clone();
@@ -165,7 +163,7 @@ mod tests {
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));
-        let adapter = ConfigAdapter::new(MockValidator, app_env);
+        let adapter = ConfigAdapter::new(MockValidator, &app_env);
         assert!(adapter.config_path.ends_with(".config/cranky/config.toml"));
     }
 
@@ -205,7 +203,7 @@ mod tests {
             MockValidator,
         );
         let hub = Arc::new(SignalHub::new(Config::default()));
-        let res = adapter.watch(hub);
+        let res = adapter.watch(&hub);
         assert!(res.is_ok());
     }
 
@@ -226,7 +224,7 @@ mod tests {
         let hub = Arc::new(SignalHub::new(Config::default()));
         let mut rx = hub.config_rx().clone();
 
-        let _watcher = adapter.watch(hub).unwrap();
+        let _watcher = adapter.watch(&hub).unwrap();
 
         // Wait a bit for watcher to initialize
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;

@@ -12,7 +12,7 @@ pub struct SurfaceCommand {
 
 impl SurfaceCommand {
     #[must_use]
-    pub fn new(
+    pub const fn new(
         module_id: ModuleId,
         parent_id: Option<ModuleId>,
         monitor_id: MonitorId,

@@ -110,10 +110,13 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
             let options = parse_module_options(lua, &table)?;
             let (class, id, on_click, on_hover, tooltip, popup, panel) =
                 parse_common_props(lua, &table)?;
-            let mut node = VNode::new_module(
+            let params = crate::features::vdom::domain::ModuleParams::new(
                 ModuleName::new(name_str),
                 instance_id_str.map(ModuleInstanceId::new),
                 options,
+            );
+            let mut node = VNode::new_module(
+                params,
                 class,
                 id,
                 on_click,
@@ -130,10 +133,13 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
         }
         mlua::Value::String(s) => {
             let name_str = s.to_str().map_or_else(|_| String::new(), |b| b.to_string());
-            Ok(VNode::new_module(
+            let params = crate::features::vdom::domain::ModuleParams::new(
                 ModuleName::new(name_str),
                 None,
                 ModuleOptions::default(),
+            );
+            Ok(VNode::new_module(
+                params,
                 None,
                 None,
                 None,
@@ -141,15 +147,20 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
                 None,
             ))
         }
-        _ => Ok(VNode::new_module(
-            ModuleName::new(String::new()),
-            None,
-            ModuleOptions::default(),
-            None,
-            None,
-            None,
-            None,
-            None,
-        )),
+        _ => {
+            let params = crate::features::vdom::domain::ModuleParams::new(
+                ModuleName::new(String::new()),
+                None,
+                ModuleOptions::default(),
+            );
+            Ok(VNode::new_module(
+                params,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ))
+        }
     }
 }

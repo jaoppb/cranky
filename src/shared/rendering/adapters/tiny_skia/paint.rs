@@ -24,8 +24,9 @@ pub(crate) fn get_paint(color: &DrawingColor, rect: Rect) -> Paint<'static> {
                 .iter()
                 .enumerate()
                 .map(|(i, &c)| {
-                    #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
-                    let pos = (i as f32) / (count as f32);
+                    let i_f = f32::from(u16::try_from(i).unwrap_or(u16::MAX));
+                    let count_f = f32::from(u16::try_from(count).unwrap_or(1));
+                    let pos = i_f / count_f;
                     GradientStop::new(pos, to_skia_color(c))
                 })
                 .collect();

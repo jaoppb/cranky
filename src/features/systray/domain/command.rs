@@ -20,20 +20,97 @@ pub struct CreateSystrayItemCommand {
     pub(crate) tooltip: Option<SystrayTooltip>,
 }
 
-impl CreateSystrayItemCommand {
-    #[allow(clippy::too_many_arguments)]
+pub struct SystrayItemParams {
+    id: SystrayId,
+    destination: Destination,
+    path: ObjectPath,
+    title: Title,
+    status: SystrayStatus,
+    icon: Option<SystrayIcon>,
+    menu_path: Option<ObjectPath>,
+    category: SystrayCategory,
+    item_is_menu: ItemIsMenu,
+}
+
+impl SystrayItemParams {
     #[must_use]
-    pub const fn new(
-        id: SystrayId,
-        destination: Destination,
-        path: ObjectPath,
-        title: Title,
-        status: SystrayStatus,
-        icon: Option<SystrayIcon>,
-        menu_path: Option<ObjectPath>,
-        category: SystrayCategory,
-        item_is_menu: ItemIsMenu,
-    ) -> Self {
+    pub const fn new(id: SystrayId, destination: Destination, path: ObjectPath, title: Title) -> Self {
+        Self {
+            id,
+            destination,
+            path,
+            title,
+            status: SystrayStatus::Passive,
+            icon: None,
+            menu_path: None,
+            category: SystrayCategory::ApplicationStatus,
+            item_is_menu: ItemIsMenu::new(false),
+        }
+    }
+
+    #[must_use]
+    pub const fn with_status(mut self, status: SystrayStatus) -> Self {
+        self.status = status;
+        self
+    }
+
+    #[must_use]
+    pub fn with_icon(mut self, icon: Option<SystrayIcon>) -> Self {
+        self.icon = icon;
+        self
+    }
+
+    #[must_use]
+    pub fn with_menu_path(mut self, menu_path: Option<ObjectPath>) -> Self {
+        self.menu_path = menu_path;
+        self
+    }
+
+    #[must_use]
+    pub fn with_category(mut self, category: SystrayCategory) -> Self {
+        self.category = category;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_item_is_menu(mut self, item_is_menu: ItemIsMenu) -> Self {
+        self.item_is_menu = item_is_menu;
+        self
+    }
+
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        SystrayId,
+        Destination,
+        ObjectPath,
+        Title,
+        SystrayStatus,
+        Option<SystrayIcon>,
+        Option<ObjectPath>,
+        SystrayCategory,
+        ItemIsMenu,
+    ) {
+        (
+            self.id,
+            self.destination,
+            self.path,
+            self.title,
+            self.status,
+            self.icon,
+            self.menu_path,
+            self.category,
+            self.item_is_menu,
+        )
+    }
+}
+
+impl CreateSystrayItemCommand {
+    #[must_use]
+    pub fn new(params: SystrayItemParams) -> Self {
+        let (id, destination, path, title, status, icon, menu_path, category, item_is_menu) =
+            params.into_parts();
         Self {
             id,
             destination,

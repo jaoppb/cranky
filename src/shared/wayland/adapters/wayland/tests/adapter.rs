@@ -129,7 +129,7 @@ async fn test_wayland_adapter_methods() {
         ),
     );
     let qh = adapter.event_queue.handle();
-    let _ = handle_cmd(&mut adapter.state, &qh, cmd);
+    let _ = handle_cmd(&mut adapter.state, &qh, &cmd);
 
     let (tx, _rx) = tokio::sync::mpsc::channel(10);
     let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(

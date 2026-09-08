@@ -3,13 +3,8 @@ use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
+use crate::utils::{f32_to_u32, f64_to_f32};
 
-#[allow(
-    clippy::as_conversions,
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss
-)]
 pub fn paint_pipeline<F: CanvasFactory>(
     render_node: &RenderNode,
     current_bounds: Option<Rect>,
@@ -21,8 +16,10 @@ pub fn paint_pipeline<F: CanvasFactory>(
     let default_font_family = FontFamily::new(String::new());
     let default_font_size = FontSize::new(14.0);
 
-    let phys_w = ((bounds.width() as f32) * scale.value()).ceil().max(1.0) as u32;
-    let phys_h = ((bounds.height() as f32) * scale.value()).ceil().max(1.0) as u32;
+    let w_f32 = f64_to_f32(f64::from(bounds.width()));
+    let h_f32 = f64_to_f32(f64::from(bounds.height()));
+    let phys_w = f32_to_u32((w_f32 * scale.value()).ceil().max(1.0));
+    let phys_h = f32_to_u32((h_f32 * scale.value()).ceil().max(1.0));
     let phys_size = Size::new(phys_w, phys_h);
 
     let width = usize::try_from(phys_w).unwrap_or(0);

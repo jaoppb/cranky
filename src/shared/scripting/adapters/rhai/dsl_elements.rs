@@ -85,15 +85,19 @@ fn register_rhai_text_and_progress(engine: &mut Engine) {
     engine.register_fn("progress", |_target: rhai::Map, val: i64| -> rhai::Map {
         let mut m = rhai::Map::new();
         m.insert("type".into(), Dynamic::from("progress"));
-        #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
-        m.insert("value".into(), Dynamic::from(val as f64));
+        m.insert(
+            "value".into(),
+            Dynamic::from(i32::try_from(val).map_or(0.0, f64::from)),
+        );
         m
     });
     engine.register_fn("progress", |_target: rhai::Map, val: i64, class: String| -> rhai::Map {
         let mut m = rhai::Map::new();
         m.insert("type".into(), Dynamic::from("progress"));
-        #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
-        m.insert("value".into(), Dynamic::from(val as f64));
+        m.insert(
+            "value".into(),
+            Dynamic::from(i32::try_from(val).map_or(0.0, f64::from)),
+        );
         m.insert("class".into(), Dynamic::from(class));
         m
     });
@@ -102,8 +106,10 @@ fn register_rhai_text_and_progress(engine: &mut Engine) {
         |_target: rhai::Map, val: i64, orientation: String, class: String| -> rhai::Map {
             let mut m = rhai::Map::new();
             m.insert("type".into(), Dynamic::from("progress"));
-            #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
-            m.insert("value".into(), Dynamic::from(val as f64));
+            m.insert(
+                "value".into(),
+                Dynamic::from(i32::try_from(val).map_or(0.0, f64::from)),
+            );
             m.insert("orientation".into(), Dynamic::from(orientation));
             m.insert("class".into(), Dynamic::from(class));
             m

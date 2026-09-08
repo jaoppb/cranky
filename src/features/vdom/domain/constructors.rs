@@ -1,13 +1,11 @@
 use super::action::{ClickHandlers, UiAction};
 use super::identifier::NodeId;
-use super::kind::VNodeKind;
+use super::kind::{ModuleParams, VNodeKind};
 use super::tag::TextContent;
 use super::vnode::VNode;
 use crate::features::styling::domain::{ClassNameList, ElementId, Orientation, ProgressValue};
+use crate::shared::primitives::BinaryData;
 use crate::shared::primitives::geometry::Size;
-use crate::shared::primitives::{
-    BinaryData, ModuleInstanceId, ModuleName, ModuleOptions,
-};
 
 impl VNode {
     #[must_use]
@@ -150,18 +148,16 @@ impl VNode {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn new_module(
-        name: ModuleName,
-        instance_id: Option<ModuleInstanceId>,
-        options: ModuleOptions,
+        params: ModuleParams,
         class: Option<ClassNameList>,
         id: Option<ElementId>,
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
         tooltip: Option<Box<Self>>,
     ) -> Self {
+        let (name, instance_id, options) = params.into_parts();
         Self {
             node_id: NodeId::new(),
             key: None,

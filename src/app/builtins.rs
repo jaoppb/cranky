@@ -256,13 +256,17 @@ mod tests {
             crate::features::metrics::domain::CreateMetricsCommand::new(
                 crate::features::metrics::domain::CpuUsage::new(50.0),
                 vec![],
-                crate::features::metrics::domain::MemoryBytes::new(1024),
-                crate::features::metrics::domain::MemoryBytes::new(2048),
-                crate::features::metrics::domain::MemoryBytes::new(0),
-                crate::features::metrics::domain::MemoryBytes::new(0),
+                crate::features::metrics::domain::MemoryMetrics::new(
+                    crate::features::metrics::domain::MemoryBytes::new(1024),
+                    crate::features::metrics::domain::MemoryBytes::new(2048),
+                    crate::features::metrics::domain::MemoryBytes::new(0),
+                    crate::features::metrics::domain::MemoryBytes::new(0),
+                ),
                 vec![],
-                crate::features::metrics::domain::NetworkSpeed::new(0),
-                crate::features::metrics::domain::NetworkSpeed::new(0),
+                crate::features::metrics::domain::NetworkMetrics::new(
+                    crate::features::metrics::domain::NetworkSpeed::new(0),
+                    crate::features::metrics::domain::NetworkSpeed::new(0),
+                ),
                 crate::features::metrics::domain::Temperature::new(45.0),
                 crate::features::metrics::domain::MetricsConfig::default(),
             ),

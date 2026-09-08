@@ -373,13 +373,16 @@ mod tests {
 
     #[test]
     fn test_diff_module_node_change() {
+        use crate::features::vdom::domain::ModuleParams;
         use crate::shared::primitives::{DynamicValue, ModuleOptions};
 
         let adapter = DefaultVdomDiffAdapter::new();
         let m1 = VNode::new_module(
-            crate::shared::primitives::ModuleName::new("clock"),
-            None,
-            ModuleOptions::default(),
+            ModuleParams::new(
+                crate::shared::primitives::ModuleName::new("clock"),
+                None,
+                ModuleOptions::default(),
+            ),
             None,
             None,
             None,
@@ -389,9 +392,11 @@ mod tests {
         let mut opts_map = HashMap::new();
         opts_map.insert("format".to_string(), DynamicValue::from("%H:%M"));
         let m2 = VNode::new_module(
-            crate::shared::primitives::ModuleName::new("clock"),
-            None,
-            ModuleOptions::new(opts_map),
+            ModuleParams::new(
+                crate::shared::primitives::ModuleName::new("clock"),
+                None,
+                ModuleOptions::new(opts_map),
+            ),
             None,
             None,
             None,

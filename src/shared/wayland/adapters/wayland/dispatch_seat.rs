@@ -14,7 +14,7 @@ impl Dispatch<WlSeat, ()> for WaylandState {
         state: &mut Self,
         proxy: &WlSeat,
         event: wl_seat::Event,
-        _data: &(),
+        (): &(),
         _conn: &Connection,
         qh: &QueueHandle<Self>,
     ) {
@@ -31,13 +31,137 @@ impl Dispatch<WlSeat, ()> for WaylandState {
     }
 }
 
+fn f64_to_i32(val: f64) -> i32 {
+    i32::try_from(crate::utils::f64_to_i64(val)).unwrap_or(0)
+}
+
+fn handle_pointer_enter(
+    state: &mut WaylandState,
+    surface: &wayland_client::protocol::wl_surface::WlSurface,
+    surface_x: f64,
+    surface_y: f64,
+) {
+    tracing::debug!(surface_x, surface_y, "wl_pointer Enter");
+    state.pointer_surface = Some(surface.clone());
+    state.pointer_pos = (surface_x, surface_y);
+    if let Some((id, mon_id, kind)) = state.surface_to_id.get(surface) {
+        tracing::debug!(module = %id, monitor = %mon_id, "Forwarding PointerEnter");
+        let _ = state.hub.pointer_tx().send((
+            *id,
+            mon_id.clone(),
+            InteractionEvent::Pointer(PointerEvent::PointerEnter { surface: *kind }),
+        ));
+    }
+}
+
+fn handle_pointer_leave(state: &mut WaylandState) {
+    tracing::debug!("wl_pointer Leave");
+    if let Some(surface) = state.pointer_surface.take()
+        && let Some((id, mon_id, kind)) = state.surface_to_id.get(&surface)
+    {
+        tracing::debug!(module = %id, monitor = %mon_id, "Forwarding PointerLeave");
+        let _ = state.hub.pointer_tx().send((
+            *id,
+            mon_id.clone(),
+            InteractionEvent::Pointer(PointerEvent::PointerLeave { surface: *kind }),
+        ));
+    }
+}
+
+fn handle_pointer_motion(state: &mut WaylandState, surface_x: f64, surface_y: f64) {
+    state.pointer_pos = (surface_x, surface_y);
+    if let Some(surface) = &state.pointer_surface
+        && let Some((id, mon_id, kind)) = state.surface_to_id.get(surface)
+    {
+        let pos = Position::new(f64_to_i32(surface_x), f64_to_i32(surface_y));
+        let _ = state.hub.pointer_tx().send((
+            *id,
+            mon_id.clone(),
+            InteractionEvent::Pointer(PointerEvent::PointerMotion {
+                surface: *kind,
+                pos,
+            }),
+        ));
+    }
+}
+
+fn handle_pointer_button(
+    state: &mut WaylandState,
+    button: u32,
+    button_state: wayland_client::WEnum<wl_pointer::ButtonState>,
+    serial: u32,
+) {
+    tracing::debug!(button, ?button_state, serial, "wl_pointer Button");
+    state.last_button_serial = Some(crate::shared::events::core::PointerSerial::new(serial));
+    let ptr_button = PointerButton::from_raw(button);
+    let pos = Position::new(f64_to_i32(state.pointer_pos.0), f64_to_i32(state.pointer_pos.1));
+
+    let Some(surface) = &state.pointer_surface else { return };
+    let Some((id, mon_id, kind)) = state.surface_to_id.get(surface) else { return };
+
+    let event = match button_state {
+        wayland_client::WEnum::Value(wl_pointer::ButtonState::Pressed) => {
+            tracing::debug!(module = %id, monitor = %mon_id, "Forwarding ButtonPress");
+            PointerEvent::ButtonPress {
+                surface: *kind,
+                button: ptr_button,
+                pos,
+            }
+        }
+        wayland_client::WEnum::Value(wl_pointer::ButtonState::Released) => {
+            tracing::debug!(module = %id, monitor = %mon_id, "Forwarding ButtonRelease & Click");
+            let _ = state.hub.pointer_tx().send((
+                *id,
+                mon_id.clone(),
+                InteractionEvent::Pointer(PointerEvent::ButtonRelease {
+                    surface: *kind,
+                    button: ptr_button,
+                    pos,
+                }),
+            ));
+            PointerEvent::Click {
+                surface: *kind,
+                button: ptr_button,
+                pos,
+            }
+        }
+        _ => return,
+    };
+    let _ = state.hub.pointer_tx().send((*id, mon_id.clone(), InteractionEvent::Pointer(event)));
+}
+
+fn handle_pointer_axis(
+    state: &WaylandState,
+    axis: wayland_client::WEnum<wl_pointer::Axis>,
+    value: f64,
+) {
+    tracing::debug!(?axis, value, "wl_pointer Axis");
+    if let Some(surface) = &state.pointer_surface
+        && let Some((id, mon_id, kind)) = state.surface_to_id.get(surface)
+    {
+        let scroll_axis = match axis {
+            wayland_client::WEnum::Value(wl_pointer::Axis::VerticalScroll) => ScrollAxis::Vertical,
+            _ => ScrollAxis::Horizontal,
+        };
+        tracing::debug!(module = %id, monitor = %mon_id, "Forwarding Scroll");
+        let _ = state.hub.pointer_tx().send((
+            *id,
+            mon_id.clone(),
+            InteractionEvent::Pointer(PointerEvent::Scroll {
+                surface: *kind,
+                axis: scroll_axis,
+                amount: ScrollDelta::new(value),
+            }),
+        ));
+    }
+}
+
 impl Dispatch<WlPointer, ()> for WaylandState {
-    #[allow(clippy::too_many_lines)]
     fn event(
         state: &mut Self,
         _proxy: &WlPointer,
         event: wl_pointer::Event,
-        _data: &(),
+        (): &(),
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
@@ -47,138 +171,15 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 surface_x,
                 surface_y,
                 ..
-            } => {
-                tracing::debug!(surface_x, surface_y, "wl_pointer Enter");
-                state.pointer_surface = Some(surface.clone());
-                state.pointer_pos = (surface_x, surface_y);
-                if let Some((id, mon_id, kind)) = state.surface_to_id.get(&surface) {
-                    tracing::debug!(module = %id, monitor = %mon_id, "Forwarding PointerEnter");
-                    let _ = state.hub.pointer_tx().send((
-                        *id,
-                        mon_id.clone(),
-                        InteractionEvent::Pointer(PointerEvent::PointerEnter { surface: *kind }),
-                    ));
-                }
+            } => handle_pointer_enter(state, &surface, surface_x, surface_y),
+            wl_pointer::Event::Leave { .. } => handle_pointer_leave(state),
+            wl_pointer::Event::Motion { surface_x, surface_y, .. } => {
+                handle_pointer_motion(state, surface_x, surface_y);
             }
-            wl_pointer::Event::Leave { .. } => {
-                tracing::debug!("wl_pointer Leave");
-                if let Some(surface) = state.pointer_surface.take()
-                    && let Some((id, mon_id, kind)) = state.surface_to_id.get(&surface)
-                {
-                    tracing::debug!(module = %id, monitor = %mon_id, "Forwarding PointerLeave");
-                    let _ = state.hub.pointer_tx().send((
-                        *id,
-                        mon_id.clone(),
-                        InteractionEvent::Pointer(PointerEvent::PointerLeave { surface: *kind }),
-                    ));
-                }
+            wl_pointer::Event::Button { button, state: btn_state, serial, .. } => {
+                handle_pointer_button(state, button, btn_state, serial);
             }
-            wl_pointer::Event::Motion {
-                surface_x,
-                surface_y,
-                time: _,
-            } => {
-                state.pointer_pos = (surface_x, surface_y);
-                if let Some(surface) = &state.pointer_surface
-                    && let Some((id, mon_id, kind)) = state.surface_to_id.get(surface)
-                {
-                    #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
-                    let pos = Position::new(surface_x as i32, surface_y as i32);
-                    let _ = state.hub.pointer_tx().send((
-                        *id,
-                        mon_id.clone(),
-                        InteractionEvent::Pointer(PointerEvent::PointerMotion {
-                            surface: *kind,
-                            pos,
-                        }),
-                    ));
-                }
-            }
-            wl_pointer::Event::Button {
-                button,
-                state: button_state,
-                serial,
-                time: _,
-            } => {
-                tracing::debug!(button, ?button_state, serial, "wl_pointer Button");
-                state.last_button_serial =
-                    Some(crate::shared::events::core::PointerSerial::new(serial));
-                let ptr_button = PointerButton::from_raw(button);
-                #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
-                let pos = Position::new(state.pointer_pos.0 as i32, state.pointer_pos.1 as i32);
-
-                if let Some(surface) = &state.pointer_surface
-                    && let Some((id, mon_id, kind)) = state.surface_to_id.get(surface)
-                {
-                    match button_state {
-                        wayland_client::WEnum::Value(
-                            wayland_client::protocol::wl_pointer::ButtonState::Pressed,
-                        ) => {
-                            tracing::debug!(module = %id, monitor = %mon_id, "Forwarding ButtonPress");
-                            let _ = state.hub.pointer_tx().send((
-                                *id,
-                                mon_id.clone(),
-                                InteractionEvent::Pointer(PointerEvent::ButtonPress {
-                                    surface: *kind,
-                                    button: ptr_button,
-                                    pos,
-                                }),
-                            ));
-                        }
-                        wayland_client::WEnum::Value(
-                            wayland_client::protocol::wl_pointer::ButtonState::Released,
-                        ) => {
-                            tracing::debug!(module = %id, monitor = %mon_id, "Forwarding ButtonRelease & Click");
-                            let _ = state.hub.pointer_tx().send((
-                                *id,
-                                mon_id.clone(),
-                                InteractionEvent::Pointer(PointerEvent::ButtonRelease {
-                                    surface: *kind,
-                                    button: ptr_button,
-                                    pos,
-                                }),
-                            ));
-                            let _ = state.hub.pointer_tx().send((
-                                *id,
-                                mon_id.clone(),
-                                InteractionEvent::Pointer(PointerEvent::Click {
-                                    surface: *kind,
-                                    button: ptr_button,
-                                    pos,
-                                }),
-                            ));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            wl_pointer::Event::Axis {
-                axis,
-                value,
-                time: _,
-            } => {
-                tracing::debug!(?axis, value, "wl_pointer Axis");
-                if let Some(surface) = &state.pointer_surface
-                    && let Some((id, mon_id, kind)) = state.surface_to_id.get(surface)
-                {
-                    let scroll_axis = match axis {
-                        wayland_client::WEnum::Value(
-                            wayland_client::protocol::wl_pointer::Axis::VerticalScroll,
-                        ) => ScrollAxis::Vertical,
-                        _ => ScrollAxis::Horizontal,
-                    };
-                    tracing::debug!(module = %id, monitor = %mon_id, "Forwarding Scroll");
-                    let _ = state.hub.pointer_tx().send((
-                        *id,
-                        mon_id.clone(),
-                        InteractionEvent::Pointer(PointerEvent::Scroll {
-                            surface: *kind,
-                            axis: scroll_axis,
-                            amount: ScrollDelta::new(value),
-                        }),
-                    ));
-                }
-            }
+            wl_pointer::Event::Axis { axis, value, .. } => handle_pointer_axis(state, axis, value),
             _ => {}
         }
     }

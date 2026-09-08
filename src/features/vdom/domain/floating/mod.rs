@@ -6,7 +6,7 @@ mod spec;
 mod tests;
 mod types;
 
-pub use anchor::PanelAnchor;
+pub use anchor::{HorizontalAnchor, PanelAnchor, VerticalAnchor};
 pub use panel::PanelSpec;
 pub use popup::{AnchorDirection, PopupOffset, PopupSpec};
 pub use spec::FloatingSpec;

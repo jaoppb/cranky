@@ -25,7 +25,6 @@ pub trait CanvasFactory: Send + Sync + Clone {
 
 #[cfg_attr(test, allow(clippy::ref_option_ref, clippy::struct_field_names))]
 #[cfg_attr(test, mockall::automock)]
-#[allow(clippy::needless_lifetimes)]
 pub trait Canvas: Send + Sync {
     /// Draw a filled rectangle with optional radius
     fn draw_rect(
@@ -49,10 +48,11 @@ pub trait Canvas: Send + Sync {
     );
 
     /// Draw text at a position
-    fn draw_text<'a>(
+    #[cfg_attr(test, mockall::concretize)]
+    fn draw_text(
         &mut self,
         text: &str,
-        font_family: Option<&'a FontFamily>,
+        font_family: Option<&FontFamily>,
         font_size: Option<FontSize>,
         color: DrawingColor,
         position: Position,

@@ -23,15 +23,15 @@ fn test_systray_missing_icon_regression() {
     let hub = SignalHub::new(crate::shared::config::domain::Config::default());
     let item = SystrayItem::new(
         crate::features::systray::domain::CreateSystrayItemCommand::new(
-            SystrayId::new("test_systray"),
-            Destination::new("dest"),
-            ObjectPath::new("/path"),
-            Title::new("Test Systray"),
-            SystrayStatus::Active,
-            None,
-            None,
-            crate::features::systray::domain::SystrayCategory::ApplicationStatus,
-            crate::features::systray::domain::ItemIsMenu::new(false),
+            crate::features::systray::domain::SystrayItemParams::new(
+                SystrayId::new("test_systray"),
+                Destination::new("dest"),
+                ObjectPath::new("/path"),
+                Title::new("Test Systray"),
+            )
+            .with_status(SystrayStatus::Active)
+            .with_category(crate::features::systray::domain::SystrayCategory::ApplicationStatus)
+            .with_item_is_menu(crate::features::systray::domain::ItemIsMenu::new(false)),
         ),
     );
 
@@ -87,15 +87,16 @@ fn test_systray_with_icon_renders_image() {
 
     let item = SystrayItem::new(
         crate::features::systray::domain::CreateSystrayItemCommand::new(
-            SystrayId::new("test_systray"),
-            Destination::new("dest"),
-            ObjectPath::new("/path"),
-            Title::new("Test Systray"),
-            SystrayStatus::Active,
-            icon,
-            None,
-            crate::features::systray::domain::SystrayCategory::ApplicationStatus,
-            crate::features::systray::domain::ItemIsMenu::new(false),
+            crate::features::systray::domain::SystrayItemParams::new(
+                SystrayId::new("test_systray"),
+                Destination::new("dest"),
+                ObjectPath::new("/path"),
+                Title::new("Test Systray"),
+            )
+            .with_status(SystrayStatus::Active)
+            .with_icon(icon)
+            .with_category(crate::features::systray::domain::SystrayCategory::ApplicationStatus)
+            .with_item_is_menu(crate::features::systray::domain::ItemIsMenu::new(false)),
         ),
     );
 

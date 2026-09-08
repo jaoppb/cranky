@@ -84,16 +84,15 @@ impl Default for RootConfig {
 }
 
 impl RootConfig {
-    #[allow(clippy::needless_pass_by_value)]
     #[must_use]
     pub fn new(cmd: CreateRootConfigCommand) -> Self {
         Self {
-            name: cmd.name().clone(),
-            height: cmd.height(),
-            vertical_alignment: cmd.vertical_alignment(),
-            margin: *cmd.margin(),
-            unfocused: cmd.unfocused().cloned(),
-            options: cmd.options().clone(),
+            name: cmd.name,
+            height: cmd.height,
+            vertical_alignment: cmd.vertical_alignment,
+            margin: cmd.margin,
+            unfocused: cmd.unfocused,
+            options: cmd.options,
         }
     }
 

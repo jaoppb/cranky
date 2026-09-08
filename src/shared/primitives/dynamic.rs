@@ -39,10 +39,9 @@ impl DynamicValue {
     }
 
     #[must_use]
-    #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
-    pub const fn as_i64(&self) -> Option<i64> {
+    pub fn as_i64(&self) -> Option<i64> {
         match self {
-            Self::Number(n) => Some(*n as i64),
+            Self::Number(n) => Some(crate::utils::f64_to_i64(*n)),
             _ => None,
         }
     }
@@ -89,9 +88,8 @@ impl From<f64> for DynamicValue {
 }
 
 impl From<i64> for DynamicValue {
-    #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
     fn from(n: i64) -> Self {
-        Self::Number(n as f64)
+        Self::Number(crate::utils::i64_to_f64(n))
     }
 }
 

@@ -45,13 +45,12 @@ impl CreatePartialRootConfigCommand {
 }
 
 impl PartialRootConfig {
-    #[allow(clippy::needless_pass_by_value)]
     #[must_use]
-    pub fn new(cmd: CreatePartialRootConfigCommand) -> Self {
+    pub const fn new(cmd: CreatePartialRootConfigCommand) -> Self {
         Self {
-            height: cmd.height(),
-            vertical_alignment: cmd.vertical_alignment(),
-            margin: cmd.margin().cloned(),
+            height: cmd.height,
+            vertical_alignment: cmd.vertical_alignment,
+            margin: cmd.margin,
         }
     }
 

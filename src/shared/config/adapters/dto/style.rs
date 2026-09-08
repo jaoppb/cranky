@@ -51,28 +51,32 @@ pub struct TooltipConfigDto {
 impl TooltipConfigDto {
     #[must_use]
     pub fn into_domain(self) -> domain::TooltipConfig {
-        let default = domain::TooltipConfig::default();
-        domain::TooltipConfig::new(
-            self.background
-                .and_then(|c| DrawingColor::parse(&c).ok())
-                .unwrap_or_else(|| default.background().clone()),
-            self.border_color
-                .and_then(|c| DrawingColor::parse(&c).ok())
-                .unwrap_or_else(|| default.border_color().clone()),
-            self.text_color
-                .and_then(|c| DrawingColor::parse(&c).ok())
-                .unwrap_or_else(|| default.text_color().clone()),
-            self.font
-                .map(FontFamily::new)
-                .or_else(|| default.font().cloned()),
-            self.size.map(FontSize::new).or_else(|| default.size()),
-            self.radius
-                .map_or_else(|| default.radius(), BorderRadius::new),
-            self.border_width
-                .map_or_else(|| default.border_width(), BorderSize::new),
-            self.padding
-                .map_or_else(|| default.padding(), PaddingOffset::new),
-        )
+        let mut config = domain::TooltipConfig::default();
+        if let Some(bg) = self.background.and_then(|c| DrawingColor::parse(&c).ok()) {
+            config = config.with_background(bg);
+        }
+        if let Some(bc) = self.border_color.and_then(|c| DrawingColor::parse(&c).ok()) {
+            config = config.with_border_color(bc);
+        }
+        if let Some(tc) = self.text_color.and_then(|c| DrawingColor::parse(&c).ok()) {
+            config = config.with_text_color(tc);
+        }
+        if let Some(font) = self.font {
+            config = config.with_font(Some(FontFamily::new(font)));
+        }
+        if let Some(size) = self.size {
+            config = config.with_size(Some(FontSize::new(size)));
+        }
+        if let Some(radius) = self.radius {
+            config = config.with_radius(BorderRadius::new(radius));
+        }
+        if let Some(border_width) = self.border_width {
+            config = config.with_border_width(BorderSize::new(border_width));
+        }
+        if let Some(padding) = self.padding {
+            config = config.with_padding(PaddingOffset::new(padding));
+        }
+        config
     }
 }
 

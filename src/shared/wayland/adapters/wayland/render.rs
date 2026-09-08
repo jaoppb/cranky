@@ -2,7 +2,7 @@ use super::state::WaylandState;
 use crate::features::module_runtime::ports::LayoutSender;
 use crate::shared::primitives::geometry::{Position, Rect, Size};
 use crate::shared::primitives::{ModuleId, MonitorId};
-use crate::shared::wayland::ports::{AppReadModel, DisplayServerError};
+use crate::shared::wayland::ports::AppReadModel;
 use std::collections::HashMap;
 use tracing::{debug, info_span};
 use wayland_client::Connection;
@@ -12,13 +12,13 @@ pub(crate) fn render_outputs(
     connection: &Connection,
     read_model: &AppReadModel,
     layout_senders: &HashMap<ModuleId, Box<dyn LayoutSender>>,
-) -> Result<(), DisplayServerError> {
+) {
     let span = info_span!("render_all_outputs");
     let _enter = span.enter();
 
     if state.bars.is_empty() {
         debug!("No bars available for rendering.");
-        return Ok(());
+        return;
     }
 
     let mut all_layouts_by_module: HashMap<ModuleId, HashMap<MonitorId, Rect>> = HashMap::new();
@@ -30,9 +30,10 @@ pub(crate) fn render_outputs(
         }
         let width = bar.width;
 
-        let hypr_rx = state.hub.hyprland_rx();
-        let hyprland_state = hypr_rx.borrow();
-        let is_focused = hyprland_state
+        let is_focused = state
+            .hub
+            .hyprland_rx()
+            .borrow()
             .focused_monitor()
             .is_some_and(|name| name.as_str() == bar.output_name);
 
@@ -60,10 +61,11 @@ pub(crate) fn render_outputs(
                 margin.bottom().value(),
                 margin.left().value(),
             );
-            #[allow(clippy::as_conversions)]
-            bar.layer_surface.set_exclusive_zone(
-                bar.config_height as i32 + margin.top().value() + margin.bottom().value(),
-            );
+            let height_i32 = i32::try_from(bar.config_height).unwrap_or(0);
+            let zone = height_i32
+                .saturating_add(margin.top().value())
+                .saturating_add(margin.bottom().value());
+            bar.layer_surface.set_exclusive_zone(zone);
             bar.surface.commit();
         }
 
@@ -88,5 +90,4 @@ pub(crate) fn render_outputs(
     }
 
     let _ = connection.flush();
-    Ok(())
 }

@@ -1,7 +1,7 @@
 use crate::features::systray::adapters::watcher::Watcher;
 use crate::features::systray::domain::{
     CreateSystrayItemCommand, Destination, ItemIsMenu, ObjectPath, SystrayCategory, SystrayId,
-    SystrayItem, SystrayStatus, Title,
+    SystrayItem, SystrayItemParams, SystrayStatus, Title,
 };
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
@@ -15,37 +15,37 @@ async fn test_remove_by_destination_removes_matching_items() {
     let mut map = BTreeMap::new();
 
     let item1 = SystrayItem::new(CreateSystrayItemCommand::new(
-        SystrayId::new("app1"),
-        Destination::new(":1.42"),
-        ObjectPath::new("/StatusNotifierItem"),
-        Title::new("App 1"),
-        SystrayStatus::Active,
-        None,
-        None,
-        SystrayCategory::ApplicationStatus,
-        ItemIsMenu::new(false),
+        SystrayItemParams::new(
+            SystrayId::new("app1"),
+            Destination::new(":1.42"),
+            ObjectPath::new("/StatusNotifierItem"),
+            Title::new("App 1"),
+        )
+        .with_status(SystrayStatus::Active)
+        .with_category(SystrayCategory::ApplicationStatus)
+        .with_item_is_menu(ItemIsMenu::new(false)),
     ));
     let item2 = SystrayItem::new(CreateSystrayItemCommand::new(
-        SystrayId::new("app2"),
-        Destination::new(":1.42"),
-        ObjectPath::new("/StatusNotifierItem2"),
-        Title::new("App 1 secondary"),
-        SystrayStatus::Active,
-        None,
-        None,
-        SystrayCategory::ApplicationStatus,
-        ItemIsMenu::new(false),
+        SystrayItemParams::new(
+            SystrayId::new("app2"),
+            Destination::new(":1.42"),
+            ObjectPath::new("/StatusNotifierItem2"),
+            Title::new("App 1 secondary"),
+        )
+        .with_status(SystrayStatus::Active)
+        .with_category(SystrayCategory::ApplicationStatus)
+        .with_item_is_menu(ItemIsMenu::new(false)),
     ));
     let item3 = SystrayItem::new(CreateSystrayItemCommand::new(
-        SystrayId::new("app3"),
-        Destination::new(":1.43"),
-        ObjectPath::new("/StatusNotifierItem"),
-        Title::new("App 2"),
-        SystrayStatus::Active,
-        None,
-        None,
-        SystrayCategory::ApplicationStatus,
-        ItemIsMenu::new(false),
+        SystrayItemParams::new(
+            SystrayId::new("app3"),
+            Destination::new(":1.43"),
+            ObjectPath::new("/StatusNotifierItem"),
+            Title::new("App 2"),
+        )
+        .with_status(SystrayStatus::Active)
+        .with_category(SystrayCategory::ApplicationStatus)
+        .with_item_is_menu(ItemIsMenu::new(false)),
     ));
 
     map.insert(SystrayId::new("app1"), item1);
@@ -75,15 +75,15 @@ async fn test_remove_by_destination_no_match_returns_false() {
     let mut map = BTreeMap::new();
 
     let item = SystrayItem::new(CreateSystrayItemCommand::new(
-        SystrayId::new("app1"),
-        Destination::new(":1.42"),
-        ObjectPath::new("/StatusNotifierItem"),
-        Title::new("App 1"),
-        SystrayStatus::Active,
-        None,
-        None,
-        SystrayCategory::ApplicationStatus,
-        ItemIsMenu::new(false),
+        SystrayItemParams::new(
+            SystrayId::new("app1"),
+            Destination::new(":1.42"),
+            ObjectPath::new("/StatusNotifierItem"),
+            Title::new("App 1"),
+        )
+        .with_status(SystrayStatus::Active)
+        .with_category(SystrayCategory::ApplicationStatus)
+        .with_item_is_menu(ItemIsMenu::new(false)),
     ));
     map.insert(SystrayId::new("app1"), item);
 

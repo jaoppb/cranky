@@ -8,7 +8,6 @@ use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{ChildModuleLayout, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
-#[allow(clippy::needless_pass_by_value)]
 pub fn layout_pipeline<F: CanvasFactory>(
     pipeline: &mut RenderPipeline,
     monitor_id: &MonitorId,
@@ -104,5 +103,6 @@ pub fn layout_pipeline<F: CanvasFactory>(
         pipeline.render_trees().get(monitor_id)?.clone()
     };
 
+    drop(diff);
     Some((render_node, size_change, child_layouts))
 }

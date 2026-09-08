@@ -1,6 +1,6 @@
 use super::{
-    AnchorDirection, ExclusiveZone, KeyboardInteractivity, PanelAnchor, PanelLayer, PanelSpec,
-    PopupOffset, PopupSpec,
+    AnchorDirection, ExclusiveZone, HorizontalAnchor, KeyboardInteractivity, PanelAnchor,
+    PanelLayer, PanelSpec, PopupOffset, PopupSpec, VerticalAnchor,
 };
 use crate::features::vdom::domain::{TextContent, VNode};
 
@@ -35,7 +35,10 @@ fn test_panel_spec_builder_and_accessors() {
         None,
         None,
     ));
-    let anchor = PanelAnchor::new(true, false, false, true);
+    let anchor = PanelAnchor::new(
+        VerticalAnchor::from_edges(true, false),
+        HorizontalAnchor::from_edges(false, true),
+    );
     let spec = PanelSpec::new(content.clone())
         .with_layer(PanelLayer::Overlay)
         .with_anchor(anchor)

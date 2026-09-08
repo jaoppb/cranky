@@ -4,26 +4,27 @@ use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::{LogicalPx, Position, Rect, Size};
 use crate::shared::rendering::ports::canvas::Canvas;
 
-#[allow(
-    clippy::as_conversions,
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation
-)]
 fn draw_bg_and_border(
     canvas: &mut dyn Canvas,
     rect: &Rect,
     style: &ComputedStyle,
     bg_override: Option<&DrawingColor>,
 ) {
+    let rx = f32::from(i16::try_from(rect.x()).unwrap_or(0));
+    let ry = f32::from(i16::try_from(rect.y()).unwrap_or(0));
+    let rw = f32::from(u16::try_from(rect.width()).unwrap_or(0));
+    let rh = f32::from(u16::try_from(rect.height()).unwrap_or(0));
+    let radius = LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value()));
+
     let bg = bg_override.or_else(|| style.background());
     if let Some(c) = bg {
         canvas.draw_rect(
-            LogicalPx::new(rect.x() as f32),
-            LogicalPx::new(rect.y() as f32),
-            LogicalPx::new(rect.width() as f32),
-            LogicalPx::new(rect.height() as f32),
+            LogicalPx::new(rx),
+            LogicalPx::new(ry),
+            LogicalPx::new(rw),
+            LogicalPx::new(rh),
             c.clone(),
-            LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value())),
+            radius,
         );
     }
     if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
@@ -31,21 +32,85 @@ fn draw_bg_and_border(
             Position::new(rect.x(), rect.y()),
             Size::new(rect.width(), rect.height()),
             color.clone(),
-            LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value())),
+            radius,
             LogicalPx::new(size.value()),
         );
     }
 }
 
+fn render_progress(
+    canvas: &mut dyn Canvas,
+    rect: &Rect,
+    progress_val: f32,
+    orientation: Orientation,
+    style: &ComputedStyle,
+) {
+    draw_bg_and_border(canvas, rect, style, None);
+    let fill_color = style.accent_color().or_else(|| style.color());
+    let Some(fill) = fill_color else {
+        return;
+    };
+
+    let r = LogicalPx::new(style.border_radius().map_or(0.0, |rad| rad.value()));
+    let clamped = progress_val.clamp(0.0, 1.0);
+    let rx = f32::from(i16::try_from(rect.x()).unwrap_or(0));
+    let ry = f32::from(i16::try_from(rect.y()).unwrap_or(0));
+    let rw = f32::from(u16::try_from(rect.width()).unwrap_or(0));
+    let rh = f32::from(u16::try_from(rect.height()).unwrap_or(0));
+
+    match orientation {
+        Orientation::Horizontal => {
+            let fill_w = (rw * clamped).round();
+            if fill_w > 0.0 {
+                canvas.draw_rect(
+                    LogicalPx::new(rx),
+                    LogicalPx::new(ry),
+                    LogicalPx::new(fill_w),
+                    LogicalPx::new(rh),
+                    fill.clone(),
+                    r,
+                );
+            }
+        }
+        Orientation::Vertical => {
+            let fill_h = (rh * clamped).round();
+            let fill_y = ry + (rh - fill_h);
+            if fill_h > 0.0 {
+                canvas.draw_rect(
+                    LogicalPx::new(rx),
+                    LogicalPx::new(fill_y),
+                    LogicalPx::new(rw),
+                    LogicalPx::new(fill_h),
+                    fill.clone(),
+                    r,
+                );
+            }
+        }
+    }
+}
+
+fn render_text(
+    canvas: &mut dyn Canvas,
+    rect: &Rect,
+    text: &crate::features::vdom::domain::TextContent,
+    style: &ComputedStyle,
+) {
+    draw_bg_and_border(canvas, rect, style, None);
+    let text_color = style.color().cloned().unwrap_or_else(|| {
+        DrawingColor::Solid(crate::shared::primitives::color::Color::new(
+            255, 255, 255, 255,
+        ))
+    });
+    canvas.draw_text(
+        text.as_str(),
+        style.font_family(),
+        style.font_size(),
+        text_color,
+        Position::new(rect.x(), rect.y()),
+    );
+}
+
 impl RenderNode {
-    #[allow(
-        clippy::as_conversions,
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        clippy::arithmetic_side_effects,
-        clippy::too_many_lines
-    )]
     pub fn render_to_canvas(&self, canvas: &mut dyn Canvas) {
         match self {
             Self::Flex {
@@ -72,41 +137,7 @@ impl RenderNode {
                 style,
                 ..
             } => {
-                draw_bg_and_border(canvas, rect, style, None);
-                let fill_color = style.accent_color().or_else(|| style.color());
-                if let Some(fill) = fill_color {
-                    let r = LogicalPx::new(style.border_radius().map_or(0.0, |rad| rad.value()));
-                    let clamped = value.value().clamp(0.0, 1.0);
-                    match orientation {
-                        Orientation::Horizontal => {
-                            let fill_w = (rect.width() as f32 * clamped).round();
-                            if fill_w > 0.0 {
-                                canvas.draw_rect(
-                                    LogicalPx::new(rect.x() as f32),
-                                    LogicalPx::new(rect.y() as f32),
-                                    LogicalPx::new(fill_w),
-                                    LogicalPx::new(rect.height() as f32),
-                                    fill.clone(),
-                                    r,
-                                );
-                            }
-                        }
-                        Orientation::Vertical => {
-                            let fill_h = (rect.height() as f32 * clamped).round();
-                            let fill_y = rect.y() as f32 + (rect.height() as f32 - fill_h);
-                            if fill_h > 0.0 {
-                                canvas.draw_rect(
-                                    LogicalPx::new(rect.x() as f32),
-                                    LogicalPx::new(fill_y),
-                                    LogicalPx::new(rect.width() as f32),
-                                    LogicalPx::new(fill_h),
-                                    fill.clone(),
-                                    r,
-                                );
-                            }
-                        }
-                    }
-                }
+                render_progress(canvas, rect, value.value(), *orientation, style);
             }
             Self::Rect { rect, style, .. } => {
                 draw_bg_and_border(
@@ -122,19 +153,7 @@ impl RenderNode {
             Self::Text {
                 rect, text, style, ..
             } => {
-                draw_bg_and_border(canvas, rect, style, None);
-                let text_color = style.color().cloned().unwrap_or_else(|| {
-                    DrawingColor::Solid(crate::shared::primitives::color::Color::new(
-                        255, 255, 255, 255,
-                    ))
-                });
-                canvas.draw_text(
-                    text.as_str(),
-                    style.font_family(),
-                    style.font_size(),
-                    text_color,
-                    Position::new(rect.x(), rect.y()),
-                );
+                render_text(canvas, rect, text, style);
             }
             Self::Image {
                 rect,

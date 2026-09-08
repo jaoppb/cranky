@@ -118,10 +118,11 @@ impl WaylandState {
             margin.bottom().value(),
             margin.left().value(),
         );
-        #[allow(clippy::as_conversions)]
-        layer_surface.set_exclusive_zone(
-            bar_height.value() as i32 + margin.top().value() + margin.bottom().value(),
-        );
+        let height_i32 = i32::try_from(bar_height.value()).unwrap_or(0);
+        let zone = height_i32
+            .saturating_add(margin.top().value())
+            .saturating_add(margin.bottom().value());
+        layer_surface.set_exclusive_zone(zone);
         surface.commit();
 
         let shm_buffer = ShmBuffer::new(
@@ -131,7 +132,7 @@ impl WaylandState {
             qh,
             self.app_env.xdg_runtime_dir().as_path(),
         )
-        .expect("Failed to create SHM buffer");
+        .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
 
         self.bars.push(WaylandBar {
             output_name: output_name.clone(),
@@ -148,10 +149,10 @@ impl WaylandState {
         });
 
         let mut scales = self.hub.monitor_scales_rx().borrow().clone();
+        let scale_f32 = i16::try_from(output_scale).map_or(1.0, f32::from);
         scales.insert(
             MonitorId::new(&output_name),
-            #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
-            crate::shared::primitives::geometry::Scale::new(output_scale as f32),
+            crate::shared::primitives::geometry::Scale::new(scale_f32),
         );
         let _ = self.hub.monitor_scales_tx().send(scales);
 

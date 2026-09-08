@@ -12,7 +12,7 @@ impl Dispatch<WlOutput, ()> for WaylandState {
         state: &mut Self,
         proxy: &WlOutput,
         event: wl_output::Event,
-        _data: &(),
+        (): &(),
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
@@ -40,10 +40,10 @@ impl Dispatch<WlOutput, ()> for WaylandState {
                 bar.surface.set_buffer_scale(factor);
             }
             let mut scales = state.hub.monitor_scales_rx().borrow().clone();
+            let factor_f32 = i16::try_from(factor).map_or(1.0, f32::from);
             scales.insert(
                 crate::shared::primitives::MonitorId::new(&name),
-                #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
-                crate::shared::primitives::geometry::Scale::new(factor as f32),
+                crate::shared::primitives::geometry::Scale::new(factor_f32),
             );
             let _ = state.hub.monitor_scales_tx().send(scales);
         }
@@ -55,7 +55,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
         state: &mut Self,
         proxy: &ZwlrLayerSurfaceV1,
         event: zwlr_layer_surface_v1::Event,
-        _data: &(),
+        (): &(),
         _conn: &Connection,
         qh: &QueueHandle<Self>,
     ) {
@@ -78,13 +78,15 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
                     if old_width != width || old_height != height {
                         debug!("Bar resized to {}x{}", width, height);
 
-                        if let Ok(new_shm) = ShmBuffer::new(
-                            state.shm.as_ref().expect("SHM bound"),
-                            width,
-                            height,
-                            qh,
-                            state.app_env.xdg_runtime_dir().as_path(),
-                        ) {
+                        if let Some(shm) = state.shm.as_ref()
+                            && let Ok(new_shm) = ShmBuffer::new(
+                                shm,
+                                width,
+                                height,
+                                qh,
+                                state.app_env.xdg_runtime_dir().as_path(),
+                            )
+                        {
                             bar.shm_buffer = new_shm;
                         }
                     }

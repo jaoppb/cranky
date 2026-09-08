@@ -1,7 +1,7 @@
 use super::vnode_parser::value_to_vnode;
 use crate::features::vdom::domain::{
-    AnchorDirection, ExclusiveZone, KeyboardInteractivity, PanelAnchor, PanelLayer, PanelSpec,
-    PopupOffset, PopupSpec,
+    AnchorDirection, ExclusiveZone, HorizontalAnchor, KeyboardInteractivity,
+    PanelAnchor, PanelLayer, PanelSpec, PopupOffset, PopupSpec, VerticalAnchor,
 };
 use crate::shared::config::domain::{MarginConfig, MarginOffset};
 use mlua::Lua;
@@ -171,7 +171,10 @@ pub(crate) fn parse_panel_spec(
             Ok(Some(
                 PanelSpec::new(content)
                     .with_layer(layer)
-                    .with_anchor(PanelAnchor::new(top, bottom, left, right))
+                    .with_anchor(PanelAnchor::new(
+                        VerticalAnchor::from_edges(top, bottom),
+                        HorizontalAnchor::from_edges(left, right),
+                    ))
                     .with_margin(margin)
                     .with_exclusive_zone(exclusive_zone)
                     .with_keyboard(keyboard),

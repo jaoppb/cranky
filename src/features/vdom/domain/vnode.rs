@@ -219,9 +219,11 @@ mod tests {
         );
         let opts = ModuleOptions::new(opts_map);
         let module_node = VNode::new_module(
-            ModuleName::new("clock"),
-            Some(ModuleInstanceId::new("h1")),
-            opts,
+            crate::features::vdom::domain::ModuleParams::new(
+                ModuleName::new("clock"),
+                Some(ModuleInstanceId::new("h1")),
+                opts,
+            ),
             None,
             None,
             None,

@@ -1,6 +1,7 @@
 use super::parser_props::{parse_common_props, parse_text_content};
 use crate::features::styling::domain::{ClassNameList, Orientation, ProgressValue};
 use crate::features::vdom::domain::{TextContent, VNode};
+use crate::utils::f64_to_f32;
 use mlua::Lua;
 
 pub(crate) fn parse_text_node(
@@ -110,8 +111,7 @@ pub(crate) fn parse_progress_node(
             Ok(node)
         }
         mlua::Value::Number(n) => {
-            #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
-            let val_f32 = n as f32;
+            let val_f32 = f64_to_f32(n);
             let orientation = match orientation_opt
                 .unwrap_or("horizontal")
                 .to_lowercase()
@@ -132,12 +132,7 @@ pub(crate) fn parse_progress_node(
             ))
         }
         mlua::Value::Integer(i) => {
-            #[allow(
-                clippy::as_conversions,
-                clippy::cast_possible_truncation,
-                clippy::cast_precision_loss
-            )]
-            let val_f32 = i as f32;
+            let val_f32 = f64_to_f32(i32::try_from(i).map_or(0.0, f64::from));
             let orientation = match orientation_opt
                 .unwrap_or("horizontal")
                 .to_lowercase()

@@ -14,8 +14,7 @@ pub fn resolve_pixmap_data(
     if pixmaps.is_empty() {
         return None;
     }
-    #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
-    let target_size = (24.0f32 * max_scale).round() as i32;
+    let target_size = crate::utils::f32_to_i32((24.0f32 * max_scale).round());
     let mut best_diff = i32::MAX;
     let mut best_pixmap: Option<&(i32, i32, Vec<u8>)> = None;
     for pixmap in pixmaps {

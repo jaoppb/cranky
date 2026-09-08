@@ -67,15 +67,12 @@ fn test_lua_ui_actions() {
 #[test]
 fn test_lua_rich_monitor_userdata() {
     let lua = Lua::new();
-    let info = ScriptMonitorInfo::new(
-        MonitorId::new("DP-1"),
-        "DP-1".to_string(),
-        Size::new(1920, 1080),
-        Scale::new(1.5),
-        true,
-        Some(1),
-        Some(2),
-    );
+    let info = ScriptMonitorInfo::from_id(&MonitorId::new("DP-1"))
+        .with_name("DP-1".to_string())
+        .with_size(Size::new(1920, 1080))
+        .with_scale(Scale::new(1.5))
+        .with_focused(true)
+        .with_workspaces(Some(1), Some(2));
     let mon = LuaMonitor(info);
     lua.globals().set("test_mon", mon).unwrap();
 

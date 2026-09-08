@@ -79,10 +79,13 @@ fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
             let name_str = table.get::<String>("name")?;
             let instance_id_str = table.get::<Option<String>>("instance_id")?;
             let options = parse_module_options(lua, &table)?;
-            VNode::new_module(
+            let params = crate::features::vdom::domain::ModuleParams::new(
                 ModuleName::new(name_str),
                 instance_id_str.map(ModuleInstanceId::new),
                 options,
+            );
+            VNode::new_module(
+                params,
                 class,
                 id,
                 on_click,

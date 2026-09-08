@@ -53,3 +53,22 @@ fn test_module_key_and_child_sizes() {
         Some(&Size::new(100, 30))
     );
 }
+
+#[test]
+fn test_script_monitor_info_builder() {
+    let id = crate::shared::primitives::MonitorId::new("DP-2");
+    let info = crate::shared::primitives::ScriptMonitorInfo::from_id(&id)
+        .with_name("DisplayPort-2".to_string())
+        .with_size(Size::new(2560, 1440))
+        .with_scale(crate::shared::primitives::Scale::new(2.0))
+        .with_focused(true)
+        .with_workspaces(Some(3), Some(4));
+
+    assert_eq!(info.id(), &id);
+    assert_eq!(info.name(), "DisplayPort-2");
+    assert_eq!(info.size(), Size::new(2560, 1440));
+    assert_eq!(info.scale(), crate::shared::primitives::Scale::new(2.0));
+    assert!(info.is_focused());
+    assert_eq!(info.active_workspace_id(), Some(3));
+    assert_eq!(info.special_workspace_id(), Some(4));
+}

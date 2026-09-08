@@ -120,15 +120,12 @@ fn test_rhai_rich_monitor_and_sys() {
         }
     "#;
     let mut module = RhaiModule::new("test_sys".into(), source).unwrap();
-    let test_mon = ScriptMonitorInfo::new(
-        MonitorId::new("DP-1"),
-        "DP-1".to_string(),
-        crate::shared::primitives::geometry::Size::new(1920, 1080),
-        crate::shared::primitives::geometry::Scale::new(1.5),
-        true,
-        Some(1),
-        Some(2),
-    );
+    let test_mon = ScriptMonitorInfo::from_id(&MonitorId::new("DP-1"))
+        .with_name("DP-1".to_string())
+        .with_size(crate::shared::primitives::geometry::Size::new(1920, 1080))
+        .with_scale(crate::shared::primitives::geometry::Scale::new(1.5))
+        .with_focused(true)
+        .with_workspaces(Some(1), Some(2));
     module.cached_monitors = vec![test_mon];
 
     let node = module.render(&MonitorId::new("DP-1"));

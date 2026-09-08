@@ -21,18 +21,19 @@ pub struct MetricsState {
 impl MetricsState {
     #[must_use]
     pub fn new(cmd: CreateMetricsCommand) -> Self {
+        let (cpu_usage, per_core, memory, disks, network, temperature, config) = cmd.into_parts();
         Self {
-            cpu_usage: cmd.cpu_usage,
-            per_core: cmd.per_core,
-            memory_used: cmd.memory_used,
-            memory_total: cmd.memory_total,
-            swap_used: cmd.swap_used,
-            swap_total: cmd.swap_total,
-            disks: cmd.disks,
-            network_tx: cmd.network_tx,
-            network_rx: cmd.network_rx,
-            temperature: cmd.temperature,
-            config: cmd.config,
+            cpu_usage,
+            per_core,
+            memory_used: memory.used(),
+            memory_total: memory.total(),
+            swap_used: memory.swap_used(),
+            swap_total: memory.swap_total(),
+            disks,
+            network_tx: network.tx(),
+            network_rx: network.rx(),
+            temperature,
+            config,
         }
     }
 

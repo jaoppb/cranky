@@ -1,9 +1,3 @@
-#![allow(
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss
-)]
-
 use super::floating_anchor::AnchorInfo;
 use super::state::WaylandState;
 use crate::features::layout_engine::domain::StyledNode;
@@ -32,32 +26,39 @@ pub(crate) fn calculate_floating_layout(
         font_size,
     );
     let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
-    if let Ok(render_node) = engine.calculate_layout(
-        layout.clone(),
-        &mut measurer,
-        crate::shared::primitives::geometry::Position::new(0, 0),
-    ) {
-        let rect = render_node.rect();
-        (rect.width() as i32, rect.height() as i32, render_node)
-    } else {
-        (
-            1,
-            1,
-            crate::features::layout_engine::domain::RenderNode::Rect {
-                path: crate::features::vdom::domain::NodePath::root(),
-                rect: Rect::new(
-                    crate::shared::primitives::geometry::Position::new(0, 0),
-                    Size::new(1, 1),
-                ),
-                style: crate::features::styling::domain::ComputedStyle::default(),
-                on_click: None,
-                on_hover: None,
-                tooltip: None,
-                popup: None,
-                panel: None,
+    engine
+        .calculate_layout(
+            layout.clone(),
+            &mut measurer,
+            crate::shared::primitives::geometry::Position::new(0, 0),
+        )
+        .map_or_else(
+            |_| {
+                (
+                    1,
+                    1,
+                    crate::features::layout_engine::domain::RenderNode::Rect {
+                        path: crate::features::vdom::domain::NodePath::root(),
+                        rect: Rect::new(
+                            crate::shared::primitives::geometry::Position::new(0, 0),
+                            Size::new(1, 1),
+                        ),
+                        style: crate::features::styling::domain::ComputedStyle::default(),
+                        on_click: None,
+                        on_hover: None,
+                        tooltip: None,
+                        popup: None,
+                        panel: None,
+                    },
+                )
+            },
+            |render_node| {
+                let rect = render_node.rect();
+                let w = i32::try_from(rect.width()).unwrap_or(1);
+                let h = i32::try_from(rect.height()).unwrap_or(1);
+                (w, h, render_node)
             },
         )
-    }
 }
 
 pub(crate) fn create_positioner(
@@ -85,28 +86,29 @@ pub(crate) fn create_positioner(
     positioner
 }
 
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn render_to_buffer(
-    shm_buffer: &mut ShmBuffer,
-    render_node: &crate::features::layout_engine::domain::RenderNode,
-    font_system: &mut FontSystem,
-    swash_cache: &mut SwashCache,
-    width: u32,
-    height: u32,
-    scale: Scale,
-    font_family: crate::shared::config::domain::FontFamily,
-    font_size: crate::shared::config::domain::FontSize,
-) {
-    let data = shm_buffer.mmap_mut();
-    if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(data, width, height) {
+pub(super) struct FloatingRenderParams<'a> {
+    pub(super) shm_buffer: &'a mut ShmBuffer,
+    pub(super) render_node: &'a crate::features::layout_engine::domain::RenderNode,
+    pub(super) font_system: &'a mut FontSystem,
+    pub(super) swash_cache: &'a mut SwashCache,
+    pub(super) width: u32,
+    pub(super) height: u32,
+    pub(super) scale: Scale,
+    pub(super) font_family: crate::shared::config::domain::FontFamily,
+    pub(super) font_size: crate::shared::config::domain::FontSize,
+}
+
+pub(super) fn render_to_buffer(params: FloatingRenderParams<'_>) {
+    let data = params.shm_buffer.mmap_mut();
+    if let Some(pixmap) = tiny_skia::PixmapMut::from_bytes(data, params.width, params.height) {
         let mut actual_canvas = TinySkiaCosmicCanvas::new(
             pixmap,
-            font_system,
-            swash_cache,
-            scale,
-            font_family,
-            font_size,
+            params.font_system,
+            params.swash_cache,
+            params.scale,
+            params.font_family,
+            params.font_size,
         );
-        render_node.render_to_canvas(&mut actual_canvas);
+        params.render_node.render_to_canvas(&mut actual_canvas);
     }
 }

@@ -14,7 +14,7 @@ impl CpuUsage {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MemoryBytes(u64);
 impl MemoryBytes {
     #[must_use]
@@ -27,7 +27,7 @@ impl MemoryBytes {
     }
 }
 
-#[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkSpeed(u64);
 impl NetworkSpeed {
     #[must_use]

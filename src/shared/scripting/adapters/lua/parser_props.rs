@@ -78,12 +78,9 @@ pub(crate) fn parse_click_handlers(lua: &Lua, val: Option<mlua::Value>) -> Optio
             mlua::Value::Integer(i) => u32::try_from(i).ok().map(PointerButton::from_raw),
             mlua::Value::Number(n) => {
                 if n >= 0.0 && n.fract() == 0.0 && n <= f64::from(u32::MAX) {
-                    #[allow(
-                        clippy::cast_possible_truncation,
-                        clippy::cast_sign_loss,
-                        clippy::as_conversions
-                    )]
-                    Some(PointerButton::from_raw(n as u32))
+                    Some(PointerButton::from_raw(crate::utils::f32_to_u32(
+                        crate::utils::f64_to_f32(n),
+                    )))
                 } else {
                     None
                 }

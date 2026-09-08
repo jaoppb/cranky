@@ -3,48 +3,17 @@ use super::grid_converter::{
     grid_track_to_track_sizing_function,
 };
 use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
-use crate::features::styling::domain::{DisplayMode, Orientation};
+use crate::features::styling::domain::{ComputedStyle, DisplayMode, Orientation};
 use crate::shared::primitives::geometry::Size;
+use crate::utils::f64_to_f32;
 use taffy::geometry::Size as TaffySize;
 use taffy::style::{Dimension, LengthPercentage, Style};
 
-#[allow(
-    clippy::as_conversions,
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::too_many_lines
-)]
-pub fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
-    let computed = node.style();
-    let col_gap = computed
-        .column_gap()
-        .or_else(|| computed.gap())
-        .map_or_else(
-            || LengthPercentage::length(0.0),
-            |g| LengthPercentage::length(g.value() as f32),
-        );
-    let row_gap = computed.row_gap().or_else(|| computed.gap()).map_or_else(
-        || LengthPercentage::length(0.0),
-        |g| LengthPercentage::length(g.value() as f32),
-    );
+fn size_to_dimension(val: u32) -> Dimension {
+    Dimension::length(f32::from(u16::try_from(val).unwrap_or(u16::MAX)))
+}
 
-    let mut style = Style {
-        position: computed.position().unwrap_or_default().into(),
-        padding: computed
-            .padding()
-            .map_or_else(taffy::geometry::Rect::zero, Into::into),
-        margin: computed
-            .margin()
-            .map_or_else(taffy::geometry::Rect::zero, Into::into),
-        gap: TaffySize {
-            width: col_gap,
-            height: row_gap,
-        },
-        justify_content: computed.justify_content().map(Into::into),
-        align_items: computed.align_items().map(Into::into),
-        ..Default::default()
-    };
-
+fn apply_display_mode(style: &mut Style, computed: &ComputedStyle, node: &StyledNode) {
     let display_mode = match (computed.display(), node) {
         (Some(mode), _) => mode,
         (None, StyledNode::Grid { .. }) => DisplayMode::Grid,
@@ -92,7 +61,9 @@ pub fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Styl
             style.display = taffy::style::Display::None;
         }
     }
+}
 
+fn apply_sizing_and_flex(style: &mut Style, computed: &ComputedStyle) {
     if let Some(col) = computed.grid_column() {
         style.grid_column = grid_line_placement_to_taffy(*col);
     }
@@ -133,18 +104,24 @@ pub fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Styl
     if let Some(as_) = computed.align_self() {
         style.align_self = Some(as_.into());
     }
+}
 
+fn apply_node_dimensions(
+    style: &mut Style,
+    node: &StyledNode,
+    computed: &ComputedStyle,
+    measurer: &mut dyn TextMeasurer,
+) {
     match node {
-        StyledNode::Flex { .. } | StyledNode::Grid { .. } => style,
+        StyledNode::Flex { .. } | StyledNode::Grid { .. } => {}
         StyledNode::Text { text, style: s, .. } => {
             let text_size = measurer.measure(text.as_str(), s.font_family(), s.font_size());
             if computed.width().is_none() {
-                style.size.width = Dimension::length(text_size.width() as f32);
+                style.size.width = size_to_dimension(text_size.width());
             }
             if computed.height().is_none() {
-                style.size.height = Dimension::length(text_size.height() as f32);
+                style.size.height = size_to_dimension(text_size.height());
             }
-            style
         }
         StyledNode::Progress { orientation, .. } => {
             let default_size = match orientation {
@@ -152,12 +129,11 @@ pub fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Styl
                 Orientation::Vertical => Size::new(8, 40),
             };
             if computed.width().is_none() {
-                style.size.width = Dimension::length(default_size.width() as f32);
+                style.size.width = size_to_dimension(default_size.width());
             }
             if computed.height().is_none() {
-                style.size.height = Dimension::length(default_size.height() as f32);
+                style.size.height = size_to_dimension(default_size.height());
             }
-            style
         }
         StyledNode::Rect { .. } => {
             if computed.width().is_none() {
@@ -166,7 +142,6 @@ pub fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Styl
             if computed.height().is_none() {
                 style.size.height = Dimension::length(10.0);
             }
-            style
         }
         StyledNode::Image { .. } => {
             if computed.width().is_none() {
@@ -175,18 +150,45 @@ pub fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Styl
             if computed.height().is_none() {
                 style.size.height = Dimension::length(24.0);
             }
-            style
         }
         StyledNode::Module { key, .. } => {
             if let Some(size) = measurer.measure_module(key) {
                 if computed.width().is_none() {
-                    style.size.width = Dimension::length(size.width() as f32);
+                    style.size.width = size_to_dimension(size.width());
                 }
                 if computed.height().is_none() {
-                    style.size.height = Dimension::length(size.height() as f32);
+                    style.size.height = size_to_dimension(size.height());
                 }
             }
-            style
         }
     }
+}
+
+#[must_use]
+pub fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
+    let computed = node.style();
+    let col_gap = computed
+        .column_gap()
+        .or_else(|| computed.gap())
+        .map_or_else(|| LengthPercentage::length(0.0), |g| LengthPercentage::length(f64_to_f32(g.value())));
+    let row_gap = computed
+        .row_gap()
+        .or_else(|| computed.gap())
+        .map_or_else(|| LengthPercentage::length(0.0), |g| LengthPercentage::length(f64_to_f32(g.value())));
+
+    let mut style = Style {
+        position: computed.position().unwrap_or_default().into(),
+        padding: computed.padding().map_or_else(taffy::geometry::Rect::zero, Into::into),
+        margin: computed.margin().map_or_else(taffy::geometry::Rect::zero, Into::into),
+        gap: TaffySize { width: col_gap, height: row_gap },
+        justify_content: computed.justify_content().map(Into::into),
+        align_items: computed.align_items().map(Into::into),
+        ..Default::default()
+    };
+
+    apply_display_mode(&mut style, computed, node);
+    apply_sizing_and_flex(&mut style, computed);
+    apply_node_dimensions(&mut style, node, computed, measurer);
+
+    style
 }

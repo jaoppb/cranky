@@ -44,7 +44,6 @@ impl TaffyLayoutAdapter {
 }
 
 impl LayoutEnginePort for TaffyLayoutAdapter {
-    #[allow(clippy::as_conversions, clippy::cast_precision_loss)]
     fn calculate_layout_with_constraints(
         &mut self,
         node: StyledNode,
@@ -63,9 +62,11 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
         let root_node_id = new_state.root_node;
 
         let available_space = available_size.map_or(taffy::geometry::Size::MAX_CONTENT, |size| {
+            let w = f32::from(u16::try_from(size.width()).unwrap_or(u16::MAX));
+            let h = f32::from(u16::try_from(size.height()).unwrap_or(u16::MAX));
             taffy::geometry::Size {
-                width: taffy::style::AvailableSpace::Definite(size.width() as f32),
-                height: taffy::style::AvailableSpace::Definite(size.height() as f32),
+                width: taffy::style::AvailableSpace::Definite(w),
+                height: taffy::style::AvailableSpace::Definite(h),
             }
         });
 

@@ -1,4 +1,4 @@
-use crate::features::systray::domain::command::CreateSystrayItemCommand;
+use crate::features::systray::domain::command::{CreateSystrayItemCommand, SystrayItemParams};
 use crate::features::systray::domain::enums::{SystrayCategory, SystrayStatus};
 use crate::features::systray::domain::icon::{IconName, SystrayIcon};
 use crate::features::systray::domain::identifiers::{
@@ -22,15 +22,17 @@ fn test_systray_item() {
     );
 
     let cmd = CreateSystrayItemCommand::new(
-        SystrayId::new("1"),
-        Destination::new("dest"),
-        ObjectPath::new("/"),
-        Title::new("t"),
-        SystrayStatus::Active,
-        icon.clone(),
-        Some(ObjectPath::new("/menu")),
-        SystrayCategory::ApplicationStatus,
-        ItemIsMenu::new(true),
+        SystrayItemParams::new(
+            SystrayId::new("1"),
+            Destination::new("dest"),
+            ObjectPath::new("/"),
+            Title::new("t"),
+        )
+        .with_status(SystrayStatus::Active)
+        .with_icon(icon.clone())
+        .with_menu_path(Some(ObjectPath::new("/menu")))
+        .with_category(SystrayCategory::ApplicationStatus)
+        .with_item_is_menu(ItemIsMenu::new(true)),
     )
     .with_item_id(Some(ItemId::new("telegram")))
     .with_window_id(Some(WindowId::new(1234)))
@@ -83,15 +85,16 @@ fn test_systray_item() {
 fn test_systray_state_serde() {
     let mut items = std::collections::BTreeMap::new();
     let cmd = CreateSystrayItemCommand::new(
-        SystrayId::new("test_id"),
-        Destination::new("test_dest"),
-        ObjectPath::new("/test"),
-        Title::new("test_title"),
-        SystrayStatus::Active,
-        Some(SystrayIcon::new(Some(IconName::new("test_icon")), None).unwrap()),
-        None,
-        SystrayCategory::Communications,
-        ItemIsMenu::new(true),
+        SystrayItemParams::new(
+            SystrayId::new("test_id"),
+            Destination::new("test_dest"),
+            ObjectPath::new("/test"),
+            Title::new("test_title"),
+        )
+        .with_status(SystrayStatus::Active)
+        .with_icon(Some(SystrayIcon::new(Some(IconName::new("test_icon")), None).unwrap()))
+        .with_category(SystrayCategory::Communications)
+        .with_item_is_menu(ItemIsMenu::new(true)),
     )
     .with_item_id(Some(ItemId::new("test_item_id")))
     .with_window_id(Some(WindowId::new(101)))

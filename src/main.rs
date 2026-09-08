@@ -86,7 +86,7 @@ async fn init_secondary_adapters(
 
     if active_signals.contains(&cranky::shared::events::signals::SignalKind::Metrics) {
         let metrics_adapter = SysinfoAdapter::new(metrics_config.clone(), hub.clone());
-        metrics_adapter.start().await;
+        metrics_adapter.start();
     }
 
     Ok((dbus_manager, sni_adapter))
@@ -138,7 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 1. Initial configuration and Core Hub
     let font_validator = CosmicFontValidatorAdapter::new();
-    let config_adapter = ConfigAdapter::new(font_validator, app_env.clone());
+    let config_adapter = ConfigAdapter::new(font_validator, &app_env);
     let initial_config = config_adapter.load_initial()?;
 
     let hub = Arc::new(SignalHub::new(initial_config.clone()));
@@ -163,18 +163,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let layout_sender = std::sync::Arc::new(layout_tx);
     let ui_sender = std::sync::Arc::new(ui_tx);
 
-    let mut app = CrankyApp::new(
+    let services = cranky::app::state::StateServices::new(
         hub.clone(),
-        initial_config.clone(),
-        display_rx,
-        display_sender,
-        layout_rx,
-        layout_sender,
-        ui_rx,
-        ui_sender,
-        system_rx,
         surface_manager,
         canvas_factory,
+        display_sender,
+        layout_sender,
+        ui_sender,
+    );
+    let channels = cranky::app::state::StateChannels::new(
+        display_rx,
+        layout_rx,
+        ui_rx,
+        system_rx,
+    );
+    let mut app = CrankyApp::new(
+        initial_config.clone(),
+        services,
+        channels,
         registry,
     )?;
 
@@ -188,8 +194,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hyprland_adapter = HyprlandAdapter::new(app_env.clone());
     spawn_background_tasks(&hub, hyprland_adapter, active_signals);
 
-    let hub_for_config = hub.clone();
-    let _config_watcher = config_adapter.watch(hub_for_config)?;
+    let _config_watcher = config_adapter.watch(&hub)?;
 
     let style_loader =
         cranky::features::styling::adapters::fs_loader::FsStyleLoader::new(app_env.clone());

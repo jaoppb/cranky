@@ -14,8 +14,7 @@ impl SysinfoAdapter {
         Self { config, hub }
     }
 
-    #[allow(clippy::unused_async)]
-    pub async fn start(&self) {
+    pub fn start(&self) {
         let config = self.config.clone();
         let hub = self.hub.clone();
 
@@ -141,13 +140,17 @@ impl SysinfoAdapter {
         MetricsState::new(crate::features::metrics::domain::CreateMetricsCommand::new(
             cpu_usage,
             per_core,
-            crate::features::metrics::domain::MemoryBytes::new(sys.used_memory()),
-            crate::features::metrics::domain::MemoryBytes::new(sys.total_memory()),
-            crate::features::metrics::domain::MemoryBytes::new(sys.used_swap()),
-            crate::features::metrics::domain::MemoryBytes::new(sys.total_swap()),
+            crate::features::metrics::domain::MemoryMetrics::new(
+                crate::features::metrics::domain::MemoryBytes::new(sys.used_memory()),
+                crate::features::metrics::domain::MemoryBytes::new(sys.total_memory()),
+                crate::features::metrics::domain::MemoryBytes::new(sys.used_swap()),
+                crate::features::metrics::domain::MemoryBytes::new(sys.total_swap()),
+            ),
             disk_metrics,
-            crate::features::metrics::domain::NetworkSpeed::new(network_tx),
-            crate::features::metrics::domain::NetworkSpeed::new(network_rx),
+            crate::features::metrics::domain::NetworkMetrics::new(
+                crate::features::metrics::domain::NetworkSpeed::new(network_tx),
+                crate::features::metrics::domain::NetworkSpeed::new(network_rx),
+            ),
             crate::features::metrics::domain::Temperature::new(temp),
             config.clone(),
         ))
@@ -250,7 +253,7 @@ mod tests {
         let mut rx = hub.metrics_rx().clone();
 
         let adapter = SysinfoAdapter::new(config, hub);
-        adapter.start().await;
+        adapter.start();
 
         // Wait for first update
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;

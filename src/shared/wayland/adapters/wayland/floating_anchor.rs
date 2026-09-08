@@ -47,7 +47,63 @@ pub(crate) fn handle_conflicts(
     }
 }
 
-#[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+fn to_i32(val: u32) -> i32 {
+    i32::try_from(val).unwrap_or(i32::MAX)
+}
+
+struct ModuleAnchorBounds {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+}
+
+fn compute_module_bounds(
+    ms: Option<&super::types::ModuleSurface>,
+    anchor_rect: Option<Rect>,
+    default_h: i32,
+    is_panel: bool,
+) -> ModuleAnchorBounds {
+    match (ms, anchor_rect) {
+        (Some(ms), Some(r)) => {
+            let y = if is_panel { ms.y.saturating_add(r.y()) } else { 0 };
+            let h = if is_panel { to_i32(r.height()) } else { default_h };
+            ModuleAnchorBounds {
+                x: ms.x.saturating_add(r.x()),
+                y,
+                w: to_i32(r.width()),
+                h,
+            }
+        }
+        (Some(ms), None) => {
+            let y = if is_panel { ms.y } else { 0 };
+            let h = if is_panel { to_i32(ms.size.height()) } else { default_h };
+            ModuleAnchorBounds {
+                x: ms.x,
+                y,
+                w: to_i32(ms.size.width()),
+                h,
+            }
+        }
+        (None, Some(r)) => {
+            let y = if is_panel { r.y() } else { 0 };
+            let h = if is_panel { to_i32(r.height()) } else { default_h };
+            ModuleAnchorBounds {
+                x: r.x(),
+                y,
+                w: to_i32(r.width()),
+                h,
+            }
+        }
+        (None, None) => ModuleAnchorBounds {
+            x: 0,
+            y: 0,
+            w: 1,
+            h: default_h,
+        },
+    }
+}
+
 pub(crate) fn resolve_anchor(
     state: &WaylandState,
     kind: &FloatingKind,
@@ -88,10 +144,11 @@ pub(crate) fn resolve_anchor(
                     break;
                 }
             }
-            anchor_x = pointer_x as i32;
-            anchor_y = bar_height as i32;
+            anchor_x = i32::try_from(crate::utils::f64_to_i64(pointer_x)).unwrap_or(0);
+            anchor_y = to_i32(bar_height);
         }
-        FloatingKind::Popup(target) => {
+        FloatingKind::Popup(target) | FloatingKind::Panel(target) => {
+            let is_panel = matches!(kind, FloatingKind::Panel(_));
             let module_id = target.module_id();
             let mon_name = target.monitor_id().as_str();
             for bar in &state.bars {
@@ -99,50 +156,16 @@ pub(crate) fn resolve_anchor(
                     bar_scale = bar.scale;
                     bar_layer_surface = Some(bar.layer_surface.clone());
                     target_monitor_id = target.monitor_id().clone();
-                    if let Some(ms) = bar.module_surfaces.get(&module_id) {
-                        if let Some(r) = anchor_rect {
-                            anchor_x = ms.x + r.x();
-                            anchor_w = r.width() as i32;
-                        } else {
-                            anchor_x = ms.x;
-                            anchor_w = ms.size.width() as i32;
-                        }
-                    } else if let Some(r) = anchor_rect {
-                        anchor_x = r.x();
-                        anchor_w = r.width() as i32;
-                    }
-                    anchor_y = 0;
-                    anchor_h = bar.height as i32;
-                    break;
-                }
-            }
-        }
-        FloatingKind::Panel(target) => {
-            let module_id = target.module_id();
-            let mon_name = target.monitor_id().as_str();
-            for bar in &state.bars {
-                if bar.output_name == mon_name {
-                    bar_scale = bar.scale;
-                    bar_layer_surface = Some(bar.layer_surface.clone());
-                    target_monitor_id = target.monitor_id().clone();
-                    if let Some(ms) = bar.module_surfaces.get(&module_id) {
-                        if let Some(r) = anchor_rect {
-                            anchor_x = ms.x + r.x();
-                            anchor_y = ms.y + r.y();
-                            anchor_w = r.width() as i32;
-                            anchor_h = r.height() as i32;
-                        } else {
-                            anchor_x = ms.x;
-                            anchor_y = ms.y;
-                            anchor_w = ms.size.width() as i32;
-                            anchor_h = ms.size.height() as i32;
-                        }
-                    } else if let Some(r) = anchor_rect {
-                        anchor_x = r.x();
-                        anchor_y = r.y();
-                        anchor_w = r.width() as i32;
-                        anchor_h = r.height() as i32;
-                    }
+                    let bounds = compute_module_bounds(
+                        bar.module_surfaces.get(&module_id),
+                        anchor_rect,
+                        to_i32(bar.height),
+                        is_panel,
+                    );
+                    anchor_x = bounds.x;
+                    anchor_y = bounds.y;
+                    anchor_w = bounds.w;
+                    anchor_h = bounds.h;
                     break;
                 }
             }

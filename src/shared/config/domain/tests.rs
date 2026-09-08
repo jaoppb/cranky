@@ -114,3 +114,34 @@ fn test_module_config_engine() {
     assert!(auto.is_auto());
     assert_eq!(auto.as_explicit(), None);
 }
+
+#[test]
+fn test_tooltip_config_builder() {
+    let bg = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(10, 20, 30, 255));
+    let bc = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(40, 50, 60, 255));
+    let tc = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(70, 80, 90, 255));
+    let font = Some(FontFamily::new("Roboto".to_string()));
+    let size = Some(FontSize::new(14.0));
+    let radius = BorderRadius::new(6.0);
+    let border_width = BorderSize::new(2.0);
+    let padding = PaddingOffset::new(12);
+
+    let config = TooltipConfig::default()
+        .with_background(bg.clone())
+        .with_border_color(bc.clone())
+        .with_text_color(tc.clone())
+        .with_font(font.clone())
+        .with_size(size)
+        .with_radius(radius)
+        .with_border_width(border_width)
+        .with_padding(padding);
+
+    assert_eq!(config.background(), &bg);
+    assert_eq!(config.border_color(), &bc);
+    assert_eq!(config.text_color(), &tc);
+    assert_eq!(config.font(), font.as_ref());
+    assert_eq!(config.size(), size);
+    assert_eq!(config.radius(), radius);
+    assert_eq!(config.border_width(), border_width);
+    assert_eq!(config.padding(), padding);
+}

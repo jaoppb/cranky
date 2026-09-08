@@ -12,7 +12,7 @@ impl Dispatch<XdgWmBase, ()> for WaylandState {
         _state: &mut Self,
         proxy: &XdgWmBase,
         event: xdg_wm_base::Event,
-        _data: &(),
+        (): &(),
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
@@ -27,7 +27,7 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
         state: &mut Self,
         proxy: &XdgSurface,
         event: xdg_surface::Event,
-        _data: &(),
+        (): &(),
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
@@ -43,13 +43,9 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
                 floating
                     .surface
                     .attach(Some(floating.shm_buffer.current_buffer()), 0, 0);
-                #[allow(clippy::as_conversions)]
-                floating.surface.damage_buffer(
-                    0,
-                    0,
-                    floating.size.width() as i32,
-                    floating.size.height() as i32,
-                );
+                let width = i32::try_from(floating.size.width()).unwrap_or(0);
+                let height = i32::try_from(floating.size.height()).unwrap_or(0);
+                floating.surface.damage_buffer(0, 0, width, height);
                 floating.surface.commit();
                 floating.shm_buffer.swap_buffers();
             } else {
@@ -64,7 +60,7 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
         state: &mut Self,
         proxy: &XdgPopup,
         event: xdg_popup::Event,
-        _data: &(),
+        (): &(),
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
@@ -106,7 +102,7 @@ impl Dispatch<XdgPositioner, ()> for WaylandState {
         _state: &mut Self,
         _proxy: &XdgPositioner,
         _event: xdg_positioner::Event,
-        _data: &(),
+        (): &(),
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {

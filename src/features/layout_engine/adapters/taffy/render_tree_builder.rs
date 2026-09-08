@@ -3,12 +3,8 @@ use crate::shared::primitives::geometry::{Position, Rect, Size};
 use taffy::tree::NodeId;
 use taffy::TaffyTree;
 
-#[allow(
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss
-)]
+use crate::utils::{f32_to_i32, f32_to_u32};
+
 fn build_children(
     taffy: &TaffyTree,
     node_id: NodeId,
@@ -25,13 +21,56 @@ fn build_children(
     Ok(render_children)
 }
 
-#[allow(
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::too_many_lines
-)]
+fn build_content_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
+    match node {
+        StyledNode::Text {
+            path, text, style, on_click, on_hover, tooltip, popup, panel,
+        } => Some(RenderNode::Text {
+            path: path.clone(), rect, text: text.clone(), style: style.clone(),
+            on_click: on_click.clone(), on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
+        }),
+        StyledNode::Progress {
+            path, value, orientation, style, on_click, on_hover, tooltip, popup, panel,
+        } => Some(RenderNode::Progress {
+            path: path.clone(), rect, value: *value, orientation: *orientation, style: style.clone(),
+            on_click: on_click.clone(), on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
+        }),
+        _ => None,
+    }
+}
+
+fn build_atomic_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
+    match node {
+        StyledNode::Rect {
+            path, style, on_click, on_hover, tooltip, popup, panel,
+        } => Some(RenderNode::Rect {
+            path: path.clone(), rect, style: style.clone(),
+            on_click: on_click.clone(), on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
+        }),
+        StyledNode::Image {
+            path, data, pixel_size, tooltip, popup, panel, ..
+        } => Some(RenderNode::Image {
+            path: path.clone(), rect, data: data.clone(), pixel_size: *pixel_size,
+            tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
+        }),
+        StyledNode::Module {
+            path, key, style, on_click, on_hover, tooltip, popup, panel, ..
+        } => Some(RenderNode::Module {
+            path: path.clone(), rect, key: key.clone(), style: style.clone(),
+            on_click: on_click.clone(), on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
+        }),
+        _ => None,
+    }
+}
+
+fn build_leaf_render_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
+    build_content_node(node, rect).or_else(|| build_atomic_node(node, rect))
+}
+
 pub(super) fn build_render_tree(
     taffy: &TaffyTree,
     node_id: NodeId,
@@ -42,12 +81,16 @@ pub(super) fn build_render_tree(
         .layout(node_id)
         .map_err(|e| LayoutError::EngineError(e.to_string()))?;
 
-    let abs_x = offset.x().saturating_add(layout.location.x as i32);
-    let abs_y = offset.y().saturating_add(layout.location.y as i32);
+    let abs_x = offset.x().saturating_add(f32_to_i32(layout.location.x));
+    let abs_y = offset.y().saturating_add(f32_to_i32(layout.location.y));
     let rect = Rect::new(
         Position::new(abs_x, abs_y),
-        Size::new(layout.size.width as u32, layout.size.height as u32),
+        Size::new(f32_to_u32(layout.size.width), f32_to_u32(layout.size.height)),
     );
+
+    if let Some(leaf) = build_leaf_render_node(node, rect) {
+        return Ok(leaf);
+    }
 
     match node {
         StyledNode::Flex {
@@ -90,103 +133,6 @@ pub(super) fn build_render_tree(
             popup: popup.clone(),
             panel: panel.clone(),
         }),
-        StyledNode::Text {
-            path,
-            text,
-            style,
-            on_click,
-            on_hover,
-            tooltip,
-            popup,
-            panel,
-        } => Ok(RenderNode::Text {
-            path: path.clone(),
-            rect,
-            text: text.clone(),
-            style: style.clone(),
-            on_click: on_click.clone(),
-            on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        StyledNode::Progress {
-            path,
-            value,
-            orientation,
-            style,
-            on_click,
-            on_hover,
-            tooltip,
-            popup,
-            panel,
-        } => Ok(RenderNode::Progress {
-            path: path.clone(),
-            rect,
-            value: *value,
-            orientation: *orientation,
-            style: style.clone(),
-            on_click: on_click.clone(),
-            on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        StyledNode::Rect {
-            path,
-            style,
-            on_click,
-            on_hover,
-            tooltip,
-            popup,
-            panel,
-        } => Ok(RenderNode::Rect {
-            path: path.clone(),
-            rect,
-            style: style.clone(),
-            on_click: on_click.clone(),
-            on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        StyledNode::Image {
-            path,
-            data,
-            pixel_size,
-            tooltip,
-            popup,
-            panel,
-            ..
-        } => Ok(RenderNode::Image {
-            path: path.clone(),
-            rect,
-            data: data.clone(),
-            pixel_size: *pixel_size,
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        StyledNode::Module {
-            path,
-            key,
-            style,
-            on_click,
-            on_hover,
-            tooltip,
-            popup,
-            panel,
-            ..
-        } => Ok(RenderNode::Module {
-            path: path.clone(),
-            rect,
-            key: key.clone(),
-            style: style.clone(),
-            on_click: on_click.clone(),
-            on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
+        _ => Err(LayoutError::EngineError("Unexpected container node".to_string())),
     }
 }

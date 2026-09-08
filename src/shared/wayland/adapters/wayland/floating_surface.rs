@@ -1,20 +1,26 @@
-#![allow(
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss
-)]
-
 use super::floating_anchor::{handle_conflicts, resolve_anchor};
-use super::floating_render::{calculate_floating_layout, create_positioner, render_to_buffer};
+use super::floating_render::calculate_floating_layout;
+use super::floating_setup::{create_new_floating, update_existing_floating};
 use super::state::WaylandState;
-use super::types::FloatingSurface;
-use crate::features::layout_engine::domain::{FloatingKind, StyledNode};
-use crate::shared::events::core::SurfaceKind;
+use crate::features::layout_engine::domain::{FloatingKind, RenderNode, StyledNode};
+use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Scale, Size};
-use crate::shared::primitives::MonitorId;
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::primitives::{MonitorId, PopupOffset};
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
+
+pub(super) struct FloatingRenderContext<'a> {
+    pub(super) render_node: &'a RenderNode,
+    pub(super) scale: Scale,
+    pub(super) text_w: i32,
+    pub(super) text_h: i32,
+    pub(super) width: u32,
+    pub(super) height: u32,
+    pub(super) size: Size,
+    pub(super) font_family: FontFamily,
+    pub(super) font_size: FontSize,
+    pub(super) effective_offset: PopupOffset,
+}
 
 pub(crate) fn show_floating(
     state: &mut WaylandState,
@@ -23,7 +29,7 @@ pub(crate) fn show_floating(
     monitor_id: Option<MonitorId>,
     anchor_rect: Option<crate::shared::primitives::geometry::Rect>,
     layout: StyledNode,
-    offset: Option<crate::shared::primitives::PopupOffset>,
+    offset: Option<PopupOffset>,
 ) -> Result<(), DisplayServerError> {
     if let Some(existing) = state.floating_surfaces.get(&kind)
         && existing.layout == layout
@@ -46,129 +52,39 @@ pub(crate) fn show_floating(
         _ => offset.unwrap_or_default(),
     };
 
-    let font_family = crate::shared::config::domain::FontFamily::new("Inter".to_string());
-    let font_size = crate::shared::config::domain::FontSize::new(12.0);
-    let scale = Scale::new(anchor_info.bar_scale as f32);
+    let font_family = FontFamily::new("Inter".to_string());
+    let font_size = FontSize::new(12.0);
+    let bar_scale_f32 = i16::try_from(anchor_info.bar_scale).map_or(1.0, f32::from);
+    let scale = Scale::new(bar_scale_f32);
 
-    let (text_w, text_h, render_node) = calculate_floating_layout(state, &layout, scale, &font_family, font_size);
-    let width = (((text_w as f32) * scale.value()).ceil() as u32).max(1);
-    let height = (((text_h as f32) * scale.value()).ceil() as u32).max(1);
-    let new_size = Size::new(width, height);
+    let (text_w, text_h, render_node) =
+        calculate_floating_layout(state, &layout, scale, &font_family, font_size);
+    let layout_width = i16::try_from(text_w.clamp(0, 32767)).map_or(1.0, f32::from);
+    let layout_height = i16::try_from(text_h.clamp(0, 32767)).map_or(1.0, f32::from);
+    let width = crate::utils::f32_to_u32((layout_width * scale.value()).ceil()).max(1);
+    let height = crate::utils::f32_to_u32((layout_height * scale.value()).ceil()).max(1);
+    let ctx = FloatingRenderContext {
+        render_node: &render_node,
+        scale,
+        text_w,
+        text_h,
+        width,
+        height,
+        size: Size::new(width, height),
+        font_family,
+        font_size,
+        effective_offset,
+    };
 
-    if let Some(floating) = state.floating_surfaces.get_mut(&kind) {
-        if floating.size == new_size {
-            render_to_buffer(
-                &mut floating.shm_buffer, &render_node, &mut state.font_system, &mut state.swash_cache,
-                width, height, scale, font_family, font_size,
-            );
-            floating.surface.set_buffer_scale(anchor_info.bar_scale);
-            floating.layout = layout;
-            floating.surface.attach(Some(floating.shm_buffer.current_buffer()), 0, 0);
-            floating.surface.damage_buffer(0, 0, width as i32, height as i32);
-            floating.surface.commit();
-            floating.shm_buffer.swap_buffers();
-            return Ok(());
-        }
-
-        let shm = state.shm.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-            reason: "SHM not bound".to_string(),
-        })?;
-        let mut new_shm_buffer = ShmBuffer::new(shm, width, height, qh, state.app_env.xdg_runtime_dir().as_path())
-            .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
-        render_to_buffer(
-            &mut new_shm_buffer, &render_node, &mut state.font_system, &mut state.swash_cache,
-            width, height, scale, font_family, font_size,
-        );
-
-        let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-            reason: "XDG WM Base not bound".to_string(),
-        })?;
-        let positioner = create_positioner(xdg_wm_base, qh, text_w, text_h, &anchor_info, effective_offset);
-        floating.reposition_token = floating.reposition_token.wrapping_add(1);
-        floating.xdg_popup.reposition(&positioner, floating.reposition_token);
-        positioner.destroy();
-        floating.shm_buffer = new_shm_buffer;
-        floating.size = new_size;
-        floating.layout = layout;
-        floating.surface.set_buffer_scale(anchor_info.bar_scale);
-        floating.surface.attach(Some(floating.shm_buffer.current_buffer()), 0, 0);
-        floating.surface.damage_buffer(0, 0, width as i32, height as i32);
-        floating.surface.commit();
-        floating.shm_buffer.swap_buffers();
-        return Ok(());
+    if state.floating_surfaces.contains_key(&kind) {
+        update_existing_floating(state, qh, &kind, layout, &anchor_info, &ctx)
+    } else {
+        create_new_floating(state, qh, kind, layout, &anchor_info, &ctx)
     }
-
-    let shm = state.shm.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "SHM not bound".to_string(),
-    })?;
-    let mut shm_buffer = ShmBuffer::new(shm, width, height, qh, state.app_env.xdg_runtime_dir().as_path())
-        .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
-    render_to_buffer(
-        &mut shm_buffer, &render_node, &mut state.font_system, &mut state.swash_cache,
-        width, height, scale, font_family, font_size,
-    );
-
-    let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "XDG WM Base not bound".to_string(),
-    })?;
-    let positioner = create_positioner(xdg_wm_base, qh, text_w, text_h, &anchor_info, effective_offset);
-
-    let compositor = state.compositor.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "Compositor not bound".to_string(),
-    })?;
-    let surface = compositor.create_surface(qh, ());
-    surface.set_buffer_scale(anchor_info.bar_scale);
-    let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, qh, ());
-    let xdg_popup = xdg_surface.get_popup(None, &positioner, qh, ());
-
-    if let FloatingKind::Popup(_) = &kind
-        && let (Some(seat), Some(serial)) = (state.seat.as_ref(), state.last_button_serial)
-    {
-        xdg_popup.grab(seat, serial.value());
-    }
-
-    anchor_info.bar_layer_surface.get_popup(&xdg_popup);
-    positioner.destroy();
-    surface.commit();
-
-    match &kind {
-        FloatingKind::Popup(target) => {
-            state.surface_to_id.insert(
-                surface.clone(),
-                (target.module_id(), anchor_info.target_monitor_id, SurfaceKind::Popup),
-            );
-        }
-        FloatingKind::Panel(target) => {
-            state.surface_to_id.insert(
-                surface.clone(),
-                (target.module_id(), anchor_info.target_monitor_id, SurfaceKind::Panel),
-            );
-        }
-        FloatingKind::Tooltip => {}
-    }
-
-    state.floating_surfaces.insert(
-        kind,
-        FloatingSurface {
-            surface,
-            xdg_surface,
-            xdg_popup,
-            shm_buffer,
-            size: new_size,
-            layout,
-            reposition_token: 0,
-        },
-    );
-
-    Ok(())
 }
 
-pub(crate) fn hide_floating(
-    state: &mut WaylandState,
-    kind: &FloatingKind,
-) -> Result<(), DisplayServerError> {
+pub(crate) fn hide_floating(state: &mut WaylandState, kind: &FloatingKind) {
     if let Some(floating) = state.floating_surfaces.remove(kind) {
         state.surface_to_id.remove(&floating.surface);
     }
-    Ok(())
 }
