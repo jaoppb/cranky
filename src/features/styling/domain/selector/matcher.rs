@@ -1,6 +1,6 @@
-use super::selector::{CompiledSelector, SelectorStep};
-use crate::features::styling::domain::{ElementQuery, PseudoClass};
-use lightningcss::selector::Combinator;
+use super::super::grid_types::PseudoClass;
+use super::super::query::ElementQuery;
+use super::model::{Combinator, CompiledSelector, SelectorStep};
 
 #[must_use]
 pub fn matches_selector(selector: &CompiledSelector, query: &ElementQuery) -> bool {
@@ -54,7 +54,7 @@ pub fn matches_selector(selector: &CompiledSelector, query: &ElementQuery) -> bo
                     return false;
                 }
             }
-            _ => {
+            Combinator::NextSibling | Combinator::LaterSibling => {
                 return false;
             }
         }

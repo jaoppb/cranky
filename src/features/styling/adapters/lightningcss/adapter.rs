@@ -1,7 +1,7 @@
 use super::parsed_stylesheet::LightningParsedStyleSheet;
 use super::properties::parse_declarations;
-use super::selector::{compile_selector, RuleEntry};
-use crate::features::styling::domain::{StyleSheetName, StylingError};
+use super::selector::compile_selector;
+use crate::features::styling::domain::{RuleEntry, StyleSheetName, StylingError};
 use crate::features::styling::ports::{CssParserPort, ParsedStyleSheetPort};
 use lightningcss::rules::CssRule;
 use lightningcss::stylesheet::{ParserOptions, StyleSheet};

@@ -1,6 +1,6 @@
-use super::matcher::matches_selector;
-use super::selector::RuleEntry;
-use crate::features::styling::domain::{ComputedStyle, ElementQuery, StyleSheetName};
+use crate::features::styling::domain::{
+    ComputedStyle, ElementQuery, RuleEntry, StyleSheetName, matches_selector,
+};
 use crate::features::styling::ports::ParsedStyleSheetPort;
 
 pub struct LightningParsedStyleSheet {

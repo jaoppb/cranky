@@ -1,5 +1,4 @@
 pub mod adapter;
-pub mod matcher;
 pub mod parsed_stylesheet;
 pub mod properties;
 pub mod selector;

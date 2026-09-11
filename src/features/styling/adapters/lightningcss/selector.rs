@@ -1,28 +1,17 @@
-use crate::features::styling::domain::{ComputedStyle, PseudoClass};
+use crate::features::styling::domain::{Combinator, CompiledSelector, PseudoClass, SelectorStep};
 use lightningcss::selector::{
-    Combinator, Component, PseudoClass as LightningPseudoClass, Selector,
+    Combinator as LightningCombinator, Component, PseudoClass as LightningPseudoClass, Selector,
 };
 use parcel_selectors::parser::NthType;
 
-#[derive(Debug, Clone)]
-pub struct RuleEntry {
-    pub selectors: Vec<CompiledSelector>,
-    pub style: ComputedStyle,
-}
-
-#[derive(Debug, Clone)]
-pub struct CompiledSelector {
-    pub steps: Vec<SelectorStep>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SelectorStep {
-    pub tag: Option<String>,
-    pub id: Option<String>,
-    pub classes: Vec<String>,
-    pub pseudo_classes: Vec<PseudoClass>,
-    pub negations: Vec<CompiledSelector>,
-    pub combinator: Option<Combinator>,
+const fn convert_combinator(comb: LightningCombinator) -> Option<Combinator> {
+    match comb {
+        LightningCombinator::Child => Some(Combinator::Child),
+        LightningCombinator::Descendant => Some(Combinator::Descendant),
+        LightningCombinator::NextSibling => Some(Combinator::NextSibling),
+        LightningCombinator::LaterSibling => Some(Combinator::LaterSibling),
+        _ => None,
+    }
 }
 
 pub fn compile_nth_data(
@@ -74,14 +63,7 @@ pub fn compile_pseudo_class(pseudo: &LightningPseudoClass, step: &mut SelectorSt
 #[must_use]
 pub fn compile_selector(selector: &Selector) -> CompiledSelector {
     let mut steps = Vec::new();
-    let mut current_step = SelectorStep {
-        tag: None,
-        id: None,
-        classes: Vec::new(),
-        pseudo_classes: Vec::new(),
-        negations: Vec::new(),
-        combinator: None,
-    };
+    let mut current_step = SelectorStep::default();
 
     for component in selector.iter_raw_match_order() {
         match component {
@@ -110,16 +92,9 @@ pub fn compile_selector(selector: &Selector) -> CompiledSelector {
                 compile_pseudo_class(pseudo, &mut current_step);
             }
             Component::Combinator(comb) => {
-                current_step.combinator = Some(*comb);
+                current_step.combinator = convert_combinator(*comb);
                 steps.push(current_step);
-                current_step = SelectorStep {
-                    tag: None,
-                    id: None,
-                    classes: Vec::new(),
-                    pseudo_classes: Vec::new(),
-                    negations: Vec::new(),
-                    combinator: None,
-                };
+                current_step = SelectorStep::default();
             }
             _ => {}
         }
