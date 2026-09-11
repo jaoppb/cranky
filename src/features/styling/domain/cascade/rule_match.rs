@@ -1,7 +1,7 @@
+use super::declared_style::DeclaredStyle;
 use super::fold::MatchedRule;
 use super::priority::{Importance, Layer, RulePriority};
 use super::specificity::Specificity;
-use crate::features::styling::domain::computed_style::ComputedStyle;
 
 /// One rule's match against an element, before cross-sheet layer and sheet
 /// position are known.
@@ -13,7 +13,7 @@ pub struct RuleMatch {
     importance: Importance,
     specificity: Specificity,
     source_order: u32,
-    style: ComputedStyle,
+    style: DeclaredStyle,
 }
 
 impl RuleMatch {
@@ -22,7 +22,7 @@ impl RuleMatch {
         importance: Importance,
         specificity: Specificity,
         source_order: u32,
-        style: ComputedStyle,
+        style: DeclaredStyle,
     ) -> Self {
         Self {
             importance,

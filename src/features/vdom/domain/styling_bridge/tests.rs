@@ -1,5 +1,5 @@
 use crate::features::layout_engine::domain::StyledNode;
-use crate::features::styling::domain::ElementQuery;
+use crate::features::styling::domain::{ElementQuery, InheritedStyle};
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::{InteractionContext, NodePath, TextContent, VNode};
 
@@ -8,6 +8,7 @@ impl StyleResolverPort for MockResolver {
     fn resolve_style(
         &self,
         _query: &ElementQuery,
+        _inherited: &InheritedStyle,
     ) -> crate::features::styling::domain::ComputedStyle {
         crate::features::styling::domain::ComputedStyle::default()
     }
@@ -71,7 +72,9 @@ fn test_vnode_with_popup_and_style_resolution() {
         None,
         None,
     )
-    .with_popup(crate::features::vdom::domain::PopupSpec::new(Box::new(popup_content.clone())));
+    .with_popup(crate::features::vdom::domain::PopupSpec::new(Box::new(
+        popup_content.clone(),
+    )));
 
     assert!(button.popup().is_some());
     assert_eq!(button.popup().unwrap().content(), &popup_content);
@@ -101,7 +104,10 @@ fn test_vnode_grid_creation_and_resolution() {
     );
 
     let grid_node = VNode::new_grid(vec![child1, child2], None, None, None, None, None);
-    assert_eq!(grid_node.tag(), crate::features::vdom::domain::NodeTag::Grid);
+    assert_eq!(
+        grid_node.tag(),
+        crate::features::vdom::domain::NodeTag::Grid
+    );
     assert!(grid_node.tag().is_container());
     assert_eq!(grid_node.children().len(), 2);
 

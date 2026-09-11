@@ -1,5 +1,5 @@
 use crate::features::styling::domain::{
-    ComputedStyle, ElementQuery, RuleMatch, StyleSheetName, StylingError,
+    ComputedStyle, ElementQuery, InheritedStyle, RuleMatch, StyleSheetName, StylingError,
 };
 use std::sync::Arc;
 
@@ -18,7 +18,10 @@ where
 
 pub trait ParsedStyleSheetPort: Send + Sync {
     fn name(&self) -> &StyleSheetName;
-    fn resolve_style(&self, query: &ElementQuery) -> ComputedStyle;
+    /// Resolves this sheet's rules for `query` and applies inheritance from
+    /// `inherited` — the parent element's own resolved style — to any of the
+    /// four naturally-inherited properties this element didn't declare.
+    fn resolve_style(&self, query: &ElementQuery, inherited: &InheritedStyle) -> ComputedStyle;
     /// Every rule in this sheet that matches `query`, each tagged with its
     /// importance, specificity, and position in this sheet's source order.
     /// Layer and cross-sheet ordering are the composite resolver's job —
@@ -66,5 +69,7 @@ pub trait StyleLoaderPort: Send + Sync {
 }
 
 pub trait StyleResolverPort: Send + Sync {
-    fn resolve_style(&self, query: &ElementQuery) -> ComputedStyle;
+    /// Resolves the final style for `query`, applying inheritance from
+    /// `inherited` — the parent element's own resolved style.
+    fn resolve_style(&self, query: &ElementQuery, inherited: &InheritedStyle) -> ComputedStyle;
 }

@@ -1,4 +1,6 @@
-use crate::features::styling::domain::{ComputedStyle, Opacity};
+use crate::features::styling::domain::{
+    ComputedStyle, CssWideKeyword, InheritableKeywords, Opacity,
+};
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::{Color, DrawingColor};
 use lightningcss::properties::Property;
@@ -80,11 +82,7 @@ pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property) -> bool 
     }
 }
 
-pub fn apply_custom_or_unparsed_property(
-    style: &mut ComputedStyle,
-    name: &str,
-    prop: &Property,
-) {
+pub fn apply_custom_or_unparsed_property(style: &mut ComputedStyle, name: &str, prop: &Property) {
     if (name == "accent-color" || name == "progress-color" || name == "fill-color")
         && let Ok(full) = prop.to_css_string(false, PrinterOptions::default())
     {
@@ -125,6 +123,48 @@ pub fn apply_font_size(style: &mut ComputedStyle, size: &LightningFontSize) {
             style.set_font_size(FontSize::new(px));
         }
         LightningFontSize::Relative(_) => {}
+    }
+}
+
+/// Scans a rule's raw declarations for a CSS-wide keyword.
+///
+/// Looks for `inherit`, `initial`, or `unset` on any of the four properties
+/// this renderer inherits. A property that failed its normal value grammar
+/// falls back to `Property::Unparsed` (lightningcss's catch-all for exactly
+/// this case), which is where these keywords actually live.
+#[must_use]
+pub fn detect_inheritable_keywords(props: &[Property]) -> InheritableKeywords {
+    let mut found = InheritableKeywords::default();
+    for prop in props {
+        let Property::Unparsed(unparsed) = prop else {
+            continue;
+        };
+        let Some(keyword) = css_wide_keyword(prop) else {
+            continue;
+        };
+        match unparsed.property_id.name() {
+            "color" => found.color = Some(keyword),
+            "accent-color" => found.accent_color = Some(keyword),
+            "font-family" => found.font_family = Some(keyword),
+            "font-size" => found.font_size = Some(keyword),
+            _ => {}
+        }
+    }
+    found
+}
+
+fn css_wide_keyword(prop: &Property) -> Option<CssWideKeyword> {
+    let full = prop.to_css_string(false, PrinterOptions::default()).ok()?;
+    let value = full
+        .split_once(':')
+        .map_or(full.as_str(), |(_, v)| v)
+        .trim();
+    if value.eq_ignore_ascii_case("inherit") || value.eq_ignore_ascii_case("unset") {
+        Some(CssWideKeyword::Inherit)
+    } else if value.eq_ignore_ascii_case("initial") {
+        Some(CssWideKeyword::Initial)
+    } else {
+        None
     }
 }
 

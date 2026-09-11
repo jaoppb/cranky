@@ -9,7 +9,8 @@ use cranky::features::module_runtime::domain::render_pipeline::{LayoutContext, R
 use cranky::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
 use cranky::features::styling::adapters::lightningcss::LightningCssAdapter;
 use cranky::features::styling::domain::{
-    ClassName, ClassNameList, ComputedStyle, ElementQuery, PseudoClass, StyleSheetName,
+    ClassName, ClassNameList, ComputedStyle, ElementQuery, InheritedStyle, PseudoClass,
+    StyleSheetName,
 };
 use cranky::features::styling::ports::{CssParserPort, StyleResolverPort};
 use cranky::features::vdom::adapters::DefaultVdomDiffAdapter;
@@ -109,7 +110,7 @@ struct StaticStyleResolver {
 }
 
 impl StyleResolverPort for StaticStyleResolver {
-    fn resolve_style(&self, _query: &ElementQuery) -> ComputedStyle {
+    fn resolve_style(&self, _query: &ElementQuery, _inherited: &InheritedStyle) -> ComputedStyle {
         self.style.clone()
     }
 }
@@ -282,14 +283,20 @@ fn bench_styling(c: &mut Criterion) {
 
     group.bench_function("resolve_style_simple_match", |b| {
         b.iter(|| {
-            let style = parsed_sheet.resolve_style(black_box(&query_simple));
+            let style = parsed_sheet.resolve_style(
+                black_box(&query_simple),
+                black_box(&InheritedStyle::default()),
+            );
             black_box(style);
         });
     });
 
     group.bench_function("resolve_style_pseudo_class_match", |b| {
         b.iter(|| {
-            let style = parsed_sheet.resolve_style(black_box(&query_hover));
+            let style = parsed_sheet.resolve_style(
+                black_box(&query_hover),
+                black_box(&InheritedStyle::default()),
+            );
             black_box(style);
         });
     });

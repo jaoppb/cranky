@@ -1,5 +1,4 @@
-use super::super::cascade::Importance;
-use super::super::computed_style::ComputedStyle;
+use super::super::cascade::{DeclaredStyle, Importance};
 use super::super::grid_types::PseudoClass;
 
 /// Relationship between two consecutive steps in a compiled selector.
@@ -21,7 +20,7 @@ pub enum Combinator {
 #[derive(Debug, Clone)]
 pub struct RuleEntry {
     pub selectors: Vec<CompiledSelector>,
-    pub style: ComputedStyle,
+    pub style: DeclaredStyle,
     pub importance: Importance,
 }
 

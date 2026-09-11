@@ -4,7 +4,8 @@ use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{
-    ClassName, ClassNameList, CssLength, ElementQuery, Orientation, ProgressValue, StyleSheetName,
+    ClassName, ClassNameList, CssLength, ElementQuery, InheritedStyle, Orientation, ProgressValue,
+    StyleSheetName,
 };
 use crate::features::styling::ports::CssParserPort;
 use crate::features::vdom::domain::{TextContent, VNode};
@@ -14,12 +15,7 @@ use crate::shared::rendering::ports::canvas::MockCanvas;
 
 struct DummyMeasurer;
 impl TextMeasurer for DummyMeasurer {
-    fn measure(
-        &mut self,
-        text: &str,
-        _f: Option<&FontFamily>,
-        _s: Option<FontSize>,
-    ) -> Size {
+    fn measure(&mut self, text: &str, _f: Option<&FontFamily>, _s: Option<FontSize>) -> Size {
         let text_len = u32::try_from(text.len()).unwrap_or(0);
         Size::new(text_len.saturating_mul(8), 16)
     }
@@ -27,12 +23,7 @@ impl TextMeasurer for DummyMeasurer {
 
 struct FixedDummyMeasurer;
 impl TextMeasurer for FixedDummyMeasurer {
-    fn measure(
-        &mut self,
-        _text: &str,
-        _f: Option<&FontFamily>,
-        _s: Option<FontSize>,
-    ) -> Size {
+    fn measure(&mut self, _text: &str, _f: Option<&FontFamily>, _s: Option<FontSize>) -> Size {
         Size::new(10, 10)
     }
 }
@@ -144,7 +135,7 @@ fn test_advanced_css_properties_parsing_and_layout() {
     let class = ClassName::new("box").unwrap();
     let query = ElementQuery::new("flex", None, std::slice::from_ref(&class), &[], None);
 
-    let style = parsed.resolve_style(&query);
+    let style = parsed.resolve_style(&query, &InheritedStyle::default());
     assert!(style.background().is_some());
     assert!((style.flex_grow().unwrap().value() - 1.0).abs() < f32::EPSILON);
     assert!((style.flex_shrink().unwrap().value() - 0.0).abs() < f32::EPSILON);

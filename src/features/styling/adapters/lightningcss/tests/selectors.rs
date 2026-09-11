@@ -2,7 +2,7 @@ use crate::features::layout_engine::domain::{AlignItems, BoxMargin, Gap, Justify
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{
     ClassName, DisplayMode, ElementQuery, GridAutoFlow, GridLinePlacement, GridPlacement,
-    GridTrack, StyleSheetName,
+    GridTrack, InheritedStyle, StyleSheetName,
 };
 use crate::features::styling::ports::CssParserPort;
 use crate::shared::primitives::color::{Color, DrawingColor};
@@ -41,10 +41,9 @@ fn test_structural_pseudo_classes() {
     let class_active = ClassName::new("active").unwrap();
 
     // 1. First child in a list of 3 (index 0, total 3)
-    let query_first =
-        ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
-            .with_structural_context(0, 3, false);
-    let style_first = parsed.resolve_style(&query_first);
+    let query_first = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
+        .with_structural_context(0, 3, false);
+    let style_first = parsed.resolve_style(&query_first, &InheritedStyle::default());
     assert_eq!(style_first.padding().map(BoxMargin::left), Some(10.0));
     assert_eq!(style_first.padding().map(BoxMargin::right), Some(0.0));
     assert!(style_first.background().is_some());
@@ -57,7 +56,7 @@ fn test_structural_pseudo_classes() {
     let query_second =
         ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
             .with_structural_context(1, 3, false);
-    let style_second = parsed.resolve_style(&query_second);
+    let style_second = parsed.resolve_style(&query_second, &InheritedStyle::default());
     assert!(style_second.padding().is_none());
     // Even: 2nd is 2n -> #222222
     if let Some(DrawingColor::Solid(c)) = style_second.background() {
@@ -65,35 +64,32 @@ fn test_structural_pseudo_classes() {
     }
 
     // 3. Last child (index 2, total 3)
-    let query_last =
-        ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
-            .with_structural_context(2, 3, false);
-    let style_last = parsed.resolve_style(&query_last);
+    let query_last = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
+        .with_structural_context(2, 3, false);
+    let style_last = parsed.resolve_style(&query_last, &InheritedStyle::default());
     assert_eq!(style_last.padding().map(BoxMargin::right), Some(15.0));
 
     // 4. Only child (index 0, total 1)
-    let query_only =
-        ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
-            .with_structural_context(0, 1, false);
-    let style_only = parsed.resolve_style(&query_only);
+    let query_only = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
+        .with_structural_context(0, 1, false);
+    let style_only = parsed.resolve_style(&query_only, &InheritedStyle::default());
     assert_eq!(style_only.border_radius().map(|r| r.value()), Some(8.0));
 
     // 5. Empty
-    let query_empty =
-        ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
-            .with_structural_context(0, 1, true);
-    let style_empty = parsed.resolve_style(&query_empty);
+    let query_empty = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
+        .with_structural_context(0, 1, true);
+    let style_empty = parsed.resolve_style(&query_empty, &InheritedStyle::default());
     assert!((style_empty.opacity().unwrap().value() - 0.5).abs() < f32::EPSILON);
 
     // 6. Not active vs Active
     let query_not_active =
         ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None);
-    let style_not_active = parsed.resolve_style(&query_not_active);
+    let style_not_active = parsed.resolve_style(&query_not_active, &InheritedStyle::default());
     assert!(style_not_active.color().is_some());
 
     let active_classes = [class_item.clone(), class_active];
     let query_active = ElementQuery::new("flex", None, &active_classes, &[], None);
-    let style_active = parsed.resolve_style(&query_active);
+    let style_active = parsed.resolve_style(&query_active, &InheritedStyle::default());
     assert!(style_active.color().is_none());
 }
 
@@ -129,7 +125,7 @@ fn test_grid_properties_parsing() {
         &[],
         None,
     );
-    let style_grid = parsed.resolve_style(&query_grid);
+    let style_grid = parsed.resolve_style(&query_grid, &InheritedStyle::default());
 
     assert_eq!(style_grid.display(), Some(DisplayMode::Grid));
     assert_eq!(
@@ -156,9 +152,8 @@ fn test_grid_properties_parsing() {
     );
 
     let class_item = ClassName::new("item").unwrap();
-    let query_item =
-        ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None);
-    let style_item = parsed.resolve_style(&query_item);
+    let query_item = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None);
+    let style_item = parsed.resolve_style(&query_item, &InheritedStyle::default());
 
     assert_eq!(
         style_item.grid_column(),

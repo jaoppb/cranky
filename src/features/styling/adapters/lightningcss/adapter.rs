@@ -1,10 +1,23 @@
 use super::parsed_stylesheet::LightningParsedStyleSheet;
-use super::properties::parse_property_list;
+use super::properties::{detect_inheritable_keywords, parse_property_list};
 use super::selector::compile_selector;
-use crate::features::styling::domain::{ComputedStyle, Importance, RuleEntry, StyleSheetName, StylingError};
+use crate::features::styling::domain::{
+    ComputedStyle, DeclaredStyle, Importance, InheritableKeywords, RuleEntry, StyleSheetName,
+    StylingError,
+};
 use crate::features::styling::ports::{CssParserPort, ParsedStyleSheetPort};
 use lightningcss::rules::CssRule;
 use lightningcss::stylesheet::{ParserOptions, StyleSheet};
+
+/// True if any of the four inheritable properties carried an explicit
+/// CSS-wide keyword, even when nothing else in the declaration list parsed
+/// to a normal value (e.g. a rule containing only `color: inherit;`).
+const fn has_keyword(keywords: InheritableKeywords) -> bool {
+    keywords.color.is_some()
+        || keywords.accent_color.is_some()
+        || keywords.font_family.is_some()
+        || keywords.font_size.is_some()
+}
 
 pub struct LightningCssAdapter;
 
@@ -46,20 +59,24 @@ impl CssParserPort for LightningCssAdapter {
                 // (importance outranks specificity), so they become distinct
                 // rule entries sharing the same selectors.
                 let normal_style = parse_property_list(&style_rule.declarations.declarations);
+                let normal_keywords =
+                    detect_inheritable_keywords(&style_rule.declarations.declarations);
                 let important_style =
                     parse_property_list(&style_rule.declarations.important_declarations);
+                let important_keywords =
+                    detect_inheritable_keywords(&style_rule.declarations.important_declarations);
 
-                if important_style != ComputedStyle::default() {
+                if important_style != ComputedStyle::default() || has_keyword(important_keywords) {
                     rule_entries.push(RuleEntry {
                         selectors: selectors.clone(),
-                        style: important_style,
+                        style: DeclaredStyle::from_parts(important_style, important_keywords),
                         importance: Importance::Important,
                     });
                 }
-                if normal_style != ComputedStyle::default() {
+                if normal_style != ComputedStyle::default() || has_keyword(normal_keywords) {
                     rule_entries.push(RuleEntry {
                         selectors,
-                        style: normal_style,
+                        style: DeclaredStyle::from_parts(normal_style, normal_keywords),
                         importance: Importance::Normal,
                     });
                 }
@@ -68,9 +85,6 @@ impl CssParserPort for LightningCssAdapter {
 
         tracing::debug!(stylesheet = %name.as_str(), rule_count = rule_entries.len(), "CSS stylesheet parsed successfully");
 
-        Ok(Box::new(LightningParsedStyleSheet::new(
-            name,
-            rule_entries,
-        )))
+        Ok(Box::new(LightningParsedStyleSheet::new(name, rule_entries)))
     }
 }

@@ -1,9 +1,15 @@
+pub mod declared_style;
 pub mod fold;
+pub mod inherited;
 pub mod priority;
 pub mod rule_match;
 pub mod specificity;
+pub mod value;
 
+pub use declared_style::*;
 pub use fold::*;
+pub use inherited::*;
 pub use priority::*;
 pub use rule_match::*;
 pub use specificity::*;
+pub use value::*;

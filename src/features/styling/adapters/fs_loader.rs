@@ -1,5 +1,5 @@
 use crate::features::styling::domain::{
-    fold_matches, ComputedStyle, ElementQuery, Layer, StyleSheetName, StylingError,
+    ComputedStyle, ElementQuery, InheritedStyle, Layer, StyleSheetName, StylingError, fold_matches,
 };
 use crate::features::styling::ports::{
     ParsedStyleSheetPort, StyleLoaderPort, StyleReloadSender, StyleResolverPort,
@@ -21,7 +21,7 @@ impl CompositeStyleResolver {
 }
 
 impl StyleResolverPort for CompositeStyleResolver {
-    fn resolve_style(&self, query: &ElementQuery) -> ComputedStyle {
+    fn resolve_style(&self, query: &ElementQuery, inherited: &InheritedStyle) -> ComputedStyle {
         // "base" is the one shared origin sheet, always loaded first by the
         // registry; every other composed sheet is the module's own. Cascade
         // layer order beats specificity, so base stays overridable by
@@ -43,7 +43,7 @@ impl StyleResolverPort for CompositeStyleResolver {
                     .map(move |m| m.into_matched(layer, sheet_index))
             })
             .collect();
-        fold_matches(matches)
+        fold_matches(matches).collapse(inherited)
     }
 }
 

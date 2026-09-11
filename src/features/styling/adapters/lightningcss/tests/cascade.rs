@@ -1,7 +1,7 @@
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{
-    ClassName, ComputedStyle, ElementId, ElementQuery, PseudoClass, StyleSheetName,
+    ClassName, ComputedStyle, ElementId, ElementQuery, InheritedStyle, PseudoClass, StyleSheetName,
 };
 use crate::features::styling::ports::{CssParserPort, StyleResolverPort};
 use crate::shared::primitives::color::{Color, DrawingColor};
@@ -31,7 +31,7 @@ fn test_id_beats_class_regardless_of_source_order() {
     ];
     let id = ElementId::new("root").unwrap();
     let query = ElementQuery::new("bar", Some(&id), &classes, &[], None);
-    let style = parsed.resolve_style(&query);
+    let style = parsed.resolve_style(&query, &InheritedStyle::default());
 
     assert_eq!(solid(&style), Color::new(255, 255, 255, 255));
 }
@@ -56,7 +56,7 @@ fn test_important_beats_specificity_and_source_order() {
     // alone against a query with no id, to prove importance — not specificity
     // — is what decides here in the id case above; this one is the control.
     let query = ElementQuery::new("bar", None, &classes, &[], None);
-    let style = parsed.resolve_style(&query);
+    let style = parsed.resolve_style(&query, &InheritedStyle::default());
     assert_eq!(solid(&style), Color::new(0, 0, 0, 255));
 }
 
@@ -81,7 +81,7 @@ fn test_module_layer_beats_base_layer_for_normal_declarations() {
     let resolver = CompositeStyleResolver::new(vec![base, module]);
     let id = ElementId::new("root").unwrap();
     let query = ElementQuery::new("bar", Some(&id), &[], &[], None);
-    let style = resolver.resolve_style(&query);
+    let style = resolver.resolve_style(&query, &InheritedStyle::default());
 
     assert_eq!(solid(&style), Color::new(0, 0, 0, 255));
 }
@@ -105,7 +105,7 @@ fn test_base_layer_wins_when_important() {
     let resolver = CompositeStyleResolver::new(vec![base, module]);
     let id = ElementId::new("root").unwrap();
     let query = ElementQuery::new("bar", Some(&id), &[], &[], None);
-    let style = resolver.resolve_style(&query);
+    let style = resolver.resolve_style(&query, &InheritedStyle::default());
 
     // Important flips layer order: base's !important beats module's normal
     // declaration even though the module selector is more specific.
@@ -126,7 +126,7 @@ fn test_workspace_hover_wins_over_active_focused() {
         ClassName::new("focused").unwrap(),
     ];
     let query = ElementQuery::new("flex", None, &classes, &[PseudoClass::Hover], None);
-    let style = parsed.resolve_style(&query);
+    let style = parsed.resolve_style(&query, &InheritedStyle::default());
 
     // #414868 (the hover color), not #565f89 (active+focused) — hovering an
     // active, focused workspace item must still show the hover highlight.

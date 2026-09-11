@@ -1,6 +1,6 @@
 use crate::features::styling::domain::{
-    fold_matches, matches_selector, selector_specificity, ComputedStyle, ElementQuery, Layer,
-    RuleEntry, RuleMatch, StyleSheetName,
+    ComputedStyle, ElementQuery, InheritedStyle, Layer, RuleEntry, RuleMatch, StyleSheetName,
+    fold_matches, matches_selector, selector_specificity,
 };
 use crate::features::styling::ports::ParsedStyleSheetPort;
 
@@ -21,7 +21,7 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
         &self.name
     }
 
-    fn resolve_style(&self, query: &ElementQuery) -> ComputedStyle {
+    fn resolve_style(&self, query: &ElementQuery, inherited: &InheritedStyle) -> ComputedStyle {
         // Single sheet: layer and sheet index are irrelevant since every
         // match shares them, so importance/specificity/source-order alone
         // decide the outcome.
@@ -30,7 +30,7 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
             .into_iter()
             .map(|m| m.into_matched(Layer::BASE, 0))
             .collect();
-        let result = fold_matches(matched);
+        let result = fold_matches(matched).collapse(inherited);
 
         tracing::trace!(
             stylesheet = %self.name.as_str(),

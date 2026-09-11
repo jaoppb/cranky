@@ -8,10 +8,10 @@ use box_model::{
     apply_sizing_properties,
 };
 use color_font::apply_color_and_font;
+pub use color_font::detect_inheritable_keywords;
 use flex::{apply_flex_container_properties, apply_flex_item_properties};
 use grid::{
-    apply_display_and_gap_properties, apply_grid_container_properties,
-    apply_grid_item_properties,
+    apply_display_and_gap_properties, apply_grid_container_properties, apply_grid_item_properties,
 };
 
 use crate::features::styling::domain::ComputedStyle;
