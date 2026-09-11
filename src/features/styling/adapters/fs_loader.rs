@@ -1,4 +1,6 @@
-use crate::features::styling::domain::{ComputedStyle, ElementQuery, StyleSheetName, StylingError};
+use crate::features::styling::domain::{
+    fold_matches, ComputedStyle, ElementQuery, Layer, StyleSheetName, StylingError,
+};
 use crate::features::styling::ports::{
     ParsedStyleSheetPort, StyleLoaderPort, StyleReloadSender, StyleResolverPort,
 };
@@ -20,12 +22,28 @@ impl CompositeStyleResolver {
 
 impl StyleResolverPort for CompositeStyleResolver {
     fn resolve_style(&self, query: &ElementQuery) -> ComputedStyle {
-        let mut computed = ComputedStyle::default();
-        for sheet in &self.stylesheets {
-            let s = sheet.resolve_style(query);
-            computed.merge_with(&s);
-        }
-        computed
+        // "base" is the one shared origin sheet, always loaded first by the
+        // registry; every other composed sheet is the module's own. Cascade
+        // layer order beats specificity, so base stays overridable by
+        // construction rather than by (previously accidental) load order.
+        let matches = self
+            .stylesheets
+            .iter()
+            .enumerate()
+            .flat_map(|(sheet_index, sheet)| {
+                let layer = if sheet.name().as_str() == "base" {
+                    Layer::BASE
+                } else {
+                    Layer::MODULE
+                };
+                let sheet_index = u32::try_from(sheet_index).unwrap_or(u32::MAX);
+                sheet
+                    .matching_rules(query)
+                    .into_iter()
+                    .map(move |m| m.into_matched(layer, sheet_index))
+            })
+            .collect();
+        fold_matches(matches)
     }
 }
 

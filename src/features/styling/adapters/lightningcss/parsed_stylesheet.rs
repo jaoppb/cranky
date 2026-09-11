@@ -1,5 +1,6 @@
 use crate::features::styling::domain::{
-    ComputedStyle, ElementQuery, RuleEntry, StyleSheetName, matches_selector,
+    fold_matches, matches_selector, selector_specificity, ComputedStyle, ElementQuery, Layer,
+    RuleEntry, RuleMatch, StyleSheetName,
 };
 use crate::features::styling::ports::ParsedStyleSheetPort;
 
@@ -21,17 +22,15 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
     }
 
     fn resolve_style(&self, query: &ElementQuery) -> ComputedStyle {
-        let mut result = ComputedStyle::default();
-
-        for rule in &self.rules {
-            let matches = rule
-                .selectors
-                .iter()
-                .any(|sel| matches_selector(sel, query));
-            if matches {
-                result.merge_with(&rule.style);
-            }
-        }
+        // Single sheet: layer and sheet index are irrelevant since every
+        // match shares them, so importance/specificity/source-order alone
+        // decide the outcome.
+        let matched = self
+            .matching_rules(query)
+            .into_iter()
+            .map(|m| m.into_matched(Layer::BASE, 0))
+            .collect();
+        let result = fold_matches(matched);
 
         tracing::trace!(
             stylesheet = %self.name.as_str(),
@@ -44,5 +43,31 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
         );
 
         result
+    }
+
+    fn matching_rules(&self, query: &ElementQuery) -> Vec<RuleMatch> {
+        self.rules
+            .iter()
+            .enumerate()
+            .filter_map(|(index, rule)| {
+                // A rule can list several comma-separated selectors sharing
+                // one declaration block; only matching ones count, and among
+                // those the most specific governs (per-selector specificity,
+                // same declarations either way).
+                let specificity = rule
+                    .selectors
+                    .iter()
+                    .filter(|sel| matches_selector(sel, query))
+                    .map(selector_specificity)
+                    .max()?;
+                let source_order = u32::try_from(index).unwrap_or(u32::MAX);
+                Some(RuleMatch::new(
+                    rule.importance,
+                    specificity,
+                    source_order,
+                    rule.style.clone(),
+                ))
+            })
+            .collect()
     }
 }

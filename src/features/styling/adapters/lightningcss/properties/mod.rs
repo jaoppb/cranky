@@ -15,17 +15,16 @@ use grid::{
 };
 
 use crate::features::styling::domain::ComputedStyle;
-use lightningcss::declaration::DeclarationBlock;
+use lightningcss::properties::Property;
 
+/// Applies one list of declarations (either a rule's normal declarations or
+/// its `!important` ones — callers keep the two separate so importance can
+/// be tracked per matched rule in the cascade).
 #[must_use]
-pub fn parse_declarations(declarations: &DeclarationBlock) -> ComputedStyle {
+pub fn parse_property_list(props: &[Property]) -> ComputedStyle {
     let mut style = ComputedStyle::default();
 
-    for prop in declarations
-        .declarations
-        .iter()
-        .chain(declarations.important_declarations.iter())
-    {
+    for prop in props {
         let _ = apply_color_and_font(&mut style, prop)
             || apply_border_properties(&mut style, prop)
             || apply_padding_properties(&mut style, prop)

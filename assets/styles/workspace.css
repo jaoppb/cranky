@@ -25,3 +25,11 @@
 .item:hover {
     background-color: #414868;
 }
+
+.item.active:hover {
+    background-color: #414868;
+}
+
+.item.active.focused:hover {
+    background-color: #414868;
+}

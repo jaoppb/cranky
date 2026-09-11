@@ -1,4 +1,6 @@
-use crate::features::styling::domain::{ComputedStyle, ElementQuery, StyleSheetName, StylingError};
+use crate::features::styling::domain::{
+    ComputedStyle, ElementQuery, RuleMatch, StyleSheetName, StylingError,
+};
 use std::sync::Arc;
 
 pub trait StyleReloadSender: Send + Sync {
@@ -17,6 +19,11 @@ where
 pub trait ParsedStyleSheetPort: Send + Sync {
     fn name(&self) -> &StyleSheetName;
     fn resolve_style(&self, query: &ElementQuery) -> ComputedStyle;
+    /// Every rule in this sheet that matches `query`, each tagged with its
+    /// importance, specificity, and position in this sheet's source order.
+    /// Layer and cross-sheet ordering are the composite resolver's job —
+    /// this sheet doesn't know about any other.
+    fn matching_rules(&self, query: &ElementQuery) -> Vec<RuleMatch>;
 }
 
 pub trait CssParserPort: Send + Sync {

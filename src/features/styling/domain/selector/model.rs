@@ -1,3 +1,4 @@
+use super::super::cascade::Importance;
 use super::super::computed_style::ComputedStyle;
 use super::super::grid_types::PseudoClass;
 
@@ -21,6 +22,7 @@ pub enum Combinator {
 pub struct RuleEntry {
     pub selectors: Vec<CompiledSelector>,
     pub style: ComputedStyle,
+    pub importance: Importance,
 }
 
 #[derive(Debug, Clone)]
