@@ -1,5 +1,8 @@
 use super::parsed_stylesheet::LightningParsedStyleSheet;
-use super::properties::{detect_inheritable_keywords, parse_property_list};
+use super::properties::{
+    detect_inheritable_keywords, detect_relative_font_size, detect_relative_lengths,
+    parse_property_list,
+};
 use super::selector::compile_selector;
 use crate::features::styling::domain::{
     ComputedStyle, DeclaredStyle, Importance, InheritableKeywords, RuleEntry, StyleSheetName,
@@ -61,22 +64,40 @@ impl CssParserPort for LightningCssAdapter {
                 let normal_style = parse_property_list(&style_rule.declarations.declarations);
                 let normal_keywords =
                     detect_inheritable_keywords(&style_rule.declarations.declarations);
+                let normal_font_size =
+                    detect_relative_font_size(&style_rule.declarations.declarations);
+                let normal_lengths = detect_relative_lengths(&style_rule.declarations.declarations);
+
                 let important_style =
                     parse_property_list(&style_rule.declarations.important_declarations);
                 let important_keywords =
                     detect_inheritable_keywords(&style_rule.declarations.important_declarations);
+                let important_font_size =
+                    detect_relative_font_size(&style_rule.declarations.important_declarations);
+                let important_lengths =
+                    detect_relative_lengths(&style_rule.declarations.important_declarations);
 
                 if important_style != ComputedStyle::default() || has_keyword(important_keywords) {
                     rule_entries.push(RuleEntry {
                         selectors: selectors.clone(),
-                        style: DeclaredStyle::from_parts(important_style, important_keywords),
+                        style: DeclaredStyle::from_parts(
+                            important_style,
+                            important_keywords,
+                            important_font_size,
+                            important_lengths,
+                        ),
                         importance: Importance::Important,
                     });
                 }
                 if normal_style != ComputedStyle::default() || has_keyword(normal_keywords) {
                     rule_entries.push(RuleEntry {
                         selectors,
-                        style: DeclaredStyle::from_parts(normal_style, normal_keywords),
+                        style: DeclaredStyle::from_parts(
+                            normal_style,
+                            normal_keywords,
+                            normal_font_size,
+                            normal_lengths,
+                        ),
                         importance: Importance::Normal,
                     });
                 }

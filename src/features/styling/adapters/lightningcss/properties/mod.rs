@@ -2,6 +2,7 @@ pub mod box_model;
 pub mod color_font;
 pub mod flex;
 pub mod grid;
+pub mod relative_lengths;
 
 use box_model::{
     apply_border_properties, apply_margin_properties, apply_padding_properties,
@@ -13,6 +14,7 @@ use flex::{apply_flex_container_properties, apply_flex_item_properties};
 use grid::{
     apply_display_and_gap_properties, apply_grid_container_properties, apply_grid_item_properties,
 };
+pub use relative_lengths::{detect_relative_font_size, detect_relative_lengths};
 
 use crate::features::styling::domain::ComputedStyle;
 use lightningcss::properties::Property;

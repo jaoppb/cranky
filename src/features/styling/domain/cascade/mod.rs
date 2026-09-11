@@ -1,3 +1,6 @@
+pub mod declared_length;
+pub mod declared_lengths;
+pub mod declared_lengths_apply;
 pub mod declared_style;
 pub mod fold;
 pub mod inherited;
@@ -6,6 +9,8 @@ pub mod rule_match;
 pub mod specificity;
 pub mod value;
 
+pub use declared_length::*;
+pub use declared_lengths::*;
 pub use declared_style::*;
 pub use fold::*;
 pub use inherited::*;

@@ -82,7 +82,7 @@ impl VNode {
         // style, after its own cascade (including inheritance from further
         // up) was applied. Cheap: color/font-size are small and font-family
         // is reference-counted, so this never deep-clones `style` itself.
-        let child_inherited = InheritedStyle::from_computed(&style);
+        let child_inherited = inherited.descend(&style);
         // A tooltip/popup/panel's content is its own root for selector
         // matching (`parent: None`, below) — it inherits fresh for the same
         // reason, rather than picking up the owning element's color/font.

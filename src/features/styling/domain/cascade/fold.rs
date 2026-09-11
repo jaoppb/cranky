@@ -36,6 +36,7 @@ pub fn fold_matches(mut matches: Vec<MatchedRule>) -> DeclaredStyle {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::styling::domain::cascade::declared_lengths::DeclaredLengths;
     use crate::features::styling::domain::cascade::declared_style::InheritableKeywords;
     use crate::features::styling::domain::cascade::inherited::InheritedStyle;
     use crate::features::styling::domain::cascade::priority::{Importance, Layer};
@@ -46,7 +47,12 @@ mod tests {
     fn style_with_color(hex: &str) -> DeclaredStyle {
         let mut style = ComputedStyle::default();
         style.set_color(DrawingColor::parse(hex).unwrap());
-        DeclaredStyle::from_parts(style, InheritableKeywords::default())
+        DeclaredStyle::from_parts(
+            style,
+            InheritableKeywords::default(),
+            None,
+            DeclaredLengths::default(),
+        )
     }
 
     #[test]

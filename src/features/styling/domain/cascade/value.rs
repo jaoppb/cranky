@@ -1,7 +1,7 @@
 /// The four ways a cascaded value can resolve, per the CSS cascade's
 /// defaulting rules: declared to a real value, explicitly reset via a
 /// CSS-wide keyword, or simply not mentioned by any matching rule.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Cascade<T> {
     #[default]
     NotDeclared,

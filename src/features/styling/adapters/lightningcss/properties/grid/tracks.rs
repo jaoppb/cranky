@@ -40,6 +40,19 @@ pub fn parse_single_track(s: &str) -> Option<GridTrack> {
         let max_t = parse_single_track(max_str.trim())?;
         return Some(GridTrack::MinMax(Box::new(min_t), Box::new(max_t)));
     }
+    // `em`/`rem` grid tracks aren't resolved — that needs a per-element
+    // font-size, but grid tracks are parsed into a plain Vec<GridTrack> with
+    // no cascade-time resolution pass, unlike every other length-bearing
+    // property in this renderer. Warn instead of silently dropping the
+    // track, so the gap is visible rather than a track that just vanishes.
+    if let Some(rest) = s.strip_suffix("rem").or_else(|| s.strip_suffix("em"))
+        && rest.trim().parse::<f32>().is_ok()
+    {
+        tracing::warn!(
+            value = %s,
+            "em/rem is not supported in grid track sizes; ignoring this track"
+        );
+    }
     None
 }
 
