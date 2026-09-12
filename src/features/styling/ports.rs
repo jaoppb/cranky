@@ -16,12 +16,31 @@ where
     }
 }
 
+/// Re-parses one CSS declaration after `var()` substitution has replaced
+/// any custom-property references with concrete text.
+///
+/// A declaration containing `var(...)` can't be parsed into a typed value
+/// at rule-parse time — the substitution depends on the element's resolved
+/// custom properties, which only exist once inheritance has been applied
+/// for that specific element. Implemented by whichever adapter owns actual
+/// CSS parsing, so the domain cascade can ask for a re-parse without
+/// depending on it directly.
+pub trait PropertyReparser: Send + Sync {
+    fn reparse(&self, name: &str, value: &str) -> ComputedStyle;
+}
+
 pub trait ParsedStyleSheetPort: Send + Sync {
     fn name(&self) -> &StyleSheetName;
-    /// Resolves this sheet's rules for `query` and applies inheritance from
-    /// `inherited` — the parent element's own resolved style — to any of the
-    /// four naturally-inherited properties this element didn't declare.
-    fn resolve_style(&self, query: &ElementQuery, inherited: &InheritedStyle) -> ComputedStyle;
+    /// Resolves this sheet's rules for `query`, applying inheritance from
+    /// `inherited` and substituting any `var()` references via `reparser`.
+    /// Returns the resolved style alongside the context `query`'s children
+    /// should inherit from.
+    fn resolve_style(
+        &self,
+        query: &ElementQuery,
+        inherited: &InheritedStyle,
+        reparser: &dyn PropertyReparser,
+    ) -> (ComputedStyle, InheritedStyle);
     /// Every rule in this sheet that matches `query`, each tagged with its
     /// importance, specificity, and position in this sheet's source order.
     /// Layer and cross-sheet ordering are the composite resolver's job —
@@ -70,6 +89,11 @@ pub trait StyleLoaderPort: Send + Sync {
 
 pub trait StyleResolverPort: Send + Sync {
     /// Resolves the final style for `query`, applying inheritance from
-    /// `inherited` — the parent element's own resolved style.
-    fn resolve_style(&self, query: &ElementQuery, inherited: &InheritedStyle) -> ComputedStyle;
+    /// `inherited`. Returns the resolved style alongside the context
+    /// `query`'s children should inherit from.
+    fn resolve_style(
+        &self,
+        query: &ElementQuery,
+        inherited: &InheritedStyle,
+    ) -> (ComputedStyle, InheritedStyle);
 }

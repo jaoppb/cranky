@@ -9,8 +9,14 @@ impl StyleResolverPort for MockResolver {
         &self,
         _query: &ElementQuery,
         _inherited: &InheritedStyle,
-    ) -> crate::features::styling::domain::ComputedStyle {
-        crate::features::styling::domain::ComputedStyle::default()
+    ) -> (
+        crate::features::styling::domain::ComputedStyle,
+        InheritedStyle,
+    ) {
+        (
+            crate::features::styling::domain::ComputedStyle::default(),
+            InheritedStyle::default(),
+        )
     }
 }
 

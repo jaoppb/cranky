@@ -1,6 +1,7 @@
 use super::parsed_stylesheet::LightningParsedStyleSheet;
 use super::properties::{
-    detect_inheritable_keywords, detect_relative_font_size, detect_relative_lengths,
+    detect_custom_property_declarations, detect_inheritable_keywords,
+    detect_pending_var_properties, detect_relative_font_size, detect_relative_lengths,
     parse_property_list,
 };
 use super::selector::compile_selector;
@@ -11,6 +12,7 @@ use crate::features::styling::domain::{
 use crate::features::styling::ports::{CssParserPort, ParsedStyleSheetPort};
 use lightningcss::rules::CssRule;
 use lightningcss::stylesheet::{ParserOptions, StyleSheet};
+use std::collections::HashMap;
 
 /// True if any of the four inheritable properties carried an explicit
 /// CSS-wide keyword, even when nothing else in the declaration list parsed
@@ -20,6 +22,17 @@ const fn has_keyword(keywords: InheritableKeywords) -> bool {
         || keywords.accent_color.is_some()
         || keywords.font_family.is_some()
         || keywords.font_size.is_some()
+}
+
+/// True if a rule's declarations were entirely `--name: ...`/`var(...)`
+/// properties — those produce nothing in the ordinary `ComputedStyle` and
+/// carry no CSS-wide keyword, so without this check they'd look empty and
+/// get silently dropped.
+fn has_custom_or_pending(
+    custom: &HashMap<String, String>,
+    pending: &HashMap<String, String>,
+) -> bool {
+    !custom.is_empty() || !pending.is_empty()
 }
 
 pub struct LightningCssAdapter;
@@ -67,6 +80,10 @@ impl CssParserPort for LightningCssAdapter {
                 let normal_font_size =
                     detect_relative_font_size(&style_rule.declarations.declarations);
                 let normal_lengths = detect_relative_lengths(&style_rule.declarations.declarations);
+                let normal_custom =
+                    detect_custom_property_declarations(&style_rule.declarations.declarations);
+                let normal_pending_vars =
+                    detect_pending_var_properties(&style_rule.declarations.declarations);
 
                 let important_style =
                     parse_property_list(&style_rule.declarations.important_declarations);
@@ -76,8 +93,16 @@ impl CssParserPort for LightningCssAdapter {
                     detect_relative_font_size(&style_rule.declarations.important_declarations);
                 let important_lengths =
                     detect_relative_lengths(&style_rule.declarations.important_declarations);
+                let important_custom = detect_custom_property_declarations(
+                    &style_rule.declarations.important_declarations,
+                );
+                let important_pending_vars =
+                    detect_pending_var_properties(&style_rule.declarations.important_declarations);
 
-                if important_style != ComputedStyle::default() || has_keyword(important_keywords) {
+                if important_style != ComputedStyle::default()
+                    || has_keyword(important_keywords)
+                    || has_custom_or_pending(&important_custom, &important_pending_vars)
+                {
                     rule_entries.push(RuleEntry {
                         selectors: selectors.clone(),
                         style: DeclaredStyle::from_parts(
@@ -85,11 +110,16 @@ impl CssParserPort for LightningCssAdapter {
                             important_keywords,
                             important_font_size,
                             important_lengths,
+                            important_custom,
+                            important_pending_vars,
                         ),
                         importance: Importance::Important,
                     });
                 }
-                if normal_style != ComputedStyle::default() || has_keyword(normal_keywords) {
+                if normal_style != ComputedStyle::default()
+                    || has_keyword(normal_keywords)
+                    || has_custom_or_pending(&normal_custom, &normal_pending_vars)
+                {
                     rule_entries.push(RuleEntry {
                         selectors,
                         style: DeclaredStyle::from_parts(
@@ -97,6 +127,8 @@ impl CssParserPort for LightningCssAdapter {
                             normal_keywords,
                             normal_font_size,
                             normal_lengths,
+                            normal_custom,
+                            normal_pending_vars,
                         ),
                         importance: Importance::Normal,
                     });

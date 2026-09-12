@@ -2,7 +2,7 @@ use crate::features::styling::domain::{
     ComputedStyle, ElementQuery, InheritedStyle, Layer, RuleEntry, RuleMatch, StyleSheetName,
     fold_matches, matches_selector, selector_specificity,
 };
-use crate::features::styling::ports::ParsedStyleSheetPort;
+use crate::features::styling::ports::{ParsedStyleSheetPort, PropertyReparser};
 
 pub struct LightningParsedStyleSheet {
     name: StyleSheetName,
@@ -21,7 +21,12 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
         &self.name
     }
 
-    fn resolve_style(&self, query: &ElementQuery, inherited: &InheritedStyle) -> ComputedStyle {
+    fn resolve_style(
+        &self,
+        query: &ElementQuery,
+        inherited: &InheritedStyle,
+        reparser: &dyn PropertyReparser,
+    ) -> (ComputedStyle, InheritedStyle) {
         // Single sheet: layer and sheet index are irrelevant since every
         // match shares them, so importance/specificity/source-order alone
         // decide the outcome.
@@ -30,7 +35,7 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
             .into_iter()
             .map(|m| m.into_matched(Layer::BASE, 0))
             .collect();
-        let result = fold_matches(matched).collapse(inherited);
+        let (result, next_inherited) = fold_matches(matched).collapse(inherited, reparser);
 
         tracing::trace!(
             stylesheet = %self.name.as_str(),
@@ -42,7 +47,7 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
             "Resolved style for query"
         );
 
-        result
+        (result, next_inherited)
     }
 
     fn matching_rules(&self, query: &ElementQuery) -> Vec<RuleMatch> {

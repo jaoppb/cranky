@@ -42,7 +42,16 @@ mod tests {
     use crate::features::styling::domain::cascade::priority::{Importance, Layer};
     use crate::features::styling::domain::cascade::specificity::Specificity;
     use crate::features::styling::domain::computed_style::ComputedStyle;
+    use crate::features::styling::ports::PropertyReparser;
     use crate::shared::primitives::color::DrawingColor;
+    use std::collections::HashMap;
+
+    struct NoopReparser;
+    impl PropertyReparser for NoopReparser {
+        fn reparse(&self, _name: &str, _value: &str) -> ComputedStyle {
+            ComputedStyle::default()
+        }
+    }
 
     fn style_with_color(hex: &str) -> DeclaredStyle {
         let mut style = ComputedStyle::default();
@@ -52,6 +61,8 @@ mod tests {
             InheritableKeywords::default(),
             None,
             DeclaredLengths::default(),
+            HashMap::new(),
+            HashMap::new(),
         )
     }
 
@@ -78,9 +89,10 @@ mod tests {
             style_with_color("#eeeeee"),
         );
         // low pushed after high: fold must still resolve by priority, not vec order.
-        let result =
-            fold_matches(vec![high.clone(), low.clone()]).collapse(&InheritedStyle::default());
-        let expected = fold_matches(vec![low, high]).collapse(&InheritedStyle::default());
+        let (result, _) = fold_matches(vec![high.clone(), low.clone()])
+            .collapse(&InheritedStyle::default(), &NoopReparser);
+        let (expected, _) =
+            fold_matches(vec![low, high]).collapse(&InheritedStyle::default(), &NoopReparser);
         assert_eq!(result, expected);
         assert_eq!(
             result.color(),

@@ -1,5 +1,6 @@
 pub mod box_model;
 pub mod color_font;
+pub mod custom_properties;
 pub mod flex;
 pub mod grid;
 pub mod relative_lengths;
@@ -10,6 +11,7 @@ use box_model::{
 };
 use color_font::apply_color_and_font;
 pub use color_font::detect_inheritable_keywords;
+pub use custom_properties::{detect_custom_property_declarations, detect_pending_var_properties};
 use flex::{apply_flex_container_properties, apply_flex_item_properties};
 use grid::{
     apply_display_and_gap_properties, apply_grid_container_properties, apply_grid_item_properties,

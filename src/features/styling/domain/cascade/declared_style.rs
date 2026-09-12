@@ -1,10 +1,14 @@
 use super::super::computed_style::ComputedStyle;
 use super::declared_length::DeclaredLength;
 use super::declared_lengths::DeclaredLengths;
+use super::declared_style_resolve::{cascade_from, resolve, resolve_font_size};
 use super::inherited::{DEFAULT_FONT_SIZE, InheritedStyle};
 use super::value::{Cascade, CssWideKeyword};
+use super::var_substitution::substitute_vars;
+use crate::features::styling::ports::PropertyReparser;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// The four properties this renderer treats as naturally inherited, each
@@ -22,13 +26,18 @@ pub struct InheritableKeywords {
     pub font_size: Option<CssWideKeyword>,
 }
 
-/// One rule's declarations before inheritance and `em`/`rem` are resolved.
+/// One rule's declarations before inheritance, `em`/`rem`, and `var()` are
+/// resolved.
 ///
 /// Every property except the four inheritable ones and the twenty
 /// length-bearing ones (see `DeclaredLengths`) collapses straight to
 /// `ComputedStyle`'s `Option<T>` shape exactly as before (`rest`) — nothing
 /// else in this codebase's grammar ever inherits, gets explicitly reset, or
-/// carries a font-relative unit.
+/// carries a font-relative unit. `custom_properties`/`pending_vars` are
+/// this rule's `--name: ...` declarations and its uses of `var(...)`,
+/// respectively — both need the element's resolved inheritance chain
+/// before they mean anything, so neither can collapse into `rest` at parse
+/// time either.
 #[derive(Debug, Clone, Default)]
 pub struct DeclaredStyle {
     rest: ComputedStyle,
@@ -37,20 +46,25 @@ pub struct DeclaredStyle {
     font_family: Cascade<Arc<str>>,
     font_size: Cascade<DeclaredLength>,
     lengths: DeclaredLengths,
+    custom_properties: HashMap<String, String>,
+    pending_vars: HashMap<String, String>,
 }
 
 impl DeclaredStyle {
     /// Builds a `DeclaredStyle` from one rule's already-parsed
     /// `ComputedStyle`, any CSS-wide keywords the adapter found on the four
     /// inheritable properties, `font-size`'s own declaration if it used a
-    /// font-relative unit, and every other length property's declaration
-    /// that did.
+    /// font-relative unit, every other length property's declaration that
+    /// did, this rule's own `--name` declarations, and any of its
+    /// properties whose value referenced `var(...)`.
     #[must_use]
     pub fn from_parts(
         computed: ComputedStyle,
         keywords: InheritableKeywords,
         font_size_declared: Option<DeclaredLength>,
         lengths: DeclaredLengths,
+        custom_properties: HashMap<String, String>,
+        pending_vars: HashMap<String, String>,
     ) -> Self {
         let color = cascade_from(keywords.color, computed.color().cloned());
         let accent_color = cascade_from(keywords.accent_color, computed.accent_color().cloned());
@@ -75,6 +89,8 @@ impl DeclaredStyle {
             font_family,
             font_size,
             lengths,
+            custom_properties,
+            pending_vars,
         }
     }
 
@@ -93,15 +109,27 @@ impl DeclaredStyle {
             self.font_size = other.font_size;
         }
         self.lengths.merge_with(&other.lengths);
+        self.custom_properties
+            .extend(other.custom_properties.clone());
+        self.pending_vars.extend(other.pending_vars.clone());
     }
 
-    /// Resolves inheritance and `em`/`rem`: a property left `NotDeclared`
-    /// (or explicitly `inherit`) takes the parent's value; `initial` resets
-    /// it regardless of what the parent had; a declared `Value` always
-    /// wins. Font-size resolves first, since every other length's `em` is
-    /// relative to *this* element's own font-size, not its parent's.
+    /// Resolves inheritance, `em`/`rem`, and `var()`: a property left
+    /// `NotDeclared` (or explicitly `inherit`) takes the parent's value;
+    /// `initial` resets it regardless of what the parent had; a declared
+    /// `Value` always wins. Font-size resolves first, since every other
+    /// length's `em` is relative to *this* element's own font-size, not
+    /// its parent's. `var()` substitution — needing this element's fully
+    /// resolved custom properties — resolves last, via `reparser` (a
+    /// `var()`-resolved length still assumes a fixed font-size base, since
+    /// re-running `DeclaredLengths` resolution against a second, later
+    /// value is out of scope here).
     #[must_use]
-    pub fn collapse(self, inherited: &InheritedStyle) -> ComputedStyle {
+    pub fn collapse(
+        self,
+        inherited: &InheritedStyle,
+        reparser: &dyn PropertyReparser,
+    ) -> (ComputedStyle, InheritedStyle) {
         let mut computed = self.rest;
         if let Some(color) = resolve(self.color, inherited.color()) {
             computed.set_color(color);
@@ -124,55 +152,25 @@ impl DeclaredStyle {
         self.lengths
             .apply(&mut computed, em_base, inherited.root_font_size());
 
-        computed
-    }
-}
+        // What this element's own children resolve var() against: the
+        // parent's custom properties, overridden by whatever this element
+        // declared — cheap when it declared none (an Arc clone, no copy).
+        let own_custom = if self.custom_properties.is_empty() {
+            Arc::clone(inherited.custom_properties())
+        } else {
+            let mut merged = (**inherited.custom_properties()).clone();
+            merged.extend(self.custom_properties);
+            Arc::new(merged)
+        };
 
-fn cascade_from<T>(keyword: Option<CssWideKeyword>, value: Option<T>) -> Cascade<T> {
-    match keyword {
-        Some(CssWideKeyword::Inherit) => Cascade::Inherit,
-        Some(CssWideKeyword::Initial) => Cascade::Initial,
-        None => value.map_or(Cascade::NotDeclared, Cascade::Value),
-    }
-}
+        for (name, raw_value) in &self.pending_vars {
+            let substituted = substitute_vars(raw_value, &own_custom);
+            let reparsed = reparser.reparse(name, &substituted);
+            computed.merge_with(&reparsed);
+        }
 
-fn resolve<T: Clone>(cascade: Cascade<T>, inherited: Option<&T>) -> Option<T> {
-    match cascade {
-        Cascade::Value(v) => Some(v),
-        Cascade::NotDeclared | Cascade::Inherit => inherited.cloned(),
-        Cascade::Initial => None,
-    }
-}
-
-/// `font-size` gets its own resolution instead of the generic `resolve`
-/// above: even a *declared* `em`/`rem` value still needs arithmetic against
-/// the parent's font-size and the root base, which `resolve`'s plain
-/// pass-through doesn't do.
-fn resolve_font_size(
-    cascade: Cascade<DeclaredLength>,
-    inherited: &InheritedStyle,
-) -> Option<FontSize> {
-    let parent_or_default = || {
-        inherited
-            .font_size()
-            .copied()
-            .unwrap_or(FontSize::new(DEFAULT_FONT_SIZE))
-    };
-    match cascade {
-        Cascade::Value(DeclaredLength::Px(v)) => Some(FontSize::new(v)),
-        Cascade::Value(DeclaredLength::Percent(v)) => {
-            Some(FontSize::new(v / 100.0 * parent_or_default().value()))
-        }
-        Cascade::Value(DeclaredLength::Em(v)) => {
-            Some(FontSize::new(v * parent_or_default().value()))
-        }
-        Cascade::Value(DeclaredLength::Rem(v)) => {
-            Some(FontSize::new(v * inherited.root_font_size().value()))
-        }
-        Cascade::Value(DeclaredLength::Auto) | Cascade::NotDeclared | Cascade::Inherit => {
-            inherited.font_size().copied()
-        }
-        Cascade::Initial => Some(FontSize::new(DEFAULT_FONT_SIZE)),
+        let next_inherited = inherited.descend(&computed, own_custom);
+        (computed, next_inherited)
     }
 }
 
@@ -180,12 +178,30 @@ fn resolve_font_size(
 mod tests {
     use super::*;
 
+    struct NoopReparser;
+    impl PropertyReparser for NoopReparser {
+        fn reparse(&self, _name: &str, _value: &str) -> ComputedStyle {
+            ComputedStyle::default()
+        }
+    }
+
     fn color(hex: &str) -> DrawingColor {
         DrawingColor::parse(hex).unwrap()
     }
 
     fn declared(computed: ComputedStyle, keywords: InheritableKeywords) -> DeclaredStyle {
-        DeclaredStyle::from_parts(computed, keywords, None, DeclaredLengths::default())
+        DeclaredStyle::from_parts(
+            computed,
+            keywords,
+            None,
+            DeclaredLengths::default(),
+            HashMap::new(),
+            HashMap::new(),
+        )
+    }
+
+    fn collapse(style: DeclaredStyle, inherited: &InheritedStyle) -> ComputedStyle {
+        style.collapse(inherited, &NoopReparser).0
     }
 
     #[test]
@@ -193,9 +209,9 @@ mod tests {
         let style = declared(ComputedStyle::default(), InheritableKeywords::default());
         let mut parent = ComputedStyle::default();
         parent.set_color(color("#ffffff"));
-        let inherited = InheritedStyle::default().descend(&parent);
+        let inherited = InheritedStyle::default().descend(&parent, Arc::new(HashMap::new()));
 
-        let computed = style.collapse(&inherited);
+        let computed = collapse(style, &inherited);
         assert_eq!(computed.color(), Some(&color("#ffffff")));
     }
 
@@ -207,9 +223,9 @@ mod tests {
 
         let mut parent = ComputedStyle::default();
         parent.set_color(color("#ffffff"));
-        let inherited = InheritedStyle::default().descend(&parent);
+        let inherited = InheritedStyle::default().descend(&parent, Arc::new(HashMap::new()));
 
-        let computed = style.collapse(&inherited);
+        let computed = collapse(style, &inherited);
         assert_eq!(computed.color(), Some(&color("#000000")));
     }
 
@@ -224,9 +240,9 @@ mod tests {
         );
         let mut parent = ComputedStyle::default();
         parent.set_color(color("#ffffff"));
-        let inherited = InheritedStyle::default().descend(&parent);
+        let inherited = InheritedStyle::default().descend(&parent, Arc::new(HashMap::new()));
 
-        let computed = style.collapse(&inherited);
+        let computed = collapse(style, &inherited);
         assert_eq!(computed.color(), None);
     }
 
@@ -241,9 +257,9 @@ mod tests {
         );
         let mut parent = ComputedStyle::default();
         parent.set_color(color("#123456"));
-        let inherited = InheritedStyle::default().descend(&parent);
+        let inherited = InheritedStyle::default().descend(&parent, Arc::new(HashMap::new()));
 
-        let computed = style.collapse(&inherited);
+        let computed = collapse(style, &inherited);
         assert_eq!(computed.color(), Some(&color("#123456")));
     }
 
@@ -260,7 +276,7 @@ mod tests {
         let override_style = declared(ComputedStyle::default(), InheritableKeywords::default());
 
         base.merge_with(&override_style);
-        let computed = base.collapse(&InheritedStyle::default());
+        let computed = collapse(base, &InheritedStyle::default());
         // override_style declared nothing, so the earlier value survives.
         assert_eq!(computed.color(), Some(&color("#000000")));
     }
@@ -272,12 +288,14 @@ mod tests {
             InheritableKeywords::default(),
             Some(DeclaredLength::Em(1.5)),
             DeclaredLengths::default(),
+            HashMap::new(),
+            HashMap::new(),
         );
         let mut parent = ComputedStyle::default();
         parent.set_font_size(FontSize::new(20.0));
-        let inherited = InheritedStyle::default().descend(&parent);
+        let inherited = InheritedStyle::default().descend(&parent, Arc::new(HashMap::new()));
 
-        let computed = style.collapse(&inherited);
+        let computed = collapse(style, &inherited);
         assert_eq!(computed.font_size().map(|fs| fs.value()), Some(30.0));
     }
 
@@ -288,12 +306,14 @@ mod tests {
             InheritableKeywords::default(),
             Some(DeclaredLength::Rem(2.0)),
             DeclaredLengths::default(),
+            HashMap::new(),
+            HashMap::new(),
         );
         let mut parent = ComputedStyle::default();
         parent.set_font_size(FontSize::new(20.0));
-        let inherited = InheritedStyle::default().descend(&parent);
+        let inherited = InheritedStyle::default().descend(&parent, Arc::new(HashMap::new()));
 
-        let computed = style.collapse(&inherited);
+        let computed = collapse(style, &inherited);
         // Root base is DEFAULT_FONT_SIZE (14.0), not the parent's 20.0.
         assert_eq!(computed.font_size().map(|fs| fs.value()), Some(28.0));
     }
@@ -304,12 +324,78 @@ mod tests {
         own.set_font_size(FontSize::new(10.0));
         let mut lengths = DeclaredLengths::default();
         lengths.set_width(DeclaredLength::Em(2.0));
-        let style = DeclaredStyle::from_parts(own, InheritableKeywords::default(), None, lengths);
+        let style = DeclaredStyle::from_parts(
+            own,
+            InheritableKeywords::default(),
+            None,
+            lengths,
+            HashMap::new(),
+            HashMap::new(),
+        );
 
-        let computed = style.collapse(&InheritedStyle::default());
+        let computed = collapse(style, &InheritedStyle::default());
         assert_eq!(
             computed.width(),
             Some(crate::features::styling::domain::CssLength::Px(20.0))
+        );
+    }
+
+    #[test]
+    fn test_custom_property_inherits_and_child_sees_it() {
+        let mut custom = HashMap::new();
+        custom.insert("--bg".to_string(), "#1a1b26".to_string());
+        let style = DeclaredStyle::from_parts(
+            ComputedStyle::default(),
+            InheritableKeywords::default(),
+            None,
+            DeclaredLengths::default(),
+            custom,
+            HashMap::new(),
+        );
+
+        let (_, next_inherited) = style.collapse(&InheritedStyle::default(), &NoopReparser);
+        assert_eq!(
+            next_inherited
+                .custom_properties()
+                .get("--bg")
+                .map(String::as_str),
+            Some("#1a1b26")
+        );
+    }
+
+    #[test]
+    fn test_pending_var_is_substituted_and_reparsed() {
+        struct BackgroundReparser;
+        impl PropertyReparser for BackgroundReparser {
+            fn reparse(&self, name: &str, value: &str) -> ComputedStyle {
+                let mut style = ComputedStyle::default();
+                if name == "background-color" {
+                    style.set_background(DrawingColor::parse(value.trim()).unwrap());
+                }
+                style
+            }
+        }
+
+        let mut custom = HashMap::new();
+        custom.insert("--bg".to_string(), "#7aa2f7".to_string());
+        let mut pending = HashMap::new();
+        pending.insert("background-color".to_string(), "var(--bg)".to_string());
+
+        let style = DeclaredStyle::from_parts(
+            ComputedStyle::default(),
+            InheritableKeywords::default(),
+            None,
+            DeclaredLengths::default(),
+            HashMap::new(),
+            pending,
+        );
+        let inherited =
+            InheritedStyle::default().descend(&ComputedStyle::default(), Arc::new(custom));
+
+        let (computed, _) = style.collapse(&inherited, &BackgroundReparser);
+        assert_eq!(
+            computed.background(),
+            Some(&DrawingColor::parse("#7aa2f7").unwrap())
         );
     }
 }

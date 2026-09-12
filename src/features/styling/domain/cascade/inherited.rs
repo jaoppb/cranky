@@ -1,6 +1,7 @@
 use super::super::computed_style::ComputedStyle;
 use crate::shared::config::domain::FontSize;
 use crate::shared::primitives::color::DrawingColor;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// The default `rem` base and the fallback used for `em` when no ancestor
@@ -13,14 +14,17 @@ pub(crate) const DEFAULT_FONT_SIZE: f32 = 14.0;
 /// The subset of computed style that CSS actually inherits down the element
 /// tree: `color`, `accent-color`, `font-family`, `font-size`.
 ///
-/// Plus the fixed `rem` base, which isn't inherited in the CSS sense (it
-/// never changes as it descends) but travels the same path for the same
-/// reason.
+/// Plus custom properties (`--name`, inherited by default, same as real
+/// CSS) and the fixed `rem` base — the latter isn't inherited in the CSS
+/// sense (it never changes as it descends) but travels the same path for
+/// the same reason.
 ///
-/// Cheap to pass down unconditionally — `DrawingColor`/`FontSize` are small
-/// and `font_family` is reference-counted — so descending through elements
-/// that redeclare none of these costs only a few copies and a refcount
-/// bump, never the deep clone a full `ComputedStyle` would need.
+/// Cheap to pass down unconditionally — `DrawingColor`/`FontSize` are small,
+/// `font_family` is reference-counted, and `custom_properties` is shared via
+/// `Arc` and only cloned when an element actually declares one — so
+/// descending through elements that redeclare none of these costs only a
+/// few copies and refcount bumps, never the deep clone a full
+/// `ComputedStyle` would need.
 #[derive(Debug, Clone)]
 pub struct InheritedStyle {
     color: Option<DrawingColor>,
@@ -28,6 +32,7 @@ pub struct InheritedStyle {
     font_family: Option<Arc<str>>,
     font_size: Option<FontSize>,
     root_font_size: FontSize,
+    custom_properties: Arc<HashMap<String, String>>,
 }
 
 impl Default for InheritedStyle {
@@ -38,6 +43,7 @@ impl Default for InheritedStyle {
             font_family: None,
             font_size: None,
             root_font_size: FontSize::new(DEFAULT_FONT_SIZE),
+            custom_properties: Arc::new(HashMap::new()),
         }
     }
 }
@@ -72,19 +78,30 @@ impl InheritedStyle {
         self.root_font_size
     }
 
+    #[must_use]
+    pub const fn custom_properties(&self) -> &Arc<HashMap<String, String>> {
+        &self.custom_properties
+    }
+
     /// Builds the context this node's children inherit from: whatever this
     /// node's own computed style ended up with, after its own cascade —
-    /// inheritance from further up included — was applied. `root_font_size`
-    /// carries forward unchanged, since it's fixed for the whole tree, not
-    /// actually inherited element-to-element.
+    /// inheritance from further up included — was applied, plus the fully
+    /// resolved custom-property map `collapse` produced for this element.
+    /// `root_font_size` carries forward unchanged, since it's fixed for the
+    /// whole tree, not actually inherited element-to-element.
     #[must_use]
-    pub fn descend(&self, style: &ComputedStyle) -> Self {
+    pub fn descend(
+        &self,
+        style: &ComputedStyle,
+        custom_properties: Arc<HashMap<String, String>>,
+    ) -> Self {
         Self {
             color: style.color().cloned(),
             accent_color: style.accent_color().cloned(),
             font_family: style.font_family().map(|f| Arc::from(f.as_str())),
             font_size: style.font_size(),
             root_font_size: self.root_font_size,
+            custom_properties,
         }
     }
 }
@@ -101,7 +118,7 @@ mod tests {
         style.set_font_family(FontFamily::new("Mono".to_string()));
         style.set_font_size(FontSize::new(14.0));
 
-        let inherited = InheritedStyle::default().descend(&style);
+        let inherited = InheritedStyle::default().descend(&style, Arc::new(HashMap::new()));
         assert_eq!(
             inherited.color(),
             Some(&DrawingColor::parse("#ffffff").unwrap())
@@ -118,8 +135,20 @@ mod tests {
 
         let mut style = ComputedStyle::default();
         style.set_font_size(FontSize::new(20.0));
-        let child = root.descend(&style);
+        let child = root.descend(&style, Arc::new(HashMap::new()));
         // The element's own font-size changed; the rem base did not.
         assert!((child.root_font_size().value() - DEFAULT_FONT_SIZE).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_custom_properties_carry_forward() {
+        let mut props = HashMap::new();
+        props.insert("--bg".to_string(), "#1a1b26".to_string());
+        let root = InheritedStyle::default().descend(&ComputedStyle::default(), Arc::new(props));
+
+        assert_eq!(
+            root.custom_properties().get("--bg").map(String::as_str),
+            Some("#1a1b26")
+        );
     }
 }

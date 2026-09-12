@@ -256,8 +256,14 @@ pub mod test_support {
             &self,
             _query: &crate::features::styling::domain::ElementQuery,
             _inherited: &crate::features::styling::domain::InheritedStyle,
-        ) -> crate::features::styling::domain::ComputedStyle {
-            crate::features::styling::domain::ComputedStyle::default()
+        ) -> (
+            crate::features::styling::domain::ComputedStyle,
+            crate::features::styling::domain::InheritedStyle,
+        ) {
+            (
+                crate::features::styling::domain::ComputedStyle::default(),
+                crate::features::styling::domain::InheritedStyle::default(),
+            )
         }
     }
 

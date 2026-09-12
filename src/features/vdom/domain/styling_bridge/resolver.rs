@@ -76,13 +76,12 @@ impl VNode {
             VNodeKind::Grid { .. } => ComputedStyle::default_for_grid(),
             _ => ComputedStyle::default(),
         };
-        style.merge_with(&resolver.resolve_style(&query, inherited));
-
-        // What this node's own children inherit from — its own resolved
-        // style, after its own cascade (including inheritance from further
-        // up) was applied. Cheap: color/font-size are small and font-family
-        // is reference-counted, so this never deep-clones `style` itself.
-        let child_inherited = inherited.descend(&style);
+        // `child_inherited` is what this node's own children inherit from —
+        // its own resolved style (color/font-size/custom properties),
+        // after its own cascade (including inheritance from further up)
+        // was applied.
+        let (matched_style, child_inherited) = resolver.resolve_style(&query, inherited);
+        style.merge_with(&matched_style);
         // A tooltip/popup/panel's content is its own root for selector
         // matching (`parent: None`, below) — it inherits fresh for the same
         // reason, rather than picking up the owning element's color/font.

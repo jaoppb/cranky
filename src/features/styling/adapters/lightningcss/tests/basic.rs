@@ -1,4 +1,6 @@
-use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
+use crate::features::styling::adapters::lightningcss::{
+    LightningCssAdapter, LightningPropertyReparser,
+};
 use crate::features::styling::domain::{
     ClassName, ElementId, ElementQuery, InheritedStyle, PseudoClass, StyleSheetName,
 };
@@ -39,7 +41,11 @@ fn test_parse_basic_css_rules() {
     // Test matching .workspace-btn
     let ws_class = ClassName::new("workspace-btn").unwrap();
     let query_ws = ElementQuery::new("flex", None, std::slice::from_ref(&ws_class), &[], None);
-    let style_ws = parsed.resolve_style(&query_ws, &InheritedStyle::default());
+    let (style_ws, _) = parsed.resolve_style(
+        &query_ws,
+        &InheritedStyle::default(),
+        &LightningPropertyReparser,
+    );
     assert!((style_ws.border_radius().unwrap().value() - 4.0).abs() < f32::EPSILON);
     assert!((style_ws.font_size().unwrap().value() - 14.0).abs() < f32::EPSILON);
 
@@ -51,7 +57,11 @@ fn test_parse_basic_css_rules() {
         &[PseudoClass::Hover],
         None,
     );
-    let style_ws_hover = parsed.resolve_style(&query_ws_hover, &InheritedStyle::default());
+    let (style_ws_hover, _) = parsed.resolve_style(
+        &query_ws_hover,
+        &InheritedStyle::default(),
+        &LightningPropertyReparser,
+    );
     if let Some(DrawingColor::Solid(c)) = style_ws_hover.background() {
         assert_eq!(*c, Color::new(122, 162, 247, 255));
     } else {
@@ -61,7 +71,11 @@ fn test_parse_basic_css_rules() {
     // Test matching #hour-main
     let hour_id = ElementId::new("hour-main").unwrap();
     let query_hour = ElementQuery::new("text", Some(&hour_id), &[], &[], None);
-    let style_hour = parsed.resolve_style(&query_hour, &InheritedStyle::default());
+    let (style_hour, _) = parsed.resolve_style(
+        &query_hour,
+        &InheritedStyle::default(),
+        &LightningPropertyReparser,
+    );
     if let Some(DrawingColor::Solid(c)) = style_hour.color() {
         assert_eq!(*c, Color::new(192, 202, 245, 255));
     } else {
@@ -70,7 +84,11 @@ fn test_parse_basic_css_rules() {
 
     // Test matching progress
     let query_progress = ElementQuery::new("progress", None, &[], &[], None);
-    let style_prog = parsed.resolve_style(&query_progress, &InheritedStyle::default());
+    let (style_prog, _) = parsed.resolve_style(
+        &query_progress,
+        &InheritedStyle::default(),
+        &LightningPropertyReparser,
+    );
     assert!((style_prog.border_radius().unwrap().value() - 6.0).abs() < f32::EPSILON);
     assert!(style_prog.accent_color().is_some());
 }
@@ -98,7 +116,11 @@ fn test_descendant_combinator() {
         Some(&bar_parent),
     );
 
-    let style = parsed.resolve_style(&item_query, &InheritedStyle::default());
+    let (style, _) = parsed.resolve_style(
+        &item_query,
+        &InheritedStyle::default(),
+        &LightningPropertyReparser,
+    );
     assert!(style.color().is_some());
 }
 
@@ -120,7 +142,11 @@ fn test_gradient_border_color_resolution() {
 
     // 1. Unfocused bar -> Solid #565f89
     let query_unfocused = ElementQuery::new("bar", None, &[], &[], None);
-    let style_unfocused = parsed.resolve_style(&query_unfocused, &InheritedStyle::default());
+    let (style_unfocused, _) = parsed.resolve_style(
+        &query_unfocused,
+        &InheritedStyle::default(),
+        &LightningPropertyReparser,
+    );
     assert_eq!(
         style_unfocused.border_color(),
         Some(&DrawingColor::Solid(Color::new(86, 95, 137, 255)))
@@ -128,7 +154,11 @@ fn test_gradient_border_color_resolution() {
 
     // 2. Focused bar -> Gradient #7aa2f7 #bb9af7 45deg
     let query_focused = ElementQuery::new("bar", None, &[], &[PseudoClass::Focused], None);
-    let style_focused = parsed.resolve_style(&query_focused, &InheritedStyle::default());
+    let (style_focused, _) = parsed.resolve_style(
+        &query_focused,
+        &InheritedStyle::default(),
+        &LightningPropertyReparser,
+    );
     if let Some(DrawingColor::Gradient(colors, angle)) = style_focused.border_color() {
         assert_eq!(colors.len(), 2);
         assert_eq!(colors[0], Color::new(122, 162, 247, 255));

@@ -7,7 +7,9 @@ use cranky::features::layout_engine::domain::{
 use cranky::features::layout_engine::ports::LayoutEnginePort;
 use cranky::features::module_runtime::domain::render_pipeline::{LayoutContext, RenderPipeline};
 use cranky::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
-use cranky::features::styling::adapters::lightningcss::LightningCssAdapter;
+use cranky::features::styling::adapters::lightningcss::{
+    LightningCssAdapter, LightningPropertyReparser,
+};
 use cranky::features::styling::domain::{
     ClassName, ClassNameList, ComputedStyle, ElementQuery, InheritedStyle, PseudoClass,
     StyleSheetName,
@@ -110,8 +112,12 @@ struct StaticStyleResolver {
 }
 
 impl StyleResolverPort for StaticStyleResolver {
-    fn resolve_style(&self, _query: &ElementQuery, _inherited: &InheritedStyle) -> ComputedStyle {
-        self.style.clone()
+    fn resolve_style(
+        &self,
+        _query: &ElementQuery,
+        _inherited: &InheritedStyle,
+    ) -> (ComputedStyle, InheritedStyle) {
+        (self.style.clone(), InheritedStyle::default())
     }
 }
 
@@ -286,6 +292,7 @@ fn bench_styling(c: &mut Criterion) {
             let style = parsed_sheet.resolve_style(
                 black_box(&query_simple),
                 black_box(&InheritedStyle::default()),
+                black_box(&LightningPropertyReparser),
             );
             black_box(style);
         });
@@ -296,6 +303,7 @@ fn bench_styling(c: &mut Criterion) {
             let style = parsed_sheet.resolve_style(
                 black_box(&query_hover),
                 black_box(&InheritedStyle::default()),
+                black_box(&LightningPropertyReparser),
             );
             black_box(style);
         });
