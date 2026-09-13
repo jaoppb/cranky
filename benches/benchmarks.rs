@@ -1,4 +1,5 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use std::fmt::Write;
 
 use cranky::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use cranky::features::layout_engine::domain::{
@@ -312,6 +313,52 @@ fn bench_styling(c: &mut Criterion) {
     group.finish();
 }
 
+/// A sheet with many distinct-class rules and a query matching exactly one
+/// of them — the shape the rule-bucket index (`RuleIndex`) exists for.
+/// `bench_styling`'s benchmarks above have too few rules (6) to show a
+/// difference between an indexed lookup and a full linear scan; this one is
+/// sized so the win is actually visible in the numbers.
+fn bench_styling_rule_buckets(c: &mut Criterion) {
+    let mut group = c.benchmark_group("styling");
+    let parser = LightningCssAdapter::new();
+
+    let mut many_rules_css = String::new();
+    for i in 0..80 {
+        let _ = writeln!(
+            many_rules_css,
+            ".class-{i} {{ color: #ffffff; background-color: #1a1b26; padding: 4px; }}"
+        );
+    }
+    many_rules_css
+        .push_str(".hot-class { color: #7aa2f7; background-color: #24283b; font-size: 14px; }\n");
+
+    let Ok(many_rules_name) = StyleSheetName::new("many_rules") else {
+        return;
+    };
+    let Ok(many_rules_sheet) = parser.parse_stylesheet(many_rules_name, &many_rules_css) else {
+        return;
+    };
+
+    let Ok(class_hot) = ClassName::new("hot-class") else {
+        return;
+    };
+    let classes_hot = [class_hot];
+    let query_many_rules = ElementQuery::new("text", None, &classes_hot, &[], None);
+
+    group.bench_function("resolve_style_many_rules_one_match", |b| {
+        b.iter(|| {
+            let style = many_rules_sheet.resolve_style(
+                black_box(&query_many_rules),
+                black_box(&InheritedStyle::default()),
+                black_box(&LightningPropertyReparser),
+            );
+            black_box(style);
+        });
+    });
+
+    group.finish();
+}
+
 // ----------------------------------------------------------------------------
 // 3. Layout Engine Benchmarks
 // ----------------------------------------------------------------------------
@@ -574,6 +621,7 @@ criterion_group!(
     benches,
     bench_vdom,
     bench_styling,
+    bench_styling_rule_buckets,
     bench_layout,
     bench_rendering,
     bench_scripting,

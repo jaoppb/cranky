@@ -1,18 +1,20 @@
 use crate::features::styling::domain::{
-    ComputedStyle, ElementQuery, InheritedStyle, Layer, RuleEntry, RuleMatch, StyleSheetName,
-    fold_matches, matches_selector, selector_specificity,
+    ComputedStyle, ElementQuery, InheritedStyle, Layer, RuleEntry, RuleIndex, RuleMatch,
+    StyleSheetName, fold_matches, matches_selector, selector_specificity,
 };
 use crate::features::styling::ports::{ParsedStyleSheetPort, PropertyReparser};
 
 pub struct LightningParsedStyleSheet {
     name: StyleSheetName,
     rules: Vec<RuleEntry>,
+    index: RuleIndex,
 }
 
 impl LightningParsedStyleSheet {
     #[must_use]
-    pub const fn new(name: StyleSheetName, rules: Vec<RuleEntry>) -> Self {
-        Self { name, rules }
+    pub fn new(name: StyleSheetName, rules: Vec<RuleEntry>) -> Self {
+        let index = RuleIndex::build(&rules);
+        Self { name, rules, index }
     }
 }
 
@@ -51,10 +53,15 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
     }
 
     fn matching_rules(&self, query: &ElementQuery) -> Vec<RuleMatch> {
-        self.rules
-            .iter()
-            .enumerate()
-            .filter_map(|(index, rule)| {
+        // The index narrows to rules that *could* match based on the
+        // element's own id/classes/tag; the full selector walk below (still
+        // needed for ancestors, pseudo-classes and `:not()`) runs only on
+        // that narrowed set instead of every rule in the sheet.
+        self.index
+            .candidates(query)
+            .into_iter()
+            .filter_map(|index| {
+                let rule = self.rules.get(index)?;
                 // A rule can list several comma-separated selectors sharing
                 // one declaration block; only matching ones count, and among
                 // those the most specific governs (per-selector specificity,
