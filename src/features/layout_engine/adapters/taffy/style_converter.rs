@@ -91,6 +91,12 @@ impl From<CssLength> for Dimension {
             CssLength::Px(v) => Self::length(v),
             CssLength::Percent(v) => Self::percent(v / 100.0),
             CssLength::Auto => Self::auto(),
+            // First-pass placeholder: taffy has no native calc() hook this
+            // crate can use without unsafe code (see mod.rs), so a `Calc`
+            // dimension starts as just its absolute part. `mod.rs`'s second
+            // layout pass overwrites this once the containing block's size
+            // — needed to resolve `percent` — is known.
+            CssLength::Calc { px, .. } => Self::length(px),
         }
     }
 }

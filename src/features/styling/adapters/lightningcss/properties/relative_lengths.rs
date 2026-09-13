@@ -1,8 +1,12 @@
+use super::calc::{calc_from_length_percentage_or_auto, calc_from_max_size, calc_from_size};
+use super::relative_spacing::apply_spacing;
 use crate::features::styling::domain::{DeclaredLength, DeclaredLengths};
 use lightningcss::properties::Property;
 use lightningcss::properties::font::FontSize as LightningFontSize;
+use lightningcss::properties::size::{MaxSize, Size};
 use lightningcss::stylesheet::PrinterOptions;
 use lightningcss::traits::ToCss;
+use lightningcss::values::length::LengthPercentageOrAuto;
 
 /// The declared `font-size`, if it used `em`/`rem`.
 ///
@@ -54,24 +58,56 @@ pub fn detect_relative_lengths(props: &[Property]) -> DeclaredLengths {
 /// The declared length, if `value`'s serialized form used `em`/`rem` — a
 /// `Px`/`Percent`/`Auto` result means the ordinary pipeline already got it
 /// right, so there's nothing for this pass to do.
-fn relative(value: &impl ToCss) -> Option<DeclaredLength> {
+pub(super) fn relative(value: &impl ToCss) -> Option<DeclaredLength> {
     let s = value.to_css_string(PrinterOptions::default()).ok()?;
     match DeclaredLength::parse(&s)? {
         len @ (DeclaredLength::Em(_) | DeclaredLength::Rem(_)) => Some(len),
-        DeclaredLength::Px(_) | DeclaredLength::Percent(_) | DeclaredLength::Auto => None,
+        // `DeclaredLength::parse` (string-based) never actually produces
+        // `Calc` — only `calc.rs`'s typed tree walk does — but the match
+        // still has to be exhaustive.
+        DeclaredLength::Px(_)
+        | DeclaredLength::Percent(_)
+        | DeclaredLength::Auto
+        | DeclaredLength::Calc { .. } => None,
     }
 }
 
 fn apply_sizing(lengths: &mut DeclaredLengths, prop: &Property) {
     match prop {
-        Property::Width(v) => relative(v).inspect(|&v| lengths.set_width(v)),
-        Property::Height(v) => relative(v).inspect(|&v| lengths.set_height(v)),
-        Property::MinWidth(v) => relative(v).inspect(|&v| lengths.set_min_width(v)),
-        Property::MinHeight(v) => relative(v).inspect(|&v| lengths.set_min_height(v)),
-        Property::MaxWidth(v) => relative(v).inspect(|&v| lengths.set_max_width(v)),
-        Property::MaxHeight(v) => relative(v).inspect(|&v| lengths.set_max_height(v)),
-        _ => None,
-    };
+        Property::Width(v) => set_size(lengths, v, DeclaredLengths::set_width),
+        Property::Height(v) => set_size(lengths, v, DeclaredLengths::set_height),
+        Property::MinWidth(v) => set_size(lengths, v, DeclaredLengths::set_min_width),
+        Property::MinHeight(v) => set_size(lengths, v, DeclaredLengths::set_min_height),
+        Property::MaxWidth(v) => set_max_size(lengths, v, DeclaredLengths::set_max_width),
+        Property::MaxHeight(v) => set_max_size(lengths, v, DeclaredLengths::set_max_height),
+        _ => {}
+    }
+}
+
+/// `calc()` is checked ahead of the plain em/rem/percent/auto scan: a
+/// `calc()` value never matches that string-based grammar (it doesn't end
+/// in a bare unit suffix), so the two checks are naturally mutually
+/// exclusive — this is just the order that avoids wasting the (cheap)
+/// string check on values already known to be `calc()`.
+fn set_size(
+    lengths: &mut DeclaredLengths,
+    size: &Size,
+    setter: fn(&mut DeclaredLengths, DeclaredLength),
+) {
+    if let Some(declared) = calc_from_size(size).or_else(|| relative(size)) {
+        setter(lengths, declared);
+    }
+}
+
+/// As `set_size`, for `max-width`/`max-height`'s separate `MaxSize` type.
+fn set_max_size(
+    lengths: &mut DeclaredLengths,
+    size: &MaxSize,
+    setter: fn(&mut DeclaredLengths, DeclaredLength),
+) {
+    if let Some(declared) = calc_from_max_size(size).or_else(|| relative(size)) {
+        setter(lengths, declared);
+    }
 }
 
 fn apply_border(lengths: &mut DeclaredLengths, prop: &Property) {
@@ -89,56 +125,10 @@ fn apply_border(lengths: &mut DeclaredLengths, prop: &Property) {
     };
 }
 
-fn apply_spacing(lengths: &mut DeclaredLengths, prop: &Property) {
-    match prop {
-        Property::Padding(p) => {
-            relative(&p.top).inspect(|&v| lengths.set_padding_top(v));
-            relative(&p.right).inspect(|&v| lengths.set_padding_right(v));
-            relative(&p.bottom).inspect(|&v| lengths.set_padding_bottom(v));
-            relative(&p.left).inspect(|&v| lengths.set_padding_left(v));
-        }
-        Property::PaddingTop(v) => {
-            relative(v).inspect(|&v| lengths.set_padding_top(v));
-        }
-        Property::PaddingRight(v) => {
-            relative(v).inspect(|&v| lengths.set_padding_right(v));
-        }
-        Property::PaddingBottom(v) => {
-            relative(v).inspect(|&v| lengths.set_padding_bottom(v));
-        }
-        Property::PaddingLeft(v) => {
-            relative(v).inspect(|&v| lengths.set_padding_left(v));
-        }
-        Property::Margin(m) => {
-            relative(&m.top).inspect(|&v| lengths.set_margin_top(v));
-            relative(&m.right).inspect(|&v| lengths.set_margin_right(v));
-            relative(&m.bottom).inspect(|&v| lengths.set_margin_bottom(v));
-            relative(&m.left).inspect(|&v| lengths.set_margin_left(v));
-        }
-        Property::MarginTop(v) => {
-            relative(v).inspect(|&v| lengths.set_margin_top(v));
-        }
-        Property::MarginRight(v) => {
-            relative(v).inspect(|&v| lengths.set_margin_right(v));
-        }
-        Property::MarginBottom(v) => {
-            relative(v).inspect(|&v| lengths.set_margin_bottom(v));
-        }
-        Property::MarginLeft(v) => {
-            relative(v).inspect(|&v| lengths.set_margin_left(v));
-        }
-        _ => {}
-    }
-}
-
 fn apply_flex(lengths: &mut DeclaredLengths, prop: &Property) {
     match prop {
-        Property::FlexBasis(v, _) => {
-            relative(v).inspect(|&v| lengths.set_flex_basis(v));
-        }
-        Property::Flex(flex, _) => {
-            relative(&flex.basis).inspect(|&v| lengths.set_flex_basis(v));
-        }
+        Property::FlexBasis(v, _) => set_flex_basis(lengths, v),
+        Property::Flex(flex, _) => set_flex_basis(lengths, &flex.basis),
         Property::Gap(gap) => {
             if let Some(v) = relative(&gap.row) {
                 lengths.set_gap(v);
@@ -147,6 +137,12 @@ fn apply_flex(lengths: &mut DeclaredLengths, prop: &Property) {
             relative(&gap.column).inspect(|&v| lengths.set_column_gap(v));
         }
         _ => {}
+    }
+}
+
+fn set_flex_basis(lengths: &mut DeclaredLengths, value: &LengthPercentageOrAuto) {
+    if let Some(declared) = calc_from_length_percentage_or_auto(value).or_else(|| relative(value)) {
+        lengths.set_flex_basis(declared);
     }
 }
 

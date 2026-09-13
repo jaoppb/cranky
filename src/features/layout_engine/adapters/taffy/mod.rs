@@ -1,5 +1,6 @@
 #![allow(unsafe_code)]
 
+pub mod calc_resolve;
 pub mod diff;
 pub mod grid_converter;
 pub mod reconciler;
@@ -11,6 +12,7 @@ pub mod tree_builder;
 use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::primitives::geometry::{Position, Size};
+use calc_resolve::resolve_pending_calcs;
 use diff::diff;
 use reconciler::{apply_patch, build_layout_state, LayoutState};
 use render_tree_builder::build_render_tree;
@@ -74,6 +76,17 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
         self.taffy
             .compute_layout(root_node_id, available_space)
             .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+
+        // A node styled with `calc(<percent>% + <px>px)` — e.g.
+        // `width: calc(100% - 2rem)` — can't resolve its percent term
+        // until its parent's size from this first pass is known. Patch any
+        // such nodes with the now-concrete pixel value and lay out again;
+        // ordinary trees (no calc()) never pay this cost.
+        if resolve_pending_calcs(&mut self.taffy, &new_state) {
+            self.taffy
+                .compute_layout(root_node_id, available_space)
+                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+        }
 
         // Build RenderNode tree
         let render_tree = build_render_tree(&self.taffy, root_node_id, &node, start_pos)?;
@@ -294,6 +307,57 @@ mod tests {
             assert_eq!(children[1].rect().width(), 100);
         } else {
             panic!("Expected RenderNode::Grid");
+        }
+    }
+
+    #[test]
+    fn test_calc_percent_resolves_against_real_parent_width_second_pass() {
+        // width: calc(50% - 20px) on a child of a 200px-wide parent — this
+        // can only resolve correctly once the parent's actual layout size
+        // is known, proving the two-pass mechanism (not just the style
+        // cascade) actually runs.
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+
+        let mut child_style = ComputedStyle::default();
+        child_style.set_width(crate::features::styling::domain::CssLength::Calc {
+            percent: 50.0,
+            px: -20.0,
+        });
+        child_style.set_height(crate::features::styling::domain::CssLength::Px(10.0));
+        let child = StyledNode::Rect {
+            path: NodePath::new(vec![0]),
+            style: child_style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        };
+
+        let mut root_style = ComputedStyle::default();
+        root_style.set_width(crate::features::styling::domain::CssLength::Px(200.0));
+        root_style.set_height(crate::features::styling::domain::CssLength::Px(10.0));
+        let root = StyledNode::Flex {
+            path: NodePath::root(),
+            children: vec![child],
+            style: root_style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        };
+
+        let render_tree = adapter
+            .calculate_layout(root, &mut measurer, Position::new(0, 0))
+            .unwrap();
+
+        if let RenderNode::Flex { children, .. } = render_tree {
+            // 200px * 50% - 20px = 80px.
+            assert_eq!(children[0].rect().width(), 80);
+        } else {
+            panic!("Expected RenderNode::Flex");
         }
     }
 }
