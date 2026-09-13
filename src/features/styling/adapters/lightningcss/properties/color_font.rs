@@ -32,14 +32,6 @@ pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property) -> bool 
             }
             true
         }
-        Property::Custom(custom) => {
-            apply_custom_or_unparsed_property(style, custom.name.as_ref(), prop);
-            true
-        }
-        Property::Unparsed(unparsed) => {
-            apply_custom_or_unparsed_property(style, unparsed.property_id.name(), prop);
-            true
-        }
         Property::FontFamily(families) => {
             if let Some(first) = families.first() {
                 let name = first
@@ -79,24 +71,6 @@ pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property) -> bool 
             true
         }
         _ => false,
-    }
-}
-
-pub fn apply_custom_or_unparsed_property(style: &mut ComputedStyle, name: &str, prop: &Property) {
-    if (name == "accent-color" || name == "progress-color" || name == "fill-color")
-        && let Ok(full) = prop.to_css_string(false, PrinterOptions::default())
-    {
-        let val = full.split_once(':').map_or(&*full, |(_, v)| v);
-        if let Ok(c) = DrawingColor::parse(val.trim()) {
-            style.set_accent_color(c);
-        }
-    } else if (name == "border-color" || name == "border")
-        && let Ok(full) = prop.to_css_string(false, PrinterOptions::default())
-    {
-        let val = full.split_once(':').map_or(&*full, |(_, v)| v);
-        if let Ok(c) = DrawingColor::parse(val.trim()) {
-            style.set_border_color(c);
-        }
     }
 }
 

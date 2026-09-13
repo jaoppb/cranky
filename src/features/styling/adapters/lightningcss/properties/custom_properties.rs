@@ -43,8 +43,8 @@ pub fn detect_custom_property_declarations(props: &[Property]) -> HashMap<String
 ///
 /// These fail their normal value grammar (lightningcss can't know what a
 /// variable resolves to at parse time) and fall back to
-/// `Property::Unparsed`, the same catch-all the CSS-wide-keyword and
-/// gradient-border detections already read from.
+/// `Property::Unparsed`, the same catch-all the CSS-wide-keyword detection
+/// already reads from.
 ///
 /// Returns each such property's name and raw value text, to be substituted
 /// and re-parsed once the element's resolved custom properties are known —

@@ -1,4 +1,5 @@
 use super::super::color_font::convert_color;
+use super::super::gradient::gradient_from_image;
 use super::utils::parse_length_str;
 use crate::features::styling::domain::ComputedStyle;
 use crate::shared::config::domain::{BorderRadius, BorderSize};
@@ -36,13 +37,26 @@ pub fn apply_border_properties(style: &mut ComputedStyle, prop: &Property) -> bo
             true
         }
         Property::BorderColor(color) => {
-            let s = color
-                .to_css_string(PrinterOptions::default())
-                .unwrap_or_default();
-            if let Ok(c) = DrawingColor::parse(s.trim()) {
-                style.set_border_color(c);
-            } else if let Some(c) = convert_color(&color.top) {
+            // A real `border-color` value is always one to four `<color>`s,
+            // never a gradient — no string round-trip needed.
+            if let Some(c) = convert_color(&color.top) {
                 style.set_border_color(DrawingColor::Solid(c));
+            }
+            true
+        }
+        Property::BorderImageSource(image) => {
+            if let Some(c) = gradient_from_image(image) {
+                style.set_border_color(c);
+            }
+            true
+        }
+        Property::BorderImage(border_image, _) => {
+            // Only the `source` longhand is implemented — `slice`/`width`/
+            // `outset`/`repeat` (9-slice image compositing) have no
+            // equivalent in this renderer and are silently left at their
+            // defaults rather than attempted.
+            if let Some(c) = gradient_from_image(&border_image.source) {
+                style.set_border_color(c);
             }
             true
         }
@@ -58,13 +72,7 @@ pub fn apply_border(style: &mut ComputedStyle, border: &Border) {
             .unwrap_or_default(),
     );
     style.set_border_size(BorderSize::new(px));
-    let s = border
-        .color
-        .to_css_string(PrinterOptions::default())
-        .unwrap_or_default();
-    if let Ok(c) = DrawingColor::parse(s.trim()) {
-        style.set_border_color(c);
-    } else if let Some(c) = convert_color(&border.color) {
+    if let Some(c) = convert_color(&border.color) {
         style.set_border_color(DrawingColor::Solid(c));
     }
 }

@@ -133,7 +133,7 @@ fn test_gradient_border_color_resolution() {
             border-color: #565f89;
         }
         bar:focus {
-            border-color: #7aa2f7 #bb9af7 45deg;
+            border-image-source: linear-gradient(45deg, #7aa2f7, #bb9af7);
         }
     ";
     let parsed = parser

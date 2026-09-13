@@ -3,6 +3,7 @@ pub mod calc;
 pub mod color_font;
 pub mod custom_properties;
 pub mod flex;
+pub mod gradient;
 pub mod grid;
 pub mod relative_lengths;
 pub mod relative_spacing;

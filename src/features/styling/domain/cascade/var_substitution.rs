@@ -12,8 +12,8 @@ const MAX_SUBSTITUTION_DEPTH: u8 = 8;
 ///
 /// A hand-written scanner rather than lightningcss's own token-level
 /// substitution: it works on the same serialized text this adapter already
-/// uses for CSS-wide keywords and the gradient-border extension, so it
-/// needs no new dependency on lightningcss's `substitute_variables`/
+/// uses for CSS-wide keywords, so it needs no new dependency on
+/// lightningcss's `substitute_variables`/
 /// `into_owned` features or their `TokenList` ownership model. Uses
 /// `str::get` throughout rather than range indexing — every boundary here
 /// comes from `find`/`char_indices`, which only ever land on char
