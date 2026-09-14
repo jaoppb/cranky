@@ -1,15 +1,8 @@
-use crate::features::layout_engine::domain::{
-    DisplayCommand, DisplayCommandSender, FloatingKind, PopupTarget, RenderNode,
-};
-use crate::features::layout_engine::ports::LayoutEnginePort;
-use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::{PointerAction, RenderOutcome};
-use crate::features::module_runtime::ports::{AnyModulePort, LayoutEvent, LayoutEventSender};
-use crate::features::vdom::domain::UiCommandSender;
+use crate::features::module_runtime::domain::RenderOutcome;
+use crate::features::module_runtime::ports::{LayoutEvent, LayoutEventSender};
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::geometry::{Position, Rect, Scale};
+use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::{ModuleId, MonitorId};
-use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::{HashMap, HashSet};
 
@@ -66,111 +59,5 @@ pub(super) fn dispatch_outcome_buffer(
             position,
             buffer,
         );
-    }
-}
-
-pub(super) fn dispatch_outcome_popups<DS: DisplayCommandSender>(
-    display_sender: &DS,
-    active_popups: &mut HashSet<MonitorId>,
-    module_id: ModuleId,
-    monitor_id: &MonitorId,
-    outcome: &RenderOutcome,
-) {
-    if let Some(anchored_popup) = outcome.render_tree().find_popup_with_anchor() {
-        active_popups.insert(monitor_id.clone());
-        display_sender.send_display_command(DisplayCommand::ShowFloatingSurface {
-            kind: FloatingKind::Popup(PopupTarget::new(module_id, monitor_id.clone())),
-            monitor_id: Some(monitor_id.clone()),
-            anchor_rect: Some(*anchored_popup.anchor_rect()),
-            layout: Box::new(anchored_popup.layout().clone()),
-            offset: anchored_popup.popup().offset(),
-        });
-    } else if active_popups.remove(monitor_id) {
-        display_sender.send_display_command(DisplayCommand::HideFloatingSurface {
-            kind: FloatingKind::Popup(PopupTarget::new(module_id, monitor_id.clone())),
-        });
-    }
-}
-
-pub(super) fn dispatch_outcome_panels<DS: DisplayCommandSender>(
-    display_sender: &DS,
-    active_panels: &mut HashSet<MonitorId>,
-    module_id: ModuleId,
-    monitor_id: &MonitorId,
-    outcome: &RenderOutcome,
-) {
-    if let Some(active_panel) = outcome.render_tree().find_panel() {
-        active_panels.insert(monitor_id.clone());
-        display_sender.send_display_command(DisplayCommand::ShowFloatingSurface {
-            kind: FloatingKind::Panel(PopupTarget::new(module_id, monitor_id.clone())),
-            monitor_id: Some(monitor_id.clone()),
-            anchor_rect: None,
-            layout: Box::new(active_panel.layout().clone()),
-            offset: None,
-        });
-    } else if active_panels.remove(monitor_id) {
-        display_sender.send_display_command(DisplayCommand::HideFloatingSurface {
-            kind: FloatingKind::Panel(PopupTarget::new(module_id, monitor_id.clone())),
-        });
-    }
-}
-
-pub(super) fn update_floating_trees<F: CanvasFactory>(
-    canvas_factory: &mut F,
-    popup_trees: &mut HashMap<MonitorId, RenderNode>,
-    panel_trees: &mut HashMap<MonitorId, RenderNode>,
-    monitor_id: &MonitorId,
-    outcome: &RenderOutcome,
-) {
-    if let Some(anchored) = outcome.render_tree().find_popup_with_anchor() {
-        let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
-        let mut measurer = canvas_factory.create_text_measurer(
-            Scale::new(1.0),
-            crate::shared::config::domain::FontFamily::new(String::new()),
-            crate::shared::config::domain::FontSize::new(14.0),
-        );
-        if let Ok(tree) = engine.calculate_layout(anchored.layout().clone(), &mut measurer, Position::new(0, 0)) {
-            popup_trees.insert(monitor_id.clone(), tree);
-        }
-    } else {
-        popup_trees.remove(monitor_id);
-    }
-
-    if let Some(panel) = outcome.render_tree().find_panel() {
-        let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
-        let mut measurer = canvas_factory.create_text_measurer(
-            Scale::new(1.0),
-            crate::shared::config::domain::FontFamily::new(String::new()),
-            crate::shared::config::domain::FontSize::new(14.0),
-        );
-        if let Ok(tree) = engine.calculate_layout(panel.layout().clone(), &mut measurer, Position::new(0, 0)) {
-            panel_trees.insert(monitor_id.clone(), tree);
-        }
-    } else {
-        panel_trees.remove(monitor_id);
-    }
-}
-
-pub(super) fn dispatch_post_actions<LS: LayoutEventSender, DS: DisplayCommandSender, US: UiCommandSender>(
-    port: &mut Box<dyn AnyModulePort>,
-    ctx: &ModuleContext<LS, DS, US>,
-    actions: Vec<PointerAction>,
-) {
-    for action in actions {
-        match action {
-            PointerAction::CallFunction(func_name, mon_id) => {
-                let _ = if let Some(m) = mon_id {
-                    port.call_function_with_args(&func_name, &[m.as_str()])
-                } else {
-                    port.call_function(&func_name)
-                };
-            }
-            PointerAction::SendUi(cmd) => {
-                ctx.ui_sender().send_ui_command(cmd);
-            }
-            PointerAction::SendDisplay(cmd) => {
-                ctx.display_sender().send_display_command(cmd);
-            }
-        }
     }
 }

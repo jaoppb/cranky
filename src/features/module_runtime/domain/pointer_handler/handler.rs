@@ -1,16 +1,14 @@
-use crate::features::layout_engine::domain::{NodePath, StyledNode};
+use crate::features::layout_engine::domain::NodePath;
 use crate::features::vdom::domain::InteractionContext;
-use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::MonitorId;
 use std::collections::HashMap;
 
 #[derive(Debug, Default)]
+#[allow(clippy::struct_field_names)]
 pub struct PointerHandler {
     pub(crate) hovered_nodes: HashMap<MonitorId, NodePath>,
     pub(crate) active_nodes: HashMap<MonitorId, NodePath>,
     pub(crate) focused_nodes: HashMap<MonitorId, NodePath>,
-    pub(crate) last_tooltip: Option<StyledNode>,
-    pub(crate) last_pointer_pos: Option<(MonitorId, Position)>,
 }
 
 impl PointerHandler {
@@ -46,15 +44,5 @@ impl PointerHandler {
             self.focused_nodes.get(monitor_id).cloned(),
             is_monitor_focused,
         )
-    }
-
-    #[must_use]
-    pub const fn last_tooltip(&self) -> Option<&StyledNode> {
-        self.last_tooltip.as_ref()
-    }
-
-    #[must_use]
-    pub const fn last_pointer_pos(&self) -> Option<&(MonitorId, Position)> {
-        self.last_pointer_pos.as_ref()
     }
 }

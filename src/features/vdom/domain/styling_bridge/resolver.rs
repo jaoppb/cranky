@@ -5,7 +5,7 @@ use crate::features::styling::domain::{
     ClassNameList, ComputedStyle, ElementQuery, InheritedStyle,
 };
 use crate::features::styling::ports::StyleResolverPort;
-use crate::features::vdom::domain::{InteractionContext, NodePath, VNode, VNodeKind};
+use crate::features::vdom::domain::{InteractionContext, NodePath, SurfaceSpace, VNode, VNodeKind};
 
 /// Where a node sits among its siblings — bundled so the recursive walk
 /// stays within clippy's argument-count limit.
@@ -44,7 +44,7 @@ impl VNode {
         self.resolve_styles_recursive(
             resolver,
             interaction,
-            &NodePath::root(),
+            &NodePath::root_in(SurfaceSpace::Bar),
             SiblingPosition::root(),
             parent,
             &InheritedStyle::default(),
@@ -87,11 +87,15 @@ impl VNode {
         // reason, rather than picking up the owning element's color/font.
         let detached_inherited = InheritedStyle::default();
 
+        // Each floating kind gets its own surface root rather than
+        // descending from `path` — a popup, panel, or tooltip is a different
+        // tree from the one that owns it, not a subtree of it, so its nodes
+        // must not be ancestor-matched (`starts_with`) against the owner's.
         let tooltip = self.tooltip().map(|t| {
             Box::new(t.resolve_styles_recursive(
                 resolver,
                 interaction,
-                &path.child(0),
+                &NodePath::root_in(SurfaceSpace::Tooltip),
                 SiblingPosition::root(),
                 None,
                 &detached_inherited,
@@ -101,7 +105,7 @@ impl VNode {
             let content = Box::new(p.content().resolve_styles_recursive(
                 resolver,
                 interaction,
-                &NodePath::root(),
+                &NodePath::root_in(SurfaceSpace::Popup),
                 SiblingPosition::root(),
                 Some(&query),
                 &detached_inherited,
@@ -117,7 +121,7 @@ impl VNode {
             let content = Box::new(p.content().resolve_styles_recursive(
                 resolver,
                 interaction,
-                &NodePath::root(),
+                &NodePath::root_in(SurfaceSpace::Panel),
                 SiblingPosition::root(),
                 Some(&query),
                 &detached_inherited,

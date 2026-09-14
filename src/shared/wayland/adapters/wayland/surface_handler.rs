@@ -7,7 +7,7 @@ use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::QueueHandle;
 
-fn copy_surface_data(shm_buffer: &mut ShmBuffer, src_data: &[u8]) {
+pub(super) fn copy_surface_data(shm_buffer: &mut ShmBuffer, src_data: &[u8]) {
     let data = shm_buffer.mmap_mut();
     let len = std::cmp::min(data.len(), src_data.len());
     if let Some(dest) = data.get_mut(..len)

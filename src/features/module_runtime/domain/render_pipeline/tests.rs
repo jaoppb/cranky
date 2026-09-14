@@ -18,6 +18,9 @@ fn test_pipeline_diff_and_layout_phases() {
     let resolver = MockStyleResolver;
     let mut factory = MockCanvasFactory;
     let mut engine = MockLayoutEngine;
+    let mut popup_engine = MockLayoutEngine;
+    let mut panel_engine = MockLayoutEngine;
+    let mut tooltip_engine = MockLayoutEngine;
 
     // 1. Diff Phase
     let diff = pipeline.diff(&mon, &port, &diff_adapter, None, None, None);
@@ -34,10 +37,15 @@ fn test_pipeline_diff_and_layout_phases() {
         interaction_context: None,
         canvas_factory: &mut factory,
         layout_engine: &mut engine,
+        popup_layout_engine: &mut popup_engine,
+        panel_layout_engine: &mut panel_engine,
+        tooltip_layout_engine: &mut tooltip_engine,
     };
     let layout_res = pipeline.layout(&mon, diff, &mut ctx);
     assert!(layout_res.is_some());
-    let (node, size_change, child_layouts) = layout_res.unwrap();
+    let (node, size_change, child_layouts, floating) = layout_res.unwrap();
+    assert!(floating.popup().is_none());
+    assert!(floating.panel().is_none());
     assert_eq!(
         size_change,
         Some(SizeChange::new(Size::new(0, 0), Size::new(10, 10)))
@@ -62,7 +70,7 @@ fn test_render_pipeline_hidpi_paint_allocates_scaled_buffer() {
     let mut pipeline = RenderPipeline::new();
     let mon = MonitorId::new("DP-1");
     let node = RenderNode::Rect {
-        path: crate::features::vdom::domain::NodePath::root(),
+        path: crate::features::vdom::domain::NodePath::root_in(crate::features::vdom::domain::SurfaceSpace::Bar),
         rect: Rect::new(Position::new(10, 20), Size::new(100, 30)),
         style: crate::features::styling::domain::ComputedStyle::default(),
         on_click: None,
@@ -92,6 +100,9 @@ fn test_process_monitor_initial_render_and_size_change() {
     let resolver = MockStyleResolver;
     let mut factory = MockCanvasFactory;
     let mut engine = MockLayoutEngine;
+    let mut popup_engine = MockLayoutEngine;
+    let mut panel_engine = MockLayoutEngine;
+    let mut tooltip_engine = MockLayoutEngine;
 
     let ctx = LayoutContext {
         scale: Scale::new(1.0),
@@ -101,6 +112,9 @@ fn test_process_monitor_initial_render_and_size_change() {
         interaction_context: None,
         canvas_factory: &mut factory,
         layout_engine: &mut engine,
+        popup_layout_engine: &mut popup_engine,
+        panel_layout_engine: &mut panel_engine,
+        tooltip_layout_engine: &mut tooltip_engine,
     };
     let outcome = pipeline.process_monitor(&mon, &port, &diff, ctx);
 
@@ -124,6 +138,9 @@ fn test_process_monitor_unchanged_returns_none() {
     let resolver = MockStyleResolver;
     let mut factory = MockCanvasFactory;
     let mut engine = MockLayoutEngine;
+    let mut popup_engine = MockLayoutEngine;
+    let mut panel_engine = MockLayoutEngine;
+    let mut tooltip_engine = MockLayoutEngine;
 
     let ctx1 = LayoutContext {
         scale: Scale::new(1.0),
@@ -133,6 +150,9 @@ fn test_process_monitor_unchanged_returns_none() {
         interaction_context: None,
         canvas_factory: &mut factory,
         layout_engine: &mut engine,
+        popup_layout_engine: &mut popup_engine,
+        panel_layout_engine: &mut panel_engine,
+        tooltip_layout_engine: &mut tooltip_engine,
     };
     let outcome1 = pipeline.process_monitor(&mon, &port, &diff, ctx1);
     assert!(outcome1.is_some());
@@ -145,6 +165,9 @@ fn test_process_monitor_unchanged_returns_none() {
         interaction_context: None,
         canvas_factory: &mut factory,
         layout_engine: &mut engine,
+        popup_layout_engine: &mut popup_engine,
+        panel_layout_engine: &mut panel_engine,
+        tooltip_layout_engine: &mut tooltip_engine,
     };
     let outcome2 = pipeline.process_monitor(&mon, &port, &diff, ctx2);
     assert!(outcome2.is_none());

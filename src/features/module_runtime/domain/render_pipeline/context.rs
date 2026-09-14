@@ -13,6 +13,13 @@ pub struct LayoutContext<'a, F: CanvasFactory> {
     pub interaction_context: Option<InteractionContext>,
     pub canvas_factory: &'a mut F,
     pub layout_engine: &'a mut dyn LayoutEnginePort,
+    /// Separate from `layout_engine`, and from each other, so laying out a
+    /// popup, panel or tooltip's content never disturbs the bar tree's
+    /// incremental layout state — or each other's, when more than one is
+    /// open at once. Each engine instance tracks a single tree.
+    pub popup_layout_engine: &'a mut dyn LayoutEnginePort,
+    pub panel_layout_engine: &'a mut dyn LayoutEnginePort,
+    pub tooltip_layout_engine: &'a mut dyn LayoutEnginePort,
 }
 
 #[derive(Debug, Clone, PartialEq)]

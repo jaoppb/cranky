@@ -10,7 +10,7 @@ use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
 use crate::features::vdom::domain::VNode;
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::geometry::{Position, Rect, Size};
+use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::ModuleId;
 use crate::shared::primitives::MonitorId;
 use std::collections::HashMap;
@@ -53,31 +53,33 @@ fn create_test_event_loop_and_channel() -> (
     (event_loop, id, display_rx)
 }
 
-fn make_test_rect_node(
-    popup: Option<crate::features::layout_engine::domain::StyledPopup>,
-) -> crate::features::layout_engine::domain::RenderNode {
+fn make_test_rect_node() -> crate::features::layout_engine::domain::RenderNode {
     crate::features::layout_engine::domain::RenderNode::Rect {
-        path: crate::features::layout_engine::domain::NodePath::root(),
+        path: crate::features::layout_engine::domain::NodePath::root_in(crate::features::layout_engine::domain::SurfaceSpace::Bar),
         rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
         style: crate::features::styling::domain::ComputedStyle::default(),
         on_click: None,
         on_hover: None,
         tooltip: None,
-        popup,
+        popup: None,
         panel: None,
     }
 }
 
 #[test]
 fn test_event_loop_popup_floating_surface_lifecycle() {
-    use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, StyledNode, StyledPopup};
+    use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
+    use crate::features::module_runtime::domain::{FloatingLayouts, PopupRenderLayout};
     use crate::features::styling::domain::ComputedStyle;
 
     let (mut event_loop, id, display_rx) = create_test_event_loop_and_channel();
     let mon = MonitorId::new("DP-1");
 
-    let popup_styled = StyledNode::Text {
-        path: crate::features::layout_engine::domain::NodePath::root(),
+    // What the pipeline's own layout pass would have produced for the
+    // popup's content — already laid out, not the raw styled tree.
+    let popup_content = crate::features::layout_engine::domain::RenderNode::Text {
+        path: crate::features::layout_engine::domain::NodePath::root_in(crate::features::layout_engine::domain::SurfaceSpace::Bar),
+        rect: Rect::new(Position::new(0, 0), Size::new(30, 12)),
         text: crate::features::vdom::domain::TextContent::new("popup".to_string()),
         style: ComputedStyle::default(),
         on_click: None,
@@ -86,19 +88,16 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
         popup: None,
         panel: None,
     };
-    let styled_popup = StyledPopup::new(
-        Box::new(popup_styled.clone()),
-        crate::features::vdom::domain::AnchorDirection::default(),
-        None,
-        true,
-    );
+    let expected_anchor_rect = Rect::new(Position::new(0, 0), Size::new(50, 20));
+    let popup_layout = PopupRenderLayout::new(expected_anchor_rect, popup_content.clone(), None);
     let outcome1 = crate::features::module_runtime::domain::RenderOutcome::new(
         None,
         vec![],
-        make_test_rect_node(Some(styled_popup)),
+        make_test_rect_node(),
         None,
+        FloatingLayouts::new(Some(popup_layout), None, None),
     );
-    event_loop.dispatch_render_outcome(&mon, &outcome1);
+    event_loop.dispatch_render_outcome(&mon, &outcome1, Scale::new(1.0));
 
     let cmd1 = display_rx
         .try_recv()
@@ -108,7 +107,8 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
             kind,
             monitor_id,
             anchor_rect,
-            layout,
+            buffer: _,
+            logical_size,
             offset,
         } => {
             assert_eq!(offset, None);
@@ -120,11 +120,11 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
                 ),)
             );
             assert_eq!(monitor_id, Some(mon.clone()));
-            assert_eq!(
-                anchor_rect,
-                Some(Rect::new(Position::new(0, 0), Size::new(50, 20)))
-            );
-            assert_eq!(*layout, popup_styled);
+            assert_eq!(anchor_rect, Some(expected_anchor_rect));
+            // The buffer was painted from `popup_content`'s own rect —
+            // proof that what was dispatched came from that layout, not a
+            // stale or unrelated one.
+            assert_eq!(logical_size, *popup_content.rect().size());
         }
         _ => panic!("Expected ShowFloatingSurface, got {cmd1:?}"),
     }
@@ -132,10 +132,11 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
     let outcome2 = crate::features::module_runtime::domain::RenderOutcome::new(
         None,
         vec![],
-        make_test_rect_node(None),
+        make_test_rect_node(),
         None,
+        FloatingLayouts::default(),
     );
-    event_loop.dispatch_render_outcome(&mon, &outcome2);
+    event_loop.dispatch_render_outcome(&mon, &outcome2, Scale::new(1.0));
 
     let cmd2 = display_rx
         .try_recv()

@@ -1,4 +1,5 @@
 use super::context::{LayoutContext, PipelineDiff};
+use super::floating_phase::{layout_floating, FloatingLayouts};
 use super::measurer::ModuleSizeMeasurer;
 use super::outcome::SizeChange;
 use super::pipeline::RenderPipeline;
@@ -13,7 +14,7 @@ pub fn layout_pipeline<F: CanvasFactory>(
     monitor_id: &MonitorId,
     diff: PipelineDiff,
     ctx: &mut LayoutContext<'_, F>,
-) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>)> {
+) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>, FloatingLayouts)> {
     let current_child_sizes_owned = ctx.current_child_sizes.cloned();
     let mut size_change = None;
     let mut child_layouts = Vec::new();
@@ -104,5 +105,18 @@ pub fn layout_pipeline<F: CanvasFactory>(
     };
 
     drop(diff);
-    Some((render_node, size_change, child_layouts))
+
+    let floating = layout_floating(
+        &render_node,
+        ctx.interaction_context.as_ref(),
+        ctx.popup_layout_engine,
+        ctx.panel_layout_engine,
+        ctx.tooltip_layout_engine,
+        ctx.canvas_factory,
+        ctx.scale,
+        ctx.current_child_sizes,
+        &mut child_layouts,
+    );
+
+    Some((render_node, size_change, child_layouts, floating))
 }

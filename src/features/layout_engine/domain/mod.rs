@@ -16,4 +16,4 @@ pub use render_node::*;
 pub use style::*;
 pub use styled_node::*;
 
-pub use crate::features::vdom::domain::{NodePath, TextContent};
+pub use crate::features::vdom::domain::{NodePath, SurfaceSpace, TextContent};

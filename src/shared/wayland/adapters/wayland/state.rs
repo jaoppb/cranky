@@ -6,7 +6,6 @@ use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::ports::DisplayServerError;
-use cosmic_text::{FontSystem, SwashCache};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
@@ -39,8 +38,6 @@ pub struct WaylandState {
     pub(crate) pointer_surface: Option<WlSurface>,
     pub(crate) pointer_pos: (f64, f64),
 
-    pub(crate) font_system: FontSystem,
-    pub(crate) swash_cache: SwashCache,
     pub(crate) floating_surfaces: HashMap<FloatingKind, FloatingSurface>,
     pub(crate) last_button_serial: Option<crate::shared::events::core::PointerSerial>,
     pub(crate) app_env: Arc<AppEnvironment>,

@@ -1,5 +1,6 @@
 use super::context::{LayoutContext, PipelineDiff};
 use super::diff_phase::diff_pipeline;
+use super::floating_phase::FloatingLayouts;
 use super::layout_phase::layout_pipeline;
 use super::outcome::{RenderOutcome, SizeChange};
 use super::paint_phase::paint_pipeline;
@@ -107,7 +108,7 @@ impl RenderPipeline {
         monitor_id: &MonitorId,
         diff: PipelineDiff,
         ctx: &mut LayoutContext<'_, F>,
-    ) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>)> {
+    ) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>, FloatingLayouts)> {
         layout_pipeline(self, monitor_id, diff, ctx)
     }
 
@@ -143,7 +144,8 @@ impl RenderPipeline {
         )?;
 
         let current_bounds = ctx.current_bounds;
-        let (render_node, size_change, child_layouts) = self.layout(monitor_id, diff, &mut ctx)?;
+        let (render_node, size_change, child_layouts, floating) =
+            self.layout(monitor_id, diff, &mut ctx)?;
 
         let buffer = self.paint(
             monitor_id,
@@ -158,6 +160,7 @@ impl RenderPipeline {
             child_layouts,
             render_node,
             buffer,
+            floating,
         ))
     }
 }

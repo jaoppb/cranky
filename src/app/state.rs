@@ -184,7 +184,8 @@ impl<
                     kind,
                     monitor_id,
                     anchor_rect,
-                    layout,
+                    buffer,
+                    logical_size,
                     offset,
                 } => {
                     tracing::debug!(
@@ -198,7 +199,8 @@ impl<
                         kind,
                         monitor_id,
                         anchor_rect,
-                        *layout,
+                        buffer,
+                        logical_size,
                         offset,
                     ) {
                         tracing::error!(err = ?e, "display.show_floating_surface failed");
@@ -955,7 +957,7 @@ mod tests {
         mock_display.expect_render_all().returning(|_, _| Ok(()));
         mock_display
             .expect_show_floating_surface()
-            .returning(|_, _, _, _, _| Ok(()));
+            .returning(|_, _, _, _, _, _| Ok(()));
         mock_display
             .expect_hide_floating_surface()
             .returning(|_| Ok(()));
@@ -986,16 +988,11 @@ mod tests {
                 kind: crate::features::layout_engine::domain::FloatingKind::Tooltip,
                 monitor_id: None,
                 anchor_rect: None,
-                layout: Box::new(crate::features::layout_engine::domain::StyledNode::Text {
-                    path: crate::features::layout_engine::domain::NodePath::root(),
-                    text: crate::features::vdom::domain::TextContent::new("t".to_string()),
-                    style: crate::features::styling::domain::ComputedStyle::default(),
-                    on_click: None,
-                    on_hover: None,
-                    tooltip: None,
-                    popup: None,
-                    panel: None,
-                }),
+                buffer: crate::shared::primitives::render::RenderBuffer::new(
+                    vec![0u8; 4],
+                    Size::new(1, 1),
+                ),
+                logical_size: Size::new(1, 1),
                 offset: None,
             })
             .await
@@ -1165,7 +1162,7 @@ mod tests {
         mock_display.expect_render_all().returning(|_, _| Ok(()));
         mock_display
             .expect_show_floating_surface()
-            .returning(|_, _, _, _, _| Ok(()));
+            .returning(|_, _, _, _, _, _| Ok(()));
         mock_display
             .expect_hide_floating_surface()
             .returning(|_| Ok(()));

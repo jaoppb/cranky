@@ -1,4 +1,4 @@
-use crate::features::layout_engine::domain::{NodePath, RenderNode};
+use crate::features::layout_engine::domain::{NodePath, RenderNode, SurfaceSpace};
 use crate::features::module_runtime::domain::pointer_handler::action::PointerAction;
 use crate::features::module_runtime::domain::pointer_handler::handler::PointerHandler;
 use crate::features::styling::domain::ComputedStyle;
@@ -9,7 +9,7 @@ use crate::shared::primitives::{FunctionName, MonitorId};
 
 fn make_test_tree(on_click: Option<ClickHandlers>) -> RenderNode {
     RenderNode::Rect {
-        path: NodePath::root(),
+        path: NodePath::root_in(SurfaceSpace::Bar),
         rect: Rect::new(Position::new(0, 0), Size::new(100, 100)),
         style: ComputedStyle::default(),
         on_click,

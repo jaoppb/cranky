@@ -45,6 +45,13 @@ impl<
             let engine = layout_engines
                 .entry(monitor_id.clone())
                 .or_insert_with(|| Box::new(TaffyLayoutAdapter::new()));
+            // Fresh per render, never cached: popup/panel content doesn't
+            // need incremental diffing the way the bar tree does, and two
+            // separate instances keep an open popup and an open panel from
+            // diffing against each other's layout state.
+            let mut popup_engine = TaffyLayoutAdapter::new();
+            let mut panel_engine = TaffyLayoutAdapter::new();
+            let mut tooltip_engine = TaffyLayoutAdapter::new();
 
             let scale = self
                 .ctx
@@ -64,6 +71,9 @@ impl<
                     interaction_context,
                     canvas_factory: &mut self.canvas_factory,
                     layout_engine: engine.as_mut(),
+                    popup_layout_engine: &mut popup_engine,
+                    panel_layout_engine: &mut panel_engine,
+                    tooltip_layout_engine: &mut tooltip_engine,
                 };
                 self.render_pipeline.process_monitor(
                     &monitor_id,
@@ -74,7 +84,7 @@ impl<
             };
 
             if let Some(outcome) = outcome {
-                self.dispatch_render_outcome(&monitor_id, &outcome);
+                self.dispatch_render_outcome(&monitor_id, &outcome, scale);
             }
         }
 

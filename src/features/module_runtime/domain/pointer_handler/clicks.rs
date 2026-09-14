@@ -13,7 +13,6 @@ impl PointerHandler {
         pos: Position,
         render_tree: &RenderNode,
     ) -> bool {
-        self.last_pointer_pos = Some((monitor_id.clone(), pos));
         let hit = render_tree.hit_test(pos);
         let target_path = hit.last().map(|n| n.path().clone());
         let old_active = self.active_nodes.get(monitor_id).cloned();
@@ -35,7 +34,6 @@ impl PointerHandler {
         pos: Position,
         render_tree: &RenderNode,
     ) -> bool {
-        self.last_pointer_pos = Some((monitor_id.clone(), pos));
         let mut changed = self.active_nodes.remove(monitor_id).is_some();
 
         let hit = render_tree.hit_test(pos);
@@ -54,13 +52,11 @@ impl PointerHandler {
     }
 
     pub(crate) fn handle_click(
-        &mut self,
         monitor_id: &MonitorId,
         button: PointerButton,
         pos: Position,
         render_tree: &RenderNode,
     ) -> Vec<PointerAction> {
-        self.last_pointer_pos = Some((monitor_id.clone(), pos));
         let hit = render_tree.hit_test(pos);
         let hit_cmd = hit
             .iter()

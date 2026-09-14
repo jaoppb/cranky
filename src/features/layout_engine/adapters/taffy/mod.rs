@@ -105,7 +105,9 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::layout_engine::domain::{NodePath, StyledNode, TextContent, TextMeasurer};
+    use crate::features::layout_engine::domain::{
+        NodePath, StyledNode, SurfaceSpace, TextContent, TextMeasurer,
+    };
     use crate::features::styling::domain::{ComputedStyle, GridTrack};
     use crate::shared::config::domain::{FontFamily, FontSize};
     use crate::shared::primitives::geometry::{Position, Size};
@@ -138,7 +140,7 @@ mod tests {
         let mut measurer = MockMeasurer;
 
         let node = StyledNode::Text {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             text: TextContent::new("hello".to_string()),
             style: ComputedStyle::default(),
             on_click: None,
@@ -165,7 +167,7 @@ mod tests {
         style.set_height(crate::features::styling::domain::CssLength::Px(30.0));
 
         let node = StyledNode::Module {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             key: crate::shared::primitives::ModuleKey::from_name(ModuleName::new("custom_mod")),
             options: ModuleOptions::default(),
             style,
@@ -191,7 +193,7 @@ mod tests {
         let mut measurer = MockMeasurer;
 
         let node = StyledNode::Module {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             key: crate::shared::primitives::ModuleKey::from_name(ModuleName::new("workspace")),
             options: ModuleOptions::default(),
             style: ComputedStyle::default(),
@@ -215,7 +217,7 @@ mod tests {
         let mut measurer = MockMeasurer;
 
         let child1 = StyledNode::Module {
-            path: NodePath::new(vec![0]),
+            path: NodePath::new(SurfaceSpace::Bar, vec![0]),
             key: crate::shared::primitives::ModuleKey::from_name(ModuleName::new("workspace")),
             options: ModuleOptions::default(),
             style: ComputedStyle::default(),
@@ -231,7 +233,7 @@ mod tests {
             0.0, 0.0, 16.0, 16.0,
         ));
         let root = StyledNode::Flex {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             children: vec![child1],
             style: root_style,
             on_click: None,
@@ -259,7 +261,7 @@ mod tests {
         let mut child1_style = ComputedStyle::default();
         child1_style.set_width(crate::features::styling::domain::CssLength::Percent(100.0));
         let child1 = StyledNode::Rect {
-            path: NodePath::new(vec![0]),
+            path: NodePath::new(SurfaceSpace::Bar, vec![0]),
             style: child1_style,
             on_click: None,
             on_hover: None,
@@ -271,7 +273,7 @@ mod tests {
         let mut child2_style = ComputedStyle::default();
         child2_style.set_width(crate::features::styling::domain::CssLength::Percent(100.0));
         let child2 = StyledNode::Rect {
-            path: NodePath::new(vec![1]),
+            path: NodePath::new(SurfaceSpace::Bar, vec![1]),
             style: child2_style,
             on_click: None,
             on_hover: None,
@@ -285,7 +287,7 @@ mod tests {
         grid_style.set_column_gap(crate::features::layout_engine::domain::Gap::new(10.0));
 
         let grid = StyledNode::Grid {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             children: vec![child1, child2],
             style: grid_style,
             on_click: None,
@@ -326,7 +328,7 @@ mod tests {
         });
         child_style.set_height(crate::features::styling::domain::CssLength::Px(10.0));
         let child = StyledNode::Rect {
-            path: NodePath::new(vec![0]),
+            path: NodePath::new(SurfaceSpace::Bar, vec![0]),
             style: child_style,
             on_click: None,
             on_hover: None,
@@ -339,7 +341,7 @@ mod tests {
         root_style.set_width(crate::features::styling::domain::CssLength::Px(200.0));
         root_style.set_height(crate::features::styling::domain::CssLength::Px(10.0));
         let root = StyledNode::Flex {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             children: vec![child],
             style: root_style,
             on_click: None,

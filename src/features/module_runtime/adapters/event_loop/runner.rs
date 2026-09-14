@@ -1,7 +1,4 @@
-use super::dispatch::{
-    discover_monitors, dispatch_outcome_buffer, dispatch_outcome_layouts, dispatch_outcome_panels,
-    dispatch_outcome_popups, dispatch_post_actions, update_floating_trees,
-};
+use super::dispatch::discover_monitors;
 use super::events::EventLoopEvent;
 use crate::features::layout_engine::domain::{DisplayCommandSender, RenderNode};
 use crate::features::layout_engine::ports::LayoutEnginePort;
@@ -14,7 +11,7 @@ use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::MonitorId;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct EventLoop<
@@ -30,10 +27,13 @@ pub struct EventLoop<
     pub(crate) canvas_factory: F,
     pub(crate) vdom_diff: Arc<dyn VdomDiffPort>,
     pub(crate) style_resolver: Arc<dyn StyleResolverPort>,
-    pub(crate) active_popups: HashSet<MonitorId>,
-    pub(crate) active_panels: HashSet<MonitorId>,
+    /// Also this module's dedup key for each floating kind: a display
+    /// command is only ever sent when a fresh layout differs from what's
+    /// cached here, so there's one cache per kind, not a hit-test copy and a
+    /// separate "did it change" copy.
     pub(crate) popup_render_trees: HashMap<MonitorId, RenderNode>,
     pub(crate) panel_render_trees: HashMap<MonitorId, RenderNode>,
+    pub(crate) tooltip_render_trees: HashMap<MonitorId, RenderNode>,
 }
 
 impl<
@@ -61,10 +61,9 @@ impl<
             canvas_factory,
             vdom_diff,
             style_resolver,
-            active_popups: HashSet::new(),
-            active_panels: HashSet::new(),
             popup_render_trees: HashMap::new(),
             panel_render_trees: HashMap::new(),
+            tooltip_render_trees: HashMap::new(),
         }
     }
 
@@ -92,47 +91,6 @@ impl<
 
     pub fn discover_monitors(&self, layouts: &HashMap<MonitorId, Rect>) -> Vec<MonitorId> {
         discover_monitors(self.ctx.hub(), layouts)
-    }
-
-    pub fn dispatch_render_outcome(
-        &mut self,
-        monitor_id: &MonitorId,
-        outcome: &crate::features::module_runtime::domain::RenderOutcome,
-    ) {
-        dispatch_outcome_layouts(
-            self.ctx.layout_sender(),
-            self.ctx.id(),
-            monitor_id,
-            outcome,
-        );
-        dispatch_outcome_buffer(
-            self.ctx.surface_manager(),
-            self.ctx.id(),
-            self.ctx.parent_id(),
-            monitor_id,
-            outcome,
-        );
-        dispatch_outcome_popups(
-            self.ctx.display_sender(),
-            &mut self.active_popups,
-            self.ctx.id(),
-            monitor_id,
-            outcome,
-        );
-        dispatch_outcome_panels(
-            self.ctx.display_sender(),
-            &mut self.active_panels,
-            self.ctx.id(),
-            monitor_id,
-            outcome,
-        );
-        update_floating_trees(
-            &mut self.canvas_factory,
-            &mut self.popup_render_trees,
-            &mut self.panel_render_trees,
-            monitor_id,
-            outcome,
-        );
     }
 
     pub async fn run(mut self) {
@@ -189,10 +147,6 @@ impl<
 
             if should_render {
                 self.render_all_monitors(&mut layout_engines);
-                let post_actions = self
-                    .pointer_handler
-                    .update_after_render(self.render_pipeline.render_trees());
-                dispatch_post_actions(&mut self.port, &self.ctx, post_actions);
             }
         }
     }

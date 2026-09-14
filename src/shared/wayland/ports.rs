@@ -83,7 +83,8 @@ pub trait DisplayServerPort: Send + Sync {
         kind: crate::features::layout_engine::domain::FloatingKind,
         monitor_id: Option<crate::shared::primitives::MonitorId>,
         anchor_rect: Option<crate::shared::primitives::geometry::Rect>,
-        layout: crate::features::layout_engine::domain::StyledNode,
+        buffer: crate::shared::primitives::render::RenderBuffer,
+        logical_size: crate::shared::primitives::geometry::Size,
         offset: Option<crate::shared::primitives::PopupOffset>,
     ) -> Result<(), DisplayServerError>;
 

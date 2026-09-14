@@ -1,16 +1,21 @@
 use super::popup::FloatingKind;
-use super::styled_node::StyledNode;
-use crate::shared::primitives::geometry::Rect;
+use crate::shared::primitives::geometry::{Rect, Size};
+use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::MonitorId;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisplayCommand {
     RequestRender,
+    /// The module has already laid out and painted this floating surface's
+    /// content — Wayland's job is placing and blitting a buffer, never
+    /// computing one. `logical_size` travels separately from `buffer`'s own
+    /// (physical, scaled) size because the positioner needs logical units.
     ShowFloatingSurface {
         kind: FloatingKind,
         monitor_id: Option<MonitorId>,
         anchor_rect: Option<Rect>,
-        layout: Box<StyledNode>,
+        buffer: RenderBuffer,
+        logical_size: Size,
         offset: Option<crate::shared::primitives::PopupOffset>,
     },
     HideFloatingSurface {

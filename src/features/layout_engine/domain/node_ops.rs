@@ -1,5 +1,7 @@
 use super::popup::{ActivePanel, AnchoredPopup};
 use super::render_node::RenderNode;
+use super::styled_node::StyledNode;
+use crate::features::vdom::domain::NodePath;
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::ChildModuleLayout;
 
@@ -76,5 +78,129 @@ impl RenderNode {
             }
         }
         None
+    }
+
+    /// Finds the tooltip belonging to the innermost node along `path` that
+    /// carries one — the same "deepest ancestor wins" rule
+    /// `PointerHandler` used when it walked a hit-test result directly,
+    /// reproduced here as a path walk since the pipeline doesn't hit-test.
+    ///
+    /// `path`'s indices are used to descend; its surface is the caller's
+    /// responsibility — this must already be the tree that surface names.
+    #[must_use]
+    pub fn find_tooltip_along(&self, path: &NodePath) -> Option<&StyledNode> {
+        let mut current = self;
+        let mut found = current.tooltip();
+        for &index in path.as_slice() {
+            let (Self::Flex { children, .. } | Self::Grid { children, .. }) = current else {
+                break;
+            };
+            let Some(child) = children.get(index) else {
+                break;
+            };
+            current = child;
+            if let Some(tooltip) = current.tooltip() {
+                found = Some(tooltip);
+            }
+        }
+        found
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::styling::domain::ComputedStyle;
+    use crate::features::vdom::domain::{SurfaceSpace, TextContent};
+    use crate::shared::primitives::geometry::{Position, Rect, Size};
+
+    fn leaf(path: &[usize], tooltip: Option<StyledNode>) -> RenderNode {
+        RenderNode::Rect {
+            path: NodePath::new(SurfaceSpace::Bar, path.to_vec()),
+            rect: Rect::new(Position::new(0, 0), Size::new(0, 0)),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: tooltip.map(Box::new),
+            popup: None,
+            panel: None,
+        }
+    }
+
+    fn tooltip_stub(text: &str) -> StyledNode {
+        StyledNode::Text {
+            path: NodePath::root_in(SurfaceSpace::Tooltip),
+            text: TextContent::new(text.to_string()),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    fn flex(path: &[usize], children: Vec<RenderNode>, tooltip: Option<StyledNode>) -> RenderNode {
+        RenderNode::Flex {
+            path: NodePath::new(SurfaceSpace::Bar, path.to_vec()),
+            rect: Rect::new(Position::new(0, 0), Size::new(0, 0)),
+            children,
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: tooltip.map(Box::new),
+            popup: None,
+            panel: None,
+        }
+    }
+
+    #[test]
+    fn test_find_tooltip_along_prefers_deepest() {
+        // root (tooltip "outer") -> child[0] (no tooltip) -> child[0][0] (tooltip "inner")
+        let inner = leaf(&[0, 0], Some(tooltip_stub("inner")));
+        let middle = flex(&[0], vec![inner], None);
+        let root = flex(&[], vec![middle], Some(tooltip_stub("outer")));
+
+        let path = NodePath::new(SurfaceSpace::Bar, vec![0, 0]);
+        let found = root.find_tooltip_along(&path);
+        let StyledNode::Text { text, .. } = found.expect("expected a tooltip") else {
+            panic!("expected StyledNode::Text");
+        };
+        assert_eq!(text.as_str(), "inner");
+    }
+
+    #[test]
+    fn test_find_tooltip_along_falls_back_to_ancestor() {
+        // root (tooltip "outer") -> child[0] (no tooltip, no further tooltip below)
+        let middle = flex(&[0], vec![leaf(&[0, 0], None)], None);
+        let root = flex(&[], vec![middle], Some(tooltip_stub("outer")));
+
+        let path = NodePath::new(SurfaceSpace::Bar, vec![0, 0]);
+        let found = root.find_tooltip_along(&path);
+        let StyledNode::Text { text, .. } = found.expect("expected the ancestor's tooltip") else {
+            panic!("expected StyledNode::Text");
+        };
+        assert_eq!(text.as_str(), "outer");
+    }
+
+    #[test]
+    fn test_find_tooltip_along_none_when_nothing_on_path_has_one() {
+        let middle = flex(&[0], vec![leaf(&[0, 0], None)], None);
+        let root = flex(&[], vec![middle], None);
+
+        let path = NodePath::new(SurfaceSpace::Bar, vec![0, 0]);
+        assert!(root.find_tooltip_along(&path).is_none());
+    }
+
+    #[test]
+    fn test_find_tooltip_along_stops_at_out_of_bounds_index() {
+        // Path descends past a leaf (no children) — must not panic, and
+        // must still return whatever was found up to that point.
+        let root = leaf(&[], Some(tooltip_stub("only")));
+        let path = NodePath::new(SurfaceSpace::Bar, vec![5, 2]);
+        let StyledNode::Text { text, .. } = root.find_tooltip_along(&path).expect("root tooltip") else {
+            panic!("expected StyledNode::Text");
+        };
+        assert_eq!(text.as_str(), "only");
     }
 }

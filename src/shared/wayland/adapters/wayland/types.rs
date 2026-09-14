@@ -1,4 +1,3 @@
-use crate::features::layout_engine::domain::StyledNode;
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::ModuleId;
@@ -25,7 +24,6 @@ pub(crate) struct FloatingSurface {
     pub(crate) xdg_popup: XdgPopup,
     pub(crate) shm_buffer: ShmBuffer,
     pub(crate) size: Size,
-    pub(crate) layout: StyledNode,
     pub(crate) reposition_token: u32,
 }
 
