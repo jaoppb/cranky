@@ -105,13 +105,16 @@ pub(crate) fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
 
     let image_fn = lua.create_function(|lua, table: mlua::Table| {
         let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
-        let (class, id, _, _, tooltip, popup, panel) = parse_common_props(lua, &table)?;
+        let (class, id, _, _, tooltip, popup, panel, key) = parse_common_props(lua, &table)?;
         let mut node = VNode::new_image(data, pixel_size, class, id, tooltip);
         if let Some(p) = popup {
             node = node.with_popup(p);
         }
         if let Some(p) = panel {
             node = node.with_panel(p);
+        }
+        if let Some(k) = key {
+            node = node.with_key(k);
         }
         Ok(LuaVNode(node))
     })?;

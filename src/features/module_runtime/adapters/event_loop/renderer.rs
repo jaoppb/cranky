@@ -8,7 +8,7 @@ use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::primitives::geometry::{Rect, Scale};
 use crate::shared::primitives::MonitorId;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 impl<
     F: CanvasFactory + 'static,
@@ -24,6 +24,15 @@ impl<
         let t0 = std::time::Instant::now();
         let layouts: HashMap<MonitorId, Rect> = self.ctx.rxs_mut().0.borrow().clone();
         let monitors = self.discover_monitors(&layouts);
+
+        // `layout_engines` and `self.render_pipeline` are both keyed by
+        // monitor and only ever grow (`.entry().or_insert_with()` /
+        // `.insert()`) — nothing else removes an entry when a monitor
+        // disconnects. `monitors` is the current, authoritative set for this
+        // pass, so anything outside it is for a monitor that's gone.
+        let live: HashSet<MonitorId> = monitors.iter().cloned().collect();
+        layout_engines.retain(|id, _| live.contains(id));
+        self.render_pipeline.retain_monitors(&live);
 
         for monitor_id in monitors {
             let current_bounds = layouts.get(&monitor_id).copied();

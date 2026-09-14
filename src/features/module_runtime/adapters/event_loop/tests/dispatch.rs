@@ -81,6 +81,7 @@ async fn test_dispatch_render_outcome_emits_layout_events() {
         vec![],
         crate::features::layout_engine::domain::RenderNode::Rect {
             path: crate::features::layout_engine::domain::NodePath::root(),
+            node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
             style: ComputedStyle::default(),
             on_click: None,

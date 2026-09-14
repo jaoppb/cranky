@@ -20,7 +20,7 @@ pub(crate) fn parse_table_children(lua: &Lua, table: &mlua::Table) -> mlua::Resu
 
 fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
     let typ: String = table.get::<Option<String>>("type")?.unwrap_or_default();
-    let (class, id, on_click, on_hover, tooltip, popup, panel) =
+    let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
         parse_common_props(lua, &table)?;
 
     let mut node = match typ.as_str() {
@@ -101,6 +101,9 @@ fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
     }
     if let Some(p) = panel {
         node = node.with_panel(p);
+    }
+    if let Some(k) = key {
+        node = node.with_key(k);
     }
     Ok(node)
 }

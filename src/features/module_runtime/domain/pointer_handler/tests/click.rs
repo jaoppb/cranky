@@ -10,6 +10,7 @@ use crate::shared::primitives::{FunctionName, MonitorId};
 fn make_test_tree(on_click: Option<ClickHandlers>) -> RenderNode {
     RenderNode::Rect {
         path: NodePath::root(),
+        node_key: None,
         rect: Rect::new(Position::new(0, 0), Size::new(100, 100)),
         style: ComputedStyle::default(),
         on_click,

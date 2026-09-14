@@ -60,7 +60,7 @@ impl VNode {
         parent: Option<&ElementQuery>,
         inherited: &InheritedStyle,
     ) -> StyledNode {
-        let pseudo_classes = compute_pseudo_classes(path, interaction);
+        let pseudo_classes = compute_pseudo_classes(path, self.key(), interaction);
         let classes = self.class_names().map_or(&[][..], ClassNameList::as_slice);
         let query = ElementQuery::new(
             self.tag().as_str(),

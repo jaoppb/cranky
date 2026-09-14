@@ -1,6 +1,6 @@
 use super::popup::{StyledPanel, StyledPopup};
 use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
-use crate::features::vdom::domain::{ClickHandlers, NodePath, TextContent, UiAction};
+use crate::features::vdom::domain::{ClickHandlers, NodeKey, NodePath, TextContent, UiAction};
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{BinaryData, ModuleKey, ModuleOptions};
 
@@ -8,6 +8,7 @@ use crate::shared::primitives::{BinaryData, ModuleKey, ModuleOptions};
 pub enum StyledNode {
     Flex {
         path: NodePath,
+        node_key: Option<NodeKey>,
         children: Vec<Self>,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
@@ -18,6 +19,7 @@ pub enum StyledNode {
     },
     Grid {
         path: NodePath,
+        node_key: Option<NodeKey>,
         children: Vec<Self>,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
@@ -28,6 +30,7 @@ pub enum StyledNode {
     },
     Text {
         path: NodePath,
+        node_key: Option<NodeKey>,
         text: TextContent,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
@@ -38,6 +41,7 @@ pub enum StyledNode {
     },
     Progress {
         path: NodePath,
+        node_key: Option<NodeKey>,
         value: ProgressValue,
         orientation: Orientation,
         style: ComputedStyle,
@@ -49,6 +53,7 @@ pub enum StyledNode {
     },
     Rect {
         path: NodePath,
+        node_key: Option<NodeKey>,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,
@@ -58,6 +63,7 @@ pub enum StyledNode {
     },
     Image {
         path: NodePath,
+        node_key: Option<NodeKey>,
         data: BinaryData,
         pixel_size: Size,
         style: ComputedStyle,
@@ -67,6 +73,7 @@ pub enum StyledNode {
     },
     Module {
         path: NodePath,
+        node_key: Option<NodeKey>,
         key: ModuleKey,
         options: ModuleOptions,
         style: ComputedStyle,
@@ -89,6 +96,22 @@ impl StyledNode {
             | Self::Rect { path, .. }
             | Self::Image { path, .. }
             | Self::Module { path, .. } => path,
+        }
+    }
+
+    /// Reconciliation identity set by the widget script (`key = "..."` in
+    /// the DSL), distinct from `path` (positional) and from `Module`'s own
+    /// `key: ModuleKey`. `None` unless the widget opted in.
+    #[must_use]
+    pub const fn node_key(&self) -> Option<&NodeKey> {
+        match self {
+            Self::Flex { node_key, .. }
+            | Self::Grid { node_key, .. }
+            | Self::Text { node_key, .. }
+            | Self::Progress { node_key, .. }
+            | Self::Rect { node_key, .. }
+            | Self::Image { node_key, .. }
+            | Self::Module { node_key, .. } => node_key.as_ref(),
         }
     }
 

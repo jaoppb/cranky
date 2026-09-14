@@ -58,6 +58,7 @@ fn make_test_rect_node(
 ) -> crate::features::layout_engine::domain::RenderNode {
     crate::features::layout_engine::domain::RenderNode::Rect {
         path: crate::features::layout_engine::domain::NodePath::root(),
+        node_key: None,
         rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
         style: crate::features::styling::domain::ComputedStyle::default(),
         on_click: None,
@@ -78,6 +79,7 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
 
     let popup_styled = StyledNode::Text {
         path: crate::features::layout_engine::domain::NodePath::root(),
+        node_key: None,
         text: crate::features::vdom::domain::TextContent::new("popup".to_string()),
         style: ComputedStyle::default(),
         on_click: None,

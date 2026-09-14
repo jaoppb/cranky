@@ -1,14 +1,14 @@
-use crate::features::layout_engine::domain::{NodePath, StyledNode};
-use crate::features::vdom::domain::InteractionContext;
+use crate::features::layout_engine::domain::StyledNode;
+use crate::features::vdom::domain::{InteractionContext, NodeRef};
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::MonitorId;
 use std::collections::HashMap;
 
 #[derive(Debug, Default)]
 pub struct PointerHandler {
-    pub(crate) hovered_nodes: HashMap<MonitorId, NodePath>,
-    pub(crate) active_nodes: HashMap<MonitorId, NodePath>,
-    pub(crate) focused_nodes: HashMap<MonitorId, NodePath>,
+    pub(crate) hovered_nodes: HashMap<MonitorId, NodeRef>,
+    pub(crate) active_nodes: HashMap<MonitorId, NodeRef>,
+    pub(crate) focused_nodes: HashMap<MonitorId, NodeRef>,
     pub(crate) last_tooltip: Option<StyledNode>,
     pub(crate) last_pointer_pos: Option<(MonitorId, Position)>,
 }
@@ -20,17 +20,17 @@ impl PointerHandler {
     }
 
     #[must_use]
-    pub fn hovered_node(&self, monitor_id: &MonitorId) -> Option<&NodePath> {
+    pub fn hovered_node(&self, monitor_id: &MonitorId) -> Option<&NodeRef> {
         self.hovered_nodes.get(monitor_id)
     }
 
     #[must_use]
-    pub fn active_node(&self, monitor_id: &MonitorId) -> Option<&NodePath> {
+    pub fn active_node(&self, monitor_id: &MonitorId) -> Option<&NodeRef> {
         self.active_nodes.get(monitor_id)
     }
 
     #[must_use]
-    pub fn focused_node(&self, monitor_id: &MonitorId) -> Option<&NodePath> {
+    pub fn focused_node(&self, monitor_id: &MonitorId) -> Option<&NodeRef> {
         self.focused_nodes.get(monitor_id)
     }
 

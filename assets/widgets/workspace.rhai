@@ -136,6 +136,7 @@ fn render(monitor) {
             let box_node = ui.flex(#{
                 class: classes,
                 id: "ws-" + ws.id.to_string(),
+                key: "ws-" + ws.id.to_string(),
                 children: [text_node],
                 on_click: on_click_cmd,
                 tooltip: tooltip_node

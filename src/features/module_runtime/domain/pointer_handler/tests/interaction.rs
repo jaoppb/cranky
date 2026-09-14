@@ -8,7 +8,7 @@ mod tests {
     };
     use crate::features::module_runtime::domain::pointer_handler::handler::PointerHandler;
     use crate::features::styling::domain::ComputedStyle;
-    use crate::features::vdom::domain::TextContent;
+    use crate::features::vdom::domain::{NodeRef, TextContent};
     use crate::shared::events::core::{PointerButton, PointerEvent, SurfaceKind};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
     use crate::shared::primitives::{FunctionName, MonitorId};
@@ -17,6 +17,7 @@ mod tests {
 fn make_test_tree(tooltip: Option<StyledNode>) -> RenderNode {
     RenderNode::Rect {
         path: NodePath::root(),
+        node_key: None,
         rect: Rect::new(Position::new(0, 0), Size::new(100, 100)),
         style: ComputedStyle::default(),
         on_click: None,
@@ -42,7 +43,7 @@ fn test_interaction_state_lifecycle() {
         &tree,
     );
     assert!(outcome_motion.has_state_changed());
-    assert_eq!(handler.hovered_node(&mon), Some(&NodePath::root()));
+    assert_eq!(handler.hovered_node(&mon), Some(&NodeRef::new(NodePath::root(), None)));
 
     let outcome_press = handler.handle_event(
         &PointerEvent::ButtonPress {
@@ -54,7 +55,7 @@ fn test_interaction_state_lifecycle() {
         &tree,
     );
     assert!(outcome_press.has_state_changed());
-    assert_eq!(handler.active_node(&mon), Some(&NodePath::root()));
+    assert_eq!(handler.active_node(&mon), Some(&NodeRef::new(NodePath::root(), None)));
 
     let outcome_release = handler.handle_event(
         &PointerEvent::ButtonRelease {
@@ -67,7 +68,7 @@ fn test_interaction_state_lifecycle() {
     );
     assert!(outcome_release.has_state_changed());
     assert_eq!(handler.active_node(&mon), None);
-    assert_eq!(handler.focused_node(&mon), Some(&NodePath::root()));
+    assert_eq!(handler.focused_node(&mon), Some(&NodeRef::new(NodePath::root(), None)));
 
     let outcome_leave = handler.handle_event(
         &PointerEvent::PointerLeave {
@@ -78,7 +79,7 @@ fn test_interaction_state_lifecycle() {
     );
     assert!(outcome_leave.has_state_changed());
     assert_eq!(handler.hovered_node(&mon), None);
-    assert_eq!(handler.focused_node(&mon), Some(&NodePath::root()));
+    assert_eq!(handler.focused_node(&mon), Some(&NodeRef::new(NodePath::root(), None)));
 }
 
 #[test]
@@ -87,6 +88,7 @@ fn test_motion_with_tooltip_lifecycle() {
     let mon = MonitorId::new("DP-1");
     let tooltip_node = StyledNode::Text {
         path: NodePath::root(),
+        node_key: None,
         text: TextContent::new("hello".to_string()),
         style: ComputedStyle::default(),
         on_click: None,
@@ -160,6 +162,7 @@ fn test_update_after_render_detects_tooltip_change() {
 
     let tooltip_node = StyledNode::Text {
         path: NodePath::root(),
+        node_key: None,
         text: TextContent::new("dynamic".to_string()),
         style: ComputedStyle::default(),
         on_click: None,

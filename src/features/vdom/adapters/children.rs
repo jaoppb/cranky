@@ -1,5 +1,15 @@
 use crate::features::vdom::domain::{ChildPatchOp, NodeId, Patch, VNode};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+
+/// Whether every child in `children` carries a key, with no duplicates.
+/// Vacuously true for an empty slice — callers must separately check that at
+/// least one child is keyed before treating that as "safe to key this list".
+fn fully_keyed(children: &[VNode]) -> bool {
+    let mut seen = HashSet::new();
+    children
+        .iter()
+        .all(|c| c.key().is_some_and(|k| seen.insert(k.as_str())))
+}
 
 #[must_use]
 pub fn diff_children_with<F>(
@@ -11,12 +21,26 @@ pub fn diff_children_with<F>(
 where
     F: Fn(&VNode, &VNode) -> Patch,
 {
-    let has_keys = old_children.iter().any(|c| c.key().is_some())
+    // Keyed reconciliation requires *every* sibling on both sides to carry a
+    // unique key: a mix of keyed and unkeyed children, or a duplicate key,
+    // has no well-defined match and silently produced wrong Move/Remove
+    // pairs before — falling back to positional (with a warning) is honest
+    // about not knowing which child is which.
+    let any_keyed = old_children.iter().any(|c| c.key().is_some())
         || new_children.iter().any(|c| c.key().is_some());
+    let keyed = any_keyed && fully_keyed(old_children) && fully_keyed(new_children);
+
+    if any_keyed && !keyed {
+        tracing::warn!(
+            parent_id = %parent_id,
+            "child list has a mix of keyed and unkeyed children, or a duplicate key; \
+             falling back to positional reconciliation for this render"
+        );
+    }
 
     let mut child_patches = Vec::new();
 
-    if has_keys {
+    if keyed {
         let mut old_map: HashMap<&str, (usize, &VNode)> = HashMap::new();
         for (idx, child) in old_children.iter().enumerate() {
             if let Some(key) = child.key() {

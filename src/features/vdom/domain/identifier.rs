@@ -72,43 +72,78 @@ impl NodePath {
     }
 }
 
+/// Identifies a specific rendered node for the purpose of remembering
+/// pointer interaction (hover/active/focus) from one render to the next.
+///
+/// Carries both the node's key (when the widget set one — see
+/// `StyledNode::node_key` / `RenderNode::node_key`) and the `NodePath` it
+/// occupied when captured, rather than picking one: a hit-tested node is
+/// matched back against the freshly-rendered tree by key first, so that
+/// removing an earlier sibling (which shifts everyone after it to a new
+/// path) doesn't strand the interaction on whatever unrelated node now sits
+/// at the old path. The path is kept as the fallback for nodes with no key,
+/// and to let a container bubble `:hover`/`:active` down to an ancestor of
+/// the exact node that was hit.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct NodeRef {
+    path: NodePath,
+    key: Option<NodeKey>,
+}
+
+impl NodeRef {
+    #[must_use]
+    pub const fn new(path: NodePath, key: Option<NodeKey>) -> Self {
+        Self { path, key }
+    }
+
+    #[must_use]
+    pub const fn path(&self) -> &NodePath {
+        &self.path
+    }
+
+    #[must_use]
+    pub const fn key(&self) -> Option<&NodeKey> {
+        self.key.as_ref()
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InteractionContext {
-    hovered_path: Option<NodePath>,
-    active_path: Option<NodePath>,
-    focused_path: Option<NodePath>,
+    hovered: Option<NodeRef>,
+    active: Option<NodeRef>,
+    focused: Option<NodeRef>,
     is_monitor_focused: bool,
 }
 
 impl InteractionContext {
     #[must_use]
     pub const fn new(
-        hovered_path: Option<NodePath>,
-        active_path: Option<NodePath>,
-        focused_path: Option<NodePath>,
+        hovered: Option<NodeRef>,
+        active: Option<NodeRef>,
+        focused: Option<NodeRef>,
         is_monitor_focused: bool,
     ) -> Self {
         Self {
-            hovered_path,
-            active_path,
-            focused_path,
+            hovered,
+            active,
+            focused,
             is_monitor_focused,
         }
     }
 
     #[must_use]
-    pub const fn hovered_path(&self) -> Option<&NodePath> {
-        self.hovered_path.as_ref()
+    pub const fn hovered(&self) -> Option<&NodeRef> {
+        self.hovered.as_ref()
     }
 
     #[must_use]
-    pub const fn active_path(&self) -> Option<&NodePath> {
-        self.active_path.as_ref()
+    pub const fn active(&self) -> Option<&NodeRef> {
+        self.active.as_ref()
     }
 
     #[must_use]
-    pub const fn focused_path(&self) -> Option<&NodePath> {
-        self.focused_path.as_ref()
+    pub const fn focused(&self) -> Option<&NodeRef> {
+        self.focused.as_ref()
     }
 
     #[must_use]

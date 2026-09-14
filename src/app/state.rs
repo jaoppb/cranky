@@ -446,7 +446,7 @@ impl<
     }
 
     fn handle_hyprland_changed(
-        &self,
+        &mut self,
         state: &crate::shared::events::signals::HyprlandState,
         current_focused_monitor: &mut String,
         display: &mut impl DisplayServerPort,
@@ -459,6 +459,40 @@ impl<
         if new_focused != *current_focused_monitor {
             *current_focused_monitor = new_focused;
             let _ = display.render_all(&self.read_model, &self.layout_senders);
+        }
+
+        self.prune_removed_monitors(state);
+    }
+
+    /// Drops every per-monitor entry for a monitor Hyprland no longer
+    /// reports.
+    ///
+    /// `module_sizes` / `computed_layouts` (in `read_model`) and the shared
+    /// `module_sizes` signal only ever gain entries elsewhere — nothing
+    /// removes one when a monitor disconnects. Left alone, a disconnected
+    /// monitor stays "discovered" forever (`discover_monitors` unions this
+    /// signal's keys with Hyprland's live list), which is what kept
+    /// `workspace.lua` rendering — and re-triggering the empty-container
+    /// crash path — for a monitor with no surface left.
+    fn prune_removed_monitors(&mut self, state: &crate::shared::events::signals::HyprlandState) {
+        let live: std::collections::HashSet<MonitorId> = state
+            .monitors()
+            .keys()
+            .map(|name| MonitorId::new(name.as_str()))
+            .collect();
+
+        self.read_model
+            .module_sizes
+            .retain(|id, _| live.contains(id));
+        self.read_model
+            .computed_layouts
+            .retain(|id, _| live.contains(id));
+
+        let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
+        let before = sizes_map.len();
+        sizes_map.retain(|id, _| live.contains(id));
+        if sizes_map.len() != before {
+            let _ = self.hub.module_sizes_tx().send(sizes_map);
         }
     }
 
@@ -988,6 +1022,7 @@ mod tests {
                 anchor_rect: None,
                 layout: Box::new(crate::features::layout_engine::domain::StyledNode::Text {
                     path: crate::features::layout_engine::domain::NodePath::root(),
+                    node_key: None,
                     text: crate::features::vdom::domain::TextContent::new("t".to_string()),
                     style: crate::features::styling::domain::ComputedStyle::default(),
                     on_click: None,
@@ -1204,5 +1239,111 @@ mod tests {
 
         let _ = stop_tx.send(true);
         let _ = app_handle.await;
+    }
+
+    /// A monitor Hyprland no longer reports must lose its per-monitor state
+    /// everywhere it's kept — `read_model.module_sizes` /
+    /// `computed_layouts`, and the shared `module_sizes` signal — while an
+    /// unrelated live monitor's state is untouched. Without this, the
+    /// module stays "discovered" forever (`discover_monitors` unions this
+    /// state with Hyprland's live list) and keeps rendering for a monitor
+    /// with no surface left.
+    #[tokio::test]
+    async fn test_prune_removed_monitors_drops_only_the_dead_monitor() {
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
+
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
+
+        let mut mock_registry = TestMockRegistry::new();
+        mock_registry.expect_load().returning(|_| Ok(()));
+        mock_registry.expect_root_module().return_const(None);
+        mock_registry.expect_module_ids().return_const(Vec::new());
+        mock_registry
+            .expect_module_names()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_name_to_ids()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_spawn_all()
+            .returning(|_| HashMap::new());
+        mock_registry
+            .expect_register_dbus_subscriptions()
+            .returning(|_| Box::pin(std::future::ready(())));
+        mock_registry.expect_clear().returning(|| ());
+
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+
+        let services = StateServices::new(
+            hub,
+            surface_manager,
+            canvas_factory,
+            Arc::new(display_tx),
+            Arc::new(layout_tx),
+            Arc::new(ui_tx),
+        );
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let mut app = CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+
+        let live_mon = MonitorId::new("eDP-1");
+        let dead_mon = MonitorId::new("HDMI-A-1");
+
+        app.read_model
+            .module_sizes
+            .insert(dead_mon.clone(), HashMap::new());
+        app.read_model
+            .module_sizes
+            .insert(live_mon.clone(), HashMap::new());
+        app.read_model
+            .computed_layouts
+            .insert(dead_mon.clone(), HashMap::new());
+        app.read_model
+            .computed_layouts
+            .insert(live_mon.clone(), HashMap::new());
+
+        let mut shared_sizes = app.hub.module_sizes_rx().borrow().clone();
+        shared_sizes.insert(
+            dead_mon.clone(),
+            crate::shared::primitives::layout::ChildSizesMap::new(),
+        );
+        shared_sizes.insert(
+            live_mon.clone(),
+            crate::shared::primitives::layout::ChildSizesMap::new(),
+        );
+        app.hub.module_sizes_tx().send(shared_sizes).unwrap();
+
+        // Only "eDP-1" is still live.
+        let mut monitors = std::collections::BTreeMap::new();
+        let name = crate::features::workspaces::domain::MonitorName::new("eDP-1");
+        monitors.insert(
+            name.clone(),
+            crate::features::workspaces::domain::Monitor::new(
+                name,
+                crate::features::workspaces::domain::WorkspaceId::new(1),
+                None,
+            ),
+        );
+        let state = crate::shared::events::signals::HyprlandState::new(
+            std::collections::BTreeMap::new(),
+            monitors,
+            None,
+        );
+
+        app.prune_removed_monitors(&state);
+
+        assert!(!app.read_model.module_sizes.contains_key(&dead_mon));
+        assert!(app.read_model.module_sizes.contains_key(&live_mon));
+        assert!(!app.read_model.computed_layouts.contains_key(&dead_mon));
+        assert!(app.read_model.computed_layouts.contains_key(&live_mon));
+
+        let after = app.hub.module_sizes_rx().borrow().clone();
+        assert!(!after.contains_key(&dead_mon));
+        assert!(after.contains_key(&live_mon));
     }
 }

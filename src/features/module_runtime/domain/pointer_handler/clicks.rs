@@ -1,7 +1,7 @@
 use super::action::PointerAction;
 use super::handler::PointerHandler;
 use crate::features::layout_engine::domain::RenderNode;
-use crate::features::vdom::domain::{UiAction, UiCommand};
+use crate::features::vdom::domain::{NodeRef, UiAction, UiCommand};
 use crate::shared::events::core::PointerButton;
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::MonitorId;
@@ -15,13 +15,15 @@ impl PointerHandler {
     ) -> bool {
         self.last_pointer_pos = Some((monitor_id.clone(), pos));
         let hit = render_tree.hit_test(pos);
-        let target_path = hit.last().map(|n| n.path().clone());
+        let target_ref = hit
+            .last()
+            .map(|n| NodeRef::new(n.path().clone(), n.node_key().cloned()));
         let old_active = self.active_nodes.get(monitor_id).cloned();
-        if old_active == target_path {
+        if old_active == target_ref {
             false
         } else {
-            if let Some(p) = target_path {
-                self.active_nodes.insert(monitor_id.clone(), p);
+            if let Some(r) = target_ref {
+                self.active_nodes.insert(monitor_id.clone(), r);
             } else {
                 self.active_nodes.remove(monitor_id);
             }
@@ -39,11 +41,13 @@ impl PointerHandler {
         let mut changed = self.active_nodes.remove(monitor_id).is_some();
 
         let hit = render_tree.hit_test(pos);
-        let target_path = hit.last().map(|n| n.path().clone());
+        let target_ref = hit
+            .last()
+            .map(|n| NodeRef::new(n.path().clone(), n.node_key().cloned()));
         let old_focus = self.focused_nodes.get(monitor_id).cloned();
-        if old_focus != target_path {
-            if let Some(p) = target_path {
-                self.focused_nodes.insert(monitor_id.clone(), p);
+        if old_focus != target_ref {
+            if let Some(r) = target_ref {
+                self.focused_nodes.insert(monitor_id.clone(), r);
             } else {
                 self.focused_nodes.remove(monitor_id);
             }

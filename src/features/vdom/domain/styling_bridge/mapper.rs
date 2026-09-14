@@ -15,11 +15,13 @@ pub fn map_to_styled_node(
 ) -> StyledNode {
     let on_click = vnode.on_click().cloned();
     let on_hover = vnode.on_hover().cloned();
+    let node_key = vnode.key().cloned();
     let path = path.clone();
 
     match vnode.kind() {
         VNodeKind::Flex { .. } => StyledNode::Flex {
             path,
+            node_key,
             children,
             style,
             on_click,
@@ -30,6 +32,7 @@ pub fn map_to_styled_node(
         },
         VNodeKind::Grid { .. } => StyledNode::Grid {
             path,
+            node_key,
             children,
             style,
             on_click,
@@ -40,6 +43,7 @@ pub fn map_to_styled_node(
         },
         VNodeKind::Text { text } => StyledNode::Text {
             path,
+            node_key,
             text: text.clone(),
             style,
             on_click,
@@ -50,6 +54,7 @@ pub fn map_to_styled_node(
         },
         VNodeKind::Progress { value, orientation } => StyledNode::Progress {
             path,
+            node_key,
             value: *value,
             orientation: *orientation,
             style,
@@ -61,6 +66,7 @@ pub fn map_to_styled_node(
         },
         VNodeKind::Rect => StyledNode::Rect {
             path,
+            node_key,
             style,
             on_click,
             on_hover,
@@ -70,6 +76,7 @@ pub fn map_to_styled_node(
         },
         VNodeKind::Image { data, pixel_size } => StyledNode::Image {
             path,
+            node_key,
             data: data.clone(),
             pixel_size: *pixel_size,
             style,
@@ -83,6 +90,7 @@ pub fn map_to_styled_node(
             options,
         } => StyledNode::Module {
             path,
+            node_key,
             key: ModuleKey::new(name.clone(), instance_id.clone()),
             options: options.clone(),
             style,
