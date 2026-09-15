@@ -124,6 +124,7 @@ impl<
         let module_ids = registry.module_ids().to_vec();
         let module_names = registry.module_names().clone();
         let name_to_ids = registry.name_to_ids().clone();
+        let module_keys = registry.module_keys().clone();
         let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
             services.hub.clone(),
             services.surface_manager.clone(),
@@ -140,6 +141,7 @@ impl<
             module_ids,
             module_names,
             name_to_ids,
+            module_keys,
             module_sizes: HashMap::new(),
             computed_layouts: HashMap::new(),
         };
@@ -233,12 +235,14 @@ impl<
 
     fn handle_container_layouts(
         &mut self,
+        parent_id: ModuleId,
         monitor_id: &MonitorId,
         layouts: &[crate::shared::primitives::ChildModuleLayout],
     ) {
         for child_layout in layouts {
-            if let Some(ids) = self.read_model.name_to_ids.get(child_layout.key().name())
-                && let Some(&child_id) = ids.first()
+            if let Some(child_id) = self
+                .registry
+                .resolve_site(Some(parent_id), child_layout.key())
             {
                 let bounds = crate::shared::primitives::ChildBounds::new(
                     *child_layout.bounds(),
@@ -278,11 +282,11 @@ impl<
         loop {
             match event {
                 LayoutEvent::ContainerLayoutsCalculated {
-                    parent_id: _,
+                    parent_id,
                     monitor_id,
                     layouts,
                 } => {
-                    self.handle_container_layouts(&monitor_id, &layouts);
+                    self.handle_container_layouts(parent_id, &monitor_id, &layouts);
                 }
                 LayoutEvent::ChildModuleSizeChanged {
                     parent_id: _,
@@ -439,6 +443,7 @@ impl<
             self.read_model.module_ids = self.registry.module_ids().to_vec();
             self.read_model.module_names.clone_from(self.registry.module_names());
             self.read_model.name_to_ids.clone_from(self.registry.name_to_ids());
+            self.read_model.module_keys.clone_from(self.registry.module_keys());
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
                 self.hub.clone(),
                 self.surface_manager.clone(),
@@ -519,18 +524,18 @@ impl<
     }
 
     pub fn handle_size_changed(&mut self, monitor_id: &MonitorId, module_id: ModuleId, size: Size) {
-        let name = self.read_model.module_names.get(&module_id).cloned();
-        tracing::trace!(monitor = %monitor_id, module = %module_id, ?size, ?name, "handle_size_changed called");
+        let key = self.read_model.module_keys.get(&module_id).cloned();
+        tracing::trace!(monitor = %monitor_id, module = %module_id, ?size, ?key, "handle_size_changed called");
         self.read_model
             .module_sizes
             .entry(monitor_id.clone())
             .or_default()
             .insert(module_id, size);
 
-        if let Some(name) = name {
+        if let Some(key) = key {
             let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
             let mon_entry = sizes_map.entry(monitor_id.clone()).or_default();
-            mon_entry.insert(crate::shared::primitives::ModuleKey::new(name, None), size);
+            mon_entry.insert(key, size);
             let _ = self.hub.module_sizes_tx().send(sizes_map);
         }
     }
@@ -574,6 +579,9 @@ mod tests {
             .return_const(HashMap::new());
         mock_registry
             .expect_name_to_ids()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_module_keys()
             .return_const(HashMap::new());
         mock_registry
             .expect_spawn_all()
@@ -630,6 +638,9 @@ mod tests {
             .return_const(HashMap::new());
         mock_registry
             .expect_name_to_ids()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_module_keys()
             .return_const(HashMap::new());
         mock_registry
             .expect_spawn_all()
@@ -744,6 +755,7 @@ mod tests {
                 m
             },
             name_to_ids,
+            module_keys: HashMap::new(),
             module_sizes: {
                 let mut m = HashMap::new();
                 let mut s = HashMap::new();
@@ -851,6 +863,7 @@ mod tests {
             module_ids: vec![ModuleId::new(1), ModuleId::new(2), ModuleId::new(3)],
             module_names: HashMap::new(),
             name_to_ids,
+            module_keys: HashMap::new(),
             module_sizes: HashMap::new(),
             computed_layouts: HashMap::new(),
         };
@@ -904,6 +917,9 @@ mod tests {
             .return_const(HashMap::new());
         mock_registry
             .expect_name_to_ids()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_module_keys()
             .return_const(HashMap::new());
         mock_registry
             .expect_spawn_all()
@@ -1069,6 +1085,16 @@ mod tests {
             vec![ModuleId::new(1)],
         );
         mock_registry.expect_name_to_ids().return_const(name_to_ids);
+        mock_registry
+            .expect_module_keys()
+            .return_const(HashMap::new());
+        mock_registry.expect_resolve_site().returning(|parent, key| {
+            if parent == Some(ModuleId::new(0)) && key.name().as_str() == "clock" {
+                Some(ModuleId::new(1))
+            } else {
+                None
+            }
+        });
 
         let (layout_tx_0, _layout_rx_0) = tokio::sync::watch::channel(HashMap::new());
         let (layout_tx_1, mut layout_rx_1) = tokio::sync::watch::channel(HashMap::new());
@@ -1207,5 +1233,96 @@ mod tests {
 
         let _ = stop_tx.send(true);
         let _ = app_handle.await;
+    }
+
+    #[tokio::test]
+    async fn test_handle_container_layouts_does_not_cross_talk_between_sites() {
+        // Two different parents (10 and 20) each embed a module named
+        // "calendar" — resolve_site must route each parent's layout event to
+        // its own site's ModuleId, never the other parent's.
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
+
+        let parent_10 = ModuleId::new(10);
+        let parent_20 = ModuleId::new(20);
+        let site_a = ModuleId::new(11);
+        let site_b = ModuleId::new(21);
+
+        let mut mock_registry = TestMockRegistry::new();
+        mock_registry.expect_load().returning(|_| Ok(()));
+        mock_registry.expect_root_module().return_const(None);
+        mock_registry.expect_module_ids().return_const(Vec::new());
+        mock_registry
+            .expect_module_names()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_name_to_ids()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_module_keys()
+            .return_const(HashMap::new());
+        mock_registry.expect_resolve_site().returning(move |parent, key| {
+            if key.name().as_str() != "calendar" {
+                return None;
+            }
+            if parent == Some(parent_10) {
+                Some(site_a)
+            } else if parent == Some(parent_20) {
+                Some(site_b)
+            } else {
+                None
+            }
+        });
+        mock_registry
+            .expect_spawn_all()
+            .returning(|_| HashMap::new());
+
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+
+        let services = StateServices::new(
+            hub,
+            surface_manager,
+            canvas_factory,
+            Arc::new(display_tx),
+            Arc::new(layout_tx),
+            Arc::new(ui_tx),
+        );
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let mut app = CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+
+        let monitor = MonitorId::new("DP-1");
+        let key = crate::shared::primitives::ModuleKey::from_name(
+            crate::shared::primitives::ModuleName::new("calendar"),
+        );
+
+        app.handle_container_layouts(
+            parent_10,
+            &monitor,
+            &[crate::shared::primitives::ChildModuleLayout::new(
+                key.clone(),
+                Rect::new(Position::new(10, 0), Size::new(50, 20)),
+                crate::shared::primitives::SizeConstraint::none(),
+            )],
+        );
+        app.handle_container_layouts(
+            parent_20,
+            &monitor,
+            &[crate::shared::primitives::ChildModuleLayout::new(
+                key,
+                Rect::new(Position::new(90, 0), Size::new(50, 20)),
+                crate::shared::primitives::SizeConstraint::none(),
+            )],
+        );
+
+        let layouts = app.read_model.computed_layouts.get(&monitor).unwrap();
+        assert_eq!(layouts.get(&site_a).unwrap().rect().x(), 10);
+        assert_eq!(layouts.get(&site_b).unwrap().rect().x(), 90);
+        assert_eq!(layouts.len(), 2);
     }
 }

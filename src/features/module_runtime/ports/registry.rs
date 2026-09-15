@@ -50,6 +50,19 @@ pub trait ModuleRegistryPort<
         &self,
     ) -> &std::collections::HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>;
 
+    /// This module's full `(name, instance_id)` — unlike `module_names`,
+    /// distinguishes two sites of the same name from each other.
+    fn module_keys(&self) -> &std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleKey>;
+
+    /// Resolves the concrete actor embedded at `key` by `parent` — the
+    /// per-site-aware replacement for guessing via `name_to_ids().first()`,
+    /// which can't tell two parents' same-named children apart.
+    fn resolve_site(
+        &self,
+        parent: Option<ModuleId>,
+        key: &crate::shared::primitives::ModuleKey,
+    ) -> Option<ModuleId>;
+
     fn modules_using_style(
         &self,
         sheet: &crate::features::styling::domain::StyleSheetName,

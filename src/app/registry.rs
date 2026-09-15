@@ -23,6 +23,17 @@ pub struct ModuleRegistry {
     module_ids: Vec<ModuleId>,
     module_names: HashMap<ModuleId, crate::shared::primitives::ModuleName>,
     name_to_ids: HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>,
+    /// This module's full identity (name + instance) — `module_names` alone
+    /// can't tell two same-named sites apart.
+    module_keys: HashMap<ModuleId, crate::shared::primitives::ModuleKey>,
+    /// The real parent recorded when this site was loaded, read by
+    /// `spawn_all` instead of assuming every non-root module is root's
+    /// child.
+    module_parents: HashMap<ModuleId, Option<ModuleId>>,
+    /// `(parent, key) -> id`, so a `ContainerLayoutsCalculated` event naming
+    /// its own parent and a child's key resolves to the one actor embedded
+    /// at that exact site, not just any actor sharing that name.
+    site_index: HashMap<crate::shared::primitives::ModuleSite, ModuleId>,
     dbus_subscriptions: Vec<crate::shared::dbus::domain::DBusSubscription>,
     style_to_modules: HashMap<StyleSheetName, HashSet<crate::shared::primitives::ModuleName>>,
     active_signals: HashSet<crate::shared::events::signals::SignalKind>,
@@ -42,6 +53,9 @@ impl ModuleRegistry {
             module_ids: Vec::new(),
             module_names: HashMap::new(),
             name_to_ids: HashMap::new(),
+            module_keys: HashMap::new(),
+            module_parents: HashMap::new(),
+            site_index: HashMap::new(),
             dbus_subscriptions: Vec::new(),
             style_to_modules: HashMap::new(),
             active_signals: HashSet::new(),
@@ -56,6 +70,9 @@ impl ModuleRegistry {
         self.module_ids.clear();
         self.module_names.clear();
         self.name_to_ids.clear();
+        self.module_keys.clear();
+        self.module_parents.clear();
+        self.site_index.clear();
         self.dbus_subscriptions.clear();
         self.style_to_modules.clear();
         self.active_signals.clear();
@@ -109,6 +126,7 @@ impl ModuleRegistry {
         config: &ModuleConfig,
         full_config: &crate::shared::config::domain::Config,
         next_id: &mut u32,
+        parent_id: Option<ModuleId>,
     ) -> Result<ModuleId, crate::features::module_runtime::ports::RegistryLoadError> {
         use crate::app::builtins::BuiltinError;
         use crate::features::module_runtime::ports::RegistryLoadError;
@@ -168,6 +186,17 @@ impl ModuleRegistry {
             .entry(config.name().clone())
             .or_default()
             .push(id);
+        // `instance_id` is always `None` from config-based loading today —
+        // there's no config syntax for it. A future lazy-spawn site (a
+        // `Module` node with an explicit instance_id) mints its key the same
+        // way, just with `Some(instance_id)` instead.
+        let key = crate::shared::primitives::ModuleKey::new(config.name().clone(), None);
+        self.module_keys.insert(id, key.clone());
+        self.module_parents.insert(id, parent_id);
+        self.site_index.insert(
+            crate::shared::primitives::ModuleSite::new(parent_id, key),
+            id,
+        );
         self.module_ids.push(id);
         self.modules.insert(id, module);
 
@@ -235,6 +264,23 @@ impl<
         &self.name_to_ids
     }
 
+    fn module_keys(&self) -> &HashMap<ModuleId, crate::shared::primitives::ModuleKey> {
+        &self.module_keys
+    }
+
+    fn resolve_site(
+        &self,
+        parent: Option<ModuleId>,
+        key: &crate::shared::primitives::ModuleKey,
+    ) -> Option<ModuleId> {
+        self.site_index
+            .get(&crate::shared::primitives::ModuleSite::new(
+                parent,
+                key.clone(),
+            ))
+            .copied()
+    }
+
     fn load(
         &mut self,
         config: &crate::shared::config::domain::Config,
@@ -252,13 +298,13 @@ impl<
                 config.root().options().clone(),
             )
         });
-        let root_id = self.load_single_module(&root_cfg, config, &mut next_id)?;
+        let root_id = self.load_single_module(&root_cfg, config, &mut next_id, None)?;
         self.root_module = Some(root_id);
 
         // 2. Load all configured child modules
         for mod_cfg in config.modules().modules().values() {
             if mod_cfg.is_enabled() && mod_cfg.name() != root_name {
-                let _ = self.load_single_module(mod_cfg, config, &mut next_id)?;
+                let _ = self.load_single_module(mod_cfg, config, &mut next_id, Some(root_id))?;
             }
         }
 
@@ -276,7 +322,12 @@ impl<
                                 crate::shared::config::domain::EngineSelection::Auto,
                                 ModuleOptions::default(),
                             );
-                            let _ = self.load_single_module(&auto_cfg, config, &mut next_id)?;
+                            let _ = self.load_single_module(
+                                &auto_cfg,
+                                config,
+                                &mut next_id,
+                                Some(root_id),
+                            )?;
                         }
                     }
                 }
@@ -303,11 +354,7 @@ impl<
                 tokio::sync::watch::channel(std::collections::HashMap::new());
             layout_senders.insert(id, Box::new(WatchLayoutSender { tx: layout_tx }));
 
-            let parent_id = if Some(id) == self.root_module {
-                None
-            } else {
-                self.root_module
-            };
+            let parent_id = self.module_parents.get(&id).copied().flatten();
 
             let ctx = crate::features::module_runtime::application::ModuleContext::new(
                 id,
@@ -407,6 +454,8 @@ impl<
             let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
             new_senders.insert(id, Box::new(WatchLayoutSender { tx: layout_tx }));
 
+            let parent_id = self.module_parents.get(&id).copied().flatten();
+
             let ctx = crate::features::module_runtime::application::ModuleContext::new(
                 id,
                 deps.hub.clone(),
@@ -415,7 +464,8 @@ impl<
                 deps.display_sender.clone(),
                 deps.ui_sender.clone(),
                 layout_rx,
-            );
+            )
+            .with_parent(parent_id);
 
             let style_resolver = self.create_style_resolver_for_module(module.styles());
             let vdom_diff =
@@ -505,6 +555,67 @@ mod tests {
         TestRegistryPort::load(&mut registry, &config).unwrap();
         assert_eq!(TestRegistryPort::module_ids(&registry).len(), 2);
         assert!(TestRegistryPort::root_module(&registry).is_some());
+    }
+
+    #[test]
+    fn test_per_site_module_identity() {
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let mut registry = ModuleRegistry::new(app_env);
+        let toml_str = r#"
+            [root]
+            name = "bar"
+        "#;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+
+        let calendar_cfg = ModuleConfig::new(
+            crate::shared::primitives::ModuleName::new("calendar"),
+            true,
+            crate::shared::config::domain::EngineSelection::Auto,
+            crate::shared::primitives::ModuleOptions::default(),
+        );
+
+        let parent_a = ModuleId::new(100);
+        let parent_b = ModuleId::new(200);
+        let mut next_id = 0_u32;
+
+        let id_a = registry
+            .load_single_module(&calendar_cfg, &config, &mut next_id, Some(parent_a))
+            .unwrap();
+        let id_b = registry
+            .load_single_module(&calendar_cfg, &config, &mut next_id, Some(parent_b))
+            .unwrap();
+
+        // Two sites embedding the same module name mint distinct ModuleIds.
+        assert_ne!(id_a, id_b);
+
+        let key = crate::shared::primitives::ModuleKey::from_name(
+            crate::shared::primitives::ModuleName::new("calendar"),
+        );
+
+        // Each site resolves to its own actor, keyed by its own parent —
+        // never to the other parent's child of the same name.
+        assert_eq!(
+            TestRegistryPort::resolve_site(&registry, Some(parent_a), &key),
+            Some(id_a)
+        );
+        assert_eq!(
+            TestRegistryPort::resolve_site(&registry, Some(parent_b), &key),
+            Some(id_b)
+        );
+        assert_eq!(
+            TestRegistryPort::resolve_site(&registry, Some(ModuleId::new(999)), &key),
+            None
+        );
+
+        assert_eq!(registry.module_parents.get(&id_a).copied().flatten(), Some(parent_a));
+        assert_eq!(registry.module_parents.get(&id_b).copied().flatten(), Some(parent_b));
     }
 
     #[test]
