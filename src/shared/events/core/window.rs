@@ -60,6 +60,9 @@ pub enum WindowManagerEvent {
         name: Option<WorkspaceName>,
         monitor_name: MonitorName,
     },
+    MonitorRemoved {
+        name: MonitorName,
+    },
     ActiveWindowChanged {
         address: WindowAddress,
     },

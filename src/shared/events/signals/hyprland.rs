@@ -128,6 +128,11 @@ impl HyprlandState {
                 self.focused_monitor = Some(monitor_name.clone());
                 if let Some(m) = self.monitors.get_mut(monitor_name) {
                     m.set_active_workspace(workspace_id.clone());
+                } else {
+                    self.monitors.insert(
+                        monitor_name.clone(),
+                        Monitor::new(monitor_name.clone(), workspace_id.clone(), None),
+                    );
                 }
 
                 if let Some(ws) = self.workspaces.get_mut(workspace_id) {
@@ -156,6 +161,9 @@ impl HyprlandState {
                         );
                     }
                 }
+            }
+            WindowManagerEvent::MonitorRemoved { name } => {
+                self.monitors.remove(name);
             }
             WindowManagerEvent::ActiveWindowChanged { .. }
             | WindowManagerEvent::WindowTitleChanged { .. } => {}

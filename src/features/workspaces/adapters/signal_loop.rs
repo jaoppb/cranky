@@ -118,8 +118,12 @@ fn process_event_stream<P: WindowManagerPort>(
                     .get_mut()
                     .set_read_timeout(Some(std::time::Duration::from_millis(2)));
 
-                let state_changed =
-                    drain_batch(&mut reader, &mut line, &mut current_state, &mut batch_events);
+                let state_changed = drain_batch(
+                    &mut reader,
+                    &mut line,
+                    &mut current_state,
+                    &mut batch_events,
+                );
 
                 if state_changed {
                     check_and_resync(adapter, &mut current_state, &batch_events);
@@ -153,4 +157,168 @@ pub async fn run_event_loop<P: WindowManagerPort + 'static>(
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::workspaces::domain::{Monitor, MonitorName, WorkspaceId, WorkspaceName};
+    use crate::features::workspaces::ports::{MockWindowManagerPort, WindowManagerError};
+    use std::collections::BTreeMap;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_drain_batch_coalesces_multiple_lines() {
+        let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
+        let mut line_buf = "workspacev2>>1,test_ws\n".to_string();
+        let mut reader = Cursor::new(b"focusedmonv2>>DP-1,1\ninvalid>>data\n".to_vec());
+        let mut batch_events = Vec::new();
+
+        let state_changed = drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+
+        assert!(state_changed);
+        assert_eq!(
+            batch_events,
+            vec![
+                "workspacev2>>1,test_ws".to_string(),
+                "focusedmonv2>>DP-1,1".to_string(),
+                "invalid>>data".to_string(),
+            ]
+        );
+        assert!(state.workspaces().contains_key(&WorkspaceId::new(1)));
+        assert_eq!(state.focused_monitor(), Some(&MonitorName::new("DP-1")));
+        assert!(state.monitors().contains_key(&MonitorName::new("DP-1")));
+    }
+
+    #[test]
+    fn test_drain_batch_unparseable_line_does_not_mark_state_changed() {
+        let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
+        let mut line_buf = "invalid>>data\n".to_string();
+        let mut reader = Cursor::new(Vec::new());
+        let mut batch_events = Vec::new();
+
+        let state_changed = drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+
+        assert!(!state_changed);
+        assert_eq!(batch_events, vec!["invalid>>data".to_string()]);
+    }
+
+    #[test]
+    fn test_drain_batch_applies_monitor_removed() {
+        let mut monitors = BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("HDMI-A-1"),
+            Monitor::new(MonitorName::new("HDMI-A-1"), WorkspaceId::new(4), None),
+        );
+        let mut state = HyprlandState::new(BTreeMap::new(), monitors, None);
+        let mut line_buf =
+            "monitorremovedv2>>1,HDMI-A-1,LG Electronics LG FULL HD 206AZQV5S860\n".to_string();
+        let mut reader = Cursor::new(Vec::new());
+        let mut batch_events = Vec::new();
+
+        let state_changed = drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+
+        assert!(state_changed);
+        assert!(!state.monitors().contains_key(&MonitorName::new("HDMI-A-1")));
+    }
+
+    fn inconsistent_state() -> HyprlandState {
+        let mut workspaces = BTreeMap::new();
+        workspaces.insert(
+            WorkspaceId::new(4),
+            crate::features::workspaces::domain::Workspace::new(
+                WorkspaceId::new(4),
+                WorkspaceName::new("4"),
+                Some(MonitorName::new("HDMI-A-1")),
+            ),
+        );
+        HyprlandState::new(workspaces, BTreeMap::new(), None)
+    }
+
+    #[test]
+    fn test_check_and_resync_replaces_state_when_inconsistent() {
+        let mut state = inconsistent_state();
+
+        let mut new_workspaces = BTreeMap::new();
+        new_workspaces.insert(
+            WorkspaceId::new(4),
+            crate::features::workspaces::domain::Workspace::new(
+                WorkspaceId::new(4),
+                WorkspaceName::new("4"),
+                Some(MonitorName::new("eDP-1")),
+            ),
+        );
+        let mut new_monitors = BTreeMap::new();
+        new_monitors.insert(
+            MonitorName::new("eDP-1"),
+            Monitor::new(MonitorName::new("eDP-1"), WorkspaceId::new(4), None),
+        );
+
+        let mut mock = MockWindowManagerPort::new();
+        mock.expect_get_state().times(1).returning(move || {
+            Ok((
+                new_workspaces.clone(),
+                new_monitors.clone(),
+                Some(MonitorName::new("eDP-1")),
+            ))
+        });
+
+        check_and_resync(&mock, &mut state, &["monitorremoved>>HDMI-A-1".to_string()]);
+
+        assert!(state.workspaces().contains_key(&WorkspaceId::new(4)));
+        assert_eq!(
+            state
+                .workspaces()
+                .get(&WorkspaceId::new(4))
+                .unwrap()
+                .monitor(),
+            Some(&MonitorName::new("eDP-1"))
+        );
+        assert!(state.monitors().contains_key(&MonitorName::new("eDP-1")));
+        assert!(!state.monitors().contains_key(&MonitorName::new("HDMI-A-1")));
+    }
+
+    #[test]
+    fn test_check_and_resync_leaves_consistent_state_untouched() {
+        let mut workspaces = BTreeMap::new();
+        workspaces.insert(
+            WorkspaceId::new(1),
+            crate::features::workspaces::domain::Workspace::new(
+                WorkspaceId::new(1),
+                WorkspaceName::new("1"),
+                Some(MonitorName::new("DP-1")),
+            ),
+        );
+        let mut monitors = BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("DP-1"),
+            Monitor::new(MonitorName::new("DP-1"), WorkspaceId::new(1), None),
+        );
+        let mut state = HyprlandState::new(workspaces, monitors, Some(MonitorName::new("DP-1")));
+        let before = state.clone();
+
+        let mut mock = MockWindowManagerPort::new();
+        mock.expect_get_state().times(0);
+
+        check_and_resync(&mock, &mut state, &[]);
+
+        assert_eq!(state, before);
+    }
+
+    #[test]
+    fn test_check_and_resync_leaves_state_as_is_on_get_state_error() {
+        let mut state = inconsistent_state();
+        let before = state.clone();
+
+        let mut mock = MockWindowManagerPort::new();
+        mock.expect_get_state().times(1).returning(|| {
+            Err(WindowManagerError::IpcError {
+                reason: "boom".to_string(),
+            })
+        });
+
+        check_and_resync(&mock, &mut state, &[]);
+
+        assert_eq!(state, before);
+    }
 }

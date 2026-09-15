@@ -121,3 +121,21 @@ fn test_parse_event() {
     assert_eq!(parse_event("invalid>>data"), None);
     assert_eq!(parse_event("missing"), None);
 }
+
+#[test]
+fn test_parse_event_monitor_removed() {
+    let e =
+        parse_event("monitorremovedv2>>1,HDMI-A-1,LG Electronics LG FULL HD 206AZQV5S860").unwrap();
+    assert_eq!(
+        e,
+        WindowManagerEvent::MonitorRemoved {
+            name: MonitorName::new("HDMI-A-1"),
+        }
+    );
+
+    // monitoraddedv2 is intentionally not parsed (lazily inferred via MonitorFocused instead)
+    assert_eq!(parse_event("monitoraddedv2>>1,HDMI-A-1,LG Display"), None);
+
+    // monitorremovedv2 missing name field
+    assert_eq!(parse_event("monitorremovedv2>>1"), None);
+}

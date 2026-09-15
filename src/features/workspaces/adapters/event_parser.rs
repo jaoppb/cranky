@@ -72,6 +72,14 @@ pub fn parse_event(raw_line: &str) -> Option<WindowManagerEvent> {
                 monitor_name: MonitorName::new(monitor_str),
             })
         }
+        "monitorremovedv2" => {
+            let mut parts = payload.splitn(3, ',');
+            let _id = parts.next()?;
+            let name = parts.next()?;
+            Some(WindowManagerEvent::MonitorRemoved {
+                name: MonitorName::new(name),
+            })
+        }
         "activewindowv2" => Some(WindowManagerEvent::ActiveWindowChanged {
             address: WindowAddress::new(payload),
         }),

@@ -1,5 +1,5 @@
 use crate::features::workspaces::adapters::inconsistency::{
-    find_state_inconsistencies, StateInconsistency,
+    StateInconsistency, find_state_inconsistencies,
 };
 use crate::features::workspaces::domain::{
     Monitor, MonitorName, Workspace, WorkspaceId, WorkspaceName,
@@ -38,6 +38,32 @@ fn test_find_state_inconsistencies_workspace_missing_monitor() {
 }
 
 #[test]
+fn test_find_state_inconsistencies_workspace_monitor_not_found() {
+    let mut workspaces = std::collections::BTreeMap::new();
+    workspaces.insert(
+        WorkspaceId::new(4),
+        Workspace::new(
+            WorkspaceId::new(4),
+            WorkspaceName::new("4"),
+            Some(MonitorName::new("HDMI-A-1")),
+        ),
+    );
+    // HDMI-A-1 was removed, but the workspace still points at it.
+    let monitors = std::collections::BTreeMap::new();
+
+    let state = HyprlandState::new(workspaces, monitors, None);
+    let incs = find_state_inconsistencies(&state);
+    assert_eq!(
+        incs,
+        vec![StateInconsistency::WorkspaceMonitorNotFound {
+            workspace_id: WorkspaceId::new(4),
+            workspace_name: WorkspaceName::new("4"),
+            monitor_name: MonitorName::new("HDMI-A-1"),
+        }]
+    );
+}
+
+#[test]
 fn test_find_state_inconsistencies_active_workspace_not_found() {
     let workspaces = std::collections::BTreeMap::new();
     let mut monitors = std::collections::BTreeMap::new();
@@ -72,6 +98,12 @@ fn test_find_state_inconsistencies_active_workspace_mismatch() {
     monitors.insert(
         MonitorName::new("DP-1"),
         Monitor::new(MonitorName::new("DP-1"), WorkspaceId::new(1), None),
+    );
+    // HDMI-1 must exist too, otherwise WorkspaceMonitorNotFound also fires -
+    // this test isolates the active-workspace mismatch check specifically.
+    monitors.insert(
+        MonitorName::new("HDMI-1"),
+        Monitor::new(MonitorName::new("HDMI-1"), WorkspaceId::new(1), None),
     );
 
     let state = HyprlandState::new(workspaces, monitors, Some(MonitorName::new("DP-1")));
@@ -142,6 +174,12 @@ fn test_find_state_inconsistencies_special_workspace_checks() {
             WorkspaceId::new(1),
             Some(WorkspaceId::new(-99)),
         ),
+    );
+    // HDMI-1 must exist too, otherwise WorkspaceMonitorNotFound also fires -
+    // this test isolates the special-workspace mismatch check specifically.
+    monitors2.insert(
+        MonitorName::new("HDMI-1"),
+        Monitor::new(MonitorName::new("HDMI-1"), WorkspaceId::new(-99), None),
     );
 
     let state2 = HyprlandState::new(workspaces2, monitors2, Some(MonitorName::new("DP-1")));
