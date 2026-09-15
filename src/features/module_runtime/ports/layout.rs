@@ -1,5 +1,5 @@
-use crate::shared::primitives::geometry::{Rect, Size};
-use crate::shared::primitives::{ChildModuleLayout, ModuleId, ModuleKey, MonitorId};
+use crate::shared::primitives::geometry::Size;
+use crate::shared::primitives::{ChildBounds, ChildModuleLayout, ModuleId, ModuleKey, MonitorId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LayoutEvent {
@@ -51,5 +51,5 @@ impl LayoutEventSender for std::sync::mpsc::Sender<LayoutEvent> {
 }
 
 pub trait LayoutSender: Send + Sync {
-    fn send_layout(&self, layout: std::collections::HashMap<MonitorId, Rect>);
+    fn send_layout(&self, layout: std::collections::HashMap<MonitorId, ChildBounds>);
 }

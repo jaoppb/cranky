@@ -8,7 +8,6 @@ use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender};
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
-use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::MonitorId;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
@@ -89,7 +88,7 @@ impl<
         )
     }
 
-    pub fn discover_monitors(&self, layouts: &HashMap<MonitorId, Rect>) -> Vec<MonitorId> {
+    pub fn discover_monitors<V>(&self, layouts: &HashMap<MonitorId, V>) -> Vec<MonitorId> {
         discover_monitors(self.ctx.hub(), layouts)
     }
 

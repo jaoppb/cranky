@@ -1,7 +1,7 @@
 use super::state::WaylandState;
 use crate::features::module_runtime::ports::LayoutSender;
 use crate::shared::primitives::geometry::{Position, Rect, Size};
-use crate::shared::primitives::{ModuleId, MonitorId};
+use crate::shared::primitives::{ChildBounds, ModuleId, MonitorId, SizeConstraint};
 use crate::shared::wayland::ports::AppReadModel;
 use std::collections::HashMap;
 use tracing::{debug, info_span};
@@ -21,7 +21,8 @@ pub(crate) fn render_outputs(
         return;
     }
 
-    let mut all_layouts_by_module: HashMap<ModuleId, HashMap<MonitorId, Rect>> = HashMap::new();
+    let mut all_layouts_by_module: HashMap<ModuleId, HashMap<MonitorId, ChildBounds>> =
+        HashMap::new();
 
     for bar in &mut state.bars {
         if !bar.configured {
@@ -75,10 +76,14 @@ pub(crate) fn render_outputs(
                 Position::new(0, 0),
                 Size::new(width, bar.config_height),
             );
+            // The root always gets a full, two-axis pin matching its own
+            // layer-surface bounds — it has no parent to leave an axis free
+            // for, so this reproduces exactly the sizing it always had.
+            let constraint = SizeConstraint::new(Some(width), Some(bar.config_height));
             all_layouts_by_module
                 .entry(root_id)
                 .or_default()
-                .insert(monitor_id, bar_rect);
+                .insert(monitor_id, ChildBounds::new(bar_rect, constraint));
         }
     }
 

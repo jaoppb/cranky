@@ -6,7 +6,7 @@ use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::{ModuleId, ModuleInstanceId, MonitorId, geometry::Rect};
+use crate::shared::primitives::{ChildBounds, ModuleId, ModuleInstanceId, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
@@ -24,7 +24,7 @@ pub struct ModuleContext<
     layout_sender: Arc<LS>,
     display_sender: Arc<DS>,
     ui_sender: Arc<US>,
-    layout_rx: watch::Receiver<HashMap<MonitorId, Rect>>,
+    layout_rx: watch::Receiver<HashMap<MonitorId, ChildBounds>>,
     pointer_rx: crate::shared::events::core::PointerReceiver,
 }
 
@@ -41,7 +41,7 @@ impl<
         layout_sender: Arc<LS>,
         display_sender: Arc<DS>,
         ui_sender: Arc<US>,
-        layout_rx: watch::Receiver<HashMap<MonitorId, Rect>>,
+        layout_rx: watch::Receiver<HashMap<MonitorId, ChildBounds>>,
     ) -> Self {
         let pointer_rx = hub.pointer_rx();
         Self {
@@ -116,7 +116,7 @@ impl<
     pub const fn rxs_mut(
         &mut self,
     ) -> (
-        &mut watch::Receiver<HashMap<MonitorId, Rect>>,
+        &mut watch::Receiver<HashMap<MonitorId, ChildBounds>>,
         &mut crate::shared::events::core::PointerReceiver,
     ) {
         (&mut self.layout_rx, &mut self.pointer_rx)
@@ -191,7 +191,8 @@ mod tests {
     use crate::features::vdom::domain::{UiCommand, VNode};
     use crate::shared::config::domain::Config;
     use crate::shared::events::signals::{HyprlandState, SignalKind};
-    use crate::shared::primitives::geometry::{Position, Size};
+    use crate::shared::primitives::geometry::{Position, Rect, Size};
+    use crate::shared::primitives::SizeConstraint;
 
     #[allow(dead_code)]
     struct TestFixture {
@@ -199,7 +200,7 @@ mod tests {
         pub layout_rx: std::sync::mpsc::Receiver<LayoutEvent>,
         pub display_rx: std::sync::mpsc::Receiver<DisplayCommand>,
         pub ui_rx: std::sync::mpsc::Receiver<UiCommand>,
-        pub layout_tx: watch::Sender<HashMap<MonitorId, Rect>>,
+        pub layout_tx: watch::Sender<HashMap<MonitorId, ChildBounds>>,
         pub event_loop: EventLoop<
             MockCanvasFactory,
             ChannelLayoutSender,
@@ -382,7 +383,7 @@ mod tests {
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-1"),
-            Rect::new(Position::new(0, 0), Size::new(10, 10)),
+            ChildBounds::new(Rect::new(Position::new(0, 0), Size::new(10, 10)), SizeConstraint::none()),
         );
         fixture.layout_tx.send(layouts).unwrap();
 
@@ -452,7 +453,7 @@ mod tests {
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-2"),
-            Rect::new(Position::new(0, 0), Size::new(10, 10)),
+            ChildBounds::new(Rect::new(Position::new(0, 0), Size::new(10, 10)), SizeConstraint::none()),
         );
         fixture.layout_tx.send(layouts).unwrap();
 
@@ -566,7 +567,7 @@ mod tests {
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-1"),
-            Rect::new(Position::new(0, 0), Size::new(1920, 30)),
+            ChildBounds::new(Rect::new(Position::new(0, 0), Size::new(1920, 30)), SizeConstraint::none()),
         );
         fixture.layout_tx.send(layouts).unwrap();
 

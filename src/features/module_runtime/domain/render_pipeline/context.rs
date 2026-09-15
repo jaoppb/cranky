@@ -2,13 +2,22 @@ use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::{InteractionContext, VNode};
 use crate::shared::primitives::geometry::{Rect, Scale};
-use crate::shared::primitives::ChildSizesMap;
+use crate::shared::primitives::{ChildSizesMap, SizeConstraint};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
 pub struct LayoutContext<'a, F: CanvasFactory> {
     pub scale: Scale,
     pub style_resolver: &'a dyn StyleResolverPort,
+    /// Still used for the module's own painted position — where its buffer
+    /// goes on whatever surface it lives on. No longer consulted for sizing:
+    /// see `current_constraint`.
     pub current_bounds: Option<Rect>,
+    /// What this module's own layout may use as available space, per axis —
+    /// for the root, always both axes pinned to its layer-surface bounds;
+    /// for an embedded module, only the axes its parent's CSS pinned. Never
+    /// derived from `current_bounds`, so a parent resizing a child's slot
+    /// can't feed back into a bigger slot next frame — see decision 10.
+    pub current_constraint: SizeConstraint,
     pub current_child_sizes: Option<&'a ChildSizesMap>,
     pub interaction_context: Option<InteractionContext>,
     pub canvas_factory: &'a mut F,

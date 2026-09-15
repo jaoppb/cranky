@@ -1,8 +1,10 @@
 use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
-use crate::shared::primitives::geometry::{Position, Size};
+use crate::shared::primitives::geometry::Position;
+use crate::shared::primitives::SizeConstraint;
 
 pub trait LayoutEnginePort: Send + Sync {
-    /// Calculates the layout tree for the given styled node.
+    /// Calculates the layout tree for the given styled node, measuring
+    /// intrinsically on both axes.
     ///
     /// # Errors
     ///
@@ -13,10 +15,12 @@ pub trait LayoutEnginePort: Send + Sync {
         measurer: &mut dyn TextMeasurer,
         start_pos: Position,
     ) -> Result<RenderNode, LayoutError> {
-        self.calculate_layout_with_constraints(node, measurer, start_pos, None)
+        self.calculate_layout_with_constraints(node, measurer, start_pos, SizeConstraint::none())
     }
 
-    /// Calculates the layout tree for the given styled node with size constraints.
+    /// Calculates the layout tree for the given styled node. A pinned axis on
+    /// `constraint` becomes a definite available space for that axis; an
+    /// unpinned axis is measured intrinsically.
     ///
     /// # Errors
     ///
@@ -26,6 +30,6 @@ pub trait LayoutEnginePort: Send + Sync {
         node: StyledNode,
         measurer: &mut dyn TextMeasurer,
         start_pos: Position,
-        available_size: Option<Size>,
+        constraint: SizeConstraint,
     ) -> Result<RenderNode, LayoutError>;
 }

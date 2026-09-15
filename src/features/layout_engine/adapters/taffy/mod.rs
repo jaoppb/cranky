@@ -11,14 +11,25 @@ pub mod tree_builder;
 
 use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
-use crate::shared::primitives::geometry::{Position, Size};
+use crate::shared::primitives::geometry::Position;
+use crate::shared::primitives::SizeConstraint;
 use calc_resolve::resolve_pending_calcs;
 use diff::diff;
 use reconciler::{apply_patch, build_layout_state, LayoutState};
 use render_tree_builder::build_render_tree;
-use taffy::prelude::TaffyMaxContent;
 use taffy::TaffyTree;
 use tree_builder::TaffyTreeBuilder;
+
+/// A pinned axis becomes a definite available space; an unpinned axis is
+/// `MaxContent` — "as much room as the content wants" — which is exactly
+/// what an entirely unconstrained layout already used on both axes, so a
+/// fully-`None` `SizeConstraint` reproduces today's intrinsic-everywhere
+/// behaviour unchanged.
+fn axis_available_space(pinned: Option<u32>) -> taffy::style::AvailableSpace {
+    pinned.map_or(taffy::style::AvailableSpace::MaxContent, |px| {
+        taffy::style::AvailableSpace::Definite(f32::from(u16::try_from(px).unwrap_or(u16::MAX)))
+    })
+}
 
 pub struct TaffyLayoutAdapter {
     taffy: TaffyTree,
@@ -51,7 +62,7 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
         node: StyledNode,
         measurer: &mut dyn TextMeasurer,
         start_pos: Position,
-        available_size: Option<Size>,
+        constraint: SizeConstraint,
     ) -> Result<RenderNode, LayoutError> {
         let mut builder = TaffyTreeBuilder::new(&mut self.taffy);
         let new_state = if let Some(state) = &self.state {
@@ -63,14 +74,10 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
 
         let root_node_id = new_state.root_node;
 
-        let available_space = available_size.map_or(taffy::geometry::Size::MAX_CONTENT, |size| {
-            let w = f32::from(u16::try_from(size.width()).unwrap_or(u16::MAX));
-            let h = f32::from(u16::try_from(size.height()).unwrap_or(u16::MAX));
-            taffy::geometry::Size {
-                width: taffy::style::AvailableSpace::Definite(w),
-                height: taffy::style::AvailableSpace::Definite(h),
-            }
-        });
+        let available_space = taffy::geometry::Size {
+            width: axis_available_space(constraint.width()),
+            height: axis_available_space(constraint.height()),
+        };
 
         // Compute layout
         self.taffy
@@ -155,6 +162,57 @@ mod tests {
             .unwrap();
         assert_eq!(render_tree.rect().width(), 50);
         assert_eq!(render_tree.rect().height(), 20);
+    }
+
+    #[test]
+    fn test_size_constraint_pins_one_axis_and_leaves_the_other_intrinsic() {
+        // A `width: 100%` root has nothing to resolve against on its own —
+        // it needs a definite available space on that axis, which is
+        // exactly what an embedded module's SizeConstraint supplies for a
+        // pinned axis and withholds for a free one.
+        let mut style = ComputedStyle::default();
+        style.set_width(crate::features::styling::domain::CssLength::Percent(100.0));
+        let node = || StyledNode::Text {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            text: TextContent::new("hello".to_string()),
+            style: style.clone(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        };
+
+        // Width pinned to 300, height left intrinsic: width resolves the
+        // 100% against the pin; height still comes from the measurer, not
+        // from the (nonexistent) pin.
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+        let pinned = adapter
+            .calculate_layout_with_constraints(
+                node(),
+                &mut measurer,
+                Position::new(0, 0),
+                crate::shared::primitives::SizeConstraint::new(Some(300), None),
+            )
+            .unwrap();
+        assert_eq!(pinned.rect().width(), 300);
+        assert_eq!(pinned.rect().height(), 20);
+
+        // No constraint at all: `100%` has no containing block to resolve
+        // against (MaxContent isn't a definite basis), so it resolves to 0
+        // — never to whatever a parent's rect happened to be. This is the
+        // actual fix: under the old model `available_size` came from
+        // `current_bounds`, so a `width: 100%` child always matched
+        // whatever slot the parent last assigned, which is exactly the
+        // feedback loop decision 10 removes. Now only an explicit
+        // `SizeConstraint` pin can produce a definite available space.
+        let mut adapter = TaffyLayoutAdapter::new();
+        let unconstrained = adapter
+            .calculate_layout(node(), &mut measurer, Position::new(0, 0))
+            .unwrap();
+        assert_eq!(unconstrained.rect().width(), 0);
+        assert_eq!(unconstrained.rect().height(), 20);
     }
 
     #[test]

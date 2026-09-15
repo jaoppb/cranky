@@ -602,6 +602,7 @@ fn bench_pipeline(c: &mut Criterion) {
                     scale: Scale::new(1.0),
                     style_resolver: &style_resolver,
                     current_bounds: None,
+                    current_constraint: cranky::shared::primitives::SizeConstraint::none(),
                     current_child_sizes: None,
                     interaction_context: None,
                     canvas_factory: &mut canvas_factory,

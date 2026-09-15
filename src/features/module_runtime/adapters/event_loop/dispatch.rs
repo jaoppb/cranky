@@ -1,13 +1,14 @@
 use crate::features::module_runtime::domain::RenderOutcome;
 use crate::features::module_runtime::ports::{LayoutEvent, LayoutEventSender};
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::{HashMap, HashSet};
 
+/// Only ever consults which monitors have *some* entry, never a value — kept
+/// generic so it isn't coupled to whatever a layout channel's value type is.
 #[must_use]
-pub(super) fn discover_monitors(hub: &SignalHub, layouts: &HashMap<MonitorId, Rect>) -> Vec<MonitorId> {
+pub(super) fn discover_monitors<V>(hub: &SignalHub, layouts: &HashMap<MonitorId, V>) -> Vec<MonitorId> {
     let mut all_monitors: HashSet<MonitorId> = HashSet::new();
     for m in hub.hyprland_rx().borrow().monitors().values() {
         all_monitors.insert(MonitorId::new(m.name().as_str()));

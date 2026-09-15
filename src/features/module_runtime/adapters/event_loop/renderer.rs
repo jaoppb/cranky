@@ -5,8 +5,8 @@ use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::domain::LayoutContext;
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::vdom::domain::UiCommandSender;
-use crate::shared::primitives::geometry::{Rect, Scale};
-use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::Scale;
+use crate::shared::primitives::{ChildBounds, MonitorId, SizeConstraint};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
 
@@ -22,11 +22,13 @@ impl<
         layout_engines: &mut HashMap<MonitorId, Box<dyn LayoutEnginePort>>,
     ) {
         let t0 = std::time::Instant::now();
-        let layouts: HashMap<MonitorId, Rect> = self.ctx.rxs_mut().0.borrow().clone();
+        let layouts: HashMap<MonitorId, ChildBounds> = self.ctx.rxs_mut().0.borrow().clone();
         let monitors = self.discover_monitors(&layouts);
 
         for monitor_id in monitors {
-            let current_bounds = layouts.get(&monitor_id).copied();
+            let current = layouts.get(&monitor_id).copied();
+            let current_bounds = current.map(|c| c.rect());
+            let current_constraint = current.map_or(SizeConstraint::none(), |c| c.constraint());
             let module_sizes_guard = self.ctx.hub().module_sizes_rx().borrow().clone();
             let current_child_sizes = module_sizes_guard.get(&monitor_id);
 
@@ -67,6 +69,7 @@ impl<
                     scale,
                     style_resolver: self.style_resolver.as_ref(),
                     current_bounds,
+                    current_constraint,
                     current_child_sizes,
                     interaction_context,
                     canvas_factory: &mut self.canvas_factory,

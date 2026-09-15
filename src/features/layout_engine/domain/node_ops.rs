@@ -3,7 +3,7 @@ use super::render_node::RenderNode;
 use super::styled_node::StyledNode;
 use crate::features::vdom::domain::NodePath;
 use crate::shared::primitives::geometry::Position;
-use crate::shared::primitives::ChildModuleLayout;
+use crate::shared::primitives::{ChildModuleLayout, SizeConstraint};
 
 impl RenderNode {
     #[must_use]
@@ -20,8 +20,17 @@ impl RenderNode {
                     child.collect_module_layouts_recursive(out);
                 }
             }
-            Self::Module { rect, key, .. } => {
-                out.push(ChildModuleLayout::new(key.clone(), *rect));
+            Self::Module { rect, key, style, .. } => {
+                // A pin is "the parent set an explicit width/height" — taffy
+                // already resolved it to this slot's rect, whatever units the
+                // CSS was in, so the resolved pixels are the constraint value.
+                // min-*/max-* clamp the slot but never pin it, so they don't
+                // produce a constraint here.
+                let constraint = SizeConstraint::new(
+                    style.width().is_some().then(|| rect.width()),
+                    style.height().is_some().then(|| rect.height()),
+                );
+                out.push(ChildModuleLayout::new(key.clone(), *rect, constraint));
             }
             _ => {}
         }
@@ -202,5 +211,64 @@ mod tests {
             panic!("expected StyledNode::Text");
         };
         assert_eq!(text.as_str(), "only");
+    }
+
+    fn module_leaf(rect: Rect, style: ComputedStyle) -> RenderNode {
+        RenderNode::Module {
+            path: NodePath::new(SurfaceSpace::Bar, vec![0]),
+            rect,
+            key: crate::shared::primitives::ModuleKey::from_name(
+                crate::shared::primitives::ModuleName::new("calendar"),
+            ),
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    #[test]
+    fn test_collect_module_layouts_no_pin_yields_no_constraint() {
+        let rect = Rect::new(Position::new(0, 0), Size::new(120, 40));
+        let root = flex(&[], vec![module_leaf(rect, ComputedStyle::default())], None);
+
+        let layouts = root.collect_module_layouts();
+        assert_eq!(layouts.len(), 1);
+        assert_eq!(layouts[0].constraint().width(), None);
+        assert_eq!(layouts[0].constraint().height(), None);
+        assert_eq!(*layouts[0].bounds(), rect);
+    }
+
+    #[test]
+    fn test_collect_module_layouts_pin_reads_resolved_pixels() {
+        // Whatever units the CSS was in (px, %, calc()), taffy already
+        // resolved the pin to this slot's rect — the constraint is read
+        // from the resolved pixels, not re-derived from the CSS value.
+        let rect = Rect::new(Position::new(0, 0), Size::new(300, 40));
+        let mut style = ComputedStyle::default();
+        style.set_width(crate::features::styling::domain::CssLength::Percent(100.0));
+        let root = flex(&[], vec![module_leaf(rect, style)], None);
+
+        let layouts = root.collect_module_layouts();
+        assert_eq!(layouts.len(), 1);
+        assert_eq!(layouts[0].constraint().width(), Some(300));
+        // height was never pinned, so it stays unconstrained even though
+        // width was.
+        assert_eq!(layouts[0].constraint().height(), None);
+    }
+
+    #[test]
+    fn test_collect_module_layouts_min_max_do_not_pin() {
+        // min-*/max-* clamp the parent's slot but never force an exact
+        // value, so they must not produce a constraint for the child.
+        let rect = Rect::new(Position::new(0, 0), Size::new(280, 40));
+        let mut style = ComputedStyle::default();
+        style.set_min_width(crate::features::styling::domain::CssLength::Px(280.0));
+        let root = flex(&[], vec![module_leaf(rect, style)], None);
+
+        let layouts = root.collect_module_layouts();
+        assert_eq!(layouts[0].constraint().width(), None);
     }
 }

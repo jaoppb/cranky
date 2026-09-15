@@ -48,11 +48,6 @@ pub fn layout_pipeline<F: CanvasFactory>(
         let default_font_family = FontFamily::new(String::new());
         let default_font_size = FontSize::new(14.0);
 
-        let available_size = ctx
-            .current_bounds
-            .filter(|b| b.width() > 0 && b.height() > 0)
-            .map(|b| *b.size());
-
         let measurer_inner = ctx.canvas_factory.create_text_measurer(
             ctx.scale,
             default_font_family,
@@ -64,7 +59,7 @@ pub fn layout_pipeline<F: CanvasFactory>(
             styled_node,
             &mut measurer,
             Position::new(0, 0),
-            available_size,
+            ctx.current_constraint,
         );
 
         let render_node = match render_node_res {

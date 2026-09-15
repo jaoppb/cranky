@@ -179,7 +179,7 @@ pub(crate) struct WatchLayoutSender {
     tx: tokio::sync::watch::Sender<
         std::collections::HashMap<
             crate::shared::primitives::MonitorId,
-            crate::shared::primitives::geometry::Rect,
+            crate::shared::primitives::ChildBounds,
         >,
     >,
 }
@@ -191,7 +191,7 @@ impl WatchLayoutSender {
         tx: tokio::sync::watch::Sender<
             std::collections::HashMap<
                 crate::shared::primitives::MonitorId,
-                crate::shared::primitives::geometry::Rect,
+                crate::shared::primitives::ChildBounds,
             >,
         >,
     ) -> Self {
@@ -204,7 +204,7 @@ impl crate::features::module_runtime::ports::LayoutSender for WatchLayoutSender 
         &self,
         layout: std::collections::HashMap<
             crate::shared::primitives::MonitorId,
-            crate::shared::primitives::geometry::Rect,
+            crate::shared::primitives::ChildBounds,
         >,
     ) {
         let _ = self.tx.send(layout);
@@ -524,9 +524,12 @@ mod tests {
         let mut layout = std::collections::HashMap::new();
         layout.insert(
             crate::shared::primitives::MonitorId::new("1"),
-            crate::shared::primitives::geometry::Rect::new(
-                crate::shared::primitives::geometry::Position::new(0, 0),
-                crate::shared::primitives::geometry::Size::new(0, 0),
+            crate::shared::primitives::ChildBounds::new(
+                crate::shared::primitives::geometry::Rect::new(
+                    crate::shared::primitives::geometry::Position::new(0, 0),
+                    crate::shared::primitives::geometry::Size::new(0, 0),
+                ),
+                crate::shared::primitives::SizeConstraint::none(),
             ),
         );
         sender.send_layout(layout.clone());

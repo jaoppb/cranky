@@ -240,11 +240,15 @@ impl<
             if let Some(ids) = self.read_model.name_to_ids.get(child_layout.key().name())
                 && let Some(&child_id) = ids.first()
             {
+                let bounds = crate::shared::primitives::ChildBounds::new(
+                    *child_layout.bounds(),
+                    child_layout.constraint(),
+                );
                 self.read_model
                     .computed_layouts
                     .entry(monitor_id.clone())
                     .or_default()
-                    .insert(child_id, *child_layout.bounds());
+                    .insert(child_id, bounds);
 
                 tracing::trace!(
                     child = %child_id,
@@ -1126,6 +1130,7 @@ mod tests {
                         crate::shared::primitives::ModuleName::new("clock"),
                     ),
                     Rect::new(Position::new(100, 0), Size::new(80, 24)),
+                    crate::shared::primitives::SizeConstraint::none(),
                 )],
             })
             .await
@@ -1141,6 +1146,7 @@ mod tests {
                         crate::shared::primitives::ModuleName::new("clock"),
                     ),
                     Rect::new(Position::new(150, 0), Size::new(80, 24)),
+                    crate::shared::primitives::SizeConstraint::none(),
                 )],
             })
             .await
@@ -1188,8 +1194,8 @@ mod tests {
             if current.contains_key(&MonitorId::new("DP-1"))
                 && current.contains_key(&MonitorId::new("DP-2"))
             {
-                assert_eq!(current.get(&MonitorId::new("DP-1")).unwrap().x(), 100);
-                assert_eq!(current.get(&MonitorId::new("DP-2")).unwrap().x(), 150);
+                assert_eq!(current.get(&MonitorId::new("DP-1")).unwrap().rect().x(), 100);
+                assert_eq!(current.get(&MonitorId::new("DP-2")).unwrap().rect().x(), 150);
                 break;
             }
             attempts += 1;

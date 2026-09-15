@@ -276,7 +276,7 @@ pub mod test_support {
             _node: crate::features::layout_engine::domain::StyledNode,
             _measurer: &mut dyn TextMeasurer,
             _start_pos: Position,
-            _available_size: Option<Size>,
+            _constraint: crate::shared::primitives::SizeConstraint,
         ) -> Result<
             crate::features::layout_engine::domain::RenderNode,
             crate::features::layout_engine::domain::LayoutError,
