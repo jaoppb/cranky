@@ -34,6 +34,11 @@ pub struct ModuleRegistry {
     /// its own parent and a child's key resolves to the one actor embedded
     /// at that exact site, not just any actor sharing that name.
     site_index: HashMap<crate::shared::primitives::ModuleSite, ModuleId>,
+    /// Monotonic, never reused for the registry's lifetime — unlike the old
+    /// per-`load()` local counter, this survives a single lazy spawn between
+    /// full config reloads, so a lazily-minted `ModuleId` can never collide
+    /// with a config-declared one.
+    next_module_id: u32,
     dbus_subscriptions: Vec<crate::shared::dbus::domain::DBusSubscription>,
     style_to_modules: HashMap<StyleSheetName, HashSet<crate::shared::primitives::ModuleName>>,
     active_signals: HashSet<crate::shared::events::signals::SignalKind>,
@@ -56,6 +61,7 @@ impl ModuleRegistry {
             module_keys: HashMap::new(),
             module_parents: HashMap::new(),
             site_index: HashMap::new(),
+            next_module_id: 0,
             dbus_subscriptions: Vec::new(),
             style_to_modules: HashMap::new(),
             active_signals: HashSet::new(),
@@ -73,6 +79,7 @@ impl ModuleRegistry {
         self.module_keys.clear();
         self.module_parents.clear();
         self.site_index.clear();
+        self.next_module_id = 0;
         self.dbus_subscriptions.clear();
         self.style_to_modules.clear();
         self.active_signals.clear();
@@ -125,14 +132,17 @@ impl ModuleRegistry {
         &mut self,
         config: &ModuleConfig,
         full_config: &crate::shared::config::domain::Config,
-        next_id: &mut u32,
         parent_id: Option<ModuleId>,
-    ) -> Result<ModuleId, crate::features::module_runtime::ports::RegistryLoadError> {
+        instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
+    ) -> Result<
+        (ModuleId, Box<dyn AnyModulePort>),
+        crate::features::module_runtime::ports::RegistryLoadError,
+    > {
         use crate::app::builtins::BuiltinError;
         use crate::features::module_runtime::ports::RegistryLoadError;
 
-        let id = ModuleId::new(*next_id);
-        *next_id = next_id.saturating_add(1);
+        let id = ModuleId::new(self.next_module_id);
+        self.next_module_id = self.next_module_id.saturating_add(1);
 
         let mut module =
             builtins::BuiltinModules::find_module(config.name(), config.engine(), &self.app_env)
@@ -186,11 +196,7 @@ impl ModuleRegistry {
             .entry(config.name().clone())
             .or_default()
             .push(id);
-        // `instance_id` is always `None` from config-based loading today —
-        // there's no config syntax for it. A future lazy-spawn site (a
-        // `Module` node with an explicit instance_id) mints its key the same
-        // way, just with `Some(instance_id)` instead.
-        let key = crate::shared::primitives::ModuleKey::new(config.name().clone(), None);
+        let key = crate::shared::primitives::ModuleKey::new(config.name().clone(), instance_id);
         self.module_keys.insert(id, key.clone());
         self.module_parents.insert(id, parent_id);
         self.site_index.insert(
@@ -198,9 +204,72 @@ impl ModuleRegistry {
             id,
         );
         self.module_ids.push(id);
-        self.modules.insert(id, module);
 
-        Ok(id)
+        Ok((id, module))
+    }
+
+    /// Mints a `ModuleId` for a site with no config stanza — a `Module` node
+    /// resolved lazily instead of declared under `[modules.*]` or
+    /// `root.{left,center,right}` — and spawns its actor immediately rather
+    /// than waiting for the next `spawn_all`. `find_module`/`init` failure is
+    /// returned to the caller instead of being fatal: unlike `load()`, a
+    /// lazy spawn happens mid-session, in the middle of some other module's
+    /// render, and must not bring the bar down.
+    fn spawn_module_lazy<
+        Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
+        LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
+        DS: crate::features::layout_engine::domain::DisplayCommandSender + 'static,
+        US: crate::features::vdom::domain::UiCommandSender + 'static,
+    >(
+        &mut self,
+        parent_id: ModuleId,
+        name: &crate::shared::primitives::ModuleName,
+        instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
+        options: ModuleOptions,
+        full_config: &crate::shared::config::domain::Config,
+        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
+    ) -> Result<
+        crate::features::module_runtime::ports::SpawnedModule,
+        crate::features::module_runtime::ports::RegistryLoadError,
+    > {
+        let cfg = ModuleConfig::new(
+            name.clone(),
+            true,
+            crate::shared::config::domain::EngineSelection::Auto,
+            options,
+        );
+        let (id, module) = self.load_single_module(&cfg, full_config, Some(parent_id), instance_id)?;
+
+        let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
+        let sender: Box<dyn crate::features::module_runtime::ports::LayoutSender> =
+            Box::new(WatchLayoutSender { tx: layout_tx });
+
+        let ctx = crate::features::module_runtime::application::ModuleContext::new(
+            id,
+            deps.hub.clone(),
+            deps.surface_manager.clone(),
+            deps.layout_sender.clone(),
+            deps.display_sender.clone(),
+            deps.ui_sender.clone(),
+            layout_rx,
+        )
+        .with_parent(Some(parent_id));
+
+        let style_resolver = self.create_style_resolver_for_module(module.styles());
+        let vdom_diff = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
+
+        crate::features::module_runtime::application::ModuleActor::new(
+            module,
+            ctx,
+            deps.canvas_factory.clone(),
+            style_resolver,
+            vdom_diff,
+        )
+        .spawn();
+
+        Ok(crate::features::module_runtime::ports::SpawnedModule::new(
+            id, sender,
+        ))
     }
 }
 
@@ -281,12 +350,30 @@ impl<
             .copied()
     }
 
+    fn parent_of(&self, id: ModuleId) -> Option<ModuleId> {
+        self.module_parents.get(&id).copied().flatten()
+    }
+
+    fn spawn_module(
+        &mut self,
+        parent: ModuleId,
+        name: &crate::shared::primitives::ModuleName,
+        instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
+        options: ModuleOptions,
+        config: &crate::shared::config::domain::Config,
+        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
+    ) -> Result<
+        crate::features::module_runtime::ports::SpawnedModule,
+        crate::features::module_runtime::ports::RegistryLoadError,
+    > {
+        self.spawn_module_lazy(parent, name, instance_id, options, config, deps)
+    }
+
     fn load(
         &mut self,
         config: &crate::shared::config::domain::Config,
     ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
         self.clear();
-        let mut next_id = 0;
 
         // 1. Load the root module (default "bar")
         let root_name = config.root().name();
@@ -298,13 +385,16 @@ impl<
                 config.root().options().clone(),
             )
         });
-        let root_id = self.load_single_module(&root_cfg, config, &mut next_id, None)?;
+        let (root_id, root_module) = self.load_single_module(&root_cfg, config, None, None)?;
+        self.modules.insert(root_id, root_module);
         self.root_module = Some(root_id);
 
         // 2. Load all configured child modules
         for mod_cfg in config.modules().modules().values() {
             if mod_cfg.is_enabled() && mod_cfg.name() != root_name {
-                let _ = self.load_single_module(mod_cfg, config, &mut next_id, Some(root_id))?;
+                let (id, module) =
+                    self.load_single_module(mod_cfg, config, Some(root_id), None)?;
+                self.modules.insert(id, module);
             }
         }
 
@@ -322,12 +412,13 @@ impl<
                                 crate::shared::config::domain::EngineSelection::Auto,
                                 ModuleOptions::default(),
                             );
-                            let _ = self.load_single_module(
+                            let (id, module) = self.load_single_module(
                                 &auto_cfg,
                                 config,
-                                &mut next_id,
                                 Some(root_id),
+                                None,
                             )?;
+                            self.modules.insert(id, module);
                         }
                     }
                 }
@@ -583,13 +674,12 @@ mod tests {
 
         let parent_a = ModuleId::new(100);
         let parent_b = ModuleId::new(200);
-        let mut next_id = 0_u32;
 
-        let id_a = registry
-            .load_single_module(&calendar_cfg, &config, &mut next_id, Some(parent_a))
+        let (id_a, _) = registry
+            .load_single_module(&calendar_cfg, &config, Some(parent_a), None)
             .unwrap();
-        let id_b = registry
-            .load_single_module(&calendar_cfg, &config, &mut next_id, Some(parent_b))
+        let (id_b, _) = registry
+            .load_single_module(&calendar_cfg, &config, Some(parent_b), None)
             .unwrap();
 
         // Two sites embedding the same module name mint distinct ModuleIds.
@@ -776,5 +866,117 @@ mod tests {
             TestRegistryPort::active_signal_subscriptions(&registry)
                 .contains(&crate::shared::events::signals::SignalKind::Time)
         );
+    }
+
+    #[tokio::test]
+    async fn test_spawn_module_lazy_mints_a_working_site() {
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let mut registry = ModuleRegistry::new(app_env);
+        let toml_str = r#"
+            [root]
+            name = "bar"
+        "#;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+        TestRegistryPort::load(&mut registry, &config).unwrap();
+        let root_id = TestRegistryPort::root_module(&registry).unwrap();
+
+        let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
+        let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
+            std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
+        let layout_sender = std::sync::Arc::new(|_| ());
+        let display_sender = std::sync::Arc::new(|_| ());
+        let ui_sender = std::sync::Arc::new(|_| ());
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+            hub,
+            surface_manager,
+            layout_sender,
+            display_sender,
+            ui_sender,
+            canvas_factory,
+        );
+
+        let name = crate::shared::primitives::ModuleName::new("calendar");
+        let spawned = registry
+            .spawn_module(
+                root_id,
+                &name,
+                None,
+                crate::shared::primitives::ModuleOptions::default(),
+                &config,
+                &deps,
+            )
+            .unwrap();
+        let id = spawned.id();
+
+        assert_ne!(id, root_id);
+        let key = crate::shared::primitives::ModuleKey::from_name(name);
+        assert_eq!(
+            TestRegistryPort::resolve_site(&registry, Some(root_id), &key),
+            Some(id)
+        );
+        assert_eq!(TestRegistryPort::parent_of(&registry, id), Some(root_id));
+        // The lazily spawned module was handed off to its own actor task,
+        // not left sitting in the pre-spawn pool.
+        assert!(!registry.modules.contains_key(&id));
+    }
+
+    #[test]
+    fn test_spawn_module_lazy_propagates_not_found() {
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let mut registry = ModuleRegistry::new(app_env);
+        let toml_str = r#"
+            [root]
+            name = "bar"
+        "#;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+        TestRegistryPort::load(&mut registry, &config).unwrap();
+        let root_id = TestRegistryPort::root_module(&registry).unwrap();
+
+        let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
+        let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
+            std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
+        let layout_sender = std::sync::Arc::new(|_| ());
+        let display_sender = std::sync::Arc::new(|_| ());
+        let ui_sender = std::sync::Arc::new(|_| ());
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+            hub,
+            surface_manager,
+            layout_sender,
+            display_sender,
+            ui_sender,
+            canvas_factory,
+        );
+
+        let name = crate::shared::primitives::ModuleName::new("does-not-exist");
+        let result = registry.spawn_module(
+            root_id,
+            &name,
+            None,
+            crate::shared::primitives::ModuleOptions::default(),
+            &config,
+            &deps,
+        );
+        assert!(matches!(
+            result,
+            Err(crate::features::module_runtime::ports::RegistryLoadError::ModuleNotFound(_))
+        ));
     }
 }

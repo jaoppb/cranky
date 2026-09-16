@@ -1,7 +1,7 @@
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{ChildBounds, ChildModuleLayout, ModuleId, ModuleKey, MonitorId};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LayoutEvent {
     ModuleSizeChanged {
         monitor_id: MonitorId,

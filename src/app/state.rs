@@ -42,6 +42,12 @@ pub struct CrankyApp<
     ui_sender: Arc<US>,
     registry: Box<R>,
     canvas_factory: F,
+    /// `None` until `set_adapter_supervisor` is called — main.rs wires it in
+    /// once the (fallible, boot-fatal) `DBus` connection is established, which
+    /// happens after `CrankyApp::new`. A lazy spawn before that point simply
+    /// can't ensure any adapter; nothing in v1 lazily spawns before boot
+    /// finishes, so this is never actually observed empty in practice.
+    adapter_supervisor: Option<crate::app::adapter_supervisor::AdapterSupervisor>,
 }
 
 pub struct StateServices<F, LS, DS, US> {
@@ -160,7 +166,19 @@ impl<
             ui_sender: services.ui_sender,
             registry,
             canvas_factory: services.canvas_factory,
+            adapter_supervisor: None,
         })
+    }
+
+    /// Wires in the on-demand adapter starter (decision 3). Called from
+    /// `main.rs` once the `DBus` connection it needs is established — after
+    /// `CrankyApp::new`, since that connection failing is fatal at boot and
+    /// must not be entangled with module loading.
+    pub fn set_adapter_supervisor(
+        &mut self,
+        supervisor: crate::app::adapter_supervisor::AdapterSupervisor,
+    ) {
+        self.adapter_supervisor = Some(supervisor);
     }
 
     #[must_use]
@@ -233,47 +251,148 @@ impl<
         }
     }
 
-    fn handle_container_layouts(
+    async fn handle_container_layouts(
         &mut self,
         parent_id: ModuleId,
         monitor_id: &MonitorId,
         layouts: &[crate::shared::primitives::ChildModuleLayout],
     ) {
         for child_layout in layouts {
-            if let Some(child_id) = self
+            match self
                 .registry
                 .resolve_site(Some(parent_id), child_layout.key())
             {
-                let bounds = crate::shared::primitives::ChildBounds::new(
-                    *child_layout.bounds(),
-                    child_layout.constraint(),
-                );
-                self.read_model
-                    .computed_layouts
-                    .entry(monitor_id.clone())
-                    .or_default()
-                    .insert(child_id, bounds);
+                Some(child_id) => {
+                    let bounds = crate::shared::primitives::ChildBounds::new(
+                        *child_layout.bounds(),
+                        child_layout.constraint(),
+                    );
+                    self.read_model
+                        .computed_layouts
+                        .entry(monitor_id.clone())
+                        .or_default()
+                        .insert(child_id, bounds);
 
-                tracing::trace!(
-                    child = %child_id,
-                    monitor = %monitor_id,
-                    bounds = ?child_layout.bounds(),
-                    "Updating computed_layouts for child module"
-                );
-                if let Some(sender) = self.layout_senders.get(&child_id) {
-                    let mut child_monitors = HashMap::new();
-                    for (mon, mod_map) in &self.read_model.computed_layouts {
-                        if let Some(&bounds) = mod_map.get(&child_id) {
-                            child_monitors.insert(mon.clone(), bounds);
+                    tracing::trace!(
+                        child = %child_id,
+                        monitor = %monitor_id,
+                        bounds = ?child_layout.bounds(),
+                        "Updating computed_layouts for child module"
+                    );
+                    if let Some(sender) = self.layout_senders.get(&child_id) {
+                        let mut child_monitors = HashMap::new();
+                        for (mon, mod_map) in &self.read_model.computed_layouts {
+                            if let Some(&bounds) = mod_map.get(&child_id) {
+                                child_monitors.insert(mon.clone(), bounds);
+                            }
                         }
+                        sender.send_layout(child_monitors);
                     }
-                    sender.send_layout(child_monitors);
+                }
+                None => {
+                    self.ensure_lazy_spawn(
+                        parent_id,
+                        child_layout.key(),
+                        child_layout.options().clone(),
+                    )
+                    .await;
                 }
             }
         }
     }
 
-    fn handle_layout_events(
+    /// Rendering a `Module` node with no resolved site is the lazy-discovery
+    /// signal (decision 2): spawn it here, on the spot, rather than waiting
+    /// for a config stanza that will never come. Idempotent two ways — a
+    /// site that already resolves is never re-spawned, and a site with a
+    /// previously recorded terminal failure is never retried until a hot
+    /// reload clears it — so a popup left open behind a ticking parent
+    /// doesn't retry a typo'd module name every frame.
+    async fn ensure_lazy_spawn(
+        &mut self,
+        parent: ModuleId,
+        key: &crate::shared::primitives::ModuleKey,
+        options: crate::shared::primitives::ModuleOptions,
+    ) {
+        let site = crate::shared::primitives::ModuleSite::new(Some(parent), key.clone());
+        if self.hub.module_errors_rx().borrow().contains_key(&site) {
+            return;
+        }
+
+        if self.would_cycle(parent, key.name()) {
+            self.record_module_error(site, "would create a cycle with an ancestor".to_string());
+            return;
+        }
+
+        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+            self.hub.clone(),
+            self.surface_manager.clone(),
+            self.layout_sender.clone(),
+            self.display_sender.clone(),
+            self.ui_sender.clone(),
+            self.canvas_factory.clone(),
+        );
+
+        match self.registry.spawn_module(
+            parent,
+            key.name(),
+            key.instance_id().cloned(),
+            options,
+            &self.read_model.config,
+            &deps,
+        ) {
+            Ok(spawned) => {
+                let id = spawned.id();
+                tracing::info!(module = %key, parent = %parent, id = %id, "Lazily spawned module");
+                self.layout_senders.insert(id, spawned.into_sender());
+                self.read_model.module_ids = self.registry.module_ids().to_vec();
+                self.read_model
+                    .module_names
+                    .clone_from(self.registry.module_names());
+                self.read_model
+                    .name_to_ids
+                    .clone_from(self.registry.name_to_ids());
+                self.read_model
+                    .module_keys
+                    .clone_from(self.registry.module_keys());
+
+                if let Some(supervisor) = self.adapter_supervisor.as_mut() {
+                    let kinds: Vec<_> = self
+                        .registry
+                        .active_signal_subscriptions()
+                        .iter()
+                        .copied()
+                        .collect();
+                    for kind in kinds {
+                        supervisor.ensure(kind).await;
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!(module = %key, parent = %parent, err = %e, "Lazy module spawn failed");
+                self.record_module_error(site, e.to_string());
+            }
+        }
+    }
+
+    fn would_cycle(&self, parent: ModuleId, name: &crate::shared::primitives::ModuleName) -> bool {
+        let mut current = Some(parent);
+        while let Some(id) = current {
+            if self.registry.module_names().get(&id) == Some(name) {
+                return true;
+            }
+            current = self.registry.parent_of(id);
+        }
+        false
+    }
+
+    fn record_module_error(&self, site: crate::shared::primitives::ModuleSite, reason: String) {
+        let mut errors = self.hub.module_errors_rx().borrow().clone();
+        errors.insert(site, reason);
+        let _ = self.hub.module_errors_tx().send(errors);
+    }
+
+    async fn handle_layout_events(
         &mut self,
         initial: LayoutEvent,
         display: &mut impl DisplayServerPort,
@@ -286,7 +405,8 @@ impl<
                     monitor_id,
                     layouts,
                 } => {
-                    self.handle_container_layouts(parent_id, &monitor_id, &layouts);
+                    self.handle_container_layouts(parent_id, &monitor_id, &layouts)
+                        .await;
                 }
                 LayoutEvent::ChildModuleSizeChanged {
                     parent_id: _,
@@ -503,7 +623,7 @@ impl<
                     self.handle_display_commands(display_cmd, &mut display);
                 }
                 Some(layout_event) = self.layout_rx.recv() => {
-                    self.handle_layout_events(layout_event, &mut display);
+                    self.handle_layout_events(layout_event, &mut display).await;
                 }
                 Some(ui_cmd) = self.ui_rx.recv() => {
                     self.handle_ui_commands(ui_cmd, &sni).await;
@@ -1157,6 +1277,7 @@ mod tests {
                     ),
                     Rect::new(Position::new(100, 0), Size::new(80, 24)),
                     crate::shared::primitives::SizeConstraint::none(),
+                    crate::shared::primitives::ModuleOptions::default(),
                 )],
             })
             .await
@@ -1173,6 +1294,7 @@ mod tests {
                     ),
                     Rect::new(Position::new(150, 0), Size::new(80, 24)),
                     crate::shared::primitives::SizeConstraint::none(),
+                    crate::shared::primitives::ModuleOptions::default(),
                 )],
             })
             .await
@@ -1308,8 +1430,10 @@ mod tests {
                 key.clone(),
                 Rect::new(Position::new(10, 0), Size::new(50, 20)),
                 crate::shared::primitives::SizeConstraint::none(),
+                crate::shared::primitives::ModuleOptions::default(),
             )],
-        );
+        )
+        .await;
         app.handle_container_layouts(
             parent_20,
             &monitor,
@@ -1317,12 +1441,171 @@ mod tests {
                 key,
                 Rect::new(Position::new(90, 0), Size::new(50, 20)),
                 crate::shared::primitives::SizeConstraint::none(),
+                crate::shared::primitives::ModuleOptions::default(),
             )],
-        );
+        )
+        .await;
 
         let layouts = app.read_model.computed_layouts.get(&monitor).unwrap();
         assert_eq!(layouts.get(&site_a).unwrap().rect().x(), 10);
         assert_eq!(layouts.get(&site_b).unwrap().rect().x(), 90);
         assert_eq!(layouts.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_ensure_lazy_spawn_rejects_self_cycle() {
+        // A parent named "calendar" embedding another "calendar" would
+        // create a cycle — must be rejected and recorded without ever
+        // calling `spawn_module` (not stubbed, so a call would panic).
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let hub_check = hub.clone();
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
+
+        let parent = ModuleId::new(1);
+        let mut names = HashMap::new();
+        names.insert(
+            parent,
+            crate::shared::primitives::ModuleName::new("calendar"),
+        );
+
+        let mut mock_registry = TestMockRegistry::new();
+        mock_registry.expect_load().returning(|_| Ok(()));
+        mock_registry.expect_root_module().return_const(None);
+        mock_registry.expect_module_ids().return_const(Vec::new());
+        mock_registry.expect_module_names().return_const(names);
+        mock_registry
+            .expect_name_to_ids()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_module_keys()
+            .return_const(HashMap::new());
+        mock_registry.expect_resolve_site().returning(|_, _| None);
+        mock_registry
+            .expect_spawn_all()
+            .returning(|_| HashMap::new());
+
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+        let services = StateServices::new(
+            hub,
+            surface_manager,
+            canvas_factory,
+            Arc::new(display_tx),
+            Arc::new(layout_tx),
+            Arc::new(ui_tx),
+        );
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let mut app = CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+
+        let monitor = MonitorId::new("DP-1");
+        let key = crate::shared::primitives::ModuleKey::from_name(
+            crate::shared::primitives::ModuleName::new("calendar"),
+        );
+        app.handle_container_layouts(
+            parent,
+            &monitor,
+            &[crate::shared::primitives::ChildModuleLayout::new(
+                key,
+                Rect::new(Position::new(0, 0), Size::new(50, 20)),
+                crate::shared::primitives::SizeConstraint::none(),
+                crate::shared::primitives::ModuleOptions::default(),
+            )],
+        )
+        .await;
+
+        let site = crate::shared::primitives::ModuleSite::new(
+            Some(parent),
+            crate::shared::primitives::ModuleKey::from_name(
+                crate::shared::primitives::ModuleName::new("calendar"),
+            ),
+        );
+        assert!(hub_check.module_errors_rx().borrow().contains_key(&site));
+        assert!(app.read_model.computed_layouts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_ensure_lazy_spawn_does_not_retry_after_recorded_failure() {
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let hub_check = hub.clone();
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
+
+        let parent = ModuleId::new(1);
+        let mut names = HashMap::new();
+        names.insert(parent, crate::shared::primitives::ModuleName::new("bar"));
+
+        let mut mock_registry = TestMockRegistry::new();
+        mock_registry.expect_load().returning(|_| Ok(()));
+        mock_registry.expect_root_module().return_const(None);
+        mock_registry.expect_module_ids().return_const(Vec::new());
+        mock_registry.expect_module_names().return_const(names);
+        mock_registry
+            .expect_name_to_ids()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_module_keys()
+            .return_const(HashMap::new());
+        mock_registry.expect_resolve_site().returning(|_, _| None);
+        mock_registry.expect_parent_of().returning(|_| None);
+        mock_registry
+            .expect_spawn_all()
+            .returning(|_| HashMap::new());
+        mock_registry.expect_spawn_module().times(1).returning(|_, _, _, _, _, _| {
+            Err(
+                crate::features::module_runtime::ports::RegistryLoadError::ModuleNotFound(
+                    crate::shared::primitives::ModuleName::new("calendarr"),
+                ),
+            )
+        });
+
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+        let services = StateServices::new(
+            hub,
+            surface_manager,
+            canvas_factory,
+            Arc::new(display_tx),
+            Arc::new(layout_tx),
+            Arc::new(ui_tx),
+        );
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let mut app = CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+
+        let monitor = MonitorId::new("DP-1");
+        let key = crate::shared::primitives::ModuleKey::from_name(
+            crate::shared::primitives::ModuleName::new("calendarr"),
+        );
+        let layouts = [crate::shared::primitives::ChildModuleLayout::new(
+            key,
+            Rect::new(Position::new(0, 0), Size::new(50, 20)),
+            crate::shared::primitives::SizeConstraint::none(),
+            crate::shared::primitives::ModuleOptions::default(),
+        )];
+
+        // First attempt: spawn_module is called and fails, and the failure
+        // is recorded.
+        app.handle_container_layouts(parent, &monitor, &layouts)
+            .await;
+        let site = crate::shared::primitives::ModuleSite::new(
+            Some(parent),
+            crate::shared::primitives::ModuleKey::from_name(
+                crate::shared::primitives::ModuleName::new("calendarr"),
+            ),
+        );
+        assert!(hub_check.module_errors_rx().borrow().contains_key(&site));
+
+        // Second identical attempt: spawn_module must not be called again —
+        // `.times(1)` on the mock enforces this; a second call would panic.
+        app.handle_container_layouts(parent, &monitor, &layouts)
+            .await;
     }
 }

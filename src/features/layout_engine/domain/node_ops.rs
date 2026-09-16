@@ -20,7 +20,9 @@ impl RenderNode {
                     child.collect_module_layouts_recursive(out);
                 }
             }
-            Self::Module { rect, key, style, .. } => {
+            Self::Module {
+                rect, key, options, style, ..
+            } => {
                 // A pin is "the parent set an explicit width/height" — taffy
                 // already resolved it to this slot's rect, whatever units the
                 // CSS was in, so the resolved pixels are the constraint value.
@@ -30,7 +32,12 @@ impl RenderNode {
                     style.width().is_some().then(|| rect.width()),
                     style.height().is_some().then(|| rect.height()),
                 );
-                out.push(ChildModuleLayout::new(key.clone(), *rect, constraint));
+                out.push(ChildModuleLayout::new(
+                    key.clone(),
+                    *rect,
+                    constraint,
+                    options.clone(),
+                ));
             }
             _ => {}
         }
@@ -220,6 +227,7 @@ mod tests {
             key: crate::shared::primitives::ModuleKey::from_name(
                 crate::shared::primitives::ModuleName::new("calendar"),
             ),
+            options: crate::shared::primitives::ModuleOptions::default(),
             style,
             on_click: None,
             on_hover: None,

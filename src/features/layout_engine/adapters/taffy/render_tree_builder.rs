@@ -57,9 +57,9 @@ fn build_atomic_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
             tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
         }),
         StyledNode::Module {
-            path, key, style, on_click, on_hover, tooltip, popup, panel, ..
+            path, key, options, style, on_click, on_hover, tooltip, popup, panel,
         } => Some(RenderNode::Module {
-            path: path.clone(), rect, key: key.clone(), style: style.clone(),
+            path: path.clone(), rect, key: key.clone(), options: options.clone(), style: style.clone(),
             on_click: on_click.clone(), on_hover: on_hover.clone(),
             tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
         }),

@@ -25,6 +25,17 @@ impl<
         let layouts: HashMap<MonitorId, ChildBounds> = self.ctx.rxs_mut().0.borrow().clone();
         let monitors = self.discover_monitors(&layouts);
 
+        let self_id = self.ctx.id();
+        let child_errors: HashMap<crate::shared::primitives::ModuleKey, String> = self
+            .ctx
+            .hub()
+            .module_errors_rx()
+            .borrow()
+            .iter()
+            .filter(|(site, _)| site.parent() == Some(self_id))
+            .map(|(site, reason)| (site.key().clone(), reason.clone()))
+            .collect();
+
         for monitor_id in monitors {
             let current = layouts.get(&monitor_id).copied();
             let current_bounds = current.map(|c| c.rect());
@@ -68,6 +79,7 @@ impl<
                 let layout_ctx = LayoutContext {
                     scale,
                     style_resolver: self.style_resolver.as_ref(),
+                    child_errors: &child_errors,
                     current_bounds,
                     current_constraint,
                     current_child_sizes,

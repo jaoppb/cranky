@@ -39,11 +39,19 @@ pub fn layout_pipeline<F: CanvasFactory>(
             .insert(monitor_id.clone(), diff.new_vdom().clone());
 
         tracing::trace!(monitor = %monitor_id, "Resolving styles for module VNode");
-        let styled_node = diff.new_vdom().resolve_styles(
-            ctx.style_resolver,
-            ctx.interaction_context.as_ref(),
-            None,
-        );
+        let styled_node = if ctx.child_errors.is_empty() {
+            diff.new_vdom().resolve_styles(
+                ctx.style_resolver,
+                ctx.interaction_context.as_ref(),
+                None,
+            )
+        } else {
+            let substituted = crate::features::vdom::domain::substitute_failed_modules(
+                diff.new_vdom(),
+                ctx.child_errors,
+            );
+            substituted.resolve_styles(ctx.style_resolver, ctx.interaction_context.as_ref(), None)
+        };
 
         let default_font_family = FontFamily::new(String::new());
         let default_font_size = FontSize::new(14.0);

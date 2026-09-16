@@ -1,24 +1,35 @@
 use super::super::geometry::{Rect, Size};
 use super::super::ids::{ModuleInstanceId, ModuleName};
+use super::super::options::ModuleOptions;
 use super::module_key::ModuleKey;
 use super::size_constraint::SizeConstraint;
 use std::collections::HashMap;
 
 /// Strongly-typed layout descriptor for a child module in a container
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ChildModuleLayout {
     key: ModuleKey,
     bounds: Rect,
     constraint: SizeConstraint,
+    /// Whatever options the embedding `ui.module(name, { ... })` call passed
+    /// — carried through so a lazy spawn (no config stanza) can `init()` the
+    /// actor with them, the same way a config-declared module would.
+    options: ModuleOptions,
 }
 
 impl ChildModuleLayout {
     #[must_use]
-    pub const fn new(key: ModuleKey, bounds: Rect, constraint: SizeConstraint) -> Self {
+    pub const fn new(
+        key: ModuleKey,
+        bounds: Rect,
+        constraint: SizeConstraint,
+        options: ModuleOptions,
+    ) -> Self {
         Self {
             key,
             bounds,
             constraint,
+            options,
         }
     }
 
@@ -35,6 +46,11 @@ impl ChildModuleLayout {
     #[must_use]
     pub const fn constraint(&self) -> SizeConstraint {
         self.constraint
+    }
+
+    #[must_use]
+    pub const fn options(&self) -> &ModuleOptions {
+        &self.options
     }
 }
 

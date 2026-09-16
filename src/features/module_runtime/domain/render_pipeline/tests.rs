@@ -8,6 +8,7 @@ use crate::features::module_runtime::test_support::{
 use crate::features::vdom::domain::VNode;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::MonitorId;
+use std::collections::HashMap;
 
 #[test]
 fn test_pipeline_diff_and_layout_phases() {
@@ -21,6 +22,7 @@ fn test_pipeline_diff_and_layout_phases() {
     let mut popup_engine = MockLayoutEngine;
     let mut panel_engine = MockLayoutEngine;
     let mut tooltip_engine = MockLayoutEngine;
+    let child_errors = HashMap::new();
 
     // 1. Diff Phase
     let diff = pipeline.diff(&mon, &port, &diff_adapter, None, None, None);
@@ -32,6 +34,7 @@ fn test_pipeline_diff_and_layout_phases() {
     let mut ctx = LayoutContext {
         scale: Scale::new(1.0),
         style_resolver: &resolver,
+        child_errors: &child_errors,
         current_bounds: None,
         current_constraint: crate::shared::primitives::SizeConstraint::none(),
         current_child_sizes: None,
@@ -104,10 +107,12 @@ fn test_process_monitor_initial_render_and_size_change() {
     let mut popup_engine = MockLayoutEngine;
     let mut panel_engine = MockLayoutEngine;
     let mut tooltip_engine = MockLayoutEngine;
+    let child_errors = HashMap::new();
 
     let ctx = LayoutContext {
         scale: Scale::new(1.0),
         style_resolver: &resolver,
+        child_errors: &child_errors,
         current_bounds: None,
         current_constraint: crate::shared::primitives::SizeConstraint::none(),
         current_child_sizes: None,
@@ -143,10 +148,12 @@ fn test_process_monitor_unchanged_returns_none() {
     let mut popup_engine = MockLayoutEngine;
     let mut panel_engine = MockLayoutEngine;
     let mut tooltip_engine = MockLayoutEngine;
+    let child_errors = HashMap::new();
 
     let ctx1 = LayoutContext {
         scale: Scale::new(1.0),
         style_resolver: &resolver,
+        child_errors: &child_errors,
         current_bounds: None,
         current_constraint: crate::shared::primitives::SizeConstraint::none(),
         current_child_sizes: None,
@@ -163,6 +170,7 @@ fn test_process_monitor_unchanged_returns_none() {
     let ctx2 = LayoutContext {
         scale: Scale::new(1.0),
         style_resolver: &resolver,
+        child_errors: &child_errors,
         current_bounds: None,
         current_constraint: crate::shared::primitives::SizeConstraint::none(),
         current_child_sizes: None,

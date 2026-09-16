@@ -592,6 +592,7 @@ fn bench_pipeline(c: &mut Criterion) {
         let mut popup_layout_engine = TaffyLayoutAdapter::default();
         let mut panel_layout_engine = TaffyLayoutAdapter::default();
         let mut tooltip_layout_engine = TaffyLayoutAdapter::default();
+        let child_errors = std::collections::HashMap::new();
         b.iter(|| {
             let mut pipeline = RenderPipeline::new();
 
@@ -601,6 +602,7 @@ fn bench_pipeline(c: &mut Criterion) {
                 let mut ctx = LayoutContext {
                     scale: Scale::new(1.0),
                     style_resolver: &style_resolver,
+                    child_errors: &child_errors,
                     current_bounds: None,
                     current_constraint: cranky::shared::primitives::SizeConstraint::none(),
                     current_child_sizes: None,
