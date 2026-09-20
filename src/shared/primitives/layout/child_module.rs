@@ -3,6 +3,7 @@ use super::super::ids::{ModuleInstanceId, ModuleName};
 use super::super::options::ModuleOptions;
 use super::module_key::ModuleKey;
 use super::size_constraint::SizeConstraint;
+use super::surface::LayoutSurface;
 use std::collections::HashMap;
 
 /// Strongly-typed layout descriptor for a child module in a container
@@ -15,6 +16,10 @@ pub struct ChildModuleLayout {
     /// — carried through so a lazy spawn (no config stanza) can `init()` the
     /// actor with them, the same way a config-declared module would.
     options: ModuleOptions,
+    /// Which tree this child was embedded in — the bar's own tree, or one of
+    /// the three floating kinds. Decides which physical Wayland surface the
+    /// child's own subsurface is parented to.
+    surface: LayoutSurface,
 }
 
 impl ChildModuleLayout {
@@ -24,12 +29,14 @@ impl ChildModuleLayout {
         bounds: Rect,
         constraint: SizeConstraint,
         options: ModuleOptions,
+        surface: LayoutSurface,
     ) -> Self {
         Self {
             key,
             bounds,
             constraint,
             options,
+            surface,
         }
     }
 
@@ -51,6 +58,11 @@ impl ChildModuleLayout {
     #[must_use]
     pub const fn options(&self) -> &ModuleOptions {
         &self.options
+    }
+
+    #[must_use]
+    pub const fn surface(&self) -> LayoutSurface {
+        self.surface
     }
 }
 

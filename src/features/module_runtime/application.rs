@@ -6,7 +6,7 @@ use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::{ChildBounds, ModuleId, ModuleInstanceId, MonitorId};
+use crate::shared::primitives::{ChildBounds, LayoutSurface, ModuleId, ModuleInstanceId, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
@@ -69,6 +69,12 @@ impl<
     }
 
     #[must_use]
+    pub fn with_surface(mut self, surface: LayoutSurface) -> Self {
+        self.identity = self.identity.with_surface(surface);
+        self
+    }
+
+    #[must_use]
     pub const fn identity(&self) -> &ModuleIdentity {
         &self.identity
     }
@@ -86,6 +92,11 @@ impl<
     #[must_use]
     pub const fn instance_id(&self) -> Option<&ModuleInstanceId> {
         self.identity.instance_id()
+    }
+
+    #[must_use]
+    pub const fn surface(&self) -> LayoutSurface {
+        self.identity.surface()
     }
 
     #[must_use]
@@ -387,6 +398,49 @@ mod tests {
         );
         fixture.layout_tx.send(layouts).unwrap();
 
+        event_loop.render_all_monitors(&mut layout_engines);
+        assert!(fixture.layout_rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_suspended_monitor_is_excluded_after_its_rect_is_withdrawn() {
+        // Decision 14: a monitor this actor has already rendered on (it's in
+        // `render_trees`) must not be rediscovered via the Hyprland/
+        // module-sizes bootstrap path once its rect disappears — that's what
+        // actually stops a child from resurrecting its own surface after its
+        // embedding site (a popup, say) closes.
+        let id = ModuleId::new(1);
+        let fixture = TestFixtureBuilder::new(id).with_monitors(&["DP-1"]).build();
+
+        let mut event_loop = fixture.event_loop;
+        let mut layout_engines = HashMap::new();
+
+        // First render: DP-1 has never been rendered before, so the
+        // Hyprland-sourced bootstrap path discovers and renders it.
+        event_loop.render_all_monitors(&mut layout_engines);
+        assert!(
+            event_loop
+                .render_pipeline()
+                .render_trees()
+                .contains_key(&MonitorId::new("DP-1"))
+        );
+        assert!(
+            fixture.layout_rx.try_recv().is_ok(),
+            "first render should report an intrinsic size"
+        );
+
+        // No live rect for DP-1 (nothing was ever sent on layout_tx), but
+        // DP-1 is now `seen` — discover_monitors must exclude it even
+        // though Hyprland still reports it.
+        let discovered = event_loop.discover_monitors(&HashMap::<MonitorId, ChildBounds>::new());
+        assert!(
+            !discovered.contains(&MonitorId::new("DP-1")),
+            "a previously-rendered monitor with no current rect must stay suspended"
+        );
+
+        // A second render_all_monitors call (e.g. from some unrelated
+        // signal tick) must therefore do nothing for DP-1 — no refresh, no
+        // diff, no submit — so `try_recv` sees nothing new.
         event_loop.render_all_monitors(&mut layout_engines);
         assert!(fixture.layout_rx.try_recv().is_err());
     }

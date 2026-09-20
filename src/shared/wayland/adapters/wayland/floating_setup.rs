@@ -190,6 +190,7 @@ fn setup_new_floating(
             shm_buffer: info.shm_buffer,
             size: info.size,
             reposition_token: 0,
+            module_surfaces: std::collections::HashMap::new(),
         },
     );
 

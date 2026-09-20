@@ -1,10 +1,16 @@
-use crate::shared::primitives::{ModuleId, ModuleInstanceId};
+use crate::shared::primitives::{LayoutSurface, ModuleId, ModuleInstanceId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModuleIdentity {
     id: ModuleId,
     parent_id: Option<ModuleId>,
     instance_id: Option<ModuleInstanceId>,
+    /// Which of the parent's trees this site was embedded in — the bar's own
+    /// tree by default, or a floating kind for a module embedded via
+    /// `ui.module(name)` inside `ui.popup`/`ui.panel`/a tooltip. Fixed for
+    /// the actor's whole life: identity is per embedding site (decision 5),
+    /// so a site never changes which surface it belongs to.
+    surface: LayoutSurface,
 }
 
 impl ModuleIdentity {
@@ -14,6 +20,7 @@ impl ModuleIdentity {
             id,
             parent_id: None,
             instance_id: None,
+            surface: LayoutSurface::Bar,
         }
     }
 
@@ -30,6 +37,12 @@ impl ModuleIdentity {
     }
 
     #[must_use]
+    pub const fn with_surface(mut self, surface: LayoutSurface) -> Self {
+        self.surface = surface;
+        self
+    }
+
+    #[must_use]
     pub const fn id(&self) -> ModuleId {
         self.id
     }
@@ -42,6 +55,11 @@ impl ModuleIdentity {
     #[must_use]
     pub const fn instance_id(&self) -> Option<&ModuleInstanceId> {
         self.instance_id.as_ref()
+    }
+
+    #[must_use]
+    pub const fn surface(&self) -> LayoutSurface {
+        self.surface
     }
 }
 

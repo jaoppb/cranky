@@ -80,7 +80,9 @@ pub trait ModuleRegistryPort<
 
     /// This module's full `(name, instance_id)` — unlike `module_names`,
     /// distinguishes two sites of the same name from each other.
-    fn module_keys(&self) -> &std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleKey>;
+    fn module_keys(
+        &self,
+    ) -> &std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleKey>;
 
     /// Resolves the concrete actor embedded at `key` by `parent` — the
     /// per-site-aware replacement for guessing via `name_to_ids().first()`,
@@ -110,9 +112,9 @@ pub trait ModuleRegistryPort<
     fn spawn_module(
         &mut self,
         parent: ModuleId,
-        name: &crate::shared::primitives::ModuleName,
-        instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
+        key: &crate::shared::primitives::ModuleKey,
         options: crate::shared::primitives::ModuleOptions,
+        surface: crate::shared::primitives::LayoutSurface,
         config: &Config,
         deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> Result<SpawnedModule, RegistryLoadError>;

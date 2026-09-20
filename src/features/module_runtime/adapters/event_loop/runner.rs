@@ -33,6 +33,12 @@ pub struct EventLoop<
     pub(crate) popup_render_trees: HashMap<MonitorId, RenderNode>,
     pub(crate) panel_render_trees: HashMap<MonitorId, RenderNode>,
     pub(crate) tooltip_render_trees: HashMap<MonitorId, RenderNode>,
+    /// Whether the last render on each monitor had any child modules at all
+    /// — lets `dispatch_outcome_layouts` send one final empty
+    /// `ContainerLayoutsCalculated` on the render where the last child
+    /// disappears, without spamming one on every render of a module that
+    /// never has children.
+    pub(crate) child_layouts_present: HashMap<MonitorId, bool>,
 }
 
 impl<
@@ -63,6 +69,7 @@ impl<
             popup_render_trees: HashMap::new(),
             panel_render_trees: HashMap::new(),
             tooltip_render_trees: HashMap::new(),
+            child_layouts_present: HashMap::new(),
         }
     }
 
@@ -89,7 +96,13 @@ impl<
     }
 
     pub fn discover_monitors<V>(&self, layouts: &HashMap<MonitorId, V>) -> Vec<MonitorId> {
-        discover_monitors(self.ctx.hub(), layouts)
+        let seen: std::collections::HashSet<MonitorId> = self
+            .render_pipeline
+            .render_trees()
+            .keys()
+            .cloned()
+            .collect();
+        discover_monitors(self.ctx.hub(), layouts, &seen)
     }
 
     pub async fn run(mut self) {

@@ -25,6 +25,12 @@ pub(crate) struct FloatingSurface {
     pub(crate) shm_buffer: ShmBuffer,
     pub(crate) size: Size,
     pub(crate) reposition_token: u32,
+    /// Modules embedded inside this floating surface's own content (gap 4)
+    /// — each gets its own subsurface, parented here instead of to
+    /// `bar.surface`. Dropped automatically (destroying every child
+    /// subsurface) whenever this `FloatingSurface` itself is dropped, since
+    /// field drop order runs after this type's own `Drop::drop` body.
+    pub(crate) module_surfaces: HashMap<ModuleId, ModuleSurface>,
 }
 
 impl Drop for FloatingSurface {

@@ -223,9 +223,9 @@ impl ModuleRegistry {
     >(
         &mut self,
         parent_id: ModuleId,
-        name: &crate::shared::primitives::ModuleName,
-        instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
+        key: &crate::shared::primitives::ModuleKey,
         options: ModuleOptions,
+        surface: crate::shared::primitives::LayoutSurface,
         full_config: &crate::shared::config::domain::Config,
         deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> Result<
@@ -233,12 +233,17 @@ impl ModuleRegistry {
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
         let cfg = ModuleConfig::new(
-            name.clone(),
+            key.name().clone(),
             true,
             crate::shared::config::domain::EngineSelection::Auto,
             options,
         );
-        let (id, module) = self.load_single_module(&cfg, full_config, Some(parent_id), instance_id)?;
+        let (id, module) = self.load_single_module(
+            &cfg,
+            full_config,
+            Some(parent_id),
+            key.instance_id().cloned(),
+        )?;
 
         let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
         let sender: Box<dyn crate::features::module_runtime::ports::LayoutSender> =
@@ -253,7 +258,8 @@ impl ModuleRegistry {
             deps.ui_sender.clone(),
             layout_rx,
         )
-        .with_parent(Some(parent_id));
+        .with_parent(Some(parent_id))
+        .with_surface(surface);
 
         let style_resolver = self.create_style_resolver_for_module(module.styles());
         let vdom_diff = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
@@ -357,16 +363,16 @@ impl<
     fn spawn_module(
         &mut self,
         parent: ModuleId,
-        name: &crate::shared::primitives::ModuleName,
-        instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
+        key: &crate::shared::primitives::ModuleKey,
         options: ModuleOptions,
+        surface: crate::shared::primitives::LayoutSurface,
         config: &crate::shared::config::domain::Config,
         deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> Result<
         crate::features::module_runtime::ports::SpawnedModule,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
-        self.spawn_module_lazy(parent, name, instance_id, options, config, deps)
+        self.spawn_module_lazy(parent, key, options, surface, config, deps)
     }
 
     fn load(
@@ -392,8 +398,7 @@ impl<
         // 2. Load all configured child modules
         for mod_cfg in config.modules().modules().values() {
             if mod_cfg.is_enabled() && mod_cfg.name() != root_name {
-                let (id, module) =
-                    self.load_single_module(mod_cfg, config, Some(root_id), None)?;
+                let (id, module) = self.load_single_module(mod_cfg, config, Some(root_id), None)?;
                 self.modules.insert(id, module);
             }
         }
@@ -412,12 +417,8 @@ impl<
                                 crate::shared::config::domain::EngineSelection::Auto,
                                 ModuleOptions::default(),
                             );
-                            let (id, module) = self.load_single_module(
-                                &auto_cfg,
-                                config,
-                                Some(root_id),
-                                None,
-                            )?;
+                            let (id, module) =
+                                self.load_single_module(&auto_cfg, config, Some(root_id), None)?;
                             self.modules.insert(id, module);
                         }
                     }
@@ -704,8 +705,14 @@ mod tests {
             None
         );
 
-        assert_eq!(registry.module_parents.get(&id_a).copied().flatten(), Some(parent_a));
-        assert_eq!(registry.module_parents.get(&id_b).copied().flatten(), Some(parent_b));
+        assert_eq!(
+            registry.module_parents.get(&id_a).copied().flatten(),
+            Some(parent_a)
+        );
+        assert_eq!(
+            registry.module_parents.get(&id_b).copied().flatten(),
+            Some(parent_b)
+        );
     }
 
     #[test]
@@ -905,12 +912,13 @@ mod tests {
         );
 
         let name = crate::shared::primitives::ModuleName::new("calendar");
+        let key = crate::shared::primitives::ModuleKey::from_name(name);
         let spawned = registry
             .spawn_module(
                 root_id,
-                &name,
-                None,
+                &key,
                 crate::shared::primitives::ModuleOptions::default(),
+                crate::shared::primitives::LayoutSurface::Popup,
                 &config,
                 &deps,
             )
@@ -918,7 +926,6 @@ mod tests {
         let id = spawned.id();
 
         assert_ne!(id, root_id);
-        let key = crate::shared::primitives::ModuleKey::from_name(name);
         assert_eq!(
             TestRegistryPort::resolve_site(&registry, Some(root_id), &key),
             Some(id)
@@ -966,11 +973,12 @@ mod tests {
         );
 
         let name = crate::shared::primitives::ModuleName::new("does-not-exist");
+        let key = crate::shared::primitives::ModuleKey::from_name(name);
         let result = registry.spawn_module(
             root_id,
-            &name,
-            None,
+            &key,
             crate::shared::primitives::ModuleOptions::default(),
+            crate::shared::primitives::LayoutSurface::Bar,
             &config,
             &deps,
         );

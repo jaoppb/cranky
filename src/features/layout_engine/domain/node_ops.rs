@@ -1,9 +1,18 @@
 use super::popup::{ActivePanel, AnchoredPopup};
 use super::render_node::RenderNode;
 use super::styled_node::StyledNode;
-use crate::features::vdom::domain::NodePath;
+use crate::features::vdom::domain::{NodePath, SurfaceSpace};
 use crate::shared::primitives::geometry::Position;
-use crate::shared::primitives::{ChildModuleLayout, SizeConstraint};
+use crate::shared::primitives::{ChildModuleLayout, LayoutSurface, SizeConstraint};
+
+const fn layout_surface_of(surface: SurfaceSpace) -> LayoutSurface {
+    match surface {
+        SurfaceSpace::Bar => LayoutSurface::Bar,
+        SurfaceSpace::Popup => LayoutSurface::Popup,
+        SurfaceSpace::Panel => LayoutSurface::Panel,
+        SurfaceSpace::Tooltip => LayoutSurface::Tooltip,
+    }
+}
 
 impl RenderNode {
     #[must_use]
@@ -21,7 +30,12 @@ impl RenderNode {
                 }
             }
             Self::Module {
-                rect, key, options, style, ..
+                rect,
+                key,
+                options,
+                style,
+                path,
+                ..
             } => {
                 // A pin is "the parent set an explicit width/height" — taffy
                 // already resolved it to this slot's rect, whatever units the
@@ -37,6 +51,7 @@ impl RenderNode {
                     *rect,
                     constraint,
                     options.clone(),
+                    layout_surface_of(path.surface()),
                 ));
             }
             _ => {}
@@ -214,7 +229,8 @@ mod tests {
         // must still return whatever was found up to that point.
         let root = leaf(&[], Some(tooltip_stub("only")));
         let path = NodePath::new(SurfaceSpace::Bar, vec![5, 2]);
-        let StyledNode::Text { text, .. } = root.find_tooltip_along(&path).expect("root tooltip") else {
+        let StyledNode::Text { text, .. } = root.find_tooltip_along(&path).expect("root tooltip")
+        else {
             panic!("expected StyledNode::Text");
         };
         assert_eq!(text.as_str(), "only");

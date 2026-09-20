@@ -257,12 +257,14 @@ impl<
         monitor_id: &MonitorId,
         layouts: &[crate::shared::primitives::ChildModuleLayout],
     ) {
+        let mut seen = std::collections::HashSet::new();
         for child_layout in layouts {
             match self
                 .registry
                 .resolve_site(Some(parent_id), child_layout.key())
             {
                 Some(child_id) => {
+                    seen.insert(child_id);
                     let bounds = crate::shared::primitives::ChildBounds::new(
                         *child_layout.bounds(),
                         child_layout.constraint(),
@@ -279,25 +281,74 @@ impl<
                         bounds = ?child_layout.bounds(),
                         "Updating computed_layouts for child module"
                     );
-                    if let Some(sender) = self.layout_senders.get(&child_id) {
-                        let mut child_monitors = HashMap::new();
-                        for (mon, mod_map) in &self.read_model.computed_layouts {
-                            if let Some(&bounds) = mod_map.get(&child_id) {
-                                child_monitors.insert(mon.clone(), bounds);
-                            }
-                        }
-                        sender.send_layout(child_monitors);
-                    }
+                    self.resend_child_bounds(child_id);
                 }
                 None => {
                     self.ensure_lazy_spawn(
                         parent_id,
                         child_layout.key(),
                         child_layout.options().clone(),
+                        child_layout.surface(),
                     )
                     .await;
                 }
             }
+        }
+
+        self.suspend_stale_children(parent_id, monitor_id, &seen);
+    }
+
+    /// Sends `child_id` its full, current cross-monitor bounds map, read back
+    /// from `computed_layouts` rather than passed in — the same map both
+    /// `handle_container_layouts` (a child gained or moved on a monitor) and
+    /// `suspend_stale_children` (a child lost a monitor) need to resend.
+    fn resend_child_bounds(&self, child_id: ModuleId) {
+        let Some(sender) = self.layout_senders.get(&child_id) else {
+            return;
+        };
+        let mut child_monitors = HashMap::new();
+        for (mon, mod_map) in &self.read_model.computed_layouts {
+            if let Some(&bounds) = mod_map.get(&child_id) {
+                child_monitors.insert(mon.clone(), bounds);
+            }
+        }
+        sender.send_layout(child_monitors);
+    }
+
+    /// Any child of `parent_id` that had a rect on `monitor_id` before this
+    /// render but isn't in `seen` now has had its embedding site withdrawn —
+    /// its popup/panel/tooltip closed, or the parent stopped embedding it.
+    /// Clearing the stale entry and resending the (now smaller) bounds map
+    /// is what actually suspends it (decision 14): once `monitor_id` is gone
+    /// from the child's own `layout_rx`, its `discover_monitors` excludes
+    /// the monitor entirely — no refresh, no render, no diff, no
+    /// `submit_buffer` — because it's already in that actor's `render_trees`
+    /// (seen before) but no longer has a live rect there.
+    fn suspend_stale_children(
+        &mut self,
+        parent_id: ModuleId,
+        monitor_id: &MonitorId,
+        seen: &std::collections::HashSet<ModuleId>,
+    ) {
+        let Some(mod_map) = self.read_model.computed_layouts.get(monitor_id) else {
+            return;
+        };
+        let stale: Vec<ModuleId> = mod_map
+            .keys()
+            .copied()
+            .filter(|id| !seen.contains(id) && self.registry.parent_of(*id) == Some(parent_id))
+            .collect();
+
+        for child_id in stale {
+            if let Some(mod_map) = self.read_model.computed_layouts.get_mut(monitor_id) {
+                mod_map.remove(&child_id);
+            }
+            tracing::trace!(
+                child = %child_id,
+                monitor = %monitor_id,
+                "Embedding site withdrawn; suspending child on this monitor"
+            );
+            self.resend_child_bounds(child_id);
         }
     }
 
@@ -313,6 +364,7 @@ impl<
         parent: ModuleId,
         key: &crate::shared::primitives::ModuleKey,
         options: crate::shared::primitives::ModuleOptions,
+        surface: crate::shared::primitives::LayoutSurface,
     ) {
         let site = crate::shared::primitives::ModuleSite::new(Some(parent), key.clone());
         if self.hub.module_errors_rx().borrow().contains_key(&site) {
@@ -335,9 +387,9 @@ impl<
 
         match self.registry.spawn_module(
             parent,
-            key.name(),
-            key.instance_id().cloned(),
+            key,
             options,
+            surface,
             &self.read_model.config,
             &deps,
         ) {
@@ -1278,6 +1330,7 @@ mod tests {
                     Rect::new(Position::new(100, 0), Size::new(80, 24)),
                     crate::shared::primitives::SizeConstraint::none(),
                     crate::shared::primitives::ModuleOptions::default(),
+                    crate::shared::primitives::LayoutSurface::Bar,
                 )],
             })
             .await
@@ -1295,6 +1348,7 @@ mod tests {
                     Rect::new(Position::new(150, 0), Size::new(80, 24)),
                     crate::shared::primitives::SizeConstraint::none(),
                     crate::shared::primitives::ModuleOptions::default(),
+                    crate::shared::primitives::LayoutSurface::Bar,
                 )],
             })
             .await
@@ -1403,6 +1457,18 @@ mod tests {
         mock_registry
             .expect_spawn_all()
             .returning(|_| HashMap::new());
+        // Each site's own parent — consulted when the *other* parent's
+        // render touches the same monitor, to confirm `site_a`/`site_b`
+        // belong to a different parent and so must not be suspended.
+        mock_registry.expect_parent_of().returning(move |id| {
+            if id == site_a {
+                Some(parent_10)
+            } else if id == site_b {
+                Some(parent_20)
+            } else {
+                None
+            }
+        });
 
         let canvas_factory =
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
@@ -1431,6 +1497,7 @@ mod tests {
                 Rect::new(Position::new(10, 0), Size::new(50, 20)),
                 crate::shared::primitives::SizeConstraint::none(),
                 crate::shared::primitives::ModuleOptions::default(),
+                crate::shared::primitives::LayoutSurface::Bar,
             )],
         )
         .await;
@@ -1442,6 +1509,7 @@ mod tests {
                 Rect::new(Position::new(90, 0), Size::new(50, 20)),
                 crate::shared::primitives::SizeConstraint::none(),
                 crate::shared::primitives::ModuleOptions::default(),
+                crate::shared::primitives::LayoutSurface::Bar,
             )],
         )
         .await;
@@ -1450,6 +1518,107 @@ mod tests {
         assert_eq!(layouts.get(&site_a).unwrap().rect().x(), 10);
         assert_eq!(layouts.get(&site_b).unwrap().rect().x(), 90);
         assert_eq!(layouts.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_handle_container_layouts_suspends_child_whose_site_closed() {
+        // Decision 14: once a parent's render no longer embeds a child on a
+        // monitor (its popup closed), the stale `computed_layouts` entry
+        // must be cleared and the child told directly — this is what stops
+        // it from rendering there again (gap 8).
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
+
+        let parent = ModuleId::new(1);
+        let child = ModuleId::new(2);
+
+        let mut mock_registry = TestMockRegistry::new();
+        mock_registry.expect_load().returning(|_| Ok(()));
+        mock_registry.expect_root_module().return_const(None);
+        mock_registry.expect_module_ids().return_const(Vec::new());
+        mock_registry
+            .expect_module_names()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_name_to_ids()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_module_keys()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_resolve_site()
+            .returning(move |p, _| if p == Some(parent) { Some(child) } else { None });
+        mock_registry
+            .expect_parent_of()
+            .returning(move |id| if id == child { Some(parent) } else { None });
+        mock_registry
+            .expect_spawn_all()
+            .returning(|_| HashMap::new());
+
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+        let services = StateServices::new(
+            hub,
+            surface_manager,
+            canvas_factory,
+            Arc::new(display_tx),
+            Arc::new(layout_tx),
+            Arc::new(ui_tx),
+        );
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let mut app = CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+
+        let (child_layout_tx, child_layout_rx) = tokio::sync::watch::channel(HashMap::new());
+        app.layout_senders.insert(
+            child,
+            Box::new(crate::app::registry::WatchLayoutSender::new(child_layout_tx)),
+        );
+
+        let monitor = MonitorId::new("DP-1");
+        let key = crate::shared::primitives::ModuleKey::from_name(
+            crate::shared::primitives::ModuleName::new("calendar"),
+        );
+
+        // Popup open: the child gets a rect on DP-1.
+        app.handle_container_layouts(
+            parent,
+            &monitor,
+            &[crate::shared::primitives::ChildModuleLayout::new(
+                key,
+                Rect::new(Position::new(0, 0), Size::new(50, 20)),
+                crate::shared::primitives::SizeConstraint::none(),
+                crate::shared::primitives::ModuleOptions::default(),
+                crate::shared::primitives::LayoutSurface::Popup,
+            )],
+        )
+        .await;
+        assert!(
+            app.read_model
+                .computed_layouts
+                .get(&monitor)
+                .is_some_and(|m| m.contains_key(&child))
+        );
+        assert!(child_layout_rx.borrow().contains_key(&monitor));
+
+        // Popup closed: the parent's next render carries no children at all.
+        app.handle_container_layouts(parent, &monitor, &[]).await;
+
+        assert!(
+            !app.read_model
+                .computed_layouts
+                .get(&monitor)
+                .is_some_and(|m| m.contains_key(&child)),
+            "the stale entry must be cleared once the site closes"
+        );
+        assert!(
+            !child_layout_rx.borrow().contains_key(&monitor),
+            "the child must be told its monitor is gone, not left with a stale rect"
+        );
     }
 
     #[tokio::test]
@@ -1514,6 +1683,7 @@ mod tests {
                 Rect::new(Position::new(0, 0), Size::new(50, 20)),
                 crate::shared::primitives::SizeConstraint::none(),
                 crate::shared::primitives::ModuleOptions::default(),
+                crate::shared::primitives::LayoutSurface::Bar,
             )],
         )
         .await;
@@ -1589,6 +1759,7 @@ mod tests {
             Rect::new(Position::new(0, 0), Size::new(50, 20)),
             crate::shared::primitives::SizeConstraint::none(),
             crate::shared::primitives::ModuleOptions::default(),
+            crate::shared::primitives::LayoutSurface::Bar,
         )];
 
         // First attempt: spawn_module is called and fails, and the failure

@@ -1,5 +1,5 @@
 use super::floating_anchor::{handle_conflicts, resolve_anchor};
-use super::floating_setup::{create_new_floating, update_existing_floating, FloatingPlacement};
+use super::floating_setup::{FloatingPlacement, create_new_floating, update_existing_floating};
 use super::state::WaylandState;
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::shared::primitives::geometry::{Rect, Size};
@@ -36,9 +36,9 @@ pub(crate) fn show_floating(
     };
 
     let effective_offset = match kind {
-        FloatingKind::Popup(_) => payload.offset.unwrap_or_else(|| {
-            state.hub.config_rx().borrow().popup().offset()
-        }),
+        FloatingKind::Popup(_) => payload
+            .offset
+            .unwrap_or_else(|| state.hub.config_rx().borrow().popup().offset()),
         _ => payload.offset.unwrap_or_default(),
     };
 
@@ -59,5 +59,13 @@ pub(crate) fn show_floating(
 pub(crate) fn hide_floating(state: &mut WaylandState, kind: &FloatingKind) {
     if let Some(floating) = state.floating_surfaces.remove(kind) {
         state.surface_to_id.remove(&floating.surface);
+        // Children embedded in this floating surface (gap 4) never get a
+        // teardown of their own — closing the popup/panel is the only
+        // signal they get. `floating`'s own drop (below, at end of scope)
+        // destroys every child subsurface; this just also forgets their
+        // pointer-routing entries before that happens.
+        for child in floating.module_surfaces.values() {
+            state.surface_to_id.remove(&child.surface);
+        }
     }
 }

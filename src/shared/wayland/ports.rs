@@ -2,6 +2,7 @@ use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};
 pub use crate::shared::wayland::domain::{AppReadModel, ModuleLayout};
+pub use crate::shared::wayland::surface_parent::SurfaceParent;
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -16,16 +17,19 @@ pub trait SurfaceManagerPort: Send + Sync {
         buffer: RenderBuffer,
     );
 
-    /// Submit a rendered buffer with optional parent module ID for nested subsurfaces.
+    /// Submit a rendered buffer for a module with a parent surface to
+    /// subsurface against — `None` for the root painting its own
+    /// layer-surface buffer directly, `Some` for anything embedded via
+    /// `ui.module(name)`, wherever it was embedded.
     fn submit_child_buffer(
         &self,
         module_id: ModuleId,
-        parent_id: Option<ModuleId>,
+        parent: Option<SurfaceParent>,
         monitor_id: MonitorId,
         position: Position,
         buffer: RenderBuffer,
     ) {
-        let _ = parent_id;
+        let _ = parent;
         self.submit_buffer(module_id, monitor_id, position, buffer);
     }
 }

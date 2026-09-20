@@ -7,8 +7,8 @@ use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::module_runtime::domain::RenderOutcome;
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::vdom::domain::UiCommandSender;
-use crate::shared::primitives::geometry::Scale;
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::Scale;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
 impl<
@@ -29,11 +29,13 @@ impl<
             self.ctx.id(),
             monitor_id,
             outcome,
+            &mut self.child_layouts_present,
         );
         dispatch_outcome_buffer(
             self.ctx.surface_manager(),
             self.ctx.id(),
             self.ctx.parent_id(),
+            self.ctx.surface(),
             monitor_id,
             outcome,
         );
