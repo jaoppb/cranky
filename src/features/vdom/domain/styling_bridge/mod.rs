@@ -1,3 +1,4 @@
+mod anchor;
 mod mapper;
 mod pseudo;
 mod resolver;

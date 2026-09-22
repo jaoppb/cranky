@@ -68,10 +68,7 @@ fn test_click_hit_returns_distinct_button_actions() {
     let mon = MonitorId::new("DP-1");
     let mut handlers = ClickHandlers::new();
     handlers.insert(PointerButton::Left, UiAction::Exec("left_clicked".into()));
-    handlers.insert(
-        PointerButton::Right,
-        UiAction::Exec("right_clicked".into()),
-    );
+    handlers.insert(PointerButton::Right, UiAction::Exec("right_clicked".into()));
     handlers.insert(PointerButton::Side, UiAction::Exec("side_clicked".into()));
 
     let tree = make_test_tree(Some(handlers));

@@ -7,25 +7,24 @@ use crate::features::module_runtime::domain::{PointerAction, RenderOutcome};
 use crate::features::module_runtime::ports::{AnyModulePort, LayoutEvent, LayoutEventSender};
 use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::geometry::{Position, Rect, Scale};
+use crate::shared::primitives::geometry::{Position, Scale};
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::{HashMap, HashSet};
 
+/// The set of monitors to render for. Wayland is the only subsystem that
+/// knows whether a surface can exist at all, and it's authoritative here:
+/// `monitor_scales` is populated the moment an output's `wl_output::Name`/
+/// `Scale` event arrives and cleaned the moment its global is removed (see
+/// `dispatch_output.rs` / `dispatch_registry.rs`). Hyprland's own view can
+/// lag a hotplug by a beat (workspaces move onto a new monitor before
+/// `monitoraddedv2` arrives), and `module_sizes` is a cache that only ever
+/// gains entries — treating either as a discovery source let a disconnected
+/// monitor stay "discovered" forever.
 #[must_use]
-pub(super) fn discover_monitors(hub: &SignalHub, layouts: &HashMap<MonitorId, Rect>) -> Vec<MonitorId> {
-    let mut all_monitors: HashSet<MonitorId> = HashSet::new();
-    for m in hub.hyprland_rx().borrow().monitors().values() {
-        all_monitors.insert(MonitorId::new(m.name().as_str()));
-    }
-    for m in layouts.keys() {
-        all_monitors.insert(m.clone());
-    }
-    for m in hub.module_sizes_rx().borrow().keys() {
-        all_monitors.insert(m.clone());
-    }
-    all_monitors.into_iter().collect()
+pub(super) fn discover_monitors(hub: &SignalHub) -> Vec<MonitorId> {
+    hub.monitor_scales_rx().borrow().keys().cloned().collect()
 }
 
 pub(super) fn dispatch_outcome_layouts<LS: LayoutEventSender>(
@@ -129,7 +128,11 @@ pub(super) fn update_floating_trees<F: CanvasFactory>(
             crate::shared::config::domain::FontFamily::new(String::new()),
             crate::shared::config::domain::FontSize::new(14.0),
         );
-        if let Ok(tree) = engine.calculate_layout(anchored.layout().clone(), &mut measurer, Position::new(0, 0)) {
+        if let Ok(tree) = engine.calculate_layout(
+            anchored.layout().clone(),
+            &mut measurer,
+            Position::new(0, 0),
+        ) {
             popup_trees.insert(monitor_id.clone(), tree);
         }
     } else {
@@ -143,7 +146,9 @@ pub(super) fn update_floating_trees<F: CanvasFactory>(
             crate::shared::config::domain::FontFamily::new(String::new()),
             crate::shared::config::domain::FontSize::new(14.0),
         );
-        if let Ok(tree) = engine.calculate_layout(panel.layout().clone(), &mut measurer, Position::new(0, 0)) {
+        if let Ok(tree) =
+            engine.calculate_layout(panel.layout().clone(), &mut measurer, Position::new(0, 0))
+        {
             panel_trees.insert(monitor_id.clone(), tree);
         }
     } else {
@@ -151,7 +156,11 @@ pub(super) fn update_floating_trees<F: CanvasFactory>(
     }
 }
 
-pub(super) fn dispatch_post_actions<LS: LayoutEventSender, DS: DisplayCommandSender, US: UiCommandSender>(
+pub(super) fn dispatch_post_actions<
+    LS: LayoutEventSender,
+    DS: DisplayCommandSender,
+    US: UiCommandSender,
+>(
     port: &mut Box<dyn AnyModulePort>,
     ctx: &ModuleContext<LS, DS, US>,
     actions: Vec<PointerAction>,

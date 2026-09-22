@@ -42,9 +42,9 @@ fn test_resolve_styles_interaction_propagation() {
 
     let resolver = MockResolver;
     let interaction = InteractionContext::new(
-        Some(NodeRef::new(NodePath::new(vec![0]), None)),
-        Some(NodeRef::new(NodePath::new(vec![0]), None)),
-        Some(NodeRef::new(NodePath::new(vec![1]), None)),
+        Some(NodeRef::new(Vec::new(), NodePath::new(vec![0]))),
+        Some(NodeRef::new(Vec::new(), NodePath::new(vec![0]))),
+        Some(NodeRef::new(Vec::new(), NodePath::new(vec![1]))),
         true,
     );
 

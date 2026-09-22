@@ -133,9 +133,20 @@ fn test_parse_event_monitor_removed() {
         }
     );
 
-    // monitoraddedv2 is intentionally not parsed (lazily inferred via MonitorFocused instead)
-    assert_eq!(parse_event("monitoraddedv2>>1,HDMI-A-1,LG Display"), None);
-
     // monitorremovedv2 missing name field
     assert_eq!(parse_event("monitorremovedv2>>1"), None);
+}
+
+#[test]
+fn test_parse_event_monitor_added() {
+    let e = parse_event("monitoraddedv2>>1,HDMI-A-1,LG Display").unwrap();
+    assert_eq!(
+        e,
+        WindowManagerEvent::MonitorAdded {
+            name: MonitorName::new("HDMI-A-1"),
+        }
+    );
+
+    // monitoraddedv2 missing name field
+    assert_eq!(parse_event("monitoraddedv2>>1"), None);
 }

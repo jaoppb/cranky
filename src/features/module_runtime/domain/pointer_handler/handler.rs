@@ -1,8 +1,8 @@
 use crate::features::layout_engine::domain::StyledNode;
 use crate::features::vdom::domain::{InteractionContext, NodeRef};
-use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::MonitorId;
-use std::collections::HashMap;
+use crate::shared::primitives::geometry::Position;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Default)]
 pub struct PointerHandler {
@@ -56,5 +56,13 @@ impl PointerHandler {
     #[must_use]
     pub const fn last_pointer_pos(&self) -> Option<&(MonitorId, Position)> {
         self.last_pointer_pos.as_ref()
+    }
+
+    /// Drops hover/active/focus state for any monitor no longer in `live`,
+    /// in one call rather than three parallel `.retain()`s.
+    pub fn retain_monitors(&mut self, live: &HashSet<MonitorId>) {
+        self.hovered_nodes.retain(|id, _| live.contains(id));
+        self.active_nodes.retain(|id, _| live.contains(id));
+        self.focused_nodes.retain(|id, _| live.contains(id));
     }
 }

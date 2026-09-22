@@ -5,8 +5,8 @@ use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::domain::LayoutContext;
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::vdom::domain::UiCommandSender;
-use crate::shared::primitives::geometry::{Rect, Scale};
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::{Rect, Scale};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::{HashMap, HashSet};
 
@@ -23,7 +23,7 @@ impl<
     ) {
         let t0 = std::time::Instant::now();
         let layouts: HashMap<MonitorId, Rect> = self.ctx.rxs_mut().0.borrow().clone();
-        let monitors = self.discover_monitors(&layouts);
+        let monitors = self.discover_monitors();
 
         // `layout_engines` and `self.render_pipeline` are both keyed by
         // monitor and only ever grow (`.entry().or_insert_with()` /
@@ -33,6 +33,8 @@ impl<
         let live: HashSet<MonitorId> = monitors.iter().cloned().collect();
         layout_engines.retain(|id, _| live.contains(id));
         self.render_pipeline.retain_monitors(&live);
+        self.floating.retain_monitors(&live);
+        self.pointer_handler.retain_monitors(&live);
 
         for monitor_id in monitors {
             let current_bounds = layouts.get(&monitor_id).copied();

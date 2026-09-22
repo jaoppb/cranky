@@ -263,11 +263,7 @@ impl<
         }
     }
 
-    fn handle_layout_events(
-        &mut self,
-        initial: LayoutEvent,
-        display: &mut impl DisplayServerPort,
-    ) {
+    fn handle_layout_events(&mut self, initial: LayoutEvent, display: &mut impl DisplayServerPort) {
         let mut event = initial;
         loop {
             match event {
@@ -316,13 +312,23 @@ impl<
             match cmd {
                 UiCommand::Exec(cmd_str) => {
                     tracing::debug!("Executing shell command: {cmd_str}");
-                    let _ = std::process::Command::new("sh").arg("-c").arg(cmd_str).spawn();
+                    let _ = std::process::Command::new("sh")
+                        .arg("-c")
+                        .arg(cmd_str)
+                        .spawn();
                 }
                 UiCommand::SystrayAction { id, action, pos } => {
-                    tracing::debug!(?id, ?action, ?pos, "Received UiCommand::SystrayAction, triggering SNI action");
+                    tracing::debug!(
+                        ?id,
+                        ?action,
+                        ?pos,
+                        "Received UiCommand::SystrayAction, triggering SNI action"
+                    );
                     match sni.trigger_action(&id, &action, pos).await {
                         Ok(()) => tracing::debug!(?id, ?action, "SNI trigger_action succeeded"),
-                        Err(e) => tracing::error!(?id, ?action, err = ?e, "SNI trigger_action failed"),
+                        Err(e) => {
+                            tracing::error!(?id, ?action, err = ?e, "SNI trigger_action failed");
+                        }
                     }
                 }
             }
@@ -344,7 +350,10 @@ impl<
             tracing::debug!("Base stylesheet changed; reloading all active modules");
             let all_modules: Vec<_> = self.read_model.module_names.values().cloned().collect();
             for mod_name in all_modules {
-                if let Ok(new_senders) = self.registry.reload_module(&mod_name, &self.read_model.config, deps) {
+                if let Ok(new_senders) =
+                    self.registry
+                        .reload_module(&mod_name, &self.read_model.config, deps)
+                {
                     for (id, sender) in new_senders {
                         self.layout_senders.insert(id, sender);
                     }
@@ -360,7 +369,10 @@ impl<
             );
             let mut any_reloaded = false;
             for mod_name in mods {
-                match self.registry.reload_module(&mod_name, &self.read_model.config, deps) {
+                match self
+                    .registry
+                    .reload_module(&mod_name, &self.read_model.config, deps)
+                {
                     Ok(new_senders) => {
                         for (id, sender) in new_senders {
                             self.layout_senders.insert(id, sender);
@@ -393,7 +405,10 @@ impl<
             match cmd {
                 SystemCommand::ReloadModule(name) => {
                     tracing::info!("Reloading module: {name}");
-                    match self.registry.reload_module(&name, &self.read_model.config, &deps) {
+                    match self
+                        .registry
+                        .reload_module(&name, &self.read_model.config, &deps)
+                    {
                         Ok(new_senders) => {
                             for (id, sender) in new_senders {
                                 self.layout_senders.insert(id, sender);
@@ -431,8 +446,12 @@ impl<
         } else {
             self.read_model.root_module = self.registry.root_module();
             self.read_model.module_ids = self.registry.module_ids().to_vec();
-            self.read_model.module_names.clone_from(self.registry.module_names());
-            self.read_model.name_to_ids.clone_from(self.registry.name_to_ids());
+            self.read_model
+                .module_names
+                .clone_from(self.registry.module_names());
+            self.read_model
+                .name_to_ids
+                .clone_from(self.registry.name_to_ids());
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
                 self.hub.clone(),
                 self.surface_manager.clone(),
@@ -446,7 +465,7 @@ impl<
     }
 
     fn handle_hyprland_changed(
-        &mut self,
+        &self,
         state: &crate::shared::events::signals::HyprlandState,
         current_focused_monitor: &mut String,
         display: &mut impl DisplayServerPort,
@@ -460,25 +479,26 @@ impl<
             *current_focused_monitor = new_focused;
             let _ = display.render_all(&self.read_model, &self.layout_senders);
         }
-
-        self.prune_removed_monitors(state);
     }
 
-    /// Drops every per-monitor entry for a monitor Hyprland no longer
-    /// reports.
+    /// Drops every per-monitor entry for a monitor Wayland no longer
+    /// reports. Wayland is authoritative for "which monitors exist" (see
+    /// `discover_monitors`) — this runs off `monitor_scales` changing,
+    /// not Hyprland, since Hyprland's own view can lag a hotplug.
     ///
     /// `module_sizes` / `computed_layouts` (in `read_model`) and the shared
     /// `module_sizes` signal only ever gain entries elsewhere — nothing
     /// removes one when a monitor disconnects. Left alone, a disconnected
-    /// monitor stays "discovered" forever (`discover_monitors` unions this
-    /// signal's keys with Hyprland's live list), which is what kept
+    /// monitor stays "discovered" forever, which is what kept
     /// `workspace.lua` rendering — and re-triggering the empty-container
     /// crash path — for a monitor with no surface left.
-    fn prune_removed_monitors(&mut self, state: &crate::shared::events::signals::HyprlandState) {
-        let live: std::collections::HashSet<MonitorId> = state
-            .monitors()
+    fn prune_removed_monitors(&mut self) {
+        let live: std::collections::HashSet<MonitorId> = self
+            .hub
+            .monitor_scales_rx()
+            .borrow()
             .keys()
-            .map(|name| MonitorId::new(name.as_str()))
+            .cloned()
             .collect();
 
         self.read_model
@@ -509,6 +529,7 @@ impl<
     ) -> Result<(), AppError> {
         let mut config_rx = self.hub.config_rx();
         let mut hyprland_rx = self.hub.hyprland_rx();
+        let mut monitor_scales_rx = self.hub.monitor_scales_rx();
 
         self.registry.register_dbus_subscriptions(&mut dbus).await;
 
@@ -541,6 +562,9 @@ impl<
                 Ok(()) = hyprland_rx.changed() => {
                     let state = hyprland_rx.borrow().clone();
                     self.handle_hyprland_changed(&state, &mut current_focused_monitor, &mut display);
+                }
+                Ok(()) = monitor_scales_rx.changed() => {
+                    self.prune_removed_monitors();
                 }
             }
         }
@@ -622,18 +646,8 @@ mod tests {
             layout_sender,
             ui_sender,
         );
-        let channels = StateChannels::new(
-            display_rx,
-            layout_rx,
-            ui_rx,
-            system_rx,
-        );
-        let app_result = CrankyApp::new(
-            config,
-            services,
-            channels,
-            Box::new(mock_registry),
-        );
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let app_result = CrankyApp::new(config, services, channels, Box::new(mock_registry));
 
         assert!(app_result.is_ok());
     }
@@ -682,19 +696,8 @@ mod tests {
             layout_sender,
             ui_sender,
         );
-        let channels = StateChannels::new(
-            display_rx,
-            layout_rx,
-            ui_rx,
-            system_rx,
-        );
-        let mut app = CrankyApp::new(
-            config,
-            services,
-            channels,
-            Box::new(mock_registry),
-        )
-        .unwrap();
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let mut app = CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
 
         let mut mock_display = MockDisplayServerPort::new();
         mock_display.expect_flush().returning(|| Ok(()));
@@ -956,19 +959,8 @@ mod tests {
             layout_sender,
             ui_sender,
         );
-        let channels = StateChannels::new(
-            display_rx,
-            layout_rx,
-            ui_rx,
-            system_rx,
-        );
-        let mut app = CrankyApp::new(
-            config,
-            services,
-            channels,
-            Box::new(mock_registry),
-        )
-        .unwrap();
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let mut app = CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
 
         let mut mock_display = MockDisplayServerPort::new();
         mock_display.expect_flush().returning(|| Ok(()));
@@ -1050,7 +1042,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Trigger config and hyprland changes
+        // Trigger config, hyprland, and monitor_scales changes
         hub.config_tx().send(Config::default()).unwrap();
         hub.hyprland_tx()
             .send(crate::shared::events::signals::HyprlandState::new(
@@ -1059,6 +1051,12 @@ mod tests {
                 Some(crate::features::workspaces::domain::MonitorName::new("1")),
             ))
             .unwrap();
+        let mut scales = hub.monitor_scales_rx().borrow().clone();
+        scales.insert(
+            MonitorId::new("1"),
+            crate::shared::primitives::geometry::Scale::new(1.0),
+        );
+        hub.monitor_scales_tx().send(scales).unwrap();
 
         let result = app.run(mock_display, mock_dbus, mock_sni).await;
         assert!(result.is_err());
@@ -1140,19 +1138,8 @@ mod tests {
             layout_sender,
             ui_sender,
         );
-        let channels = StateChannels::new(
-            display_rx,
-            layout_rx,
-            ui_rx,
-            system_rx,
-        );
-        let mut app = CrankyApp::new(
-            config,
-            services,
-            channels,
-            Box::new(mock_registry),
-        )
-        .unwrap();
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let mut app = CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
 
         // 1. Send ContainerLayoutsCalculated for DP-1
         layout_tx
@@ -1318,24 +1305,15 @@ mod tests {
         );
         app.hub.module_sizes_tx().send(shared_sizes).unwrap();
 
-        // Only "eDP-1" is still live.
-        let mut monitors = std::collections::BTreeMap::new();
-        let name = crate::features::workspaces::domain::MonitorName::new("eDP-1");
-        monitors.insert(
-            name.clone(),
-            crate::features::workspaces::domain::Monitor::new(
-                name,
-                crate::features::workspaces::domain::WorkspaceId::new(1),
-                None,
-            ),
+        // Only "eDP-1" is still live per Wayland.
+        let mut scales = app.hub.monitor_scales_rx().borrow().clone();
+        scales.insert(
+            live_mon.clone(),
+            crate::shared::primitives::geometry::Scale::new(1.0),
         );
-        let state = crate::shared::events::signals::HyprlandState::new(
-            std::collections::BTreeMap::new(),
-            monitors,
-            None,
-        );
+        app.hub.monitor_scales_tx().send(scales).unwrap();
 
-        app.prune_removed_monitors(&state);
+        app.prune_removed_monitors();
 
         assert!(!app.read_model.module_sizes.contains_key(&dead_mon));
         assert!(app.read_model.module_sizes.contains_key(&live_mon));

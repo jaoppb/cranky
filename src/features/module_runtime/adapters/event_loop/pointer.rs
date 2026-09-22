@@ -1,7 +1,7 @@
 use super::runner::EventLoop;
 use crate::features::layout_engine::domain::DisplayCommandSender;
-use crate::features::module_runtime::domain::pointer_handler::PointerOutcome;
 use crate::features::module_runtime::domain::PointerAction;
+use crate::features::module_runtime::domain::pointer_handler::PointerOutcome;
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::events::core::PointerEvent;
@@ -29,10 +29,10 @@ impl<
                 self.render_pipeline.render_trees().get(monitor_id)
             }
             crate::shared::events::core::SurfaceKind::Popup => {
-                self.popup_render_trees.get(monitor_id)
+                self.floating.popup_render_trees().get(monitor_id)
             }
             crate::shared::events::core::SurfaceKind::Panel => {
-                self.panel_render_trees.get(monitor_id)
+                self.floating.panel_render_trees().get(monitor_id)
             }
         };
 
@@ -65,20 +65,17 @@ impl<
         );
         match event {
             crate::shared::events::core::SurfaceLifecycleEvent::PopupDismissed => {
-                self.popup_render_trees.remove(monitor_id);
+                self.floating.popup_render_trees_mut().remove(monitor_id);
             }
             crate::shared::events::core::SurfaceLifecycleEvent::PanelDismissed => {
-                self.panel_render_trees.remove(monitor_id);
+                self.floating.panel_render_trees_mut().remove(monitor_id);
             }
         }
         let outcome = self.pointer_handler.handle_dismissal(event, monitor_id);
         self.execute_outcome(&outcome)
     }
 
-    fn execute_outcome(
-        &mut self,
-        outcome: &PointerOutcome,
-    ) -> bool {
+    fn execute_outcome(&mut self, outcome: &PointerOutcome) -> bool {
         let ctx_id = self.ctx.id();
         let mut changed = false;
         for action in outcome.actions() {

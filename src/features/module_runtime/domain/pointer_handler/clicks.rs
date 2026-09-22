@@ -1,10 +1,11 @@
 use super::action::PointerAction;
 use super::handler::PointerHandler;
+use super::hit_ref::capture_node_ref;
 use crate::features::layout_engine::domain::RenderNode;
-use crate::features::vdom::domain::{NodeRef, UiAction, UiCommand};
+use crate::features::vdom::domain::{UiAction, UiCommand};
 use crate::shared::events::core::PointerButton;
-use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::Position;
 
 impl PointerHandler {
     pub fn handle_button_press(
@@ -15,9 +16,7 @@ impl PointerHandler {
     ) -> bool {
         self.last_pointer_pos = Some((monitor_id.clone(), pos));
         let hit = render_tree.hit_test(pos);
-        let target_ref = hit
-            .last()
-            .map(|n| NodeRef::new(n.path().clone(), n.node_key().cloned()));
+        let target_ref = capture_node_ref(&hit);
         let old_active = self.active_nodes.get(monitor_id).cloned();
         if old_active == target_ref {
             false
@@ -41,9 +40,7 @@ impl PointerHandler {
         let mut changed = self.active_nodes.remove(monitor_id).is_some();
 
         let hit = render_tree.hit_test(pos);
-        let target_ref = hit
-            .last()
-            .map(|n| NodeRef::new(n.path().clone(), n.node_key().cloned()));
+        let target_ref = capture_node_ref(&hit);
         let old_focus = self.focused_nodes.get(monitor_id).cloned();
         if old_focus != target_ref {
             if let Some(r) = target_ref {

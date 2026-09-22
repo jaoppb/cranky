@@ -138,12 +138,66 @@ mod tests {
     }
 
     #[test]
+    fn test_monitor_removed_clears_focus_when_it_was_focused() {
+        let mut monitors = BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("HDMI-A-1"),
+            Monitor::new(MonitorName::new("HDMI-A-1"), WorkspaceId::new(1), None),
+        );
+        let mut state = HyprlandState::new(
+            BTreeMap::new(),
+            monitors,
+            Some(MonitorName::new("HDMI-A-1")),
+        );
+
+        state.apply_event(&WindowManagerEvent::MonitorRemoved {
+            name: MonitorName::new("HDMI-A-1"),
+        });
+
+        assert_eq!(state.focused_monitor(), None);
+    }
+
+    #[test]
+    fn test_monitor_removed_leaves_focus_when_a_different_monitor_was_focused() {
+        let mut monitors = BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("HDMI-A-1"),
+            Monitor::new(MonitorName::new("HDMI-A-1"), WorkspaceId::new(1), None),
+        );
+        monitors.insert(
+            MonitorName::new("eDP-1"),
+            Monitor::new(MonitorName::new("eDP-1"), WorkspaceId::new(2), None),
+        );
+        let mut state =
+            HyprlandState::new(BTreeMap::new(), monitors, Some(MonitorName::new("eDP-1")));
+
+        state.apply_event(&WindowManagerEvent::MonitorRemoved {
+            name: MonitorName::new("HDMI-A-1"),
+        });
+
+        assert_eq!(state.focused_monitor(), Some(&MonitorName::new("eDP-1")));
+    }
+
+    #[test]
+    fn test_monitor_added_is_a_no_op() {
+        let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
+
+        // MonitorAdded carries no active-workspace data, so applying it directly is a
+        // no-op - signal_loop treats it as an unconditional resync trigger instead.
+        state.apply_event(&WindowManagerEvent::MonitorAdded {
+            name: MonitorName::new("HDMI-A-1"),
+        });
+
+        assert!(state.monitors().is_empty());
+    }
+
+    #[test]
     fn test_monitor_focused_lazily_creates_unknown_monitor() {
         let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
 
-        // A monitor connecting is never parsed as its own event (monitoraddedv2 carries no
-        // active-workspace data) - instead the first focusedmonv2 for an unknown monitor name
-        // must create the monitor entry on the spot.
+        // Kept as a fast path for the case where MonitorFocused happens to arrive for a
+        // name not yet known - not the primary mechanism monitor-add correctness rests
+        // on (see MonitorAdded's forced resync in signal_loop.rs).
         state.apply_event(&WindowManagerEvent::MonitorFocused {
             monitor_name: MonitorName::new("HDMI-A-1"),
             workspace_id: WorkspaceId::new(4),

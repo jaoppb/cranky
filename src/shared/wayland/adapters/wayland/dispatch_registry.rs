@@ -67,6 +67,16 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                     }
                     info.output.release();
 
+                    if !info.name.is_empty() {
+                        let mut scales = state.hub.monitor_scales_rx().borrow().clone();
+                        if scales
+                            .remove(&crate::shared::primitives::MonitorId::new(&info.name))
+                            .is_some()
+                        {
+                            let _ = state.hub.monitor_scales_tx().send(scales);
+                        }
+                    }
+
                     let tx = state.command_tx.clone();
                     tokio::spawn(async move {
                         let _ = tx

@@ -1,3 +1,4 @@
+use super::anchor::ResolvedInteraction;
 use super::mapper::map_to_styled_node;
 use super::pseudo::compute_pseudo_classes;
 use crate::features::layout_engine::domain::{StyledNode, StyledPanel, StyledPopup};
@@ -41,9 +42,10 @@ impl VNode {
         interaction: Option<&InteractionContext>,
         parent: Option<&ElementQuery>,
     ) -> StyledNode {
+        let resolved_interaction = interaction.map(|ctx| ResolvedInteraction::resolve(self, ctx));
         self.resolve_styles_recursive(
             resolver,
-            interaction,
+            resolved_interaction.as_ref(),
             &NodePath::root(),
             SiblingPosition::root(),
             parent,
@@ -54,13 +56,13 @@ impl VNode {
     fn resolve_styles_recursive(
         &self,
         resolver: &dyn StyleResolverPort,
-        interaction: Option<&InteractionContext>,
+        resolved_interaction: Option<&ResolvedInteraction>,
         path: &NodePath,
         position: SiblingPosition,
         parent: Option<&ElementQuery>,
         inherited: &InheritedStyle,
     ) -> StyledNode {
-        let pseudo_classes = compute_pseudo_classes(path, self.key(), interaction);
+        let pseudo_classes = compute_pseudo_classes(path, resolved_interaction);
         let classes = self.class_names().map_or(&[][..], ClassNameList::as_slice);
         let query = ElementQuery::new(
             self.tag().as_str(),
@@ -90,7 +92,7 @@ impl VNode {
         let tooltip = self.tooltip().map(|t| {
             Box::new(t.resolve_styles_recursive(
                 resolver,
-                interaction,
+                resolved_interaction,
                 &path.child(0),
                 SiblingPosition::root(),
                 None,
@@ -100,7 +102,7 @@ impl VNode {
         let popup = self.popup().map(|p| {
             let content = Box::new(p.content().resolve_styles_recursive(
                 resolver,
-                interaction,
+                resolved_interaction,
                 &NodePath::root(),
                 SiblingPosition::root(),
                 Some(&query),
@@ -116,7 +118,7 @@ impl VNode {
         let panel = self.panel().map(|p| {
             let content = Box::new(p.content().resolve_styles_recursive(
                 resolver,
-                interaction,
+                resolved_interaction,
                 &NodePath::root(),
                 SiblingPosition::root(),
                 Some(&query),
@@ -141,7 +143,7 @@ impl VNode {
                     .map(|(idx, child)| {
                         child.resolve_styles_recursive(
                             resolver,
-                            interaction,
+                            resolved_interaction,
                             &path.child(idx),
                             SiblingPosition::new(idx, total),
                             Some(&query),
