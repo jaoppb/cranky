@@ -238,4 +238,58 @@ mod tests {
         assert!(!empty.has_state_changed());
         assert_eq!(empty.into_actions(), Vec::<PointerAction>::new());
     }
+
+    fn hover_with_tooltip(handler: &mut PointerHandler, mon: &MonitorId) {
+        let tooltip_node = StyledNode::Text {
+            path: NodePath::root(),
+            node_key: None,
+            text: TextContent::new("tip".to_string()),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        };
+        let tree = make_test_tree(Some(tooltip_node));
+        let _ = handler.handle_event(
+            &PointerEvent::PointerMotion {
+                surface: SurfaceKind::Bar,
+                pos: Position::new(10, 10),
+            },
+            mon,
+            &tree,
+        );
+    }
+
+    #[test]
+    fn test_retain_monitors_drops_pointer_pos_and_tooltip_for_dead_monitor() {
+        let mut handler = PointerHandler::new();
+        let mon = MonitorId::new("HDMI-A-1");
+        hover_with_tooltip(&mut handler, &mon);
+        assert!(handler.last_pointer_pos().is_some());
+        assert!(handler.last_tooltip().is_some());
+
+        handler.retain_monitors(&std::collections::HashSet::new());
+
+        assert!(handler.last_pointer_pos().is_none());
+        assert!(handler.last_tooltip().is_none());
+        assert!(handler.hovered_node(&mon).is_none());
+    }
+
+    #[test]
+    fn test_retain_monitors_keeps_pointer_pos_and_tooltip_for_live_monitor() {
+        let mut handler = PointerHandler::new();
+        let mon = MonitorId::new("eDP-1");
+        hover_with_tooltip(&mut handler, &mon);
+
+        let mut live = std::collections::HashSet::new();
+        live.insert(mon.clone());
+        live.insert(MonitorId::new("HDMI-A-1"));
+        handler.retain_monitors(&live);
+
+        assert!(handler.last_pointer_pos().is_some());
+        assert!(handler.last_tooltip().is_some());
+        assert!(handler.hovered_node(&mon).is_some());
+    }
 }

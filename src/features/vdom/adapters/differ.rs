@@ -22,6 +22,8 @@ impl DefaultVdomDiffAdapter {
 
         let class_changed = old_node.class_names() != new_node.class_names();
         let id_changed = old_node.element_id() != new_node.element_id();
+        // Key-only changes must still dirty the tree, or the stale keyless RenderNode is kept.
+        let key_changed = old_node.key() != new_node.key();
         let handlers_changed = old_node.on_click() != new_node.on_click()
             || old_node.on_hover() != new_node.on_hover();
 
@@ -87,6 +89,7 @@ impl DefaultVdomDiffAdapter {
 
         let props_dirty = class_changed
             || id_changed
+            || key_changed
             || handlers_changed
             || tooltip_patch.is_some()
             || popup_patch.is_some()
@@ -587,5 +590,43 @@ mod tests {
         let changed = adapter.diff(Some(&grid1), &grid2);
         assert!(!changed.is_unchanged());
         assert!(matches!(changed.patch(), Patch::UpdateChildren { .. }));
+    }
+
+    #[test]
+    fn test_diff_key_only_change_on_unkeyed_list_is_not_unchanged() {
+        // Adding keys to an unkeyed list falls back to positional
+        // reconciliation (the old side isn't fully keyed); the per-node diff
+        // must still see the key change or the pipeline skips the rebuild.
+        let adapter = DefaultVdomDiffAdapter::new();
+        let item = |text: &str| {
+            VNode::new_text(TextContent::new(text.to_string()), None, None, None, None, None)
+        };
+        let old_list = VNode::new_flex(vec![item("a"), item("b")], None, None, None, None, None);
+        let new_list = VNode::new_flex(
+            vec![
+                item("a").with_key(NodeKey::new("a").unwrap()),
+                item("b").with_key(NodeKey::new("b").unwrap()),
+            ],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let res = adapter.diff(Some(&old_list), &new_list);
+        assert!(!res.is_unchanged());
+    }
+
+    #[test]
+    fn test_diff_key_value_change_is_not_unchanged() {
+        let adapter = DefaultVdomDiffAdapter::new();
+        let make = |key: &str| {
+            VNode::new_text(TextContent::new("same".to_string()), None, None, None, None, None)
+                .with_key(NodeKey::new(key).unwrap())
+        };
+
+        let res = adapter.diff(Some(&make("old")), &make("new"));
+        assert!(!res.is_unchanged());
     }
 }

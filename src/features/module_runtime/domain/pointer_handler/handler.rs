@@ -59,10 +59,20 @@ impl PointerHandler {
     }
 
     /// Drops hover/active/focus state for any monitor no longer in `live`,
-    /// in one call rather than three parallel `.retain()`s.
+    /// in one call rather than three parallel `.retain()`s. Also drops the
+    /// last known pointer position (and its associated tooltip cache) if it
+    /// was on a monitor that's now gone - otherwise a later reconnect of
+    /// the same monitor id would resurrect a stale position/tooltip with
+    /// no new `PointerMotion` event to justify it.
     pub fn retain_monitors(&mut self, live: &HashSet<MonitorId>) {
         self.hovered_nodes.retain(|id, _| live.contains(id));
         self.active_nodes.retain(|id, _| live.contains(id));
         self.focused_nodes.retain(|id, _| live.contains(id));
+        if let Some((monitor_id, _)) = &self.last_pointer_pos
+            && !live.contains(monitor_id)
+        {
+            self.last_pointer_pos = None;
+            self.last_tooltip = None;
+        }
     }
 }

@@ -63,7 +63,7 @@ mod tests {
     #[test]
     fn test_hover_survives_reorder_when_matched_by_key() {
         use crate::features::styling::domain::ElementId;
-        use crate::features::vdom::domain::{NodeKey, NodePath, NodeRef};
+        use crate::features::vdom::domain::{AnchorSegment, NodeKey, NodePath, NodeRef};
 
         let item_b = VNode::new_text(
             TextContent::new("b".to_string()),
@@ -78,7 +78,13 @@ mod tests {
         // Captured as if the pointer hit "b" itself while "a" (since
         // removed) still came before it, putting "b" at path [1] at capture
         // time. The anchor is "b" itself, so the relative path is root.
-        let hovered = NodeRef::new(vec![NodeKey::new("b").unwrap()], NodePath::root());
+        let hovered = NodeRef::new(
+            vec![AnchorSegment::new(
+                NodePath::new(vec![1]),
+                NodeKey::new("b").unwrap(),
+            )],
+            NodePath::root(),
+        );
         let interaction = InteractionContext::new(Some(hovered), None, None, false);
 
         // Re-render with "a" removed: "b" is now at path [0].
@@ -103,7 +109,7 @@ mod tests {
     #[test]
     fn test_hover_reaches_both_keyed_container_and_unkeyed_child_after_reorder() {
         use crate::features::styling::domain::ElementId;
-        use crate::features::vdom::domain::{NodeKey, NodePath, NodeRef};
+        use crate::features::vdom::domain::{AnchorSegment, NodeKey, NodePath, NodeRef};
 
         let label = VNode::new_text(
             TextContent::new("B".to_string()),
@@ -127,7 +133,13 @@ mod tests {
         // removed) still came before "b", putting the label at path [1, 0]
         // and its keyed container ("b") at [1]. The anchor is "b"; the
         // relative path from that anchor down to the label is [0].
-        let hovered = NodeRef::new(vec![NodeKey::new("b").unwrap()], NodePath::new(vec![0]));
+        let hovered = NodeRef::new(
+            vec![AnchorSegment::new(
+                NodePath::new(vec![1]),
+                NodeKey::new("b").unwrap(),
+            )],
+            NodePath::new(vec![0]),
+        );
         let interaction = InteractionContext::new(Some(hovered), None, None, false);
 
         // Re-render with "a" removed: "b" is now at [0], its label at [0, 0].
@@ -151,7 +163,7 @@ mod tests {
     #[test]
     fn test_same_key_in_different_lists_does_not_cross_match() {
         use crate::features::styling::domain::ElementId;
-        use crate::features::vdom::domain::{NodeKey, NodePath, NodeRef};
+        use crate::features::vdom::domain::{AnchorSegment, NodeKey, NodePath, NodeRef};
 
         let list_a_item = VNode::new_text(
             TextContent::new("a1".to_string()),
@@ -181,7 +193,10 @@ mod tests {
 
         // Anchor chain ["list-a", "1"] must only ever resolve inside list-a.
         let hovered = NodeRef::new(
-            vec![NodeKey::new("list-a").unwrap(), NodeKey::new("1").unwrap()],
+            vec![
+                AnchorSegment::new(NodePath::new(vec![0]), NodeKey::new("list-a").unwrap()),
+                AnchorSegment::new(NodePath::new(vec![0]), NodeKey::new("1").unwrap()),
+            ],
             NodePath::root(),
         );
         let interaction = InteractionContext::new(Some(hovered), None, None, false);
@@ -194,5 +209,49 @@ mod tests {
             vec![crate::features::styling::domain::PseudoClass::Hover]
         );
         assert!(resolver.pseudo_classes_of("list-b-item").is_empty());
+    }
+
+    /// Two keyed lists whose containers are *unkeyed* both reduce to the
+    /// anchor chain `["1"]`, since unkeyed nodes are transparent to it. A
+    /// hover captured in the second list must not land on the first.
+    #[test]
+    fn test_same_key_under_unkeyed_wrappers_does_not_cross_match() {
+        use crate::features::styling::domain::ElementId;
+        use crate::features::vdom::domain::{AnchorSegment, NodeKey, NodePath, NodeRef};
+
+        let keyed_item = |id: &str| {
+            VNode::new_text(
+                TextContent::new(id.to_string()),
+                None,
+                Some(ElementId::new(id).unwrap()),
+                None,
+                None,
+                None,
+            )
+            .with_key(NodeKey::new("1").unwrap())
+        };
+        let list_a = VNode::new_flex(vec![keyed_item("a-item")], None, None, None, None, None);
+        let list_b = VNode::new_flex(vec![keyed_item("b-item")], None, None, None, None, None);
+        let root = VNode::new_flex(vec![list_a, list_b], None, None, None, None, None);
+
+        // What capture_node_ref produces for a hit on list B's item: the
+        // unkeyed wrapper's position ([1]) is part of the anchor.
+        let hovered = NodeRef::new(
+            vec![AnchorSegment::new(
+                NodePath::new(vec![1, 0]),
+                NodeKey::new("1").unwrap(),
+            )],
+            NodePath::root(),
+        );
+        let interaction = InteractionContext::new(Some(hovered), None, None, false);
+
+        let resolver = RecordingResolver::new();
+        let _ = root.resolve_styles(&resolver, Some(&interaction), None);
+
+        assert!(resolver.pseudo_classes_of("a-item").is_empty());
+        assert_eq!(
+            resolver.pseudo_classes_of("b-item"),
+            vec![crate::features::styling::domain::PseudoClass::Hover]
+        );
     }
 }

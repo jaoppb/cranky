@@ -6,4 +6,4 @@ mod node_ref;
 pub use node_id::NodeId;
 pub use node_key::NodeKey;
 pub use node_path::NodePath;
-pub use node_ref::{InteractionContext, NodeRef};
+pub use node_ref::{AnchorSegment, InteractionContext, NodeRef};

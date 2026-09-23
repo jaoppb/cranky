@@ -1,10 +1,9 @@
-use crate::features::vdom::domain::{InteractionContext, NodeKey, NodePath, NodeRef, VNode};
+use crate::features::vdom::domain::{AnchorSegment, InteractionContext, NodePath, NodeRef, VNode};
 
 /// The three interaction refs, pre-resolved into concrete absolute
 /// `NodePath`s against one specific tree (`None` if a ref's keyed anchor no
-/// longer exists in that tree). Resolving once per tree — rather than once
-/// per node visited while walking it — turns an O(nodes²) anchor search
-/// into O(nodes).
+/// longer exists in that tree), so each is resolved once per tree rather
+/// than once per node visited while walking it.
 pub struct ResolvedInteraction {
     hovered: Option<NodePath>,
     active: Option<NodePath>,
@@ -48,50 +47,40 @@ impl ResolvedInteraction {
 }
 
 /// Turns a captured `NodeRef` into a concrete absolute `NodePath` in `root`,
-/// or `None` if its anchor (when it has one) can no longer be found there.
+/// or `None` if one of its keyed levels can no longer be found there.
 fn resolve_target_path(root: &VNode, node_ref: &NodeRef) -> Option<NodePath> {
-    let anchor_path = if node_ref.anchor_keys().is_empty() {
-        NodePath::root()
-    } else {
-        find_anchor(
-            root,
-            &NodePath::root(),
-            node_ref.anchor_keys(),
-            &mut Vec::new(),
-        )?
-    };
-    Some(anchor_path.extend(node_ref.relative_path()))
+    let mut node = root;
+    let mut path = NodePath::root();
+    for segment in node_ref.anchor() {
+        (node, path) = resolve_segment(node, path, segment)?;
+    }
+    Some(path.extend(node_ref.relative_path()))
 }
 
-/// Depth-first search for the node whose keyed ancestors (including itself)
-/// spell out exactly `target`, in order from root. Unkeyed nodes don't
-/// extend the chain, so they're transparent to the search. Since the chain
-/// only ever grows on the way down, a branch whose chain-so-far isn't a
-/// prefix of `target` cannot contain a match and is pruned.
-fn find_anchor(
-    node: &VNode,
-    path: &NodePath,
-    target: &[NodeKey],
-    seen: &mut Vec<NodeKey>,
-) -> Option<NodePath> {
-    let pushed = node.key().is_some();
-    if let Some(key) = node.key() {
-        seen.push(key.clone());
-    }
-
-    let result = if seen.as_slice() == target {
-        Some(path.clone())
-    } else if target.starts_with(seen.as_slice()) {
-        node.children()
-            .iter()
-            .enumerate()
-            .find_map(|(idx, child)| find_anchor(child, &path.child(idx), target, seen))
-    } else {
-        None
+/// Follows one anchor segment from `start`: every step but the last walks
+/// through unkeyed nodes by position, then the keyed node is picked out of
+/// that parent's children by key — its captured index is ignored, since a
+/// reorder is exactly what changes it.
+fn resolve_segment<'a>(
+    start: &'a VNode,
+    start_path: NodePath,
+    segment: &AnchorSegment,
+) -> Option<(&'a VNode, NodePath)> {
+    let Some((_, through)) = segment.path().as_slice().split_last() else {
+        return (start.key() == Some(segment.key())).then_some((start, start_path));
     };
 
-    if pushed {
-        seen.pop();
+    let mut parent = start;
+    let mut parent_path = start_path;
+    for &idx in through {
+        parent = parent.children().get(idx)?;
+        parent_path = parent_path.child(idx);
     }
-    result
+
+    parent
+        .children()
+        .iter()
+        .enumerate()
+        .find(|(_, child)| child.key() == Some(segment.key()))
+        .map(|(idx, child)| (child, parent_path.child(idx)))
 }
