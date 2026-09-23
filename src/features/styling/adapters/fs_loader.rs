@@ -187,30 +187,19 @@ impl StyleLoaderPort for FsStyleLoader {
 mod tests {
     use super::*;
 
-    fn get_test_env(sub: &str) -> Arc<AppEnvironment> {
-        let dir = std::env::temp_dir().join(format!("cranky_test_styling_{sub}"));
-        let _ = std::fs::remove_dir_all(&dir);
-        let _ = std::fs::create_dir_all(&dir);
-        Arc::new(AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(dir.clone()),
-            crate::shared::env::domain::XdgCacheHome::new(dir.clone()),
-            crate::shared::env::domain::XdgRuntimeDir::new(dir),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ))
-    }
+    use crate::test_utils::TestHome;
 
     #[test]
     fn test_ensure_builtin_styles() {
-        let env = get_test_env("ensure");
-        let loader = FsStyleLoader::new(env);
+        let home = TestHome::new("styling");
+        let loader = FsStyleLoader::new(home.env());
         assert!(loader.ensure_builtin_styles().is_ok());
     }
 
     #[test]
     fn test_load_stylesheet_fallback() {
-        let env = get_test_env("fallback");
-        let loader = FsStyleLoader::new(env);
+        let home = TestHome::new("styling");
+        let loader = FsStyleLoader::new(home.env());
         let base = loader
             .load_stylesheet(&StyleSheetName::new("base").unwrap())
             .unwrap();

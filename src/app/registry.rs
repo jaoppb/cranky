@@ -486,14 +486,8 @@ mod tests {
 
     #[test]
     fn test_module_registry_load() {
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let mut registry = ModuleRegistry::new(app_env);
+        let home = crate::test_utils::TestHome::new("registry");
+        let mut registry = ModuleRegistry::new(home.env());
         let toml_str = r#"
             [root]
             name = "bar"
@@ -537,14 +531,8 @@ mod tests {
 
     #[test]
     fn test_module_registry_load_errors() {
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let mut registry = ModuleRegistry::new(app_env);
+        let home = crate::test_utils::TestHome::new("registry");
+        let mut registry = ModuleRegistry::new(home.env());
         let toml_str = r#"
             [root]
             name = "bar"
@@ -563,14 +551,8 @@ mod tests {
 
     #[test]
     fn test_module_registry_clear() {
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let mut registry = ModuleRegistry::new(app_env);
+        let home = crate::test_utils::TestHome::new("registry");
+        let mut registry = ModuleRegistry::new(home.env());
         let toml_str = r#"
             [root]
             name = "bar"
@@ -588,14 +570,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_module_registry_register_dbus() {
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let mut registry = ModuleRegistry::new(app_env);
+        let home = crate::test_utils::TestHome::new("registry");
+        let mut registry = ModuleRegistry::new(home.env());
         let toml_str = r#"
             [root]
             name = "bar"
@@ -618,14 +594,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_module_registry_spawn_all() {
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let mut registry = ModuleRegistry::new(app_env);
+        let home = crate::test_utils::TestHome::new("registry");
+        let mut registry = ModuleRegistry::new(home.env());
         let toml_str = r#"
             [root]
             name = "bar"
