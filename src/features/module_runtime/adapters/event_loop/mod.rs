@@ -1,7 +1,8 @@
 mod dispatch;
 pub mod events;
-pub mod poll;
+mod floating_state;
 pub mod pointer;
+pub mod poll;
 pub mod renderer;
 pub mod runner;
 #[cfg(test)]

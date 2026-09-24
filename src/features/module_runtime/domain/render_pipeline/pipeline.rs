@@ -11,7 +11,7 @@ use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ChildModuleLayout, ChildSizesMap, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Default)]
 pub struct RenderPipeline {
@@ -79,6 +79,23 @@ impl RenderPipeline {
         &mut self,
     ) -> &mut HashMap<MonitorId, Option<InteractionContext>> {
         &mut self.last_interactions
+    }
+
+    /// Drops every per-monitor entry for a monitor not in `live`.
+    ///
+    /// Nothing else in this struct ever removes an entry — every accessor
+    /// above only inserts — so a monitor that disconnects would otherwise
+    /// keep its render state (and its `LayoutEnginePort`, tracked alongside
+    /// this in `EventLoop`) alive in memory for the rest of the process.
+    /// Called once per render pass from the only place that knows the
+    /// current monitor set: `EventLoop::render_all_monitors`.
+    pub fn retain_monitors(&mut self, live: &HashSet<MonitorId>) {
+        self.sizes.retain(|id, _| live.contains(id));
+        self.rendered_bounds.retain(|id, _| live.contains(id));
+        self.render_trees.retain(|id, _| live.contains(id));
+        self.vdom_trees.retain(|id, _| live.contains(id));
+        self.last_child_sizes.retain(|id, _| live.contains(id));
+        self.last_interactions.retain(|id, _| live.contains(id));
     }
 
     #[must_use]

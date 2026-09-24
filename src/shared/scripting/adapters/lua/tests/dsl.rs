@@ -255,4 +255,37 @@ fn test_lua_shorthand_dsl() {
         crate::features::vdom::domain::NodeTag::Module
     );
 }
+#[test]
+fn test_lua_vnode_key_is_reconciliation_identity() {
+    let lua = Lua::new();
+    register_cranky_api(&lua).expect("DSL registration failed");
+
+    // `key` is distinct from `id`: both may be set, and either may be set
+    // alone, since one is a CSS selector and the other is reconciliation
+    // identity (see `NodeKey`).
+    let script = r#"
+        return ui.flex({
+            key = "ws-3",
+            id = "ws-3",
+            children = {}
+        })
+    "#;
+    let val = lua.load(script).eval::<mlua::Value>().expect("Eval failed");
+    let vnode = value_to_vnode(&lua, val).expect("Conversion failed");
+    assert_eq!(vnode.key().map(crate::features::vdom::domain::NodeKey::as_str), Some("ws-3"));
+    assert_eq!(vnode.element_id().map(crate::features::styling::domain::ElementId::as_str), Some("ws-3"));
+}
+
+#[test]
+fn test_lua_vnode_without_key_has_none() {
+    let lua = Lua::new();
+    register_cranky_api(&lua).expect("DSL registration failed");
+
+    let val = lua
+        .load(r#"return ui.rect("box")"#)
+        .eval::<mlua::Value>()
+        .expect("Eval failed");
+    let vnode = value_to_vnode(&lua, val).expect("Conversion failed");
+    assert_eq!(vnode.key(), None);
+}
 }

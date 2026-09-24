@@ -39,6 +39,7 @@ pub(crate) fn calculate_floating_layout(
                     1,
                     crate::features::layout_engine::domain::RenderNode::Rect {
                         path: crate::features::vdom::domain::NodePath::root(),
+                        node_key: None,
                         rect: Rect::new(
                             crate::shared::primitives::geometry::Position::new(0, 0),
                             Size::new(1, 1),

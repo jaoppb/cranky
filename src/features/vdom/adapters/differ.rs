@@ -22,6 +22,8 @@ impl DefaultVdomDiffAdapter {
 
         let class_changed = old_node.class_names() != new_node.class_names();
         let id_changed = old_node.element_id() != new_node.element_id();
+        // Key-only changes must still dirty the tree, or the stale keyless RenderNode is kept.
+        let key_changed = old_node.key() != new_node.key();
         let handlers_changed = old_node.on_click() != new_node.on_click()
             || old_node.on_hover() != new_node.on_hover();
 
@@ -87,6 +89,7 @@ impl DefaultVdomDiffAdapter {
 
         let props_dirty = class_changed
             || id_changed
+            || key_changed
             || handlers_changed
             || tooltip_patch.is_some()
             || popup_patch.is_some()
@@ -319,6 +322,107 @@ mod tests {
         }
     }
 
+    /// A list with a duplicate key has no well-defined keyed match, so it
+    /// must fall back to positional reconciliation (an `Update` per shared
+    /// index) rather than letting the last duplicate silently win a key
+    /// lookup, which would misattribute the other's identity.
+    #[test]
+    fn test_diff_duplicate_keys_falls_back_to_positional() {
+        let adapter = DefaultVdomDiffAdapter::new();
+        let dup = NodeKey::new("dup").unwrap();
+
+        let child1 = VNode::new_text(
+            TextContent::new("1".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .with_key(dup.clone());
+        let child2 = VNode::new_text(
+            TextContent::new("2".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .with_key(dup);
+
+        let old_tree = VNode::new_flex(
+            vec![child1.clone(), child2.clone()],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        // Same two nodes, same duplicate key, but their text content swapped
+        // position — a keyed diff would (wrongly) call this unchanged.
+        let new_tree = VNode::new_flex(vec![child2, child1], None, None, None, None, None);
+
+        let res = adapter.diff(Some(&old_tree), &new_tree);
+        match res.patch() {
+            Patch::UpdateChildren { child_patches, .. } => {
+                assert!(
+                    child_patches
+                        .iter()
+                        .all(|p| matches!(p, ChildPatchOp::Update { .. })),
+                    "expected positional Updates, not a keyed Move: {child_patches:?}"
+                );
+            }
+            _ => panic!("Expected UpdateChildren patch"),
+        }
+    }
+
+    /// A list where some children are keyed and others aren't has the same
+    /// "no well-defined match" problem as a duplicate key.
+    #[test]
+    fn test_diff_mixed_keyed_and_unkeyed_falls_back_to_positional() {
+        let adapter = DefaultVdomDiffAdapter::new();
+        let keyed_child = VNode::new_text(
+            TextContent::new("1".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .with_key(NodeKey::new("k1").unwrap());
+        let unkeyed_child = VNode::new_text(
+            TextContent::new("2".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let old_tree = VNode::new_flex(
+            vec![keyed_child.clone(), unkeyed_child.clone()],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let new_tree = VNode::new_flex(vec![unkeyed_child, keyed_child], None, None, None, None, None);
+
+        let res = adapter.diff(Some(&old_tree), &new_tree);
+        match res.patch() {
+            Patch::UpdateChildren { child_patches, .. } => {
+                assert!(
+                    child_patches
+                        .iter()
+                        .all(|p| matches!(p, ChildPatchOp::Update { .. })),
+                    "expected positional Updates, not a keyed Move: {child_patches:?}"
+                );
+            }
+            _ => panic!("Expected UpdateChildren patch"),
+        }
+    }
+
     #[test]
     fn test_diff_positional_children() {
         let adapter = DefaultVdomDiffAdapter::new();
@@ -486,5 +590,43 @@ mod tests {
         let changed = adapter.diff(Some(&grid1), &grid2);
         assert!(!changed.is_unchanged());
         assert!(matches!(changed.patch(), Patch::UpdateChildren { .. }));
+    }
+
+    #[test]
+    fn test_diff_key_only_change_on_unkeyed_list_is_not_unchanged() {
+        // Adding keys to an unkeyed list falls back to positional
+        // reconciliation (the old side isn't fully keyed); the per-node diff
+        // must still see the key change or the pipeline skips the rebuild.
+        let adapter = DefaultVdomDiffAdapter::new();
+        let item = |text: &str| {
+            VNode::new_text(TextContent::new(text.to_string()), None, None, None, None, None)
+        };
+        let old_list = VNode::new_flex(vec![item("a"), item("b")], None, None, None, None, None);
+        let new_list = VNode::new_flex(
+            vec![
+                item("a").with_key(NodeKey::new("a").unwrap()),
+                item("b").with_key(NodeKey::new("b").unwrap()),
+            ],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        let res = adapter.diff(Some(&old_list), &new_list);
+        assert!(!res.is_unchanged());
+    }
+
+    #[test]
+    fn test_diff_key_value_change_is_not_unchanged() {
+        let adapter = DefaultVdomDiffAdapter::new();
+        let make = |key: &str| {
+            VNode::new_text(TextContent::new("same".to_string()), None, None, None, None, None)
+                .with_key(NodeKey::new(key).unwrap())
+        };
+
+        let res = adapter.diff(Some(&make("old")), &make("new"));
+        assert!(!res.is_unchanged());
     }
 }

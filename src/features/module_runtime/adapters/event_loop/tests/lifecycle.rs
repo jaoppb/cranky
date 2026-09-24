@@ -10,18 +10,14 @@ use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
 use crate::features::vdom::domain::VNode;
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::geometry::{Position, Rect, Size};
 use crate::shared::primitives::ModuleId;
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::{Position, Rect, Size};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-type TestEventLoop = EventLoop<
-    MockCanvasFactory,
-    MockLayoutSender,
-    ChannelDisplaySender,
-    MockUiSender,
->;
+type TestEventLoop =
+    EventLoop<MockCanvasFactory, MockLayoutSender, ChannelDisplaySender, MockUiSender>;
 
 fn create_test_event_loop_and_channel() -> (
     TestEventLoop,
@@ -58,6 +54,7 @@ fn make_test_rect_node(
 ) -> crate::features::layout_engine::domain::RenderNode {
     crate::features::layout_engine::domain::RenderNode::Rect {
         path: crate::features::layout_engine::domain::NodePath::root(),
+        node_key: None,
         rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
         style: crate::features::styling::domain::ComputedStyle::default(),
         on_click: None,
@@ -70,7 +67,9 @@ fn make_test_rect_node(
 
 #[test]
 fn test_event_loop_popup_floating_surface_lifecycle() {
-    use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, StyledNode, StyledPopup};
+    use crate::features::layout_engine::domain::{
+        DisplayCommand, FloatingKind, StyledNode, StyledPopup,
+    };
     use crate::features::styling::domain::ComputedStyle;
 
     let (mut event_loop, id, display_rx) = create_test_event_loop_and_channel();
@@ -78,6 +77,7 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
 
     let popup_styled = StyledNode::Text {
         path: crate::features::layout_engine::domain::NodePath::root(),
+        node_key: None,
         text: crate::features::vdom::domain::TextContent::new("popup".to_string()),
         style: ComputedStyle::default(),
         on_click: None,

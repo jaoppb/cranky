@@ -3,7 +3,9 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::features::workspaces::adapters::hyprland::HyprlandAdapter;
-    use crate::features::workspaces::domain::{Monitor, MonitorName, Workspace, WorkspaceId, WorkspaceName};
+    use crate::features::workspaces::domain::{
+        Monitor, MonitorName, Workspace, WorkspaceId, WorkspaceName,
+    };
     use crate::shared::events::core::WindowManagerEvent;
     use crate::shared::events::signals::hyprland::HyprlandState;
 
@@ -112,6 +114,102 @@ mod tests {
                 .monitor(),
             Some(&MonitorName::new("DP-1"))
         );
+    }
+
+    #[test]
+    fn test_monitor_removed() {
+        let mut monitors = BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("HDMI-A-1"),
+            Monitor::new(MonitorName::new("HDMI-A-1"), WorkspaceId::new(1), None),
+        );
+        monitors.insert(
+            MonitorName::new("eDP-1"),
+            Monitor::new(MonitorName::new("eDP-1"), WorkspaceId::new(2), None),
+        );
+        let mut state = HyprlandState::new(BTreeMap::new(), monitors, None);
+
+        state.apply_event(&WindowManagerEvent::MonitorRemoved {
+            name: MonitorName::new("HDMI-A-1"),
+        });
+
+        assert!(!state.monitors().contains_key(&MonitorName::new("HDMI-A-1")));
+        assert!(state.monitors().contains_key(&MonitorName::new("eDP-1")));
+    }
+
+    #[test]
+    fn test_monitor_removed_clears_focus_when_it_was_focused() {
+        let mut monitors = BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("HDMI-A-1"),
+            Monitor::new(MonitorName::new("HDMI-A-1"), WorkspaceId::new(1), None),
+        );
+        let mut state = HyprlandState::new(
+            BTreeMap::new(),
+            monitors,
+            Some(MonitorName::new("HDMI-A-1")),
+        );
+
+        state.apply_event(&WindowManagerEvent::MonitorRemoved {
+            name: MonitorName::new("HDMI-A-1"),
+        });
+
+        assert_eq!(state.focused_monitor(), None);
+    }
+
+    #[test]
+    fn test_monitor_removed_leaves_focus_when_a_different_monitor_was_focused() {
+        let mut monitors = BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("HDMI-A-1"),
+            Monitor::new(MonitorName::new("HDMI-A-1"), WorkspaceId::new(1), None),
+        );
+        monitors.insert(
+            MonitorName::new("eDP-1"),
+            Monitor::new(MonitorName::new("eDP-1"), WorkspaceId::new(2), None),
+        );
+        let mut state =
+            HyprlandState::new(BTreeMap::new(), monitors, Some(MonitorName::new("eDP-1")));
+
+        state.apply_event(&WindowManagerEvent::MonitorRemoved {
+            name: MonitorName::new("HDMI-A-1"),
+        });
+
+        assert_eq!(state.focused_monitor(), Some(&MonitorName::new("eDP-1")));
+    }
+
+    #[test]
+    fn test_monitor_added_is_a_no_op() {
+        let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
+
+        // MonitorAdded carries no active-workspace data, so applying it directly is a
+        // no-op - signal_loop treats it as an unconditional resync trigger instead.
+        state.apply_event(&WindowManagerEvent::MonitorAdded {
+            name: MonitorName::new("HDMI-A-1"),
+        });
+
+        assert!(state.monitors().is_empty());
+    }
+
+    #[test]
+    fn test_monitor_focused_lazily_creates_unknown_monitor() {
+        let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
+
+        // Kept as a fast path for the case where MonitorFocused happens to arrive for a
+        // name not yet known - not the primary mechanism monitor-add correctness rests
+        // on (see MonitorAdded's forced resync in signal_loop.rs).
+        state.apply_event(&WindowManagerEvent::MonitorFocused {
+            monitor_name: MonitorName::new("HDMI-A-1"),
+            workspace_id: WorkspaceId::new(4),
+        });
+
+        assert_eq!(state.focused_monitor(), Some(&MonitorName::new("HDMI-A-1")));
+        let mon = state
+            .monitors()
+            .get(&MonitorName::new("HDMI-A-1"))
+            .expect("monitor should have been lazily created");
+        assert_eq!(mon.active_workspace_id(), &WorkspaceId::new(4));
+        assert_eq!(mon.special_workspace_id(), None);
     }
 
     #[test]

@@ -1,7 +1,11 @@
+mod interaction;
+#[cfg(test)]
+mod tests;
+
 use super::popup::{StyledPanel, StyledPopup};
 use super::styled_node::StyledNode;
 use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
-use crate::features::vdom::domain::{ClickHandlers, NodePath, TextContent, UiAction};
+use crate::features::vdom::domain::{ClickHandlers, NodeKey, NodePath, TextContent, UiAction};
 use crate::shared::primitives::geometry::{Rect, Size};
 use crate::shared::primitives::{BinaryData, ModuleKey};
 
@@ -9,6 +13,7 @@ use crate::shared::primitives::{BinaryData, ModuleKey};
 pub enum RenderNode {
     Flex {
         path: NodePath,
+        node_key: Option<NodeKey>,
         rect: Rect,
         children: Vec<Self>,
         style: ComputedStyle,
@@ -20,6 +25,7 @@ pub enum RenderNode {
     },
     Grid {
         path: NodePath,
+        node_key: Option<NodeKey>,
         rect: Rect,
         children: Vec<Self>,
         style: ComputedStyle,
@@ -31,6 +37,7 @@ pub enum RenderNode {
     },
     Text {
         path: NodePath,
+        node_key: Option<NodeKey>,
         rect: Rect,
         text: TextContent,
         style: ComputedStyle,
@@ -42,6 +49,7 @@ pub enum RenderNode {
     },
     Progress {
         path: NodePath,
+        node_key: Option<NodeKey>,
         rect: Rect,
         value: ProgressValue,
         orientation: Orientation,
@@ -54,6 +62,7 @@ pub enum RenderNode {
     },
     Rect {
         path: NodePath,
+        node_key: Option<NodeKey>,
         rect: Rect,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
@@ -64,6 +73,7 @@ pub enum RenderNode {
     },
     Image {
         path: NodePath,
+        node_key: Option<NodeKey>,
         rect: Rect,
         data: BinaryData,
         pixel_size: Size,
@@ -73,6 +83,7 @@ pub enum RenderNode {
     },
     Module {
         path: NodePath,
+        node_key: Option<NodeKey>,
         rect: Rect,
         key: ModuleKey,
         style: ComputedStyle,
@@ -98,6 +109,23 @@ impl RenderNode {
         }
     }
 
+    /// The reconciliation identity carried over from the `StyledNode` this
+    /// was built from — see `StyledNode::node_key`. Pointer hit-testing uses
+    /// this to remember hover/active/focus by identity rather than by
+    /// position.
+    #[must_use]
+    pub const fn node_key(&self) -> Option<&NodeKey> {
+        match self {
+            Self::Flex { node_key, .. }
+            | Self::Grid { node_key, .. }
+            | Self::Text { node_key, .. }
+            | Self::Progress { node_key, .. }
+            | Self::Rect { node_key, .. }
+            | Self::Image { node_key, .. }
+            | Self::Module { node_key, .. } => node_key.as_ref(),
+        }
+    }
+
     #[must_use]
     pub const fn rect(&self) -> Rect {
         match self {
@@ -109,96 +137,5 @@ impl RenderNode {
             | Self::Image { rect, .. }
             | Self::Module { rect, .. } => *rect,
         }
-    }
-
-    #[must_use]
-    pub const fn on_click(&self) -> Option<&ClickHandlers> {
-        match self {
-            Self::Text { on_click, .. }
-            | Self::Flex { on_click, .. }
-            | Self::Grid { on_click, .. }
-            | Self::Progress { on_click, .. }
-            | Self::Rect { on_click, .. }
-            | Self::Module { on_click, .. } => on_click.as_ref(),
-            Self::Image { .. } => None,
-        }
-    }
-
-    #[must_use]
-    pub const fn on_hover(&self) -> Option<&UiAction> {
-        match self {
-            Self::Text { on_hover, .. }
-            | Self::Flex { on_hover, .. }
-            | Self::Grid { on_hover, .. }
-            | Self::Progress { on_hover, .. }
-            | Self::Rect { on_hover, .. }
-            | Self::Module { on_hover, .. } => on_hover.as_ref(),
-            Self::Image { .. } => None,
-        }
-    }
-
-    #[must_use]
-    pub fn tooltip(&self) -> Option<&StyledNode> {
-        match self {
-            Self::Flex { tooltip, .. }
-            | Self::Grid { tooltip, .. }
-            | Self::Text { tooltip, .. }
-            | Self::Progress { tooltip, .. }
-            | Self::Rect { tooltip, .. }
-            | Self::Image { tooltip, .. }
-            | Self::Module { tooltip, .. } => tooltip.as_deref(),
-        }
-    }
-
-    #[must_use]
-    pub const fn popup(&self) -> Option<&StyledPopup> {
-        match self {
-            Self::Flex { popup, .. }
-            | Self::Grid { popup, .. }
-            | Self::Text { popup, .. }
-            | Self::Progress { popup, .. }
-            | Self::Rect { popup, .. }
-            | Self::Image { popup, .. }
-            | Self::Module { popup, .. } => popup.as_ref(),
-        }
-    }
-
-    #[must_use]
-    pub const fn panel(&self) -> Option<&StyledPanel> {
-        match self {
-            Self::Flex { panel, .. }
-            | Self::Grid { panel, .. }
-            | Self::Text { panel, .. }
-            | Self::Progress { panel, .. }
-            | Self::Rect { panel, .. }
-            | Self::Image { panel, .. }
-            | Self::Module { panel, .. } => panel.as_ref(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::shared::primitives::geometry::Position;
-
-    #[test]
-    fn test_render_node_accessors() {
-        let rect = Rect::new(Position::new(0, 0), Size::new(10, 10));
-        let node = RenderNode::Rect {
-            path: NodePath::root(),
-            rect,
-            style: ComputedStyle::default(),
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-        assert_eq!(node.rect(), rect);
-        assert_eq!(node.on_click(), None);
-        assert_eq!(node.on_hover(), None);
-        assert_eq!(node.popup(), None);
-        assert_eq!(node.panel(), None);
     }
 }

@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::features::workspaces::domain::{Monitor, MonitorName, Workspace, WorkspaceId};
+use crate::features::workspaces::domain::{
+    Monitor, MonitorName, Workspace, WorkspaceId, WorkspaceName,
+};
 use crate::shared::events::core::WindowManagerEvent;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -69,26 +71,51 @@ impl HyprlandState {
         None
     }
 
+    fn apply_workspace_activated(&mut self, id: &WorkspaceId, name: &WorkspaceName) {
+        let mon = self.effective_focused_monitor();
+        if let Some(mon_name) = mon {
+            if let Some(ws) = self.workspaces.get_mut(id) {
+                ws.set_monitor(mon_name.clone());
+            } else {
+                self.workspaces.insert(
+                    id.clone(),
+                    Workspace::new(id.clone(), name.clone(), Some(mon_name.clone())),
+                );
+            }
+            if let Some(m) = self.monitors.get_mut(&mon_name) {
+                m.set_active_workspace(id.clone());
+            }
+        } else if !self.workspaces.contains_key(id) {
+            self.workspaces
+                .insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
+        }
+    }
+
+    fn apply_special_workspace_activated(
+        &mut self,
+        id: Option<&WorkspaceId>,
+        name: Option<&WorkspaceName>,
+        monitor_name: &MonitorName,
+    ) {
+        if let Some(m) = self.monitors.get_mut(monitor_name) {
+            m.set_special_workspace(id.cloned());
+        }
+        if let Some(ws_id) = id {
+            if let Some(ws) = self.workspaces.get_mut(ws_id) {
+                ws.set_monitor(monitor_name.clone());
+            } else if let Some(ws_name) = name {
+                self.workspaces.insert(
+                    ws_id.clone(),
+                    Workspace::new(ws_id.clone(), ws_name.clone(), Some(monitor_name.clone())),
+                );
+            }
+        }
+    }
+
     pub fn apply_event(&mut self, event: &WindowManagerEvent) {
         match event {
             WindowManagerEvent::WorkspaceActivated { id, name } => {
-                let mon = self.effective_focused_monitor();
-                if let Some(mon_name) = mon {
-                    if let Some(ws) = self.workspaces.get_mut(id) {
-                        ws.set_monitor(mon_name.clone());
-                    } else {
-                        self.workspaces.insert(
-                            id.clone(),
-                            Workspace::new(id.clone(), name.clone(), Some(mon_name.clone())),
-                        );
-                    }
-                    if let Some(m) = self.monitors.get_mut(&mon_name) {
-                        m.set_active_workspace(id.clone());
-                    }
-                } else if !self.workspaces.contains_key(id) {
-                    self.workspaces
-                        .insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
-                }
+                self.apply_workspace_activated(id, name);
             }
             WindowManagerEvent::WorkspaceCreated { id, name } => {
                 if !self.workspaces.contains_key(id) {
@@ -128,6 +155,11 @@ impl HyprlandState {
                 self.focused_monitor = Some(monitor_name.clone());
                 if let Some(m) = self.monitors.get_mut(monitor_name) {
                     m.set_active_workspace(workspace_id.clone());
+                } else {
+                    self.monitors.insert(
+                        monitor_name.clone(),
+                        Monitor::new(monitor_name.clone(), workspace_id.clone(), None),
+                    );
                 }
 
                 if let Some(ws) = self.workspaces.get_mut(workspace_id) {
@@ -139,25 +171,18 @@ impl HyprlandState {
                 name,
                 monitor_name,
             } => {
-                if let Some(m) = self.monitors.get_mut(monitor_name) {
-                    m.set_special_workspace(id.clone());
-                }
-                if let Some(ws_id) = id {
-                    if let Some(ws) = self.workspaces.get_mut(ws_id) {
-                        ws.set_monitor(monitor_name.clone());
-                    } else if let Some(ws_name) = name {
-                        self.workspaces.insert(
-                            ws_id.clone(),
-                            Workspace::new(
-                                ws_id.clone(),
-                                ws_name.clone(),
-                                Some(monitor_name.clone()),
-                            ),
-                        );
-                    }
+                self.apply_special_workspace_activated(id.as_ref(), name.as_ref(), monitor_name);
+            }
+            WindowManagerEvent::MonitorRemoved { name } => {
+                self.monitors.remove(name);
+                if self.focused_monitor.as_ref() == Some(name) {
+                    self.focused_monitor = None;
                 }
             }
-            WindowManagerEvent::ActiveWindowChanged { .. }
+            // MonitorAdded carries no active-workspace id, so it can't be applied
+            // incrementally - signal_loop treats it as an unconditional resync trigger.
+            WindowManagerEvent::MonitorAdded { .. }
+            | WindowManagerEvent::ActiveWindowChanged { .. }
             | WindowManagerEvent::WindowTitleChanged { .. } => {}
         }
     }

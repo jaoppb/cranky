@@ -1,25 +1,24 @@
+use super::anchor::ResolvedInteraction;
 use crate::features::styling::domain::PseudoClass;
-use crate::features::vdom::domain::{InteractionContext, NodePath};
+use crate::features::vdom::domain::NodePath;
 
 #[must_use]
 pub fn compute_pseudo_classes(
     path: &NodePath,
-    interaction: Option<&InteractionContext>,
+    resolved: Option<&ResolvedInteraction>,
 ) -> Vec<PseudoClass> {
-    let Some(ctx) = interaction else {
+    let Some(resolved) = resolved else {
         return Vec::new();
     };
 
     let mut pseudo_classes = Vec::new();
-    if ctx.hovered_path().is_some_and(|h| h == path || h.starts_with(path)) {
+    if resolved.is_hovered_or_ancestor(path) {
         pseudo_classes.push(PseudoClass::Hover);
     }
-    if ctx.active_path().is_some_and(|a| a == path || a.starts_with(path)) {
+    if resolved.is_active_or_ancestor(path) {
         pseudo_classes.push(PseudoClass::Active);
     }
-    if ctx.focused_path().is_some_and(|f| f == path)
-        || (path.is_root() && ctx.is_monitor_focused())
-    {
+    if resolved.is_focused(path) || (path.is_root() && resolved.is_monitor_focused()) {
         pseudo_classes.push(PseudoClass::Focused);
     }
 

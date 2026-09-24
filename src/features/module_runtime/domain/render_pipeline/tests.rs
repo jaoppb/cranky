@@ -63,6 +63,7 @@ fn test_render_pipeline_hidpi_paint_allocates_scaled_buffer() {
     let mon = MonitorId::new("DP-1");
     let node = RenderNode::Rect {
         path: crate::features::vdom::domain::NodePath::root(),
+        node_key: None,
         rect: Rect::new(Position::new(10, 20), Size::new(100, 30)),
         style: crate::features::styling::domain::ComputedStyle::default(),
         on_click: None,

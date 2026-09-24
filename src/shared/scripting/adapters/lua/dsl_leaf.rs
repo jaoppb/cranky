@@ -12,7 +12,7 @@ pub(crate) fn parse_text_node(
     match val {
         mlua::Value::Table(table) => {
             let text_str = parse_text_content(&table);
-            let (class, id, on_click, on_hover, tooltip, popup, panel) =
+            let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
                 parse_common_props(lua, &table)?;
             let mut node = VNode::new_text(
                 TextContent::new(text_str),
@@ -27,6 +27,9 @@ pub(crate) fn parse_text_node(
             }
             if let Some(p) = panel {
                 node = node.with_panel(p);
+            }
+            if let Some(k) = key {
+                node = node.with_key(k);
             }
             Ok(node)
         }
@@ -91,7 +94,7 @@ pub(crate) fn parse_progress_node(
                 "vertical" => Orientation::Vertical,
                 _ => Orientation::Horizontal,
             };
-            let (class, id, on_click, on_hover, tooltip, popup, panel) =
+            let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
                 parse_common_props(lua, &table)?;
             let mut node = VNode::new_progress(
                 ProgressValue::new(value_num).unwrap_or_default(),
@@ -107,6 +110,9 @@ pub(crate) fn parse_progress_node(
             }
             if let Some(p) = panel {
                 node = node.with_panel(p);
+            }
+            if let Some(k) = key {
+                node = node.with_key(k);
             }
             Ok(node)
         }

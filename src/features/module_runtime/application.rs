@@ -263,6 +263,18 @@ mod tests {
                 let h_state =
                     HyprlandState::new(std::collections::BTreeMap::new(), monitors_map, focused);
                 hub.hyprland_tx().send(h_state).unwrap();
+
+                // Wayland is the actual discovery source - mirror it here so
+                // a monitor set up via `with_monitors` is one `EventLoop`
+                // will actually render for.
+                let mut scales = hub.monitor_scales_rx().borrow().clone();
+                for m in &self.monitors {
+                    scales.insert(
+                        MonitorId::new(*m),
+                        crate::shared::primitives::geometry::Scale::new(1.0),
+                    );
+                }
+                hub.monitor_scales_tx().send(scales).unwrap();
             }
 
             let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
@@ -445,9 +457,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_module_actor_renders_unknown_hyprland_monitor_from_layout() {
+    async fn test_module_actor_renders_monitor_unknown_to_hyprland() {
+        // Wayland is the sole discovery source: a monitor `monitor_scales`
+        // knows about renders even before Hyprland has announced it (the
+        // capture that motivated this showed monitoraddedv2 arriving after
+        // Hyprland had already moved workspaces onto the new monitor).
         let id = ModuleId::new(1);
         let fixture = TestFixtureBuilder::new(id).build();
+
+        let mut scales = fixture.hub.monitor_scales_rx().borrow().clone();
+        scales.insert(
+            MonitorId::new("DP-2"),
+            crate::shared::primitives::geometry::Scale::new(1.0),
+        );
+        fixture.hub.monitor_scales_tx().send(scales).unwrap();
 
         let mut layouts = HashMap::new();
         layouts.insert(
@@ -476,6 +499,29 @@ mod tests {
             }
             _ => panic!("Unexpected event"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_module_actor_does_not_render_monitor_known_only_via_layout() {
+        // The mirror image of the above: a monitor appearing only in the
+        // layout watch (no monitor_scales entry) is not rendered for.
+        // Layout is a consequence of Wayland surfaces existing, not a
+        // discovery source in its own right.
+        let id = ModuleId::new(1);
+        let fixture = TestFixtureBuilder::new(id).build();
+
+        let mut layouts = HashMap::new();
+        layouts.insert(
+            MonitorId::new("DP-2"),
+            Rect::new(Position::new(0, 0), Size::new(10, 10)),
+        );
+        fixture.layout_tx.send(layouts).unwrap();
+
+        let mut event_loop = fixture.event_loop;
+        let mut layout_engines = HashMap::new();
+        event_loop.render_all_monitors(&mut layout_engines);
+
+        assert!(fixture.layout_rx.try_recv().is_err());
     }
 
     #[tokio::test]

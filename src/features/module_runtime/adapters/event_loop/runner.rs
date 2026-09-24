@@ -3,7 +3,8 @@ use super::dispatch::{
     dispatch_outcome_popups, dispatch_post_actions, update_floating_trees,
 };
 use super::events::EventLoopEvent;
-use crate::features::layout_engine::domain::{DisplayCommandSender, RenderNode};
+use super::floating_state::FloatingState;
+use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
@@ -11,10 +12,9 @@ use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender};
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
-use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::MonitorId;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct EventLoop<
@@ -30,10 +30,7 @@ pub struct EventLoop<
     pub(crate) canvas_factory: F,
     pub(crate) vdom_diff: Arc<dyn VdomDiffPort>,
     pub(crate) style_resolver: Arc<dyn StyleResolverPort>,
-    pub(crate) active_popups: HashSet<MonitorId>,
-    pub(crate) active_panels: HashSet<MonitorId>,
-    pub(crate) popup_render_trees: HashMap<MonitorId, RenderNode>,
-    pub(crate) panel_render_trees: HashMap<MonitorId, RenderNode>,
+    pub(super) floating: FloatingState,
 }
 
 impl<
@@ -61,10 +58,7 @@ impl<
             canvas_factory,
             vdom_diff,
             style_resolver,
-            active_popups: HashSet::new(),
-            active_panels: HashSet::new(),
-            popup_render_trees: HashMap::new(),
-            panel_render_trees: HashMap::new(),
+            floating: FloatingState::default(),
         }
     }
 
@@ -90,8 +84,8 @@ impl<
         )
     }
 
-    pub fn discover_monitors(&self, layouts: &HashMap<MonitorId, Rect>) -> Vec<MonitorId> {
-        discover_monitors(self.ctx.hub(), layouts)
+    pub fn discover_monitors(&self) -> Vec<MonitorId> {
+        discover_monitors(self.ctx.hub())
     }
 
     pub fn dispatch_render_outcome(
@@ -99,12 +93,7 @@ impl<
         monitor_id: &MonitorId,
         outcome: &crate::features::module_runtime::domain::RenderOutcome,
     ) {
-        dispatch_outcome_layouts(
-            self.ctx.layout_sender(),
-            self.ctx.id(),
-            monitor_id,
-            outcome,
-        );
+        dispatch_outcome_layouts(self.ctx.layout_sender(), self.ctx.id(), monitor_id, outcome);
         dispatch_outcome_buffer(
             self.ctx.surface_manager(),
             self.ctx.id(),
@@ -114,22 +103,23 @@ impl<
         );
         dispatch_outcome_popups(
             self.ctx.display_sender(),
-            &mut self.active_popups,
+            self.floating.active_popups_mut(),
             self.ctx.id(),
             monitor_id,
             outcome,
         );
         dispatch_outcome_panels(
             self.ctx.display_sender(),
-            &mut self.active_panels,
+            self.floating.active_panels_mut(),
             self.ctx.id(),
             monitor_id,
             outcome,
         );
+        let (popup_trees, panel_trees) = self.floating.render_trees_mut();
         update_floating_trees(
             &mut self.canvas_factory,
-            &mut self.popup_render_trees,
-            &mut self.panel_render_trees,
+            popup_trees,
+            panel_trees,
             monitor_id,
             outcome,
         );

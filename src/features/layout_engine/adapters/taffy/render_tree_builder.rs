@@ -24,16 +24,16 @@ fn build_children(
 fn build_content_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
     match node {
         StyledNode::Text {
-            path, text, style, on_click, on_hover, tooltip, popup, panel,
+            path, node_key, text, style, on_click, on_hover, tooltip, popup, panel,
         } => Some(RenderNode::Text {
-            path: path.clone(), rect, text: text.clone(), style: style.clone(),
+            path: path.clone(), node_key: node_key.clone(), rect, text: text.clone(), style: style.clone(),
             on_click: on_click.clone(), on_hover: on_hover.clone(),
             tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
         }),
         StyledNode::Progress {
-            path, value, orientation, style, on_click, on_hover, tooltip, popup, panel,
+            path, node_key, value, orientation, style, on_click, on_hover, tooltip, popup, panel,
         } => Some(RenderNode::Progress {
-            path: path.clone(), rect, value: *value, orientation: *orientation, style: style.clone(),
+            path: path.clone(), node_key: node_key.clone(), rect, value: *value, orientation: *orientation, style: style.clone(),
             on_click: on_click.clone(), on_hover: on_hover.clone(),
             tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
         }),
@@ -44,22 +44,22 @@ fn build_content_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
 fn build_atomic_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
     match node {
         StyledNode::Rect {
-            path, style, on_click, on_hover, tooltip, popup, panel,
+            path, node_key, style, on_click, on_hover, tooltip, popup, panel,
         } => Some(RenderNode::Rect {
-            path: path.clone(), rect, style: style.clone(),
+            path: path.clone(), node_key: node_key.clone(), rect, style: style.clone(),
             on_click: on_click.clone(), on_hover: on_hover.clone(),
             tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
         }),
         StyledNode::Image {
-            path, data, pixel_size, tooltip, popup, panel, ..
+            path, node_key, data, pixel_size, tooltip, popup, panel, ..
         } => Some(RenderNode::Image {
-            path: path.clone(), rect, data: data.clone(), pixel_size: *pixel_size,
+            path: path.clone(), node_key: node_key.clone(), rect, data: data.clone(), pixel_size: *pixel_size,
             tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
         }),
         StyledNode::Module {
-            path, key, style, on_click, on_hover, tooltip, popup, panel, ..
+            path, node_key, key, style, on_click, on_hover, tooltip, popup, panel, ..
         } => Some(RenderNode::Module {
-            path: path.clone(), rect, key: key.clone(), style: style.clone(),
+            path: path.clone(), node_key: node_key.clone(), rect, key: key.clone(), style: style.clone(),
             on_click: on_click.clone(), on_hover: on_hover.clone(),
             tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
         }),
@@ -95,6 +95,7 @@ pub(super) fn build_render_tree(
     match node {
         StyledNode::Flex {
             path,
+            node_key,
             children,
             style,
             on_click,
@@ -104,6 +105,7 @@ pub(super) fn build_render_tree(
             panel,
         } => Ok(RenderNode::Flex {
             path: path.clone(),
+            node_key: node_key.clone(),
             rect,
             children: build_children(taffy, node_id, children, Position::new(abs_x, abs_y))?,
             style: style.clone(),
@@ -115,6 +117,7 @@ pub(super) fn build_render_tree(
         }),
         StyledNode::Grid {
             path,
+            node_key,
             children,
             style,
             on_click,
@@ -124,6 +127,7 @@ pub(super) fn build_render_tree(
             panel,
         } => Ok(RenderNode::Grid {
             path: path.clone(),
+            node_key: node_key.clone(),
             rect,
             children: build_children(taffy, node_id, children, Position::new(abs_x, abs_y))?,
             style: style.clone(),

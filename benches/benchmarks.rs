@@ -82,6 +82,7 @@ fn create_styled_node_tree(depth: usize, branching: usize) -> StyledNode {
     if depth == 0 {
         StyledNode::Text {
             path: NodePath::root(),
+            node_key: None,
             text: TextContent::new("Benchmark Text Content".to_string()),
             style,
             on_click: None,
@@ -97,6 +98,7 @@ fn create_styled_node_tree(depth: usize, branching: usize) -> StyledNode {
         }
         StyledNode::Flex {
             path: NodePath::root(),
+            node_key: None,
             children,
             style,
             on_click: None,

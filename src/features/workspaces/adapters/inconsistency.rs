@@ -11,6 +11,12 @@ pub enum StateInconsistency {
         workspace_id: WorkspaceId,
         workspace_name: WorkspaceName,
     },
+    /// A workspace's assigned monitor does not exist in the state.
+    WorkspaceMonitorNotFound {
+        workspace_id: WorkspaceId,
+        workspace_name: WorkspaceName,
+        monitor_name: MonitorName,
+    },
     /// A monitor references an active workspace that does not exist in the state.
     MonitorActiveWorkspaceNotFound {
         monitor_name: MonitorName,
@@ -45,6 +51,16 @@ impl std::fmt::Display for StateInconsistency {
                 write!(
                     f,
                     "workspace {workspace_id} ('{workspace_name}') has no monitor assigned"
+                )
+            }
+            Self::WorkspaceMonitorNotFound {
+                workspace_id,
+                workspace_name,
+                monitor_name,
+            } => {
+                write!(
+                    f,
+                    "workspace {workspace_id} ('{workspace_name}') is assigned to monitor '{monitor_name}' which does not exist"
                 )
             }
             Self::MonitorActiveWorkspaceNotFound {
@@ -103,11 +119,21 @@ pub fn find_state_inconsistencies(state: &HyprlandState) -> Vec<StateInconsisten
     let mut inconsistencies = Vec::new();
 
     for (ws_id, ws) in state.workspaces() {
-        if ws.monitor().is_none() {
-            inconsistencies.push(StateInconsistency::WorkspaceMissingMonitor {
-                workspace_id: ws_id.clone(),
-                workspace_name: ws.name().clone(),
-            });
+        match ws.monitor() {
+            None => {
+                inconsistencies.push(StateInconsistency::WorkspaceMissingMonitor {
+                    workspace_id: ws_id.clone(),
+                    workspace_name: ws.name().clone(),
+                });
+            }
+            Some(monitor_name) if !state.monitors().contains_key(monitor_name) => {
+                inconsistencies.push(StateInconsistency::WorkspaceMonitorNotFound {
+                    workspace_id: ws_id.clone(),
+                    workspace_name: ws.name().clone(),
+                    monitor_name: monitor_name.clone(),
+                });
+            }
+            Some(_) => {}
         }
     }
 

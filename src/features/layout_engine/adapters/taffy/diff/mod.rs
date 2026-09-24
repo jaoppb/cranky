@@ -1,40 +1,9 @@
+mod children;
+
 use super::reconciler::{LayoutState, Patch};
 use super::style_builder::node_to_style;
 use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
-use crate::features::styling::domain::ComputedStyle;
-
-fn diff_container<'a>(
-    old_state: &'a LayoutState,
-    new_layout: &'a StyledNode,
-    old_style: &ComputedStyle,
-    new_style: &ComputedStyle,
-    new_children: &'a [StyledNode],
-    measurer: &mut dyn TextMeasurer,
-) -> Patch<'a> {
-    let style = if old_style == new_style {
-        None
-    } else {
-        Some(node_to_style(new_layout, measurer))
-    };
-
-    let mut child_patches = Vec::with_capacity(new_children.len());
-    for (i, new_child) in new_children.iter().enumerate() {
-        if let Some(old_child) = old_state.children.get(i) {
-            child_patches.push(diff(old_child, new_child, measurer));
-        } else {
-            child_patches.push(Patch::Create {
-                new_layout: new_child,
-            });
-        }
-    }
-
-    Patch::Update {
-        old_state,
-        new_layout,
-        style: Box::new(style),
-        children: Some(child_patches),
-    }
-}
+use children::diff_container;
 
 fn leaf_patch<'a>(
     old_state: &'a LayoutState,

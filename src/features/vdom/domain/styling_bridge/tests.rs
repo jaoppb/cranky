@@ -1,7 +1,7 @@
 use crate::features::layout_engine::domain::StyledNode;
 use crate::features::styling::domain::{ElementQuery, InheritedStyle};
 use crate::features::styling::ports::StyleResolverPort;
-use crate::features::vdom::domain::{InteractionContext, NodePath, TextContent, VNode};
+use crate::features::vdom::domain::{InteractionContext, NodePath, NodeRef, TextContent, VNode};
 
 struct MockResolver;
 impl StyleResolverPort for MockResolver {
@@ -42,9 +42,9 @@ fn test_resolve_styles_interaction_propagation() {
 
     let resolver = MockResolver;
     let interaction = InteractionContext::new(
-        Some(NodePath::new(vec![0])),
-        Some(NodePath::new(vec![0])),
-        Some(NodePath::new(vec![1])),
+        Some(NodeRef::new(Vec::new(), NodePath::new(vec![0]))),
+        Some(NodeRef::new(Vec::new(), NodePath::new(vec![0]))),
+        Some(NodeRef::new(Vec::new(), NodePath::new(vec![1]))),
         true,
     );
 
