@@ -2,3 +2,12 @@ text {
     color: #c0caf5;
     font-size: 14px;
 }
+
+/* Reserves the popup's slot before the lazily spawned calendar has reported a
+   size. A Module node with no reported size sets no dimension at all, so only
+   these min-* survive the first frame — without them the popup opens as a
+   sliver on the first click of a session. */
+.calendar {
+    min-width: 280px;
+    min-height: 260px;
+}

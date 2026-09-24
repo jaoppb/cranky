@@ -488,13 +488,18 @@ mod tests {
             let popup = node_after_toggle_on.popup().unwrap();
             assert_eq!(
                 popup.content().tag(),
-                crate::features::vdom::domain::NodeTag::Flex,
-                "Popup should be a Flex node for {engine_name}"
+                crate::features::vdom::domain::NodeTag::Module,
+                "Popup content should be a Module node for {engine_name}"
             );
+            let crate::features::vdom::domain::VNodeKind::Module { name, .. } =
+                popup.content().kind()
+            else {
+                panic!("Popup content should be a Module node for {engine_name}");
+            };
             assert_eq!(
-                popup.content().children().len(),
-                3,
-                "Popup should contain Header, Weekdays, and Grid for {engine_name}"
+                name.as_str(),
+                "calendar",
+                "Popup should embed the calendar module for {engine_name}"
             );
 
             // Dismiss popup via on_popup_dismiss
