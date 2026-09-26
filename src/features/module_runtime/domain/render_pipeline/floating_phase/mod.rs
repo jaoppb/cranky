@@ -63,12 +63,12 @@ impl FloatingLayouts {
 /// one kind's tree against another's cached layout state whenever more than
 /// one is open at once.
 #[allow(clippy::too_many_arguments)]
-pub fn layout_floating<F: CanvasFactory>(
+pub fn layout_floating<F: CanvasFactory, E: LayoutEnginePort>(
     render_node: &RenderNode,
     interaction: Option<&InteractionContext>,
-    popup_layout_engine: &mut dyn LayoutEnginePort,
-    panel_layout_engine: &mut dyn LayoutEnginePort,
-    tooltip_layout_engine: &mut dyn LayoutEnginePort,
+    popup_layout_engine: &mut E,
+    panel_layout_engine: &mut E,
+    tooltip_layout_engine: &mut E,
     canvas_factory: &mut F,
     scale: Scale,
     current_child_sizes: Option<&ChildSizesMap>,

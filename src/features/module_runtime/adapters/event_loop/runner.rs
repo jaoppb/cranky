@@ -1,7 +1,7 @@
 use super::dispatch::discover_monitors;
 use super::events::EventLoopEvent;
+use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::{DisplayCommandSender, RenderNode};
-use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
 use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender};
@@ -108,7 +108,7 @@ impl<
     pub async fn run(mut self) {
         let subs = self.port.subscriptions().to_vec();
         let mut events_stream = self.ctx.hub().subscribe_streams(&subs);
-        let mut layout_engines: HashMap<MonitorId, Box<dyn LayoutEnginePort>> = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
 
         self.port.refresh(self.ctx.hub(), &subs);
         self.render_all_monitors(&mut layout_engines);

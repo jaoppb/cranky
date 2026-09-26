@@ -6,7 +6,7 @@ use crate::shared::primitives::{ChildSizesMap, ModuleKey, SizeConstraint};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
 
-pub struct LayoutContext<'a, F: CanvasFactory> {
+pub struct LayoutContext<'a, F: CanvasFactory, E: LayoutEnginePort> {
     pub scale: Scale,
     pub style_resolver: &'a dyn StyleResolverPort,
     /// Terminal lazy-spawn failures for this module's own children, keyed by
@@ -28,14 +28,14 @@ pub struct LayoutContext<'a, F: CanvasFactory> {
     pub current_child_sizes: Option<&'a ChildSizesMap>,
     pub interaction_context: Option<InteractionContext>,
     pub canvas_factory: &'a mut F,
-    pub layout_engine: &'a mut dyn LayoutEnginePort,
+    pub layout_engine: &'a mut E,
     /// Separate from `layout_engine`, and from each other, so laying out a
     /// popup, panel or tooltip's content never disturbs the bar tree's
     /// incremental layout state — or each other's, when more than one is
     /// open at once. Each engine instance tracks a single tree.
-    pub popup_layout_engine: &'a mut dyn LayoutEnginePort,
-    pub panel_layout_engine: &'a mut dyn LayoutEnginePort,
-    pub tooltip_layout_engine: &'a mut dyn LayoutEnginePort,
+    pub popup_layout_engine: &'a mut E,
+    pub panel_layout_engine: &'a mut E,
+    pub tooltip_layout_engine: &'a mut E,
 }
 
 #[derive(Debug, Clone, PartialEq)]

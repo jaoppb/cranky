@@ -5,6 +5,7 @@ use super::layout_phase::layout_pipeline;
 use super::outcome::{RenderOutcome, SizeChange};
 use super::paint_phase::paint_pipeline;
 use crate::features::layout_engine::domain::RenderNode;
+use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::features::vdom::domain::{InteractionContext, VNode};
 use crate::features::vdom::ports::VdomDiffPort;
@@ -103,11 +104,11 @@ impl RenderPipeline {
         )
     }
 
-    pub fn layout<F: CanvasFactory>(
+    pub fn layout<F: CanvasFactory, E: LayoutEnginePort>(
         &mut self,
         monitor_id: &MonitorId,
         diff: PipelineDiff,
-        ctx: &mut LayoutContext<'_, F>,
+        ctx: &mut LayoutContext<'_, F, E>,
     ) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>, FloatingLayouts)> {
         layout_pipeline(self, monitor_id, diff, ctx)
     }
@@ -127,12 +128,12 @@ impl RenderPipeline {
         res
     }
 
-    pub fn process_monitor<F: CanvasFactory>(
+    pub fn process_monitor<F: CanvasFactory, E: LayoutEnginePort>(
         &mut self,
         monitor_id: &MonitorId,
         port: &dyn AnyModulePort,
         vdom_diff: &dyn VdomDiffPort,
-        mut ctx: LayoutContext<'_, F>,
+        mut ctx: LayoutContext<'_, F, E>,
     ) -> Option<RenderOutcome> {
         let diff = self.diff(
             monitor_id,

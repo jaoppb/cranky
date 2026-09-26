@@ -191,6 +191,7 @@ impl<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
     use crate::features::layout_engine::domain::DisplayCommand;
     use crate::features::module_runtime::ports::LayoutEvent;
     use crate::features::module_runtime::test_support::{
@@ -370,7 +371,7 @@ mod tests {
             .build();
 
         let mut event_loop = fixture.event_loop;
-        let mut layout_engines = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
         event_loop.render_all_monitors(&mut layout_engines);
 
         let event = fixture
@@ -413,7 +414,7 @@ mod tests {
         let fixture = TestFixtureBuilder::new(id).with_monitors(&["DP-1"]).build();
 
         let mut event_loop = fixture.event_loop;
-        let mut layout_engines = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
 
         // First render: DP-1 has never been rendered before, so the
         // Hyprland-sourced bootstrap path discovers and renders it.
@@ -512,7 +513,7 @@ mod tests {
         fixture.layout_tx.send(layouts).unwrap();
 
         let mut event_loop = fixture.event_loop;
-        let mut layout_engines = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
         event_loop.render_all_monitors(&mut layout_engines);
 
         let event = fixture
@@ -551,7 +552,7 @@ mod tests {
             .build();
 
         let mut event_loop = fixture.event_loop;
-        let mut layout_engines = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
         event_loop.render_all_monitors(&mut layout_engines);
 
         assert!(
@@ -626,7 +627,7 @@ mod tests {
         fixture.layout_tx.send(layouts).unwrap();
 
         let mut event_loop = fixture.event_loop;
-        let mut layout_engines = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
         event_loop.render_all_monitors(&mut layout_engines);
 
         let mut found_container_layouts = false;

@@ -44,9 +44,9 @@ impl PopupRenderLayout {
 /// Lays out an anchored popup's content with the pipeline's own measurer,
 /// scale and font fallback — the single layout pass that both hit-testing
 /// and painting now read from.
-pub fn layout_popup<F: CanvasFactory>(
+pub fn layout_popup<F: CanvasFactory, E: LayoutEnginePort>(
     anchored: &AnchoredPopup<'_>,
-    layout_engine: &mut dyn LayoutEnginePort,
+    layout_engine: &mut E,
     canvas_factory: &mut F,
     scale: Scale,
     current_child_sizes: Option<&ChildSizesMap>,

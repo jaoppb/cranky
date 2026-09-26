@@ -11,17 +11,16 @@ use async_trait::async_trait;
 /// The `ModuleId` minted for a lazy spawn, plus the sender its new actor's
 /// layout channel is reached through.
 ///
-/// What `spawn_module` hands back instead of a bare `(ModuleId, Box<dyn
-/// LayoutSender>)` tuple, whose two positions carry no names of their own
-/// at the call site.
-pub struct SpawnedModule {
+/// What `spawn_module` hands back instead of a bare `(ModuleId, Snd)` tuple,
+/// whose two positions carry no names of their own at the call site.
+pub struct SpawnedModule<Snd: LayoutSender> {
     id: ModuleId,
-    sender: Box<dyn LayoutSender>,
+    sender: Snd,
 }
 
-impl SpawnedModule {
+impl<Snd: LayoutSender> SpawnedModule<Snd> {
     #[must_use]
-    pub const fn new(id: ModuleId, sender: Box<dyn LayoutSender>) -> Self {
+    pub const fn new(id: ModuleId, sender: Snd) -> Self {
         Self { id, sender }
     }
 
@@ -31,7 +30,7 @@ impl SpawnedModule {
     }
 
     #[must_use]
-    pub fn into_sender(self) -> Box<dyn LayoutSender> {
+    pub fn into_sender(self) -> Snd {
         self.sender
     }
 }
@@ -43,6 +42,7 @@ pub trait ModuleRegistryPort<
     LS: LayoutEventSender + 'static,
     DS: DisplayCommandSender + 'static,
     US: UiCommandSender + 'static,
+    Snd: LayoutSender + 'static,
 >: Send + Sync
 {
     /// Load module configurations into registry.
@@ -55,7 +55,7 @@ pub trait ModuleRegistryPort<
     fn spawn_all(
         &mut self,
         deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
-    ) -> std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>;
+    ) -> std::collections::HashMap<ModuleId, Snd>;
 
     /// Reload a specific module by name.
     ///
@@ -67,7 +67,7 @@ pub trait ModuleRegistryPort<
         name: &crate::shared::primitives::ModuleName,
         config: &Config,
         deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
-    ) -> Result<std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>, RegistryLoadError>;
+    ) -> Result<std::collections::HashMap<ModuleId, Snd>, RegistryLoadError>;
 
     fn root_module(&self) -> Option<ModuleId>;
     fn module_ids(&self) -> &[ModuleId];
@@ -117,7 +117,7 @@ pub trait ModuleRegistryPort<
         surface: crate::shared::primitives::LayoutSurface,
         config: &Config,
         deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
-    ) -> Result<SpawnedModule, RegistryLoadError>;
+    ) -> Result<SpawnedModule<Snd>, RegistryLoadError>;
 
     fn modules_using_style(
         &self,

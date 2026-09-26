@@ -1,5 +1,4 @@
 use super::runner::EventLoop;
-use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::domain::LayoutContext;
@@ -17,9 +16,9 @@ impl<
     US: UiCommandSender + 'static,
 > EventLoop<F, LS, DS, US>
 {
-    pub fn render_all_monitors(
+    pub fn render_all_monitors<E: LayoutEnginePort + Default>(
         &mut self,
-        layout_engines: &mut HashMap<MonitorId, Box<dyn LayoutEnginePort>>,
+        layout_engines: &mut HashMap<MonitorId, E>,
     ) {
         let t0 = std::time::Instant::now();
         let layouts: HashMap<MonitorId, ChildBounds> = self.ctx.rxs_mut().0.borrow().clone();
@@ -55,16 +54,14 @@ impl<
                     .interaction_context(&monitor_id, is_monitor_focused),
             );
 
-            let engine = layout_engines
-                .entry(monitor_id.clone())
-                .or_insert_with(|| Box::new(TaffyLayoutAdapter::new()));
+            let engine = layout_engines.entry(monitor_id.clone()).or_default();
             // Fresh per render, never cached: popup/panel content doesn't
             // need incremental diffing the way the bar tree does, and two
             // separate instances keep an open popup and an open panel from
             // diffing against each other's layout state.
-            let mut popup_engine = TaffyLayoutAdapter::new();
-            let mut panel_engine = TaffyLayoutAdapter::new();
-            let mut tooltip_engine = TaffyLayoutAdapter::new();
+            let mut popup_engine = E::default();
+            let mut panel_engine = E::default();
+            let mut tooltip_engine = E::default();
 
             let scale = self
                 .ctx
@@ -85,7 +82,7 @@ impl<
                     current_child_sizes,
                     interaction_context,
                     canvas_factory: &mut self.canvas_factory,
-                    layout_engine: engine.as_mut(),
+                    layout_engine: engine,
                     popup_layout_engine: &mut popup_engine,
                     panel_layout_engine: &mut panel_engine,
                     tooltip_layout_engine: &mut tooltip_engine,

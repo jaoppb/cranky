@@ -30,12 +30,12 @@ const fn hovered_tree<'a>(
 /// tooltip wins — but works from `hovered_path` against the already-laid-out
 /// trees instead of a hit-test result, since the pipeline never hit-tests.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn layout_tooltip<F: CanvasFactory>(
+pub(super) fn layout_tooltip<F: CanvasFactory, E: LayoutEnginePort>(
     bar: &RenderNode,
     popup: Option<&RenderNode>,
     panel: Option<&RenderNode>,
     interaction: Option<&InteractionContext>,
-    layout_engine: &mut dyn LayoutEnginePort,
+    layout_engine: &mut E,
     canvas_factory: &mut F,
     scale: Scale,
     current_child_sizes: Option<&ChildSizesMap>,

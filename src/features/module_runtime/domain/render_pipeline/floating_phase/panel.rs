@@ -7,9 +7,9 @@ use crate::shared::primitives::ChildSizesMap;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
 /// Lays out an active panel's content the same way `layout_popup` does.
-pub fn layout_panel<F: CanvasFactory>(
+pub fn layout_panel<F: CanvasFactory, E: LayoutEnginePort>(
     active: &ActivePanel<'_>,
-    layout_engine: &mut dyn LayoutEnginePort,
+    layout_engine: &mut E,
     canvas_factory: &mut F,
     scale: Scale,
     current_child_sizes: Option<&ChildSizesMap>,

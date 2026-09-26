@@ -16,8 +16,8 @@ const fn floating_font_fallback() -> (FontFamily, FontSize) {
 /// Lays out one piece of floating content (a popup's, panel's or tooltip's)
 /// with the pipeline's own measurer, scale and font fallback — shared by all
 /// three so hit-testing and painting always agree, whichever kind it is.
-pub(super) fn layout_floating_content<F: CanvasFactory>(
-    layout_engine: &mut dyn LayoutEnginePort,
+pub(super) fn layout_floating_content<F: CanvasFactory, E: LayoutEnginePort>(
+    layout_engine: &mut E,
     canvas_factory: &mut F,
     scale: Scale,
     current_child_sizes: Option<&ChildSizesMap>,

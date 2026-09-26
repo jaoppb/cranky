@@ -4,16 +4,17 @@ use super::measurer::ModuleSizeMeasurer;
 use super::outcome::SizeChange;
 use super::pipeline::RenderPipeline;
 use crate::features::layout_engine::domain::RenderNode;
+use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{ChildModuleLayout, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
-pub fn layout_pipeline<F: CanvasFactory>(
+pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
     pipeline: &mut RenderPipeline,
     monitor_id: &MonitorId,
     diff: PipelineDiff,
-    ctx: &mut LayoutContext<'_, F>,
+    ctx: &mut LayoutContext<'_, F, E>,
 ) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>, FloatingLayouts)> {
     let current_child_sizes_owned = ctx.current_child_sizes.cloned();
     let mut size_change = None;

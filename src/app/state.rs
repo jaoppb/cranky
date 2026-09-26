@@ -22,11 +22,12 @@ pub enum AppError {
 pub use crate::shared::wayland::domain::{AppReadModel, ModuleLayout};
 
 pub struct CrankyApp<
-    R: crate::features::module_runtime::ports::ModuleRegistryPort<F, LS, DS, US> + 'static,
+    R: crate::features::module_runtime::ports::ModuleRegistryPort<F, LS, DS, US, Snd> + 'static,
     F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
     LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
     DS: crate::features::layout_engine::domain::DisplayCommandSender + 'static,
     US: crate::features::vdom::domain::UiCommandSender + 'static,
+    Snd: crate::features::module_runtime::ports::LayoutSender + 'static,
 > {
     hub: Arc<SignalHub>,
     read_model: AppReadModel,
@@ -34,8 +35,7 @@ pub struct CrankyApp<
     layout_rx: mpsc::Receiver<LayoutEvent>,
     ui_rx: mpsc::Receiver<UiCommand>,
     system_rx: mpsc::Receiver<SystemCommand>,
-    layout_senders:
-        HashMap<ModuleId, Box<dyn crate::features::module_runtime::ports::LayoutSender>>,
+    layout_senders: HashMap<ModuleId, Snd>,
     surface_manager: DynSurfaceManager,
     display_sender: Arc<DS>,
     layout_sender: Arc<LS>,
@@ -106,12 +106,13 @@ impl StateChannels {
 }
 
 impl<
-    R: crate::features::module_runtime::ports::ModuleRegistryPort<F, LS, DS, US> + 'static,
+    R: crate::features::module_runtime::ports::ModuleRegistryPort<F, LS, DS, US, Snd> + 'static,
     F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
     LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
     DS: crate::features::layout_engine::domain::DisplayCommandSender + 'static,
     US: crate::features::vdom::domain::UiCommandSender + 'static,
-> CrankyApp<R, F, LS, DS, US>
+    Snd: crate::features::module_runtime::ports::LayoutSender + 'static,
+> CrankyApp<R, F, LS, DS, US, Snd>
 {
     /// Creates a new [`CrankyApp`] instance and initializes modules from config.
     ///
@@ -716,6 +717,7 @@ mod tests {
         tokio::sync::mpsc::Sender<LayoutEvent>,
         tokio::sync::mpsc::Sender<DisplayCommand>,
         tokio::sync::mpsc::Sender<UiCommand>,
+        crate::app::registry::WatchLayoutSender,
     >;
 
     #[tokio::test]
@@ -1133,7 +1135,7 @@ mod tests {
             }
         });
         mock_display.expect_dispatch_pending().returning(|| Ok(()));
-        mock_display.expect_render_all().returning(|_, _| Ok(()));
+        mock_display.expect_render_all::<crate::app::registry::WatchLayoutSender>().returning(|_, _| Ok(()));
         mock_display
             .expect_show_floating_surface()
             .returning(|_| Ok(()));
@@ -1260,17 +1262,15 @@ mod tests {
 
         let (layout_tx_0, _layout_rx_0) = tokio::sync::watch::channel(HashMap::new());
         let (layout_tx_1, mut layout_rx_1) = tokio::sync::watch::channel(HashMap::new());
-        let mut senders: HashMap<
-            ModuleId,
-            Box<dyn crate::features::module_runtime::ports::LayoutSender>,
-        > = HashMap::new();
+        let mut senders: HashMap<ModuleId, crate::app::registry::WatchLayoutSender> =
+            HashMap::new();
         senders.insert(
             ModuleId::new(0),
-            Box::new(crate::app::registry::WatchLayoutSender::new(layout_tx_0)),
+            crate::app::registry::WatchLayoutSender::new(layout_tx_0),
         );
         senders.insert(
             ModuleId::new(1),
-            Box::new(crate::app::registry::WatchLayoutSender::new(layout_tx_1)),
+            crate::app::registry::WatchLayoutSender::new(layout_tx_1),
         );
 
         mock_registry.expect_spawn_all().return_once(|_| senders);
@@ -1357,7 +1357,7 @@ mod tests {
             })
         });
         mock_display.expect_dispatch_pending().returning(|| Ok(()));
-        mock_display.expect_render_all().returning(|_, _| Ok(()));
+        mock_display.expect_render_all::<crate::app::registry::WatchLayoutSender>().returning(|_, _| Ok(()));
         mock_display
             .expect_show_floating_surface()
             .returning(|_| Ok(()));
@@ -1566,7 +1566,7 @@ mod tests {
         let (child_layout_tx, child_layout_rx) = tokio::sync::watch::channel(HashMap::new());
         app.layout_senders.insert(
             child,
-            Box::new(crate::app::registry::WatchLayoutSender::new(child_layout_tx)),
+            crate::app::registry::WatchLayoutSender::new(child_layout_tx),
         );
 
         let monitor = MonitorId::new("DP-1");

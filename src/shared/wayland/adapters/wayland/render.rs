@@ -7,11 +7,11 @@ use std::collections::HashMap;
 use tracing::{debug, info_span};
 use wayland_client::Connection;
 
-pub(crate) fn render_outputs(
+pub(crate) fn render_outputs<Snd: LayoutSender>(
     state: &mut WaylandState,
     connection: &Connection,
     read_model: &AppReadModel,
-    layout_senders: &HashMap<ModuleId, Box<dyn LayoutSender>>,
+    layout_senders: &HashMap<ModuleId, Snd>,
 ) {
     let span = info_span!("render_all_outputs");
     let _enter = span.enter();

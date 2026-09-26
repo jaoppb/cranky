@@ -229,7 +229,7 @@ impl ModuleRegistry {
         full_config: &crate::shared::config::domain::Config,
         deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> Result<
-        crate::features::module_runtime::ports::SpawnedModule,
+        crate::features::module_runtime::ports::SpawnedModule<WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
         let cfg = ModuleConfig::new(
@@ -246,8 +246,7 @@ impl ModuleRegistry {
         )?;
 
         let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
-        let sender: Box<dyn crate::features::module_runtime::ports::LayoutSender> =
-            Box::new(WatchLayoutSender { tx: layout_tx });
+        let sender = WatchLayoutSender { tx: layout_tx };
 
         let ctx = crate::features::module_runtime::application::ModuleContext::new(
             id,
@@ -279,7 +278,7 @@ impl ModuleRegistry {
     }
 }
 
-pub(crate) struct WatchLayoutSender {
+pub struct WatchLayoutSender {
     tx: tokio::sync::watch::Sender<
         std::collections::HashMap<
             crate::shared::primitives::MonitorId,
@@ -321,7 +320,7 @@ impl<
     LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
     DS: crate::features::layout_engine::domain::DisplayCommandSender + 'static,
     US: crate::features::vdom::domain::UiCommandSender + 'static,
-> ModuleRegistryPort<Fact, LS, DS, US> for ModuleRegistry
+> ModuleRegistryPort<Fact, LS, DS, US, WatchLayoutSender> for ModuleRegistry
 {
     fn root_module(&self) -> Option<ModuleId> {
         self.root_module
@@ -369,7 +368,7 @@ impl<
         config: &crate::shared::config::domain::Config,
         deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> Result<
-        crate::features::module_runtime::ports::SpawnedModule,
+        crate::features::module_runtime::ports::SpawnedModule<WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
         self.spawn_module_lazy(parent, key, options, surface, config, deps)
@@ -432,19 +431,14 @@ impl<
     fn spawn_all(
         &mut self,
         deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
-    ) -> std::collections::HashMap<
-        ModuleId,
-        Box<dyn crate::features::module_runtime::ports::LayoutSender>,
-    > {
-        let mut layout_senders: std::collections::HashMap<
-            ModuleId,
-            Box<dyn crate::features::module_runtime::ports::LayoutSender>,
-        > = std::collections::HashMap::new();
+    ) -> std::collections::HashMap<ModuleId, WatchLayoutSender> {
+        let mut layout_senders: std::collections::HashMap<ModuleId, WatchLayoutSender> =
+            std::collections::HashMap::new();
 
         for (id, module) in std::mem::take(&mut self.modules) {
             let (layout_tx, layout_rx) =
                 tokio::sync::watch::channel(std::collections::HashMap::new());
-            layout_senders.insert(id, Box::new(WatchLayoutSender { tx: layout_tx }));
+            layout_senders.insert(id, WatchLayoutSender { tx: layout_tx });
 
             let parent_id = self.module_parents.get(&id).copied().flatten();
 
@@ -483,19 +477,14 @@ impl<
         config: &crate::shared::config::domain::Config,
         deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> Result<
-        std::collections::HashMap<
-            ModuleId,
-            Box<dyn crate::features::module_runtime::ports::LayoutSender>,
-        >,
+        std::collections::HashMap<ModuleId, WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
         use crate::app::builtins::BuiltinError;
         use crate::features::module_runtime::ports::RegistryLoadError;
 
-        let mut new_senders: std::collections::HashMap<
-            ModuleId,
-            Box<dyn crate::features::module_runtime::ports::LayoutSender>,
-        > = std::collections::HashMap::new();
+        let mut new_senders: std::collections::HashMap<ModuleId, WatchLayoutSender> =
+            std::collections::HashMap::new();
         let target_ids: Vec<ModuleId> = self
             .module_configs
             .iter()
@@ -544,7 +533,7 @@ impl<
             }
 
             let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
-            new_senders.insert(id, Box::new(WatchLayoutSender { tx: layout_tx }));
+            new_senders.insert(id, WatchLayoutSender { tx: layout_tx });
 
             let parent_id = self.module_parents.get(&id).copied().flatten();
 
@@ -624,6 +613,7 @@ mod tests {
             crate::features::module_runtime::test_support::MockLayoutSender,
             crate::features::module_runtime::test_support::MockDisplaySender,
             crate::features::module_runtime::test_support::MockUiSender,
+            WatchLayoutSender,
         >;
 
     #[test]

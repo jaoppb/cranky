@@ -94,10 +94,10 @@ impl DisplayServerPort for WaylandAdapter {
         Ok(())
     }
 
-    fn render_all(
+    fn render_all<Snd: LayoutSender + 'static>(
         &mut self,
         read_model: &AppReadModel,
-        layout_senders: &HashMap<ModuleId, Box<dyn LayoutSender>>,
+        layout_senders: &HashMap<ModuleId, Snd>,
     ) -> Result<(), DisplayServerError> {
         render_outputs(&mut self.state, &self.connection, read_model, layout_senders);
         Ok(())

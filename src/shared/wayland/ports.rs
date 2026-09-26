@@ -70,13 +70,10 @@ pub trait DisplayServerPort: Send + Sync {
     /// # Errors
     ///
     /// Returns `DisplayServerError` if rendering fails.
-    fn render_all(
+    fn render_all<Snd: crate::features::module_runtime::ports::LayoutSender + 'static>(
         &mut self,
         read_model: &AppReadModel,
-        layout_senders: &std::collections::HashMap<
-            crate::shared::primitives::ModuleId,
-            Box<dyn crate::features::module_runtime::ports::LayoutSender>,
-        >,
+        layout_senders: &std::collections::HashMap<crate::shared::primitives::ModuleId, Snd>,
     ) -> Result<(), DisplayServerError>;
 
     /// # Errors
