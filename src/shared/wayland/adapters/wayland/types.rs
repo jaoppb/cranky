@@ -31,6 +31,11 @@ pub(crate) struct FloatingSurface {
     /// subsurface) whenever this `FloatingSurface` itself is dropped, since
     /// field drop order runs after this type's own `Drop::drop` body.
     pub(crate) module_surfaces: HashMap<ModuleId, ModuleSurface>,
+    /// The floating surface this one is nested inside (decision 7), fixed
+    /// at creation — `None` for one owned by a module embedded directly in
+    /// the bar tree. Read back as the parent link when walking ancestor or
+    /// descendant chains for exclusivity and teardown ordering.
+    pub(crate) parent: Option<crate::features::layout_engine::domain::FloatingKind>,
 }
 
 impl Drop for FloatingSurface {

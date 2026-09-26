@@ -75,21 +75,8 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
                     .iter()
                     .find(|(_, f)| &f.xdg_popup == proxy)
                     .map(|(k, _)| k.clone());
-                if let Some(kind) = matching_kind
-                    && let Some(floating) = state.floating_surfaces.remove(&kind)
-                {
-                    state.surface_to_id.remove(&floating.surface);
-                    if let crate::features::layout_engine::domain::FloatingKind::Popup(target) =
-                        kind
-                    {
-                        let _ = state.hub.pointer_tx().send((
-                            target.module_id(),
-                            target.monitor_id().clone(),
-                            crate::shared::events::core::InteractionEvent::Lifecycle(
-                                crate::shared::events::core::SurfaceLifecycleEvent::PopupDismissed,
-                            ),
-                        ));
-                    }
+                if let Some(kind) = matching_kind {
+                    super::floating_teardown::teardown_floating(state, &kind, true);
                 }
             }
             other => tracing::debug!("xdg_popup Event: {other:?}"),

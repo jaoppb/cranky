@@ -1,5 +1,5 @@
 use crate::features::layout_engine::domain::{
-    DisplayCommand, DisplayCommandSender, FloatingKind, PopupTarget, RenderNode,
+    DisplayCommand, DisplayCommandSender, FloatingKind, PopupTarget, RenderNode, ShowFloating,
 };
 use crate::features::module_runtime::domain::render_pipeline::paint_pipeline;
 use crate::features::module_runtime::domain::{PopupRenderLayout, RenderOutcome};
@@ -29,6 +29,7 @@ fn dispatch_floating_kind<DS: DisplayCommandSender, F: CanvasFactory>(
     node: Option<&RenderNode>,
     anchor_rect: Option<Rect>,
     offset: Option<PopupOffset>,
+    parent: Option<FloatingKind>,
 ) {
     let Some(node) = node else {
         if trees.remove(monitor_id).is_some() {
@@ -47,16 +48,18 @@ fn dispatch_floating_kind<DS: DisplayCommandSender, F: CanvasFactory>(
     let Some((buffer, _)) = paint_pipeline(node, Some(node.rect()), scale, canvas_factory) else {
         return;
     };
-    display_sender.send_display_command(DisplayCommand::ShowFloatingSurface {
+    display_sender.send_display_command(DisplayCommand::ShowFloatingSurface(ShowFloating {
         kind,
         monitor_id: Some(monitor_id.clone()),
         anchor_rect,
         buffer,
         logical_size,
         offset,
-    });
+        parent,
+    }));
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn dispatch_outcome_popups<DS: DisplayCommandSender, F: CanvasFactory>(
     display_sender: &DS,
     popup_render_trees: &mut HashMap<MonitorId, RenderNode>,
@@ -65,6 +68,7 @@ pub(super) fn dispatch_outcome_popups<DS: DisplayCommandSender, F: CanvasFactory
     module_id: ModuleId,
     monitor_id: &MonitorId,
     outcome: &RenderOutcome,
+    parent: Option<FloatingKind>,
 ) {
     let kind = FloatingKind::Popup(PopupTarget::new(module_id, monitor_id.clone()));
     let popup_layout = outcome.popup_layout();
@@ -78,9 +82,11 @@ pub(super) fn dispatch_outcome_popups<DS: DisplayCommandSender, F: CanvasFactory
         popup_layout.map(PopupRenderLayout::node),
         popup_layout.map(PopupRenderLayout::anchor_rect),
         popup_layout.and_then(PopupRenderLayout::offset),
+        parent,
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn dispatch_outcome_panels<DS: DisplayCommandSender, F: CanvasFactory>(
     display_sender: &DS,
     panel_render_trees: &mut HashMap<MonitorId, RenderNode>,
@@ -89,6 +95,7 @@ pub(super) fn dispatch_outcome_panels<DS: DisplayCommandSender, F: CanvasFactory
     module_id: ModuleId,
     monitor_id: &MonitorId,
     outcome: &RenderOutcome,
+    parent: Option<FloatingKind>,
 ) {
     let kind = FloatingKind::Panel(PopupTarget::new(module_id, monitor_id.clone()));
     dispatch_floating_kind(
@@ -101,6 +108,7 @@ pub(super) fn dispatch_outcome_panels<DS: DisplayCommandSender, F: CanvasFactory
         outcome.panel_layout(),
         None,
         None,
+        parent,
     );
 }
 
@@ -112,6 +120,9 @@ pub(super) fn dispatch_outcome_tooltips<DS: DisplayCommandSender, F: CanvasFacto
     monitor_id: &MonitorId,
     outcome: &RenderOutcome,
 ) {
+    // Tooltip children stay a documented known gap (Phase 4): a tooltip is
+    // never itself nested inside another floating surface's content, so it
+    // has no parent link to carry.
     dispatch_floating_kind(
         display_sender,
         tooltip_render_trees,
@@ -120,6 +131,7 @@ pub(super) fn dispatch_outcome_tooltips<DS: DisplayCommandSender, F: CanvasFacto
         FloatingKind::Tooltip,
         monitor_id,
         outcome.tooltip_layout(),
+        None,
         None,
         None,
     );

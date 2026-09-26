@@ -103,15 +103,17 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
         .try_recv()
         .expect("Should have sent ShowFloatingSurface");
     match cmd1 {
-        DisplayCommand::ShowFloatingSurface {
+        DisplayCommand::ShowFloatingSurface(crate::features::layout_engine::domain::ShowFloating {
             kind,
             monitor_id,
             anchor_rect,
             buffer: _,
             logical_size,
             offset,
-        } => {
+            parent,
+        }) => {
             assert_eq!(offset, None);
+            assert_eq!(parent, None);
             assert_eq!(
                 kind,
                 FloatingKind::Popup(crate::features::layout_engine::domain::PopupTarget::new(

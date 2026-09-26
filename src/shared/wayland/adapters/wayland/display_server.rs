@@ -5,9 +5,7 @@ use super::render::render_outputs;
 use super::surface_handler::handle_cmd;
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::features::module_runtime::ports::LayoutSender;
-use crate::shared::primitives::geometry::{Rect, Size};
-use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::primitives::{ModuleId, MonitorId};
+use crate::shared::primitives::ModuleId;
 use crate::shared::wayland::ports::{AppReadModel, DisplayServerError, DisplayServerPort};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -107,25 +105,21 @@ impl DisplayServerPort for WaylandAdapter {
 
     fn show_floating_surface(
         &mut self,
-        kind: FloatingKind,
-        monitor_id: Option<MonitorId>,
-        anchor_rect: Option<Rect>,
-        buffer: RenderBuffer,
-        logical_size: Size,
-        offset: Option<crate::shared::primitives::PopupOffset>,
+        floating: crate::features::layout_engine::domain::ShowFloating,
     ) -> Result<(), DisplayServerError> {
         let qh = self.event_queue.handle();
         show_floating(
             &mut self.state,
             &qh,
-            kind,
-            monitor_id,
-            anchor_rect,
+            floating.kind,
+            floating.monitor_id,
+            floating.anchor_rect,
             &FloatingPayload {
-                buffer: &buffer,
-                logical_size,
-                offset,
+                buffer: &floating.buffer,
+                logical_size: floating.logical_size,
+                offset: floating.offset,
             },
+            floating.parent,
         )
     }
 

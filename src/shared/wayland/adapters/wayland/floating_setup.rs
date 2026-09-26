@@ -1,4 +1,4 @@
-use super::floating_anchor::AnchorInfo;
+use super::floating_anchor::{AnchorInfo, FloatingParentRole};
 use super::floating_render::create_positioner;
 use super::state::WaylandState;
 use super::surface_handler::copy_surface_data;
@@ -12,6 +12,8 @@ use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
+
+pub(super) use super::floating_update::update_existing_floating;
 
 /// Everything Wayland needs to place a floating surface — no rendering
 /// information, since the module already painted `buffer`. `size` is the
@@ -30,67 +32,6 @@ struct NewFloatingInfo {
     positioner: XdgPositioner,
 }
 
-fn commit_surface(floating: &mut FloatingSurface, bar_scale: i32, w_i32: i32, h_i32: i32) {
-    floating.surface.set_buffer_scale(bar_scale);
-    floating.surface.attach(Some(floating.shm_buffer.current_buffer()), 0, 0);
-    floating.surface.damage_buffer(0, 0, w_i32, h_i32);
-    floating.surface.commit();
-    floating.shm_buffer.swap_buffers();
-}
-
-pub(super) fn update_existing_floating(
-    state: &mut WaylandState,
-    qh: &QueueHandle<WaylandState>,
-    kind: &FloatingKind,
-    buffer: &RenderBuffer,
-    anchor_info: &AnchorInfo,
-    placement: &FloatingPlacement,
-) -> Result<(), DisplayServerError> {
-    let Some(floating) = state.floating_surfaces.get_mut(kind) else {
-        return Ok(());
-    };
-    let w_i32 = i32::try_from(placement.size.width()).unwrap_or(0);
-    let h_i32 = i32::try_from(placement.size.height()).unwrap_or(0);
-
-    if floating.size == placement.size {
-        copy_surface_data(&mut floating.shm_buffer, buffer.data());
-        commit_surface(floating, anchor_info.bar_scale, w_i32, h_i32);
-        return Ok(());
-    }
-
-    let shm = state.shm.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "SHM not bound".to_string(),
-    })?;
-    let mut new_shm_buffer = ShmBuffer::new(
-        shm,
-        placement.size.width(),
-        placement.size.height(),
-        qh,
-        state.app_env.xdg_runtime_dir().as_path(),
-    )
-    .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
-    copy_surface_data(&mut new_shm_buffer, buffer.data());
-
-    let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "XDG WM Base not bound".to_string(),
-    })?;
-    let positioner = create_positioner(
-        xdg_wm_base,
-        qh,
-        placement.text_w,
-        placement.text_h,
-        anchor_info,
-        placement.offset,
-    );
-    floating.reposition_token = floating.reposition_token.wrapping_add(1);
-    floating.xdg_popup.reposition(&positioner, floating.reposition_token);
-    positioner.destroy();
-    floating.shm_buffer = new_shm_buffer;
-    floating.size = placement.size;
-    commit_surface(floating, anchor_info.bar_scale, w_i32, h_i32);
-    Ok(())
-}
-
 pub(super) fn create_new_floating(
     state: &mut WaylandState,
     qh: &QueueHandle<WaylandState>,
@@ -98,6 +39,7 @@ pub(super) fn create_new_floating(
     buffer: &RenderBuffer,
     anchor_info: &AnchorInfo,
     placement: &FloatingPlacement,
+    parent: Option<FloatingKind>,
 ) -> Result<(), DisplayServerError> {
     let shm = state.shm.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
         reason: "SHM not bound".to_string(),
@@ -134,6 +76,7 @@ pub(super) fn create_new_floating(
             size: placement.size,
             positioner,
         },
+        parent,
     )
 }
 
@@ -143,6 +86,7 @@ fn setup_new_floating(
     kind: FloatingKind,
     anchor_info: &AnchorInfo,
     info: NewFloatingInfo,
+    parent: Option<FloatingKind>,
 ) -> Result<(), DisplayServerError> {
     let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
         reason: "XDG WM Base not bound".to_string(),
@@ -153,7 +97,14 @@ fn setup_new_floating(
     let surface = compositor.create_surface(qh, ());
     surface.set_buffer_scale(anchor_info.bar_scale);
     let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, qh, ());
-    let xdg_popup = xdg_surface.get_popup(None, &info.positioner, qh, ());
+    // A popup nested inside another floating surface (decision 7) names its
+    // parent directly; a top-level one leaves it unset and relies on
+    // `zwlr_layer_surface_v1.get_popup` below instead.
+    let parent_xdg_surface = match &anchor_info.parent_role {
+        FloatingParentRole::Popup(p) => Some(p),
+        FloatingParentRole::Layer(_) => None,
+    };
+    let xdg_popup = xdg_surface.get_popup(parent_xdg_surface, &info.positioner, qh, ());
 
     if let FloatingKind::Popup(_) = &kind
         && let (Some(seat), Some(serial)) = (state.seat.as_ref(), state.last_button_serial)
@@ -161,7 +112,9 @@ fn setup_new_floating(
         xdg_popup.grab(seat, serial.value());
     }
 
-    anchor_info.bar_layer_surface.get_popup(&xdg_popup);
+    if let FloatingParentRole::Layer(layer) = &anchor_info.parent_role {
+        layer.get_popup(&xdg_popup);
+    }
     info.positioner.destroy();
     surface.commit();
 
@@ -191,6 +144,7 @@ fn setup_new_floating(
             size: info.size,
             reposition_token: 0,
             module_surfaces: std::collections::HashMap::new(),
+            parent,
         },
     );
 

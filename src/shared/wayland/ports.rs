@@ -84,12 +84,7 @@ pub trait DisplayServerPort: Send + Sync {
     /// Returns `DisplayServerError` if displaying the floating surface fails.
     fn show_floating_surface(
         &mut self,
-        kind: crate::features::layout_engine::domain::FloatingKind,
-        monitor_id: Option<crate::shared::primitives::MonitorId>,
-        anchor_rect: Option<crate::shared::primitives::geometry::Rect>,
-        buffer: crate::shared::primitives::render::RenderBuffer,
-        logical_size: crate::shared::primitives::geometry::Size,
-        offset: Option<crate::shared::primitives::PopupOffset>,
+        floating: crate::features::layout_engine::domain::ShowFloating,
     ) -> Result<(), DisplayServerError>;
 
     /// # Errors

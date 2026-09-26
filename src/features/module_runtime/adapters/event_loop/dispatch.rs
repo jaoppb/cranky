@@ -82,7 +82,7 @@ pub(super) fn dispatch_outcome_layouts<LS: LayoutEventSender>(
 /// life) plus the monitor being rendered — a popup/panel's `FloatingKind`
 /// needs both `parent_id` and `monitor_id` to name the exact floating
 /// surface this child lives inside.
-fn surface_parent_for(
+pub(super) fn surface_parent_for(
     parent_id: ModuleId,
     surface: LayoutSurface,
     monitor_id: &MonitorId,

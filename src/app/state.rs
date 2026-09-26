@@ -200,29 +200,16 @@ impl<
                 DisplayCommand::RequestRender => {
                     needs_render = true;
                 }
-                DisplayCommand::ShowFloatingSurface {
-                    kind,
-                    monitor_id,
-                    anchor_rect,
-                    buffer,
-                    logical_size,
-                    offset,
-                } => {
+                DisplayCommand::ShowFloatingSurface(floating) => {
                     tracing::debug!(
-                        ?kind,
-                        ?monitor_id,
-                        ?anchor_rect,
-                        ?offset,
+                        kind = ?floating.kind,
+                        monitor_id = ?floating.monitor_id,
+                        anchor_rect = ?floating.anchor_rect,
+                        offset = ?floating.offset,
+                        parent = ?floating.parent,
                         "Received DisplayCommand::ShowFloatingSurface, calling display.show_floating_surface"
                     );
-                    if let Err(e) = display.show_floating_surface(
-                        kind,
-                        monitor_id,
-                        anchor_rect,
-                        buffer,
-                        logical_size,
-                        offset,
-                    ) {
+                    if let Err(e) = display.show_floating_surface(floating) {
                         tracing::error!(err = ?e, "display.show_floating_surface failed");
                     } else {
                         tracing::debug!("display.show_floating_surface succeeded");
@@ -1149,7 +1136,7 @@ mod tests {
         mock_display.expect_render_all().returning(|_, _| Ok(()));
         mock_display
             .expect_show_floating_surface()
-            .returning(|_, _, _, _, _, _| Ok(()));
+            .returning(|_| Ok(()));
         mock_display
             .expect_hide_floating_surface()
             .returning(|_| Ok(()));
@@ -1176,17 +1163,20 @@ mod tests {
             .await
             .unwrap();
         display_tx
-            .send(DisplayCommand::ShowFloatingSurface {
-                kind: crate::features::layout_engine::domain::FloatingKind::Tooltip,
-                monitor_id: None,
-                anchor_rect: None,
-                buffer: crate::shared::primitives::render::RenderBuffer::new(
-                    vec![0u8; 4],
-                    Size::new(1, 1),
-                ),
-                logical_size: Size::new(1, 1),
-                offset: None,
-            })
+            .send(DisplayCommand::ShowFloatingSurface(
+                crate::features::layout_engine::domain::ShowFloating {
+                    kind: crate::features::layout_engine::domain::FloatingKind::Tooltip,
+                    monitor_id: None,
+                    anchor_rect: None,
+                    buffer: crate::shared::primitives::render::RenderBuffer::new(
+                        vec![0u8; 4],
+                        Size::new(1, 1),
+                    ),
+                    logical_size: Size::new(1, 1),
+                    offset: None,
+                    parent: None,
+                },
+            ))
             .await
             .unwrap();
         display_tx
@@ -1370,7 +1360,7 @@ mod tests {
         mock_display.expect_render_all().returning(|_, _| Ok(()));
         mock_display
             .expect_show_floating_surface()
-            .returning(|_, _, _, _, _, _| Ok(()));
+            .returning(|_| Ok(()));
         mock_display
             .expect_hide_floating_surface()
             .returning(|_| Ok(()));

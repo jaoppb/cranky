@@ -18,6 +18,12 @@ use wayland_client::protocol::wl_surface::WlSurface;
 /// child, which (like the tooltip's own surface in `setup_new_floating`)
 /// gets no pointer routing today. `None` overall means the parent isn't
 /// ready yet (a popup not yet shown, or already torn down).
+///
+/// The kind is always `SurfaceKind::Bar` when present: it names which of
+/// the *child's* trees to hit-test, and a child's own subsurface always
+/// shows its main tree, whatever it happens to be parented to. Recording
+/// the parent's kind instead would hit-test the child's own (empty) popup
+/// tree, so clicks inside an embedded module would never land.
 fn resolve_parent_surface(
     state: &WaylandState,
     bar_index: usize,
@@ -30,8 +36,7 @@ fn resolve_parent_surface(
             .map(|bar| (bar.surface.clone(), Some(SurfaceKind::Bar))),
         SurfaceParent::Floating(kind) => {
             let surface_kind = match kind {
-                FloatingKind::Popup(_) => Some(SurfaceKind::Popup),
-                FloatingKind::Panel(_) => Some(SurfaceKind::Panel),
+                FloatingKind::Popup(_) | FloatingKind::Panel(_) => Some(SurfaceKind::Bar),
                 FloatingKind::Tooltip => None,
             };
             state

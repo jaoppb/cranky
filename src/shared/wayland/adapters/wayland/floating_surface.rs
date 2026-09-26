@@ -1,6 +1,8 @@
 use super::floating_anchor::{handle_conflicts, resolve_anchor};
 use super::floating_setup::{FloatingPlacement, create_new_floating, update_existing_floating};
+use super::floating_teardown::teardown_floating;
 use super::state::WaylandState;
+use crate::features::layout_engine::domain::popup::ancestors;
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::shared::primitives::geometry::{Rect, Size};
 use crate::shared::primitives::render::RenderBuffer;
@@ -18,7 +20,9 @@ pub(crate) struct FloatingPayload<'a> {
 
 /// Shows or updates a floating surface. This is placement and blitting
 /// only — layout and painting happen once, in the module that owns the
-/// content, before this is ever called.
+/// content, before this is ever called. `parent` is the floating surface
+/// this one nests inside (decision 7), if any, fixed for `kind`'s whole
+/// life on first show.
 pub(crate) fn show_floating(
     state: &mut WaylandState,
     qh: &QueueHandle<WaylandState>,
@@ -26,12 +30,26 @@ pub(crate) fn show_floating(
     monitor_id: Option<MonitorId>,
     anchor_rect: Option<Rect>,
     payload: &FloatingPayload<'_>,
+    parent: Option<FloatingKind>,
 ) -> Result<(), DisplayServerError> {
+    let parent_of = |k: &FloatingKind| -> Option<FloatingKind> {
+        if *k == kind {
+            parent.clone()
+        } else {
+            state.floating_surfaces.get(k).and_then(|f| f.parent.clone())
+        }
+    };
+    let Ok(ancestor_kinds) = ancestors(&kind, parent_of) else {
+        tracing::warn!(?kind, "popup nesting cycle detected, dropping");
+        return Ok(());
+    };
+
     if let FloatingKind::Popup(ref target) = kind {
-        handle_conflicts(state, target);
+        handle_conflicts(state, target, &ancestor_kinds);
     }
 
-    let Some(anchor_info) = resolve_anchor(state, &kind, monitor_id, anchor_rect) else {
+    let Some(anchor_info) = resolve_anchor(state, &kind, monitor_id, anchor_rect, parent.as_ref())
+    else {
         return Ok(());
     };
 
@@ -52,20 +70,13 @@ pub(crate) fn show_floating(
     if state.floating_surfaces.contains_key(&kind) {
         update_existing_floating(state, qh, &kind, payload.buffer, &anchor_info, &placement)
     } else {
-        create_new_floating(state, qh, kind, payload.buffer, &anchor_info, &placement)
+        create_new_floating(state, qh, kind, payload.buffer, &anchor_info, &placement, parent)
     }
 }
 
 pub(crate) fn hide_floating(state: &mut WaylandState, kind: &FloatingKind) {
-    if let Some(floating) = state.floating_surfaces.remove(kind) {
-        state.surface_to_id.remove(&floating.surface);
-        // Children embedded in this floating surface (gap 4) never get a
-        // teardown of their own — closing the popup/panel is the only
-        // signal they get. `floating`'s own drop (below, at end of scope)
-        // destroys every child subsurface; this just also forgets their
-        // pointer-routing entries before that happens.
-        for child in floating.module_surfaces.values() {
-            state.surface_to_id.remove(&child.surface);
-        }
-    }
+    // The module closed its own popup/panel — it already knows, so its own
+    // owner gets no dismissal notice; any nested descendant still does
+    // (decision 7), the same as every other teardown path.
+    teardown_floating(state, kind, false);
 }

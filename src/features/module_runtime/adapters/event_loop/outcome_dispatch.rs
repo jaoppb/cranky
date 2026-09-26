@@ -1,4 +1,4 @@
-use super::dispatch::{dispatch_outcome_buffer, dispatch_outcome_layouts};
+use super::dispatch::{dispatch_outcome_buffer, dispatch_outcome_layouts, surface_parent_for};
 use super::floating_dispatch::{
     dispatch_outcome_panels, dispatch_outcome_popups, dispatch_outcome_tooltips,
 };
@@ -10,6 +10,7 @@ use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::Scale;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
+use crate::shared::wayland::ports::SurfaceParent;
 
 impl<
     F: CanvasFactory + 'static,
@@ -39,6 +40,18 @@ impl<
             monitor_id,
             outcome,
         );
+        // The floating surface this module's own popup/panel nests inside
+        // (decision 7), if any — the same embedding site
+        // `dispatch_outcome_buffer` just used to parent this module's own
+        // subsurface, since a module opening its own popup while itself
+        // embedded in someone else's is exactly what nests a popup.
+        let floating_parent = self
+            .ctx
+            .parent_id()
+            .and_then(|pid| match surface_parent_for(pid, self.ctx.surface(), monitor_id) {
+                SurfaceParent::Bar => None,
+                SurfaceParent::Floating(kind) => Some(kind),
+            });
         dispatch_outcome_popups(
             self.ctx.display_sender(),
             &mut self.popup_render_trees,
@@ -47,6 +60,7 @@ impl<
             self.ctx.id(),
             monitor_id,
             outcome,
+            floating_parent.clone(),
         );
         dispatch_outcome_panels(
             self.ctx.display_sender(),
@@ -56,6 +70,7 @@ impl<
             self.ctx.id(),
             monitor_id,
             outcome,
+            floating_parent,
         );
         dispatch_outcome_tooltips(
             self.ctx.display_sender(),
