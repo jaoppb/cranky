@@ -1,28 +1,29 @@
+use super::anchor::ResolvedInteraction;
 use crate::features::styling::domain::PseudoClass;
-use crate::features::vdom::domain::{InteractionContext, NodePath, SurfaceSpace};
+use crate::features::vdom::domain::{NodePath, SurfaceSpace};
 
 #[must_use]
 pub fn compute_pseudo_classes(
     path: &NodePath,
-    interaction: Option<&InteractionContext>,
+    resolved: Option<&ResolvedInteraction>,
 ) -> Vec<PseudoClass> {
-    let Some(ctx) = interaction else {
+    let Some(resolved) = resolved else {
         return Vec::new();
     };
 
     let mut pseudo_classes = Vec::new();
-    if ctx.hovered_path().is_some_and(|h| h == path || h.starts_with(path)) {
+    if resolved.is_hovered_or_ancestor(path) {
         pseudo_classes.push(PseudoClass::Hover);
     }
-    if ctx.active_path().is_some_and(|a| a == path || a.starts_with(path)) {
+    if resolved.is_active_or_ancestor(path) {
         pseudo_classes.push(PseudoClass::Active);
     }
     // The monitor-focus fallback means "this is the bar's own root", not
     // "this is root of whatever surface it happens to be in" — a popup or
     // panel has its own root now too, and it must not pick up :focus just
     // because the underlying monitor does.
-    if ctx.focused_path().is_some_and(|f| f == path)
-        || (path.is_root() && path.surface() == SurfaceSpace::Bar && ctx.is_monitor_focused())
+    if resolved.is_focused(path)
+        || (path.is_root() && path.surface() == SurfaceSpace::Bar && resolved.is_monitor_focused())
     {
         pseudo_classes.push(PseudoClass::Focused);
     }
@@ -33,7 +34,14 @@ pub fn compute_pseudo_classes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::vdom::domain::SurfaceSpace;
+    use crate::features::vdom::domain::{InteractionContext, NodeRef, VNode};
+
+    /// `ResolvedInteraction::resolve` only needs to walk the tree when an
+    /// anchor is non-empty; every test here captures a keyless ref, so an
+    /// empty tree is a sufficient stand-in for "some surface's own root".
+    fn empty_root() -> VNode {
+        VNode::new_flex(Vec::new(), None, None, None, None, None)
+    }
 
     #[test]
     fn test_hover_does_not_cross_surface_boundary() {
@@ -41,26 +49,35 @@ mod tests {
         // separate surface. Same numeric indices on purpose — the surface
         // is what must keep them apart.
         let owner_path = NodePath::new(SurfaceSpace::Bar, vec![0, 1]);
-        let popup_owner_path = NodePath::new(SurfaceSpace::Bar, vec![0, 1]);
-        assert_eq!(owner_path, popup_owner_path);
 
-        let hovered_in_popup = NodePath::new(SurfaceSpace::Popup, vec![0, 1]);
+        let hovered_in_popup =
+            NodeRef::new(Vec::new(), NodePath::new(SurfaceSpace::Popup, vec![0, 1]));
         let interaction = InteractionContext::new(Some(hovered_in_popup), None, None, false);
 
         // Hovering inside the popup must not mark the bar node that owns it
         // as :hover, even though the indices happen to line up.
-        let owner_classes = compute_pseudo_classes(&owner_path, Some(&interaction));
-        assert!(!owner_classes.contains(&PseudoClass::Hover));
+        let resolved_for_bar =
+            ResolvedInteraction::resolve(&empty_root(), SurfaceSpace::Bar, &interaction);
+        assert!(
+            !compute_pseudo_classes(&owner_path, Some(&resolved_for_bar))
+                .contains(&PseudoClass::Hover)
+        );
 
-        // The popup node actually under the cursor still gets :hover.
+        // The popup node actually under the cursor still gets :hover, and so
+        // does an ancestor within the SAME surface.
+        let resolved_for_popup =
+            ResolvedInteraction::resolve(&empty_root(), SurfaceSpace::Popup, &interaction);
         let popup_node_path = NodePath::new(SurfaceSpace::Popup, vec![0, 1]);
-        let popup_classes = compute_pseudo_classes(&popup_node_path, Some(&interaction));
-        assert!(popup_classes.contains(&PseudoClass::Hover));
+        assert!(
+            compute_pseudo_classes(&popup_node_path, Some(&resolved_for_popup))
+                .contains(&PseudoClass::Hover)
+        );
 
-        // And an ancestor within the SAME surface still gets :hover, as before.
         let popup_ancestor_path = NodePath::new(SurfaceSpace::Popup, vec![0]);
-        let ancestor_classes = compute_pseudo_classes(&popup_ancestor_path, Some(&interaction));
-        assert!(ancestor_classes.contains(&PseudoClass::Hover));
+        assert!(
+            compute_pseudo_classes(&popup_ancestor_path, Some(&resolved_for_popup))
+                .contains(&PseudoClass::Hover)
+        );
     }
 
     #[test]
@@ -69,14 +86,19 @@ mod tests {
         // monitor-focus fallback must not spuriously mark a popup/panel
         // root :focus just because the underlying monitor has focus.
         let interaction = InteractionContext::new(None, None, None, true);
+        let resolved = ResolvedInteraction::resolve(&empty_root(), SurfaceSpace::Bar, &interaction);
 
         let bar_root = NodePath::root_in(SurfaceSpace::Bar);
-        assert!(compute_pseudo_classes(&bar_root, Some(&interaction)).contains(&PseudoClass::Focused));
+        assert!(compute_pseudo_classes(&bar_root, Some(&resolved)).contains(&PseudoClass::Focused));
 
         let popup_root = NodePath::root_in(SurfaceSpace::Popup);
-        assert!(!compute_pseudo_classes(&popup_root, Some(&interaction)).contains(&PseudoClass::Focused));
+        assert!(
+            !compute_pseudo_classes(&popup_root, Some(&resolved)).contains(&PseudoClass::Focused)
+        );
 
         let panel_root = NodePath::root_in(SurfaceSpace::Panel);
-        assert!(!compute_pseudo_classes(&panel_root, Some(&interaction)).contains(&PseudoClass::Focused));
+        assert!(
+            !compute_pseudo_classes(&panel_root, Some(&resolved)).contains(&PseudoClass::Focused)
+        );
     }
 }

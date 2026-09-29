@@ -212,16 +212,8 @@ mod tests {
     use super::*;
     use crate::shared::config::domain::{EngineId, EngineSelection};
 
-    fn get_test_env() -> crate::shared::env::domain::AppEnvironment {
-        crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from(
-                std::env::var("HOME").unwrap_or_else(|_| "/tmp".into()),
-            )),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/")),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        )
+    fn get_test_env() -> crate::test_utils::TestHome {
+        crate::test_utils::TestHome::new("builtins")
     }
 
     #[test]

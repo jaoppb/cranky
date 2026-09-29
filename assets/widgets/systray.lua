@@ -112,6 +112,7 @@ function render(monitor)
 
 		local item_node = ui.flex({
 			class = "item",
+			key = tostring(item.id),
 			children = item_children,
 			on_click = {
 				left = ui.action.systray(item.id, "Primary"),

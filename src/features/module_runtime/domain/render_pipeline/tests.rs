@@ -6,8 +6,8 @@ use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockLayoutEngine, MockStyleResolver, MockVdomDiff, TestModulePort,
 };
 use crate::features::vdom::domain::VNode;
-use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use std::collections::HashMap;
 
 #[test]
@@ -74,7 +74,10 @@ fn test_render_pipeline_hidpi_paint_allocates_scaled_buffer() {
     let mut pipeline = RenderPipeline::new();
     let mon = MonitorId::new("DP-1");
     let node = RenderNode::Rect {
-        path: crate::features::vdom::domain::NodePath::root_in(crate::features::vdom::domain::SurfaceSpace::Bar),
+        path: crate::features::vdom::domain::NodePath::root_in(
+            crate::features::vdom::domain::SurfaceSpace::Bar,
+        ),
+        node_key: None,
         rect: Rect::new(Position::new(10, 20), Size::new(100, 30)),
         style: crate::features::styling::domain::ComputedStyle::default(),
         on_click: None,

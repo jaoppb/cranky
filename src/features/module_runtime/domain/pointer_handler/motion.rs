@@ -1,9 +1,10 @@
 use super::action::PointerAction;
 use super::handler::PointerHandler;
+use super::hit_ref::capture_node_ref;
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::vdom::domain::{UiAction, UiCommand};
-use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::Position;
 
 impl PointerHandler {
     pub(crate) fn handle_pointer_motion(
@@ -16,11 +17,11 @@ impl PointerHandler {
         let mut state_changed = false;
 
         let hit = render_tree.hit_test(pos);
-        let target_path = hit.last().map(|n| n.path().clone());
+        let target_ref = capture_node_ref(&hit);
         let old_hover = self.hovered_nodes.get(monitor_id).cloned();
-        if old_hover != target_path {
-            if let Some(p) = &target_path {
-                self.hovered_nodes.insert(monitor_id.clone(), p.clone());
+        if old_hover != target_ref {
+            if let Some(r) = &target_ref {
+                self.hovered_nodes.insert(monitor_id.clone(), r.clone());
             } else {
                 self.hovered_nodes.remove(monitor_id);
             }

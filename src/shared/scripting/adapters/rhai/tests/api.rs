@@ -225,4 +225,40 @@ fn test_rhai_vnode_with_popup_default_offset_none() {
     let popup = node.popup().unwrap();
     assert_eq!(popup.offset(), None);
 }
+#[test]
+fn test_rhai_vnode_key_is_reconciliation_identity() {
+    // `key` reaches `VNode` with zero Rust-side parsing: `ui.flex`/`ui.grid`
+    // pass an arbitrary props map straight through (see dsl_elements.rs),
+    // and `VNode` deserializes `key` like any other field. This test is the
+    // guard against that assumption silently breaking.
+    let source = r#"
+        fn init() {}
+        fn refresh() {}
+        fn render(monitor) {
+            return ui.flex(#{
+                key: "ws-3",
+                id: "ws-3",
+                children: [],
+            });
+        }
+    "#;
+    let module = RhaiModule::new("test_key".into(), source).unwrap();
+    let node = module.render(&MonitorId::new("DP-1"));
+    assert_eq!(node.key().map(crate::features::vdom::domain::NodeKey::as_str), Some("ws-3"));
+    assert_eq!(node.element_id().map(crate::features::styling::domain::ElementId::as_str), Some("ws-3"));
+}
+
+#[test]
+fn test_rhai_vnode_without_key_has_none() {
+    let source = r#"
+        fn init() {}
+        fn refresh() {}
+        fn render(monitor) {
+            return ui.rect("box");
+        }
+    "#;
+    let module = RhaiModule::new("test_no_key".into(), source).unwrap();
+    let node = module.render(&MonitorId::new("DP-1"));
+    assert_eq!(node.key(), None);
+}
 }

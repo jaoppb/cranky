@@ -1,7 +1,7 @@
 pub(crate) use super::parser_floating::{parse_panel_spec, parse_popup_spec};
 use super::vnode_parser::value_to_vnode;
 use crate::features::styling::domain::{ClassNameList, ElementId};
-use crate::features::vdom::domain::{ClickHandlers, PanelSpec, PopupSpec, UiAction, VNode};
+use crate::features::vdom::domain::{ClickHandlers, NodeKey, PanelSpec, PopupSpec, UiAction, VNode};
 use crate::shared::events::core::PointerButton;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{BinaryData, ModuleOptions};
@@ -110,6 +110,7 @@ pub(crate) type CommonProps = (
     Option<Box<VNode>>,
     Option<PopupSpec>,
     Option<PanelSpec>,
+    Option<NodeKey>,
 );
 
 pub(crate) fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result<CommonProps> {
@@ -127,5 +128,12 @@ pub(crate) fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result
     };
     let popup = parse_popup_spec(lua, table.get::<Option<mlua::Value>>("popup")?)?;
     let panel = parse_panel_spec(lua, table.get::<Option<mlua::Value>>("panel")?)?;
-    Ok((class, id, on_click, on_hover, tooltip, popup, panel))
+    // Reconciliation identity, distinct from `id` (a CSS selector). A widget
+    // rendering a variable-length list sets this so the layout and vdom
+    // reconcilers can track a child across insertions/removals instead of by
+    // position — see `NodeKey` for the "all siblings keyed, or none" policy.
+    let key = table
+        .get::<Option<String>>("key")?
+        .and_then(|s| NodeKey::new(s).ok());
+    Ok((class, id, on_click, on_hover, tooltip, popup, panel, key))
 }

@@ -7,7 +7,7 @@ use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::primitives::geometry::Scale;
 use crate::shared::primitives::{ChildBounds, MonitorId, SizeConstraint};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 impl<
     F: CanvasFactory + 'static,
@@ -23,6 +23,20 @@ impl<
         let t0 = std::time::Instant::now();
         let layouts: HashMap<MonitorId, ChildBounds> = self.ctx.rxs_mut().0.borrow().clone();
         let monitors = self.discover_monitors(&layouts);
+
+        // `layout_engines` and `self.render_pipeline` are both keyed by
+        // monitor and only ever grow (`.entry().or_insert_with()` /
+        // `.insert()`) — nothing else removes an entry when a monitor
+        // disconnects. `monitors` is the current, authoritative set for this
+        // pass, so anything outside it is for a monitor that's gone.
+        let live: HashSet<MonitorId> = monitors.iter().cloned().collect();
+        layout_engines.retain(|id, _| live.contains(id));
+        self.render_pipeline.retain_monitors(&live);
+        self.popup_render_trees.retain(|id, _| live.contains(id));
+        self.panel_render_trees.retain(|id, _| live.contains(id));
+        self.tooltip_render_trees.retain(|id, _| live.contains(id));
+        self.child_layouts_present.retain(|id, _| live.contains(id));
+        self.pointer_handler.retain_monitors(&live);
 
         let self_id = self.ctx.id();
         let child_errors: HashMap<crate::shared::primitives::ModuleKey, String> = self

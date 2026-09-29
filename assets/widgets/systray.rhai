@@ -113,6 +113,7 @@ fn render(monitor) {
         
         let item_node = ui.flex(#{
             class: "item",
+            key: item.id.to_string(),
             children: item_children,
             on_click: #{
                 left: ui.action.systray(item.id, "Primary"),

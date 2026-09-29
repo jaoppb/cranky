@@ -2,6 +2,7 @@ pub mod action;
 pub mod clicks;
 pub mod dispatch;
 pub mod handler;
+mod hit_ref;
 pub mod motion;
 #[cfg(test)]
 mod tests;

@@ -102,7 +102,12 @@ impl<
             .keys()
             .cloned()
             .collect();
-        discover_monitors(self.ctx.hub(), layouts, &seen)
+        discover_monitors(
+            self.ctx.hub(),
+            layouts,
+            &seen,
+            self.ctx.parent_id().is_some(),
+        )
     }
 
     pub async fn run(mut self) {

@@ -1,5 +1,5 @@
 use crate::features::workspaces::adapters::inconsistency::{
-    find_state_inconsistencies, StateInconsistency,
+    StateInconsistency, find_state_inconsistencies,
 };
 use crate::features::workspaces::domain::{
     Monitor, MonitorName, Workspace, WorkspaceId, WorkspaceName,
@@ -20,6 +20,16 @@ fn test_state_inconsistency_display() {
     assert_eq!(
         inc1.to_string(),
         "workspace 1 ('code') has no monitor assigned"
+    );
+
+    let inc1b = StateInconsistency::WorkspaceMonitorNotFound {
+        workspace_id: ws_id.clone(),
+        workspace_name: WorkspaceName::new("code"),
+        monitor_name: mon_dp1.clone(),
+    };
+    assert_eq!(
+        inc1b.to_string(),
+        "workspace 1 ('code') is assigned to monitor 'DP-1' which does not exist"
     );
 
     let inc2 = StateInconsistency::MonitorActiveWorkspaceNotFound {

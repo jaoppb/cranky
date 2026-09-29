@@ -52,6 +52,66 @@ macro_rules! assert_pixmap_has_color {
     };
 }
 
+/// A throwaway `HOME` (and XDG dirs) for tests that write under it.
+///
+/// `BuiltinModules::ensure_builtins`, for example, writes module scripts into
+/// `~/.local/share/cranky/modules`. Unique per process and per call, so
+/// parallel tests — and other checkouts running their own suites — never
+/// share files, and the user's real `HOME` is never touched. Removed on drop.
+#[cfg(test)]
+pub struct TestHome {
+    dir: std::path::PathBuf,
+    env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
+}
+
+#[cfg(test)]
+impl TestHome {
+    /// # Panics
+    ///
+    /// Panics if the temporary directory can't be created.
+    #[must_use]
+    pub fn new(label: &str) -> Self {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "cranky-test-{label}-{}-{n}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("failed to create test HOME");
+
+        let env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(dir.clone()),
+            crate::shared::env::domain::XdgCacheHome::new(dir.join("cache")),
+            crate::shared::env::domain::XdgRuntimeDir::new(dir.join("runtime")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        Self { dir, env }
+    }
+
+    #[must_use]
+    pub fn env(&self) -> std::sync::Arc<crate::shared::env::domain::AppEnvironment> {
+        self.env.clone()
+    }
+}
+
+#[cfg(test)]
+impl std::ops::Deref for TestHome {
+    type Target = crate::shared::env::domain::AppEnvironment;
+
+    fn deref(&self) -> &Self::Target {
+        &self.env
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestHome {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
 #[cfg(test)]
 /// Extracts RGBA pixel color at `(x, y)` from a pixmap.
 ///

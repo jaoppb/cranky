@@ -1,3 +1,4 @@
+use super::anchor::ResolvedInteraction;
 use super::mapper::map_to_styled_node;
 use super::pseudo::compute_pseudo_classes;
 use crate::features::layout_engine::domain::{StyledNode, StyledPanel, StyledPopup};
@@ -33,6 +34,26 @@ impl SiblingPosition {
     }
 }
 
+/// The raw context (so a floating child can re-resolve its own
+/// `ResolvedInteraction` against its own tree below) plus the interaction
+/// already resolved against *this* surface's tree (what pseudo-class
+/// computation for the current node uses) — bundled for the same reason as
+/// `SiblingPosition`.
+#[derive(Debug, Clone, Copy)]
+struct Interaction<'a> {
+    ctx: Option<&'a InteractionContext>,
+    resolved: Option<&'a ResolvedInteraction>,
+}
+
+impl<'a> Interaction<'a> {
+    const fn new(
+        ctx: Option<&'a InteractionContext>,
+        resolved: Option<&'a ResolvedInteraction>,
+    ) -> Self {
+        Self { ctx, resolved }
+    }
+}
+
 impl VNode {
     #[must_use]
     pub fn resolve_styles(
@@ -41,9 +62,11 @@ impl VNode {
         interaction: Option<&InteractionContext>,
         parent: Option<&ElementQuery>,
     ) -> StyledNode {
+        let resolved_interaction =
+            interaction.map(|ctx| ResolvedInteraction::resolve(self, SurfaceSpace::Bar, ctx));
         self.resolve_styles_recursive(
             resolver,
-            interaction,
+            Interaction::new(interaction, resolved_interaction.as_ref()),
             &NodePath::root_in(SurfaceSpace::Bar),
             SiblingPosition::root(),
             parent,
@@ -54,13 +77,13 @@ impl VNode {
     fn resolve_styles_recursive(
         &self,
         resolver: &dyn StyleResolverPort,
-        interaction: Option<&InteractionContext>,
+        interaction: Interaction<'_>,
         path: &NodePath,
         position: SiblingPosition,
         parent: Option<&ElementQuery>,
         inherited: &InheritedStyle,
     ) -> StyledNode {
-        let pseudo_classes = compute_pseudo_classes(path, interaction);
+        let pseudo_classes = compute_pseudo_classes(path, interaction.resolved);
         let classes = self.class_names().map_or(&[][..], ClassNameList::as_slice);
         let query = ElementQuery::new(
             self.tag().as_str(),
@@ -92,9 +115,12 @@ impl VNode {
         // tree from the one that owns it, not a subtree of it, so its nodes
         // must not be ancestor-matched (`starts_with`) against the owner's.
         let tooltip = self.tooltip().map(|t| {
+            let tooltip_resolved = interaction
+                .ctx
+                .map(|ctx| ResolvedInteraction::resolve(t, SurfaceSpace::Tooltip, ctx));
             Box::new(t.resolve_styles_recursive(
                 resolver,
-                interaction,
+                Interaction::new(interaction.ctx, tooltip_resolved.as_ref()),
                 &NodePath::root_in(SurfaceSpace::Tooltip),
                 SiblingPosition::root(),
                 None,
@@ -102,9 +128,12 @@ impl VNode {
             ))
         });
         let popup = self.popup().map(|p| {
+            let popup_resolved = interaction
+                .ctx
+                .map(|ctx| ResolvedInteraction::resolve(p.content(), SurfaceSpace::Popup, ctx));
             let content = Box::new(p.content().resolve_styles_recursive(
                 resolver,
-                interaction,
+                Interaction::new(interaction.ctx, popup_resolved.as_ref()),
                 &NodePath::root_in(SurfaceSpace::Popup),
                 SiblingPosition::root(),
                 Some(&query),
@@ -118,9 +147,12 @@ impl VNode {
             )
         });
         let panel = self.panel().map(|p| {
+            let panel_resolved = interaction
+                .ctx
+                .map(|ctx| ResolvedInteraction::resolve(p.content(), SurfaceSpace::Panel, ctx));
             let content = Box::new(p.content().resolve_styles_recursive(
                 resolver,
-                interaction,
+                Interaction::new(interaction.ctx, panel_resolved.as_ref()),
                 &NodePath::root_in(SurfaceSpace::Panel),
                 SiblingPosition::root(),
                 Some(&query),

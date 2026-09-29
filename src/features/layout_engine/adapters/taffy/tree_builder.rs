@@ -36,6 +36,14 @@ impl<'a> TaffyTreeBuilder<'a> {
             .map_err(|e| LayoutError::EngineError(e.to_string()))
     }
 
+    /// Frees `node_id` and everything under it.
+    ///
+    /// `node_id` **must** still be live. Both taffy calls below index their
+    /// `SlotMap` directly (`children` -> `self.children[key]`, `remove` ->
+    /// `self.parents[key]`) and panic on a freed key rather than returning
+    /// `Err`, so the `if let Ok(..)` guard catches nothing. Taffy exposes no
+    /// way to test a key, which is why callers must never retain a freed
+    /// `NodeId` in their own bookkeeping.
     pub(super) fn remove_recursive(&mut self, node_id: NodeId) {
         if let Ok(children) = self.taffy.children(node_id) {
             for child in children {

@@ -6,7 +6,9 @@ use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::{ChildBounds, LayoutSurface, ModuleId, ModuleInstanceId, MonitorId};
+use crate::shared::primitives::{
+    ChildBounds, LayoutSurface, ModuleId, ModuleInstanceId, MonitorId,
+};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
@@ -203,8 +205,8 @@ mod tests {
     use crate::features::vdom::domain::{UiCommand, VNode};
     use crate::shared::config::domain::Config;
     use crate::shared::events::signals::{HyprlandState, SignalKind};
-    use crate::shared::primitives::geometry::{Position, Rect, Size};
     use crate::shared::primitives::SizeConstraint;
+    use crate::shared::primitives::geometry::{Position, Rect, Size};
 
     #[allow(dead_code)]
     struct TestFixture {
@@ -223,6 +225,7 @@ mod tests {
 
     struct TestFixtureBuilder {
         id: ModuleId,
+        parent_id: Option<ModuleId>,
         monitors: Vec<&'static str>,
         subs: Vec<SignalKind>,
         vnode: VNode,
@@ -232,10 +235,16 @@ mod tests {
         fn new(id: ModuleId) -> Self {
             Self {
                 id,
+                parent_id: None,
                 monitors: Vec::new(),
                 subs: Vec::new(),
                 vnode: VNode::new_rect(None, None, None, None, None),
             }
+        }
+
+        fn with_parent(mut self, parent_id: ModuleId) -> Self {
+            self.parent_id = Some(parent_id);
+            self
         }
 
         fn with_monitors(mut self, monitors: &[&'static str]) -> Self {
@@ -276,6 +285,18 @@ mod tests {
                 let h_state =
                     HyprlandState::new(std::collections::BTreeMap::new(), monitors_map, focused);
                 hub.hyprland_tx().send(h_state).unwrap();
+
+                // Wayland is the actual discovery source - mirror it here so
+                // a monitor set up via `with_monitors` is one `EventLoop`
+                // will actually render for.
+                let mut scales = hub.monitor_scales_rx().borrow().clone();
+                for m in &self.monitors {
+                    scales.insert(
+                        MonitorId::new(*m),
+                        crate::shared::primitives::geometry::Scale::new(1.0),
+                    );
+                }
+                hub.monitor_scales_tx().send(scales).unwrap();
             }
 
             let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
@@ -298,7 +319,8 @@ mod tests {
                 display_sender,
                 ui_sender,
                 layout_rx,
-            );
+            )
+            .with_parent(self.parent_id);
             let port = Box::new(TestModulePort::with_subs(self.vnode, self.subs));
 
             let resolver = Arc::new(CompositeStyleResolver::new(vec![]));
@@ -395,7 +417,10 @@ mod tests {
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-1"),
-            ChildBounds::new(Rect::new(Position::new(0, 0), Size::new(10, 10)), SizeConstraint::none()),
+            ChildBounds::new(
+                Rect::new(Position::new(0, 0), Size::new(10, 10)),
+                SizeConstraint::none(),
+            ),
         );
         fixture.layout_tx.send(layouts).unwrap();
 
@@ -405,13 +430,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_suspended_monitor_is_excluded_after_its_rect_is_withdrawn() {
-        // Decision 14: a monitor this actor has already rendered on (it's in
-        // `render_trees`) must not be rediscovered via the Hyprland/
-        // module-sizes bootstrap path once its rect disappears — that's what
+        // Decision 14: a monitor this *embedded* actor has already rendered
+        // on (it's in `render_trees`) must not be rediscovered via the
+        // Wayland bootstrap path once its rect disappears — that's what
         // actually stops a child from resurrecting its own surface after its
-        // embedding site (a popup, say) closes.
+        // embedding site (a popup, say) closes. A top-level actor (no
+        // parent) has no site to lose and is exempt from this — see
+        // `test_module_actor_skips_pipeline_when_vdom_unchanged`.
         let id = ModuleId::new(1);
-        let fixture = TestFixtureBuilder::new(id).with_monitors(&["DP-1"]).build();
+        let parent = ModuleId::new(99);
+        let fixture = TestFixtureBuilder::new(id)
+            .with_parent(parent)
+            .with_monitors(&["DP-1"])
+            .build();
 
         let mut event_loop = fixture.event_loop;
         let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
@@ -501,14 +532,28 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_module_actor_renders_unknown_hyprland_monitor_from_layout() {
+    async fn test_module_actor_renders_monitor_unknown_to_hyprland() {
+        // Wayland is the sole discovery source: a monitor `monitor_scales`
+        // knows about renders even before Hyprland has announced it (the
+        // capture that motivated this showed monitoraddedv2 arriving after
+        // Hyprland had already moved workspaces onto the new monitor).
         let id = ModuleId::new(1);
         let fixture = TestFixtureBuilder::new(id).build();
+
+        let mut scales = fixture.hub.monitor_scales_rx().borrow().clone();
+        scales.insert(
+            MonitorId::new("DP-2"),
+            crate::shared::primitives::geometry::Scale::new(1.0),
+        );
+        fixture.hub.monitor_scales_tx().send(scales).unwrap();
 
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-2"),
-            ChildBounds::new(Rect::new(Position::new(0, 0), Size::new(10, 10)), SizeConstraint::none()),
+            ChildBounds::new(
+                Rect::new(Position::new(0, 0), Size::new(10, 10)),
+                SizeConstraint::none(),
+            ),
         );
         fixture.layout_tx.send(layouts).unwrap();
 
@@ -532,6 +577,32 @@ mod tests {
             }
             _ => panic!("Unexpected event"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_module_actor_does_not_render_monitor_known_only_via_layout() {
+        // The mirror image of the above: a monitor appearing only in the
+        // layout watch (no monitor_scales entry) is not rendered for.
+        // Layout is a consequence of Wayland surfaces existing, not a
+        // discovery source in its own right.
+        let id = ModuleId::new(1);
+        let fixture = TestFixtureBuilder::new(id).build();
+
+        let mut layouts = HashMap::new();
+        layouts.insert(
+            MonitorId::new("DP-2"),
+            ChildBounds::new(
+                Rect::new(Position::new(0, 0), Size::new(10, 10)),
+                SizeConstraint::none(),
+            ),
+        );
+        fixture.layout_tx.send(layouts).unwrap();
+
+        let mut event_loop = fixture.event_loop;
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
+        event_loop.render_all_monitors(&mut layout_engines);
+
+        assert!(fixture.layout_rx.try_recv().is_err());
     }
 
     #[tokio::test]
@@ -622,7 +693,10 @@ mod tests {
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-1"),
-            ChildBounds::new(Rect::new(Position::new(0, 0), Size::new(1920, 30)), SizeConstraint::none()),
+            ChildBounds::new(
+                Rect::new(Position::new(0, 0), Size::new(1920, 30)),
+                SizeConstraint::none(),
+            ),
         );
         fixture.layout_tx.send(layouts).unwrap();
 

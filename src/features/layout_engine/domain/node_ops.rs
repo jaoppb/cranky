@@ -148,6 +148,7 @@ mod tests {
     fn leaf(path: &[usize], tooltip: Option<StyledNode>) -> RenderNode {
         RenderNode::Rect {
             path: NodePath::new(SurfaceSpace::Bar, path.to_vec()),
+            node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(0, 0)),
             style: ComputedStyle::default(),
             on_click: None,
@@ -161,6 +162,7 @@ mod tests {
     fn tooltip_stub(text: &str) -> StyledNode {
         StyledNode::Text {
             path: NodePath::root_in(SurfaceSpace::Tooltip),
+            node_key: None,
             text: TextContent::new(text.to_string()),
             style: ComputedStyle::default(),
             on_click: None,
@@ -174,6 +176,7 @@ mod tests {
     fn flex(path: &[usize], children: Vec<RenderNode>, tooltip: Option<StyledNode>) -> RenderNode {
         RenderNode::Flex {
             path: NodePath::new(SurfaceSpace::Bar, path.to_vec()),
+            node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(0, 0)),
             children,
             style: ComputedStyle::default(),
@@ -239,6 +242,7 @@ mod tests {
     fn module_leaf(rect: Rect, style: ComputedStyle) -> RenderNode {
         RenderNode::Module {
             path: NodePath::new(SurfaceSpace::Bar, vec![0]),
+            node_key: None,
             rect,
             key: crate::shared::primitives::ModuleKey::from_name(
                 crate::shared::primitives::ModuleName::new("calendar"),

@@ -18,6 +18,7 @@ pub type WindowManagerState = (
     Option<crate::features::workspaces::domain::MonitorName>,
 );
 
+#[cfg_attr(test, mockall::automock)]
 pub trait WindowManagerPort: Send + Sync {
     /// Retrieves the current state of the window manager.
     ///

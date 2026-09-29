@@ -11,13 +11,30 @@ pub struct LayoutState {
     pub(super) children: Vec<Self>,
 }
 
+/// A container's child reconciliation.
+///
+/// `patches` applied in the order given (which becomes the new taffy child
+/// order — `apply_patch` never reorders on its own, so matching by key
+/// rather than position is what lets a container's own order change), plus
+/// every old child `NodeId` that has no counterpart in the new list and must
+/// be freed.
+///
+/// Computed once at diff time (positionally or by `NodeKey` — see
+/// `super::diff::children`) so `apply_patch` never has to guess which old
+/// children survived; guessing via "index >= new length" is exactly what
+/// let dead `NodeId`s slip back into `LayoutState` before.
+pub struct ChildrenPatch<'a> {
+    pub patches: Vec<Patch<'a>>,
+    pub removed: Vec<NodeId>,
+}
+
 pub enum Patch<'a> {
     Keep(&'a LayoutState),
     Update {
         old_state: &'a LayoutState,
         new_layout: &'a StyledNode,
         style: Box<Option<Style>>,
-        children: Option<Vec<Self>>,
+        children: Option<ChildrenPatch<'a>>,
     },
     Replace {
         old_state: &'a LayoutState,
@@ -80,19 +97,24 @@ pub(super) fn apply_patch(
                 builder.set_style(node_id, s)?;
             }
 
+            // `Some(_)` is an authoritative child list, even when empty;
+            // `None` means the differ never looked at children (leaf or Module).
+            let had_child_list = children.is_some();
             let mut new_state_children = Vec::new();
-            if let Some(child_patches) = children {
-                let mut new_child_ids = Vec::new();
-                for cp in child_patches {
+            if let Some(ChildrenPatch { patches, removed }) = children {
+                let mut new_child_ids = Vec::with_capacity(patches.len());
+                for cp in patches {
                     let child_state = apply_patch(builder, cp, measurer)?;
                     new_child_ids.push(child_state.root_node);
                     new_state_children.push(child_state);
                 }
 
-                if old_state.children.len() > new_state_children.len() {
-                    for child in old_state.children.iter().skip(new_state_children.len()) {
-                        builder.remove_recursive(child.root_node);
-                    }
+                // `removed` is exactly the old children absent from the new
+                // list (by key, or by trailing position when unkeyed) —
+                // freed here, before `new_state_children` below replaces
+                // `old_state.children` for good.
+                for dead_id in removed {
+                    builder.remove_recursive(dead_id);
                 }
 
                 builder.set_children(node_id, &new_child_ids)?;
@@ -101,10 +123,15 @@ pub(super) fn apply_patch(
             Ok(LayoutState {
                 root_node: node_id,
                 layout: new_layout.clone(),
-                children: if new_state_children.is_empty() && !old_state.children.is_empty() {
-                    old_state.children.clone()
-                } else {
+                // Never carry `old_state.children` across an authoritative
+                // child list: the loop above already freed every one of their
+                // taffy nodes, and a freed NodeId handed to the next frame's
+                // `remove_recursive` panics inside taffy's SlotMap rather than
+                // returning an error.
+                children: if had_child_list {
                     new_state_children
+                } else {
+                    old_state.children.clone()
                 },
             })
         }

@@ -14,6 +14,7 @@ pub(crate) fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
         || table.contains_key("class")?
         || table.contains_key("children")?
         || table.contains_key("id")?
+        || table.contains_key("key")?
         || table.contains_key("on_click")?
         || table.contains_key("on_hover")?
         || table.contains_key("tooltip")?
@@ -22,7 +23,7 @@ pub(crate) fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
 
     if is_full_spec {
         let children_vec = parse_table_children(lua, &table)?;
-        let (class, id, on_click, on_hover, tooltip, popup, panel) =
+        let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
             parse_common_props(lua, &table)?;
         let mut node = VNode::new_flex(children_vec, class, id, on_click, on_hover, tooltip);
         if let Some(p) = popup {
@@ -30,6 +31,9 @@ pub(crate) fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
         }
         if let Some(p) = panel {
             node = node.with_panel(p);
+        }
+        if let Some(k) = key {
+            node = node.with_key(k);
         }
         return Ok(node);
     }
@@ -50,6 +54,7 @@ pub(crate) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
         || table.contains_key("class")?
         || table.contains_key("children")?
         || table.contains_key("id")?
+        || table.contains_key("key")?
         || table.contains_key("on_click")?
         || table.contains_key("on_hover")?
         || table.contains_key("tooltip")?
@@ -58,7 +63,7 @@ pub(crate) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
 
     if is_full_spec {
         let children_vec = parse_table_children(lua, &table)?;
-        let (class, id, on_click, on_hover, tooltip, popup, panel) =
+        let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
             parse_common_props(lua, &table)?;
         let mut node = VNode::new_grid(children_vec, class, id, on_click, on_hover, tooltip);
         if let Some(p) = popup {
@@ -66,6 +71,9 @@ pub(crate) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
         }
         if let Some(p) = panel {
             node = node.with_panel(p);
+        }
+        if let Some(k) = key {
+            node = node.with_key(k);
         }
         return Ok(node);
     }
@@ -80,7 +88,7 @@ pub(crate) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
 pub(crate) fn parse_rect_node(lua: &Lua, val: Option<mlua::Value>) -> mlua::Result<VNode> {
     match val {
         Some(mlua::Value::Table(table)) => {
-            let (class, id, on_click, on_hover, tooltip, popup, panel) =
+            let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
                 parse_common_props(lua, &table)?;
             let mut node = VNode::new_rect(class, id, on_click, on_hover, tooltip);
             if let Some(p) = popup {
@@ -88,6 +96,9 @@ pub(crate) fn parse_rect_node(lua: &Lua, val: Option<mlua::Value>) -> mlua::Resu
             }
             if let Some(p) = panel {
                 node = node.with_panel(p);
+            }
+            if let Some(k) = key {
+                node = node.with_key(k);
             }
             Ok(node)
         }
@@ -108,7 +119,7 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
             let name_str = table.get::<String>("name")?;
             let instance_id_str = table.get::<Option<String>>("instance_id")?;
             let options = parse_module_options(lua, &table)?;
-            let (class, id, on_click, on_hover, tooltip, popup, panel) =
+            let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
                 parse_common_props(lua, &table)?;
             let params = crate::features::vdom::domain::ModuleParams::new(
                 ModuleName::new(name_str),
@@ -128,6 +139,9 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
             }
             if let Some(p) = panel {
                 node = node.with_panel(p);
+            }
+            if let Some(k) = key {
+                node = node.with_key(k);
             }
             Ok(node)
         }

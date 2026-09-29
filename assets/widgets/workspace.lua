@@ -116,6 +116,7 @@ function render(monitor)
 				ui.flex({
 					class = classes,
 					id = "ws-" .. ws.id,
+					key = "ws-" .. ws.id,
 					on_click = ui.action.exec(exec_cmd),
 					tooltip = ui.flex({
 						class = "tooltip",

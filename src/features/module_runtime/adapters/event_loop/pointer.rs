@@ -1,7 +1,7 @@
 use super::runner::EventLoop;
 use crate::features::layout_engine::domain::DisplayCommandSender;
-use crate::features::module_runtime::domain::pointer_handler::PointerOutcome;
 use crate::features::module_runtime::domain::PointerAction;
+use crate::features::module_runtime::domain::pointer_handler::PointerOutcome;
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::events::core::PointerEvent;
@@ -75,10 +75,7 @@ impl<
         self.execute_outcome(&outcome)
     }
 
-    fn execute_outcome(
-        &mut self,
-        outcome: &PointerOutcome,
-    ) -> bool {
+    fn execute_outcome(&mut self, outcome: &PointerOutcome) -> bool {
         let ctx_id = self.ctx.id();
         let mut changed = false;
         for action in outcome.actions() {

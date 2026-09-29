@@ -9,30 +9,49 @@ use std::collections::{HashMap, HashSet};
 /// Only ever consults which monitors have *some* entry, never a value — kept
 /// generic so it isn't coupled to whatever a layout channel's value type is.
 ///
-/// `seen` is every monitor this actor has ever produced a render tree for
-/// (`RenderPipeline::render_trees` keys) — a monitor already in `seen` but
-/// absent from `layouts` has no live site any more (its embedding rect was
-/// withdrawn) and must stay suspended (decision 14), not be rediscovered via
-/// the Hyprland/module-sizes bootstrap path below. A monitor never rendered
-/// before still needs that bootstrap path: it renders once, unconstrained,
-/// purely to report an intrinsic size before anyone has assigned it a rect.
+/// A top-level actor (`is_embedded` false — the bar itself, or any module
+/// with no parent) has no "site" to lose: it always covers every monitor
+/// Wayland currently reports, on every pass. Suspension (decision 14) only
+/// makes sense for an *embedded* actor, whose presence on a monitor is a
+/// fact some parent asserts by giving it a rect in `layouts` — for that
+/// actor, `seen` (every monitor this actor has ever produced a render tree
+/// for, i.e. `RenderPipeline::render_trees` keys) matters: a monitor already
+/// in `seen` but absent from `layouts` has no live site any more (its
+/// embedding rect was withdrawn) and must stay suspended, not be
+/// rediscovered via the bootstrap path below. A monitor this embedded actor
+/// never rendered before still needs that bootstrap path: it renders once,
+/// unconstrained, purely to report an intrinsic size before its parent has
+/// assigned it a rect.
+///
+/// Wayland's `monitor_scales` is the sole authority on whether a monitor
+/// exists at all: it's populated the moment an output's `wl_output::Name`/
+/// `Scale` event arrives and cleaned the moment its global is removed,
+/// whereas Hyprland's own view can lag a hotplug by a beat (workspaces move
+/// onto a new monitor before `monitoraddedv2` arrives) and `module_sizes` is
+/// a cache that only ever gains entries — unioning either of those in, as
+/// this used to, let a disconnected monitor stay "discovered" forever. A
+/// `layouts` entry for a monitor Wayland doesn't (or no longer) know about
+/// is likewise never a discovery source on its own — layout is a
+/// consequence of a Wayland surface existing, not the other way round.
 #[must_use]
 pub(super) fn discover_monitors<V>(
     hub: &SignalHub,
     layouts: &HashMap<MonitorId, V>,
     seen: &HashSet<MonitorId>,
+    is_embedded: bool,
 ) -> Vec<MonitorId> {
+    let wayland_monitors: HashSet<MonitorId> =
+        hub.monitor_scales_rx().borrow().keys().cloned().collect();
+    if !is_embedded {
+        return wayland_monitors.into_iter().collect();
+    }
     let mut all_monitors: HashSet<MonitorId> = HashSet::new();
     for m in layouts.keys() {
-        all_monitors.insert(m.clone());
-    }
-    for m in hub.hyprland_rx().borrow().monitors().values() {
-        let id = MonitorId::new(m.name().as_str());
-        if !seen.contains(&id) {
-            all_monitors.insert(id);
+        if wayland_monitors.contains(m) {
+            all_monitors.insert(m.clone());
         }
     }
-    for m in hub.module_sizes_rx().borrow().keys() {
+    for m in &wayland_monitors {
         if !seen.contains(m) {
             all_monitors.insert(m.clone());
         }
