@@ -124,10 +124,13 @@ pub(super) fn dispatch_outcome_tooltips<DS: DisplayCommandSender, F: CanvasFacto
     scale: Scale,
     monitor_id: &MonitorId,
     outcome: &RenderOutcome,
+    parent: Option<FloatingKind>,
 ) {
-    // Tooltip children stay a documented known gap (Phase 4): a tooltip is
-    // never itself nested inside another floating surface's content, so it
-    // has no parent link to carry.
+    // A tooltip triggered on an element inside a module embedded in an
+    // open popup/panel (`ui.module()` nested inside floating content) nests
+    // the same way that module's own popup/panel would — `parent` is the
+    // same floating surface `dispatch_outcome_popups`/`dispatch_outcome_panels`
+    // compute for this module, not always `None`.
     dispatch_floating_kind(
         display_sender,
         tooltip_render_trees,
@@ -138,6 +141,6 @@ pub(super) fn dispatch_outcome_tooltips<DS: DisplayCommandSender, F: CanvasFacto
         outcome.tooltip_layout(),
         None,
         None,
-        None,
+        parent,
     );
 }

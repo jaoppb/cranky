@@ -1,6 +1,7 @@
 use super::floating_bounds::{compute_module_bounds, to_i32};
 use super::floating_teardown::teardown_floating;
 use super::state::WaylandState;
+use super::tooltip_anchor::resolve_tooltip_anchor;
 use crate::features::layout_engine::domain::{FloatingKind, PopupExclusivity, PopupTarget};
 use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::MonitorId;
@@ -65,7 +66,6 @@ pub(crate) fn resolve_anchor(
     parent: Option<&FloatingKind>,
 ) -> Option<AnchorInfo> {
     let mut bar_scale = 1;
-    let mut bar_height = 0;
     let mut parent_role = None;
     let mut anchor_x = 0;
     let mut anchor_y = 0;
@@ -75,31 +75,12 @@ pub(crate) fn resolve_anchor(
 
     match kind {
         FloatingKind::Tooltip => {
-            let parent_surface = state.pointer_surface.clone()?;
-            let mut pointer_x = state.pointer_pos.0;
-            for bar in &state.bars {
-                if bar.surface == parent_surface {
-                    bar_scale = bar.scale;
-                    bar_height = bar.height;
-                    parent_role = Some(FloatingParentRole::Layer(bar.layer_surface.clone()));
-                    target_monitor_id = MonitorId::new(&bar.output_name);
-                    break;
-                }
-                if let Some(ms) = bar
-                    .module_surfaces
-                    .values()
-                    .find(|m| m.surface == parent_surface)
-                {
-                    bar_scale = bar.scale;
-                    bar_height = bar.height;
-                    parent_role = Some(FloatingParentRole::Layer(bar.layer_surface.clone()));
-                    pointer_x += f64::from(ms.x);
-                    target_monitor_id = MonitorId::new(&bar.output_name);
-                    break;
-                }
-            }
-            anchor_x = i32::try_from(crate::utils::f64_to_i64(pointer_x)).unwrap_or(0);
-            anchor_y = to_i32(bar_height);
+            let resolved = resolve_tooltip_anchor(state)?;
+            bar_scale = resolved.bar_scale;
+            parent_role = Some(resolved.parent_role);
+            target_monitor_id = resolved.target_monitor_id;
+            anchor_x = resolved.anchor_x;
+            anchor_y = resolved.anchor_y;
         }
         FloatingKind::Popup(target) | FloatingKind::Panel(target) => {
             let is_panel = matches!(kind, FloatingKind::Panel(_));

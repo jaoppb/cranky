@@ -70,7 +70,7 @@ impl<
             self.ctx.id(),
             monitor_id,
             outcome,
-            floating_parent,
+            floating_parent.clone(),
         );
         dispatch_outcome_tooltips(
             self.ctx.display_sender(),
@@ -79,6 +79,7 @@ impl<
             scale,
             monitor_id,
             outcome,
+            floating_parent,
         );
     }
 }
