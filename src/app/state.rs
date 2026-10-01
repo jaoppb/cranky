@@ -359,7 +359,7 @@ impl<
             return;
         }
 
-        if self.would_cycle(parent, key.name()) {
+        if self.would_cycle(parent, key) {
             self.record_module_error(site, "would create a cycle with an ancestor".to_string());
             return;
         }
@@ -411,10 +411,19 @@ impl<
         }
     }
 
-    fn would_cycle(&self, parent: ModuleId, name: &crate::shared::primitives::ModuleName) -> bool {
+    /// Walks the ancestor chain comparing each ancestor's full `ModuleKey`
+    /// (name + instance id) against `key`, not just its name — two sites
+    /// embedding the same module name with distinct `instance_id`s (e.g.
+    /// two `ui.module("clock", {instance_id=...})` calls at different
+    /// popup nesting depths) are different sites and must not be rejected
+    /// as a cycle against each other. Mirrors how popup-nesting cycle
+    /// detection elsewhere (`popup::chain::ancestors`) compares full target
+    /// identity rather than bare name.
+    fn would_cycle(&self, parent: ModuleId, key: &crate::shared::primitives::ModuleKey) -> bool {
+        let module_keys = self.registry.module_keys();
         let mut current = Some(parent);
         while let Some(id) = current {
-            if self.registry.module_names().get(&id) == Some(name) {
+            if module_keys.get(&id) == Some(key) {
                 return true;
             }
             current = self.registry.parent_of(id);
@@ -1664,6 +1673,13 @@ mod tests {
             parent,
             crate::shared::primitives::ModuleName::new("calendar"),
         );
+        let mut keys = HashMap::new();
+        keys.insert(
+            parent,
+            crate::shared::primitives::ModuleKey::from_name(
+                crate::shared::primitives::ModuleName::new("calendar"),
+            ),
+        );
 
         let mut mock_registry = TestMockRegistry::new();
         mock_registry.expect_load().returning(|_| Ok(()));
@@ -1673,9 +1689,7 @@ mod tests {
         mock_registry
             .expect_name_to_ids()
             .return_const(HashMap::new());
-        mock_registry
-            .expect_module_keys()
-            .return_const(HashMap::new());
+        mock_registry.expect_module_keys().return_const(keys);
         mock_registry.expect_resolve_site().returning(|_, _| None);
         mock_registry
             .expect_spawn_all()
@@ -1804,6 +1818,100 @@ mod tests {
         // `.times(1)` on the mock enforces this; a second call would panic.
         app.handle_container_layouts(parent, &monitor, &layouts)
             .await;
+    }
+
+    /// Bug: `would_cycle` compared ancestors by bare `ModuleName`, so two
+    /// sites embedding the same module name with distinct `instance_id`s
+    /// (e.g. two `ui.module("clock", {instance_id=...})` calls at
+    /// different popup nesting depths) were incorrectly rejected as a
+    /// cycle against each other. It must compare the full `ModuleKey`
+    /// (name + instance id) instead — mirroring how popup-nesting cycle
+    /// detection elsewhere (`popup::chain::ancestors`) compares full target
+    /// identity.
+    #[tokio::test]
+    async fn test_would_cycle_distinguishes_instances_from_real_ancestors() {
+        let config = Config::default();
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManagerPort::new());
+
+        // `inner` is nested under `outer`; `outer` embeds "clock" as
+        // instance "a".
+        let outer = ModuleId::new(10);
+        let inner = ModuleId::new(20);
+
+        let mut keys = HashMap::new();
+        keys.insert(
+            outer,
+            crate::shared::primitives::ModuleKey::new(
+                crate::shared::primitives::ModuleName::new("clock"),
+                Some(crate::shared::primitives::ModuleInstanceId::new("a")),
+            ),
+        );
+        keys.insert(
+            inner,
+            crate::shared::primitives::ModuleKey::from_name(
+                crate::shared::primitives::ModuleName::new("calendar"),
+            ),
+        );
+
+        let mut mock_registry = TestMockRegistry::new();
+        mock_registry.expect_load().returning(|_| Ok(()));
+        mock_registry.expect_root_module().return_const(None);
+        mock_registry.expect_module_ids().return_const(Vec::new());
+        mock_registry
+            .expect_module_names()
+            .return_const(HashMap::new());
+        mock_registry
+            .expect_name_to_ids()
+            .return_const(HashMap::new());
+        mock_registry.expect_module_keys().return_const(keys);
+        mock_registry
+            .expect_parent_of()
+            .returning(move |id| if id == inner { Some(outer) } else { None });
+        mock_registry
+            .expect_spawn_all()
+            .returning(|_| HashMap::new());
+
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+        let services = StateServices::new(
+            hub,
+            surface_manager,
+            canvas_factory,
+            Arc::new(display_tx),
+            Arc::new(layout_tx),
+            Arc::new(ui_tx),
+        );
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let app = CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+
+        let clock_b = crate::shared::primitives::ModuleKey::new(
+            crate::shared::primitives::ModuleName::new("clock"),
+            Some(crate::shared::primitives::ModuleInstanceId::new("b")),
+        );
+        let clock_a = crate::shared::primitives::ModuleKey::new(
+            crate::shared::primitives::ModuleName::new("clock"),
+            Some(crate::shared::primitives::ModuleInstanceId::new("a")),
+        );
+
+        // A different instance of "clock" embedded under an ancestor that
+        // also embeds "clock" — but as a different instance — is not a
+        // cycle.
+        assert!(
+            !app.would_cycle(inner, &clock_b),
+            "distinct instance_ids of the same module name must not be treated as a cycle"
+        );
+
+        // The exact same (name, instance_id) reappearing up the real
+        // ancestor chain is still correctly rejected as a cycle.
+        assert!(
+            app.would_cycle(inner, &clock_a),
+            "a real ancestor sharing the full ModuleKey must still be caught as a cycle"
+        );
     }
 
     /// A monitor Hyprland no longer reports must lose its per-monitor state
