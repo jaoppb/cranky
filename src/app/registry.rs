@@ -16,20 +16,48 @@ use crate::features::styling::ports::CssParserPort;
 use crate::features::styling::ports::{ParsedStyleSheetPort, StyleLoaderPort, StyleResolverPort};
 use std::collections::HashSet;
 
+/// One module site's durable facts: its full key (name + instance), the
+/// parent it's embedded under, and the `LayoutSurface` it was spawned onto.
+///
+/// Replaces the old `module_names` + `module_keys` + `module_parents` trio
+/// of parallel per-`ModuleId` maps, which every write site had to keep in
+/// lockstep by hand, and which had no durable place to remember a lazily
+/// spawned site's `LayoutSurface` — so a reload of an embedded module (see
+/// `reload_module`) silently reset it back to `LayoutSurface::Bar`.
+#[derive(Debug, Clone)]
+pub struct ModuleSiteInfo {
+    key: crate::shared::primitives::ModuleKey,
+    parent: Option<ModuleId>,
+    surface: crate::shared::primitives::LayoutSurface,
+}
+
+impl ModuleSiteInfo {
+    #[must_use]
+    pub const fn key(&self) -> &crate::shared::primitives::ModuleKey {
+        &self.key
+    }
+
+    #[must_use]
+    pub const fn parent(&self) -> Option<ModuleId> {
+        self.parent
+    }
+
+    #[must_use]
+    pub const fn surface(&self) -> crate::shared::primitives::LayoutSurface {
+        self.surface
+    }
+}
+
 pub struct ModuleRegistry {
     modules: HashMap<ModuleId, Box<dyn AnyModulePort>>,
     module_configs: HashMap<ModuleId, ModuleConfig>,
     root_module: Option<ModuleId>,
     module_ids: Vec<ModuleId>,
-    module_names: HashMap<ModuleId, crate::shared::primitives::ModuleName>,
     name_to_ids: HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>,
-    /// This module's full identity (name + instance) — `module_names` alone
-    /// can't tell two same-named sites apart.
-    module_keys: HashMap<ModuleId, crate::shared::primitives::ModuleKey>,
-    /// The real parent recorded when this site was loaded, read by
-    /// `spawn_all` instead of assuming every non-root module is root's
-    /// child.
-    module_parents: HashMap<ModuleId, Option<ModuleId>>,
+    /// Every module site's durable facts, keyed by its `ModuleId`. The
+    /// single source of truth for a site's key, parent and surface across
+    /// its whole lifetime — see `ModuleSiteInfo`.
+    sites: HashMap<ModuleId, ModuleSiteInfo>,
     /// `(parent, key) -> id`, so a `ContainerLayoutsCalculated` event naming
     /// its own parent and a child's key resolves to the one actor embedded
     /// at that exact site, not just any actor sharing that name.
@@ -56,10 +84,8 @@ impl ModuleRegistry {
             module_configs: HashMap::new(),
             root_module: None,
             module_ids: Vec::new(),
-            module_names: HashMap::new(),
             name_to_ids: HashMap::new(),
-            module_keys: HashMap::new(),
-            module_parents: HashMap::new(),
+            sites: HashMap::new(),
             site_index: HashMap::new(),
             next_module_id: 0,
             dbus_subscriptions: Vec::new(),
@@ -74,10 +100,8 @@ impl ModuleRegistry {
         self.module_configs.clear();
         self.root_module = None;
         self.module_ids.clear();
-        self.module_names.clear();
         self.name_to_ids.clear();
-        self.module_keys.clear();
-        self.module_parents.clear();
+        self.sites.clear();
         self.site_index.clear();
         self.next_module_id = 0;
         self.dbus_subscriptions.clear();
@@ -134,6 +158,7 @@ impl ModuleRegistry {
         full_config: &crate::shared::config::domain::Config,
         parent_id: Option<ModuleId>,
         instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
+        surface: crate::shared::primitives::LayoutSurface,
     ) -> Result<
         (ModuleId, Box<dyn AnyModulePort>),
         crate::features::module_runtime::ports::RegistryLoadError,
@@ -191,14 +216,19 @@ impl ModuleRegistry {
         }
 
         self.module_configs.insert(id, config.clone());
-        self.module_names.insert(id, config.name().clone());
         self.name_to_ids
             .entry(config.name().clone())
             .or_default()
             .push(id);
         let key = crate::shared::primitives::ModuleKey::new(config.name().clone(), instance_id);
-        self.module_keys.insert(id, key.clone());
-        self.module_parents.insert(id, parent_id);
+        self.sites.insert(
+            id,
+            ModuleSiteInfo {
+                key: key.clone(),
+                parent: parent_id,
+                surface,
+            },
+        );
         self.site_index.insert(
             crate::shared::primitives::ModuleSite::new(parent_id, key),
             id,
@@ -243,22 +273,13 @@ impl ModuleRegistry {
             full_config,
             Some(parent_id),
             key.instance_id().cloned(),
+            surface,
         )?;
 
         let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
         let sender = WatchLayoutSender { tx: layout_tx };
 
-        let ctx = crate::features::module_runtime::application::ModuleContext::new(
-            id,
-            deps.hub.clone(),
-            deps.surface_manager.clone(),
-            deps.layout_sender.clone(),
-            deps.display_sender.clone(),
-            deps.ui_sender.clone(),
-            layout_rx,
-        )
-        .with_parent(Some(parent_id))
-        .with_surface(surface);
+        let ctx = self.build_site_context(id, layout_rx, deps);
 
         let style_resolver = self.create_style_resolver_for_module(module.styles());
         let vdom_diff = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
@@ -275,6 +296,49 @@ impl ModuleRegistry {
         Ok(crate::features::module_runtime::ports::SpawnedModule::new(
             id, sender,
         ))
+    }
+
+    /// Builds the `ModuleContext` for an existing site's actor from its
+    /// durable `ModuleSiteInfo` (`parent` + `surface`) rather than
+    /// reconstructing it from scratch — shared by `spawn_all` and
+    /// `reload_module` so a hot-reload of a module embedded via
+    /// `ui.module()` inside an open popup/panel/tooltip rebuilds onto the
+    /// same `LayoutSurface` it was originally spawned on, instead of
+    /// silently resetting to `LayoutSurface::Bar` (`ModuleContext::new`'s
+    /// default). An id with no recorded site falls back to `Bar` /
+    /// no-parent, which only ever happens for a root module during initial
+    /// `load()`, before `spawn_all` has a chance to run.
+    fn build_site_context<
+        Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
+        LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
+        DS: crate::features::layout_engine::domain::DisplayCommandSender + 'static,
+        US: crate::features::vdom::domain::UiCommandSender + 'static,
+    >(
+        &self,
+        id: ModuleId,
+        layout_rx: tokio::sync::watch::Receiver<
+            std::collections::HashMap<
+                crate::shared::primitives::MonitorId,
+                crate::shared::primitives::ChildBounds,
+            >,
+        >,
+        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
+    ) -> crate::features::module_runtime::application::ModuleContext<LS, DS, US> {
+        let site = self.sites.get(&id);
+        let parent_id = site.and_then(ModuleSiteInfo::parent);
+        let surface = site.map_or(crate::shared::primitives::LayoutSurface::Bar, |s| s.surface);
+
+        crate::features::module_runtime::application::ModuleContext::new(
+            id,
+            deps.hub.clone(),
+            deps.surface_manager.clone(),
+            deps.layout_sender.clone(),
+            deps.display_sender.clone(),
+            deps.ui_sender.clone(),
+            layout_rx,
+        )
+        .with_parent(parent_id)
+        .with_surface(surface)
     }
 }
 
@@ -330,16 +394,22 @@ impl<
         &self.module_ids
     }
 
-    fn module_names(&self) -> &HashMap<ModuleId, crate::shared::primitives::ModuleName> {
-        &self.module_names
+    fn module_names(&self) -> HashMap<ModuleId, crate::shared::primitives::ModuleName> {
+        self.sites
+            .iter()
+            .map(|(id, site)| (*id, site.key.name().clone()))
+            .collect()
     }
 
     fn name_to_ids(&self) -> &HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>> {
         &self.name_to_ids
     }
 
-    fn module_keys(&self) -> &HashMap<ModuleId, crate::shared::primitives::ModuleKey> {
-        &self.module_keys
+    fn module_keys(&self) -> HashMap<ModuleId, crate::shared::primitives::ModuleKey> {
+        self.sites
+            .iter()
+            .map(|(id, site)| (*id, site.key.clone()))
+            .collect()
     }
 
     fn resolve_site(
@@ -356,7 +426,7 @@ impl<
     }
 
     fn parent_of(&self, id: ModuleId) -> Option<ModuleId> {
-        self.module_parents.get(&id).copied().flatten()
+        self.sites.get(&id).and_then(ModuleSiteInfo::parent)
     }
 
     fn spawn_module(
@@ -390,14 +460,26 @@ impl<
                 config.root().options().clone(),
             )
         });
-        let (root_id, root_module) = self.load_single_module(&root_cfg, config, None, None)?;
+        let (root_id, root_module) = self.load_single_module(
+            &root_cfg,
+            config,
+            None,
+            None,
+            crate::shared::primitives::LayoutSurface::Bar,
+        )?;
         self.modules.insert(root_id, root_module);
         self.root_module = Some(root_id);
 
         // 2. Load all configured child modules
         for mod_cfg in config.modules().modules().values() {
             if mod_cfg.is_enabled() && mod_cfg.name() != root_name {
-                let (id, module) = self.load_single_module(mod_cfg, config, Some(root_id), None)?;
+                let (id, module) = self.load_single_module(
+                    mod_cfg,
+                    config,
+                    Some(root_id),
+                    None,
+                    crate::shared::primitives::LayoutSurface::Bar,
+                )?;
                 self.modules.insert(id, module);
             }
         }
@@ -416,8 +498,13 @@ impl<
                                 crate::shared::config::domain::EngineSelection::Auto,
                                 ModuleOptions::default(),
                             );
-                            let (id, module) =
-                                self.load_single_module(&auto_cfg, config, Some(root_id), None)?;
+                            let (id, module) = self.load_single_module(
+                                &auto_cfg,
+                                config,
+                                Some(root_id),
+                                None,
+                                crate::shared::primitives::LayoutSurface::Bar,
+                            )?;
                             self.modules.insert(id, module);
                         }
                     }
@@ -440,18 +527,7 @@ impl<
                 tokio::sync::watch::channel(std::collections::HashMap::new());
             layout_senders.insert(id, WatchLayoutSender { tx: layout_tx });
 
-            let parent_id = self.module_parents.get(&id).copied().flatten();
-
-            let ctx = crate::features::module_runtime::application::ModuleContext::new(
-                id,
-                deps.hub.clone(),
-                deps.surface_manager.clone(),
-                deps.layout_sender.clone(),
-                deps.display_sender.clone(),
-                deps.ui_sender.clone(),
-                layout_rx,
-            )
-            .with_parent(parent_id);
+            let ctx = self.build_site_context(id, layout_rx, deps);
 
             let style_resolver = self.create_style_resolver_for_module(module.styles());
 
@@ -535,18 +611,7 @@ impl<
             let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
             new_senders.insert(id, WatchLayoutSender { tx: layout_tx });
 
-            let parent_id = self.module_parents.get(&id).copied().flatten();
-
-            let ctx = crate::features::module_runtime::application::ModuleContext::new(
-                id,
-                deps.hub.clone(),
-                deps.surface_manager.clone(),
-                deps.layout_sender.clone(),
-                deps.display_sender.clone(),
-                deps.ui_sender.clone(),
-                layout_rx,
-            )
-            .with_parent(parent_id);
+            let ctx = self.build_site_context(id, layout_rx, deps);
 
             let style_resolver = self.create_style_resolver_for_module(module.styles());
             let vdom_diff =
@@ -661,10 +726,22 @@ mod tests {
         let parent_b = ModuleId::new(200);
 
         let (id_a, _) = registry
-            .load_single_module(&calendar_cfg, &config, Some(parent_a), None)
+            .load_single_module(
+                &calendar_cfg,
+                &config,
+                Some(parent_a),
+                None,
+                crate::shared::primitives::LayoutSurface::Bar,
+            )
             .unwrap();
         let (id_b, _) = registry
-            .load_single_module(&calendar_cfg, &config, Some(parent_b), None)
+            .load_single_module(
+                &calendar_cfg,
+                &config,
+                Some(parent_b),
+                None,
+                crate::shared::primitives::LayoutSurface::Bar,
+            )
             .unwrap();
 
         // Two sites embedding the same module name mint distinct ModuleIds.
@@ -690,11 +767,11 @@ mod tests {
         );
 
         assert_eq!(
-            registry.module_parents.get(&id_a).copied().flatten(),
+            registry.sites.get(&id_a).and_then(ModuleSiteInfo::parent),
             Some(parent_a)
         );
         assert_eq!(
-            registry.module_parents.get(&id_b).copied().flatten(),
+            registry.sites.get(&id_b).and_then(ModuleSiteInfo::parent),
             Some(parent_b)
         );
     }
@@ -946,5 +1023,91 @@ mod tests {
             result,
             Err(crate::features::module_runtime::ports::RegistryLoadError::ModuleNotFound(_))
         ));
+    }
+
+    /// Bug A regression: `reload_module` used to rebuild a reloaded
+    /// module's `ModuleContext` via `.with_parent(parent_id)` alone, never
+    /// chaining `.with_surface(...)` — so hot-reloading a module embedded
+    /// via `ui.module()` inside an open popup/panel/tooltip silently reset
+    /// its `LayoutSurface` back to the `Bar` default, breaking where its
+    /// Wayland subsurface gets parented. `build_site_context` — now shared
+    /// by `spawn_all`, `spawn_module_lazy` and `reload_module` — must carry
+    /// the site's recorded surface forward across a reload instead.
+    #[tokio::test]
+    async fn test_reload_preserves_embedded_surface() {
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let mut registry = ModuleRegistry::new(app_env);
+        let toml_str = r#"
+            [root]
+            name = "bar"
+        "#;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+        TestRegistryPort::load(&mut registry, &config).unwrap();
+        let root_id = TestRegistryPort::root_module(&registry).unwrap();
+
+        let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
+        let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
+            std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
+        let layout_sender = std::sync::Arc::new(|_| ());
+        let display_sender = std::sync::Arc::new(|_| ());
+        let ui_sender = std::sync::Arc::new(|_| ());
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+            hub,
+            surface_manager,
+            layout_sender,
+            display_sender,
+            ui_sender,
+            canvas_factory,
+        );
+
+        // Spawn "calendar" lazily, embedded under the root as a Popup site
+        // — mirroring a module embedded via `ui.module()` inside an open
+        // `ui.popup`.
+        let name = crate::shared::primitives::ModuleName::new("calendar");
+        let key = crate::shared::primitives::ModuleKey::from_name(name.clone());
+        let spawned = registry
+            .spawn_module(
+                root_id,
+                &key,
+                crate::shared::primitives::ModuleOptions::default(),
+                crate::shared::primitives::LayoutSurface::Popup,
+                &config,
+                &deps,
+            )
+            .unwrap();
+        let id = spawned.id();
+        assert_eq!(
+            registry.sites.get(&id).map(ModuleSiteInfo::surface),
+            Some(crate::shared::primitives::LayoutSurface::Popup)
+        );
+
+        // Trigger a reload for that module name — the same path a widget
+        // script or config hot-reload drives.
+        registry.reload_module(&name, &config, &deps).unwrap();
+
+        // The recorded site facts must survive the reload...
+        assert_eq!(
+            registry.sites.get(&id).map(ModuleSiteInfo::surface),
+            Some(crate::shared::primitives::LayoutSurface::Popup)
+        );
+
+        // ...and the ModuleContext `reload_module` actually builds for the
+        // rebuilt actor must carry that surface, not reset to
+        // `ModuleContext::new`'s `LayoutSurface::Bar` default.
+        let (_layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
+        let ctx = registry.build_site_context(id, layout_rx, &deps);
+        assert_eq!(
+            ctx.surface(),
+            crate::shared::primitives::LayoutSurface::Popup
+        );
     }
 }

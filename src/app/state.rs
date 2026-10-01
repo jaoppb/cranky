@@ -129,9 +129,9 @@ impl<
 
         let root_module = registry.root_module();
         let module_ids = registry.module_ids().to_vec();
-        let module_names = registry.module_names().clone();
+        let module_names = registry.module_names();
         let name_to_ids = registry.name_to_ids().clone();
-        let module_keys = registry.module_keys().clone();
+        let module_keys = registry.module_keys();
         let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
             services.hub.clone(),
             services.surface_manager.clone(),
@@ -386,15 +386,11 @@ impl<
                 tracing::info!(module = %key, parent = %parent, id = %id, "Lazily spawned module");
                 self.layout_senders.insert(id, spawned.into_sender());
                 self.read_model.module_ids = self.registry.module_ids().to_vec();
-                self.read_model
-                    .module_names
-                    .clone_from(self.registry.module_names());
+                self.read_model.module_names = self.registry.module_names();
                 self.read_model
                     .name_to_ids
                     .clone_from(self.registry.name_to_ids());
-                self.read_model
-                    .module_keys
-                    .clone_from(self.registry.module_keys());
+                self.read_model.module_keys = self.registry.module_keys();
 
                 if let Some(supervisor) = self.adapter_supervisor.as_mut() {
                     let kinds: Vec<_> = self
@@ -620,15 +616,11 @@ impl<
         } else {
             self.read_model.root_module = self.registry.root_module();
             self.read_model.module_ids = self.registry.module_ids().to_vec();
-            self.read_model
-                .module_names
-                .clone_from(self.registry.module_names());
+            self.read_model.module_names = self.registry.module_names();
             self.read_model
                 .name_to_ids
                 .clone_from(self.registry.name_to_ids());
-            self.read_model
-                .module_keys
-                .clone_from(self.registry.module_keys());
+            self.read_model.module_keys = self.registry.module_keys();
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
                 self.hub.clone(),
                 self.surface_manager.clone(),
