@@ -2,7 +2,7 @@ use super::content::layout_floating_content;
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::vdom::domain::{
-    AnchorSegment, InteractionContext, NodePath, NodeRef, SurfaceSpace,
+    InteractionContext, NodePath, NodeRef, SurfaceSpace, resolve_segment,
 };
 use crate::shared::primitives::ChildSizesMap;
 use crate::shared::primitives::geometry::Scale;
@@ -38,30 +38,6 @@ fn resolve_node_ref(root: &RenderNode, node_ref: &NodeRef) -> Option<NodePath> {
         (node, path) = resolve_segment(node, path, segment)?;
     }
     Some(path.extend(node_ref.relative_path()))
-}
-
-fn resolve_segment<'a>(
-    start: &'a RenderNode,
-    start_path: NodePath,
-    segment: &AnchorSegment,
-) -> Option<(&'a RenderNode, NodePath)> {
-    let Some((_, through)) = segment.path().as_slice().split_last() else {
-        return (start.node_key() == Some(segment.key())).then_some((start, start_path));
-    };
-
-    let mut parent = start;
-    let mut parent_path = start_path;
-    for &idx in through {
-        parent = parent.children().get(idx)?;
-        parent_path = parent_path.child(idx);
-    }
-
-    parent
-        .children()
-        .iter()
-        .enumerate()
-        .find(|(_, child)| child.node_key() == Some(segment.key()))
-        .map(|(idx, child)| (child, parent_path.child(idx)))
 }
 
 /// Resolves whichever tooltip is active for the current hover, and lays it

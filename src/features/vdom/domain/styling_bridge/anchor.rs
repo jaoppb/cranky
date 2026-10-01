@@ -1,5 +1,5 @@
 use crate::features::vdom::domain::{
-    AnchorSegment, InteractionContext, NodePath, NodeRef, SurfaceSpace, VNode,
+    InteractionContext, NodePath, NodeRef, SurfaceSpace, VNode, resolve_segment,
 };
 
 /// The three interaction refs, pre-resolved into concrete absolute
@@ -73,32 +73,4 @@ fn resolve_target_path(
         (node, path) = resolve_segment(node, path, segment)?;
     }
     Some(path.extend(node_ref.relative_path()))
-}
-
-/// Follows one anchor segment from `start`: every step but the last walks
-/// through unkeyed nodes by position, then the keyed node is picked out of
-/// that parent's children by key — its captured index is ignored, since a
-/// reorder is exactly what changes it.
-fn resolve_segment<'a>(
-    start: &'a VNode,
-    start_path: NodePath,
-    segment: &AnchorSegment,
-) -> Option<(&'a VNode, NodePath)> {
-    let Some((_, through)) = segment.path().as_slice().split_last() else {
-        return (start.key() == Some(segment.key())).then_some((start, start_path));
-    };
-
-    let mut parent = start;
-    let mut parent_path = start_path;
-    for &idx in through {
-        parent = parent.children().get(idx)?;
-        parent_path = parent_path.child(idx);
-    }
-
-    parent
-        .children()
-        .iter()
-        .enumerate()
-        .find(|(_, child)| child.key() == Some(segment.key()))
-        .map(|(idx, child)| (child, parent_path.child(idx)))
 }
