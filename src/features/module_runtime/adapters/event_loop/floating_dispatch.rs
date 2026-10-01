@@ -13,15 +13,18 @@ use std::collections::HashMap;
 /// `trees` is this module's own cache of what it last showed for `kind` on
 /// this monitor — the same cache the module's hit-testing reads, so there is
 /// exactly one place that remembers "what's currently there," not a
-/// hit-testing copy and a separate dedup copy. Content identical to what's
-/// cached is never repainted or resent; painting only happens on an actual
-/// change, which is what keeps an unrelated re-render (a clock ticking
-/// behind an open, unchanged calendar) from re-uploading a full popup buffer
-/// every tick.
+/// hit-testing copy and a separate dedup copy. The cached pair is the
+/// content *and* the anchor it was positioned against: content identical to
+/// what's cached is never repainted or resent, but a dispatch still goes out
+/// whenever the anchor moved even if the content didn't, since that's what
+/// actually repositions the floating surface on screen (a sibling module's
+/// width changing this module's x-offset on the same render tick, while the
+/// popup's own content stays the same). Comparing the node alone would miss
+/// that and leave the popup visually stuck at its old position.
 #[allow(clippy::too_many_arguments)]
 fn dispatch_floating_kind<DS: DisplayCommandSender, F: CanvasFactory>(
     display_sender: &DS,
-    trees: &mut HashMap<MonitorId, RenderNode>,
+    trees: &mut HashMap<MonitorId, (Option<Rect>, RenderNode)>,
     canvas_factory: &mut F,
     scale: Scale,
     kind: FloatingKind,
@@ -38,8 +41,10 @@ fn dispatch_floating_kind<DS: DisplayCommandSender, F: CanvasFactory>(
         return;
     };
 
-    let unchanged = trees.get(monitor_id) == Some(node);
-    trees.insert(monitor_id.clone(), node.clone());
+    let unchanged = trees
+        .get(monitor_id)
+        .is_some_and(|(cached_anchor, cached_node)| *cached_anchor == anchor_rect && cached_node == node);
+    trees.insert(monitor_id.clone(), (anchor_rect, node.clone()));
     if unchanged {
         return;
     }
@@ -62,7 +67,7 @@ fn dispatch_floating_kind<DS: DisplayCommandSender, F: CanvasFactory>(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn dispatch_outcome_popups<DS: DisplayCommandSender, F: CanvasFactory>(
     display_sender: &DS,
-    popup_render_trees: &mut HashMap<MonitorId, RenderNode>,
+    popup_render_trees: &mut HashMap<MonitorId, (Option<Rect>, RenderNode)>,
     canvas_factory: &mut F,
     scale: Scale,
     module_id: ModuleId,
@@ -89,7 +94,7 @@ pub(super) fn dispatch_outcome_popups<DS: DisplayCommandSender, F: CanvasFactory
 #[allow(clippy::too_many_arguments)]
 pub(super) fn dispatch_outcome_panels<DS: DisplayCommandSender, F: CanvasFactory>(
     display_sender: &DS,
-    panel_render_trees: &mut HashMap<MonitorId, RenderNode>,
+    panel_render_trees: &mut HashMap<MonitorId, (Option<Rect>, RenderNode)>,
     canvas_factory: &mut F,
     scale: Scale,
     module_id: ModuleId,
@@ -114,7 +119,7 @@ pub(super) fn dispatch_outcome_panels<DS: DisplayCommandSender, F: CanvasFactory
 
 pub(super) fn dispatch_outcome_tooltips<DS: DisplayCommandSender, F: CanvasFactory>(
     display_sender: &DS,
-    tooltip_render_trees: &mut HashMap<MonitorId, RenderNode>,
+    tooltip_render_trees: &mut HashMap<MonitorId, (Option<Rect>, RenderNode)>,
     canvas_factory: &mut F,
     scale: Scale,
     monitor_id: &MonitorId,

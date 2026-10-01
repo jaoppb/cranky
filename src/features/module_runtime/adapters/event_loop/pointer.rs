@@ -28,12 +28,14 @@ impl<
             crate::shared::events::core::SurfaceKind::Bar => {
                 self.render_pipeline.render_trees().get(monitor_id)
             }
-            crate::shared::events::core::SurfaceKind::Popup => {
-                self.popup_render_trees.get(monitor_id)
-            }
-            crate::shared::events::core::SurfaceKind::Panel => {
-                self.panel_render_trees.get(monitor_id)
-            }
+            crate::shared::events::core::SurfaceKind::Popup => self
+                .popup_render_trees
+                .get(monitor_id)
+                .map(|(_, node)| node),
+            crate::shared::events::core::SurfaceKind::Panel => self
+                .panel_render_trees
+                .get(monitor_id)
+                .map(|(_, node)| node),
         };
 
         if let Some(render_tree) = target_tree {
