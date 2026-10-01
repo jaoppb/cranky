@@ -19,7 +19,7 @@ use std::sync::Arc;
 type TestEventLoop =
     EventLoop<MockCanvasFactory, MockLayoutSender, ChannelDisplaySender, MockUiSender>;
 
-fn create_test_event_loop_and_channel() -> (
+pub(super) fn create_test_event_loop_and_channel() -> (
     TestEventLoop,
     ModuleId,
     std::sync::mpsc::Receiver<crate::features::layout_engine::domain::DisplayCommand>,
@@ -49,7 +49,7 @@ fn create_test_event_loop_and_channel() -> (
     (event_loop, id, display_rx)
 }
 
-fn make_test_rect_node() -> crate::features::layout_engine::domain::RenderNode {
+pub(super) fn make_test_rect_node() -> crate::features::layout_engine::domain::RenderNode {
     crate::features::layout_engine::domain::RenderNode::Rect {
         path: crate::features::layout_engine::domain::NodePath::root_in(
             crate::features::layout_engine::domain::SurfaceSpace::Bar,

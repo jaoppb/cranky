@@ -9,6 +9,7 @@ use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::Rect;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -27,12 +28,14 @@ pub struct EventLoop<
     pub(crate) vdom_diff: Arc<dyn VdomDiffPort>,
     pub(crate) style_resolver: Arc<dyn StyleResolverPort>,
     /// Also this module's dedup key for each floating kind: a display
-    /// command is only ever sent when a fresh layout differs from what's
-    /// cached here, so there's one cache per kind, not a hit-test copy and a
-    /// separate "did it change" copy.
-    pub(crate) popup_render_trees: HashMap<MonitorId, RenderNode>,
-    pub(crate) panel_render_trees: HashMap<MonitorId, RenderNode>,
-    pub(crate) tooltip_render_trees: HashMap<MonitorId, RenderNode>,
+    /// command is only ever sent when a fresh (anchor, layout) pair differs
+    /// from what's cached here, so there's one cache per kind, not a
+    /// hit-test copy and a separate "did it change" copy. The anchor is part
+    /// of the key because a popup can be repositioned (a sibling's width
+    /// shifting this module's x-offset) without its content changing at all.
+    pub(crate) popup_render_trees: HashMap<MonitorId, (Option<Rect>, RenderNode)>,
+    pub(crate) panel_render_trees: HashMap<MonitorId, (Option<Rect>, RenderNode)>,
+    pub(crate) tooltip_render_trees: HashMap<MonitorId, (Option<Rect>, RenderNode)>,
     /// Whether the last render on each monitor had any child modules at all
     /// — lets `dispatch_outcome_layouts` send one final empty
     /// `ContainerLayoutsCalculated` on the render where the last child

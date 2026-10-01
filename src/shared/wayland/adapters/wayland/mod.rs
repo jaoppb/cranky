@@ -17,6 +17,7 @@ pub mod render;
 pub mod state;
 pub mod surface_handler;
 pub mod surface_manager;
+pub mod tooltip_anchor;
 pub mod types;
 
 #[cfg(test)]
