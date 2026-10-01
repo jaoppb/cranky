@@ -1,5 +1,5 @@
 use super::action::{ClickHandlers, UiAction};
-use super::identifier::{NodeId, NodeKey};
+use super::identifier::{KeyedTree, NodeId, NodeKey};
 use super::kind::VNodeKind;
 use super::tag::NodeTag;
 use crate::features::styling::domain::{ClassNameList, ElementId};
@@ -143,6 +143,16 @@ impl VNode {
             VNodeKind::Text { text } => text.as_str().trim().is_empty(),
             _ => false,
         }
+    }
+}
+
+impl KeyedTree for VNode {
+    fn children(&self) -> &[Self] {
+        Self::children(self)
+    }
+
+    fn node_key(&self) -> Option<&NodeKey> {
+        self.key()
     }
 }
 

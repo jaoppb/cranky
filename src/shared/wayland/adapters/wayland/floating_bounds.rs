@@ -61,3 +61,19 @@ pub(super) fn compute_module_bounds(
         },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::to_i32;
+
+    #[test]
+    fn to_i32_overflow_falls_back_to_i32_max() {
+        let overflowing = u32::MAX;
+        assert_eq!(to_i32(overflowing), i32::MAX);
+    }
+
+    #[test]
+    fn to_i32_in_range_value_round_trips() {
+        assert_eq!(to_i32(42), 42);
+    }
+}

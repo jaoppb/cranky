@@ -1,4 +1,5 @@
 use super::floating_anchor::AnchorInfo;
+use super::floating_bounds::to_i32;
 use super::floating_render::create_positioner;
 use super::floating_setup::FloatingPlacement;
 use super::state::WaylandState;
@@ -29,8 +30,8 @@ pub(super) fn update_existing_floating(
     let Some(floating) = state.floating_surfaces.get_mut(kind) else {
         return Ok(());
     };
-    let w_i32 = i32::try_from(placement.size.width()).unwrap_or(0);
-    let h_i32 = i32::try_from(placement.size.height()).unwrap_or(0);
+    let w_i32 = to_i32(placement.size.width());
+    let h_i32 = to_i32(placement.size.height());
 
     if floating.size == placement.size {
         copy_surface_data(&mut floating.shm_buffer, buffer.data());
