@@ -173,7 +173,11 @@ impl<
         }
     }
 
-    pub fn spawn(self) {
+    /// Spawns this actor's event loop onto its own task and hands back the
+    /// `JoinHandle` instead of discarding it, so a caller that mints this
+    /// actor outside the normal config-driven lifecycle (a lazy spawn, see
+    /// `ModuleRegistry::spawn_module_lazy`) can track and later abort it.
+    pub fn spawn(self) -> tokio::task::JoinHandle<()> {
         let event_loop = EventLoop::new(
             self.port,
             self.ctx,
@@ -186,7 +190,7 @@ impl<
 
         tokio::spawn(async move {
             event_loop.run().await;
-        });
+        })
     }
 }
 

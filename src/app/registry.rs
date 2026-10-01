@@ -67,6 +67,15 @@ pub struct ModuleRegistry {
     /// full config reloads, so a lazily-minted `ModuleId` can never collide
     /// with a config-declared one.
     next_module_id: u32,
+    /// Every actor `spawn_module_lazy` has handed off to its own task,
+    /// keyed by its `ModuleId`. Unlike a config-declared module's actor
+    /// (spawned via `spawn_all`/`reload_module`, which live for the whole
+    /// registry generation they belong to), a lazily spawned actor has no
+    /// other owner — nothing else calls `clear()`'s `abort()` on it — so
+    /// without this it would keep running forever past a config hot-reload,
+    /// orphaned and able to collide with a freshly re-minted `ModuleId`
+    /// once `next_module_id` resets.
+    lazy_actor_handles: HashMap<ModuleId, tokio::task::JoinHandle<()>>,
     dbus_subscriptions: Vec<crate::shared::dbus::domain::DBusSubscription>,
     style_to_modules: HashMap<StyleSheetName, HashSet<crate::shared::primitives::ModuleName>>,
     active_signals: HashSet<crate::shared::events::signals::SignalKind>,
@@ -88,6 +97,7 @@ impl ModuleRegistry {
             sites: HashMap::new(),
             site_index: HashMap::new(),
             next_module_id: 0,
+            lazy_actor_handles: HashMap::new(),
             dbus_subscriptions: Vec::new(),
             style_to_modules: HashMap::new(),
             active_signals: HashSet::new(),
@@ -96,6 +106,15 @@ impl ModuleRegistry {
     }
 
     pub fn clear(&mut self) {
+        // Every lazily spawned actor is orphaned the instant the registry
+        // it belongs to is cleared — nothing else will ever abort it, and
+        // `next_module_id` resetting below means its old id can be handed
+        // to a brand-new actor. Abort first, so that reuse never races a
+        // still-running orphan.
+        for (_, handle) in self.lazy_actor_handles.drain() {
+            handle.abort();
+        }
+
         self.modules.clear();
         self.module_configs.clear();
         self.root_module = None;
@@ -284,7 +303,7 @@ impl ModuleRegistry {
         let style_resolver = self.create_style_resolver_for_module(module.styles());
         let vdom_diff = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
 
-        crate::features::module_runtime::application::ModuleActor::new(
+        let handle = crate::features::module_runtime::application::ModuleActor::new(
             module,
             ctx,
             deps.canvas_factory.clone(),
@@ -292,6 +311,7 @@ impl ModuleRegistry {
             vdom_diff,
         )
         .spawn();
+        self.lazy_actor_handles.insert(id, handle);
 
         Ok(crate::features::module_runtime::ports::SpawnedModule::new(
             id, sender,
@@ -1108,6 +1128,91 @@ mod tests {
         assert_eq!(
             ctx.surface(),
             crate::shared::primitives::LayoutSurface::Popup
+        );
+    }
+
+    /// Regression: `clear()` used to reset `next_module_id` without ever
+    /// aborting a lazily spawned actor's task. Orphaned that way, the
+    /// actor (and its subsurface, channels, etc.) kept running forever
+    /// past the config reload that cleared the registry, and could end up
+    /// sharing a freshly re-minted `ModuleId` with a brand-new
+    /// config-declared module once `next_module_id` restarted at 0.
+    #[tokio::test]
+    async fn test_clear_aborts_orphaned_lazy_actors() {
+        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::RustLog::new(String::new()),
+            None,
+        ));
+        let mut registry = ModuleRegistry::new(app_env);
+        let toml_str = r#"
+            [root]
+            name = "bar"
+        "#;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+        TestRegistryPort::load(&mut registry, &config).unwrap();
+        let root_id = TestRegistryPort::root_module(&registry).unwrap();
+
+        let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
+        let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
+            std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
+        let layout_sender = std::sync::Arc::new(|_| ());
+        let display_sender = std::sync::Arc::new(|_| ());
+        let ui_sender = std::sync::Arc::new(|_| ());
+        let canvas_factory =
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+            hub,
+            surface_manager,
+            layout_sender,
+            display_sender,
+            ui_sender,
+            canvas_factory,
+        );
+
+        let name = crate::shared::primitives::ModuleName::new("calendar");
+        let key = crate::shared::primitives::ModuleKey::from_name(name);
+        let spawned = registry
+            .spawn_module(
+                root_id,
+                &key,
+                crate::shared::primitives::ModuleOptions::default(),
+                crate::shared::primitives::LayoutSurface::Popup,
+                &config,
+                &deps,
+            )
+            .unwrap();
+        let id = spawned.id();
+
+        let abort_handle = registry
+            .lazy_actor_handles
+            .get(&id)
+            .expect("the lazily spawned actor's JoinHandle must be tracked")
+            .abort_handle();
+        assert!(
+            !abort_handle.is_finished(),
+            "the actor must still be running right after it's spawned"
+        );
+
+        registry.clear();
+        assert!(
+            registry.lazy_actor_handles.is_empty(),
+            "clear() must drop every tracked handle"
+        );
+
+        // Give the aborted task a chance to actually stop.
+        for _ in 0..10 {
+            if abort_handle.is_finished() {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        assert!(
+            abort_handle.is_finished(),
+            "clear() must abort every lazily spawned actor, not just stop tracking it"
         );
     }
 }
