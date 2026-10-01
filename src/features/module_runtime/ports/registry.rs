@@ -71,18 +71,23 @@ pub trait ModuleRegistryPort<
 
     fn root_module(&self) -> Option<ModuleId>;
     fn module_ids(&self) -> &[ModuleId];
+    /// Derived on the fly from each site's `ModuleKey` — there is no
+    /// durable `ModuleId -> ModuleName`-only store any more, so this
+    /// allocates a fresh map per call.
     fn module_names(
         &self,
-    ) -> &std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleName>;
+    ) -> std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleName>;
     fn name_to_ids(
         &self,
     ) -> &std::collections::HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>;
 
     /// This module's full `(name, instance_id)` — unlike `module_names`,
-    /// distinguishes two sites of the same name from each other.
+    /// distinguishes two sites of the same name from each other. Derived on
+    /// the fly from each site's `ModuleKey`, for the same reason as
+    /// `module_names`.
     fn module_keys(
         &self,
-    ) -> &std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleKey>;
+    ) -> std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleKey>;
 
     /// Resolves the concrete actor embedded at `key` by `parent` — the
     /// per-site-aware replacement for guessing via `name_to_ids().first()`,
