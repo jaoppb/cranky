@@ -113,6 +113,8 @@ pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
     let floating = layout_floating(
         &render_node,
         ctx.interaction_context.as_ref(),
+        monitor_id,
+        pipeline.floating_content_caches_mut(),
         ctx.popup_layout_engine,
         ctx.panel_layout_engine,
         ctx.tooltip_layout_engine,

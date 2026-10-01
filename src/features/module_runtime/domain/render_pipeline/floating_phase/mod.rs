@@ -3,16 +3,29 @@ mod panel;
 mod popup;
 mod tooltip;
 
-pub use panel::layout_panel;
-pub use popup::{layout_popup, PopupRenderLayout};
+use panel::layout_panel;
+use popup::layout_popup;
+pub use popup::PopupRenderLayout;
 
-use crate::features::layout_engine::domain::RenderNode;
+use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::vdom::domain::InteractionContext;
 use crate::shared::primitives::geometry::Scale;
-use crate::shared::primitives::{ChildModuleLayout, ChildSizesMap};
+use crate::shared::primitives::{ChildModuleLayout, ChildSizesMap, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
+use std::collections::HashMap;
 use tooltip::layout_tooltip;
+
+/// The three floating kinds' per-monitor content caches.
+///
+/// Borrowed together so `layout_floating` can hand each kind its own cache
+/// without borrowing `RenderPipeline` three separate times — see
+/// `RenderPipeline::floating_content_caches_mut`.
+pub struct FloatingContentCaches<'a> {
+    pub popup: &'a mut HashMap<MonitorId, (StyledNode, RenderNode)>,
+    pub panel: &'a mut HashMap<MonitorId, (StyledNode, RenderNode)>,
+    pub tooltip: &'a mut HashMap<MonitorId, (StyledNode, RenderNode)>,
+}
 
 /// The layout results for whatever floating content is currently open on a monitor.
 ///
@@ -66,6 +79,8 @@ impl FloatingLayouts {
 pub fn layout_floating<F: CanvasFactory, E: LayoutEnginePort>(
     render_node: &RenderNode,
     interaction: Option<&InteractionContext>,
+    monitor_id: &MonitorId,
+    caches: FloatingContentCaches<'_>,
     popup_layout_engine: &mut E,
     panel_layout_engine: &mut E,
     tooltip_layout_engine: &mut E,
@@ -74,9 +89,16 @@ pub fn layout_floating<F: CanvasFactory, E: LayoutEnginePort>(
     current_child_sizes: Option<&ChildSizesMap>,
     child_layouts: &mut Vec<ChildModuleLayout>,
 ) -> FloatingLayouts {
+    let FloatingContentCaches {
+        popup: popup_cache,
+        panel: panel_cache,
+        tooltip: tooltip_cache,
+    } = caches;
     let popup = render_node.find_popup_with_anchor().and_then(|anchored| {
         let layout = layout_popup(
             &anchored,
+            popup_cache,
+            monitor_id,
             popup_layout_engine,
             canvas_factory,
             scale,
@@ -88,6 +110,8 @@ pub fn layout_floating<F: CanvasFactory, E: LayoutEnginePort>(
     let panel = render_node.find_panel().and_then(|active| {
         let node = layout_panel(
             &active,
+            panel_cache,
+            monitor_id,
             panel_layout_engine,
             canvas_factory,
             scale,
@@ -101,6 +125,8 @@ pub fn layout_floating<F: CanvasFactory, E: LayoutEnginePort>(
         popup.as_ref().map(PopupRenderLayout::node),
         panel.as_ref(),
         interaction,
+        tooltip_cache,
+        monitor_id,
         tooltip_layout_engine,
         canvas_factory,
         scale,

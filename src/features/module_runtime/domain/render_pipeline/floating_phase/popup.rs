@@ -1,10 +1,11 @@
-use super::content::layout_floating_content;
+use super::content::layout_floating_content_cached;
 use crate::features::layout_engine::domain::popup::AnchoredPopup;
-use crate::features::layout_engine::domain::RenderNode;
+use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::primitives::geometry::{Rect, Scale};
-use crate::shared::primitives::{ChildSizesMap, PopupOffset};
+use crate::shared::primitives::{ChildSizesMap, MonitorId, PopupOffset};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
+use std::collections::HashMap;
 
 /// The pipeline's layout of an open popup: its anchor (on the parent's own
 /// tree), the laid-out content, and the offset the script requested.
@@ -44,14 +45,19 @@ impl PopupRenderLayout {
 /// Lays out an anchored popup's content with the pipeline's own measurer,
 /// scale and font fallback — the single layout pass that both hit-testing
 /// and painting now read from.
-pub fn layout_popup<F: CanvasFactory, E: LayoutEnginePort>(
+#[allow(clippy::too_many_arguments)]
+pub(super) fn layout_popup<F: CanvasFactory, E: LayoutEnginePort>(
     anchored: &AnchoredPopup<'_>,
+    cache: &mut HashMap<MonitorId, (StyledNode, RenderNode)>,
+    monitor_id: &MonitorId,
     layout_engine: &mut E,
     canvas_factory: &mut F,
     scale: Scale,
     current_child_sizes: Option<&ChildSizesMap>,
 ) -> Option<PopupRenderLayout> {
-    let node = layout_floating_content(
+    let node = layout_floating_content_cached(
+        cache,
+        monitor_id,
         layout_engine,
         canvas_factory,
         scale,
