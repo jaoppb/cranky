@@ -8,6 +8,7 @@ pub mod dispatch_xdg;
 pub mod display_server;
 pub mod floating_anchor;
 pub mod floating_bounds;
+pub mod floating_composite;
 pub mod floating_render;
 pub mod floating_setup;
 pub mod floating_surface;

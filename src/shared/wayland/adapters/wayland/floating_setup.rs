@@ -1,7 +1,6 @@
 use super::floating_anchor::{AnchorInfo, FloatingParentRole};
 use super::floating_render::create_positioner;
 use super::state::WaylandState;
-use super::surface_handler::copy_surface_data;
 use super::types::FloatingSurface;
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::shared::events::core::SurfaceKind;
@@ -9,6 +8,7 @@ use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::PopupOffset;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::composite::{CompositeLayers, composite_into};
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
@@ -30,6 +30,8 @@ struct NewFloatingInfo {
     shm_buffer: ShmBuffer,
     size: Size,
     positioner: XdgPositioner,
+    base: RenderBuffer,
+    layers: CompositeLayers,
 }
 
 pub(super) fn create_new_floating(
@@ -52,7 +54,11 @@ pub(super) fn create_new_floating(
         state.app_env.xdg_runtime_dir().as_path(),
     )
     .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
-    copy_surface_data(&mut shm_buffer, buffer.data());
+    // Children that rendered before this surface existed. Blend only: the
+    // configure handler attaches and commits this buffer.
+    let layers = state.pending_children.remove(&kind).unwrap_or_default();
+    let scale = anchor_info.bar_scale;
+    composite_into(shm_buffer.mmap_mut(), placement.size, buffer.data(), &layers, scale);
 
     let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
         reason: "XDG WM Base not bound".to_string(),
@@ -75,6 +81,8 @@ pub(super) fn create_new_floating(
             shm_buffer,
             size: placement.size,
             positioner,
+            base: buffer.clone(),
+            layers,
         },
         parent,
     )
@@ -145,6 +153,8 @@ fn setup_new_floating(
             reposition_token: 0,
             module_surfaces: std::collections::HashMap::new(),
             parent,
+            base: info.base,
+            layers: info.layers,
         },
     );
 

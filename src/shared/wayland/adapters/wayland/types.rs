@@ -1,6 +1,8 @@
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::ModuleId;
+use crate::shared::primitives::render::RenderBuffer;
+use crate::shared::wayland::composite::CompositeLayers;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use std::collections::HashMap;
 use std::os::unix::io::{AsRawFd, RawFd};
@@ -36,6 +38,11 @@ pub(crate) struct FloatingSurface {
     /// the bar tree. Read back as the parent link when walking ancestor or
     /// descendant chains for exclusivity and teardown ordering.
     pub(crate) parent: Option<crate::features::layout_engine::domain::FloatingKind>,
+    /// The owner's last rendered frame, kept so a child update can re-blend
+    /// without the owner re-rendering.
+    pub(crate) base: RenderBuffer,
+    /// Embedded children's pixels, blended over `base` (composite mode).
+    pub(crate) layers: CompositeLayers,
 }
 
 impl Drop for FloatingSurface {

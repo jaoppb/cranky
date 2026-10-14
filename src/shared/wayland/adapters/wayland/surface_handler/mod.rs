@@ -1,11 +1,15 @@
 mod bar;
+mod composite;
 mod module;
 
 use super::command::SurfaceCommand;
 use super::state::WaylandState;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::ports::DisplayServerError;
+use crate::shared::config::domain::PopupEmbed;
+use crate::shared::wayland::surface_parent::SurfaceParent;
 use bar::handle_bar_surface;
+use composite::handle_composite_child;
 use module::handle_module_surface;
 use wayland_client::QueueHandle;
 
@@ -45,8 +49,13 @@ pub(crate) fn handle_cmd(
         i32::try_from(height).unwrap_or(0),
     );
 
+    let embed = state.hub.config_rx().borrow().popup().embed();
     match cmd.parent() {
         None => handle_bar_surface(state, qh, &shm, bar_index, cmd, dims),
+        Some(SurfaceParent::Floating(kind)) if embed == PopupEmbed::Composite => {
+            handle_composite_child(state, bar_index, kind, cmd);
+            Ok(())
+        }
         Some(parent) => handle_module_surface(state, qh, &shm, bar_index, parent, cmd, dims),
     }
 }

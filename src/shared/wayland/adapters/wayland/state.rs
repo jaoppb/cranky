@@ -5,6 +5,7 @@ use crate::shared::events::core::SurfaceKind;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::composite::CompositeLayers;
 use crate::shared::wayland::ports::DisplayServerError;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -39,6 +40,9 @@ pub struct WaylandState {
     pub(crate) pointer_pos: (f64, f64),
 
     pub(crate) floating_surfaces: HashMap<FloatingKind, FloatingSurface>,
+    /// Composite child frames that arrived before their floating surface
+    /// existed; moved into its `layers` when it is created.
+    pub(crate) pending_children: HashMap<FloatingKind, CompositeLayers>,
     pub(crate) last_button_serial: Option<crate::shared::events::core::PointerSerial>,
     pub(crate) app_env: Arc<AppEnvironment>,
 }

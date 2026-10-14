@@ -83,6 +83,8 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
             reposition_token: 0,
             module_surfaces,
             parent: None,
+            base: crate::shared::primitives::render::RenderBuffer::new(Vec::new(), Size::new(0, 0)),
+            layers: crate::shared::wayland::composite::CompositeLayers::default(),
         },
     );
 
@@ -112,6 +114,7 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
         pointer_surface: Some(module_surface),
         pointer_pos: (12.0, 4.0),
         floating_surfaces,
+        pending_children: HashMap::new(),
         last_button_serial: None,
         app_env,
     };
