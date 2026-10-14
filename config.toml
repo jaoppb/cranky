@@ -27,6 +27,12 @@ fps_limit = 30
 behavior = "global"
 # Offset from the bar outer edge (x = horizontal, y = vertical gap)
 offset = { x = 0, y = 8 }
+# How modules embedded in a popup (ui.module) are rendered.
+# Options:
+#   "composite"  - Painted into the popup's own buffer (default)
+#   "subsurface" - Separate Wayland subsurface per embedded module. Does not
+#                  render live on Hyprland <= 0.56.2 (hyprwm/Hyprland#16357)
+embed = "composite"
 
 [metrics]
 update_interval_ms = 1000

@@ -86,6 +86,16 @@ pub struct PopupConfigDto {
     behavior: PopupBehaviorDto,
     #[serde(default)]
     offset: Option<crate::shared::primitives::PopupOffset>,
+    #[serde(default)]
+    embed: PopupEmbedDto,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PopupEmbedDto {
+    #[default]
+    Composite,
+    Subsurface,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -105,7 +115,17 @@ impl PopupConfigDto {
             Some(off) => off,
             None => crate::shared::primitives::PopupOffset::new(0, 8),
         };
-        domain::PopupConfig::new(self.behavior.into_domain(), offset)
+        domain::PopupConfig::new(self.behavior.into_domain(), offset, self.embed.into_domain())
+    }
+}
+
+impl PopupEmbedDto {
+    #[must_use]
+    pub const fn into_domain(self) -> domain::PopupEmbed {
+        match self {
+            Self::Composite => domain::PopupEmbed::Composite,
+            Self::Subsurface => domain::PopupEmbed::Subsurface,
+        }
     }
 }
 
