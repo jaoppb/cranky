@@ -2,6 +2,7 @@
 
 mod blend;
 mod layers;
+pub mod route;
 
 pub use layers::{ChildLayer, CompositeLayers};
 
