@@ -7,7 +7,9 @@ use super::types::FloatingSurface;
 use crate::shared::wayland::composite::composite_into;
 
 /// Blends `floating.base` plus every child layer into the shm back buffer,
-/// then commits it.
+/// then commits it, but only once the first configure has arrived. Before
+/// that, the blend waits in the back slot, which the configure handler
+/// attaches.
 pub(super) fn repaint(floating: &mut FloatingSurface, bar_scale: i32) {
     let size = floating.size;
     composite_into(
@@ -17,12 +19,14 @@ pub(super) fn repaint(floating: &mut FloatingSurface, bar_scale: i32) {
         &floating.layers,
         bar_scale,
     );
-    commit_surface(
-        floating,
-        bar_scale,
-        to_i32(size.width()),
-        to_i32(size.height()),
-    );
+    if floating.configure.is_configured() {
+        commit_surface(
+            floating,
+            bar_scale,
+            to_i32(size.width()),
+            to_i32(size.height()),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -36,6 +40,7 @@ mod tests {
     use crate::shared::wayland::adapters::wayland::floating_setup::{
         FloatingPlacement, create_new_floating, update_existing_floating,
     };
+    use crate::shared::wayland::adapters::wayland::state::WaylandState;
     use crate::shared::wayland::adapters::wayland::tests::fixture::{
         Fake, committed_bytes, popup_kind, solid,
     };
@@ -83,10 +88,134 @@ mod tests {
         let fake = Fake::new();
         let mut floating = fake.floating(Size::new(2, 1), solid(2, 1, BASE));
         floating.layers = child_layers();
+        floating.configure.mark_configured();
 
         repaint(&mut floating, 1);
 
         assert_eq!(committed_bytes(&mut floating.shm_buffer), BLENDED.to_vec());
+    }
+
+    #[test]
+    fn repaint_after_configure_commits_and_swaps() {
+        let fake = Fake::new();
+        let mut floating = fake.floating(Size::new(2, 1), solid(2, 1, BASE));
+        floating.layers = child_layers();
+        floating.configure.mark_configured();
+        let back = floating.shm_buffer.current_buffer().clone();
+
+        repaint(&mut floating, 1);
+
+        assert_ne!(
+            floating.shm_buffer.current_buffer(),
+            &back,
+            "committed slot swapped out"
+        );
+        assert_eq!(committed_bytes(&mut floating.shm_buffer), BLENDED.to_vec());
+    }
+
+    #[test]
+    fn repaint_before_configure_blends_back_slot_without_swap() {
+        let fake = Fake::new();
+        let mut floating = fake.floating(Size::new(2, 1), solid(2, 1, BASE));
+        floating.layers = child_layers();
+        let back = floating.shm_buffer.current_buffer().clone();
+
+        repaint(&mut floating, 1);
+
+        assert_eq!(
+            floating.shm_buffer.current_buffer(),
+            &back,
+            "no commit/swap"
+        );
+        assert_eq!(floating.shm_buffer.mmap_mut().to_vec(), BLENDED.to_vec());
+    }
+
+    #[test]
+    fn owner_update_before_configure_does_not_swap() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let kind = popup_kind();
+        let mut floating = fake.floating(Size::new(2, 1), solid(2, 1, [0, 0, 0, 255]));
+        floating.layers = child_layers();
+        let back = floating.shm_buffer.current_buffer().clone();
+        state.floating_surfaces.insert(kind.clone(), floating);
+
+        let placement = placement(Size::new(2, 1));
+        let base = solid(2, 1, BASE);
+        update_existing_floating(
+            &mut state,
+            &fake.qh,
+            &kind,
+            &base,
+            &anchor(&fake),
+            &placement,
+        )
+        .expect("floating updated");
+
+        let floating = state.floating_surfaces.get_mut(&kind).expect("floating");
+        assert_eq!(
+            floating.shm_buffer.current_buffer(),
+            &back,
+            "no commit/swap"
+        );
+        assert_eq!(floating.shm_buffer.mmap_mut().to_vec(), BLENDED.to_vec());
+        fake.configure(&mut state, &kind);
+        let floating = state.floating_surfaces.get_mut(&kind).expect("floating");
+        assert_eq!(committed_bytes(&mut floating.shm_buffer), BLENDED.to_vec());
+    }
+
+    #[test]
+    fn owner_resize_before_configure_blends_new_buffer_without_swap() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let kind = popup_kind();
+        let mut floating = fake.floating(Size::new(1, 1), solid(1, 1, [0, 0, 0, 255]));
+        floating.layers = child_layers();
+        state.floating_surfaces.insert(kind.clone(), floating);
+
+        let placement = placement(Size::new(2, 1));
+        let base = solid(2, 1, BASE);
+        update_existing_floating(
+            &mut state,
+            &fake.qh,
+            &kind,
+            &base,
+            &anchor(&fake),
+            &placement,
+        )
+        .expect("floating updated");
+        fake.configure(&mut state, &kind);
+
+        let floating = state.floating_surfaces.get_mut(&kind).expect("floating");
+        assert!(floating.configure.is_configured());
+        assert_eq!(committed_bytes(&mut floating.shm_buffer), BLENDED.to_vec());
+    }
+
+    #[test]
+    fn create_new_floating_keeps_pending_children_on_error() {
+        let fake = Fake::new();
+        let unbinds: [fn(&mut WaylandState); 2] =
+            [|s| s.xdg_wm_base = None, |s| s.compositor = None];
+        for unbind in unbinds {
+            let mut state = fake.state(PopupEmbed::Composite);
+            unbind(&mut state);
+            let kind = popup_kind();
+            state.pending_children.insert(kind.clone(), child_layers());
+
+            let result = create_new_floating(
+                &mut state,
+                &fake.qh,
+                kind.clone(),
+                &solid(2, 1, BASE),
+                &anchor(&fake),
+                &placement(Size::new(2, 1)),
+                None,
+            );
+
+            assert!(result.is_err());
+            let pending = state.pending_children.get(&kind);
+            assert!(pending.and_then(|l| l.get(ModuleId::new(9))).is_some());
+        }
     }
 
     #[test]
@@ -124,6 +253,7 @@ mod tests {
         let kind = popup_kind();
         let mut floating = fake.floating(Size::new(1, 1), solid(1, 1, [0, 0, 0, 255]));
         floating.layers = child_layers();
+        floating.configure.mark_configured();
         state.floating_surfaces.insert(kind.clone(), floating);
         let base = solid(2, 1, BASE);
 

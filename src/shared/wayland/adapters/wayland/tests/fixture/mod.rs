@@ -1,38 +1,36 @@
 //! A compositor-less `WaylandState` for unit tests: protocol objects are
 //! bound over a socket pair nobody reads from, so requests are just queued.
 
+mod state;
+
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
-use crate::features::metrics::domain::MetricsConfig;
-use crate::shared::config::domain::{
-    Config, MarginConfig, ModulesConfig, PopupConfig, PopupEmbed, RenderingMode, RootConfig,
-    TooltipConfig,
-};
-use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
-use crate::shared::events::signals::SignalHub;
+use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
-use crate::shared::wayland::adapters::wayland::types::{FloatingSurface, WaylandBar};
+use crate::shared::wayland::adapters::wayland::types::{
+    ConfigureGate, FloatingSurface, WaylandBar,
+};
 use crate::shared::wayland::composite::CompositeLayers;
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::Path;
 use wayland_client::backend::Backend;
 use wayland_client::protocol::{
     wl_compositor::WlCompositor, wl_shm::WlShm, wl_subcompositor::WlSubcompositor,
 };
-use wayland_client::{Connection, EventQueue, QueueHandle};
-use wayland_protocols::xdg::shell::client::{xdg_surface::XdgSurface, xdg_wm_base::XdgWmBase};
+use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle};
+use wayland_protocols::xdg::shell::client::xdg_surface::{Event as XdgSurfaceEvent, XdgSurface};
+use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::{
     Layer, ZwlrLayerShellV1,
 };
 
 pub struct Fake {
     _server: UnixStream,
-    _connection: Connection,
+    connection: Connection,
     _queue: EventQueue<WaylandState>,
     pub qh: QueueHandle<WaylandState>,
     compositor: WlCompositor,
@@ -57,7 +55,7 @@ impl Fake {
         let layer_shell = registry.bind(5, 1, &qh, ());
         Self {
             _server: server,
-            _connection: connection,
+            connection,
             _queue: queue,
             qh,
             compositor,
@@ -65,48 +63,6 @@ impl Fake {
             shm,
             xdg_wm_base,
             layer_shell,
-        }
-    }
-
-    /// A `WaylandState` with every global bound and `popup.embed = embed`.
-    pub fn state(&self, embed: PopupEmbed) -> WaylandState {
-        let popup = PopupConfig::default();
-        let config = Config::new(
-            RootConfig::default(),
-            ModulesConfig::default(),
-            RenderingMode::default(),
-            MetricsConfig::default(),
-            TooltipConfig::default(),
-            PopupConfig::new(popup.behavior(), popup.offset(), embed),
-        );
-        let tmp = || PathBuf::from("/tmp");
-        let app_env = Arc::new(AppEnvironment::new(
-            HomeDir::new(tmp()),
-            XdgCacheHome::new(tmp()),
-            XdgRuntimeDir::new(tmp()),
-            RustLog::new(String::new()),
-            None,
-        ));
-        let (command_tx, _command_rx) = tokio::sync::mpsc::channel(1);
-        WaylandState {
-            hub: Arc::new(SignalHub::new(config)),
-            compositor: Some(self.compositor.clone()),
-            subcompositor: Some(self.subcompositor.clone()),
-            layer_shell: Some(self.layer_shell.clone()),
-            xdg_wm_base: Some(self.xdg_wm_base.clone()),
-            shm: Some(self.shm.clone()),
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            seat: None,
-            pointer: None,
-            command_tx,
-            surface_to_id: HashMap::new(),
-            pointer_surface: None,
-            pointer_pos: (0.0, 0.0),
-            floating_surfaces: HashMap::new(),
-            pending_children: HashMap::new(),
-            last_button_serial: None,
-            app_env,
         }
     }
 
@@ -126,7 +82,8 @@ impl Fake {
         self.xdg_wm_base.get_xdg_surface(&surface, &self.qh, ())
     }
 
-    /// An already-shown floating surface of `size` whose owner frame is `base`.
+    /// A shown, not yet configured floating surface of `size` whose owner
+    /// frame is `base`.
     pub fn floating(&self, size: Size, base: RenderBuffer) -> FloatingSurface {
         let surface = self.compositor.create_surface(&self.qh, ());
         let xdg_surface = self.xdg_wm_base.get_xdg_surface(&surface, &self.qh, ());
@@ -143,7 +100,26 @@ impl Fake {
             parent: None,
             base,
             layers: CompositeLayers::default(),
+            configure: ConfigureGate::default(),
         }
+    }
+
+    /// Delivers the first `xdg_surface.configure` for `kind` through the real
+    /// dispatch handler.
+    pub fn configure(&self, state: &mut WaylandState, kind: &FloatingKind) {
+        let xdg_surface = state
+            .floating_surfaces
+            .get(kind)
+            .map(|floating| floating.xdg_surface.clone())
+            .expect("floating surface");
+        <WaylandState as Dispatch<XdgSurface, ()>>::event(
+            state,
+            &xdg_surface,
+            XdgSurfaceEvent::Configure { serial: 1 },
+            &(),
+            &self.connection,
+            &self.qh,
+        );
     }
 
     /// A bar on output `name` with buffer scale `scale`.

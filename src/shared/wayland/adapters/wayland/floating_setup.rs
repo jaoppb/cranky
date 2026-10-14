@@ -8,7 +8,7 @@ use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::PopupOffset;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
-use crate::shared::wayland::composite::{CompositeLayers, composite_into};
+use crate::shared::wayland::composite::composite_into;
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
@@ -31,7 +31,6 @@ struct NewFloatingInfo {
     size: Size,
     positioner: XdgPositioner,
     base: RenderBuffer,
-    layers: CompositeLayers,
 }
 
 pub(super) fn create_new_floating(
@@ -46,7 +45,7 @@ pub(super) fn create_new_floating(
     let shm = state.shm.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
         reason: "SHM not bound".to_string(),
     })?;
-    let mut shm_buffer = ShmBuffer::new(
+    let shm_buffer = ShmBuffer::new(
         shm,
         placement.size.width(),
         placement.size.height(),
@@ -54,11 +53,6 @@ pub(super) fn create_new_floating(
         state.app_env.xdg_runtime_dir().as_path(),
     )
     .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
-    // Children that rendered before this surface existed. Blend only: the
-    // configure handler attaches and commits this buffer.
-    let layers = state.pending_children.remove(&kind).unwrap_or_default();
-    let scale = anchor_info.bar_scale;
-    composite_into(shm_buffer.mmap_mut(), placement.size, buffer.data(), &layers, scale);
 
     let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
         reason: "XDG WM Base not bound".to_string(),
@@ -82,7 +76,6 @@ pub(super) fn create_new_floating(
             size: placement.size,
             positioner,
             base: buffer.clone(),
-            layers,
         },
         parent,
     )
@@ -93,7 +86,7 @@ fn setup_new_floating(
     qh: &QueueHandle<WaylandState>,
     kind: FloatingKind,
     anchor_info: &AnchorInfo,
-    info: NewFloatingInfo,
+    mut info: NewFloatingInfo,
     parent: Option<FloatingKind>,
 ) -> Result<(), DisplayServerError> {
     let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
@@ -102,6 +95,11 @@ fn setup_new_floating(
     let compositor = state.compositor.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
         reason: "Compositor not bound".to_string(),
     })?;
+    // Past every fallible step: claim children that rendered before this
+    // surface existed. Blend only; the configure handler attaches it.
+    let layers = state.pending_children.remove(&kind).unwrap_or_default();
+    let (size, scale) = (info.size, anchor_info.bar_scale);
+    composite_into(info.shm_buffer.mmap_mut(), size, info.base.data(), &layers, scale);
     let surface = compositor.create_surface(qh, ());
     surface.set_buffer_scale(anchor_info.bar_scale);
     let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, qh, ());
@@ -154,7 +152,8 @@ fn setup_new_floating(
             module_surfaces: std::collections::HashMap::new(),
             parent,
             base: info.base,
-            layers: info.layers,
+            layers,
+            configure: super::types::ConfigureGate::default(),
         },
     );
 

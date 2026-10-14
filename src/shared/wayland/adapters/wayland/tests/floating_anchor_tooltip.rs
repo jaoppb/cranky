@@ -85,6 +85,7 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
             parent: None,
             base: crate::shared::primitives::render::RenderBuffer::new(Vec::new(), Size::new(0, 0)),
             layers: crate::shared::wayland::composite::CompositeLayers::default(),
+            configure: crate::shared::wayland::adapters::wayland::types::ConfigureGate::default(),
         },
     );
 

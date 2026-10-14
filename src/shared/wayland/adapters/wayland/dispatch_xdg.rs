@@ -40,6 +40,7 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
                 .find(|f| &f.xdg_surface == proxy)
             {
                 tracing::debug!("Attaching buffer to floating surface");
+                floating.configure.mark_configured();
                 floating
                     .surface
                     .attach(Some(floating.shm_buffer.current_buffer()), 0, 0);

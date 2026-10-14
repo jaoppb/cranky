@@ -43,6 +43,25 @@ pub(crate) struct FloatingSurface {
     pub(crate) base: RenderBuffer,
     /// Embedded children's pixels, blended over `base` (composite mode).
     pub(crate) layers: CompositeLayers,
+    /// Whether the first `xdg_surface.configure` arrived; until then nothing
+    /// may be attached or committed.
+    pub(crate) configure: ConfigureGate,
+}
+
+/// Tracks a floating surface's first `xdg_surface.configure`.
+#[derive(Debug, Default)]
+pub(crate) struct ConfigureGate {
+    configured: bool,
+}
+
+impl ConfigureGate {
+    pub(crate) const fn is_configured(&self) -> bool {
+        self.configured
+    }
+
+    pub(crate) const fn mark_configured(&mut self) {
+        self.configured = true;
+    }
 }
 
 impl Drop for FloatingSurface {
