@@ -1,4 +1,5 @@
 pub mod adapters;
+pub mod composite;
 pub mod domain;
 pub mod ports;
 pub mod surface_parent;
