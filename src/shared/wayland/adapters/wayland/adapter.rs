@@ -64,6 +64,7 @@ impl WaylandAdapter {
             surface_to_id: HashMap::new(),
             pointer_surface: None,
             pointer_pos: (0.0, 0.0),
+            pointer_target: None,
             floating_surfaces: HashMap::new(),
             pending_children: HashMap::new(),
             last_button_serial: None,

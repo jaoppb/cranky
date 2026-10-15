@@ -2,6 +2,7 @@
 pub mod adapter;
 pub mod command;
 pub mod dispatch_output;
+pub mod dispatch_pointer;
 pub mod dispatch_registry;
 pub mod dispatch_seat;
 pub mod dispatch_xdg;

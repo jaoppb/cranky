@@ -20,6 +20,7 @@ use std::path::Path;
 use wayland_client::backend::Backend;
 use wayland_client::protocol::{
     wl_compositor::WlCompositor, wl_shm::WlShm, wl_subcompositor::WlSubcompositor,
+    wl_surface::WlSurface,
 };
 use wayland_client::{Connection, Dispatch, EventQueue, QueueHandle};
 use wayland_protocols::xdg::shell::client::xdg_surface::{Event as XdgSurfaceEvent, XdgSurface};
@@ -75,6 +76,11 @@ impl Fake {
             Path::new("/tmp"),
         )
         .expect("shm buffer")
+    }
+
+    /// A bare `wl_surface`, standing in for a bar module's subsurface.
+    pub fn surface(&self) -> WlSurface {
+        self.compositor.create_surface(&self.qh, ())
     }
 
     pub fn xdg_surface(&self) -> XdgSurface {

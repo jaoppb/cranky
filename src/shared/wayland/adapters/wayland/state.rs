@@ -6,6 +6,7 @@ use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::composite::CompositeLayers;
+use crate::shared::wayland::composite::route::PointerTarget;
 use crate::shared::wayland::ports::DisplayServerError;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -38,6 +39,9 @@ pub struct WaylandState {
     pub(crate) surface_to_id: HashMap<WlSurface, (ModuleId, MonitorId, SurfaceKind)>,
     pub(crate) pointer_surface: Option<WlSurface>,
     pub(crate) pointer_pos: (f64, f64),
+    /// Where pointer events currently go: a `surface_to_id` entry, or a child
+    /// composited into the floating surface under the pointer.
+    pub(crate) pointer_target: Option<PointerTarget>,
 
     pub(crate) floating_surfaces: HashMap<FloatingKind, FloatingSurface>,
     /// Composite child frames that arrived before their floating surface
