@@ -1,3 +1,4 @@
+use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use std::collections::HashMap;
 use std::os::unix::io::{AsFd, AsRawFd};
 use std::os::unix::net::UnixStream;
@@ -42,6 +43,7 @@ async fn test_wayland_state_initialization() {
         pointer_surface: None,
         pointer_pos: (0.0, 0.0),
         pointer_target: None,
+        pointer_grab: PointerGrab::default(),
         floating_surfaces: HashMap::new(),
         pending_children: HashMap::new(),
         last_button_serial: None,
@@ -94,6 +96,7 @@ async fn test_wayland_adapter_methods() {
         pointer_surface: None,
         pointer_pos: (0.0, 0.0),
         pointer_target: None,
+        pointer_grab: PointerGrab::default(),
         floating_surfaces: HashMap::new(),
         pending_children: HashMap::new(),
         last_button_serial: None,

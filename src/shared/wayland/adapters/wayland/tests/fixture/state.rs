@@ -1,5 +1,6 @@
 //! The fixture's `WaylandState` builder.
 
+use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use super::Fake;
 use crate::features::metrics::domain::MetricsConfig;
 use crate::shared::config::domain::{
@@ -49,6 +50,7 @@ impl Fake {
             pointer_surface: None,
             pointer_pos: (0.0, 0.0),
             pointer_target: None,
+            pointer_grab: PointerGrab::default(),
             floating_surfaces: HashMap::new(),
             pending_children: HashMap::new(),
             last_button_serial: None,

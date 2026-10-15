@@ -4,17 +4,16 @@
 //! Every event re-routes the current position, so `pointer_target` always
 //! names whoever last got a `PointerEnter`; crossings between the popup's own
 //! area and a child are synthesized as `PointerLeave`/`PointerEnter` pairs.
+//! While a button is held, routing is frozen instead (see
+//! `dispatch_pointer_button`).
 
+use super::dispatch_pointer_button::grabbed;
 use super::state::WaylandState;
 use crate::features::layout_engine::domain::FloatingKind;
-use crate::shared::events::core::{
-    InteractionEvent, PointerButton, PointerEvent, PointerSerial, ScrollAxis, ScrollDelta,
-    SurfaceKind,
-};
+use crate::shared::events::core::{InteractionEvent, PointerEvent, SurfaceKind};
 use crate::shared::primitives::geometry::Position;
 use crate::shared::wayland::composite::route::{PointerTarget, crossing, hit};
-use wayland_client::WEnum;
-use wayland_client::protocol::{wl_pointer, wl_surface::WlSurface};
+use wayland_client::protocol::wl_surface::WlSurface;
 
 fn f64_to_i32(val: f64) -> i32 {
     i32::try_from(crate::utils::f64_to_i64(val)).unwrap_or(0)
@@ -54,7 +53,7 @@ pub(super) fn route(
     Some((target.clone(), pos))
 }
 
-fn send(state: &WaylandState, target: &PointerTarget, event: PointerEvent) {
+pub(super) fn send(state: &WaylandState, target: &PointerTarget, event: PointerEvent) {
     let (id, monitor, _) = target;
     tracing::debug!(module = %id, monitor = %monitor, ?event, "Forwarding pointer event");
     let _ = state
@@ -63,12 +62,17 @@ fn send(state: &WaylandState, target: &PointerTarget, event: PointerEvent) {
         .send((*id, monitor.clone(), InteractionEvent::Pointer(event)));
 }
 
+/// The pointer's surface-local logical position.
+pub(super) fn pointer_pos(state: &WaylandState) -> Position {
+    let (x, y) = state.pointer_pos;
+    Position::new(f64_to_i32(x), f64_to_i32(y))
+}
+
 /// Routes the current pointer position, sending `PointerLeave` to the old
 /// target and `PointerEnter` to the new one when they differ. Returns the
 /// new target with its local position.
-fn retarget(state: &mut WaylandState) -> Option<(PointerTarget, Position)> {
-    let (x, y) = state.pointer_pos;
-    let pos = Position::new(f64_to_i32(x), f64_to_i32(y));
+pub(super) fn retarget(state: &mut WaylandState) -> Option<(PointerTarget, Position)> {
+    let pos = pointer_pos(state);
     let next = state
         .pointer_surface
         .as_ref()
@@ -85,13 +89,32 @@ fn retarget(state: &mut WaylandState) -> Option<(PointerTarget, Position)> {
     next
 }
 
-fn retarget_and_move(state: &mut WaylandState) {
-    if let Some((target, pos)) = retarget(state) {
+/// Whether `target` is a composited child rather than the pointer surface's
+/// own module.
+fn is_composite_child(state: &WaylandState, target: &PointerTarget) -> bool {
+    let own = state
+        .pointer_surface
+        .as_ref()
+        .and_then(|s| state.surface_to_id.get(s));
+    own != Some(target)
+}
+
+/// Retargets after an Enter not driven by motion (`wl_pointer.enter`, the end
+/// of a grab). A newly entered composite child also gets a Motion, its only
+/// source for the entry position; any other target gets just the
+/// `PointerEnter`, exactly as before compositing.
+pub(super) fn retarget_entering(state: &mut WaylandState) {
+    let before = state.pointer_target.clone();
+    if let Some((target, pos)) = retarget(state)
+        && before.as_ref() != Some(&target)
+        && is_composite_child(state, &target)
+    {
         let surface = target.2;
         send(state, &target, PointerEvent::PointerMotion { surface, pos });
     }
 }
 
+/// A new Enter means the compositor ended any implicit grab.
 pub(super) fn handle_pointer_enter(
     state: &mut WaylandState,
     surface: &WlSurface,
@@ -99,18 +122,32 @@ pub(super) fn handle_pointer_enter(
     surface_y: f64,
 ) {
     tracing::debug!(surface_x, surface_y, "wl_pointer Enter");
+    state.pointer_grab.cancel();
     state.pointer_surface = Some(surface.clone());
     state.pointer_pos = (surface_x, surface_y);
-    retarget_and_move(state);
+    retarget_entering(state);
 }
 
+/// While a button is held, motion goes to the grabbed target relative to its
+/// press-time origin; otherwise it retargets first.
 pub(super) fn handle_pointer_motion(state: &mut WaylandState, surface_x: f64, surface_y: f64) {
     state.pointer_pos = (surface_x, surface_y);
-    retarget_and_move(state);
+    let routed = if state.pointer_grab.is_active() {
+        grabbed(state)
+    } else {
+        retarget(state)
+    };
+    if let Some((target, pos)) = routed {
+        let surface = target.2;
+        send(state, &target, PointerEvent::PointerMotion { surface, pos });
+    }
 }
 
+/// A Leave during a hold also ends the grab: the grabbed target gets its
+/// `PointerLeave` once, and the next Enter routes from scratch.
 pub(super) fn handle_pointer_leave(state: &mut WaylandState) {
     tracing::debug!("wl_pointer Leave");
+    state.pointer_grab.cancel();
     state.pointer_surface = None;
     if let Some(target) = state.pointer_target.take() {
         let surface = target.2;
@@ -118,208 +155,40 @@ pub(super) fn handle_pointer_leave(state: &mut WaylandState) {
     }
 }
 
-/// Records the serial (`xdg_popup.grab` needs it even when nothing is hit),
-/// then sends press, or release followed by click, to the current target.
-pub(super) fn handle_pointer_button(
-    state: &mut WaylandState,
-    button: u32,
-    button_state: WEnum<wl_pointer::ButtonState>,
-    serial: u32,
-) {
-    tracing::debug!(button, ?button_state, serial, "wl_pointer Button");
-    state.last_button_serial = Some(PointerSerial::new(serial));
-    let pressed = match button_state {
-        WEnum::Value(wl_pointer::ButtonState::Pressed) => true,
-        WEnum::Value(wl_pointer::ButtonState::Released) => false,
-        _ => return,
-    };
-    let Some((target, pos)) = retarget(state) else {
-        return;
-    };
-    let (surface, button) = (target.2, PointerButton::from_raw(button));
-    if pressed {
-        send(
-            state,
-            &target,
-            PointerEvent::ButtonPress {
-                surface,
-                button,
-                pos,
-            },
-        );
-    } else {
-        send(
-            state,
-            &target,
-            PointerEvent::ButtonRelease {
-                surface,
-                button,
-                pos,
-            },
-        );
-        send(
-            state,
-            &target,
-            PointerEvent::Click {
-                surface,
-                button,
-                pos,
-            },
-        );
-    }
-}
-
-pub(super) fn handle_pointer_axis(
-    state: &mut WaylandState,
-    axis: WEnum<wl_pointer::Axis>,
-    value: f64,
-) {
-    tracing::debug!(?axis, value, "wl_pointer Axis");
-    let Some((target, _)) = retarget(state) else {
-        return;
-    };
-    let axis = match axis {
-        WEnum::Value(wl_pointer::Axis::VerticalScroll) => ScrollAxis::Vertical,
-        _ => ScrollAxis::Horizontal,
-    };
-    let (surface, amount) = (target.2, ScrollDelta::new(value));
-    send(
-        state,
-        &target,
-        PointerEvent::Scroll {
-            surface,
-            axis,
-            amount,
-        },
-    );
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::shared::config::domain::PopupEmbed;
-    use crate::shared::events::core::{
-        InteractionEvent, PointerButton, PointerEvent, PointerSerial, ScrollDelta, SurfaceKind,
+    use crate::shared::primitives::{ModuleId, MonitorId};
+    use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::handle_pointer_button;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::Fake;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::{
+        CHILD, LEFT, OWNER, PRESSED, RELEASED, bar, bar_module, child, clicks, drain, enter, leave,
+        motion, owner, popup,
     };
-    use crate::shared::primitives::{ModuleId, MonitorId, Position, Size};
-    use crate::shared::wayland::adapters::wayland::state::WaylandState;
-    use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, popup_kind, solid};
-    use tokio::sync::broadcast::Receiver;
-    use wayland_client::WEnum;
-    use wayland_client::protocol::wl_pointer::{Axis, ButtonState};
-    use wayland_client::protocol::wl_surface::WlSurface;
 
-    type Event = (ModuleId, MonitorId, InteractionEvent);
+    #[test]
+    fn dispatch_pointer_enter_on_owner_area_sends_only_enter() {
+        let fake = Fake::new();
+        let (mut state, surface) = popup(&fake, 1);
+        let mut rx = state.hub.pointer_rx();
+        handle_pointer_enter(&mut state, &surface, 1.0, 1.0);
+        assert_eq!(drain(&mut rx), vec![owner(enter(SurfaceKind::Popup))]);
+    }
 
-    /// `popup_kind()`'s owner: module 1 on DP-1.
-    const OWNER: u32 = 1;
-    const CHILD: u32 = 9;
-    const BAR_MODULE: u32 = 3;
-    const LEFT: u32 = 0x110;
-    const PRESSED: WEnum<ButtonState> = WEnum::Value(ButtonState::Pressed);
-    const RELEASED: WEnum<ButtonState> = WEnum::Value(ButtonState::Released);
-
-    /// A 20×10 popup owned by module 1 on DP-1, whose bar has `scale`, with
-    /// module 9 composited as a 4×4 logical layer at (10, 2).
-    fn popup(fake: &Fake, scale: u32) -> (WaylandState, WlSurface) {
-        let mut state = fake.state(PopupEmbed::Composite);
-        state
-            .bars
-            .push(fake.bar("DP-1", i32::try_from(scale).unwrap_or(1)));
-        let mut floating = fake.floating(Size::new(20, 10), solid(20, 10, [0; 4]));
-        let side = 4u32.saturating_mul(scale);
-        floating.layers.upsert(
-            ModuleId::new(CHILD),
-            MonitorId::new("DP-1"),
-            Position::new(10, 2),
-            solid(side, side, [1; 4]),
+    #[test]
+    fn dispatch_pointer_enter_on_child_sends_enter_then_local_motion() {
+        let fake = Fake::new();
+        let (mut state, surface) = popup(&fake, 1);
+        let mut rx = state.hub.pointer_rx();
+        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
+        assert_eq!(
+            drain(&mut rx),
+            vec![
+                child(enter(SurfaceKind::Bar)),
+                child(motion(SurfaceKind::Bar, 1, 1))
+            ]
         );
-        let surface = floating.surface.clone();
-        state.surface_to_id.insert(
-            surface.clone(),
-            (
-                ModuleId::new(OWNER),
-                MonitorId::new("DP-1"),
-                SurfaceKind::Popup,
-            ),
-        );
-        state.floating_surfaces.insert(popup_kind(), floating);
-        (state, surface)
-    }
-
-    /// Registers a bar module subsurface for module 3 on HDMI-A-1.
-    fn bar_module(fake: &Fake, state: &mut WaylandState) -> WlSurface {
-        let surface = fake.surface();
-        state.surface_to_id.insert(
-            surface.clone(),
-            (
-                ModuleId::new(BAR_MODULE),
-                MonitorId::new("HDMI-A-1"),
-                SurfaceKind::Bar,
-            ),
-        );
-        surface
-    }
-
-    fn drain(rx: &mut Receiver<Event>) -> Vec<Event> {
-        std::iter::from_fn(|| rx.try_recv().ok()).collect()
-    }
-
-    fn ev(id: u32, monitor: &str, event: PointerEvent) -> Event {
-        (
-            ModuleId::new(id),
-            MonitorId::new(monitor),
-            InteractionEvent::Pointer(event),
-        )
-    }
-
-    fn owner(event: PointerEvent) -> Event {
-        ev(OWNER, "DP-1", event)
-    }
-
-    fn child(event: PointerEvent) -> Event {
-        ev(CHILD, "DP-1", event)
-    }
-
-    fn enter(surface: SurfaceKind) -> PointerEvent {
-        PointerEvent::PointerEnter { surface }
-    }
-
-    fn leave(surface: SurfaceKind) -> PointerEvent {
-        PointerEvent::PointerLeave { surface }
-    }
-
-    fn motion(surface: SurfaceKind, x: i32, y: i32) -> PointerEvent {
-        PointerEvent::PointerMotion {
-            surface,
-            pos: Position::new(x, y),
-        }
-    }
-
-    fn clicks(surface: SurfaceKind, x: i32, y: i32) -> [PointerEvent; 3] {
-        let (button, pos) = (PointerButton::Left, Position::new(x, y));
-        [
-            PointerEvent::ButtonPress {
-                surface,
-                button,
-                pos,
-            },
-            PointerEvent::ButtonRelease {
-                surface,
-                button,
-                pos,
-            },
-            PointerEvent::Click {
-                surface,
-                button,
-                pos,
-            },
-        ]
-    }
-
-    fn click(state: &mut WaylandState) {
-        handle_pointer_button(state, LEFT, PRESSED, 7);
-        handle_pointer_button(state, LEFT, RELEASED, 8);
     }
 
     #[test]
@@ -328,13 +197,7 @@ mod tests {
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
         handle_pointer_enter(&mut state, &surface, 1.0, 1.0);
-        assert_eq!(
-            drain(&mut rx),
-            vec![
-                owner(enter(SurfaceKind::Popup)),
-                owner(motion(SurfaceKind::Popup, 1, 1))
-            ]
-        );
+        drain(&mut rx);
         handle_pointer_motion(&mut state, 11.0, 3.0);
         assert_eq!(
             drain(&mut rx),
@@ -373,53 +236,6 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_pointer_click_on_child_is_local_to_child() {
-        let fake = Fake::new();
-        let (mut state, surface) = popup(&fake, 1);
-        let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 13.0, 5.0);
-        drain(&mut rx);
-        click(&mut state);
-        assert_eq!(
-            drain(&mut rx),
-            clicks(SurfaceKind::Bar, 3, 3).map(child).to_vec()
-        );
-        assert_eq!(state.last_button_serial, Some(PointerSerial::new(8)));
-    }
-
-    #[test]
-    fn dispatch_pointer_click_on_owner_area_goes_to_owner() {
-        let fake = Fake::new();
-        let (mut state, surface) = popup(&fake, 1);
-        let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 5.0, 6.0);
-        drain(&mut rx);
-        click(&mut state);
-        assert_eq!(
-            drain(&mut rx),
-            clicks(SurfaceKind::Popup, 5, 6).map(owner).to_vec()
-        );
-    }
-
-    #[test]
-    fn dispatch_pointer_scroll_on_child_goes_to_child() {
-        let fake = Fake::new();
-        let (mut state, surface) = popup(&fake, 1);
-        let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
-        drain(&mut rx);
-        handle_pointer_axis(&mut state, WEnum::Value(Axis::VerticalScroll), 2.5);
-        assert_eq!(
-            drain(&mut rx),
-            vec![child(PointerEvent::Scroll {
-                surface: SurfaceKind::Bar,
-                axis: crate::shared::events::core::ScrollAxis::Vertical,
-                amount: ScrollDelta::new(2.5),
-            })]
-        );
-    }
-
-    #[test]
     fn dispatch_pointer_route_scales_layers_by_target_monitor_bar() {
         let fake = Fake::new();
         let (state, surface) = popup(&fake, 2);
@@ -435,29 +251,27 @@ mod tests {
         let (mut state, surface) = popup(&fake, 1);
         state.bars.clear();
         let routed = route(&state, &surface, Position::new(13, 5));
-        assert_eq!(
-            routed,
-            Some((
-                (
-                    ModuleId::new(CHILD),
-                    MonitorId::new("DP-1"),
-                    SurfaceKind::Bar
-                ),
-                Position::new(3, 3)
-            ))
+        let target = (
+            ModuleId::new(CHILD),
+            MonitorId::new("DP-1"),
+            SurfaceKind::Bar,
         );
+        assert_eq!(routed, Some((target, Position::new(3, 3))));
     }
 
+    /// The pre-composite sequence: Enter carries no Motion, and nothing
+    /// else changes for a module on its own surface.
     #[test]
-    fn dispatch_pointer_bar_module_routing_is_unchanged() {
+    fn dispatch_pointer_bar_module_keeps_legacy_event_sequence() {
         let fake = Fake::new();
         let mut state = fake.state(PopupEmbed::Composite);
         let surface = bar_module(&fake, &mut state);
         let mut rx = state.hub.pointer_rx();
         handle_pointer_enter(&mut state, &surface, 5.0, 6.0);
-        click(&mut state);
+        handle_pointer_motion(&mut state, 5.0, 6.0);
+        handle_pointer_button(&mut state, LEFT, PRESSED, 1);
+        handle_pointer_button(&mut state, LEFT, RELEASED, 2);
         handle_pointer_leave(&mut state);
-        let bar = |event| ev(BAR_MODULE, "HDMI-A-1", event);
         let mut expected = vec![
             bar(enter(SurfaceKind::Bar)),
             bar(motion(SurfaceKind::Bar, 5, 6)),
@@ -476,28 +290,9 @@ mod tests {
         handle_pointer_enter(&mut state, &popup_surface, 11.0, 3.0);
         drain(&mut rx);
         handle_pointer_enter(&mut state, &bar_surface, 4.0, 4.0);
-        let bar = |event| ev(BAR_MODULE, "HDMI-A-1", event);
         assert_eq!(
             drain(&mut rx),
-            vec![
-                child(leave(SurfaceKind::Bar)),
-                bar(enter(SurfaceKind::Bar)),
-                bar(motion(SurfaceKind::Bar, 4, 4)),
-            ]
+            vec![child(leave(SurfaceKind::Bar)), bar(enter(SurfaceKind::Bar))]
         );
-    }
-
-    #[test]
-    fn dispatch_pointer_button_serial_recorded_without_target() {
-        let fake = Fake::new();
-        let mut state = fake.state(PopupEmbed::Composite);
-        let mut rx = state.hub.pointer_rx();
-        handle_pointer_button(&mut state, LEFT, PRESSED, 42);
-        assert_eq!(state.last_button_serial, Some(PointerSerial::new(42)));
-        let unknown = fake.surface();
-        handle_pointer_enter(&mut state, &unknown, 1.0, 1.0);
-        handle_pointer_button(&mut state, LEFT, RELEASED, 43);
-        assert_eq!(state.last_button_serial, Some(PointerSerial::new(43)));
-        assert_eq!(drain(&mut rx), vec![]);
     }
 }

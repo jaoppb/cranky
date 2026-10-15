@@ -1,6 +1,7 @@
 //! A compositor-less `WaylandState` for unit tests: protocol objects are
 //! bound over a socket pair nobody reads from, so requests are just queued.
 
+pub mod pointer;
 mod state;
 
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};

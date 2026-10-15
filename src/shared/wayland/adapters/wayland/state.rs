@@ -1,3 +1,4 @@
+use super::dispatch_pointer_button::PointerGrab;
 use super::types::{FloatingSurface, WaylandBar, WaylandOutputInfo};
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
 use crate::shared::env::domain::AppEnvironment;
@@ -42,6 +43,8 @@ pub struct WaylandState {
     /// Where pointer events currently go: a `surface_to_id` entry, or a child
     /// composited into the floating surface under the pointer.
     pub(crate) pointer_target: Option<PointerTarget>,
+    /// Buttons held on `pointer_target`, which stays fixed while any is.
+    pub(crate) pointer_grab: PointerGrab,
 
     pub(crate) floating_surfaces: HashMap<FloatingKind, FloatingSurface>,
     /// Composite child frames that arrived before their floating surface

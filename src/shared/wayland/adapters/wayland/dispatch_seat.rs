@@ -1,7 +1,5 @@
-use super::dispatch_pointer::{
-    handle_pointer_axis, handle_pointer_button, handle_pointer_enter, handle_pointer_leave,
-    handle_pointer_motion,
-};
+use super::dispatch_pointer::{handle_pointer_enter, handle_pointer_leave, handle_pointer_motion};
+use super::dispatch_pointer_button::{handle_pointer_axis, handle_pointer_button};
 use super::state::WaylandState;
 use wayland_client::protocol::{
     wl_pointer::{self, WlPointer},

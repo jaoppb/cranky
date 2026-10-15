@@ -1,3 +1,4 @@
+use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
 use crate::shared::config::domain::Config;
 use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
@@ -115,6 +116,7 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
         pointer_surface: Some(module_surface),
         pointer_pos: (12.0, 4.0),
         pointer_target: None,
+        pointer_grab: PointerGrab::default(),
         floating_surfaces,
         pending_children: HashMap::new(),
         last_button_serial: None,
