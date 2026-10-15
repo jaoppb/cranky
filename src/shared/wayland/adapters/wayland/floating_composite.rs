@@ -273,4 +273,25 @@ mod tests {
         assert_eq!(floating.base, base);
         assert_eq!(committed_bytes(&mut floating.shm_buffer), BLENDED.to_vec());
     }
+
+    #[test]
+    fn failed_resize_keeps_base_matching_shm_size() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let kind = popup_kind();
+        let mut floating = fake.floating(Size::new(1, 1), solid(1, 1, BASE));
+        floating.configure.mark_configured();
+        state.floating_surfaces.insert(kind.clone(), floating);
+        state.shm = None;
+
+        let placement = placement(Size::new(2, 1));
+        let base = solid(2, 1, BASE);
+        let result =
+            update_existing_floating(&mut state, &fake.qh, &kind, &base, &anchor(&fake), &placement);
+
+        assert!(result.is_err());
+        let floating = state.floating_surfaces.get(&kind).expect("floating");
+        assert_eq!(floating.size, Size::new(1, 1));
+        assert_eq!(*floating.base.size(), floating.size);
+    }
 }

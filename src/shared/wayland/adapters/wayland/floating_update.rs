@@ -29,10 +29,10 @@ pub(super) fn update_existing_floating(
     let Some(floating) = state.floating_surfaces.get_mut(kind) else {
         return Ok(());
     };
-    floating.base = buffer.clone();
     floating.scale = anchor_info.bar_scale;
 
     if floating.size == placement.size {
+        floating.base = buffer.clone();
         repaint(floating, anchor_info.bar_scale);
         return Ok(());
     }
@@ -66,6 +66,8 @@ pub(super) fn update_existing_floating(
     // Blend into the new buffer, not the old one, before committing it.
     floating.shm_buffer = new_shm_buffer;
     floating.size = placement.size;
+    // Only now: `base` must keep the shm buffer's size if any step above fails.
+    floating.base = buffer.clone();
     repaint(floating, anchor_info.bar_scale);
     Ok(())
 }

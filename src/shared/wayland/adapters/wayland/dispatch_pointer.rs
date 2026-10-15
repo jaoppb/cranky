@@ -44,6 +44,8 @@ pub(super) fn route(
         .floating_surfaces
         .iter()
         .find(|(_, floating)| &floating.surface == surface)
+        // Tooltips get no pointer routing, composited children included.
+        .filter(|(kind, _)| !matches!(kind, FloatingKind::Tooltip))
         .and_then(|(kind, floating)| hit(&floating.layers, floating_scale(state, kind), pos));
     if let Some(child) = child {
         let target = (child.module_id, child.monitor_id, SurfaceKind::Bar);
@@ -161,7 +163,7 @@ mod tests {
     use crate::shared::config::domain::PopupEmbed;
     use crate::shared::primitives::{ModuleId, MonitorId};
     use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::handle_pointer_button;
-    use crate::shared::wayland::adapters::wayland::tests::fixture::Fake;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, popup_kind};
     use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::{
         CHILD, LEFT, OWNER, PRESSED, RELEASED, bar, bar_module, child, clicks, drain, enter, leave,
         motion, owner, popup,
@@ -294,5 +296,19 @@ mod tests {
             drain(&mut rx),
             vec![child(leave(SurfaceKind::Bar)), bar(enter(SurfaceKind::Bar))]
         );
+    }
+
+    /// Tooltips never had pointer routing; a layer composited into one must
+    /// not grow it.
+    #[test]
+    fn dispatch_pointer_tooltip_layers_get_no_routing() {
+        let fake = Fake::new();
+        let (mut state, surface) = popup(&fake, 2);
+        state.surface_to_id.remove(&surface);
+        let floating = state.floating_surfaces.remove(&popup_kind());
+        let floating = floating.expect("popup floating surface");
+        state.floating_surfaces.insert(FloatingKind::Tooltip, floating);
+
+        assert_eq!(route(&state, &surface, Position::new(13, 5)), None);
     }
 }
