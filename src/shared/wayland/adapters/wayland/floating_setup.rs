@@ -154,6 +154,7 @@ fn setup_new_floating(
             base: info.base,
             layers,
             configure: super::types::ConfigureGate::default(),
+            scale: anchor_info.bar_scale,
         },
     );
 

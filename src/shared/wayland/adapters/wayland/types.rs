@@ -47,6 +47,8 @@ pub(crate) struct FloatingSurface {
     /// Whether the first `xdg_surface.configure` arrived; until then nothing
     /// may be attached or committed.
     pub(crate) configure: ConfigureGate,
+    /// Buffer scale the surface was last placed with (its anchor's bar scale).
+    pub(crate) scale: i32,
 }
 
 /// Tracks a floating surface's first `xdg_surface.configure`.

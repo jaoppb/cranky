@@ -30,6 +30,7 @@ pub(super) fn update_existing_floating(
         return Ok(());
     };
     floating.base = buffer.clone();
+    floating.scale = anchor_info.bar_scale;
 
     if floating.size == placement.size {
         repaint(floating, anchor_info.bar_scale);

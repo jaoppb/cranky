@@ -108,6 +108,7 @@ impl Fake {
             base,
             layers: CompositeLayers::default(),
             configure: ConfigureGate::default(),
+            scale: 1,
         }
     }
 
