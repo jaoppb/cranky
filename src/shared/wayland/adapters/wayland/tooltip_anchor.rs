@@ -1,6 +1,7 @@
 use super::floating_anchor::FloatingParentRole;
 use super::floating_bounds::to_i32;
 use super::state::WaylandState;
+use super::types::FloatingSurface;
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::shared::primitives::MonitorId;
 
@@ -22,6 +23,9 @@ pub(super) struct TooltipAnchor {
 /// parallel to a bar's — for a module embedded inside an open popup/panel
 /// (`ui.module()` nested inside floating content). Without the second
 /// pass, hovering such a module would leave the tooltip anchor unresolved.
+/// A child composited into the popup's own surface is found through
+/// `pointer_target` instead; hovering the popup owner's own content still
+/// resolves nothing.
 pub(super) fn resolve_tooltip_anchor(state: &WaylandState) -> Option<TooltipAnchor> {
     let parent_surface = state.pointer_surface.clone()?;
     let mut pointer_x = state.pointer_pos.0;
@@ -59,11 +63,18 @@ pub(super) fn resolve_tooltip_anchor(state: &WaylandState) -> Option<TooltipAnch
             }) else {
                 continue;
             };
-            let Some(ms) = floating
+            // A composited child's pointer coordinates are already local to
+            // the popup surface, so it adds no origin; a subsurface child's
+            // are local to its own surface, so it adds its offset.
+            let child_x = if floating.surface == parent_surface && hovers_layer(state, floating) {
+                0
+            } else if let Some(ms) = floating
                 .module_surfaces
                 .values()
                 .find(|m| m.surface == parent_surface)
-            else {
+            {
+                ms.x
+            } else {
                 continue;
             };
             if let Some(bar) = state
@@ -75,7 +86,7 @@ pub(super) fn resolve_tooltip_anchor(state: &WaylandState) -> Option<TooltipAnch
                 bar_height = bar.height;
             }
             parent_role = Some(FloatingParentRole::Popup(floating.xdg_surface.clone()));
-            pointer_x += f64::from(ms.x);
+            pointer_x += f64::from(child_x);
             target_monitor_id = floating_monitor_id.clone();
             break 'search;
         }
@@ -88,4 +99,18 @@ pub(super) fn resolve_tooltip_anchor(state: &WaylandState) -> Option<TooltipAnch
         anchor_x: i32::try_from(crate::utils::f64_to_i64(pointer_x)).unwrap_or(0),
         anchor_y: to_i32(bar_height),
     })
+}
+
+/// Whether the pointer target is a child composited into `floating`, rather
+/// than the floating surface's own owner.
+fn hovers_layer(state: &WaylandState, floating: &FloatingSurface) -> bool {
+    state
+        .pointer_target
+        .as_ref()
+        .is_some_and(|(id, monitor, _)| {
+            floating
+                .layers
+                .get(*id)
+                .is_some_and(|layer| layer.monitor_id() == monitor)
+        })
 }

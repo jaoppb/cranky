@@ -2,6 +2,7 @@ use super::floating_bounds::{compute_module_bounds, to_i32};
 use super::floating_teardown::teardown_floating;
 use super::state::WaylandState;
 use super::tooltip_anchor::resolve_tooltip_anchor;
+use super::types::ModuleSurface;
 use crate::features::layout_engine::domain::{FloatingKind, PopupExclusivity, PopupTarget};
 use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::MonitorId;
@@ -101,17 +102,21 @@ pub(crate) fn resolve_anchor(
                                 .map(|f| FloatingParentRole::Popup(f.xdg_surface.clone()))
                         },
                     );
-                    let ms = parent.map_or_else(
-                        || bar.module_surfaces.get(&module_id),
+                    let placement = parent.map_or_else(
+                        || {
+                            bar.module_surfaces
+                                .get(&module_id)
+                                .map(ModuleSurface::placement)
+                        },
                         |parent_kind| {
                             state
                                 .floating_surfaces
                                 .get(parent_kind)
-                                .and_then(|f| f.module_surfaces.get(&module_id))
+                                .and_then(|f| f.child_placement(module_id))
                         },
                     );
                     let bounds =
-                        compute_module_bounds(ms, anchor_rect, to_i32(bar.height), precise);
+                        compute_module_bounds(placement, anchor_rect, to_i32(bar.height), precise);
                     anchor_x = bounds.x;
                     anchor_y = bounds.y;
                     anchor_w = bounds.w;

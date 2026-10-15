@@ -1,3 +1,4 @@
+use super::floating_bounds::ChildPlacement;
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::ModuleId;
@@ -100,6 +101,27 @@ pub(crate) struct ModuleSurface {
     pub(crate) size: Size,
     pub(crate) x: i32,
     pub(crate) y: i32,
+}
+
+impl ModuleSurface {
+    pub(super) const fn placement(&self) -> ChildPlacement {
+        ChildPlacement::new(self.x, self.y, self.size)
+    }
+}
+
+impl FloatingSurface {
+    /// Where `module_id` is embedded in this surface: a composited layer
+    /// first, else an old-style subsurface.
+    pub(super) fn child_placement(&self, module_id: ModuleId) -> Option<ChildPlacement> {
+        self.layers
+            .get(module_id)
+            .map(|l| ChildPlacement::new(l.origin().x(), l.origin().y(), *l.buffer().size()))
+            .or_else(|| {
+                self.module_surfaces
+                    .get(&module_id)
+                    .map(ModuleSurface::placement)
+            })
+    }
 }
 
 impl Drop for ModuleSurface {
