@@ -95,6 +95,7 @@ impl Dispatch<XdgPositioner, ()> for WaylandState {
 
 #[cfg(test)]
 mod tests {
+    use crate::features::layout_engine::domain::FloatingKind;
     use crate::shared::config::domain::PopupEmbed;
     use crate::shared::primitives::render::RenderBuffer;
     use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset, Position, Size};
@@ -110,7 +111,6 @@ mod tests {
         Fake, committed_bytes, popup_kind, solid,
     };
     use crate::shared::wayland::adapters::wayland::types::FloatingSurface;
-    use crate::features::layout_engine::domain::FloatingKind;
 
     const BASE: [u8; 4] = [5, 5, 5, 255];
     /// A 2×1 `BASE` with the 1×1 child at logical (1, 0).
@@ -127,7 +127,12 @@ mod tests {
     }
 
     /// An owner frame `base` placed at `base`'s own size.
-    fn owner_frame(fake: &Fake, state: &mut WaylandState, kind: &FloatingKind, base: &RenderBuffer) {
+    fn owner_frame(
+        fake: &Fake,
+        state: &mut WaylandState,
+        kind: &FloatingKind,
+        base: &RenderBuffer,
+    ) {
         let anchor = AnchorInfo {
             bar_scale: 1,
             parent_role: FloatingParentRole::Popup(fake.xdg_surface()),
@@ -214,7 +219,11 @@ mod tests {
 
         let floating = state.floating_surfaces.get_mut(&kind).expect("floating");
         assert!(floating.configure.is_configured());
-        assert_ne!(floating.shm_buffer.current_buffer(), &pre, "swapped exactly once");
+        assert_ne!(
+            floating.shm_buffer.current_buffer(),
+            &pre,
+            "swapped exactly once"
+        );
         assert_eq!(committed_bytes(&mut floating.shm_buffer), BLENDED.to_vec());
     }
 }

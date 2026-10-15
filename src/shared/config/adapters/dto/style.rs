@@ -115,7 +115,11 @@ impl PopupConfigDto {
             Some(off) => off,
             None => crate::shared::primitives::PopupOffset::new(0, 8),
         };
-        domain::PopupConfig::new(self.behavior.into_domain(), offset, self.embed.into_domain())
+        domain::PopupConfig::new(
+            self.behavior.into_domain(),
+            offset,
+            self.embed.into_domain(),
+        )
     }
 }
 

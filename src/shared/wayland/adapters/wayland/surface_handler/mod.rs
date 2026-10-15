@@ -4,9 +4,9 @@ mod module;
 
 use super::command::SurfaceCommand;
 use super::state::WaylandState;
+use crate::shared::config::domain::PopupEmbed;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::ports::DisplayServerError;
-use crate::shared::config::domain::PopupEmbed;
 use crate::shared::wayland::surface_parent::SurfaceParent;
 use bar::handle_bar_surface;
 use composite::handle_composite_child;

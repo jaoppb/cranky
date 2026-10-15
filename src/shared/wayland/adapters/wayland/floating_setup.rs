@@ -99,7 +99,13 @@ fn setup_new_floating(
     // surface existed. Blend only; the configure handler attaches it.
     let layers = state.pending_children.remove(&kind).unwrap_or_default();
     let (size, scale) = (info.size, anchor_info.bar_scale);
-    composite_into(info.shm_buffer.mmap_mut(), size, info.base.data(), &layers, scale);
+    composite_into(
+        info.shm_buffer.mmap_mut(),
+        size,
+        info.base.data(),
+        &layers,
+        scale,
+    );
     let surface = compositor.create_surface(qh, ());
     surface.set_buffer_scale(anchor_info.bar_scale);
     let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, qh, ());

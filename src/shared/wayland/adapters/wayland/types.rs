@@ -3,8 +3,8 @@ use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::ModuleId;
 use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::wayland::composite::CompositeLayers;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::composite::CompositeLayers;
 use std::collections::HashMap;
 use std::os::unix::io::{AsRawFd, RawFd};
 use wayland_client::protocol::{

@@ -286,8 +286,14 @@ mod tests {
 
         let placement = placement(Size::new(2, 1));
         let base = solid(2, 1, BASE);
-        let result =
-            update_existing_floating(&mut state, &fake.qh, &kind, &base, &anchor(&fake), &placement);
+        let result = update_existing_floating(
+            &mut state,
+            &fake.qh,
+            &kind,
+            &base,
+            &anchor(&fake),
+            &placement,
+        );
 
         assert!(result.is_err());
         let floating = state.floating_surfaces.get(&kind).expect("floating");

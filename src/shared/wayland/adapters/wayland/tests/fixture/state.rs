@@ -1,6 +1,5 @@
 //! The fixture's `WaylandState` builder.
 
-use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use super::Fake;
 use crate::features::metrics::domain::MetricsConfig;
 use crate::shared::config::domain::{
@@ -8,6 +7,7 @@ use crate::shared::config::domain::{
 };
 use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
 use crate::shared::events::signals::SignalHub;
+use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use std::collections::HashMap;
 use std::path::PathBuf;

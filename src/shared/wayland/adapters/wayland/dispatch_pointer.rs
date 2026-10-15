@@ -163,11 +163,11 @@ mod tests {
     use crate::shared::config::domain::PopupEmbed;
     use crate::shared::primitives::{ModuleId, MonitorId};
     use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::handle_pointer_button;
-    use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, popup_kind};
     use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::{
         CHILD, LEFT, OWNER, PRESSED, RELEASED, bar, bar_module, child, clicks, drain, enter, leave,
         motion, owner, popup,
     };
+    use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, popup_kind};
 
     #[test]
     fn dispatch_pointer_enter_on_owner_area_sends_only_enter() {
@@ -307,7 +307,9 @@ mod tests {
         state.surface_to_id.remove(&surface);
         let floating = state.floating_surfaces.remove(&popup_kind());
         let floating = floating.expect("popup floating surface");
-        state.floating_surfaces.insert(FloatingKind::Tooltip, floating);
+        state
+            .floating_surfaces
+            .insert(FloatingKind::Tooltip, floating);
 
         assert_eq!(route(&state, &surface, Position::new(13, 5)), None);
     }

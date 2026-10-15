@@ -1,4 +1,4 @@
 mod adapter;
-mod floating_anchor_tooltip;
 pub(super) mod fixture;
+mod floating_anchor_tooltip;
 mod manager;

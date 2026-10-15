@@ -145,13 +145,19 @@ fn test_popup_config_dto_offset_list() {
 #[test]
 fn popup_embed_dto_subsurface() {
     let dto: PopupConfigDto = toml::from_str(r#"embed = "subsurface""#).unwrap();
-    assert_eq!(dto.into_domain().embed(), crate::shared::config::domain::PopupEmbed::Subsurface);
+    assert_eq!(
+        dto.into_domain().embed(),
+        crate::shared::config::domain::PopupEmbed::Subsurface
+    );
 }
 
 #[test]
 fn popup_embed_dto_defaults_to_composite() {
     let dto: PopupConfigDto = toml::from_str(r#"behavior = "global""#).unwrap();
-    assert_eq!(dto.into_domain().embed(), crate::shared::config::domain::PopupEmbed::Composite);
+    assert_eq!(
+        dto.into_domain().embed(),
+        crate::shared::config::domain::PopupEmbed::Composite
+    );
 }
 
 #[test]

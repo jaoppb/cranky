@@ -10,7 +10,12 @@ use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
 
-pub(super) fn commit_surface(floating: &mut FloatingSurface, bar_scale: i32, w_i32: i32, h_i32: i32) {
+pub(super) fn commit_surface(
+    floating: &mut FloatingSurface,
+    bar_scale: i32,
+    w_i32: i32,
+    h_i32: i32,
+) {
     floating.surface.set_buffer_scale(bar_scale);
     floating.surface.attach(Some(floating.shm_buffer.current_buffer()), 0, 0);
     floating.surface.damage_buffer(0, 0, w_i32, h_i32);
