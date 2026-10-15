@@ -6,7 +6,7 @@ use crate::features::styling::domain::{
     ClassNameList, ComputedStyle, ElementQuery, InheritedStyle,
 };
 use crate::features::styling::ports::StyleResolverPort;
-use crate::features::vdom::domain::{InteractionContext, NodePath, VNode, VNodeKind};
+use crate::features::vdom::domain::{InteractionContext, NodePath, SurfaceSpace, VNode, VNodeKind};
 
 /// Where a node sits among its siblings — bundled so the recursive walk
 /// stays within clippy's argument-count limit.
@@ -34,6 +34,26 @@ impl SiblingPosition {
     }
 }
 
+/// The raw context (so a floating child can re-resolve its own
+/// `ResolvedInteraction` against its own tree below) plus the interaction
+/// already resolved against *this* surface's tree (what pseudo-class
+/// computation for the current node uses) — bundled for the same reason as
+/// `SiblingPosition`.
+#[derive(Debug, Clone, Copy)]
+struct Interaction<'a> {
+    ctx: Option<&'a InteractionContext>,
+    resolved: Option<&'a ResolvedInteraction>,
+}
+
+impl<'a> Interaction<'a> {
+    const fn new(
+        ctx: Option<&'a InteractionContext>,
+        resolved: Option<&'a ResolvedInteraction>,
+    ) -> Self {
+        Self { ctx, resolved }
+    }
+}
+
 impl VNode {
     #[must_use]
     pub fn resolve_styles(
@@ -42,11 +62,12 @@ impl VNode {
         interaction: Option<&InteractionContext>,
         parent: Option<&ElementQuery>,
     ) -> StyledNode {
-        let resolved_interaction = interaction.map(|ctx| ResolvedInteraction::resolve(self, ctx));
+        let resolved_interaction =
+            interaction.map(|ctx| ResolvedInteraction::resolve(self, SurfaceSpace::Bar, ctx));
         self.resolve_styles_recursive(
             resolver,
-            resolved_interaction.as_ref(),
-            &NodePath::root(),
+            Interaction::new(interaction, resolved_interaction.as_ref()),
+            &NodePath::root_in(SurfaceSpace::Bar),
             SiblingPosition::root(),
             parent,
             &InheritedStyle::default(),
@@ -56,13 +77,13 @@ impl VNode {
     fn resolve_styles_recursive(
         &self,
         resolver: &dyn StyleResolverPort,
-        resolved_interaction: Option<&ResolvedInteraction>,
+        interaction: Interaction<'_>,
         path: &NodePath,
         position: SiblingPosition,
         parent: Option<&ElementQuery>,
         inherited: &InheritedStyle,
     ) -> StyledNode {
-        let pseudo_classes = compute_pseudo_classes(path, resolved_interaction);
+        let pseudo_classes = compute_pseudo_classes(path, interaction.resolved);
         let classes = self.class_names().map_or(&[][..], ClassNameList::as_slice);
         let query = ElementQuery::new(
             self.tag().as_str(),
@@ -89,21 +110,31 @@ impl VNode {
         // reason, rather than picking up the owning element's color/font.
         let detached_inherited = InheritedStyle::default();
 
+        // Each floating kind gets its own surface root rather than
+        // descending from `path` — a popup, panel, or tooltip is a different
+        // tree from the one that owns it, not a subtree of it, so its nodes
+        // must not be ancestor-matched (`starts_with`) against the owner's.
         let tooltip = self.tooltip().map(|t| {
+            let tooltip_resolved = interaction
+                .ctx
+                .map(|ctx| ResolvedInteraction::resolve(t, SurfaceSpace::Tooltip, ctx));
             Box::new(t.resolve_styles_recursive(
                 resolver,
-                resolved_interaction,
-                &path.child(0),
+                Interaction::new(interaction.ctx, tooltip_resolved.as_ref()),
+                &NodePath::root_in(SurfaceSpace::Tooltip),
                 SiblingPosition::root(),
                 None,
                 &detached_inherited,
             ))
         });
         let popup = self.popup().map(|p| {
+            let popup_resolved = interaction
+                .ctx
+                .map(|ctx| ResolvedInteraction::resolve(p.content(), SurfaceSpace::Popup, ctx));
             let content = Box::new(p.content().resolve_styles_recursive(
                 resolver,
-                resolved_interaction,
-                &NodePath::root(),
+                Interaction::new(interaction.ctx, popup_resolved.as_ref()),
+                &NodePath::root_in(SurfaceSpace::Popup),
                 SiblingPosition::root(),
                 Some(&query),
                 &detached_inherited,
@@ -116,10 +147,13 @@ impl VNode {
             )
         });
         let panel = self.panel().map(|p| {
+            let panel_resolved = interaction
+                .ctx
+                .map(|ctx| ResolvedInteraction::resolve(p.content(), SurfaceSpace::Panel, ctx));
             let content = Box::new(p.content().resolve_styles_recursive(
                 resolver,
-                resolved_interaction,
-                &NodePath::root(),
+                Interaction::new(interaction.ctx, panel_resolved.as_ref()),
+                &NodePath::root_in(SurfaceSpace::Panel),
                 SiblingPosition::root(),
                 Some(&query),
                 &detached_inherited,
@@ -143,7 +177,7 @@ impl VNode {
                     .map(|(idx, child)| {
                         child.resolve_styles_recursive(
                             resolver,
-                            resolved_interaction,
+                            interaction,
                             &path.child(idx),
                             SiblingPosition::new(idx, total),
                             Some(&query),

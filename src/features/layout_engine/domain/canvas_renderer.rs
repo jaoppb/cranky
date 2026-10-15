@@ -162,7 +162,12 @@ impl RenderNode {
                 ..
             } => {
                 let logical_size = Size::new(rect.width(), rect.height());
-                canvas.draw_image(data, *pixel_size, logical_size, Position::new(rect.x(), rect.y()));
+                canvas.draw_image(
+                    data,
+                    *pixel_size,
+                    logical_size,
+                    Position::new(rect.x(), rect.y()),
+                );
             }
         }
     }
@@ -172,10 +177,10 @@ impl RenderNode {
 mod tests {
     use super::super::render_node::RenderNode;
     use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
-    use crate::features::vdom::domain::{NodePath, TextContent};
+    use crate::features::vdom::domain::{NodePath, SurfaceSpace, TextContent};
+    use crate::shared::primitives::BinaryData;
     use crate::shared::primitives::color::{Color, DrawingColor};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
-    use crate::shared::primitives::BinaryData;
     use crate::shared::rendering::ports::canvas::MockCanvas;
 
     #[test]
@@ -186,7 +191,7 @@ mod tests {
         let mut rect_style = ComputedStyle::default();
         rect_style.set_background(DrawingColor::Solid(Color::new(255, 255, 255, 255)));
         let rect = RenderNode::Rect {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             style: rect_style,
@@ -204,7 +209,7 @@ mod tests {
         let mut flex_style = ComputedStyle::default();
         flex_style.set_background(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         let flex = RenderNode::Flex {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             children: vec![],
@@ -222,7 +227,7 @@ mod tests {
         let mut text_style = ComputedStyle::default();
         text_style.set_color(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         let text = RenderNode::Text {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             text: TextContent::new("test".to_string()),
@@ -241,7 +246,7 @@ mod tests {
         prog_style.set_background(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         prog_style.set_accent_color(DrawingColor::Solid(Color::new(255, 0, 0, 255)));
         let progress = RenderNode::Progress {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(100, 10)),
             value: ProgressValue::new(0.5).unwrap(),
@@ -258,7 +263,7 @@ mod tests {
         let mut canvas = MockCanvas::new();
         canvas.expect_draw_image().times(1).return_const(());
         let image = RenderNode::Image {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
             data: BinaryData::new(vec![0, 0, 0, 0]),

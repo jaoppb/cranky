@@ -2,18 +2,25 @@
 pub mod adapter;
 pub mod command;
 pub mod dispatch_output;
+pub mod dispatch_pointer;
+pub mod dispatch_pointer_button;
 pub mod dispatch_registry;
 pub mod dispatch_seat;
 pub mod dispatch_xdg;
 pub mod display_server;
 pub mod floating_anchor;
+pub mod floating_bounds;
+pub mod floating_composite;
 pub mod floating_render;
 pub mod floating_setup;
 pub mod floating_surface;
+pub mod floating_teardown;
+pub mod floating_update;
 pub mod render;
 pub mod state;
 pub mod surface_handler;
 pub mod surface_manager;
+pub mod tooltip_anchor;
 pub mod types;
 
 #[cfg(test)]

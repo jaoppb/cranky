@@ -8,7 +8,6 @@ use crate::shared::env::domain::AppEnvironment;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::ports::DisplayServerError;
-use cosmic_text::{FontSystem, SwashCache};
 use std::collections::HashMap;
 use std::os::unix::io::{AsFd, AsRawFd};
 use std::sync::{Arc, Mutex};
@@ -65,9 +64,10 @@ impl WaylandAdapter {
             surface_to_id: HashMap::new(),
             pointer_surface: None,
             pointer_pos: (0.0, 0.0),
-            font_system: FontSystem::new(),
-            swash_cache: SwashCache::new(),
+            pointer_target: None,
+            pointer_grab: super::dispatch_pointer_button::PointerGrab::default(),
             floating_surfaces: HashMap::new(),
+            pending_children: HashMap::new(),
             last_button_serial: None,
             app_env,
         };

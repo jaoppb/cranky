@@ -141,3 +141,26 @@ fn test_popup_config_dto_offset_list() {
     assert_eq!(domain.offset().dx(), 2);
     assert_eq!(domain.offset().dy(), 10);
 }
+
+#[test]
+fn popup_embed_dto_subsurface() {
+    let dto: PopupConfigDto = toml::from_str(r#"embed = "subsurface""#).unwrap();
+    assert_eq!(
+        dto.into_domain().embed(),
+        crate::shared::config::domain::PopupEmbed::Subsurface
+    );
+}
+
+#[test]
+fn popup_embed_dto_defaults_to_composite() {
+    let dto: PopupConfigDto = toml::from_str(r#"behavior = "global""#).unwrap();
+    assert_eq!(
+        dto.into_domain().embed(),
+        crate::shared::config::domain::PopupEmbed::Composite
+    );
+}
+
+#[test]
+fn popup_embed_dto_rejects_unknown_value() {
+    assert!(toml::from_str::<PopupConfigDto>(r#"embed = "bogus""#).is_err());
+}

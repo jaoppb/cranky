@@ -276,13 +276,15 @@ pub mod test_support {
             _node: crate::features::layout_engine::domain::StyledNode,
             _measurer: &mut dyn TextMeasurer,
             _start_pos: Position,
-            _available_size: Option<Size>,
+            _constraint: crate::shared::primitives::SizeConstraint,
         ) -> Result<
             crate::features::layout_engine::domain::RenderNode,
             crate::features::layout_engine::domain::LayoutError,
         > {
             Ok(crate::features::layout_engine::domain::RenderNode::Rect {
-                path: crate::features::layout_engine::domain::NodePath::root(),
+                path: crate::features::layout_engine::domain::NodePath::root_in(
+                    crate::features::layout_engine::domain::SurfaceSpace::Bar,
+                ),
                 node_key: None,
                 rect: crate::shared::primitives::geometry::Rect::new(
                     Position::new(0, 0),

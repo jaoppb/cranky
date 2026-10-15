@@ -16,7 +16,10 @@ pub use color::{Color, DrawingColor};
 pub use dynamic::DynamicValue;
 pub use geometry::{BarHeight, BarWidth, Position, Rect, Scale, Size};
 pub use ids::{FunctionName, ModuleId, ModuleInstanceId, ModuleName, MonitorId};
-pub use layout::{ChildModuleLayout, ChildSizesMap, ModuleKey};
+pub use layout::{
+    ChildBounds, ChildModuleLayout, ChildSizesMap, LayoutSurface, ModuleKey, ModuleSite,
+    SizeConstraint,
+};
 pub use monitor::ScriptMonitorInfo;
 pub use offset::PopupOffset;
 pub use options::ModuleOptions;

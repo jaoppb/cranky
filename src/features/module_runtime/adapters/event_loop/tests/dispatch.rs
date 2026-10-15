@@ -13,7 +13,7 @@ use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::ModuleId;
 use crate::shared::primitives::MonitorId;
-use crate::shared::primitives::geometry::{Position, Rect, Size};
+use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -48,7 +48,9 @@ async fn test_dispatch_render_outcome_emits_layout_events() {
         Some(SizeChange::new(Size::new(0, 0), Size::new(50, 20))),
         vec![],
         crate::features::layout_engine::domain::RenderNode::Rect {
-            path: crate::features::layout_engine::domain::NodePath::root(),
+            path: crate::features::layout_engine::domain::NodePath::root_in(
+                crate::features::layout_engine::domain::SurfaceSpace::Bar,
+            ),
             node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
             style: ComputedStyle::default(),
@@ -59,9 +61,10 @@ async fn test_dispatch_render_outcome_emits_layout_events() {
             panel: None,
         },
         None,
+        crate::features::module_runtime::domain::FloatingLayouts::default(),
     );
 
-    event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &outcome);
+    event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &outcome, Scale::new(1.0));
 
     let received = layout_rx
         .try_recv()

@@ -1,11 +1,7 @@
-use super::dispatch::{
-    discover_monitors, dispatch_outcome_buffer, dispatch_outcome_layouts, dispatch_outcome_panels,
-    dispatch_outcome_popups, dispatch_post_actions, update_floating_trees,
-};
+use super::dispatch::discover_monitors;
 use super::events::EventLoopEvent;
-use super::floating_state::FloatingState;
-use crate::features::layout_engine::domain::DisplayCommandSender;
-use crate::features::layout_engine::ports::LayoutEnginePort;
+use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
+use crate::features::layout_engine::domain::{DisplayCommandSender, RenderNode};
 use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
 use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender};
@@ -13,6 +9,7 @@ use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::Rect;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -30,7 +27,21 @@ pub struct EventLoop<
     pub(crate) canvas_factory: F,
     pub(crate) vdom_diff: Arc<dyn VdomDiffPort>,
     pub(crate) style_resolver: Arc<dyn StyleResolverPort>,
-    pub(super) floating: FloatingState,
+    /// Also this module's dedup key for each floating kind: a display
+    /// command is only ever sent when a fresh (anchor, layout) pair differs
+    /// from what's cached here, so there's one cache per kind, not a
+    /// hit-test copy and a separate "did it change" copy. The anchor is part
+    /// of the key because a popup can be repositioned (a sibling's width
+    /// shifting this module's x-offset) without its content changing at all.
+    pub(crate) popup_render_trees: HashMap<MonitorId, (Option<Rect>, RenderNode)>,
+    pub(crate) panel_render_trees: HashMap<MonitorId, (Option<Rect>, RenderNode)>,
+    pub(crate) tooltip_render_trees: HashMap<MonitorId, (Option<Rect>, RenderNode)>,
+    /// Whether the last render on each monitor had any child modules at all
+    /// — lets `dispatch_outcome_layouts` send one final empty
+    /// `ContainerLayoutsCalculated` on the render where the last child
+    /// disappears, without spamming one on every render of a module that
+    /// never has children.
+    pub(crate) child_layouts_present: HashMap<MonitorId, bool>,
 }
 
 impl<
@@ -58,7 +69,10 @@ impl<
             canvas_factory,
             vdom_diff,
             style_resolver,
-            floating: FloatingState::default(),
+            popup_render_trees: HashMap::new(),
+            panel_render_trees: HashMap::new(),
+            tooltip_render_trees: HashMap::new(),
+            child_layouts_present: HashMap::new(),
         }
     }
 
@@ -84,51 +98,25 @@ impl<
         )
     }
 
-    pub fn discover_monitors(&self) -> Vec<MonitorId> {
-        discover_monitors(self.ctx.hub())
-    }
-
-    pub fn dispatch_render_outcome(
-        &mut self,
-        monitor_id: &MonitorId,
-        outcome: &crate::features::module_runtime::domain::RenderOutcome,
-    ) {
-        dispatch_outcome_layouts(self.ctx.layout_sender(), self.ctx.id(), monitor_id, outcome);
-        dispatch_outcome_buffer(
-            self.ctx.surface_manager(),
-            self.ctx.id(),
-            self.ctx.parent_id(),
-            monitor_id,
-            outcome,
-        );
-        dispatch_outcome_popups(
-            self.ctx.display_sender(),
-            self.floating.active_popups_mut(),
-            self.ctx.id(),
-            monitor_id,
-            outcome,
-        );
-        dispatch_outcome_panels(
-            self.ctx.display_sender(),
-            self.floating.active_panels_mut(),
-            self.ctx.id(),
-            monitor_id,
-            outcome,
-        );
-        let (popup_trees, panel_trees) = self.floating.render_trees_mut();
-        update_floating_trees(
-            &mut self.canvas_factory,
-            popup_trees,
-            panel_trees,
-            monitor_id,
-            outcome,
-        );
+    pub fn discover_monitors<V>(&self, layouts: &HashMap<MonitorId, V>) -> Vec<MonitorId> {
+        let seen: std::collections::HashSet<MonitorId> = self
+            .render_pipeline
+            .render_trees()
+            .keys()
+            .cloned()
+            .collect();
+        discover_monitors(
+            self.ctx.hub(),
+            layouts,
+            &seen,
+            self.ctx.parent_id().is_some(),
+        )
     }
 
     pub async fn run(mut self) {
         let subs = self.port.subscriptions().to_vec();
         let mut events_stream = self.ctx.hub().subscribe_streams(&subs);
-        let mut layout_engines: HashMap<MonitorId, Box<dyn LayoutEnginePort>> = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
 
         self.port.refresh(self.ctx.hub(), &subs);
         self.render_all_monitors(&mut layout_engines);
@@ -179,10 +167,6 @@ impl<
 
             if should_render {
                 self.render_all_monitors(&mut layout_engines);
-                let post_actions = self
-                    .pointer_handler
-                    .update_after_render(self.render_pipeline.render_trees());
-                dispatch_post_actions(&mut self.port, &self.ctx, post_actions);
             }
         }
     }

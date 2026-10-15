@@ -1,6 +1,6 @@
 use crate::shared::config::domain::{Config, RootConfig};
 use crate::shared::primitives::{
-    DynamicValue, ModuleId, ModuleName, MonitorId,
+    ChildBounds, DynamicValue, ModuleId, ModuleKey, ModuleName, MonitorId,
     geometry::{BarWidth, Position, Rect, Size},
 };
 use std::collections::HashMap;
@@ -33,8 +33,12 @@ pub struct AppReadModel {
     pub module_ids: Vec<ModuleId>,
     pub module_names: HashMap<ModuleId, ModuleName>,
     pub name_to_ids: HashMap<ModuleName, Vec<ModuleId>>,
+    /// This module's full `(name, instance_id)` identity, mirroring
+    /// `ModuleRegistry::module_keys` — needed wherever a lookup must
+    /// distinguish two same-named embedding sites.
+    pub module_keys: HashMap<ModuleId, ModuleKey>,
     pub module_sizes: HashMap<MonitorId, HashMap<ModuleId, Size>>,
-    pub computed_layouts: HashMap<MonitorId, HashMap<ModuleId, Rect>>,
+    pub computed_layouts: HashMap<MonitorId, HashMap<ModuleId, ChildBounds>>,
 }
 
 impl AppReadModel {
@@ -52,6 +56,7 @@ impl AppReadModel {
             module_ids,
             module_names,
             name_to_ids,
+            module_keys: HashMap::new(),
             module_sizes: HashMap::new(),
             computed_layouts: HashMap::new(),
         }
@@ -88,7 +93,10 @@ impl AppReadModel {
         if let Some(mon_layouts) = self.computed_layouts.get(monitor) {
             for (&mod_id, &bounds) in mon_layouts {
                 if Some(mod_id) != self.root_module {
-                    layouts.push(ModuleLayout { id: mod_id, bounds });
+                    layouts.push(ModuleLayout {
+                        id: mod_id,
+                        bounds: bounds.rect(),
+                    });
                 }
             }
             return layouts;

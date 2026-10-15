@@ -2,17 +2,40 @@ use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::{InteractionContext, VNode};
 use crate::shared::primitives::geometry::{Rect, Scale};
-use crate::shared::primitives::ChildSizesMap;
+use crate::shared::primitives::{ChildSizesMap, ModuleKey, SizeConstraint};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
+use std::collections::HashMap;
 
-pub struct LayoutContext<'a, F: CanvasFactory> {
+pub struct LayoutContext<'a, F: CanvasFactory, E: LayoutEnginePort> {
     pub scale: Scale,
     pub style_resolver: &'a dyn StyleResolverPort,
+    /// Terminal lazy-spawn failures for this module's own children, keyed by
+    /// the failed child's `ModuleKey` — pre-filtered from the hub's
+    /// site-keyed map, since this module only ever needs to know about its
+    /// own embedding sites. Consulted right before style resolution to swap
+    /// a failed `Module` node for an error placeholder.
+    pub child_errors: &'a HashMap<ModuleKey, String>,
+    /// Still used for the module's own painted position — where its buffer
+    /// goes on whatever surface it lives on. No longer consulted for sizing:
+    /// see `current_constraint`.
     pub current_bounds: Option<Rect>,
+    /// What this module's own layout may use as available space, per axis —
+    /// for the root, always both axes pinned to its layer-surface bounds;
+    /// for an embedded module, only the axes its parent's CSS pinned. Never
+    /// derived from `current_bounds`, so a parent resizing a child's slot
+    /// can't feed back into a bigger slot next frame — see decision 10.
+    pub current_constraint: SizeConstraint,
     pub current_child_sizes: Option<&'a ChildSizesMap>,
     pub interaction_context: Option<InteractionContext>,
     pub canvas_factory: &'a mut F,
-    pub layout_engine: &'a mut dyn LayoutEnginePort,
+    pub layout_engine: &'a mut E,
+    /// Separate from `layout_engine`, and from each other, so laying out a
+    /// popup, panel or tooltip's content never disturbs the bar tree's
+    /// incremental layout state — or each other's, when more than one is
+    /// open at once. Each engine instance tracks a single tree.
+    pub popup_layout_engine: &'a mut E,
+    pub panel_layout_engine: &'a mut E,
+    pub tooltip_layout_engine: &'a mut E,
 }
 
 #[derive(Debug, Clone, PartialEq)]

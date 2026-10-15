@@ -7,7 +7,7 @@ use super::styled_node::StyledNode;
 use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
 use crate::features::vdom::domain::{ClickHandlers, NodeKey, NodePath, TextContent, UiAction};
 use crate::shared::primitives::geometry::{Rect, Size};
-use crate::shared::primitives::{BinaryData, ModuleKey};
+use crate::shared::primitives::{BinaryData, ModuleKey, ModuleOptions};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum RenderNode {
@@ -86,6 +86,7 @@ pub enum RenderNode {
         node_key: Option<NodeKey>,
         rect: Rect,
         key: ModuleKey,
+        options: ModuleOptions,
         style: ComputedStyle,
         on_click: Option<ClickHandlers>,
         on_hover: Option<UiAction>,

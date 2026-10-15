@@ -10,12 +10,19 @@ use crate::shared::config::domain::Config;
 use crate::shared::dbus::domain::DBusState;
 use crate::shared::events::core::{PointerReceiver, PointerSender};
 use crate::shared::primitives::geometry::Scale;
-use crate::shared::primitives::{ChildSizesMap, MonitorId};
+use crate::shared::primitives::{ChildSizesMap, ModuleSite, MonitorId};
 
 use super::hyprland::HyprlandState;
 
 pub type ModuleSizesMap = HashMap<MonitorId, ChildSizesMap>;
 pub type MonitorScalesMap = HashMap<MonitorId, Scale>;
+/// Terminal lazy-spawn failures, keyed by embedding site — module-not-found,
+/// `init()` failure, or a cycle.
+///
+/// Broadcast the same way `module_sizes` is: every module actor reads the
+/// whole map and filters to its own children, so a fix (hot reload clearing
+/// an entry) wakes the render loop exactly like a size change does.
+pub type ModuleErrorsMap = HashMap<ModuleSite, String>;
 
 pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
@@ -37,6 +44,10 @@ pub struct SignalHub {
         watch::Sender<MonitorScalesMap>,
         watch::Receiver<MonitorScalesMap>,
     ),
+    module_errors: (
+        watch::Sender<ModuleErrorsMap>,
+        watch::Receiver<ModuleErrorsMap>,
+    ),
 }
 
 impl SignalHub {
@@ -56,6 +67,7 @@ impl SignalHub {
         let pointer = tokio::sync::broadcast::channel(32);
         let module_sizes = watch::channel(HashMap::new());
         let monitor_scales = watch::channel(HashMap::new());
+        let module_errors = watch::channel(HashMap::new());
 
         Self {
             config,
@@ -68,7 +80,18 @@ impl SignalHub {
             mpris,
             module_sizes,
             monitor_scales,
+            module_errors,
         }
+    }
+
+    #[must_use]
+    pub fn module_errors_tx(&self) -> watch::Sender<ModuleErrorsMap> {
+        self.module_errors.0.clone()
+    }
+
+    #[must_use]
+    pub fn module_errors_rx(&self) -> watch::Receiver<ModuleErrorsMap> {
+        self.module_errors.1.clone()
     }
 
     #[must_use]

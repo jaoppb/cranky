@@ -1,9 +1,12 @@
-use crate::features::vdom::domain::{AnchorSegment, InteractionContext, NodePath, NodeRef, VNode};
+use crate::features::vdom::domain::{
+    InteractionContext, NodePath, NodeRef, SurfaceSpace, VNode, resolve_segment,
+};
 
 /// The three interaction refs, pre-resolved into concrete absolute
 /// `NodePath`s against one specific tree (`None` if a ref's keyed anchor no
 /// longer exists in that tree), so each is resolved once per tree rather
 /// than once per node visited while walking it.
+#[derive(Debug)]
 pub struct ResolvedInteraction {
     hovered: Option<NodePath>,
     active: Option<NodePath>,
@@ -13,11 +16,17 @@ pub struct ResolvedInteraction {
 
 impl ResolvedInteraction {
     #[must_use]
-    pub fn resolve(root: &VNode, ctx: &InteractionContext) -> Self {
+    pub fn resolve(root: &VNode, surface: SurfaceSpace, ctx: &InteractionContext) -> Self {
         Self {
-            hovered: ctx.hovered().and_then(|r| resolve_target_path(root, r)),
-            active: ctx.active().and_then(|r| resolve_target_path(root, r)),
-            focused: ctx.focused().and_then(|r| resolve_target_path(root, r)),
+            hovered: ctx
+                .hovered()
+                .and_then(|r| resolve_target_path(root, surface, r)),
+            active: ctx
+                .active()
+                .and_then(|r| resolve_target_path(root, surface, r)),
+            focused: ctx
+                .focused()
+                .and_then(|r| resolve_target_path(root, surface, r)),
             is_monitor_focused: ctx.is_monitor_focused(),
         }
     }
@@ -47,40 +56,21 @@ impl ResolvedInteraction {
 }
 
 /// Turns a captured `NodeRef` into a concrete absolute `NodePath` in `root`,
-/// or `None` if one of its keyed levels can no longer be found there.
-fn resolve_target_path(root: &VNode, node_ref: &NodeRef) -> Option<NodePath> {
+/// or `None` if one of its keyed levels can no longer be found there, or if
+/// the ref was captured in a different surface than `root` belongs to (a
+/// popup's hover must never resolve against the bar's tree, and vice versa).
+fn resolve_target_path(
+    root: &VNode,
+    surface: SurfaceSpace,
+    node_ref: &NodeRef,
+) -> Option<NodePath> {
+    if node_ref.relative_path().surface() != surface {
+        return None;
+    }
     let mut node = root;
-    let mut path = NodePath::root();
+    let mut path = NodePath::root_in(surface);
     for segment in node_ref.anchor() {
         (node, path) = resolve_segment(node, path, segment)?;
     }
     Some(path.extend(node_ref.relative_path()))
-}
-
-/// Follows one anchor segment from `start`: every step but the last walks
-/// through unkeyed nodes by position, then the keyed node is picked out of
-/// that parent's children by key — its captured index is ignored, since a
-/// reorder is exactly what changes it.
-fn resolve_segment<'a>(
-    start: &'a VNode,
-    start_path: NodePath,
-    segment: &AnchorSegment,
-) -> Option<(&'a VNode, NodePath)> {
-    let Some((_, through)) = segment.path().as_slice().split_last() else {
-        return (start.key() == Some(segment.key())).then_some((start, start_path));
-    };
-
-    let mut parent = start;
-    let mut parent_path = start_path;
-    for &idx in through {
-        parent = parent.children().get(idx)?;
-        parent_path = parent_path.child(idx);
-    }
-
-    parent
-        .children()
-        .iter()
-        .enumerate()
-        .find(|(_, child)| child.key() == Some(segment.key()))
-        .map(|(idx, child)| (child, parent_path.child(idx)))
 }

@@ -21,7 +21,7 @@ impl PointerHandler {
                 PointerOutcome::new(Vec::new(), state_changed)
             }
             PointerEvent::Click { button, pos, .. } => {
-                let actions = self.handle_click(monitor_id, *button, *pos, render_tree);
+                let actions = Self::handle_click(monitor_id, *button, *pos, render_tree);
                 PointerOutcome::new(actions, false)
             }
             PointerEvent::PointerMotion { pos, .. } => {

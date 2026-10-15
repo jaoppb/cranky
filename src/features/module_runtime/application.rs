@@ -6,7 +6,9 @@ use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::{ModuleId, ModuleInstanceId, MonitorId, geometry::Rect};
+use crate::shared::primitives::{
+    ChildBounds, LayoutSurface, ModuleId, ModuleInstanceId, MonitorId,
+};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
@@ -24,7 +26,7 @@ pub struct ModuleContext<
     layout_sender: Arc<LS>,
     display_sender: Arc<DS>,
     ui_sender: Arc<US>,
-    layout_rx: watch::Receiver<HashMap<MonitorId, Rect>>,
+    layout_rx: watch::Receiver<HashMap<MonitorId, ChildBounds>>,
     pointer_rx: crate::shared::events::core::PointerReceiver,
 }
 
@@ -41,7 +43,7 @@ impl<
         layout_sender: Arc<LS>,
         display_sender: Arc<DS>,
         ui_sender: Arc<US>,
-        layout_rx: watch::Receiver<HashMap<MonitorId, Rect>>,
+        layout_rx: watch::Receiver<HashMap<MonitorId, ChildBounds>>,
     ) -> Self {
         let pointer_rx = hub.pointer_rx();
         Self {
@@ -69,6 +71,12 @@ impl<
     }
 
     #[must_use]
+    pub fn with_surface(mut self, surface: LayoutSurface) -> Self {
+        self.identity = self.identity.with_surface(surface);
+        self
+    }
+
+    #[must_use]
     pub const fn identity(&self) -> &ModuleIdentity {
         &self.identity
     }
@@ -86,6 +94,11 @@ impl<
     #[must_use]
     pub const fn instance_id(&self) -> Option<&ModuleInstanceId> {
         self.identity.instance_id()
+    }
+
+    #[must_use]
+    pub const fn surface(&self) -> LayoutSurface {
+        self.identity.surface()
     }
 
     #[must_use]
@@ -116,7 +129,7 @@ impl<
     pub const fn rxs_mut(
         &mut self,
     ) -> (
-        &mut watch::Receiver<HashMap<MonitorId, Rect>>,
+        &mut watch::Receiver<HashMap<MonitorId, ChildBounds>>,
         &mut crate::shared::events::core::PointerReceiver,
     ) {
         (&mut self.layout_rx, &mut self.pointer_rx)
@@ -160,7 +173,11 @@ impl<
         }
     }
 
-    pub fn spawn(self) {
+    /// Spawns this actor's event loop onto its own task and hands back the
+    /// `JoinHandle` instead of discarding it, so a caller that mints this
+    /// actor outside the normal config-driven lifecycle (a lazy spawn, see
+    /// `ModuleRegistry::spawn_module_lazy`) can track and later abort it.
+    pub fn spawn(self) -> tokio::task::JoinHandle<()> {
         let event_loop = EventLoop::new(
             self.port,
             self.ctx,
@@ -173,13 +190,14 @@ impl<
 
         tokio::spawn(async move {
             event_loop.run().await;
-        });
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
     use crate::features::layout_engine::domain::DisplayCommand;
     use crate::features::module_runtime::ports::LayoutEvent;
     use crate::features::module_runtime::test_support::{
@@ -191,7 +209,8 @@ mod tests {
     use crate::features::vdom::domain::{UiCommand, VNode};
     use crate::shared::config::domain::Config;
     use crate::shared::events::signals::{HyprlandState, SignalKind};
-    use crate::shared::primitives::geometry::{Position, Size};
+    use crate::shared::primitives::SizeConstraint;
+    use crate::shared::primitives::geometry::{Position, Rect, Size};
 
     #[allow(dead_code)]
     struct TestFixture {
@@ -199,7 +218,7 @@ mod tests {
         pub layout_rx: std::sync::mpsc::Receiver<LayoutEvent>,
         pub display_rx: std::sync::mpsc::Receiver<DisplayCommand>,
         pub ui_rx: std::sync::mpsc::Receiver<UiCommand>,
-        pub layout_tx: watch::Sender<HashMap<MonitorId, Rect>>,
+        pub layout_tx: watch::Sender<HashMap<MonitorId, ChildBounds>>,
         pub event_loop: EventLoop<
             MockCanvasFactory,
             ChannelLayoutSender,
@@ -210,6 +229,7 @@ mod tests {
 
     struct TestFixtureBuilder {
         id: ModuleId,
+        parent_id: Option<ModuleId>,
         monitors: Vec<&'static str>,
         subs: Vec<SignalKind>,
         vnode: VNode,
@@ -219,10 +239,16 @@ mod tests {
         fn new(id: ModuleId) -> Self {
             Self {
                 id,
+                parent_id: None,
                 monitors: Vec::new(),
                 subs: Vec::new(),
                 vnode: VNode::new_rect(None, None, None, None, None),
             }
+        }
+
+        fn with_parent(mut self, parent_id: ModuleId) -> Self {
+            self.parent_id = Some(parent_id);
+            self
         }
 
         fn with_monitors(mut self, monitors: &[&'static str]) -> Self {
@@ -297,7 +323,8 @@ mod tests {
                 display_sender,
                 ui_sender,
                 layout_rx,
-            );
+            )
+            .with_parent(self.parent_id);
             let port = Box::new(TestModulePort::with_subs(self.vnode, self.subs));
 
             let resolver = Arc::new(CompositeStyleResolver::new(vec![]));
@@ -370,7 +397,7 @@ mod tests {
             .build();
 
         let mut event_loop = fixture.event_loop;
-        let mut layout_engines = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
         event_loop.render_all_monitors(&mut layout_engines);
 
         let event = fixture
@@ -394,10 +421,62 @@ mod tests {
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-1"),
-            Rect::new(Position::new(0, 0), Size::new(10, 10)),
+            ChildBounds::new(
+                Rect::new(Position::new(0, 0), Size::new(10, 10)),
+                SizeConstraint::none(),
+            ),
         );
         fixture.layout_tx.send(layouts).unwrap();
 
+        event_loop.render_all_monitors(&mut layout_engines);
+        assert!(fixture.layout_rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_suspended_monitor_is_excluded_after_its_rect_is_withdrawn() {
+        // Decision 14: a monitor this *embedded* actor has already rendered
+        // on (it's in `render_trees`) must not be rediscovered via the
+        // Wayland bootstrap path once its rect disappears — that's what
+        // actually stops a child from resurrecting its own surface after its
+        // embedding site (a popup, say) closes. A top-level actor (no
+        // parent) has no site to lose and is exempt from this — see
+        // `test_module_actor_skips_pipeline_when_vdom_unchanged`.
+        let id = ModuleId::new(1);
+        let parent = ModuleId::new(99);
+        let fixture = TestFixtureBuilder::new(id)
+            .with_parent(parent)
+            .with_monitors(&["DP-1"])
+            .build();
+
+        let mut event_loop = fixture.event_loop;
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
+
+        // First render: DP-1 has never been rendered before, so the
+        // Hyprland-sourced bootstrap path discovers and renders it.
+        event_loop.render_all_monitors(&mut layout_engines);
+        assert!(
+            event_loop
+                .render_pipeline()
+                .render_trees()
+                .contains_key(&MonitorId::new("DP-1"))
+        );
+        assert!(
+            fixture.layout_rx.try_recv().is_ok(),
+            "first render should report an intrinsic size"
+        );
+
+        // No live rect for DP-1 (nothing was ever sent on layout_tx), but
+        // DP-1 is now `seen` — discover_monitors must exclude it even
+        // though Hyprland still reports it.
+        let discovered = event_loop.discover_monitors(&HashMap::<MonitorId, ChildBounds>::new());
+        assert!(
+            !discovered.contains(&MonitorId::new("DP-1")),
+            "a previously-rendered monitor with no current rect must stay suspended"
+        );
+
+        // A second render_all_monitors call (e.g. from some unrelated
+        // signal tick) must therefore do nothing for DP-1 — no refresh, no
+        // diff, no submit — so `try_recv` sees nothing new.
         event_loop.render_all_monitors(&mut layout_engines);
         assert!(fixture.layout_rx.try_recv().is_err());
     }
@@ -475,12 +554,15 @@ mod tests {
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-2"),
-            Rect::new(Position::new(0, 0), Size::new(10, 10)),
+            ChildBounds::new(
+                Rect::new(Position::new(0, 0), Size::new(10, 10)),
+                SizeConstraint::none(),
+            ),
         );
         fixture.layout_tx.send(layouts).unwrap();
 
         let mut event_loop = fixture.event_loop;
-        let mut layout_engines = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
         event_loop.render_all_monitors(&mut layout_engines);
 
         let event = fixture
@@ -513,12 +595,15 @@ mod tests {
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-2"),
-            Rect::new(Position::new(0, 0), Size::new(10, 10)),
+            ChildBounds::new(
+                Rect::new(Position::new(0, 0), Size::new(10, 10)),
+                SizeConstraint::none(),
+            ),
         );
         fixture.layout_tx.send(layouts).unwrap();
 
         let mut event_loop = fixture.event_loop;
-        let mut layout_engines = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
         event_loop.render_all_monitors(&mut layout_engines);
 
         assert!(fixture.layout_rx.try_recv().is_err());
@@ -542,7 +627,7 @@ mod tests {
             .build();
 
         let mut event_loop = fixture.event_loop;
-        let mut layout_engines = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
         event_loop.render_all_monitors(&mut layout_engines);
 
         assert!(
@@ -612,12 +697,15 @@ mod tests {
         let mut layouts = HashMap::new();
         layouts.insert(
             MonitorId::new("DP-1"),
-            Rect::new(Position::new(0, 0), Size::new(1920, 30)),
+            ChildBounds::new(
+                Rect::new(Position::new(0, 0), Size::new(1920, 30)),
+                SizeConstraint::none(),
+            ),
         );
         fixture.layout_tx.send(layouts).unwrap();
 
         let mut event_loop = fixture.event_loop;
-        let mut layout_engines = HashMap::new();
+        let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
         event_loop.render_all_monitors(&mut layout_engines);
 
         let mut found_container_layouts = false;

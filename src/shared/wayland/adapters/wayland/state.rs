@@ -1,3 +1,4 @@
+use super::dispatch_pointer_button::PointerGrab;
 use super::types::{FloatingSurface, WaylandBar, WaylandOutputInfo};
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
 use crate::shared::env::domain::AppEnvironment;
@@ -5,8 +6,9 @@ use crate::shared::events::core::SurfaceKind;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::composite::CompositeLayers;
+use crate::shared::wayland::composite::route::PointerTarget;
 use crate::shared::wayland::ports::DisplayServerError;
-use cosmic_text::{FontSystem, SwashCache};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
@@ -38,10 +40,16 @@ pub struct WaylandState {
     pub(crate) surface_to_id: HashMap<WlSurface, (ModuleId, MonitorId, SurfaceKind)>,
     pub(crate) pointer_surface: Option<WlSurface>,
     pub(crate) pointer_pos: (f64, f64),
+    /// Where pointer events currently go: a `surface_to_id` entry, or a child
+    /// composited into the floating surface under the pointer.
+    pub(crate) pointer_target: Option<PointerTarget>,
+    /// Buttons held on `pointer_target`, which stays fixed while any is.
+    pub(crate) pointer_grab: PointerGrab,
 
-    pub(crate) font_system: FontSystem,
-    pub(crate) swash_cache: SwashCache,
     pub(crate) floating_surfaces: HashMap<FloatingKind, FloatingSurface>,
+    /// Composite child frames that arrived before their floating surface
+    /// existed; moved into its `layers` when it is created.
+    pub(crate) pending_children: HashMap<FloatingKind, CompositeLayers>,
     pub(crate) last_button_serial: Option<crate::shared::events::core::PointerSerial>,
     pub(crate) app_env: Arc<AppEnvironment>,
 }

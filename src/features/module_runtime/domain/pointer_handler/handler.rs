@@ -1,16 +1,13 @@
-use crate::features::layout_engine::domain::StyledNode;
 use crate::features::vdom::domain::{InteractionContext, NodeRef};
 use crate::shared::primitives::MonitorId;
-use crate::shared::primitives::geometry::Position;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Default)]
+#[allow(clippy::struct_field_names)]
 pub struct PointerHandler {
     pub(crate) hovered_nodes: HashMap<MonitorId, NodeRef>,
     pub(crate) active_nodes: HashMap<MonitorId, NodeRef>,
     pub(crate) focused_nodes: HashMap<MonitorId, NodeRef>,
-    pub(crate) last_tooltip: Option<StyledNode>,
-    pub(crate) last_pointer_pos: Option<(MonitorId, Position)>,
 }
 
 impl PointerHandler {
@@ -48,31 +45,13 @@ impl PointerHandler {
         )
     }
 
-    #[must_use]
-    pub const fn last_tooltip(&self) -> Option<&StyledNode> {
-        self.last_tooltip.as_ref()
-    }
-
-    #[must_use]
-    pub const fn last_pointer_pos(&self) -> Option<&(MonitorId, Position)> {
-        self.last_pointer_pos.as_ref()
-    }
-
     /// Drops hover/active/focus state for any monitor no longer in `live`,
-    /// in one call rather than three parallel `.retain()`s. Also drops the
-    /// last known pointer position (and its associated tooltip cache) if it
-    /// was on a monitor that's now gone - otherwise a later reconnect of
-    /// the same monitor id would resurrect a stale position/tooltip with
-    /// no new `PointerMotion` event to justify it.
+    /// in one call rather than three parallel `.retain()`s — a removed
+    /// monitor's stale interaction state must not resurrect if its id is
+    /// reused by a later hotplug.
     pub fn retain_monitors(&mut self, live: &HashSet<MonitorId>) {
         self.hovered_nodes.retain(|id, _| live.contains(id));
         self.active_nodes.retain(|id, _| live.contains(id));
         self.focused_nodes.retain(|id, _| live.contains(id));
-        if let Some((monitor_id, _)) = &self.last_pointer_pos
-            && !live.contains(monitor_id)
-        {
-            self.last_pointer_pos = None;
-            self.last_tooltip = None;
-        }
     }
 }

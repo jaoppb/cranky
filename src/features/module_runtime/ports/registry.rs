@@ -8,6 +8,33 @@ use crate::shared::events::signals::SignalKind;
 use crate::shared::primitives::ModuleId;
 use async_trait::async_trait;
 
+/// The `ModuleId` minted for a lazy spawn, plus the sender its new actor's
+/// layout channel is reached through.
+///
+/// What `spawn_module` hands back instead of a bare `(ModuleId, Snd)` tuple,
+/// whose two positions carry no names of their own at the call site.
+pub struct SpawnedModule<Snd: LayoutSender> {
+    id: ModuleId,
+    sender: Snd,
+}
+
+impl<Snd: LayoutSender> SpawnedModule<Snd> {
+    #[must_use]
+    pub const fn new(id: ModuleId, sender: Snd) -> Self {
+        Self { id, sender }
+    }
+
+    #[must_use]
+    pub const fn id(&self) -> ModuleId {
+        self.id
+    }
+
+    #[must_use]
+    pub fn into_sender(self) -> Snd {
+        self.sender
+    }
+}
+
 #[async_trait]
 #[cfg_attr(test, mockall::automock)]
 pub trait ModuleRegistryPort<
@@ -15,6 +42,7 @@ pub trait ModuleRegistryPort<
     LS: LayoutEventSender + 'static,
     DS: DisplayCommandSender + 'static,
     US: UiCommandSender + 'static,
+    Snd: LayoutSender + 'static,
 >: Send + Sync
 {
     /// Load module configurations into registry.
@@ -27,7 +55,7 @@ pub trait ModuleRegistryPort<
     fn spawn_all(
         &mut self,
         deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
-    ) -> std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>;
+    ) -> std::collections::HashMap<ModuleId, Snd>;
 
     /// Reload a specific module by name.
     ///
@@ -39,16 +67,62 @@ pub trait ModuleRegistryPort<
         name: &crate::shared::primitives::ModuleName,
         config: &Config,
         deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
-    ) -> Result<std::collections::HashMap<ModuleId, Box<dyn LayoutSender>>, RegistryLoadError>;
+    ) -> Result<std::collections::HashMap<ModuleId, Snd>, RegistryLoadError>;
 
     fn root_module(&self) -> Option<ModuleId>;
     fn module_ids(&self) -> &[ModuleId];
+    /// Derived on the fly from each site's `ModuleKey` — there is no
+    /// durable `ModuleId -> ModuleName`-only store any more, so this
+    /// allocates a fresh map per call.
     fn module_names(
         &self,
-    ) -> &std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleName>;
+    ) -> std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleName>;
     fn name_to_ids(
         &self,
     ) -> &std::collections::HashMap<crate::shared::primitives::ModuleName, Vec<ModuleId>>;
+
+    /// This module's full `(name, instance_id)` — unlike `module_names`,
+    /// distinguishes two sites of the same name from each other. Derived on
+    /// the fly from each site's `ModuleKey`, for the same reason as
+    /// `module_names`.
+    fn module_keys(
+        &self,
+    ) -> std::collections::HashMap<ModuleId, crate::shared::primitives::ModuleKey>;
+
+    /// Resolves the concrete actor embedded at `key` by `parent` — the
+    /// per-site-aware replacement for guessing via `name_to_ids().first()`,
+    /// which can't tell two parents' same-named children apart.
+    fn resolve_site(
+        &self,
+        parent: Option<ModuleId>,
+        key: &crate::shared::primitives::ModuleKey,
+    ) -> Option<ModuleId>;
+
+    /// The real parent this site was loaded or spawned under — `None` for
+    /// the root and for an unknown id. Lets a caller walk the ancestor chain
+    /// (cycle detection) without reaching into the registry's own maps.
+    fn parent_of(&self, id: ModuleId) -> Option<ModuleId>;
+
+    /// Mints a `ModuleId` for a `Module` node with no existing actor and
+    /// spawns it immediately, instead of waiting for the next `spawn_all`.
+    /// Used for lazy discovery: rendering `ui.module(name)` with no site
+    /// resolves to no actor, which is the caller's cue to spawn one here.
+    ///
+    /// # Errors
+    ///
+    /// Returns `RegistryLoadError` if the named module can't be found or its
+    /// `init()` fails — the caller decides what a failed lazy spawn means
+    /// (an error placeholder), unlike `load()`, where the same failure is
+    /// fatal at boot.
+    fn spawn_module(
+        &mut self,
+        parent: ModuleId,
+        key: &crate::shared::primitives::ModuleKey,
+        options: crate::shared::primitives::ModuleOptions,
+        surface: crate::shared::primitives::LayoutSurface,
+        config: &Config,
+        deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
+    ) -> Result<SpawnedModule<Snd>, RegistryLoadError>;
 
     fn modules_using_style(
         &self,

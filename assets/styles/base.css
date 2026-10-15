@@ -22,3 +22,11 @@ bar:focus {
     padding: 4px 8px;
     color: #ffffff;
 }
+
+.module-error {
+    background-color: #f7768e;
+    color: #1a1b26;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}

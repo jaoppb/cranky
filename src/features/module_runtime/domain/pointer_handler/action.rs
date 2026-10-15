@@ -2,14 +2,14 @@ use crate::features::layout_engine::domain::DisplayCommand;
 use crate::features::vdom::domain::UiCommand;
 use crate::shared::primitives::{FunctionName, MonitorId};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PointerAction {
     CallFunction(FunctionName, Option<MonitorId>),
     SendUi(UiCommand),
     SendDisplay(DisplayCommand),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PointerOutcome {
     actions: Vec<PointerAction>,
     state_changed: bool,

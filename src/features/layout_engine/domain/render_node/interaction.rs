@@ -1,9 +1,19 @@
 use super::RenderNode;
-use crate::features::layout_engine::domain::styled_node::StyledNode;
 use crate::features::layout_engine::domain::popup::{StyledPanel, StyledPopup};
-use crate::features::vdom::domain::{ClickHandlers, UiAction};
+use crate::features::layout_engine::domain::styled_node::StyledNode;
+use crate::features::vdom::domain::{ClickHandlers, KeyedTree, NodeKey, UiAction};
 
 impl RenderNode {
+    /// This node's children, or an empty slice for a leaf variant. Used to
+    /// walk an anchor chain (see `NodeRef`) back into a concrete `NodePath`.
+    #[must_use]
+    pub fn children(&self) -> &[Self] {
+        match self {
+            Self::Flex { children, .. } | Self::Grid { children, .. } => children,
+            _ => &[],
+        }
+    }
+
     #[must_use]
     pub const fn on_click(&self) -> Option<&ClickHandlers> {
         match self {
@@ -67,5 +77,15 @@ impl RenderNode {
             | Self::Image { panel, .. }
             | Self::Module { panel, .. } => panel.as_ref(),
         }
+    }
+}
+
+impl KeyedTree for RenderNode {
+    fn children(&self) -> &[Self] {
+        Self::children(self)
+    }
+
+    fn node_key(&self) -> Option<&NodeKey> {
+        Self::node_key(self)
     }
 }

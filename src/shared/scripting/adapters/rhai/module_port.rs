@@ -107,13 +107,20 @@ impl AnyModulePort for RhaiModule {
                 match rhai::serde::from_dynamic::<crate::features::vdom::domain::VNode>(&result) {
                     Ok(node) => node,
                     Err(e) => {
-                        eprintln!("Failed to deserialize render output in rhai module: {e}");
-                        crate::features::vdom::domain::VNode::new_flex(vec![], None, None, None, None, None)
+                        tracing::error!("Failed to deserialize render output in rhai module: {e}");
+                        crate::features::vdom::domain::VNode::new_flex(
+                            vec![],
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                        )
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Module render error in rhai: {e:?}");
+                tracing::error!("Module render error in rhai: {e:?}");
                 crate::features::vdom::domain::VNode::new_flex(vec![], None, None, None, None, None)
             }
         }

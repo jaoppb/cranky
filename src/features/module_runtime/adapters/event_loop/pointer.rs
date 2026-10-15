@@ -28,12 +28,14 @@ impl<
             crate::shared::events::core::SurfaceKind::Bar => {
                 self.render_pipeline.render_trees().get(monitor_id)
             }
-            crate::shared::events::core::SurfaceKind::Popup => {
-                self.floating.popup_render_trees().get(monitor_id)
-            }
-            crate::shared::events::core::SurfaceKind::Panel => {
-                self.floating.panel_render_trees().get(monitor_id)
-            }
+            crate::shared::events::core::SurfaceKind::Popup => self
+                .popup_render_trees
+                .get(monitor_id)
+                .map(|(_, node)| node),
+            crate::shared::events::core::SurfaceKind::Panel => self
+                .panel_render_trees
+                .get(monitor_id)
+                .map(|(_, node)| node),
         };
 
         if let Some(render_tree) = target_tree {
@@ -65,10 +67,10 @@ impl<
         );
         match event {
             crate::shared::events::core::SurfaceLifecycleEvent::PopupDismissed => {
-                self.floating.popup_render_trees_mut().remove(monitor_id);
+                self.popup_render_trees.remove(monitor_id);
             }
             crate::shared::events::core::SurfaceLifecycleEvent::PanelDismissed => {
-                self.floating.panel_render_trees_mut().remove(monitor_id);
+                self.panel_render_trees.remove(monitor_id);
             }
         }
         let outcome = self.pointer_handler.handle_dismissal(event, monitor_id);

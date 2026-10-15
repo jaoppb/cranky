@@ -37,37 +37,36 @@ pub enum FloatingKind {
 pub struct PopupExclusivity;
 
 impl PopupExclusivity {
+    /// `ancestors` are `target`'s own ancestor chain (decision 7): opening a
+    /// nested popup must never dismiss the popup it lives inside, under any
+    /// `PopupBehavior`, so they're excluded from every arm up front rather
+    /// than repeating the exclusion four times.
     #[must_use]
     pub fn compute_conflicts(
         active_popups: &[PopupTarget],
         target: &PopupTarget,
+        ancestors: &[PopupTarget],
         behavior: crate::shared::config::domain::PopupBehavior,
     ) -> Vec<PopupTarget> {
+        let candidates = active_popups
+            .iter()
+            .filter(|p| *p != target && !ancestors.contains(p));
         match behavior {
-            crate::shared::config::domain::PopupBehavior::PerModuleAndMonitor => active_popups
-                .iter()
+            crate::shared::config::domain::PopupBehavior::PerModuleAndMonitor => candidates
                 .filter(|p| {
-                    *p != target
-                        && p.module_id() == target.module_id()
-                        && p.monitor_id() == target.monitor_id()
+                    p.module_id() == target.module_id() && p.monitor_id() == target.monitor_id()
                 })
                 .cloned()
                 .collect(),
-            crate::shared::config::domain::PopupBehavior::PerModule => active_popups
-                .iter()
-                .filter(|p| *p != target && p.module_id() == target.module_id())
+            crate::shared::config::domain::PopupBehavior::PerModule => candidates
+                .filter(|p| p.module_id() == target.module_id())
                 .cloned()
                 .collect(),
-            crate::shared::config::domain::PopupBehavior::PerMonitor => active_popups
-                .iter()
-                .filter(|p| *p != target && p.monitor_id() == target.monitor_id())
+            crate::shared::config::domain::PopupBehavior::PerMonitor => candidates
+                .filter(|p| p.monitor_id() == target.monitor_id())
                 .cloned()
                 .collect(),
-            crate::shared::config::domain::PopupBehavior::Global => active_popups
-                .iter()
-                .filter(|p| *p != target)
-                .cloned()
-                .collect(),
+            crate::shared::config::domain::PopupBehavior::Global => candidates.cloned().collect(),
         }
     }
 }

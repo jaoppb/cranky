@@ -3,7 +3,7 @@ use std::fmt::Write;
 
 use cranky::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use cranky::features::layout_engine::domain::{
-    AlignItems, BoxMargin, FlexDirection, JustifyContent, NodePath, StyledNode,
+    AlignItems, BoxMargin, FlexDirection, JustifyContent, NodePath, StyledNode, SurfaceSpace,
 };
 use cranky::features::layout_engine::ports::LayoutEnginePort;
 use cranky::features::module_runtime::domain::render_pipeline::{LayoutContext, RenderPipeline};
@@ -81,7 +81,7 @@ fn create_styled_node_tree(depth: usize, branching: usize) -> StyledNode {
 
     if depth == 0 {
         StyledNode::Text {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
             text: TextContent::new("Benchmark Text Content".to_string()),
             style,
@@ -97,7 +97,7 @@ fn create_styled_node_tree(depth: usize, branching: usize) -> StyledNode {
             children.push(create_styled_node_tree(depth.saturating_sub(1), branching));
         }
         StyledNode::Flex {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
             children,
             style,
@@ -591,6 +591,10 @@ fn bench_pipeline(c: &mut Criterion) {
 
     group.bench_function("full_render_pipeline_iteration", |b| {
         let mut layout_engine = TaffyLayoutAdapter::default();
+        let mut popup_layout_engine = TaffyLayoutAdapter::default();
+        let mut panel_layout_engine = TaffyLayoutAdapter::default();
+        let mut tooltip_layout_engine = TaffyLayoutAdapter::default();
+        let child_errors = std::collections::HashMap::new();
         b.iter(|| {
             let mut pipeline = RenderPipeline::new();
 
@@ -600,11 +604,16 @@ fn bench_pipeline(c: &mut Criterion) {
                 let mut ctx = LayoutContext {
                     scale: Scale::new(1.0),
                     style_resolver: &style_resolver,
+                    child_errors: &child_errors,
                     current_bounds: None,
+                    current_constraint: cranky::shared::primitives::SizeConstraint::none(),
                     current_child_sizes: None,
                     interaction_context: None,
                     canvas_factory: &mut canvas_factory,
                     layout_engine: &mut layout_engine,
+                    popup_layout_engine: &mut popup_layout_engine,
+                    panel_layout_engine: &mut panel_layout_engine,
+                    tooltip_layout_engine: &mut tooltip_layout_engine,
                 };
                 let layout_res = pipeline.layout(&monitor_id, diff, &mut ctx);
                 black_box(layout_res);

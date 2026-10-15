@@ -29,3 +29,6 @@ contrib/arch/cranky-git/
 __pycache__/
 *.pyc
 
+# Local design notes
+/SPEC.md
+

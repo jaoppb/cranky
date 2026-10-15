@@ -14,10 +14,20 @@ pub enum PopupBehavior {
     Global,
 }
 
+/// How a module embedded in a popup is rendered: painted into the popup's own
+/// buffer (`Composite`) or as a separate Wayland subsurface (`Subsurface`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PopupEmbed {
+    #[default]
+    Composite,
+    Subsurface,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PopupConfig {
     behavior: PopupBehavior,
     offset: PopupOffset,
+    embed: PopupEmbed,
 }
 
 impl Default for PopupConfig {
@@ -25,14 +35,19 @@ impl Default for PopupConfig {
         Self {
             behavior: PopupBehavior::default(),
             offset: PopupOffset::new(0, 8),
+            embed: PopupEmbed::default(),
         }
     }
 }
 
 impl PopupConfig {
     #[must_use]
-    pub const fn new(behavior: PopupBehavior, offset: PopupOffset) -> Self {
-        Self { behavior, offset }
+    pub const fn new(behavior: PopupBehavior, offset: PopupOffset, embed: PopupEmbed) -> Self {
+        Self {
+            behavior,
+            offset,
+            embed,
+        }
     }
 
     #[must_use]
@@ -43,6 +58,11 @@ impl PopupConfig {
     #[must_use]
     pub const fn offset(&self) -> PopupOffset {
         self.offset
+    }
+
+    #[must_use]
+    pub const fn embed(&self) -> PopupEmbed {
+        self.embed
     }
 }
 

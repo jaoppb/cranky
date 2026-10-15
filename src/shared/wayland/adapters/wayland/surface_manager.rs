@@ -2,7 +2,7 @@ use super::command::SurfaceCommand;
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};
-use crate::shared::wayland::ports::SurfaceManagerPort;
+use crate::shared::wayland::ports::{SurfaceManagerPort, SurfaceParent};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -26,7 +26,7 @@ impl SurfaceManagerPort for WaylandSurfaceManager {
     fn submit_child_buffer(
         &self,
         module_id: ModuleId,
-        parent_id: Option<ModuleId>,
+        parent: Option<SurfaceParent>,
         monitor_id: MonitorId,
         position: Position,
         buffer: RenderBuffer,
@@ -38,7 +38,7 @@ impl SurfaceManagerPort for WaylandSurfaceManager {
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             map.insert(
                 (module_id, monitor_id.clone()),
-                SurfaceCommand::new(module_id, parent_id, monitor_id, position, buffer),
+                SurfaceCommand::new(module_id, parent, monitor_id, position, buffer),
             );
         }
         let _ = self.notify_tx.try_send(());

@@ -53,6 +53,12 @@ impl AnchorSegment {
 /// interaction for that render, exactly as it would for fully unkeyed
 /// content. `anchor` is empty when no ancestor (including the hit node
 /// itself) declared a key — `relative_path` is then the absolute path.
+///
+/// `relative_path` (and every `AnchorSegment::path`) carries the
+/// `SurfaceSpace` of the tree the ref was captured in, since it's built by
+/// walking that tree from its own `NodePath::root_in(surface)` — so a ref
+/// captured inside a popup can never be mistaken for one captured in the
+/// bar, even before any anchor/key resolution happens.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct NodeRef {
     anchor: Vec<AnchorSegment>,

@@ -1,3 +1,4 @@
+use super::floating_phase::{FloatingLayouts, PopupRenderLayout};
 use crate::features::layout_engine::domain::RenderNode;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::render::RenderBuffer;
@@ -33,6 +34,7 @@ pub struct RenderOutcome {
     child_layouts: Vec<ChildModuleLayout>,
     render_tree: RenderNode,
     buffer: Option<(RenderBuffer, Position)>,
+    floating: FloatingLayouts,
 }
 
 impl RenderOutcome {
@@ -42,13 +44,30 @@ impl RenderOutcome {
         child_layouts: Vec<ChildModuleLayout>,
         render_tree: RenderNode,
         buffer: Option<(RenderBuffer, Position)>,
+        floating: FloatingLayouts,
     ) -> Self {
         Self {
             size_change,
             child_layouts,
             render_tree,
             buffer,
+            floating,
         }
+    }
+
+    #[must_use]
+    pub const fn popup_layout(&self) -> Option<&PopupRenderLayout> {
+        self.floating.popup()
+    }
+
+    #[must_use]
+    pub const fn panel_layout(&self) -> Option<&RenderNode> {
+        self.floating.panel()
+    }
+
+    #[must_use]
+    pub const fn tooltip_layout(&self) -> Option<&RenderNode> {
+        self.floating.tooltip()
     }
 
     #[must_use]

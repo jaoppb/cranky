@@ -1,38 +1,39 @@
 #[cfg(test)]
 mod tests {
-    use crate::features::layout_engine::domain::{
-        DisplayCommand, FloatingKind, NodePath, RenderNode, StyledNode,
-    };
+    use crate::features::layout_engine::domain::{NodePath, RenderNode, SurfaceSpace};
     use crate::features::module_runtime::domain::pointer_handler::action::{
         PointerAction, PointerOutcome,
     };
     use crate::features::module_runtime::domain::pointer_handler::handler::PointerHandler;
     use crate::features::styling::domain::ComputedStyle;
-    use crate::features::vdom::domain::{NodeRef, TextContent};
+    use crate::features::vdom::domain::NodeRef;
     use crate::shared::events::core::{PointerButton, PointerEvent, SurfaceKind};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
     use crate::shared::primitives::{FunctionName, MonitorId};
-    use std::collections::HashMap;
 
-    fn make_test_tree(tooltip: Option<StyledNode>) -> RenderNode {
+    fn make_test_tree() -> RenderNode {
         RenderNode::Rect {
-            path: NodePath::root(),
+            path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(100, 100)),
             style: ComputedStyle::default(),
             on_click: None,
             on_hover: None,
-            tooltip: tooltip.map(Box::new),
+            tooltip: None,
             popup: None,
             panel: None,
         }
+    }
+
+    fn root_ref() -> NodeRef {
+        NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Bar))
     }
 
     #[test]
     fn test_interaction_state_lifecycle() {
         let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
-        let tree = make_test_tree(None);
+        let tree = make_test_tree();
 
         let outcome_motion = handler.handle_event(
             &PointerEvent::PointerMotion {
@@ -43,10 +44,7 @@ mod tests {
             &tree,
         );
         assert!(outcome_motion.has_state_changed());
-        assert_eq!(
-            handler.hovered_node(&mon),
-            Some(&NodeRef::new(Vec::new(), NodePath::root()))
-        );
+        assert_eq!(handler.hovered_node(&mon), Some(&root_ref()));
 
         let outcome_press = handler.handle_event(
             &PointerEvent::ButtonPress {
@@ -58,10 +56,7 @@ mod tests {
             &tree,
         );
         assert!(outcome_press.has_state_changed());
-        assert_eq!(
-            handler.active_node(&mon),
-            Some(&NodeRef::new(Vec::new(), NodePath::root()))
-        );
+        assert_eq!(handler.active_node(&mon), Some(&root_ref()));
 
         let outcome_release = handler.handle_event(
             &PointerEvent::ButtonRelease {
@@ -74,10 +69,7 @@ mod tests {
         );
         assert!(outcome_release.has_state_changed());
         assert_eq!(handler.active_node(&mon), None);
-        assert_eq!(
-            handler.focused_node(&mon),
-            Some(&NodeRef::new(Vec::new(), NodePath::root()))
-        );
+        assert_eq!(handler.focused_node(&mon), Some(&root_ref()));
 
         let outcome_leave = handler.handle_event(
             &PointerEvent::PointerLeave {
@@ -88,109 +80,7 @@ mod tests {
         );
         assert!(outcome_leave.has_state_changed());
         assert_eq!(handler.hovered_node(&mon), None);
-        assert_eq!(
-            handler.focused_node(&mon),
-            Some(&NodeRef::new(Vec::new(), NodePath::root()))
-        );
-    }
-
-    #[test]
-    fn test_motion_with_tooltip_lifecycle() {
-        let mut handler = PointerHandler::new();
-        let mon = MonitorId::new("DP-1");
-        let tooltip_node = StyledNode::Text {
-            path: NodePath::root(),
-            node_key: None,
-            text: TextContent::new("hello".to_string()),
-            style: ComputedStyle::default(),
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-        let tree = make_test_tree(Some(tooltip_node.clone()));
-
-        let outcome = handler.handle_event(
-            &PointerEvent::PointerMotion {
-                surface: SurfaceKind::Bar,
-                pos: Position::new(10, 10),
-            },
-            &mon,
-            &tree,
-        );
-        assert_eq!(outcome.actions().len(), 1);
-        match &outcome.actions()[0] {
-            PointerAction::SendDisplay(DisplayCommand::ShowFloatingSurface {
-                kind,
-                layout,
-                ..
-            }) => {
-                assert_eq!(*kind, FloatingKind::Tooltip);
-                assert_eq!(**layout, tooltip_node);
-            }
-            _ => panic!("Expected ShowFloatingSurface"),
-        }
-
-        let outcome2 = handler.handle_event(
-            &PointerEvent::PointerMotion {
-                surface: SurfaceKind::Bar,
-                pos: Position::new(12, 12),
-            },
-            &mon,
-            &tree,
-        );
-        assert!(outcome2.actions().is_empty());
-
-        let outcome3 = handler.handle_event(
-            &PointerEvent::PointerLeave {
-                surface: SurfaceKind::Bar,
-            },
-            &mon,
-            &tree,
-        );
-        assert_eq!(outcome3.actions().len(), 1);
-        assert_eq!(
-            outcome3.actions()[0],
-            PointerAction::SendDisplay(DisplayCommand::HideFloatingSurface {
-                kind: FloatingKind::Tooltip,
-            })
-        );
-        assert!(handler.last_tooltip().is_none());
-    }
-
-    #[test]
-    fn test_update_after_render_detects_tooltip_change() {
-        let mut handler = PointerHandler::new();
-        let mon = MonitorId::new("DP-1");
-        let tree1 = make_test_tree(None);
-
-        let _ = handler.handle_event(
-            &PointerEvent::PointerMotion {
-                surface: SurfaceKind::Bar,
-                pos: Position::new(10, 10),
-            },
-            &mon,
-            &tree1,
-        );
-
-        let tooltip_node = StyledNode::Text {
-            path: NodePath::root(),
-            node_key: None,
-            text: TextContent::new("dynamic".to_string()),
-            style: ComputedStyle::default(),
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-        let tree2 = make_test_tree(Some(tooltip_node));
-        let mut render_trees = HashMap::new();
-        render_trees.insert(mon.clone(), tree2);
-
-        let actions = handler.update_after_render(&render_trees);
-        assert_eq!(actions.len(), 1);
+        assert_eq!(handler.focused_node(&mon), Some(&root_ref()));
     }
 
     #[test]
@@ -239,57 +129,34 @@ mod tests {
         assert_eq!(empty.into_actions(), Vec::<PointerAction>::new());
     }
 
-    fn hover_with_tooltip(handler: &mut PointerHandler, mon: &MonitorId) {
-        let tooltip_node = StyledNode::Text {
-            path: NodePath::root(),
-            node_key: None,
-            text: TextContent::new("tip".to_string()),
-            style: ComputedStyle::default(),
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-        let tree = make_test_tree(Some(tooltip_node));
-        let _ = handler.handle_event(
-            &PointerEvent::PointerMotion {
-                surface: SurfaceKind::Bar,
-                pos: Position::new(10, 10),
-            },
-            mon,
-            &tree,
-        );
-    }
-
+    /// Merge seam: `retain_monitors` must drop a dead monitor's hover/active/
+    /// focus state but leave a live monitor's alone, otherwise a reused
+    /// monitor id after a hotplug would resurrect stale interaction state.
     #[test]
-    fn test_retain_monitors_drops_pointer_pos_and_tooltip_for_dead_monitor() {
+    fn test_retain_monitors_drops_state_for_dead_monitor_only() {
         let mut handler = PointerHandler::new();
-        let mon = MonitorId::new("HDMI-A-1");
-        hover_with_tooltip(&mut handler, &mon);
-        assert!(handler.last_pointer_pos().is_some());
-        assert!(handler.last_tooltip().is_some());
+        let dead = MonitorId::new("HDMI-A-1");
+        let live = MonitorId::new("eDP-1");
+        let tree = make_test_tree();
 
-        handler.retain_monitors(&std::collections::HashSet::new());
+        for mon in [&dead, &live] {
+            let _ = handler.handle_event(
+                &PointerEvent::PointerMotion {
+                    surface: SurfaceKind::Bar,
+                    pos: Position::new(10, 10),
+                },
+                mon,
+                &tree,
+            );
+        }
+        assert!(handler.hovered_node(&dead).is_some());
+        assert!(handler.hovered_node(&live).is_some());
 
-        assert!(handler.last_pointer_pos().is_none());
-        assert!(handler.last_tooltip().is_none());
-        assert!(handler.hovered_node(&mon).is_none());
-    }
+        let mut still_live = std::collections::HashSet::new();
+        still_live.insert(live.clone());
+        handler.retain_monitors(&still_live);
 
-    #[test]
-    fn test_retain_monitors_keeps_pointer_pos_and_tooltip_for_live_monitor() {
-        let mut handler = PointerHandler::new();
-        let mon = MonitorId::new("eDP-1");
-        hover_with_tooltip(&mut handler, &mon);
-
-        let mut live = std::collections::HashSet::new();
-        live.insert(mon.clone());
-        live.insert(MonitorId::new("HDMI-A-1"));
-        handler.retain_monitors(&live);
-
-        assert!(handler.last_pointer_pos().is_some());
-        assert!(handler.last_tooltip().is_some());
-        assert!(handler.hovered_node(&mon).is_some());
+        assert!(handler.hovered_node(&dead).is_none());
+        assert!(handler.hovered_node(&live).is_some());
     }
 }

@@ -1,12 +1,11 @@
 use super::runner::EventLoop;
-use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::domain::LayoutContext;
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::vdom::domain::UiCommandSender;
-use crate::shared::primitives::MonitorId;
-use crate::shared::primitives::geometry::{Rect, Scale};
+use crate::shared::primitives::geometry::Scale;
+use crate::shared::primitives::{ChildBounds, MonitorId, SizeConstraint};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::{HashMap, HashSet};
 
@@ -17,13 +16,13 @@ impl<
     US: UiCommandSender + 'static,
 > EventLoop<F, LS, DS, US>
 {
-    pub fn render_all_monitors(
+    pub fn render_all_monitors<E: LayoutEnginePort + Default>(
         &mut self,
-        layout_engines: &mut HashMap<MonitorId, Box<dyn LayoutEnginePort>>,
+        layout_engines: &mut HashMap<MonitorId, E>,
     ) {
         let t0 = std::time::Instant::now();
-        let layouts: HashMap<MonitorId, Rect> = self.ctx.rxs_mut().0.borrow().clone();
-        let monitors = self.discover_monitors();
+        let layouts: HashMap<MonitorId, ChildBounds> = self.ctx.rxs_mut().0.borrow().clone();
+        let monitors = self.discover_monitors(&layouts);
 
         // `layout_engines` and `self.render_pipeline` are both keyed by
         // monitor and only ever grow (`.entry().or_insert_with()` /
@@ -33,11 +32,27 @@ impl<
         let live: HashSet<MonitorId> = monitors.iter().cloned().collect();
         layout_engines.retain(|id, _| live.contains(id));
         self.render_pipeline.retain_monitors(&live);
-        self.floating.retain_monitors(&live);
+        self.popup_render_trees.retain(|id, _| live.contains(id));
+        self.panel_render_trees.retain(|id, _| live.contains(id));
+        self.tooltip_render_trees.retain(|id, _| live.contains(id));
+        self.child_layouts_present.retain(|id, _| live.contains(id));
         self.pointer_handler.retain_monitors(&live);
 
+        let self_id = self.ctx.id();
+        let child_errors: HashMap<crate::shared::primitives::ModuleKey, String> = self
+            .ctx
+            .hub()
+            .module_errors_rx()
+            .borrow()
+            .iter()
+            .filter(|(site, _)| site.parent() == Some(self_id))
+            .map(|(site, reason)| (site.key().clone(), reason.clone()))
+            .collect();
+
         for monitor_id in monitors {
-            let current_bounds = layouts.get(&monitor_id).copied();
+            let current = layouts.get(&monitor_id).copied();
+            let current_bounds = current.map(|c| c.rect());
+            let current_constraint = current.map_or(SizeConstraint::none(), |c| c.constraint());
             let module_sizes_guard = self.ctx.hub().module_sizes_rx().borrow().clone();
             let current_child_sizes = module_sizes_guard.get(&monitor_id);
 
@@ -53,9 +68,14 @@ impl<
                     .interaction_context(&monitor_id, is_monitor_focused),
             );
 
-            let engine = layout_engines
-                .entry(monitor_id.clone())
-                .or_insert_with(|| Box::new(TaffyLayoutAdapter::new()));
+            let engine = layout_engines.entry(monitor_id.clone()).or_default();
+            // Fresh per render, never cached: popup/panel content doesn't
+            // need incremental diffing the way the bar tree does, and two
+            // separate instances keep an open popup and an open panel from
+            // diffing against each other's layout state.
+            let mut popup_engine = E::default();
+            let mut panel_engine = E::default();
+            let mut tooltip_engine = E::default();
 
             let scale = self
                 .ctx
@@ -70,11 +90,16 @@ impl<
                 let layout_ctx = LayoutContext {
                     scale,
                     style_resolver: self.style_resolver.as_ref(),
+                    child_errors: &child_errors,
                     current_bounds,
+                    current_constraint,
                     current_child_sizes,
                     interaction_context,
                     canvas_factory: &mut self.canvas_factory,
-                    layout_engine: engine.as_mut(),
+                    layout_engine: engine,
+                    popup_layout_engine: &mut popup_engine,
+                    panel_layout_engine: &mut panel_engine,
+                    tooltip_layout_engine: &mut tooltip_engine,
                 };
                 self.render_pipeline.process_monitor(
                     &monitor_id,
@@ -85,7 +110,7 @@ impl<
             };
 
             if let Some(outcome) = outcome {
-                self.dispatch_render_outcome(&monitor_id, &outcome);
+                self.dispatch_render_outcome(&monitor_id, &outcome, scale);
             }
         }
 

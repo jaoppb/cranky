@@ -1,7 +1,9 @@
 use crate::features::layout_engine::domain::StyledNode;
 use crate::features::styling::domain::{ElementQuery, InheritedStyle};
 use crate::features::styling::ports::StyleResolverPort;
-use crate::features::vdom::domain::{InteractionContext, NodePath, NodeRef, TextContent, VNode};
+use crate::features::vdom::domain::{
+    InteractionContext, NodePath, NodeRef, SurfaceSpace, TextContent, VNode,
+};
 
 struct MockResolver;
 impl StyleResolverPort for MockResolver {
@@ -42,19 +44,34 @@ fn test_resolve_styles_interaction_propagation() {
 
     let resolver = MockResolver;
     let interaction = InteractionContext::new(
-        Some(NodeRef::new(Vec::new(), NodePath::new(vec![0]))),
-        Some(NodeRef::new(Vec::new(), NodePath::new(vec![0]))),
-        Some(NodeRef::new(Vec::new(), NodePath::new(vec![1]))),
+        Some(NodeRef::new(
+            Vec::new(),
+            NodePath::new(SurfaceSpace::Bar, vec![0]),
+        )),
+        Some(NodeRef::new(
+            Vec::new(),
+            NodePath::new(SurfaceSpace::Bar, vec![0]),
+        )),
+        Some(NodeRef::new(
+            Vec::new(),
+            NodePath::new(SurfaceSpace::Bar, vec![1]),
+        )),
         true,
     );
 
     let styled = root.resolve_styles(&resolver, Some(&interaction), None);
-    assert_eq!(styled.path(), &NodePath::root());
+    assert_eq!(styled.path(), &NodePath::root_in(SurfaceSpace::Bar));
 
     if let StyledNode::Flex { children, .. } = styled {
         assert_eq!(children.len(), 2);
-        assert_eq!(children[0].path(), &NodePath::new(vec![0]));
-        assert_eq!(children[1].path(), &NodePath::new(vec![1]));
+        assert_eq!(
+            children[0].path(),
+            &NodePath::new(SurfaceSpace::Bar, vec![0])
+        );
+        assert_eq!(
+            children[1].path(),
+            &NodePath::new(SurfaceSpace::Bar, vec![1])
+        );
     } else {
         panic!("Expected StyledNode::Flex");
     }

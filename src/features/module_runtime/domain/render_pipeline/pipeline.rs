@@ -1,9 +1,11 @@
 use super::context::{LayoutContext, PipelineDiff};
 use super::diff_phase::diff_pipeline;
+use super::floating_phase::{FloatingContentCaches, FloatingLayouts};
 use super::layout_phase::layout_pipeline;
 use super::outcome::{RenderOutcome, SizeChange};
 use super::paint_phase::paint_pipeline;
-use crate::features::layout_engine::domain::RenderNode;
+use crate::features::layout_engine::domain::{RenderNode, StyledNode};
+use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::features::vdom::domain::{InteractionContext, VNode};
 use crate::features::vdom::ports::VdomDiffPort;
@@ -21,6 +23,11 @@ pub struct RenderPipeline {
     vdom_trees: HashMap<MonitorId, VNode>,
     last_child_sizes: HashMap<MonitorId, Option<ChildSizesMap>>,
     last_interactions: HashMap<MonitorId, Option<InteractionContext>>,
+    /// Last `(StyledNode, RenderNode)` per floating kind — lets
+    /// `layout_floating` skip re-laying-out unchanged floating content.
+    popup_content_cache: HashMap<MonitorId, (StyledNode, RenderNode)>,
+    panel_content_cache: HashMap<MonitorId, (StyledNode, RenderNode)>,
+    tooltip_content_cache: HashMap<MonitorId, (StyledNode, RenderNode)>,
 }
 
 impl RenderPipeline {
@@ -81,14 +88,18 @@ impl RenderPipeline {
         &mut self.last_interactions
     }
 
-    /// Drops every per-monitor entry for a monitor not in `live`.
-    ///
-    /// Nothing else in this struct ever removes an entry — every accessor
-    /// above only inserts — so a monitor that disconnects would otherwise
-    /// keep its render state (and its `LayoutEnginePort`, tracked alongside
-    /// this in `EventLoop`) alive in memory for the rest of the process.
-    /// Called once per render pass from the only place that knows the
-    /// current monitor set: `EventLoop::render_all_monitors`.
+    /// Disjoint mutable borrows of all three floating-content caches at once.
+    pub const fn floating_content_caches_mut(&mut self) -> FloatingContentCaches<'_> {
+        FloatingContentCaches {
+            popup: &mut self.popup_content_cache,
+            panel: &mut self.panel_content_cache,
+            tooltip: &mut self.tooltip_content_cache,
+        }
+    }
+
+    /// Drops every per-monitor entry for a monitor not in `live` — nothing
+    /// else here ever removes an entry, so a disconnected monitor would
+    /// otherwise keep its render state alive forever.
     pub fn retain_monitors(&mut self, live: &HashSet<MonitorId>) {
         self.sizes.retain(|id, _| live.contains(id));
         self.rendered_bounds.retain(|id, _| live.contains(id));
@@ -96,6 +107,9 @@ impl RenderPipeline {
         self.vdom_trees.retain(|id, _| live.contains(id));
         self.last_child_sizes.retain(|id, _| live.contains(id));
         self.last_interactions.retain(|id, _| live.contains(id));
+        self.popup_content_cache.retain(|id, _| live.contains(id));
+        self.panel_content_cache.retain(|id, _| live.contains(id));
+        self.tooltip_content_cache.retain(|id, _| live.contains(id));
     }
 
     #[must_use]
@@ -119,12 +133,12 @@ impl RenderPipeline {
         )
     }
 
-    pub fn layout<F: CanvasFactory>(
+    pub fn layout<F: CanvasFactory, E: LayoutEnginePort>(
         &mut self,
         monitor_id: &MonitorId,
         diff: PipelineDiff,
-        ctx: &mut LayoutContext<'_, F>,
-    ) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>)> {
+        ctx: &mut LayoutContext<'_, F, E>,
+    ) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>, FloatingLayouts)> {
         layout_pipeline(self, monitor_id, diff, ctx)
     }
 
@@ -143,12 +157,12 @@ impl RenderPipeline {
         res
     }
 
-    pub fn process_monitor<F: CanvasFactory>(
+    pub fn process_monitor<F: CanvasFactory, E: LayoutEnginePort>(
         &mut self,
         monitor_id: &MonitorId,
         port: &dyn AnyModulePort,
         vdom_diff: &dyn VdomDiffPort,
-        mut ctx: LayoutContext<'_, F>,
+        mut ctx: LayoutContext<'_, F, E>,
     ) -> Option<RenderOutcome> {
         let diff = self.diff(
             monitor_id,
@@ -160,7 +174,8 @@ impl RenderPipeline {
         )?;
 
         let current_bounds = ctx.current_bounds;
-        let (render_node, size_change, child_layouts) = self.layout(monitor_id, diff, &mut ctx)?;
+        let (render_node, size_change, child_layouts, floating) =
+            self.layout(monitor_id, diff, &mut ctx)?;
 
         let buffer = self.paint(
             monitor_id,
@@ -175,6 +190,7 @@ impl RenderPipeline {
             child_layouts,
             render_node,
             buffer,
+            floating,
         ))
     }
 }

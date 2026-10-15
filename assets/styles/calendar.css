@@ -6,6 +6,7 @@
     border-radius: 8px;
     border: 1px solid #414868;
     min-width: 240px;
+    min-height: 260px;
     gap: 8px;
 }
 

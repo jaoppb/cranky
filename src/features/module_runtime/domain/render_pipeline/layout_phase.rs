@@ -1,19 +1,21 @@
 use super::context::{LayoutContext, PipelineDiff};
+use super::floating_phase::{layout_floating, FloatingLayouts};
 use super::measurer::ModuleSizeMeasurer;
 use super::outcome::SizeChange;
 use super::pipeline::RenderPipeline;
 use crate::features::layout_engine::domain::RenderNode;
+use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{ChildModuleLayout, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
-pub fn layout_pipeline<F: CanvasFactory>(
+pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
     pipeline: &mut RenderPipeline,
     monitor_id: &MonitorId,
     diff: PipelineDiff,
-    ctx: &mut LayoutContext<'_, F>,
-) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>)> {
+    ctx: &mut LayoutContext<'_, F, E>,
+) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>, FloatingLayouts)> {
     let current_child_sizes_owned = ctx.current_child_sizes.cloned();
     let mut size_change = None;
     let mut child_layouts = Vec::new();
@@ -38,19 +40,22 @@ pub fn layout_pipeline<F: CanvasFactory>(
             .insert(monitor_id.clone(), diff.new_vdom().clone());
 
         tracing::trace!(monitor = %monitor_id, "Resolving styles for module VNode");
-        let styled_node = diff.new_vdom().resolve_styles(
-            ctx.style_resolver,
-            ctx.interaction_context.as_ref(),
-            None,
-        );
+        let styled_node = if ctx.child_errors.is_empty() {
+            diff.new_vdom().resolve_styles(
+                ctx.style_resolver,
+                ctx.interaction_context.as_ref(),
+                None,
+            )
+        } else {
+            let substituted = crate::features::vdom::domain::substitute_failed_modules(
+                diff.new_vdom(),
+                ctx.child_errors,
+            );
+            substituted.resolve_styles(ctx.style_resolver, ctx.interaction_context.as_ref(), None)
+        };
 
         let default_font_family = FontFamily::new(String::new());
         let default_font_size = FontSize::new(14.0);
-
-        let available_size = ctx
-            .current_bounds
-            .filter(|b| b.width() > 0 && b.height() > 0)
-            .map(|b| *b.size());
 
         let measurer_inner = ctx.canvas_factory.create_text_measurer(
             ctx.scale,
@@ -63,7 +68,7 @@ pub fn layout_pipeline<F: CanvasFactory>(
             styled_node,
             &mut measurer,
             Position::new(0, 0),
-            available_size,
+            ctx.current_constraint,
         );
 
         let render_node = match render_node_res {
@@ -104,5 +109,20 @@ pub fn layout_pipeline<F: CanvasFactory>(
     };
 
     drop(diff);
-    Some((render_node, size_change, child_layouts))
+
+    let floating = layout_floating(
+        &render_node,
+        ctx.interaction_context.as_ref(),
+        monitor_id,
+        pipeline.floating_content_caches_mut(),
+        ctx.popup_layout_engine,
+        ctx.panel_layout_engine,
+        ctx.tooltip_layout_engine,
+        ctx.canvas_factory,
+        ctx.scale,
+        ctx.current_child_sizes,
+        &mut child_layouts,
+    );
+
+    Some((render_node, size_change, child_layouts, floating))
 }

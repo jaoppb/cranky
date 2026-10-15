@@ -1,9 +1,9 @@
+use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use std::collections::HashMap;
 use std::os::unix::io::{AsFd, AsRawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex};
 
-use cosmic_text::{FontSystem, SwashCache};
 use wayland_client::Connection;
 
 use crate::shared::config::domain::Config;
@@ -42,9 +42,10 @@ async fn test_wayland_state_initialization() {
         surface_to_id: HashMap::new(),
         pointer_surface: None,
         pointer_pos: (0.0, 0.0),
-        font_system: FontSystem::new(),
-        swash_cache: SwashCache::new(),
+        pointer_target: None,
+        pointer_grab: PointerGrab::default(),
         floating_surfaces: HashMap::new(),
+        pending_children: HashMap::new(),
         last_button_serial: None,
         app_env,
     };
@@ -94,9 +95,10 @@ async fn test_wayland_adapter_methods() {
         surface_to_id: HashMap::new(),
         pointer_surface: None,
         pointer_pos: (0.0, 0.0),
-        font_system: FontSystem::new(),
-        swash_cache: SwashCache::new(),
+        pointer_target: None,
+        pointer_grab: PointerGrab::default(),
         floating_surfaces: HashMap::new(),
+        pending_children: HashMap::new(),
         last_button_serial: None,
         app_env,
     };

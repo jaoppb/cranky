@@ -63,7 +63,9 @@ mod tests {
     #[test]
     fn test_hover_survives_reorder_when_matched_by_key() {
         use crate::features::styling::domain::ElementId;
-        use crate::features::vdom::domain::{AnchorSegment, NodeKey, NodePath, NodeRef};
+        use crate::features::vdom::domain::{
+            AnchorSegment, NodeKey, NodePath, NodeRef, SurfaceSpace,
+        };
 
         let item_b = VNode::new_text(
             TextContent::new("b".to_string()),
@@ -80,10 +82,10 @@ mod tests {
         // time. The anchor is "b" itself, so the relative path is root.
         let hovered = NodeRef::new(
             vec![AnchorSegment::new(
-                NodePath::new(vec![1]),
+                NodePath::new(SurfaceSpace::Bar, vec![1]),
                 NodeKey::new("b").unwrap(),
             )],
-            NodePath::root(),
+            NodePath::root_in(SurfaceSpace::Bar),
         );
         let interaction = InteractionContext::new(Some(hovered), None, None, false);
 
@@ -109,7 +111,9 @@ mod tests {
     #[test]
     fn test_hover_reaches_both_keyed_container_and_unkeyed_child_after_reorder() {
         use crate::features::styling::domain::ElementId;
-        use crate::features::vdom::domain::{AnchorSegment, NodeKey, NodePath, NodeRef};
+        use crate::features::vdom::domain::{
+            AnchorSegment, NodeKey, NodePath, NodeRef, SurfaceSpace,
+        };
 
         let label = VNode::new_text(
             TextContent::new("B".to_string()),
@@ -135,10 +139,10 @@ mod tests {
         // relative path from that anchor down to the label is [0].
         let hovered = NodeRef::new(
             vec![AnchorSegment::new(
-                NodePath::new(vec![1]),
+                NodePath::new(SurfaceSpace::Bar, vec![1]),
                 NodeKey::new("b").unwrap(),
             )],
-            NodePath::new(vec![0]),
+            NodePath::new(SurfaceSpace::Bar, vec![0]),
         );
         let interaction = InteractionContext::new(Some(hovered), None, None, false);
 
@@ -163,7 +167,9 @@ mod tests {
     #[test]
     fn test_same_key_in_different_lists_does_not_cross_match() {
         use crate::features::styling::domain::ElementId;
-        use crate::features::vdom::domain::{AnchorSegment, NodeKey, NodePath, NodeRef};
+        use crate::features::vdom::domain::{
+            AnchorSegment, NodeKey, NodePath, NodeRef, SurfaceSpace,
+        };
 
         let list_a_item = VNode::new_text(
             TextContent::new("a1".to_string()),
@@ -194,10 +200,16 @@ mod tests {
         // Anchor chain ["list-a", "1"] must only ever resolve inside list-a.
         let hovered = NodeRef::new(
             vec![
-                AnchorSegment::new(NodePath::new(vec![0]), NodeKey::new("list-a").unwrap()),
-                AnchorSegment::new(NodePath::new(vec![0]), NodeKey::new("1").unwrap()),
+                AnchorSegment::new(
+                    NodePath::new(SurfaceSpace::Bar, vec![0]),
+                    NodeKey::new("list-a").unwrap(),
+                ),
+                AnchorSegment::new(
+                    NodePath::new(SurfaceSpace::Bar, vec![0]),
+                    NodeKey::new("1").unwrap(),
+                ),
             ],
-            NodePath::root(),
+            NodePath::root_in(SurfaceSpace::Bar),
         );
         let interaction = InteractionContext::new(Some(hovered), None, None, false);
 
@@ -217,7 +229,9 @@ mod tests {
     #[test]
     fn test_same_key_under_unkeyed_wrappers_does_not_cross_match() {
         use crate::features::styling::domain::ElementId;
-        use crate::features::vdom::domain::{AnchorSegment, NodeKey, NodePath, NodeRef};
+        use crate::features::vdom::domain::{
+            AnchorSegment, NodeKey, NodePath, NodeRef, SurfaceSpace,
+        };
 
         let keyed_item = |id: &str| {
             VNode::new_text(
@@ -238,10 +252,10 @@ mod tests {
         // unkeyed wrapper's position ([1]) is part of the anchor.
         let hovered = NodeRef::new(
             vec![AnchorSegment::new(
-                NodePath::new(vec![1, 0]),
+                NodePath::new(SurfaceSpace::Bar, vec![1, 0]),
                 NodeKey::new("1").unwrap(),
             )],
-            NodePath::root(),
+            NodePath::root_in(SurfaceSpace::Bar),
         );
         let interaction = InteractionContext::new(Some(hovered), None, None, false);
 

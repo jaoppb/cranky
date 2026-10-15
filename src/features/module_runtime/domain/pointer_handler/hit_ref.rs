@@ -1,5 +1,5 @@
 use crate::features::layout_engine::domain::RenderNode;
-use crate::features::vdom::domain::{AnchorSegment, NodePath, NodeRef};
+use crate::features::vdom::domain::{AnchorSegment, NodePath, NodeRef, SurfaceSpace};
 
 /// Captures a `NodeRef` for the deepest node in a hit-test chain (root to
 /// leaf, as returned by `RenderNode::hit_test`): one anchor segment per
@@ -14,6 +14,9 @@ use crate::features::vdom::domain::{AnchorSegment, NodePath, NodeRef};
 #[must_use]
 pub(super) fn capture_node_ref(hit: &[&RenderNode]) -> Option<NodeRef> {
     let leaf = hit.last()?;
+    // Every node on a hit chain belongs to the same tree, so the leaf's
+    // surface is the whole chain's surface.
+    let surface = leaf.path().surface();
 
     let mut anchor = Vec::new();
     let mut anchored_len = 0;
@@ -21,19 +24,19 @@ pub(super) fn capture_node_ref(hit: &[&RenderNode]) -> Option<NodeRef> {
         if let Some(key) = node.node_key() {
             let path = node.path().as_slice();
             anchor.push(AnchorSegment::new(
-                suffix_from(path, anchored_len),
+                suffix_from(surface, path, anchored_len),
                 key.clone(),
             ));
             anchored_len = path.len();
         }
     }
 
-    let relative_path = suffix_from(leaf.path().as_slice(), anchored_len);
+    let relative_path = suffix_from(surface, leaf.path().as_slice(), anchored_len);
     Some(NodeRef::new(anchor, relative_path))
 }
 
-fn suffix_from(path: &[usize], start: usize) -> NodePath {
-    NodePath::new(path.get(start..).unwrap_or_default().to_vec())
+fn suffix_from(surface: SurfaceSpace, path: &[usize], start: usize) -> NodePath {
+    NodePath::new(surface, path.get(start..).unwrap_or_default().to_vec())
 }
 
 #[cfg(test)]
@@ -45,7 +48,7 @@ mod tests {
 
     fn node(path: &[usize], key: Option<&str>, x: i32, children: Vec<RenderNode>) -> RenderNode {
         RenderNode::Flex {
-            path: NodePath::new(path.to_vec()),
+            path: NodePath::new(SurfaceSpace::Bar, path.to_vec()),
             node_key: key.map(|k| NodeKey::new(k).unwrap()),
             rect: Rect::new(Position::new(x, 0), Size::new(100, 10)),
             children,
@@ -74,7 +77,7 @@ mod tests {
         assert_eq!(
             captured.anchor(),
             &[AnchorSegment::new(
-                NodePath::new(vec![1, 0]),
+                NodePath::new(SurfaceSpace::Bar, vec![1, 0]),
                 NodeKey::new("1").unwrap()
             )]
         );
@@ -96,8 +99,14 @@ mod tests {
         assert_eq!(
             captured.anchor(),
             &[
-                AnchorSegment::new(NodePath::new(vec![0]), NodeKey::new("row").unwrap()),
-                AnchorSegment::new(NodePath::new(vec![0, 0]), NodeKey::new("b").unwrap()),
+                AnchorSegment::new(
+                    NodePath::new(SurfaceSpace::Bar, vec![0]),
+                    NodeKey::new("row").unwrap()
+                ),
+                AnchorSegment::new(
+                    NodePath::new(SurfaceSpace::Bar, vec![0, 0]),
+                    NodeKey::new("b").unwrap()
+                ),
             ]
         );
         assert_eq!(captured.relative_path().as_slice(), &[0]);

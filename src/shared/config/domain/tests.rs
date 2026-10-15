@@ -84,7 +84,12 @@ fn test_modules_config() {
 
 #[test]
 fn test_popup_config() {
-    let popup = PopupConfig::new(PopupBehavior::PerMonitor, crate::shared::primitives::PopupOffset::new(0, 8));
+    let popup = PopupConfig::new(
+        PopupBehavior::PerMonitor,
+        crate::shared::primitives::PopupOffset::new(0, 8),
+        PopupEmbed::Subsurface,
+    );
+    assert_eq!(popup.embed(), PopupEmbed::Subsurface);
     assert_eq!(popup.behavior(), PopupBehavior::PerMonitor);
     assert_eq!(popup.offset(), crate::shared::primitives::PopupOffset::new(0, 8));
     assert_eq!(PopupBehavior::default(), PopupBehavior::Global);
@@ -144,4 +149,10 @@ fn test_tooltip_config_builder() {
     assert_eq!(config.radius(), radius);
     assert_eq!(config.border_width(), border_width);
     assert_eq!(config.padding(), padding);
+}
+
+#[test]
+fn popup_embed_defaults_to_composite() {
+    assert_eq!(PopupEmbed::default(), PopupEmbed::Composite);
+    assert_eq!(PopupConfig::default().embed(), PopupEmbed::Composite);
 }

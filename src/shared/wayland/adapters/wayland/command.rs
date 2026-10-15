@@ -1,10 +1,11 @@
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};
+use crate::shared::wayland::surface_parent::SurfaceParent;
 
 pub struct SurfaceCommand {
     module_id: ModuleId,
-    parent_id: Option<ModuleId>,
+    parent: Option<SurfaceParent>,
     monitor_id: MonitorId,
     position: Position,
     buffer: RenderBuffer,
@@ -14,14 +15,14 @@ impl SurfaceCommand {
     #[must_use]
     pub const fn new(
         module_id: ModuleId,
-        parent_id: Option<ModuleId>,
+        parent: Option<SurfaceParent>,
         monitor_id: MonitorId,
         position: Position,
         buffer: RenderBuffer,
     ) -> Self {
         Self {
             module_id,
-            parent_id,
+            parent,
             monitor_id,
             position,
             buffer,
@@ -34,8 +35,8 @@ impl SurfaceCommand {
     }
 
     #[must_use]
-    pub const fn parent_id(&self) -> Option<ModuleId> {
-        self.parent_id
+    pub const fn parent(&self) -> Option<&SurfaceParent> {
+        self.parent.as_ref()
     }
 
     #[must_use]

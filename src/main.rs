@@ -1,25 +1,23 @@
 #![deny(unsafe_code)]
 #![warn(clippy::type_complexity, clippy::needless_lifetimes)]
 
+use cranky::app::adapter_supervisor::AdapterSupervisor;
 use cranky::app::commands::{ChannelSystemSender, SystemCommand};
 use cranky::app::state::CrankyApp;
 use cranky::features::layout_engine::domain::DisplayCommand;
-use cranky::features::metrics::adapters::SysinfoAdapter;
 use cranky::features::module_runtime::ports::LayoutEvent;
 use cranky::features::styling::ports::StyleLoaderPort;
 use cranky::features::systray::adapters::SniAdapter;
 use cranky::features::systray::ports::SniPort;
 use cranky::features::vdom::domain::UiCommand;
-use cranky::features::workspaces::adapters::hyprland::HyprlandAdapter;
 use cranky::shared::config::adapters::ConfigAdapter;
-use cranky::shared::events::signals::SignalHub;
+use cranky::shared::events::signals::{SignalHub, SignalKind};
 use cranky::shared::rendering::adapters::font::CosmicFontValidatorAdapter;
 use cranky::shared::wayland::adapters::wayland::WaylandAdapter;
 use std::sync::Arc;
 use tracing::{error, info, info_span};
 
 use tokio::sync::mpsc;
-use tracing::Instrument;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -49,14 +47,22 @@ fn init_tracing(env: &AppEnvironment) -> tracing_appender::non_blocking::WorkerG
     guard
 }
 
+/// Establishes the (boot-fatal) `DBus` connection, builds the on-demand
+/// adapter supervisor around it, and eagerly `ensure`s every signal already
+/// active from the initial config load. Systray is handled separately: its
+/// `start()` needs `&mut self` on the very instance `CrankyApp::run` later
+/// drives via `SniPort::trigger_action`, so it isn't part of the supervisor
+/// — see `SPEC.md`'s Phase 3 write-up.
 async fn init_secondary_adapters(
     hub: &Arc<SignalHub>,
+    app_env: &Arc<AppEnvironment>,
     metrics_config: &cranky::features::metrics::domain::MetricsConfig,
-    active_signals: &std::collections::HashSet<cranky::shared::events::signals::SignalKind>,
+    active_signals: &std::collections::HashSet<SignalKind>,
 ) -> Result<
     (
         cranky::shared::dbus::subscription_manager::DbusSubscriptionManager,
         SniAdapter,
+        AdapterSupervisor,
     ),
     Box<dyn std::error::Error>,
 > {
@@ -69,59 +75,27 @@ async fn init_secondary_adapters(
     let dbus_manager =
         cranky::shared::dbus::subscription_manager::DbusSubscriptionManager::new(conn.clone(), hub);
 
-    if active_signals.contains(&cranky::shared::events::signals::SignalKind::Mpris) {
-        let mpris_adapter =
-            cranky::features::mpris::adapters::zbus::ZbusMprisAdapter::new(conn.clone(), hub);
-        if let Err(e) = mpris_adapter.start_watching().await {
-            error!("Failed to start MPRIS watcher: {e}");
+    let mut supervisor = AdapterSupervisor::new(
+        hub.clone(),
+        app_env.clone(),
+        metrics_config.clone(),
+        conn.clone(),
+    );
+    for kind in [SignalKind::Mpris, SignalKind::Metrics, SignalKind::Hyprland, SignalKind::Time] {
+        if active_signals.contains(&kind) {
+            supervisor.ensure(kind).await;
         }
     }
 
     let mut sni_adapter = SniAdapter::new(hub.clone());
-    if active_signals.contains(&cranky::shared::events::signals::SignalKind::Systray)
-        && let Err(e) = sni_adapter.start().await
-    {
-        error!("Failed to start SNI Watcher: {e:?}");
+    if active_signals.contains(&SignalKind::Systray) {
+        supervisor.mark_started(SignalKind::Systray);
+        if let Err(e) = sni_adapter.start().await {
+            error!("Failed to start SNI Watcher: {e:?}");
+        }
     }
 
-    if active_signals.contains(&cranky::shared::events::signals::SignalKind::Metrics) {
-        let metrics_adapter = SysinfoAdapter::new(metrics_config.clone(), hub.clone());
-        metrics_adapter.start();
-    }
-
-    Ok((dbus_manager, sni_adapter))
-}
-
-fn spawn_background_tasks(
-    hub: &Arc<SignalHub>,
-    hyprland_adapter: HyprlandAdapter,
-    active_signals: &std::collections::HashSet<cranky::shared::events::signals::SignalKind>,
-) {
-    if active_signals.contains(&cranky::shared::events::signals::SignalKind::Hyprland) {
-        let hub_for_hypr = hub.clone();
-        tokio::spawn(
-            async move {
-                hyprland_adapter.run(hub_for_hypr).await;
-            }
-            .instrument(info_span!("hyprland_adapter")),
-        );
-    }
-
-    if active_signals.contains(&cranky::shared::events::signals::SignalKind::Time) {
-        let hub_for_time = hub.clone();
-        tokio::spawn(
-            async move {
-                loop {
-                    let now = chrono::Local::now();
-                    let ms_until_next_sec =
-                        1000_u64.saturating_sub(u64::from(now.timestamp_subsec_millis()));
-                    tokio::time::sleep(std::time::Duration::from_millis(ms_until_next_sec)).await;
-                    let _ = hub_for_time.time_tx().send(chrono::Local::now());
-                }
-            }
-            .instrument(info_span!("time_adapter")),
-        );
-    }
+    Ok((dbus_manager, sni_adapter, supervisor))
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -186,13 +160,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let active_signals = app.active_signals();
 
-    // 3. Initialize secondary adapters
-    let (zbus_adapter, sni_adapter) =
-        init_secondary_adapters(&hub, initial_config.metrics(), active_signals).await?;
-
-    // 4. Spawn background worker tasks
-    let hyprland_adapter = HyprlandAdapter::new(app_env.clone());
-    spawn_background_tasks(&hub, hyprland_adapter, active_signals);
+    // 3. Initialize secondary adapters, and wire the supervisor in for
+    // later on-demand starts triggered by a lazily-spawned module.
+    let (zbus_adapter, sni_adapter, adapter_supervisor) =
+        init_secondary_adapters(&hub, &app_env, initial_config.metrics(), active_signals).await?;
+    app.set_adapter_supervisor(adapter_supervisor);
 
     let _config_watcher = config_adapter.watch(&hub)?;
 
