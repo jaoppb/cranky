@@ -3,6 +3,7 @@
 pub mod calc_resolve;
 pub mod diff;
 pub mod grid_converter;
+mod leaf_size;
 pub mod reconciler;
 pub mod render_tree_builder;
 pub mod style_builder;
@@ -12,11 +13,14 @@ pub mod tree_builder;
 use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::primitives::SizeConstraint;
-use crate::shared::primitives::geometry::Position;
+use crate::shared::primitives::geometry::{Position, Size};
+use crate::utils::f32_to_u32;
 use calc_resolve::resolve_pending_calcs;
 use diff::diff;
 use reconciler::{LayoutState, apply_patch, build_layout_state};
 use render_tree_builder::build_render_tree;
+use taffy::style::{Dimension, Style};
+use taffy::tree::NodeId;
 use taffy::TaffyTree;
 use tree_builder::TaffyTreeBuilder;
 
@@ -34,6 +38,8 @@ fn axis_available_space(pinned: Option<u32>) -> taffy::style::AvailableSpace {
 pub struct TaffyLayoutAdapter {
     taffy: TaffyTree,
     state: Option<LayoutState>,
+    /// Root size of the last pass's unpinned layout; `None` if it wasn't pinned.
+    intrinsic: Option<Size>,
 }
 
 #[allow(clippy::non_send_fields_in_send_ty)]
@@ -52,6 +58,7 @@ impl TaffyLayoutAdapter {
         Self {
             taffy: TaffyTree::new(),
             state: None,
+            intrinsic: None,
         }
     }
 
@@ -66,6 +73,30 @@ impl TaffyLayoutAdapter {
     fn reset(&mut self) {
         self.taffy = TaffyTree::new();
         self.state = None;
+    }
+
+    /// Pins the root's size to `constraint` and returns the style to
+    /// restore afterwards. A pinned axis is the embedding module's host box,
+    /// which the child fills (the Shadow DOM split): the root takes the
+    /// pinned size itself, not merely the room to grow into, so `1fr`
+    /// tracks and `space-between` have a definite box to distribute.
+    fn pin_root(
+        &mut self,
+        root: NodeId,
+        constraint: SizeConstraint,
+    ) -> Result<Style, LayoutError> {
+        let engine_err = |e: taffy::TaffyError| LayoutError::EngineError(e.to_string());
+        let original = self.taffy.style(root).map_err(engine_err)?.clone();
+        let mut pinned = original.clone();
+        let px = |v: u32| Dimension::length(f32::from(u16::try_from(v).unwrap_or(u16::MAX)));
+        if let Some(w) = constraint.width() {
+            pinned.size.width = px(w);
+        }
+        if let Some(h) = constraint.height() {
+            pinned.size.height = px(h);
+        }
+        self.taffy.set_style(root, pinned).map_err(engine_err)?;
+        Ok(original)
     }
 
     fn layout_pass(
@@ -90,6 +121,24 @@ impl TaffyLayoutAdapter {
             height: axis_available_space(constraint.height()),
         };
 
+        // A pinned root is laid out twice: unpinned first, whose size is
+        // what an embedder may measure it by, then pinned to the host box.
+        self.intrinsic = None;
+        let unpinned_root = if constraint.width().is_some() || constraint.height().is_some() {
+            self.taffy
+                .compute_layout(root_node_id, taffy::geometry::Size { width: axis_available_space(None), height: axis_available_space(None) })
+                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+            let size = self
+                .taffy
+                .layout(root_node_id)
+                .map_err(|e| LayoutError::EngineError(e.to_string()))?
+                .size;
+            self.intrinsic = Some(Size::new(f32_to_u32(size.width), f32_to_u32(size.height)));
+            Some(self.pin_root(root_node_id, constraint)?)
+        } else {
+            None
+        };
+
         // Compute layout
         self.taffy
             .compute_layout(root_node_id, available_space)
@@ -108,6 +157,14 @@ impl TaffyLayoutAdapter {
 
         // Build RenderNode tree
         let render_tree = build_render_tree(&self.taffy, root_node_id, node, start_pos)?;
+
+        // The diff only patches nodes whose style changed, so the root must
+        // go back to its own style for the next pass to start clean.
+        if let Some(original) = unpinned_root {
+            self.taffy
+                .set_style(root_node_id, original)
+                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+        }
 
         tracing::trace!(
             rect = ?render_tree.rect(),
@@ -133,6 +190,10 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
             self.reset();
         }
         result
+    }
+
+    fn intrinsic_size(&self) -> Option<Size> {
+        self.intrinsic
     }
 }
 
@@ -737,5 +798,164 @@ mod tests {
         adapter
             .calculate_layout(dup_second, &mut measurer, Position::new(0, 0))
             .unwrap();
+    }
+
+    #[test]
+    fn test_dropping_a_constraint_unpins_the_cached_root() {
+        let grid = || {
+            let mut style = ComputedStyle::default_for_grid();
+            style.set_grid_template_columns(vec![GridTrack::Fr(1.0)]);
+            StyledNode::Grid {
+                path: NodePath::root_in(SurfaceSpace::Bar),
+                node_key: None,
+                children: vec![text_leaf("ab", ComputedStyle::default())],
+                style,
+                on_click: None,
+                on_hover: None,
+                tooltip: None,
+                popup: None,
+                panel: None,
+            }
+        };
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+        let pinned = adapter
+            .calculate_layout_with_constraints(
+                grid(),
+                &mut measurer,
+                Position::new(0, 0),
+                SizeConstraint::new(Some(280), None),
+            )
+            .unwrap();
+        assert_eq!(pinned.rect().width(), 280);
+        // What the embedder measures by is the unpinned size, not the pin.
+        assert_eq!(adapter.intrinsic_size(), Some(Size::new(20, 20)));
+
+        let free = adapter
+            .calculate_layout(grid(), &mut measurer, Position::new(0, 0))
+            .unwrap();
+        assert_eq!(free.rect().width(), 20);
+        assert_eq!(adapter.intrinsic_size(), None);
+    }
+
+    fn text_leaf(text: &str, style: ComputedStyle) -> StyledNode {
+        StyledNode::Text {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            text: TextContent::new(text.to_string()),
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    #[test]
+    fn test_leaf_padding_grows_the_box_instead_of_eating_the_glyph() {
+        // Issue #9: `.day { padding: 4px 2px }` hugged the glyph because the
+        // leaf's size was the bare glyph size, so border-box padding came
+        // out of it. 5 glyphs * 10 + 2px each side, 20 + 4px each end.
+        let mut style = ComputedStyle::default();
+        style.set_padding(crate::features::layout_engine::domain::BoxMargin::new(
+            4.0, 4.0, 2.0, 2.0,
+        ));
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+
+        let tree = adapter
+            .calculate_layout(text_leaf("hello", style), &mut measurer, Position::new(0, 0))
+            .unwrap();
+
+        assert_eq!(tree.rect().width(), 54);
+        assert_eq!(tree.rect().height(), 28);
+    }
+
+    #[test]
+    fn test_fr_columns_fill_a_pinned_root_width() {
+        // Issue #9: `repeat(7, 1fr)` collapsed to content-sized columns
+        // because the child was never given a definite width. Pinned to
+        // 280, seven `1fr` tracks must split it evenly (40px each).
+        let cell = |i: usize| StyledNode::Text {
+            path: NodePath::new(SurfaceSpace::Bar, vec![i]),
+            node_key: None,
+            text: TextContent::new("1".to_string()),
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        };
+        let mut grid_style = ComputedStyle::default_for_grid();
+        grid_style.set_grid_template_columns(vec![GridTrack::Fr(1.0); 7]);
+        let grid = StyledNode::Grid {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            children: (0..7).map(cell).collect(),
+            style: grid_style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        };
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+
+        let tree = adapter
+            .calculate_layout_with_constraints(
+                grid,
+                &mut measurer,
+                Position::new(0, 0),
+                crate::shared::primitives::SizeConstraint::new(Some(280), None),
+            )
+            .unwrap();
+
+        assert_eq!(tree.rect().width(), 280);
+        let RenderNode::Grid { children, .. } = tree else {
+            panic!("Expected RenderNode::Grid");
+        };
+        let xs: Vec<u32> = children.iter().map(|c| u32::try_from(c.rect().x()).unwrap()).collect();
+        assert_eq!(xs, vec![0, 40, 80, 120, 160, 200, 240]);
+    }
+
+    #[test]
+    fn test_embedder_min_width_overrides_the_childs_reported_width() {
+        // Issue #9 decision: a rule on the embed node (`.calendar {
+        // min-width: 280px }`) wins over the child's own default (reported
+        // as 240) and persists — it is a real constraint, not a hint.
+        struct CalendarMeasurer;
+        impl TextMeasurer for CalendarMeasurer {
+            fn measure(&mut self, _: &str, _: Option<&FontFamily>, _: Option<FontSize>) -> Size {
+                Size::new(0, 0)
+            }
+            fn measure_module(&self, _: &crate::shared::primitives::ModuleKey) -> Option<Size> {
+                Some(Size::new(240, 190))
+            }
+        }
+        let mut style = ComputedStyle::default();
+        style.set_min_width(crate::features::styling::domain::CssLength::Px(280.0));
+        let node = StyledNode::Module {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            key: crate::shared::primitives::ModuleKey::from_name(ModuleName::new("calendar")),
+            options: ModuleOptions::default(),
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        };
+        let mut adapter = TaffyLayoutAdapter::new();
+
+        let tree = adapter
+            .calculate_layout(node, &mut CalendarMeasurer, Position::new(0, 0))
+            .unwrap();
+
+        assert_eq!(tree.rect().width(), 280);
+        assert_eq!(tree.rect().height(), 190);
     }
 }

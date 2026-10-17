@@ -3,11 +3,9 @@ text {
     font-size: 14px;
 }
 
-/* Reserves the popup's slot before the lazily spawned calendar has reported a
-   size. A Module node with no reported size sets no dimension at all, so only
-   these min-* survive the first frame — without them the popup opens as a
-   sliver on the first click of a session. */
+/* The embedder's rule on the embed node wins over the calendar's own
+   `.root` default (240px) and persists: the popup is 280px wide, and the
+   calendar lays itself out to fill it. Height follows the calendar's content. */
 .calendar {
     min-width: 280px;
-    min-height: 260px;
 }

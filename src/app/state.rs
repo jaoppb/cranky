@@ -4,7 +4,7 @@ use crate::features::module_runtime::ports::LayoutEvent;
 use crate::features::vdom::domain::UiCommand;
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::{ModuleId, MonitorId, geometry::Size};
+use crate::shared::primitives::{ChildReport, ModuleId, MonitorId, geometry::Size};
 use crate::shared::wayland::ports::DisplayServerPort;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
@@ -468,8 +468,9 @@ impl<
                     monitor_id,
                     module_id,
                     size,
+                    settled_width,
                 } => {
-                    self.handle_size_changed(&monitor_id, module_id, size);
+                    self.handle_size_changed(&monitor_id, module_id, size, settled_width);
                 }
             }
             if let Ok(next) = self.layout_rx.try_recv() {
@@ -748,7 +749,13 @@ impl<
         }
     }
 
-    pub fn handle_size_changed(&mut self, monitor_id: &MonitorId, module_id: ModuleId, size: Size) {
+    pub fn handle_size_changed(
+        &mut self,
+        monitor_id: &MonitorId,
+        module_id: ModuleId,
+        size: Size,
+        settled_width: Option<u32>,
+    ) {
         let key = self.read_model.module_keys.get(&module_id).cloned();
         tracing::trace!(monitor = %monitor_id, module = %module_id, ?size, ?key, "handle_size_changed called");
         self.read_model
@@ -760,7 +767,7 @@ impl<
         if let Some(key) = key {
             let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
             let mon_entry = sizes_map.entry(monitor_id.clone()).or_default();
-            mon_entry.insert(key, size);
+            mon_entry.insert_report(key, ChildReport::new(size, settled_width));
             let _ = self.hub.module_sizes_tx().send(sizes_map);
         }
     }
@@ -1196,6 +1203,7 @@ mod tests {
                 monitor_id: MonitorId::new("1"),
                 module_id: ModuleId::new(1),
                 size: Size::new(10, 10),
+                settled_width: None,
             })
             .await
             .unwrap();

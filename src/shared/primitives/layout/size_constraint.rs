@@ -1,12 +1,13 @@
 use super::super::geometry::Rect;
 
-/// A parent's CSS pin on an embedded module's slot, per axis.
+/// The box an embedder resolved for an embedded module's host, per axis.
 ///
-/// `Some(px)` means the parent set an explicit `width`/`height` and taffy
-/// already resolved it to that many pixels for this slot; `None` means the
-/// child measures that axis intrinsically. Never built from anything the
-/// child reported — only from a static CSS pin — so it cannot reintroduce a
-/// parent/child size feedback loop.
+/// `Some(px)` is a definite size the child fills: the host's resolved width,
+/// or its height when the embedder's CSS set one. `None` means the child
+/// measures that axis intrinsically. The embedder sizes the host from the
+/// child's *intrinsic* report (see `ChildReport`), never from the size it was
+/// laid out at under this constraint, so the two directions cannot feed back
+/// into each other.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SizeConstraint {
     width: Option<u32>,

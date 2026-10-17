@@ -37,13 +37,15 @@ impl RenderNode {
                 path,
                 ..
             } => {
-                // A pin is "the parent set an explicit width/height" — taffy
-                // already resolved it to this slot's rect, whatever units the
-                // CSS was in, so the resolved pixels are the constraint value.
-                // min-*/max-* clamp the slot but never pin it, so they don't
-                // produce a constraint here.
+                // The host box is the parent's call (the Shadow DOM split):
+                // its resolved width — from the embedder's width, min-*,
+                // grow, stretch or percentages, in whatever units the CSS
+                // used — is the child's definite width, so the child fills
+                // it. A zero width is "nothing resolved yet", not a pin.
+                // Height is pinned only by an explicit CSS height, so the
+                // popup keeps following its content.
                 let constraint = SizeConstraint::new(
-                    style.width().is_some().then(|| rect.width()),
+                    (rect.width() > 0).then(|| rect.width()),
                     style.height().is_some().then(|| rect.height()),
                 );
                 out.push(ChildModuleLayout::new(
@@ -258,13 +260,16 @@ mod tests {
     }
 
     #[test]
-    fn test_collect_module_layouts_no_pin_yields_no_constraint() {
+    fn test_collect_module_layouts_width_is_always_the_resolved_host_width() {
+        // The host box is the embedder's call: with no CSS at all its
+        // width is still the child's definite width (here, its own
+        // intrinsic one), and height stays free to follow content.
         let rect = Rect::new(Position::new(0, 0), Size::new(120, 40));
         let root = flex(&[], vec![module_leaf(rect, ComputedStyle::default())], None);
 
         let layouts = root.collect_module_layouts();
         assert_eq!(layouts.len(), 1);
-        assert_eq!(layouts[0].constraint().width(), None);
+        assert_eq!(layouts[0].constraint().width(), Some(120));
         assert_eq!(layouts[0].constraint().height(), None);
         assert_eq!(*layouts[0].bounds(), rect);
     }
@@ -288,13 +293,24 @@ mod tests {
     }
 
     #[test]
-    fn test_collect_module_layouts_min_max_do_not_pin() {
-        // min-*/max-* clamp the parent's slot but never force an exact
-        // value, so they must not produce a constraint for the child.
+    fn test_collect_module_layouts_min_width_override_reaches_the_child() {
+        // `.calendar { min-width: 280px }` widened the host past the
+        // child's own 240; the child must be laid out at the host's 280.
         let rect = Rect::new(Position::new(0, 0), Size::new(280, 40));
         let mut style = ComputedStyle::default();
         style.set_min_width(crate::features::styling::domain::CssLength::Px(280.0));
         let root = flex(&[], vec![module_leaf(rect, style)], None);
+
+        let layouts = root.collect_module_layouts();
+        assert_eq!(layouts[0].constraint().width(), Some(280));
+    }
+
+    #[test]
+    fn test_collect_module_layouts_zero_width_host_is_not_a_pin() {
+        // A host with no report yet resolves to 0; that is "nothing
+        // resolved", and pinning the child to 0 would collapse it.
+        let rect = Rect::new(Position::new(0, 0), Size::new(0, 0));
+        let root = flex(&[], vec![module_leaf(rect, ComputedStyle::default())], None);
 
         let layouts = root.collect_module_layouts();
         assert_eq!(layouts[0].constraint().width(), None);

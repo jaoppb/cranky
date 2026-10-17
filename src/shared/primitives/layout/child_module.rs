@@ -66,9 +66,41 @@ impl ChildModuleLayout {
     }
 }
 
-/// Strongly-typed map of child module sizes per monitor
+/// What a child module has reported to its embedder.
+///
+/// `size` is intrinsic (laid out with no pin, so it never depends on the
+/// width the parent chose); `settled_width` is the width it was last laid
+/// out at once a parent pinned one. The parent measures with `size` and gates a floating surface on
+/// `settled_width`, so the child's pixels are never shown at a stale width.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChildReport {
+    size: Size,
+    settled_width: Option<u32>,
+}
+
+impl ChildReport {
+    #[must_use]
+    pub const fn new(size: Size, settled_width: Option<u32>) -> Self {
+        Self {
+            size,
+            settled_width,
+        }
+    }
+
+    #[must_use]
+    pub const fn size(&self) -> &Size {
+        &self.size
+    }
+
+    #[must_use]
+    pub const fn settled_width(&self) -> Option<u32> {
+        self.settled_width
+    }
+}
+
+/// Strongly-typed map of child module reports per monitor
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct ChildSizesMap(HashMap<ModuleKey, Size>);
+pub struct ChildSizesMap(HashMap<ModuleKey, ChildReport>);
 
 impl ChildSizesMap {
     #[must_use]
@@ -77,12 +109,16 @@ impl ChildSizesMap {
     }
 
     pub fn insert(&mut self, key: ModuleKey, size: Size) {
-        self.0.insert(key, size);
+        self.insert_report(key, ChildReport::new(size, None));
+    }
+
+    pub fn insert_report(&mut self, key: ModuleKey, report: ChildReport) {
+        self.0.insert(key, report);
     }
 
     #[must_use]
     pub fn get(&self, key: &ModuleKey) -> Option<&Size> {
-        self.0.get(key)
+        self.0.get(key).map(ChildReport::size)
     }
 
     #[must_use]
@@ -91,6 +127,16 @@ impl ChildSizesMap {
         name: &ModuleName,
         instance_id: Option<&ModuleInstanceId>,
     ) -> Option<&Size> {
+        self.report_by_name_or_key(name, instance_id)
+            .map(ChildReport::size)
+    }
+
+    #[must_use]
+    pub fn report_by_name_or_key(
+        &self,
+        name: &ModuleName,
+        instance_id: Option<&ModuleInstanceId>,
+    ) -> Option<&ChildReport> {
         let key = ModuleKey::new(name.clone(), instance_id.cloned());
         self.0.get(&key).or_else(|| {
             if instance_id.is_some() {

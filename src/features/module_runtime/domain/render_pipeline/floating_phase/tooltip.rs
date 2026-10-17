@@ -1,5 +1,5 @@
-use super::content::layout_floating_content_cached;
-use crate::features::layout_engine::domain::{RenderNode, StyledNode};
+use super::content::{layout_floating_content_cached, FloatingCache};
+use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::vdom::domain::{
     InteractionContext, NodePath, NodeRef, SurfaceSpace, resolve_segment,
@@ -7,7 +7,6 @@ use crate::features::vdom::domain::{
 use crate::shared::primitives::{ChildSizesMap, MonitorId};
 use crate::shared::primitives::geometry::Scale;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
-use std::collections::HashMap;
 
 /// Picks the render tree that owns the hover, so the tooltip lookup walks
 /// the same surface the hover actually happened on.
@@ -53,7 +52,7 @@ pub(super) fn layout_tooltip<F: CanvasFactory, E: LayoutEnginePort>(
     popup: Option<&RenderNode>,
     panel: Option<&RenderNode>,
     interaction: Option<&InteractionContext>,
-    cache: &mut HashMap<MonitorId, (StyledNode, RenderNode)>,
+    cache: &mut FloatingCache,
     monitor_id: &MonitorId,
     layout_engine: &mut E,
     canvas_factory: &mut F,
