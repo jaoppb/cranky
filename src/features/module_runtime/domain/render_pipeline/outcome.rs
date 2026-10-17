@@ -9,12 +9,30 @@ use crate::shared::primitives::ChildModuleLayout;
 pub struct SizeChange {
     old: Size,
     new: Size,
+    settled_width: Option<u32>,
 }
 
 impl SizeChange {
     #[must_use]
     pub const fn new(old: Size, new: Size) -> Self {
-        Self { old, new }
+        Self {
+            old,
+            new,
+            settled_width: None,
+        }
+    }
+
+    /// The width the module was laid out at once its embedder pinned one;
+    /// changes even when the intrinsic size does not.
+    #[must_use]
+    pub const fn with_settled_width(mut self, settled_width: Option<u32>) -> Self {
+        self.settled_width = settled_width;
+        self
+    }
+
+    #[must_use]
+    pub const fn settled_width(&self) -> Option<u32> {
+        self.settled_width
     }
 
     #[must_use]
@@ -68,6 +86,21 @@ impl RenderOutcome {
     #[must_use]
     pub const fn tooltip_layout(&self) -> Option<&RenderNode> {
         self.floating.tooltip()
+    }
+
+    #[must_use]
+    pub const fn popup_held(&self) -> bool {
+        self.floating.popup_held()
+    }
+
+    #[must_use]
+    pub const fn panel_held(&self) -> bool {
+        self.floating.panel_held()
+    }
+
+    #[must_use]
+    pub const fn tooltip_held(&self) -> bool {
+        self.floating.tooltip_held()
     }
 
     #[must_use]

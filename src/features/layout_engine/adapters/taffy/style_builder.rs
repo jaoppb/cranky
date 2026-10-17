@@ -1,17 +1,13 @@
+use super::leaf_size::apply_node_dimensions;
 use super::grid_converter::{
     grid_auto_flow_to_taffy, grid_line_placement_to_taffy, grid_track_to_template_component,
     grid_track_to_track_sizing_function,
 };
 use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
-use crate::features::styling::domain::{ComputedStyle, DisplayMode, Orientation};
-use crate::shared::primitives::geometry::Size;
+use crate::features::styling::domain::{ComputedStyle, DisplayMode};
 use crate::utils::f64_to_f32;
 use taffy::geometry::Size as TaffySize;
-use taffy::style::{Dimension, LengthPercentage, Style};
-
-fn size_to_dimension(val: u32) -> Dimension {
-    Dimension::length(f32::from(u16::try_from(val).unwrap_or(u16::MAX)))
-}
+use taffy::style::{LengthPercentage, Style};
 
 fn apply_display_mode(style: &mut Style, computed: &ComputedStyle, node: &StyledNode) {
     let display_mode = match (computed.display(), node) {
@@ -103,64 +99,6 @@ fn apply_sizing_and_flex(style: &mut Style, computed: &ComputedStyle) {
     }
     if let Some(as_) = computed.align_self() {
         style.align_self = Some(as_.into());
-    }
-}
-
-fn apply_node_dimensions(
-    style: &mut Style,
-    node: &StyledNode,
-    computed: &ComputedStyle,
-    measurer: &mut dyn TextMeasurer,
-) {
-    match node {
-        StyledNode::Flex { .. } | StyledNode::Grid { .. } => {}
-        StyledNode::Text { text, style: s, .. } => {
-            let text_size = measurer.measure(text.as_str(), s.font_family(), s.font_size());
-            if computed.width().is_none() {
-                style.size.width = size_to_dimension(text_size.width());
-            }
-            if computed.height().is_none() {
-                style.size.height = size_to_dimension(text_size.height());
-            }
-        }
-        StyledNode::Progress { orientation, .. } => {
-            let default_size = match orientation {
-                Orientation::Horizontal => Size::new(40, 8),
-                Orientation::Vertical => Size::new(8, 40),
-            };
-            if computed.width().is_none() {
-                style.size.width = size_to_dimension(default_size.width());
-            }
-            if computed.height().is_none() {
-                style.size.height = size_to_dimension(default_size.height());
-            }
-        }
-        StyledNode::Rect { .. } => {
-            if computed.width().is_none() {
-                style.size.width = Dimension::length(10.0);
-            }
-            if computed.height().is_none() {
-                style.size.height = Dimension::length(10.0);
-            }
-        }
-        StyledNode::Image { .. } => {
-            if computed.width().is_none() {
-                style.size.width = Dimension::length(24.0);
-            }
-            if computed.height().is_none() {
-                style.size.height = Dimension::length(24.0);
-            }
-        }
-        StyledNode::Module { key, .. } => {
-            if let Some(size) = measurer.measure_module(key) {
-                if computed.width().is_none() {
-                    style.size.width = size_to_dimension(size.width());
-                }
-                if computed.height().is_none() {
-                    style.size.height = size_to_dimension(size.height());
-                }
-            }
-        }
     }
 }
 

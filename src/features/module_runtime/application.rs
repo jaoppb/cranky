@@ -409,6 +409,7 @@ mod tests {
                 monitor_id,
                 module_id,
                 size,
+                ..
             } => {
                 assert_eq!(monitor_id.as_str(), "DP-1");
                 assert_eq!(module_id, id);
@@ -574,6 +575,7 @@ mod tests {
                 monitor_id,
                 module_id,
                 size,
+                ..
             } => {
                 assert_eq!(monitor_id.as_str(), "DP-2");
                 assert_eq!(module_id, id);

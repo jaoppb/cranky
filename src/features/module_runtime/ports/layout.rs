@@ -6,7 +6,10 @@ pub enum LayoutEvent {
     ModuleSizeChanged {
         monitor_id: MonitorId,
         module_id: ModuleId,
+        /// Intrinsic size (laid out with no pin).
         size: Size,
+        /// Width the module was laid out at once its embedder pinned one.
+        settled_width: Option<u32>,
     },
     ChildModuleSizeChanged {
         parent_id: ModuleId,

@@ -33,7 +33,14 @@ fn dispatch_floating_kind<DS: DisplayCommandSender, F: CanvasFactory>(
     anchor_rect: Option<Rect>,
     offset: Option<PopupOffset>,
     parent: Option<FloatingKind>,
+    hold: bool,
 ) {
+    // An embedded child has not settled on its host width yet: leave the
+    // surface exactly as it is (closed, or showing its previous frame)
+    // rather than present a frame at the wrong width.
+    if hold {
+        return;
+    }
     let Some(node) = node else {
         if trees.remove(monitor_id).is_some() {
             display_sender.send_display_command(DisplayCommand::HideFloatingSurface { kind });
@@ -88,6 +95,7 @@ pub(super) fn dispatch_outcome_popups<DS: DisplayCommandSender, F: CanvasFactory
         popup_layout.map(PopupRenderLayout::anchor_rect),
         popup_layout.and_then(PopupRenderLayout::offset),
         parent,
+        outcome.popup_held(),
     );
 }
 
@@ -114,6 +122,7 @@ pub(super) fn dispatch_outcome_panels<DS: DisplayCommandSender, F: CanvasFactory
         None,
         None,
         parent,
+        outcome.panel_held(),
     );
 }
 
@@ -142,5 +151,6 @@ pub(super) fn dispatch_outcome_tooltips<DS: DisplayCommandSender, F: CanvasFacto
         None,
         None,
         parent,
+        outcome.tooltip_held(),
     );
 }

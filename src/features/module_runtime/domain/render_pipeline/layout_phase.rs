@@ -1,5 +1,5 @@
 use super::context::{LayoutContext, PipelineDiff};
-use super::floating_phase::{layout_floating, FloatingLayouts};
+use super::floating_phase::{apply_gate, layout_floating, FloatingLayouts};
 use super::measurer::ModuleSizeMeasurer;
 use super::outcome::SizeChange;
 use super::pipeline::RenderPipeline;
@@ -7,8 +7,37 @@ use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Position, Size};
-use crate::shared::primitives::{ChildModuleLayout, MonitorId};
+use crate::shared::primitives::{ChildModuleLayout, MonitorId, SizeConstraint};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
+
+/// Records what this layout reports to its embedder and returns the change,
+/// if any: the unpinned size, not the pinned one (the embedder sizes the host
+/// from it, so it must not depend on the width it chose), plus the width the
+/// layout settled at.
+fn report_size<E: LayoutEnginePort>(
+    pipeline: &mut RenderPipeline,
+    monitor_id: &MonitorId,
+    engine: &E,
+    constraint: SizeConstraint,
+    render_node: &RenderNode,
+) -> Option<SizeChange> {
+    let size = engine
+        .intrinsic_size()
+        .unwrap_or_else(|| *render_node.rect().size());
+    let settled_width = constraint.width();
+    let old_size = pipeline
+        .sizes()
+        .get(monitor_id)
+        .copied()
+        .unwrap_or(Size::new(0, 0));
+    let settled_changed = pipeline.embed.settle(monitor_id, settled_width);
+    if size == old_size && !settled_changed {
+        return None;
+    }
+    pipeline.sizes_mut().insert(monitor_id.clone(), size);
+    tracing::trace!(monitor = %monitor_id, ?size, ?old_size, ?settled_width, "Module size changed");
+    Some(SizeChange::new(old_size, size).with_settled_width(settled_width))
+}
 
 pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
     pipeline: &mut RenderPipeline,
@@ -85,23 +114,7 @@ pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
             .render_trees_mut()
             .insert(monitor_id.clone(), render_node.clone());
 
-        let size = *render_node.rect().size();
-        let old_size = pipeline
-            .sizes()
-            .get(monitor_id)
-            .copied()
-            .unwrap_or(Size::new(0, 0));
-
-        if size != old_size {
-            pipeline.sizes_mut().insert(monitor_id.clone(), size);
-            tracing::trace!(
-                monitor = %monitor_id,
-                ?size,
-                ?old_size,
-                "Module size changed"
-            );
-            size_change = Some(SizeChange::new(old_size, size));
-        }
+        size_change = report_size(pipeline, monitor_id, ctx.layout_engine, ctx.current_constraint, &render_node);
 
         render_node
     } else {
@@ -122,6 +135,13 @@ pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
         ctx.scale,
         ctx.current_child_sizes,
         &mut child_layouts,
+    );
+
+    let floating = apply_gate(
+        floating,
+        ctx.current_child_sizes,
+        pipeline.embed.gate_rounds_mut(),
+        monitor_id,
     );
 
     Some((render_node, size_change, child_layouts, floating))

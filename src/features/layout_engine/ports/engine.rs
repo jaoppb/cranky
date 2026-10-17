@@ -1,5 +1,5 @@
 use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
-use crate::shared::primitives::geometry::Position;
+use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::SizeConstraint;
 
 pub trait LayoutEnginePort: Send + Sync {
@@ -32,4 +32,15 @@ pub trait LayoutEnginePort: Send + Sync {
         start_pos: Position,
         constraint: SizeConstraint,
     ) -> Result<RenderNode, LayoutError>;
+
+    /// The root's size from the *unpinned* pass of the last
+    /// `calculate_layout_with_constraints`, or `None` when that call had no
+    /// pin (its result already is the intrinsic size).
+    ///
+    /// An embedded module reports this to its embedder rather than the
+    /// pinned size: the embedder sizes the host from it, so it must not
+    /// depend on the width the embedder chose.
+    fn intrinsic_size(&self) -> Option<Size> {
+        None
+    }
 }

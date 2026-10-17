@@ -1,10 +1,11 @@
 use super::context::{LayoutContext, PipelineDiff};
 use super::diff_phase::diff_pipeline;
-use super::floating_phase::{FloatingContentCaches, FloatingLayouts};
+use super::embed_state::EmbedState;
+use super::floating_phase::{FloatingCache, FloatingContentCaches, FloatingLayouts};
 use super::layout_phase::layout_pipeline;
 use super::outcome::{RenderOutcome, SizeChange};
 use super::paint_phase::paint_pipeline;
-use crate::features::layout_engine::domain::{RenderNode, StyledNode};
+use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::features::vdom::domain::{InteractionContext, VNode};
@@ -18,6 +19,7 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug, Default)]
 pub struct RenderPipeline {
     sizes: HashMap<MonitorId, Size>,
+    pub(super) embed: EmbedState,
     rendered_bounds: HashMap<MonitorId, Rect>,
     render_trees: HashMap<MonitorId, RenderNode>,
     vdom_trees: HashMap<MonitorId, VNode>,
@@ -25,9 +27,9 @@ pub struct RenderPipeline {
     last_interactions: HashMap<MonitorId, Option<InteractionContext>>,
     /// Last `(StyledNode, RenderNode)` per floating kind — lets
     /// `layout_floating` skip re-laying-out unchanged floating content.
-    popup_content_cache: HashMap<MonitorId, (StyledNode, RenderNode)>,
-    panel_content_cache: HashMap<MonitorId, (StyledNode, RenderNode)>,
-    tooltip_content_cache: HashMap<MonitorId, (StyledNode, RenderNode)>,
+    popup_content_cache: FloatingCache,
+    panel_content_cache: FloatingCache,
+    tooltip_content_cache: FloatingCache,
 }
 
 impl RenderPipeline {
@@ -102,6 +104,7 @@ impl RenderPipeline {
     /// otherwise keep its render state alive forever.
     pub fn retain_monitors(&mut self, live: &HashSet<MonitorId>) {
         self.sizes.retain(|id, _| live.contains(id));
+        self.embed.retain_monitors(live);
         self.rendered_bounds.retain(|id, _| live.contains(id));
         self.render_trees.retain(|id, _| live.contains(id));
         self.vdom_trees.retain(|id, _| live.contains(id));

@@ -675,4 +675,89 @@ mod tests {
             "Module 'mod' not found (engine: rhai)"
         );
     }
+
+    /// Issue #9, end to end on the shipped assets: the calendar laid out at
+    /// the 280px host its embedder resolved, for both script engines.
+    #[test]
+    fn test_calendar_fills_its_host_lua_and_rhai() {
+        use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
+        use crate::features::layout_engine::domain::{RenderNode, TextMeasurer};
+        use crate::features::layout_engine::ports::LayoutEnginePort;
+        use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
+        use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
+        use crate::features::styling::domain::StyleSheetName;
+        use crate::features::styling::ports::CssParserPort;
+        use crate::shared::config::domain::{FontFamily, FontSize};
+        use crate::shared::primitives::geometry::{Position, Size};
+        use crate::shared::primitives::{ModuleName, MonitorId, SizeConstraint};
+
+        struct Glyphs;
+        impl TextMeasurer for Glyphs {
+            fn measure(&mut self, t: &str, _: Option<&FontFamily>, _: Option<FontSize>) -> Size {
+                Size::new(u32::try_from(t.chars().count()).unwrap_or(0) * 7, 16)
+            }
+        }
+
+        let parser = LightningCssAdapter::new();
+        let sheets = [
+            ("base", include_str!("../../assets/styles/base.css")),
+            ("calendar", include_str!("../../assets/styles/calendar.css")),
+        ]
+        .into_iter()
+        .map(|(n, css)| parser.parse_stylesheet(StyleSheetName::new(n).unwrap(), css).unwrap())
+        .collect();
+        let resolver = CompositeStyleResolver::new(sheets);
+        let env = get_test_env();
+        let mut laid_out = Vec::new();
+
+        for engine_name in ["lua", "rhai"] {
+            let selection = EngineSelection::Explicit(EngineId::new(engine_name));
+            let mut cal = BuiltinModules::find_module(&ModuleName::new("calendar"), &selection, &env).unwrap();
+            cal.init(
+                &crate::shared::config::domain::ModuleConfig::new(
+                    ModuleName::new("calendar"),
+                    true,
+                    selection.clone(),
+                    crate::shared::primitives::ModuleOptions::default(),
+                ),
+                &crate::shared::config::domain::Config::default(),
+            )
+            .unwrap();
+            let hub = crate::shared::events::signals::SignalHub::new(crate::shared::config::domain::Config::default());
+            let now = chrono::DateTime::parse_from_rfc3339("2026-10-15T12:00:00+00:00")
+                .unwrap()
+                .with_timezone(&chrono::Local);
+            hub.time_tx().send(now).unwrap();
+            cal.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
+
+            let styled = cal.render(&MonitorId::new("DP-1")).resolve_styles(&resolver, None, None);
+            let mut engine = TaffyLayoutAdapter::new();
+            let tree = engine
+                .calculate_layout_with_constraints(
+                    styled,
+                    &mut Glyphs,
+                    Position::new(0, 0),
+                    SizeConstraint::new(Some(280), None),
+                )
+                .unwrap();
+
+            // The root fills the 280px host; the 260px min-height is gone,
+            // so the popup follows the content.
+            assert_eq!(tree.rect().width(), 280, "{engine_name}: root fills host");
+            assert!(tree.rect().height() < 260, "{engine_name}: no dead space, got {}", tree.rect().height());
+
+            let RenderNode::Flex { children, .. } = &tree else { panic!("{engine_name}: flex root") };
+            let RenderNode::Grid { children: days, .. } = &children[2] else { panic!("{engine_name}: day grid") };
+            // 7 equal columns spanning the padded root (280 - 2*12 - 2*1 border).
+            let xs: Vec<i32> = days.iter().take(7).map(|d| d.rect().x()).collect();
+            let step = xs[1] - xs[0];
+            assert!(step > 30, "{engine_name}: columns should spread, got {xs:?}");
+            assert!(
+                xs.windows(2).all(|w| (w[1] - w[0] - step).abs() <= 1),
+                "{engine_name}: even columns {xs:?}"
+            );
+            laid_out.push((tree.rect().height(), xs));
+        }
+        assert_eq!(laid_out[0], laid_out[1], "lua and rhai must lay out identically");
+    }
 }
