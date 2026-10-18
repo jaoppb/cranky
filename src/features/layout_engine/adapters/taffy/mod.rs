@@ -17,9 +17,10 @@ use crate::shared::primitives::geometry::{Position, Size};
 use crate::utils::f32_to_u32;
 use calc_resolve::resolve_pending_calcs;
 use diff::diff;
+use leaf_size::size_to_dimension;
 use reconciler::{LayoutState, apply_patch, build_layout_state};
 use render_tree_builder::build_render_tree;
-use taffy::style::{Dimension, Style};
+use taffy::style::Style;
 use taffy::tree::NodeId;
 use taffy::TaffyTree;
 use tree_builder::TaffyTreeBuilder;
@@ -88,12 +89,11 @@ impl TaffyLayoutAdapter {
         let engine_err = |e: taffy::TaffyError| LayoutError::EngineError(e.to_string());
         let original = self.taffy.style(root).map_err(engine_err)?.clone();
         let mut pinned = original.clone();
-        let px = |v: u32| Dimension::length(f32::from(u16::try_from(v).unwrap_or(u16::MAX)));
         if let Some(w) = constraint.width() {
-            pinned.size.width = px(w);
+            pinned.size.width = size_to_dimension(w);
         }
         if let Some(h) = constraint.height() {
-            pinned.size.height = px(h);
+            pinned.size.height = size_to_dimension(h);
         }
         self.taffy.set_style(root, pinned).map_err(engine_err)?;
         Ok(original)

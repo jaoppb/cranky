@@ -1,11 +1,11 @@
 pub mod context;
 pub mod diff_phase;
+mod embed_state;
 pub mod floating_phase;
 pub mod layout_phase;
 pub mod measurer;
 pub mod outcome;
 pub mod paint_phase;
-mod embed_state;
 pub mod pipeline;
 #[cfg(test)]
 mod tests;

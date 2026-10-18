@@ -4,7 +4,7 @@ use crate::shared::primitives::geometry::Size;
 use crate::utils::f64_to_f32;
 use taffy::style::{Dimension, Style};
 
-fn size_to_dimension(val: u32) -> Dimension {
+pub(super) fn size_to_dimension(val: u32) -> Dimension {
     Dimension::length(f32::from(u16::try_from(val).unwrap_or(u16::MAX)))
 }
 
