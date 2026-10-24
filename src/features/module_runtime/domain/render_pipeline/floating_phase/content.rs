@@ -7,6 +7,12 @@ use crate::shared::primitives::{ChildSizesMap, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
 
+/// Last laid-out floating content per monitor, with its child-size snapshot.
+///
+/// An embedded module's host box is measured from what the child reported,
+/// so the same content under different reports is a different layout.
+pub type FloatingCache = HashMap<MonitorId, (StyledNode, Option<ChildSizesMap>, RenderNode)>;
+
 /// Fallback font used when a floating node's own CSS specifies none —
 /// matches `paint_pipeline`'s fallback so a popup's fonts never disagree
 /// with what the bar tree would use for the same unstyled node.
@@ -43,7 +49,7 @@ pub(super) fn layout_floating_content<F: CanvasFactory, E: LayoutEnginePort>(
 /// sibling module's size, say) is what's actually dirty.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn layout_floating_content_cached<F: CanvasFactory, E: LayoutEnginePort>(
-    cache: &mut HashMap<MonitorId, (StyledNode, RenderNode)>,
+    cache: &mut FloatingCache,
     monitor_id: &MonitorId,
     layout_engine: &mut E,
     canvas_factory: &mut F,
@@ -51,13 +57,17 @@ pub(super) fn layout_floating_content_cached<F: CanvasFactory, E: LayoutEnginePo
     current_child_sizes: Option<&ChildSizesMap>,
     content: &StyledNode,
 ) -> Option<RenderNode> {
-    if let Some((cached_content, cached_node)) = cache.get(monitor_id)
+    if let Some((cached_content, cached_sizes, cached_node)) = cache.get(monitor_id)
         && cached_content == content
+        && cached_sizes.as_ref() == current_child_sizes
     {
         return Some(cached_node.clone());
     }
     let node = layout_floating_content(layout_engine, canvas_factory, scale, current_child_sizes, content)?;
-    cache.insert(monitor_id.clone(), (content.clone(), node.clone()));
+    cache.insert(
+        monitor_id.clone(),
+        (content.clone(), current_child_sizes.cloned(), node.clone()),
+    );
     Some(node)
 }
 
@@ -137,6 +147,43 @@ mod tests {
             &mut cache, &monitor_id, &mut engine, &mut canvas_factory, Scale::new(1.0), None, &content,
         );
         assert_eq!(calls.load(Ordering::SeqCst), 1, "unchanged content must not re-run layout");
+    }
+
+    /// Issue #9 regression: identical content whose embedded child has since
+    /// reported (or changed) a size must be laid out again — the host box is
+    /// measured from that report. A stale hit left the host unsettled
+    /// forever, so the gate never opened and the popup never appeared.
+    #[test]
+    fn test_cached_layout_recomputes_when_child_sizes_change() {
+        use crate::shared::primitives::{ChildReport, ChildSizesMap, ModuleKey, ModuleName};
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut engine = CountingEngine { calls: calls.clone() };
+        let mut canvas_factory = MockCanvasFactory;
+        let mut cache = HashMap::new();
+        let monitor_id = MonitorId::new("DP-1");
+        let content = text_node("popup with an embedded calendar");
+
+        layout_floating_content_cached(
+            &mut cache, &monitor_id, &mut engine, &mut canvas_factory, Scale::new(1.0), None, &content,
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+        let mut sizes = ChildSizesMap::new();
+        sizes.insert_report(
+            ModuleKey::from_name(ModuleName::new("calendar")),
+            ChildReport::new(Size::new(240, 215), Some(280)),
+        );
+        for _ in 0..2 {
+            layout_floating_content_cached(
+                &mut cache, &monitor_id, &mut engine, &mut canvas_factory, Scale::new(1.0), Some(&sizes), &content,
+            );
+        }
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            2,
+            "a new child report must re-run layout once, then hit the cache"
+        );
     }
 
     #[test]

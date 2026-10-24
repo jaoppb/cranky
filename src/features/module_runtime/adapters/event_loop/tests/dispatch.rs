@@ -74,6 +74,7 @@ async fn test_dispatch_render_outcome_emits_layout_events() {
             monitor_id,
             module_id,
             size,
+            ..
         } => {
             assert_eq!(monitor_id.as_str(), "DP-1");
             assert_eq!(module_id, id);

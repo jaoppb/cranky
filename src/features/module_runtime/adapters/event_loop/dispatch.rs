@@ -92,6 +92,7 @@ pub(super) fn dispatch_outcome_layouts<LS: LayoutEventSender>(
             monitor_id: monitor_id.clone(),
             module_id,
             size: size_change.new_size(),
+            settled_width: size_change.settled_width(),
         });
     }
 }

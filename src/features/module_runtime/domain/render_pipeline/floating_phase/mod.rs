@@ -1,19 +1,21 @@
 mod content;
+mod gate;
 mod panel;
 mod popup;
 mod tooltip;
 
+pub(super) use gate::apply_gate;
 use panel::layout_panel;
 use popup::layout_popup;
+pub use content::FloatingCache;
 pub use popup::PopupRenderLayout;
 
-use crate::features::layout_engine::domain::{RenderNode, StyledNode};
+use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::vdom::domain::InteractionContext;
 use crate::shared::primitives::geometry::Scale;
 use crate::shared::primitives::{ChildModuleLayout, ChildSizesMap, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
-use std::collections::HashMap;
 use tooltip::layout_tooltip;
 
 /// The three floating kinds' per-monitor content caches.
@@ -22,9 +24,9 @@ use tooltip::layout_tooltip;
 /// without borrowing `RenderPipeline` three separate times — see
 /// `RenderPipeline::floating_content_caches_mut`.
 pub struct FloatingContentCaches<'a> {
-    pub popup: &'a mut HashMap<MonitorId, (StyledNode, RenderNode)>,
-    pub panel: &'a mut HashMap<MonitorId, (StyledNode, RenderNode)>,
-    pub tooltip: &'a mut HashMap<MonitorId, (StyledNode, RenderNode)>,
+    pub popup: &'a mut FloatingCache,
+    pub panel: &'a mut FloatingCache,
+    pub tooltip: &'a mut FloatingCache,
 }
 
 /// The layout results for whatever floating content is currently open on a monitor.
@@ -36,6 +38,9 @@ pub struct FloatingLayouts {
     popup: Option<PopupRenderLayout>,
     panel: Option<RenderNode>,
     tooltip: Option<RenderNode>,
+    /// Per kind: an embedded child has not settled on the host width yet,
+    /// so the dispatcher must not present or update that surface.
+    held: [bool; 3],
 }
 
 impl FloatingLayouts {
@@ -49,7 +54,29 @@ impl FloatingLayouts {
             popup,
             panel,
             tooltip,
+            held: [false; 3],
         }
+    }
+
+    #[must_use]
+    pub(super) const fn with_held(mut self, popup: bool, panel: bool, tooltip: bool) -> Self {
+        self.held = [popup, panel, tooltip];
+        self
+    }
+
+    #[must_use]
+    pub const fn popup_held(&self) -> bool {
+        self.held[0]
+    }
+
+    #[must_use]
+    pub const fn panel_held(&self) -> bool {
+        self.held[1]
+    }
+
+    #[must_use]
+    pub const fn tooltip_held(&self) -> bool {
+        self.held[2]
     }
 
     #[must_use]
@@ -134,9 +161,5 @@ pub fn layout_floating<F: CanvasFactory, E: LayoutEnginePort>(
     )
     .inspect(|node| child_layouts.extend(node.collect_module_layouts()));
 
-    FloatingLayouts {
-        popup,
-        panel,
-        tooltip,
-    }
+    FloatingLayouts::new(popup, panel, tooltip)
 }

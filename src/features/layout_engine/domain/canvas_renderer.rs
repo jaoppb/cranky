@@ -3,6 +3,7 @@ use crate::features::styling::domain::{ComputedStyle, Orientation};
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::{LogicalPx, Position, Rect, Size};
 use crate::shared::rendering::ports::canvas::Canvas;
+use crate::utils::f64_to_i64;
 
 fn draw_bg_and_border(
     canvas: &mut dyn Canvas,
@@ -89,6 +90,16 @@ fn render_progress(
     }
 }
 
+/// Where a text leaf's glyphs start: the box's origin moved in by its
+/// padding, which layout already added to the box (see `leaf_size`).
+fn text_origin(rect: &Rect, style: &ComputedStyle) -> Position {
+    let inset = |v: f64| i32::try_from(f64_to_i64(v.max(0.0))).unwrap_or(0);
+    let (left, top) = style
+        .padding()
+        .map_or((0, 0), |p| (inset(p.left()), inset(p.top())));
+    Position::new(rect.x().saturating_add(left), rect.y().saturating_add(top))
+}
+
 fn render_text(
     canvas: &mut dyn Canvas,
     rect: &Rect,
@@ -106,7 +117,7 @@ fn render_text(
         style.font_family(),
         style.font_size(),
         text_color,
-        Position::new(rect.x(), rect.y()),
+        text_origin(rect, style),
     );
 }
 
@@ -176,6 +187,7 @@ impl RenderNode {
 #[cfg(test)]
 mod tests {
     use super::super::render_node::RenderNode;
+    use super::super::style::BoxMargin;
     use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
     use crate::features::vdom::domain::{NodePath, SurfaceSpace, TextContent};
     use crate::shared::primitives::BinaryData;
@@ -273,5 +285,41 @@ mod tests {
             panel: None,
         };
         image.render_to_canvas(&mut canvas);
+    }
+
+    fn text_node(style: ComputedStyle) -> RenderNode {
+        RenderNode::Text {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            rect: Rect::new(Position::new(20, 30), Size::new(30, 20)),
+            text: TextContent::new("7".to_string()),
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    #[test]
+    fn test_text_is_drawn_inside_its_padding() {
+        let mut padded = ComputedStyle::default();
+        padded.set_padding(BoxMargin::new(4.0, 4.0, 2.0, 2.0));
+        let mut canvas = MockCanvas::new();
+        canvas
+            .expect_draw_text()
+            .withf(|_, _, _, _, pos| *pos == Position::new(22, 34))
+            .times(1)
+            .return_const(());
+        text_node(padded).render_to_canvas(&mut canvas);
+
+        let mut canvas = MockCanvas::new();
+        canvas
+            .expect_draw_text()
+            .withf(|_, _, _, _, pos| *pos == Position::new(20, 30))
+            .times(1)
+            .return_const(());
+        text_node(ComputedStyle::default()).render_to_canvas(&mut canvas);
     }
 }

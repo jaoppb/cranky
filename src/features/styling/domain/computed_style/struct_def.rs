@@ -55,7 +55,7 @@ impl ComputedStyle {
         Self {
             display: Some(DisplayMode::Flex),
             flex_direction: Some(FlexDirection::Row),
-            align_items: Some(AlignItems::Start),
+            align_items: Some(AlignItems::Stretch),
             ..Default::default()
         }
     }
