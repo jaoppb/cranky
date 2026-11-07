@@ -2,8 +2,8 @@
 //! bound over a socket pair nobody reads from, so requests are just queued.
 
 pub mod pointer;
-pub mod wire;
 mod state;
+pub mod wire;
 
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
 use crate::shared::config::domain::MarginConfig;

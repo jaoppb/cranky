@@ -1,7 +1,6 @@
 
 pub mod adapter;
 pub mod command;
-pub mod dispatch_noop;
 pub mod dispatch_output;
 pub mod dispatch_pointer;
 pub mod dispatch_pointer_button;
