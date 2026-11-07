@@ -1,4 +1,5 @@
 use super::super::command::SurfaceCommand;
+use super::super::input_region::{is_click_through, set_empty_input_region};
 use super::super::state::WaylandState;
 use super::super::types::ModuleSurface;
 use super::copy_surface_data;
@@ -112,6 +113,9 @@ pub(super) fn handle_module_surface(
         surface.set_buffer_scale(bar_scale);
         let subsurface = subcompositor.get_subsurface(&surface, &parent_surface, qh, ());
         subsurface.set_desync();
+        if matches!(parent, SurfaceParent::Floating(kind) if is_click_through(kind)) {
+            set_empty_input_region(&compositor, &surface, qh);
+        }
 
         let shm_buffer = ShmBuffer::new(shm, width, height, qh, xdg_runtime_dir.as_path())
             .map_err(|err| DisplayServerError::Internal(err.to_string()))?;
