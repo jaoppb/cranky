@@ -49,8 +49,7 @@ pub fn substitute_failed_modules<S: std::hash::BuildHasher>(
         result.popup = Some(
             PopupSpec::new(Box::new(content))
                 .with_anchor(popup.anchor_direction())
-                .with_offset(popup.offset())
-                .with_dismiss_on_unfocus(popup.dismiss_on_unfocus()),
+                .with_offset(popup.offset()),
         );
     }
     if let Some(panel) = result.panel.as_ref() {

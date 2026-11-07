@@ -81,7 +81,6 @@ function render(monitor)
 		node.popup = ui.popup({
 			content = ui.module({ name = "calendar", class = "calendar" }),
 			anchor = "bottom",
-			dismiss_on_unfocus = true,
 		})
 	end
 	return ui.text(node)

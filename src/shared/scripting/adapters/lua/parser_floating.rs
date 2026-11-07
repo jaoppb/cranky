@@ -86,16 +86,10 @@ pub(crate) fn parse_popup_spec(
                     _ => AnchorDirection::Auto,
                 };
                 let offset = parse_offset(&table);
-                let dismiss_on_unfocus = table
-                    .get::<Option<bool>>("dismiss_on_unfocus")
-                    .ok()
-                    .flatten()
-                    .unwrap_or(true);
                 Ok(Some(
                     PopupSpec::new(content)
                         .with_anchor(anchor)
-                        .with_offset(offset)
-                        .with_dismiss_on_unfocus(dismiss_on_unfocus),
+                        .with_offset(offset),
                 ))
             } else {
                 let node = value_to_vnode(lua, mlua::Value::Table(table))?;

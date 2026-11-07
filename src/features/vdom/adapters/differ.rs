@@ -28,8 +28,8 @@ impl DefaultVdomDiffAdapter {
             || old_node.on_hover() != new_node.on_hover();
 
         let tooltip_patch = self.diff_optional_subnode(old_node.tooltip(), new_node.tooltip());
-        let popup_props_changed = old_node.popup().map(|p| (p.anchor_direction(), p.offset(), p.dismiss_on_unfocus()))
-            != new_node.popup().map(|p| (p.anchor_direction(), p.offset(), p.dismiss_on_unfocus()));
+        let popup_props_changed = old_node.popup().map(|p| (p.anchor_direction(), p.offset()))
+            != new_node.popup().map(|p| (p.anchor_direction(), p.offset()));
         let popup_content_patch = self.diff_optional_subnode(
             old_node.popup().map(crate::features::vdom::domain::PopupSpec::content),
             new_node.popup().map(crate::features::vdom::domain::PopupSpec::content),

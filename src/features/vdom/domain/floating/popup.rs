@@ -20,7 +20,6 @@ pub struct PopupSpec {
     content: Box<VNode>,
     anchor_direction: AnchorDirection,
     offset: Option<PopupOffset>,
-    dismiss_on_unfocus: bool,
 }
 
 #[derive(Deserialize)]
@@ -33,14 +32,8 @@ enum PopupSpecHelper {
         anchor_direction: AnchorDirection,
         #[serde(default)]
         offset: Option<PopupOffset>,
-        #[serde(default = "default_true")]
-        dismiss_on_unfocus: bool,
     },
     Implicit(Box<VNode>),
-}
-
-const fn default_true() -> bool {
-    true
 }
 
 impl From<PopupSpecHelper> for PopupSpec {
@@ -50,12 +43,10 @@ impl From<PopupSpecHelper> for PopupSpec {
                 content,
                 anchor_direction,
                 offset,
-                dismiss_on_unfocus,
             } => Self {
                 content,
                 anchor_direction,
                 offset,
-                dismiss_on_unfocus,
             },
             PopupSpecHelper::Implicit(content) => Self::new(content),
         }
@@ -69,7 +60,6 @@ impl PopupSpec {
             content,
             anchor_direction: AnchorDirection::Auto,
             offset: None,
-            dismiss_on_unfocus: true,
         }
     }
 
@@ -86,12 +76,6 @@ impl PopupSpec {
     }
 
     #[must_use]
-    pub const fn with_dismiss_on_unfocus(mut self, dismiss_on_unfocus: bool) -> Self {
-        self.dismiss_on_unfocus = dismiss_on_unfocus;
-        self
-    }
-
-    #[must_use]
     pub fn content(&self) -> &VNode {
         &self.content
     }
@@ -104,10 +88,5 @@ impl PopupSpec {
     #[must_use]
     pub const fn offset(&self) -> Option<PopupOffset> {
         self.offset
-    }
-
-    #[must_use]
-    pub const fn dismiss_on_unfocus(&self) -> bool {
-        self.dismiss_on_unfocus
     }
 }
