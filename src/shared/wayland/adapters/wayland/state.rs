@@ -1,4 +1,5 @@
 use super::dispatch_pointer_button::PointerGrab;
+use super::keyboard::KeyboardInput;
 use super::types::{FloatingSurface, WaylandBar, WaylandOutputInfo};
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
 use crate::shared::env::domain::AppEnvironment;
@@ -34,6 +35,7 @@ pub struct WaylandState {
     pub(crate) bars: Vec<WaylandBar>,
     pub(crate) seat: Option<WlSeat>,
     pub(crate) pointer: Option<WlPointer>,
+    pub(crate) keyboard: KeyboardInput,
 
     pub(crate) command_tx: tokio::sync::mpsc::Sender<DisplayCommand>,
 

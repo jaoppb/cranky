@@ -1,6 +1,7 @@
 
 pub mod adapter;
 pub mod command;
+pub mod dispatch_keyboard;
 pub mod dispatch_output;
 pub mod dispatch_pointer;
 pub mod dispatch_pointer_button;
@@ -17,6 +18,7 @@ pub mod floating_surface;
 pub mod floating_teardown;
 pub mod floating_update;
 pub mod input_region;
+pub mod keyboard;
 pub mod render;
 pub mod state;
 pub mod surface_handler;

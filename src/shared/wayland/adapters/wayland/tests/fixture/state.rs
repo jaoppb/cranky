@@ -8,6 +8,7 @@ use crate::shared::config::domain::{
 use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
 use crate::shared::events::signals::SignalHub;
 use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
+use crate::shared::wayland::adapters::wayland::keyboard::KeyboardInput;
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -45,6 +46,7 @@ impl Fake {
             bars: Vec::new(),
             seat: None,
             pointer: None,
+            keyboard: KeyboardInput::default(),
             command_tx,
             surface_to_id: HashMap::new(),
             pointer_surface: None,

@@ -114,6 +114,7 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
         bars: Vec::new(),
         seat: None,
         pointer: None,
+        keyboard: crate::shared::wayland::adapters::wayland::keyboard::KeyboardInput::default(),
         command_tx,
         surface_to_id: HashMap::new(),
         // The pointer is over the embedded module's own subsurface, not
