@@ -46,6 +46,8 @@
     margin-bottom: 2px;
 }
 
+/* width: 100% makes the text leaf fill its grid column; a leaf is otherwise
+   exactly as wide as its glyphs, leaving text-align: center nothing to do. */
 .weekday {
     color: #565f89;
     font-size: 11px;

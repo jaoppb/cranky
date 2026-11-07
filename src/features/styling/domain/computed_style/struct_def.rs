@@ -5,7 +5,7 @@ use crate::features::layout_engine::domain::{
 };
 use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
-use crate::shared::primitives::text_align::TextAlign;
+use crate::shared::primitives::TextAlign;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ComputedStyle {

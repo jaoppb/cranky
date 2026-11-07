@@ -1,7 +1,7 @@
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
-use crate::shared::primitives::text_align::TextAlignment;
+use crate::shared::primitives::TextAlignment;
 use crate::shared::rendering::ports::canvas::Canvas;
 use cosmic_text::{FontSystem, SwashCache};
 use tiny_skia::PixmapMut;

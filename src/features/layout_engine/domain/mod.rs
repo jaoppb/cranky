@@ -1,5 +1,4 @@
 pub mod canvas_renderer;
-mod text_placement;
 pub mod commands;
 pub mod errors;
 pub mod measurer;
@@ -8,6 +7,7 @@ pub mod popup;
 pub mod render_node;
 pub mod style;
 pub mod styled_node;
+mod text_placement;
 
 pub use commands::*;
 pub use errors::*;

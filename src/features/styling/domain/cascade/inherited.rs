@@ -1,7 +1,7 @@
 use super::super::computed_style::ComputedStyle;
 use crate::shared::config::domain::FontSize;
 use crate::shared::primitives::color::DrawingColor;
-use crate::shared::primitives::text_align::TextAlign;
+use crate::shared::primitives::TextAlign;
 use std::collections::HashMap;
 use std::sync::Arc;
 

@@ -8,7 +8,7 @@ use crate::features::styling::domain::grid_types::{
 use crate::features::styling::domain::values::{CssLength, FlexGrow, FlexShrink, Opacity};
 use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
-use crate::shared::primitives::text_align::TextAlign;
+use crate::shared::primitives::TextAlign;
 
 impl ComputedStyle {
     pub fn set_background(&mut self, bg: DrawingColor) {

@@ -2,7 +2,7 @@ use crate::features::layout_engine::domain::TextMeasurer;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::{Color, DrawingColor};
 use crate::shared::primitives::geometry::{Position, Scale, Size};
-use crate::shared::primitives::text_align::{TextAlign, TextAlignment};
+use crate::shared::primitives::{TextAlign, TextAlignment};
 use crate::shared::rendering::adapters::tiny_skia::canvas::TinySkiaCosmicCanvas;
 use crate::shared::rendering::adapters::tiny_skia::measurer::CosmicTextMeasurer;
 use crate::shared::rendering::ports::canvas::Canvas;

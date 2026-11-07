@@ -9,7 +9,7 @@ use crate::features::vdom::domain::{TextContent, VNode};
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
-use crate::shared::primitives::text_align::{TextAlign, TextAlignment};
+use crate::shared::primitives::{TextAlign, TextAlignment};
 use crate::shared::rendering::ports::canvas::MockCanvas;
 use std::sync::{Arc, Mutex};
 

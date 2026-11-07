@@ -184,7 +184,7 @@ mod tests {
     use crate::shared::primitives::BinaryData;
     use crate::shared::primitives::color::{Color, DrawingColor};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
-    use crate::shared::primitives::text_align::{TextAlign, TextAlignment};
+    use crate::shared::primitives::{TextAlign, TextAlignment};
     use crate::shared::rendering::ports::canvas::MockCanvas;
 
     #[test]
