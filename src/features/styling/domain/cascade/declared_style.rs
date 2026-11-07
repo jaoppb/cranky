@@ -8,10 +8,11 @@ use super::var_substitution::substitute_vars;
 use crate::features::styling::ports::PropertyReparser;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
+use crate::shared::primitives::TextAlign;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// The four properties this renderer treats as naturally inherited, each
+/// The five properties this renderer treats as naturally inherited, each
 /// possibly carrying an explicit CSS-wide keyword instead of a normal
 /// value.
 ///
@@ -24,12 +25,13 @@ pub struct InheritableKeywords {
     pub accent_color: Option<CssWideKeyword>,
     pub font_family: Option<CssWideKeyword>,
     pub font_size: Option<CssWideKeyword>,
+    pub text_align: Option<CssWideKeyword>,
 }
 
 /// One rule's declarations before inheritance, `em`/`rem`, and `var()` are
 /// resolved.
 ///
-/// Every property except the four inheritable ones and the twenty
+/// Every property except the five inheritable ones and the twenty
 /// length-bearing ones (see `DeclaredLengths`) collapses straight to
 /// `ComputedStyle`'s `Option<T>` shape exactly as before (`rest`) — nothing
 /// else in this codebase's grammar ever inherits, gets explicitly reset, or
@@ -45,6 +47,7 @@ pub struct DeclaredStyle {
     accent_color: Cascade<DrawingColor>,
     font_family: Cascade<Arc<str>>,
     font_size: Cascade<DeclaredLength>,
+    text_align: Cascade<TextAlign>,
     lengths: DeclaredLengths,
     custom_properties: HashMap<String, String>,
     pending_vars: HashMap<String, String>,
@@ -82,12 +85,14 @@ impl DeclaredStyle {
                 .map(|fs| DeclaredLength::Px(fs.value()))
         });
         let font_size = cascade_from(keywords.font_size, font_size_value);
+        let text_align = cascade_from(keywords.text_align, computed.text_align());
         Self {
             rest: computed,
             color,
             accent_color,
             font_family,
             font_size,
+            text_align,
             lengths,
             custom_properties,
             pending_vars,
@@ -107,6 +112,9 @@ impl DeclaredStyle {
         }
         if !matches!(other.font_size, Cascade::NotDeclared) {
             self.font_size = other.font_size;
+        }
+        if !matches!(other.text_align, Cascade::NotDeclared) {
+            self.text_align = other.text_align;
         }
         self.lengths.merge_with(&other.lengths);
         self.custom_properties
@@ -139,6 +147,10 @@ impl DeclaredStyle {
         }
         if let Some(family) = resolve(self.font_family, inherited.font_family()) {
             computed.set_font_family(FontFamily::new(family.to_string()));
+        }
+
+        if let Some(align) = resolve(self.text_align, inherited.text_align().as_ref()) {
+            computed.set_text_align(align);
         }
 
         let own_font_size = resolve_font_size(self.font_size, inherited);

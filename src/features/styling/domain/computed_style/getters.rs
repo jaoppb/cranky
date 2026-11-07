@@ -8,6 +8,7 @@ use crate::features::styling::domain::grid_types::{
 use crate::features::styling::domain::values::{CssLength, FlexGrow, FlexShrink, Opacity};
 use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
+use crate::shared::primitives::TextAlign;
 
 impl ComputedStyle {
     #[must_use]
@@ -25,6 +26,10 @@ impl ComputedStyle {
     #[must_use]
     pub const fn font_family(&self) -> Option<&FontFamily> {
         self.font_family.as_ref()
+    }
+    #[must_use]
+    pub const fn text_align(&self) -> Option<TextAlign> {
+        self.text_align
     }
     #[must_use]
     pub const fn font_size(&self) -> Option<FontSize> {

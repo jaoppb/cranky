@@ -10,6 +10,7 @@ pub mod options;
 pub mod render;
 #[cfg(test)]
 mod tests;
+pub mod text_align;
 
 pub use binary::BinaryData;
 pub use color::{Color, DrawingColor};
@@ -23,3 +24,4 @@ pub use layout::{
 pub use monitor::ScriptMonitorInfo;
 pub use offset::PopupOffset;
 pub use options::ModuleOptions;
+pub use text_align::{TextAlign, TextAlignment};

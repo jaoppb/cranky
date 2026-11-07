@@ -24,7 +24,7 @@ use cranky::shared::dbus::domain::DBusSubscription;
 use cranky::shared::events::signals::{SignalHub, SignalKind};
 use cranky::shared::primitives::color::{Color, DrawingColor};
 use cranky::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
-use cranky::shared::primitives::{FunctionName, ModuleOptions, MonitorId};
+use cranky::shared::primitives::{FunctionName, ModuleOptions, MonitorId, TextAlignment};
 use cranky::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory;
 use cranky::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
 use cranky::shared::scripting::adapters::lua::LuaModule;
@@ -486,6 +486,7 @@ fn bench_rendering(c: &mut Criterion) {
                 Some(FontSize::new(13.0)),
                 text_color.clone(),
                 Position::new(12, 10),
+                TextAlignment::default(),
             );
         });
     });

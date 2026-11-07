@@ -2,6 +2,7 @@ use crate::shared::primitives::color::DrawingColor;
 
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
+use crate::shared::primitives::TextAlignment;
 
 pub trait CanvasFactory: Send + Sync + Clone {
     #[must_use]
@@ -47,7 +48,8 @@ pub trait Canvas: Send + Sync {
         border_size: LogicalPx,
     );
 
-    /// Draw text at a position
+    /// Draw text starting at `position`, shifted within
+    /// `alignment.available_width()` per `alignment.align()`.
     #[cfg_attr(test, mockall::concretize)]
     fn draw_text(
         &mut self,
@@ -56,6 +58,7 @@ pub trait Canvas: Send + Sync {
         font_size: Option<FontSize>,
         color: DrawingColor,
         position: Position,
+        alignment: TextAlignment,
     );
 
     /// Draw an RGBA image

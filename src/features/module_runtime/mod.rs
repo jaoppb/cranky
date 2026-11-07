@@ -148,6 +148,7 @@ pub mod test_support {
             _font_size: Option<FontSize>,
             _color: crate::shared::primitives::color::DrawingColor,
             _pos: Position,
+            _alignment: crate::shared::primitives::TextAlignment,
         ) {
         }
 

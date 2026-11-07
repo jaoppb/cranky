@@ -8,10 +8,14 @@ use crate::features::styling::domain::grid_types::{
 use crate::features::styling::domain::values::{CssLength, FlexGrow, FlexShrink, Opacity};
 use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
+use crate::shared::primitives::TextAlign;
 
 impl ComputedStyle {
     pub fn set_background(&mut self, bg: DrawingColor) {
         self.background = Some(bg);
+    }
+    pub const fn set_text_align(&mut self, align: TextAlign) {
+        self.text_align = Some(align);
     }
     pub fn set_color(&mut self, color: DrawingColor) {
         self.color = Some(color);

@@ -1,6 +1,7 @@
 use super::super::computed_style::ComputedStyle;
 use crate::shared::config::domain::FontSize;
 use crate::shared::primitives::color::DrawingColor;
+use crate::shared::primitives::TextAlign;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -12,7 +13,7 @@ use std::sync::Arc;
 pub(crate) const DEFAULT_FONT_SIZE: f32 = 14.0;
 
 /// The subset of computed style that CSS actually inherits down the element
-/// tree: `color`, `accent-color`, `font-family`, `font-size`.
+/// tree: `color`, `accent-color`, `font-family`, `font-size`, `text-align`.
 ///
 /// Plus custom properties (`--name`, inherited by default, same as real
 /// CSS) and the fixed `rem` base — the latter isn't inherited in the CSS
@@ -31,6 +32,7 @@ pub struct InheritedStyle {
     accent_color: Option<DrawingColor>,
     font_family: Option<Arc<str>>,
     font_size: Option<FontSize>,
+    text_align: Option<TextAlign>,
     root_font_size: FontSize,
     custom_properties: Arc<HashMap<String, String>>,
 }
@@ -42,6 +44,7 @@ impl Default for InheritedStyle {
             accent_color: None,
             font_family: None,
             font_size: None,
+            text_align: None,
             root_font_size: FontSize::new(DEFAULT_FONT_SIZE),
             custom_properties: Arc::new(HashMap::new()),
         }
@@ -67,6 +70,11 @@ impl InheritedStyle {
     #[must_use]
     pub const fn font_size(&self) -> Option<&FontSize> {
         self.font_size.as_ref()
+    }
+
+    #[must_use]
+    pub const fn text_align(&self) -> Option<TextAlign> {
+        self.text_align
     }
 
     /// The size `1rem` resolves against — fixed for the whole tree
@@ -100,6 +108,7 @@ impl InheritedStyle {
             accent_color: style.accent_color().cloned(),
             font_family: style.font_family().map(|f| Arc::from(f.as_str())),
             font_size: style.font_size(),
+            text_align: style.text_align(),
             root_font_size: self.root_font_size,
             custom_properties,
         }
