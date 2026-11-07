@@ -5,6 +5,7 @@ use wayland_client::protocol::{
     wl_buffer::{self, WlBuffer},
     wl_compositor::{self, WlCompositor},
     wl_output::WlOutput,
+    wl_region::WlRegion,
     wl_registry::{self, WlRegistry},
     wl_shm::{self, WlShm},
     wl_shm_pool::{self, WlShmPool},
@@ -12,8 +13,10 @@ use wayland_client::protocol::{
     wl_subsurface::{self, WlSubsurface},
     wl_surface::{self, WlSurface},
 };
-use wayland_client::{Connection, Dispatch, QueueHandle};
+use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::{self, ZwlrLayerShellV1};
+
+delegate_noop!(WaylandState: WlRegion);
 
 impl Dispatch<WlRegistry, ()> for WaylandState {
     fn event(

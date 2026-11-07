@@ -3,6 +3,7 @@
 
 pub mod pointer;
 mod state;
+pub mod wire;
 
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
 use crate::shared::config::domain::MarginConfig;
@@ -31,7 +32,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::{
 };
 
 pub struct Fake {
-    _server: UnixStream,
+    server: UnixStream,
     connection: Connection,
     _queue: EventQueue<WaylandState>,
     pub qh: QueueHandle<WaylandState>,
@@ -56,7 +57,7 @@ impl Fake {
         let xdg_wm_base = registry.bind(4, 3, &qh, ());
         let layer_shell = registry.bind(5, 1, &qh, ());
         Self {
-            _server: server,
+            server,
             connection,
             _queue: queue,
             qh,

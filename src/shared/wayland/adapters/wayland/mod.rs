@@ -16,6 +16,7 @@ pub mod floating_setup;
 pub mod floating_surface;
 pub mod floating_teardown;
 pub mod floating_update;
+pub mod input_region;
 pub mod render;
 pub mod state;
 pub mod surface_handler;

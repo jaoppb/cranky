@@ -1,5 +1,6 @@
 use super::floating_anchor::{AnchorInfo, FloatingParentRole};
 use super::floating_render::create_positioner;
+use super::input_region::{is_click_through, set_empty_input_region};
 use super::state::WaylandState;
 use super::types::FloatingSurface;
 use crate::features::layout_engine::domain::FloatingKind;
@@ -108,6 +109,9 @@ fn setup_new_floating(
     );
     let surface = compositor.create_surface(qh, ());
     surface.set_buffer_scale(anchor_info.bar_scale);
+    if is_click_through(&kind) {
+        set_empty_input_region(compositor, &surface, qh);
+    }
     let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, qh, ());
     // A popup nested inside another floating surface (decision 7) names its
     // parent directly; a top-level one leaves it unset and relies on
