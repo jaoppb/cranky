@@ -143,7 +143,6 @@ impl VNode {
                 content,
                 p.anchor_direction(),
                 p.offset(),
-                p.dismiss_on_unfocus(),
             )
         });
         let panel = self.panel().map(|p| {

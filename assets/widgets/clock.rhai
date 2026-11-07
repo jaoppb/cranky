@@ -139,7 +139,6 @@ fn render(monitor) {
             // `module` is a reserved keyword in Rhai — `widget` is the alias.
             content: ui.widget("calendar", "calendar"),
             anchor: "bottom",
-            dismiss_on_unfocus: true
         });
     }
     return ui.text(node);

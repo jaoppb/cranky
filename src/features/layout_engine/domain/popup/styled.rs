@@ -10,7 +10,6 @@ pub struct StyledPopup {
     content: Box<StyledNode>,
     anchor_direction: AnchorDirection,
     offset: Option<PopupOffset>,
-    dismiss_on_unfocus: bool,
 }
 
 impl StyledPopup {
@@ -19,13 +18,11 @@ impl StyledPopup {
         content: Box<StyledNode>,
         anchor_direction: AnchorDirection,
         offset: Option<PopupOffset>,
-        dismiss_on_unfocus: bool,
     ) -> Self {
         Self {
             content,
             anchor_direction,
             offset,
-            dismiss_on_unfocus,
         }
     }
 
@@ -42,11 +39,6 @@ impl StyledPopup {
     #[must_use]
     pub const fn offset(&self) -> Option<PopupOffset> {
         self.offset
-    }
-
-    #[must_use]
-    pub const fn dismiss_on_unfocus(&self) -> bool {
-        self.dismiss_on_unfocus
     }
 }
 

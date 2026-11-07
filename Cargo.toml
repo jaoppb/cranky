@@ -69,6 +69,7 @@ taffy = "0.12"
 futures = "0.3.34"
 lightningcss = "1.0.0-alpha.63"
 parcel_selectors = "0.28"
+xkbcommon = "0.9.0"
 
 [dev-dependencies]
 arch-lint = "0.5.0"

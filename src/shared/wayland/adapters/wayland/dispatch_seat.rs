@@ -25,6 +25,8 @@ impl Dispatch<WlSeat, ()> for WaylandState {
             {
                 state.pointer = Some(proxy.get_pointer(qh, ()));
             }
+            let has_keyboard = caps.contains(wl_seat::Capability::Keyboard);
+            state.keyboard.on_capability(proxy, has_keyboard, qh);
         }
     }
 }

@@ -164,7 +164,6 @@ fn test_rhai_vnode_with_popup_and_panel() {
                 content: p_content,
                 anchor: "bottom",
                 offset: [5, 10],
-                dismiss_on_unfocus: true,
             });
 
             let panel_content = ui.text("Panel content");
@@ -190,7 +189,6 @@ fn test_rhai_vnode_with_popup_and_panel() {
     assert_eq!(popup.anchor_direction(), crate::features::vdom::domain::AnchorDirection::Bottom);
     assert_eq!(popup.offset().unwrap().dx(), 5);
     assert_eq!(popup.offset().unwrap().dy(), 10);
-    assert!(popup.dismiss_on_unfocus());
 
     assert!(node.panel().is_some());
     let panel = node.panel().unwrap();
@@ -212,7 +210,6 @@ fn test_rhai_vnode_with_popup_default_offset_none() {
             let pop = ui.popup(#{
                 content: p_content,
                 anchor: "bottom",
-                dismiss_on_unfocus: true,
             });
             return ui.rect(#{
                 popup: pop,

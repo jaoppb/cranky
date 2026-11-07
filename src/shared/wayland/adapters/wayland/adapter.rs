@@ -60,6 +60,7 @@ impl WaylandAdapter {
             bars: Vec::new(),
             seat: None,
             pointer: None,
+            keyboard: super::keyboard::KeyboardInput::default(),
             command_tx,
             surface_to_id: HashMap::new(),
             pointer_surface: None,

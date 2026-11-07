@@ -38,6 +38,7 @@ pub(crate) fn teardown_floating(state: &mut WaylandState, kind: &FloatingKind, n
         };
         leave_dying_surface(state, &floating);
         state.surface_to_id.remove(&floating.surface);
+        state.keyboard.forget_focus(&floating.surface);
         for child in floating.module_surfaces.values() {
             state.surface_to_id.remove(&child.surface);
         }
