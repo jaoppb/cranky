@@ -10,7 +10,8 @@
 
 use std::io::Read;
 use std::os::fd::OwnedFd;
-use wayland_client::protocol::{wl_keyboard::WlKeyboard, wl_surface::WlSurface};
+use wayland_client::protocol::{wl_keyboard::WlKeyboard, wl_seat::WlSeat, wl_surface::WlSurface};
+use wayland_client::{Dispatch, Proxy, QueueHandle};
 use xkbcommon::xkb;
 
 /// evdev key codes are offset by 8 in xkb.
@@ -18,13 +19,29 @@ const EVDEV_OFFSET: u32 = 8;
 
 #[derive(Default)]
 pub struct KeyboardInput {
-    pub(crate) device: Option<WlKeyboard>,
+    device: Option<WlKeyboard>,
     focus: Option<WlSurface>,
     /// evdev codes of every key that produces Escape in some layout or level.
     escape_codes: Vec<u32>,
 }
 
 impl KeyboardInput {
+    /// Follows the seat's keyboard capability: binds a `wl_keyboard` when it
+    /// appears, releases it and forgets everything about it when it goes.
+    pub(crate) fn on_capability<D>(&mut self, seat: &WlSeat, present: bool, qh: &QueueHandle<D>)
+    where
+        D: Dispatch<WlKeyboard, ()> + 'static,
+    {
+        if present && self.device.is_none() {
+            self.device = Some(seat.get_keyboard(qh, ()));
+        } else if !present && let Some(device) = self.device.take() {
+            if device.version() >= 3 {
+                device.release();
+            }
+            *self = Self::default();
+        }
+    }
+
     pub(crate) const fn focus(&self) -> Option<&WlSurface> {
         self.focus.as_ref()
     }
@@ -33,11 +50,9 @@ impl KeyboardInput {
         self.focus = Some(surface);
     }
 
-    pub(crate) fn clear_focus(&mut self) {
-        self.focus = None;
-    }
-
-    /// Drops the focus if it is `surface`, which is about to be destroyed.
+    /// Drops the focus if it is `surface`: it is being destroyed, or the
+    /// compositor said the keyboard left it. A `Leave` for a surface that no
+    /// longer holds focus must not clear a newer `Enter`.
     pub(crate) fn forget_focus(&mut self, surface: &WlSurface) {
         if self.focus.as_ref() == Some(surface) {
             self.focus = None;

@@ -1,12 +1,11 @@
 use super::dispatch_pointer::{handle_pointer_enter, handle_pointer_leave, handle_pointer_motion};
 use super::dispatch_pointer_button::{handle_pointer_axis, handle_pointer_button};
-use super::keyboard::KeyboardInput;
 use super::state::WaylandState;
 use wayland_client::protocol::{
     wl_pointer::{self, WlPointer},
     wl_seat::{self, WlSeat},
 };
-use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
+use wayland_client::{Connection, Dispatch, QueueHandle};
 
 impl Dispatch<WlSeat, ()> for WaylandState {
     fn event(
@@ -27,14 +26,7 @@ impl Dispatch<WlSeat, ()> for WaylandState {
                 state.pointer = Some(proxy.get_pointer(qh, ()));
             }
             let has_keyboard = caps.contains(wl_seat::Capability::Keyboard);
-            if has_keyboard && state.keyboard.device.is_none() {
-                state.keyboard.device = Some(proxy.get_keyboard(qh, ()));
-            } else if !has_keyboard && let Some(device) = state.keyboard.device.take() {
-                if device.version() >= 3 {
-                    device.release();
-                }
-                state.keyboard = KeyboardInput::default();
-            }
+            state.keyboard.on_capability(proxy, has_keyboard, qh);
         }
     }
 }

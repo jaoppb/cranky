@@ -23,7 +23,7 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
         match event {
             wl_keyboard::Event::Keymap { fd, size, .. } => state.keyboard.load_keymap(fd, size),
             wl_keyboard::Event::Enter { surface, .. } => state.keyboard.set_focus(surface),
-            wl_keyboard::Event::Leave { .. } => state.keyboard.clear_focus(),
+            wl_keyboard::Event::Leave { surface, .. } => state.keyboard.forget_focus(&surface),
             wl_keyboard::Event::Key {
                 key,
                 state: WEnum::Value(KeyState::Pressed),
@@ -36,7 +36,8 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
     }
 }
 
-/// Closes the focused popup if `code` is Esc. Returns whether it did.
+/// Closes the focused popup if `code` is Esc. Returns whether it did (the
+/// event handler ignores it; tests assert on it).
 pub(super) fn handle_key(state: &mut WaylandState, code: u32) -> bool {
     if !state.keyboard.is_escape(code) {
         return false;
@@ -147,7 +148,8 @@ mod tests {
     fn esc_without_keyboard_focus_closes_nothing() {
         let fake = Fake::new();
         let mut state = nested(&fake);
-        state.keyboard.clear_focus();
+        let focus = state.keyboard.focus().cloned().unwrap();
+        state.keyboard.forget_focus(&focus);
         assert!(!handle_key(&mut state, ESC));
         assert_eq!(state.floating_surfaces.len(), 2);
     }
@@ -181,6 +183,21 @@ mod tests {
         let fake = Fake::new();
         let mut state = nested(&fake);
         teardown_floating(&mut state, &popup_kind(), true);
+        assert!(state.keyboard.focus().is_none());
+    }
+
+    /// A `Leave` for the surface focus already moved away from (a grab
+    /// chain changing hands) must not wipe the newer focus.
+    #[test]
+    fn forgetting_a_surface_keeps_focus_that_moved_elsewhere() {
+        let fake = Fake::new();
+        let mut state = nested(&fake);
+        let outer = state.keyboard.focus().cloned().unwrap();
+        let inner = state.floating_surfaces[&nested_kind()].surface.clone();
+        state.keyboard.set_focus(inner.clone());
+        state.keyboard.forget_focus(&outer);
+        assert_eq!(state.keyboard.focus(), Some(&inner));
+        state.keyboard.forget_focus(&inner);
         assert!(state.keyboard.focus().is_none());
     }
 }
