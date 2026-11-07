@@ -20,6 +20,8 @@
     color: #c0caf5;
     font-size: 14px;
     font-weight: bold;
+    flex-grow: 1;
+    text-align: center;
 }
 
 .title:hover {
@@ -47,6 +49,7 @@
 .weekday {
     color: #565f89;
     font-size: 11px;
+    width: 100%;
     text-align: center;
     font-weight: bold;
 }
@@ -60,6 +63,7 @@
 .day {
     color: #c0caf5;
     font-size: 12px;
+    width: 100%;
     text-align: center;
     padding: 4px 2px;
     border-radius: 4px;

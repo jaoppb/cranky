@@ -3,8 +3,10 @@ use crate::features::styling::domain::{
 };
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::{Color, DrawingColor};
+use crate::shared::primitives::text_align::TextAlign;
 use lightningcss::properties::Property;
 use lightningcss::properties::font::{AbsoluteFontSize, FontSize as LightningFontSize};
+use lightningcss::properties::text::TextAlign as LightningTextAlign;
 use lightningcss::stylesheet::PrinterOptions;
 use lightningcss::traits::ToCss;
 use lightningcss::values::color::CssColor as LightningCssColor;
@@ -42,6 +44,12 @@ pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property) -> bool 
             }
             true
         }
+        Property::TextAlign(align) => {
+            if let Some(a) = convert_text_align(*align) {
+                style.set_text_align(a);
+            }
+            true
+        }
         Property::FontSize(size) => {
             apply_font_size(style, size);
             true
@@ -74,6 +82,17 @@ pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property) -> bool 
     }
 }
 
+/// Only the three keywords the painter honours; `start`/`end`/`justify`
+/// and friends leave the property undeclared.
+const fn convert_text_align(align: LightningTextAlign) -> Option<TextAlign> {
+    match align {
+        LightningTextAlign::Left => Some(TextAlign::Left),
+        LightningTextAlign::Center => Some(TextAlign::Center),
+        LightningTextAlign::Right => Some(TextAlign::Right),
+        _ => None,
+    }
+}
+
 pub fn apply_font_size(style: &mut ComputedStyle, size: &LightningFontSize) {
     match size {
         LightningFontSize::Length(l) => {
@@ -102,7 +121,7 @@ pub fn apply_font_size(style: &mut ComputedStyle, size: &LightningFontSize) {
 
 /// Scans a rule's raw declarations for a CSS-wide keyword.
 ///
-/// Looks for `inherit`, `initial`, or `unset` on any of the four properties
+/// Looks for `inherit`, `initial`, or `unset` on any of the five properties
 /// this renderer inherits. A property that failed its normal value grammar
 /// falls back to `Property::Unparsed` (lightningcss's catch-all for exactly
 /// this case), which is where these keywords actually live.
@@ -121,6 +140,7 @@ pub fn detect_inheritable_keywords(props: &[Property]) -> InheritableKeywords {
             "accent-color" => found.accent_color = Some(keyword),
             "font-family" => found.font_family = Some(keyword),
             "font-size" => found.font_size = Some(keyword),
+            "text-align" => found.text_align = Some(keyword),
             _ => {}
         }
     }

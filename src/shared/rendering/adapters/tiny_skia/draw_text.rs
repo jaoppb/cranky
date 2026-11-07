@@ -3,6 +3,7 @@ use super::paint::{get_family, get_paint};
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::{LogicalPx, Position, Size};
+use crate::shared::primitives::text_align::TextAlignment;
 use cosmic_text::{Attrs, Buffer, Metrics, Shaping, SwashContent};
 use tiny_skia::{Rect, Transform};
 
@@ -14,6 +15,7 @@ impl TinySkiaCosmicCanvas<'_> {
         font_size: Option<FontSize>,
         color: &DrawingColor,
         position: Position,
+        alignment: TextAlignment,
     ) {
         let Some(pixmap) = &mut self.pixmap else {
             return;
@@ -22,12 +24,8 @@ impl TinySkiaCosmicCanvas<'_> {
         let family = font_family.unwrap_or(&self.default_font_family).as_str();
         let pos_x = f32::from(i16::try_from(position.x()).unwrap_or(0));
         let pos_y = f32::from(i16::try_from(position.y()).unwrap_or(0));
-        let physical_x = LogicalPx::new(pos_x)
-            .apply_scale(&self.scale)
-            .value();
-        let physical_y = LogicalPx::new(pos_y)
-            .apply_scale(&self.scale)
-            .value();
+        let origin_x = LogicalPx::new(pos_x).apply_scale(&self.scale).value();
+        let physical_y = LogicalPx::new(pos_y).apply_scale(&self.scale).value();
 
         let physical_size = LogicalPx::new(size).apply_scale(&self.scale).value();
         let metrics = Metrics::new(physical_size, physical_size * 1.0);
@@ -36,6 +34,16 @@ impl TinySkiaCosmicCanvas<'_> {
 
         buffer.set_text(text, &attrs, Shaping::Advanced, None);
         buffer.shape_until_scroll(self.font_system, false);
+
+        let text_width = buffer
+            .layout_runs()
+            .fold(0.0_f32, |widest, run| widest.max(run.line_w));
+        let available = LogicalPx::new(f32::from(
+            u16::try_from(alignment.available_width()).unwrap_or(u16::MAX),
+        ))
+        .apply_scale(&self.scale)
+        .value();
+        let physical_x = origin_x + alignment.align().offset(available, text_width);
 
         for run in buffer.layout_runs() {
             for glyph in run.glyphs {
@@ -56,8 +64,10 @@ impl TinySkiaCosmicCanvas<'_> {
 
                         if image.placement.width > 0
                             && image.placement.height > 0
-                            && let Some(mut glyph_pixmap) =
-                                tiny_skia::Pixmap::new(image.placement.width, image.placement.height)
+                            && let Some(mut glyph_pixmap) = tiny_skia::Pixmap::new(
+                                image.placement.width,
+                                image.placement.height,
+                            )
                             && let Some(glyph_rect) = Rect::from_xywh(0.0, 0.0, glyph_w, glyph_h)
                         {
                             glyph_pixmap.fill_rect(glyph_rect, &paint, Transform::identity(), None);
@@ -76,7 +86,9 @@ impl TinySkiaCosmicCanvas<'_> {
                                 let r = scale_channel(pixel.red());
                                 let g = scale_channel(pixel.green());
                                 let b = scale_channel(pixel.blue());
-                                if let Some(c) = tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, a) {
+                                if let Some(c) =
+                                    tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, a)
+                                {
                                     *pixel = c;
                                 } else {
                                     *pixel = tiny_skia::PremultipliedColorU8::TRANSPARENT;

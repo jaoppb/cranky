@@ -22,6 +22,7 @@ const fn has_keyword(keywords: InheritableKeywords) -> bool {
         || keywords.accent_color.is_some()
         || keywords.font_family.is_some()
         || keywords.font_size.is_some()
+        || keywords.text_align.is_some()
 }
 
 /// True if a rule's declarations were entirely `--name: ...`/`var(...)`

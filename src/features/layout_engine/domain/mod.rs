@@ -1,4 +1,5 @@
 pub mod canvas_renderer;
+mod text_placement;
 pub mod commands;
 pub mod errors;
 pub mod measurer;

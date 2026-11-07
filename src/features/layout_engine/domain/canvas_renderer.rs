@@ -1,9 +1,9 @@
 use super::render_node::RenderNode;
+use super::text_placement::{text_alignment, text_origin};
 use crate::features::styling::domain::{ComputedStyle, Orientation};
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::{LogicalPx, Position, Rect, Size};
 use crate::shared::rendering::ports::canvas::Canvas;
-use crate::utils::f64_to_i64;
 
 fn draw_bg_and_border(
     canvas: &mut dyn Canvas,
@@ -90,16 +90,6 @@ fn render_progress(
     }
 }
 
-/// Where a text leaf's glyphs start: the box's origin moved in by its
-/// padding, which layout already added to the box (see `leaf_size`).
-fn text_origin(rect: &Rect, style: &ComputedStyle) -> Position {
-    let inset = |v: f64| i32::try_from(f64_to_i64(v.max(0.0))).unwrap_or(0);
-    let (left, top) = style
-        .padding()
-        .map_or((0, 0), |p| (inset(p.left()), inset(p.top())));
-    Position::new(rect.x().saturating_add(left), rect.y().saturating_add(top))
-}
-
 fn render_text(
     canvas: &mut dyn Canvas,
     rect: &Rect,
@@ -118,6 +108,7 @@ fn render_text(
         style.font_size(),
         text_color,
         text_origin(rect, style),
+        text_alignment(rect, style),
     );
 }
 
@@ -193,6 +184,7 @@ mod tests {
     use crate::shared::primitives::BinaryData;
     use crate::shared::primitives::color::{Color, DrawingColor};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
+    use crate::shared::primitives::text_align::{TextAlign, TextAlignment};
     use crate::shared::rendering::ports::canvas::MockCanvas;
 
     #[test]
@@ -309,7 +301,7 @@ mod tests {
         let mut canvas = MockCanvas::new();
         canvas
             .expect_draw_text()
-            .withf(|_, _, _, _, pos| *pos == Position::new(22, 34))
+            .withf(|_, _, _, _, pos, _| *pos == Position::new(22, 34))
             .times(1)
             .return_const(());
         text_node(padded).render_to_canvas(&mut canvas);
@@ -317,7 +309,34 @@ mod tests {
         let mut canvas = MockCanvas::new();
         canvas
             .expect_draw_text()
-            .withf(|_, _, _, _, pos| *pos == Position::new(20, 30))
+            .withf(|_, _, _, _, pos, _| *pos == Position::new(20, 30))
+            .times(1)
+            .return_const(());
+        text_node(ComputedStyle::default()).render_to_canvas(&mut canvas);
+    }
+
+    #[test]
+    fn test_text_alignment_carries_style_align_and_padded_width() {
+        let mut centered = ComputedStyle::default();
+        centered.set_padding(BoxMargin::new(4.0, 4.0, 2.0, 2.0));
+        centered.set_text_align(TextAlign::Center);
+        let mut canvas = MockCanvas::new();
+        canvas
+            .expect_draw_text()
+            .withf(|_, _, _, _, _, alignment| {
+                *alignment == TextAlignment::new(TextAlign::Center, 26)
+            })
+            .times(1)
+            .return_const(());
+        text_node(centered).render_to_canvas(&mut canvas);
+    }
+
+    #[test]
+    fn test_text_alignment_defaults_to_left_over_full_box() {
+        let mut canvas = MockCanvas::new();
+        canvas
+            .expect_draw_text()
+            .withf(|_, _, _, _, _, alignment| *alignment == TextAlignment::new(TextAlign::Left, 30))
             .times(1)
             .return_const(());
         text_node(ComputedStyle::default()).render_to_canvas(&mut canvas);

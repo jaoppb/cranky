@@ -5,3 +5,4 @@ mod inheritance;
 mod layout_integration;
 mod selectors;
 mod embed_sizing;
+mod text_align;
