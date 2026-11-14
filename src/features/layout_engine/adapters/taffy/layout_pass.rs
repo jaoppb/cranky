@@ -29,11 +29,7 @@ impl TaffyLayoutAdapter {
     /// which the child fills (the Shadow DOM split): the root takes the
     /// pinned size itself, not merely the room to grow into, so `1fr`
     /// tracks and `space-between` have a definite box to distribute.
-    fn pin_root(
-        &mut self,
-        root: NodeId,
-        constraint: SizeConstraint,
-    ) -> Result<Style, LayoutError> {
+    fn pin_root(&mut self, root: NodeId, constraint: SizeConstraint) -> Result<Style, LayoutError> {
         let engine_err = |e: taffy::TaffyError| LayoutError::EngineError(e.to_string());
         let original = self.taffy.style(root).map_err(engine_err)?.clone();
         let mut pinned = original.clone();
@@ -74,7 +70,13 @@ impl TaffyLayoutAdapter {
         self.intrinsic = None;
         let unpinned_root = if constraint.width().is_some() || constraint.height().is_some() {
             self.taffy
-                .compute_layout(root_node_id, taffy::geometry::Size { width: axis_available_space(None), height: axis_available_space(None) })
+                .compute_layout(
+                    root_node_id,
+                    taffy::geometry::Size {
+                        width: axis_available_space(None),
+                        height: axis_available_space(None),
+                    },
+                )
                 .map_err(|e| LayoutError::EngineError(e.to_string()))?;
             let size = self
                 .taffy

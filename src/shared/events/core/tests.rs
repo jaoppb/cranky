@@ -33,7 +33,10 @@ fn test_pointer_button_conversion() {
     assert_eq!(PointerButton::Other(999).to_raw(), 999);
 
     assert_eq!(PointerButton::from_name("left"), Some(PointerButton::Left));
-    assert_eq!(PointerButton::from_name("RIGHT"), Some(PointerButton::Right));
+    assert_eq!(
+        PointerButton::from_name("RIGHT"),
+        Some(PointerButton::Right)
+    );
     assert_eq!(
         PointerButton::from_name("middle"),
         Some(PointerButton::Middle)
@@ -69,4 +72,3 @@ fn test_pointer_serial() {
     assert_eq!(serial.value(), 1042);
     assert_eq!(serial.to_string(), "1042");
 }
-

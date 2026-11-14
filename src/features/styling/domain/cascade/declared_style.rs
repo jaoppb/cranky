@@ -7,8 +7,8 @@ use super::value::{Cascade, CssWideKeyword};
 use super::var_substitution::substitute_vars;
 use crate::features::styling::ports::PropertyReparser;
 use crate::shared::config::domain::{FontFamily, FontSize};
-use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::TextAlign;
+use crate::shared::primitives::color::DrawingColor;
 use std::collections::HashMap;
 use std::sync::Arc;
 

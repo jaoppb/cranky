@@ -94,7 +94,8 @@ impl AnyModulePort for LuaModule {
 
             let lua_monitor = {
                 let mut mon_info = None;
-                if let Ok(Some(raw_monitors)) = globals.get::<Option<mlua::Table>>("_raw_monitors") {
+                if let Ok(Some(raw_monitors)) = globals.get::<Option<mlua::Table>>("_raw_monitors")
+                {
                     for pair in raw_monitors.sequence_values::<mlua::Value>() {
                         if let Ok(mlua::Value::UserData(ud)) = pair
                             && let Ok(mon) = ud.borrow::<LuaMonitor>()

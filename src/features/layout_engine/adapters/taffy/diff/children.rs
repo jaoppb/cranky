@@ -114,13 +114,19 @@ pub(super) fn diff_container<'a>(
     };
 
     let old_children = old_state.children.as_slice();
-    let any_keyed = old_children
-        .iter()
-        .any(|c| c.layout.node_key().is_some())
+    let any_keyed = old_children.iter().any(|c| c.layout.node_key().is_some())
         || new_children.iter().any(|c| c.node_key().is_some());
     let keyed = any_keyed
-        && fully_keyed(old_children.iter().map(|c| c.layout.node_key().map(NodeKey::as_str)))
-        && fully_keyed(new_children.iter().map(|c| c.node_key().map(NodeKey::as_str)));
+        && fully_keyed(
+            old_children
+                .iter()
+                .map(|c| c.layout.node_key().map(NodeKey::as_str)),
+        )
+        && fully_keyed(
+            new_children
+                .iter()
+                .map(|c| c.node_key().map(NodeKey::as_str)),
+        );
 
     if any_keyed && !keyed {
         tracing::warn!(

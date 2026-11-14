@@ -1,8 +1,8 @@
 use super::floating_phase::{FloatingLayouts, PopupRenderLayout};
 use crate::features::layout_engine::domain::RenderNode;
+use crate::shared::primitives::ChildModuleLayout;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::primitives::ChildModuleLayout;
 
 /// Value Object representing a module size transition.
 #[derive(Debug, Clone, PartialEq, Eq)]

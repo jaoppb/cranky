@@ -23,8 +23,11 @@ pub fn diff_pipeline(
     let bounds_changed = current_bounds != pipeline.rendered_bounds().get(monitor_id).copied();
     let child_sizes_changed =
         pipeline.last_child_sizes().get(monitor_id) != Some(&current_child_sizes_owned);
-    let interaction_changed =
-        pipeline.last_interactions().get(monitor_id).map(Option::as_ref) != Some(interaction);
+    let interaction_changed = pipeline
+        .last_interactions()
+        .get(monitor_id)
+        .map(Option::as_ref)
+        != Some(interaction);
 
     if diff_result.is_unchanged()
         && !bounds_changed

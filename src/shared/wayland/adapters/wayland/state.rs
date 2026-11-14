@@ -13,11 +13,11 @@ use crate::shared::wayland::ports::DisplayServerError;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
+use wayland_client::QueueHandle;
 use wayland_client::protocol::{
     wl_compositor::WlCompositor, wl_output::WlOutput, wl_pointer::WlPointer, wl_seat::WlSeat,
     wl_shm::WlShm, wl_subcompositor::WlSubcompositor, wl_surface::WlSurface,
 };
-use wayland_client::QueueHandle;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 use wayland_protocols_wlr::layer_shell::v1::client::{
     zwlr_layer_shell_v1::{Layer, ZwlrLayerShellV1},
@@ -90,12 +90,12 @@ impl WaylandState {
             output_scale
         );
 
-        let compositor = self
-            .compositor
-            .as_ref()
-            .ok_or_else(|| DisplayServerError::ConnectionFailed {
-                reason: "Compositor not bound".to_string(),
-            })?;
+        let compositor =
+            self.compositor
+                .as_ref()
+                .ok_or_else(|| DisplayServerError::ConnectionFailed {
+                    reason: "Compositor not bound".to_string(),
+                })?;
         let layer_shell =
             self.layer_shell
                 .as_ref()

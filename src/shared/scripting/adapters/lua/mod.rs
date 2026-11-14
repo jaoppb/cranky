@@ -10,10 +10,10 @@ pub mod module_port;
 pub mod parser_floating;
 pub mod parser_props;
 pub mod sync;
-pub mod userdata;
-pub mod vnode_parser;
 #[cfg(test)]
 mod tests;
+pub mod userdata;
+pub mod vnode_parser;
 
 pub use api::{register_cranky_api, register_vdom_dsl};
 pub use module::LuaModule;

@@ -1,7 +1,7 @@
 use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode};
 use crate::shared::primitives::geometry::{Position, Rect, Size};
-use taffy::tree::NodeId;
 use taffy::TaffyTree;
+use taffy::tree::NodeId;
 
 use super::render_leaf_builder::build_leaf_render_node;
 use crate::utils::{f32_to_i32, f32_to_u32};
@@ -36,7 +36,10 @@ pub(super) fn build_render_tree(
     let abs_y = offset.y().saturating_add(f32_to_i32(layout.location.y));
     let rect = Rect::new(
         Position::new(abs_x, abs_y),
-        Size::new(f32_to_u32(layout.size.width), f32_to_u32(layout.size.height)),
+        Size::new(
+            f32_to_u32(layout.size.width),
+            f32_to_u32(layout.size.height),
+        ),
     );
 
     if let Some(leaf) = build_leaf_render_node(node, rect) {
@@ -45,22 +48,48 @@ pub(super) fn build_render_tree(
 
     match node {
         StyledNode::Flex {
-            path, node_key, children, style, on_click, on_hover, tooltip, popup, panel,
+            path,
+            node_key,
+            children,
+            style,
+            on_click,
+            on_hover,
+            tooltip,
+            popup,
+            panel,
         } => Ok(RenderNode::Flex {
-            path: path.clone(), node_key: node_key.clone(), rect,
+            path: path.clone(),
+            node_key: node_key.clone(),
+            rect,
             children: build_children(taffy, node_id, children, Position::new(abs_x, abs_y))?,
             style: style.clone(),
-            on_click: on_click.clone(), on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
+            on_click: on_click.clone(),
+            on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(),
+            popup: popup.clone(),
+            panel: panel.clone(),
         }),
         StyledNode::Grid {
-            path, node_key, children, style, on_click, on_hover, tooltip, popup, panel,
+            path,
+            node_key,
+            children,
+            style,
+            on_click,
+            on_hover,
+            tooltip,
+            popup,
+            panel,
         } => Ok(RenderNode::Grid {
-            path: path.clone(), node_key: node_key.clone(), rect,
+            path: path.clone(),
+            node_key: node_key.clone(),
+            rect,
             children: build_children(taffy, node_id, children, Position::new(abs_x, abs_y))?,
             style: style.clone(),
-            on_click: on_click.clone(), on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(), popup: popup.clone(), panel: panel.clone(),
+            on_click: on_click.clone(),
+            on_hover: on_hover.clone(),
+            tooltip: tooltip.clone(),
+            popup: popup.clone(),
+            panel: panel.clone(),
         }),
         _ => Err(LayoutError::EngineError(
             "Unexpected container node".to_string(),

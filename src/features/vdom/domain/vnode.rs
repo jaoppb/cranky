@@ -158,8 +158,8 @@ impl KeyedTree for VNode {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::tag::TextContent;
+    use super::*;
     use crate::shared::primitives::geometry::Size;
     use crate::shared::primitives::{ModuleInstanceId, ModuleName, ModuleOptions};
     use std::collections::HashMap;

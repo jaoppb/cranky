@@ -1,7 +1,7 @@
 use super::popup::FloatingKind;
+use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::{Rect, Size};
 use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::primitives::MonitorId;
 
 /// Everything needed to show or update one floating surface.
 ///

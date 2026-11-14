@@ -1,6 +1,4 @@
-use super::dsl_container::{
-    parse_flex_node, parse_grid_node, parse_module_node, parse_rect_node,
-};
+use super::dsl_container::{parse_flex_node, parse_grid_node, parse_module_node, parse_rect_node};
 use super::dsl_leaf::{parse_progress_node, parse_text_node};
 use super::parser_props::{
     parse_common_props, parse_image_data_and_size, parse_panel_spec, parse_popup_spec,
@@ -88,12 +86,8 @@ pub(crate) fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
 
     let progress_fn = lua.create_function(
         |lua, (val, orientation_opt, class_opt): (mlua::Value, Option<String>, Option<String>)| {
-            let node = parse_progress_node(
-                lua,
-                val,
-                orientation_opt.as_deref(),
-                class_opt.as_deref(),
-            )?;
+            let node =
+                parse_progress_node(lua, val, orientation_opt.as_deref(), class_opt.as_deref())?;
             Ok(LuaVNode(node))
         },
     )?;

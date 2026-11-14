@@ -1,7 +1,9 @@
 use super::command::{CreateMetricsCommand, MemoryMetrics, NetworkMetrics};
 use super::config::{CpuMode, MetricsConfig};
 use super::state::MetricsState;
-use super::types::{CpuUsage, DiskMetric, DiskName, MemoryBytes, MountPoint, NetworkSpeed, Temperature};
+use super::types::{
+    CpuUsage, DiskMetric, DiskName, MemoryBytes, MountPoint, NetworkSpeed, Temperature,
+};
 
 #[test]
 fn test_normalize_cpu_usage_0to100() {

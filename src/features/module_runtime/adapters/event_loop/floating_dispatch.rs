@@ -50,7 +50,9 @@ fn dispatch_floating_kind<DS: DisplayCommandSender, F: CanvasFactory>(
 
     let unchanged = trees
         .get(monitor_id)
-        .is_some_and(|(cached_anchor, cached_node)| *cached_anchor == anchor_rect && cached_node == node);
+        .is_some_and(|(cached_anchor, cached_node)| {
+            *cached_anchor == anchor_rect && cached_node == node
+        });
     trees.insert(monitor_id.clone(), (anchor_rect, node.clone()));
     if unchanged {
         return;

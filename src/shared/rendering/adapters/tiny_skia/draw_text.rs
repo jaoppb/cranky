@@ -1,9 +1,9 @@
 use super::canvas::TinySkiaCosmicCanvas;
 use super::paint::{get_family, get_paint};
 use crate::shared::config::domain::{FontFamily, FontSize};
+use crate::shared::primitives::TextAlignment;
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::{LogicalPx, Position, Size};
-use crate::shared::primitives::TextAlignment;
 use cosmic_text::{Attrs, Buffer, Metrics, Shaping, SwashContent};
 use tiny_skia::{Rect, Transform};
 
@@ -54,8 +54,14 @@ impl TinySkiaCosmicCanvas<'_> {
                     .get_image(self.font_system, physical_glyph.cache_key)
                     && image.content == SwashContent::Mask
                 {
-                    let rect_x = f32::from(i16::try_from(physical_glyph.x.saturating_add(image.placement.left)).unwrap_or(0));
-                    let rect_y = f32::from(i16::try_from(physical_glyph.y.saturating_sub(image.placement.top)).unwrap_or(0));
+                    let rect_x = f32::from(
+                        i16::try_from(physical_glyph.x.saturating_add(image.placement.left))
+                            .unwrap_or(0),
+                    );
+                    let rect_y = f32::from(
+                        i16::try_from(physical_glyph.y.saturating_sub(image.placement.top))
+                            .unwrap_or(0),
+                    );
                     let glyph_w = f32::from(u16::try_from(image.placement.width).unwrap_or(0));
                     let glyph_h = f32::from(u16::try_from(image.placement.height).unwrap_or(0));
 
@@ -64,8 +70,10 @@ impl TinySkiaCosmicCanvas<'_> {
 
                         if image.placement.width > 0
                             && image.placement.height > 0
-                            && let Some(mut glyph_pixmap) =
-                                tiny_skia::Pixmap::new(image.placement.width, image.placement.height)
+                            && let Some(mut glyph_pixmap) = tiny_skia::Pixmap::new(
+                                image.placement.width,
+                                image.placement.height,
+                            )
                             && let Some(glyph_rect) = Rect::from_xywh(0.0, 0.0, glyph_w, glyph_h)
                         {
                             glyph_pixmap.fill_rect(glyph_rect, &paint, Transform::identity(), None);
@@ -84,7 +92,9 @@ impl TinySkiaCosmicCanvas<'_> {
                                 let r = scale_channel(pixel.red());
                                 let g = scale_channel(pixel.green());
                                 let b = scale_channel(pixel.blue());
-                                if let Some(c) = tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, a) {
+                                if let Some(c) =
+                                    tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, a)
+                                {
                                     *pixel = c;
                                 } else {
                                     *pixel = tiny_skia::PremultipliedColorU8::TRANSPARENT;

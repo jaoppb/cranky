@@ -126,14 +126,7 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
                 instance_id_str.map(ModuleInstanceId::new),
                 options,
             );
-            let mut node = VNode::new_module(
-                params,
-                class,
-                id,
-                on_click,
-                on_hover,
-                tooltip,
-            );
+            let mut node = VNode::new_module(params, class, id, on_click, on_hover, tooltip);
             if let Some(p) = popup {
                 node = node.with_popup(p);
             }
@@ -152,14 +145,7 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
                 None,
                 ModuleOptions::default(),
             );
-            Ok(VNode::new_module(
-                params,
-                None,
-                None,
-                None,
-                None,
-                None,
-            ))
+            Ok(VNode::new_module(params, None, None, None, None, None))
         }
         _ => {
             let params = crate::features::vdom::domain::ModuleParams::new(
@@ -167,14 +153,7 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
                 None,
                 ModuleOptions::default(),
             );
-            Ok(VNode::new_module(
-                params,
-                None,
-                None,
-                None,
-                None,
-                None,
-            ))
+            Ok(VNode::new_module(params, None, None, None, None, None))
         }
     }
 }

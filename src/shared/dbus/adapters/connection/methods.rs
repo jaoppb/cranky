@@ -55,12 +55,9 @@ impl ZbusConnectionAdapter<Connected> {
             .map_err(|e| DbusConnectionError::MethodCallFailed(e.to_string()))?;
 
         let msg_body = msg.body();
-        let dict: HashMap<String, zbus::zvariant::Value> =
-            msg_body.deserialize().map_err(|e| {
-                DbusConnectionError::MethodCallFailed(format!(
-                    "Failed to deserialize properties: {e}"
-                ))
-            })?;
+        let dict: HashMap<String, zbus::zvariant::Value> = msg_body.deserialize().map_err(|e| {
+            DbusConnectionError::MethodCallFailed(format!("Failed to deserialize properties: {e}"))
+        })?;
 
         let mut map = HashMap::new();
         for (k, v) in dict {

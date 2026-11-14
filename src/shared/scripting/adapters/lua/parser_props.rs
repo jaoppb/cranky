@@ -1,7 +1,9 @@
 pub(crate) use super::parser_floating::{parse_panel_spec, parse_popup_spec};
 use super::vnode_parser::value_to_vnode;
 use crate::features::styling::domain::{ClassNameList, ElementId};
-use crate::features::vdom::domain::{ClickHandlers, NodeKey, PanelSpec, PopupSpec, UiAction, VNode};
+use crate::features::vdom::domain::{
+    ClickHandlers, NodeKey, PanelSpec, PopupSpec, UiAction, VNode,
+};
 use crate::shared::events::core::PointerButton;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{BinaryData, ModuleOptions};

@@ -1,6 +1,8 @@
 use serde::Deserialize;
 
-use crate::shared::config::domain::{self, BorderRadius, BorderSize, FontFamily, FontSize, PaddingOffset};
+use crate::shared::config::domain::{
+    self, BorderRadius, BorderSize, FontFamily, FontSize, PaddingOffset,
+};
 use crate::shared::primitives::color::DrawingColor;
 
 use super::helpers::default_timebased_duration_ms;

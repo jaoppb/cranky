@@ -109,14 +109,7 @@ mod tests {
 
     #[test]
     fn test_substitute_replaces_failed_module_with_error_text() {
-        let tree = VNode::new_flex(
-            vec![module_node("calendar")],
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let tree = VNode::new_flex(vec![module_node("calendar")], None, None, None, None, None);
         let mut errors = HashMap::new();
         errors.insert(
             ModuleKey::from_name(ModuleName::new("calendar")),
@@ -155,9 +148,9 @@ mod tests {
 
     #[test]
     fn test_substitute_recurses_into_popup_content() {
-        let popup = crate::features::vdom::domain::floating::PopupSpec::new(Box::new(
-            module_node("calendar"),
-        ));
+        let popup = crate::features::vdom::domain::floating::PopupSpec::new(Box::new(module_node(
+            "calendar",
+        )));
         let tree = VNode::new_flex(Vec::new(), None, None, None, None, None).with_popup(popup);
 
         let mut errors = HashMap::new();

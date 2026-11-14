@@ -1,6 +1,6 @@
 use super::adapter::WaylandAdapter;
 use super::command::SurfaceCommand;
-use super::floating_surface::{hide_floating, show_floating, FloatingPayload};
+use super::floating_surface::{FloatingPayload, hide_floating, show_floating};
 use super::render::render_outputs;
 use super::surface_handler::handle_cmd;
 use crate::features::layout_engine::domain::FloatingKind;
@@ -99,7 +99,12 @@ impl DisplayServerPort for WaylandAdapter {
         read_model: &AppReadModel,
         layout_senders: &HashMap<ModuleId, Snd>,
     ) -> Result<(), DisplayServerError> {
-        render_outputs(&mut self.state, &self.connection, read_model, layout_senders);
+        render_outputs(
+            &mut self.state,
+            &self.connection,
+            read_model,
+            layout_senders,
+        );
         Ok(())
     }
 

@@ -80,8 +80,12 @@ impl DefaultVdomDiffAdapter {
         let popup_props_changed = old_node.popup().map(|p| (p.anchor_direction(), p.offset()))
             != new_node.popup().map(|p| (p.anchor_direction(), p.offset()));
         let popup_content_patch = self.diff_optional_subnode(
-            old_node.popup().map(crate::features::vdom::domain::PopupSpec::content),
-            new_node.popup().map(crate::features::vdom::domain::PopupSpec::content),
+            old_node
+                .popup()
+                .map(crate::features::vdom::domain::PopupSpec::content),
+            new_node
+                .popup()
+                .map(crate::features::vdom::domain::PopupSpec::content),
         );
         if popup_props_changed {
             popup_content_patch.or_else(|| {
@@ -98,11 +102,30 @@ impl DefaultVdomDiffAdapter {
     }
 
     fn diff_panel(&self, old_node: &VNode, new_node: &VNode) -> Option<Box<Patch>> {
-        let panel_props_changed = old_node.panel().map(|p| (p.layer(), p.anchor(), *p.margin(), p.exclusive_zone(), p.keyboard()))
-            != new_node.panel().map(|p| (p.layer(), p.anchor(), *p.margin(), p.exclusive_zone(), p.keyboard()));
+        let panel_props_changed = old_node.panel().map(|p| {
+            (
+                p.layer(),
+                p.anchor(),
+                *p.margin(),
+                p.exclusive_zone(),
+                p.keyboard(),
+            )
+        }) != new_node.panel().map(|p| {
+            (
+                p.layer(),
+                p.anchor(),
+                *p.margin(),
+                p.exclusive_zone(),
+                p.keyboard(),
+            )
+        });
         let panel_content_patch = self.diff_optional_subnode(
-            old_node.panel().map(crate::features::vdom::domain::PanelSpec::content),
-            new_node.panel().map(crate::features::vdom::domain::PanelSpec::content),
+            old_node
+                .panel()
+                .map(crate::features::vdom::domain::PanelSpec::content),
+            new_node
+                .panel()
+                .map(crate::features::vdom::domain::PanelSpec::content),
         );
         if panel_props_changed {
             panel_content_patch.or_else(|| {
@@ -414,7 +437,14 @@ mod tests {
             None,
             None,
         );
-        let new_tree = VNode::new_flex(vec![unkeyed_child, keyed_child], None, None, None, None, None);
+        let new_tree = VNode::new_flex(
+            vec![unkeyed_child, keyed_child],
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
         match res.patch() {
@@ -545,7 +575,9 @@ mod tests {
         );
         let with_pop1 = base
             .clone()
-            .with_popup(crate::features::vdom::domain::PopupSpec::new(Box::new(popup1)));
+            .with_popup(crate::features::vdom::domain::PopupSpec::new(Box::new(
+                popup1,
+            )));
 
         // 1. None -> Some(popup)
         let diff1 = adapter.diff(Some(&base), &with_pop1);
@@ -606,7 +638,14 @@ mod tests {
         // must still see the key change or the pipeline skips the rebuild.
         let adapter = DefaultVdomDiffAdapter::new();
         let item = |text: &str| {
-            VNode::new_text(TextContent::new(text.to_string()), None, None, None, None, None)
+            VNode::new_text(
+                TextContent::new(text.to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
         };
         let old_list = VNode::new_flex(vec![item("a"), item("b")], None, None, None, None, None);
         let new_list = VNode::new_flex(
@@ -629,8 +668,15 @@ mod tests {
     fn test_diff_key_value_change_is_not_unchanged() {
         let adapter = DefaultVdomDiffAdapter::new();
         let make = |key: &str| {
-            VNode::new_text(TextContent::new("same".to_string()), None, None, None, None, None)
-                .with_key(NodeKey::new(key).unwrap())
+            VNode::new_text(
+                TextContent::new("same".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .with_key(NodeKey::new(key).unwrap())
         };
 
         let res = adapter.diff(Some(&make("old")), &make("new"));

@@ -1,26 +1,28 @@
-use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
 use crate::shared::config::domain::Config;
 use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::geometry::Size;
-use crate::shared::wayland::adapters::wayland::dispatch_pointer::handle_pointer_enter;
-use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::popup;
-use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, popup_kind};
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::adapters::wayland::dispatch_pointer::handle_pointer_enter;
+use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use crate::shared::wayland::adapters::wayland::floating_anchor::{
-    resolve_anchor, FloatingParentRole,
+    FloatingParentRole, resolve_anchor,
 };
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
+use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::popup;
+use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, popup_kind};
 use crate::shared::wayland::adapters::wayland::types::{FloatingSurface, ModuleSurface};
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
 use std::sync::Arc;
-use wayland_client::backend::Backend;
-use wayland_client::protocol::{wl_compositor::WlCompositor, wl_shm::WlShm, wl_subcompositor::WlSubcompositor};
 use wayland_client::Connection;
+use wayland_client::backend::Backend;
+use wayland_client::protocol::{
+    wl_compositor::WlCompositor, wl_shm::WlShm, wl_subcompositor::WlSubcompositor,
+};
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 
 /// Regression test (Gap A): the hovered element can belong to a module

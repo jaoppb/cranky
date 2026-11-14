@@ -66,8 +66,7 @@ fn test_compute_conflicts_never_returns_an_ancestor() {
         PopupBehavior::PerMonitor,
         PopupBehavior::Global,
     ] {
-        let conflicts =
-            PopupExclusivity::compute_conflicts(&active, &child, &ancestors, behavior);
+        let conflicts = PopupExclusivity::compute_conflicts(&active, &child, &ancestors, behavior);
         assert!(
             !conflicts.contains(&parent),
             "{behavior:?} must never return an ancestor"
@@ -88,7 +87,12 @@ fn test_ancestors_walks_the_chain_nearest_first() {
 
     // c's parent is b, b's parent is a, a has no parent (topmost).
     let links = [(c.clone(), Some(b.clone())), (b.clone(), Some(a.clone()))];
-    let parent_of = |k: &FloatingKind| links.iter().find(|(kind, _)| kind == k).and_then(|(_, p)| p.clone());
+    let parent_of = |k: &FloatingKind| {
+        links
+            .iter()
+            .find(|(kind, _)| kind == k)
+            .and_then(|(_, p)| p.clone())
+    };
 
     let result = ancestors(&c, parent_of).expect("no cycle");
     assert_eq!(result, vec![b, a]);
@@ -101,7 +105,12 @@ fn test_ancestors_rejects_a_cycle() {
 
     // a's parent is b, b's parent is a: a cycle.
     let links = [(a.clone(), Some(b.clone())), (b, Some(a.clone()))];
-    let parent_of = |k: &FloatingKind| links.iter().find(|(kind, _)| kind == k).and_then(|(_, p)| p.clone());
+    let parent_of = |k: &FloatingKind| {
+        links
+            .iter()
+            .find(|(kind, _)| kind == k)
+            .and_then(|(_, p)| p.clone())
+    };
 
     assert_eq!(ancestors(&a, parent_of), Err(PopupCycle));
 }

@@ -92,7 +92,9 @@ fn test_systray_state_serde() {
             Title::new("test_title"),
         )
         .with_status(SystrayStatus::Active)
-        .with_icon(Some(SystrayIcon::new(Some(IconName::new("test_icon")), None).unwrap()))
+        .with_icon(Some(
+            SystrayIcon::new(Some(IconName::new("test_icon")), None).unwrap(),
+        ))
         .with_category(SystrayCategory::Communications)
         .with_item_is_menu(ItemIsMenu::new(true)),
     )

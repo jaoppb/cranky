@@ -143,7 +143,8 @@ pub(crate) fn evaluate_metadata(
     }
 
     if styles.is_empty()
-        && let Ok(default_sheet) = crate::features::styling::domain::StyleSheetName::new(module_name)
+        && let Ok(default_sheet) =
+            crate::features::styling::domain::StyleSheetName::new(module_name)
     {
         styles.push(default_sheet);
     }

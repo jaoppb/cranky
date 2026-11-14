@@ -17,7 +17,9 @@ pub(super) fn commit_surface(
     h_i32: i32,
 ) {
     floating.surface.set_buffer_scale(bar_scale);
-    floating.surface.attach(Some(floating.shm_buffer.current_buffer()), 0, 0);
+    floating
+        .surface
+        .attach(Some(floating.shm_buffer.current_buffer()), 0, 0);
     floating.surface.damage_buffer(0, 0, w_i32, h_i32);
     floating.surface.commit();
     floating.shm_buffer.swap_buffers();
@@ -42,9 +44,12 @@ pub(super) fn update_existing_floating(
         return Ok(());
     }
 
-    let shm = state.shm.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "SHM not bound".to_string(),
-    })?;
+    let shm = state
+        .shm
+        .as_ref()
+        .ok_or_else(|| DisplayServerError::ConnectionFailed {
+            reason: "SHM not bound".to_string(),
+        })?;
     let new_shm_buffer = ShmBuffer::new(
         shm,
         placement.size.width(),
@@ -54,9 +59,13 @@ pub(super) fn update_existing_floating(
     )
     .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
 
-    let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "XDG WM Base not bound".to_string(),
-    })?;
+    let xdg_wm_base =
+        state
+            .xdg_wm_base
+            .as_ref()
+            .ok_or_else(|| DisplayServerError::ConnectionFailed {
+                reason: "XDG WM Base not bound".to_string(),
+            })?;
     let positioner = create_positioner(
         xdg_wm_base,
         qh,
@@ -66,7 +75,9 @@ pub(super) fn update_existing_floating(
         placement.offset,
     );
     floating.reposition_token = floating.reposition_token.wrapping_add(1);
-    floating.xdg_popup.reposition(&positioner, floating.reposition_token);
+    floating
+        .xdg_popup
+        .reposition(&positioner, floating.reposition_token);
     positioner.destroy();
     // Blend into the new buffer, not the old one, before committing it.
     floating.shm_buffer = new_shm_buffer;

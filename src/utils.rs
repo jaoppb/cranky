@@ -33,11 +33,7 @@ pub fn f32_to_i32(val: f32) -> i32 {
     let is_neg = val.is_sign_negative();
     let u = f32_to_u32(val.abs());
     let i = i32::try_from(u).unwrap_or(i32::MAX);
-    if is_neg {
-        i.saturating_neg()
-    } else {
-        i
-    }
+    if is_neg { i.saturating_neg() } else { i }
 }
 
 #[must_use]
@@ -71,11 +67,7 @@ pub fn f64_to_i64(val: f64) -> i64 {
     let is_neg = val.is_sign_negative();
     let u = f64_to_u64(val.abs());
     let i = i64::try_from(u).unwrap_or(i64::MAX);
-    if is_neg {
-        i.saturating_neg()
-    } else {
-        i
-    }
+    if is_neg { i.saturating_neg() } else { i }
 }
 
 #[must_use]
@@ -107,7 +99,9 @@ pub fn f64_to_f32(val: f64) -> f32 {
     }
     let bits = val.to_bits();
     let sign_bit = u32::try_from((bits >> 63) & 1).unwrap_or(0);
-    let exp_val = i32::try_from((bits >> 52) & 0x7FF).unwrap_or(0).saturating_sub(1023);
+    let exp_val = i32::try_from((bits >> 52) & 0x7FF)
+        .unwrap_or(0)
+        .saturating_sub(1023);
     let new_exp = exp_val.saturating_add(127);
     if new_exp >= 255 {
         return if sign_bit == 1 {
@@ -296,6 +290,9 @@ mod tests {
         assert_eq!(f64_to_f32(42.5).to_bits(), 42.5f32.to_bits());
         assert!(f64_to_f32(f64::NAN).is_nan());
         assert_eq!(f64_to_f32(f64::INFINITY).to_bits(), f32::INFINITY.to_bits());
-        assert_eq!(f64_to_f32(f64::NEG_INFINITY).to_bits(), f32::NEG_INFINITY.to_bits());
+        assert_eq!(
+            f64_to_f32(f64::NEG_INFINITY).to_bits(),
+            f32::NEG_INFINITY.to_bits()
+        );
     }
 }

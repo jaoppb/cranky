@@ -5,17 +5,13 @@ use zbus::Proxy;
 
 async fn invoke_primary(proxy: &Proxy<'_>, is_menu: bool, pos_x: i32, pos_y: i32) {
     if is_menu {
-        debug!(
-            "trigger_action: item_is_menu=true, calling ContextMenu({pos_x}, {pos_y}) on D-Bus"
-        );
+        debug!("trigger_action: item_is_menu=true, calling ContextMenu({pos_x}, {pos_y}) on D-Bus");
         match proxy.call_method("ContextMenu", &(pos_x, pos_y)).await {
             Ok(_) => debug!("trigger_action: ContextMenu({pos_x}, {pos_y}) succeeded"),
             Err(e) => error!("trigger_action: ContextMenu({pos_x}, {pos_y}) failed: {e}"),
         }
     } else {
-        debug!(
-            "trigger_action: item_is_menu=false, calling Activate({pos_x}, {pos_y}) on D-Bus"
-        );
+        debug!("trigger_action: item_is_menu=false, calling Activate({pos_x}, {pos_y}) on D-Bus");
         if let Err(e) = proxy.call_method("Activate", &(pos_x, pos_y)).await {
             warn!(
                 "trigger_action: Activate({pos_x}, {pos_y}) failed: {e}, attempting SecondaryActivate({pos_x}, {pos_y})"

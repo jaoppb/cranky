@@ -1,8 +1,8 @@
 use super::dispatch_pointer::send;
 use super::state::WaylandState;
 use super::types::FloatingSurface;
-use crate::features::layout_engine::domain::popup::descendants_deepest_first;
 use crate::features::layout_engine::domain::FloatingKind;
+use crate::features::layout_engine::domain::popup::descendants_deepest_first;
 use crate::shared::events::core::{InteractionEvent, PointerEvent, SurfaceLifecycleEvent};
 
 /// Tears down `kind` and every floating surface nested inside it (decision

@@ -1,7 +1,7 @@
 use super::dto::{HyprMonitorDto, HyprWorkspaceDto};
 use super::event_parser::parse_event;
 use super::hyprland_provider::{HyprlandProvider, RealHyprlandProvider};
-use super::inconsistency::{find_state_inconsistencies, StateInconsistency};
+use super::inconsistency::{StateInconsistency, find_state_inconsistencies};
 use super::signal_loop::run_event_loop;
 use crate::features::workspaces::ports::{
     WindowManagerError, WindowManagerPort, WindowManagerState,

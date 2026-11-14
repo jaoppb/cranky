@@ -48,10 +48,19 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 ..
             } => handle_pointer_enter(state, &surface, surface_x, surface_y),
             wl_pointer::Event::Leave { .. } => handle_pointer_leave(state),
-            wl_pointer::Event::Motion { surface_x, surface_y, .. } => {
+            wl_pointer::Event::Motion {
+                surface_x,
+                surface_y,
+                ..
+            } => {
                 handle_pointer_motion(state, surface_x, surface_y);
             }
-            wl_pointer::Event::Button { button, state: btn_state, serial, .. } => {
+            wl_pointer::Event::Button {
+                button,
+                state: btn_state,
+                serial,
+                ..
+            } => {
                 handle_pointer_button(state, button, btn_state, serial);
             }
             wl_pointer::Event::Axis { axis, value, .. } => handle_pointer_axis(state, axis, value),

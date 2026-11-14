@@ -4,11 +4,11 @@ mod panel;
 mod popup;
 mod tooltip;
 
+pub use content::FloatingCache;
 pub(super) use gate::apply_gate;
 use panel::layout_panel;
-use popup::layout_popup;
-pub use content::FloatingCache;
 pub use popup::PopupRenderLayout;
+use popup::layout_popup;
 
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;

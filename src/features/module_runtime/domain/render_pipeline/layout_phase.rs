@@ -1,5 +1,5 @@
 use super::context::{LayoutContext, PipelineDiff};
-use super::floating_phase::{apply_gate, layout_floating, FloatingLayouts};
+use super::floating_phase::{FloatingLayouts, apply_gate, layout_floating};
 use super::measurer::ModuleSizeMeasurer;
 use super::outcome::SizeChange;
 use super::pipeline::RenderPipeline;
@@ -44,7 +44,12 @@ pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
     monitor_id: &MonitorId,
     diff: PipelineDiff,
     ctx: &mut LayoutContext<'_, F, E>,
-) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>, FloatingLayouts)> {
+) -> Option<(
+    RenderNode,
+    Option<SizeChange>,
+    Vec<ChildModuleLayout>,
+    FloatingLayouts,
+)> {
     let current_child_sizes_owned = ctx.current_child_sizes.cloned();
     let mut size_change = None;
     let mut child_layouts = Vec::new();
@@ -114,7 +119,13 @@ pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
             .render_trees_mut()
             .insert(monitor_id.clone(), render_node.clone());
 
-        size_change = report_size(pipeline, monitor_id, ctx.layout_engine, ctx.current_constraint, &render_node);
+        size_change = report_size(
+            pipeline,
+            monitor_id,
+            ctx.layout_engine,
+            ctx.current_constraint,
+            &render_node,
+        );
 
         render_node
     } else {

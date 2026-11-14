@@ -47,4 +47,3 @@ mod tests {
         assert!(Opacity::new(f32::NAN).is_err());
     }
 }
-

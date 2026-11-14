@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use futures_util::stream::{BoxStream, SelectAll};
 use futures_util::StreamExt;
+use futures_util::stream::{BoxStream, SelectAll};
 use tokio_stream::wrappers::WatchStream;
 
 use super::hub::SignalHub;

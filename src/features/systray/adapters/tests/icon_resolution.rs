@@ -1,9 +1,7 @@
 use crate::features::systray::adapters::icon_resolver::{
-    resolve_icon, InMemorySystrayIconCache, ICON_CACHE,
+    ICON_CACHE, InMemorySystrayIconCache, resolve_icon,
 };
-use crate::features::systray::domain::{
-    IconCacheKey, IconImage, IconName, IconThemePath,
-};
+use crate::features::systray::domain::{IconCacheKey, IconImage, IconName, IconThemePath};
 use crate::features::systray::ports::SystrayIconCachePort;
 
 #[test]

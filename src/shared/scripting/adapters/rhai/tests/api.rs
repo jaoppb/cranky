@@ -6,9 +6,9 @@ mod tests {
     use crate::shared::primitives::{MonitorId, ScriptMonitorInfo};
     use crate::shared::scripting::adapters::rhai::RhaiModule;
 
-#[test]
-fn test_rhai_cranky_namespaces_and_aliases() {
-    let source = r#"
+    #[test]
+    fn test_rhai_cranky_namespaces_and_aliases() {
+        let source = r#"
         fn init() {
             // cranky namespaces
             assert(cranky != ());
@@ -30,23 +30,23 @@ fn test_rhai_cranky_namespaces_and_aliases() {
             return ui.flex([txt, btn]);
         }
     "#;
-    let mut module = RhaiModule::new("test_ns".into(), source).unwrap();
-    let mod_config = crate::shared::config::domain::ModuleConfig::new(
-        "test_ns".into(),
-        true,
-        crate::shared::config::domain::EngineSelection::Auto,
-        crate::shared::primitives::ModuleOptions::default(),
-    );
-    let config = crate::shared::config::domain::Config::default();
-    assert!(module.init(&mod_config, &config).is_ok());
-    let node = module.render(&MonitorId::new("DP-1"));
-    assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Flex);
-    assert_eq!(node.children().len(), 2);
-}
+        let mut module = RhaiModule::new("test_ns".into(), source).unwrap();
+        let mod_config = crate::shared::config::domain::ModuleConfig::new(
+            "test_ns".into(),
+            true,
+            crate::shared::config::domain::EngineSelection::Auto,
+            crate::shared::primitives::ModuleOptions::default(),
+        );
+        let config = crate::shared::config::domain::Config::default();
+        assert!(module.init(&mod_config, &config).is_ok());
+        let node = module.render(&MonitorId::new("DP-1"));
+        assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Flex);
+        assert_eq!(node.children().len(), 2);
+    }
 
-#[test]
-fn test_rhai_ui_actions() {
-    let source = r#"
+    #[test]
+    fn test_rhai_ui_actions() {
+        let source = r#"
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
@@ -63,38 +63,38 @@ fn test_rhai_ui_actions() {
             });
         }
     "#;
-    let module = RhaiModule::new("test_actions".into(), source).unwrap();
-    let node = module.render(&MonitorId::new("DP-1"));
-    assert_eq!(node.children().len(), 3);
+        let module = RhaiModule::new("test_actions".into(), source).unwrap();
+        let node = module.render(&MonitorId::new("DP-1"));
+        assert_eq!(node.children().len(), 3);
 
-    let click1 = node.children()[0].on_click().unwrap();
-    assert_eq!(
-        click1.get(&PointerButton::Left),
-        Some(&UiAction::Exec("echo test".into()))
-    );
+        let click1 = node.children()[0].on_click().unwrap();
+        assert_eq!(
+            click1.get(&PointerButton::Left),
+            Some(&UiAction::Exec("echo test".into()))
+        );
 
-    let click2 = node.children()[1].on_click().unwrap();
-    assert_eq!(
-        click2.get(&PointerButton::Left),
-        Some(&UiAction::ScriptCall(
-            crate::shared::primitives::FunctionName::new("toggle_popup")
-        ))
-    );
+        let click2 = node.children()[1].on_click().unwrap();
+        assert_eq!(
+            click2.get(&PointerButton::Left),
+            Some(&UiAction::ScriptCall(
+                crate::shared::primitives::FunctionName::new("toggle_popup")
+            ))
+        );
 
-    let click3 = node.children()[2].on_click().unwrap();
-    assert_eq!(
-        click3.get(&PointerButton::Left),
-        Some(&UiAction::SystrayAction {
-            id: crate::features::systray::domain::SystrayId::new("42"),
-            action: crate::features::systray::domain::SystrayActionName::parse_str("Activate"),
-            pos: None
-        })
-    );
-}
+        let click3 = node.children()[2].on_click().unwrap();
+        assert_eq!(
+            click3.get(&PointerButton::Left),
+            Some(&UiAction::SystrayAction {
+                id: crate::features::systray::domain::SystrayId::new("42"),
+                action: crate::features::systray::domain::SystrayActionName::parse_str("Activate"),
+                pos: None
+            })
+        );
+    }
 
-#[test]
-fn test_rhai_rich_monitor_and_sys() {
-    let source = r#"
+    #[test]
+    fn test_rhai_rich_monitor_and_sys() {
+        let source = r#"
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
@@ -119,22 +119,22 @@ fn test_rhai_rich_monitor_and_sys() {
             return ui.text("Mon: " + monitor.name);
         }
     "#;
-    let mut module = RhaiModule::new("test_sys".into(), source).unwrap();
-    let test_mon = ScriptMonitorInfo::from_id(&MonitorId::new("DP-1"))
-        .with_name("DP-1".to_string())
-        .with_size(crate::shared::primitives::geometry::Size::new(1920, 1080))
-        .with_scale(crate::shared::primitives::geometry::Scale::new(1.5))
-        .with_focused(true)
-        .with_workspaces(Some(1), Some(2));
-    module.cached_monitors = vec![test_mon];
+        let mut module = RhaiModule::new("test_sys".into(), source).unwrap();
+        let test_mon = ScriptMonitorInfo::from_id(&MonitorId::new("DP-1"))
+            .with_name("DP-1".to_string())
+            .with_size(crate::shared::primitives::geometry::Size::new(1920, 1080))
+            .with_scale(crate::shared::primitives::geometry::Scale::new(1.5))
+            .with_focused(true)
+            .with_workspaces(Some(1), Some(2));
+        module.cached_monitors = vec![test_mon];
 
-    let node = module.render(&MonitorId::new("DP-1"));
-    assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Text);
-}
+        let node = module.render(&MonitorId::new("DP-1"));
+        assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Text);
+    }
 
-#[test]
-fn test_rhai_render_grid() {
-    let source = r#"
+    #[test]
+    fn test_rhai_render_grid() {
+        let source = r#"
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
@@ -144,18 +144,18 @@ fn test_rhai_render_grid() {
             ]);
         }
     "#;
-    let module = RhaiModule::new("test_grid".into(), source).unwrap();
-    let render_node = module.render(&MonitorId::new("DP-1"));
-    assert_eq!(
-        render_node.tag(),
-        crate::features::vdom::domain::NodeTag::Grid
-    );
-    assert_eq!(render_node.children().len(), 2);
-}
+        let module = RhaiModule::new("test_grid".into(), source).unwrap();
+        let render_node = module.render(&MonitorId::new("DP-1"));
+        assert_eq!(
+            render_node.tag(),
+            crate::features::vdom::domain::NodeTag::Grid
+        );
+        assert_eq!(render_node.children().len(), 2);
+    }
 
-#[test]
-fn test_rhai_vnode_with_popup_and_panel() {
-    let source = r#"
+    #[test]
+    fn test_rhai_vnode_with_popup_and_panel() {
+        let source = r#"
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
@@ -182,27 +182,33 @@ fn test_rhai_vnode_with_popup_and_panel() {
             });
         }
     "#;
-    let module = RhaiModule::new("test_pop_pan".into(), source).unwrap();
-    let node = module.render(&MonitorId::new("DP-1"));
-    assert!(node.popup().is_some());
-    let popup = node.popup().unwrap();
-    assert_eq!(popup.anchor_direction(), crate::features::vdom::domain::AnchorDirection::Bottom);
-    assert_eq!(popup.offset().unwrap().dx(), 5);
-    assert_eq!(popup.offset().unwrap().dy(), 10);
+        let module = RhaiModule::new("test_pop_pan".into(), source).unwrap();
+        let node = module.render(&MonitorId::new("DP-1"));
+        assert!(node.popup().is_some());
+        let popup = node.popup().unwrap();
+        assert_eq!(
+            popup.anchor_direction(),
+            crate::features::vdom::domain::AnchorDirection::Bottom
+        );
+        assert_eq!(popup.offset().unwrap().dx(), 5);
+        assert_eq!(popup.offset().unwrap().dy(), 10);
 
-    assert!(node.panel().is_some());
-    let panel = node.panel().unwrap();
-    assert_eq!(panel.layer(), crate::features::vdom::domain::PanelLayer::Overlay);
-    assert!(panel.anchor().top());
-    assert!(panel.anchor().right());
-    assert!(!panel.anchor().bottom());
-    assert_eq!(panel.margin().top().value(), 15);
-    assert_eq!(panel.margin().right().value(), 25);
-}
+        assert!(node.panel().is_some());
+        let panel = node.panel().unwrap();
+        assert_eq!(
+            panel.layer(),
+            crate::features::vdom::domain::PanelLayer::Overlay
+        );
+        assert!(panel.anchor().top());
+        assert!(panel.anchor().right());
+        assert!(!panel.anchor().bottom());
+        assert_eq!(panel.margin().top().value(), 15);
+        assert_eq!(panel.margin().right().value(), 25);
+    }
 
-#[test]
-fn test_rhai_vnode_with_popup_default_offset_none() {
-    let source = r#"
+    #[test]
+    fn test_rhai_vnode_with_popup_default_offset_none() {
+        let source = r#"
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
@@ -216,19 +222,19 @@ fn test_rhai_vnode_with_popup_default_offset_none() {
             });
         }
     "#;
-    let module = RhaiModule::new("test_pop_none".into(), source).unwrap();
-    let node = module.render(&MonitorId::new("DP-1"));
-    assert!(node.popup().is_some());
-    let popup = node.popup().unwrap();
-    assert_eq!(popup.offset(), None);
-}
-#[test]
-fn test_rhai_vnode_key_is_reconciliation_identity() {
-    // `key` reaches `VNode` with zero Rust-side parsing: `ui.flex`/`ui.grid`
-    // pass an arbitrary props map straight through (see dsl_elements.rs),
-    // and `VNode` deserializes `key` like any other field. This test is the
-    // guard against that assumption silently breaking.
-    let source = r#"
+        let module = RhaiModule::new("test_pop_none".into(), source).unwrap();
+        let node = module.render(&MonitorId::new("DP-1"));
+        assert!(node.popup().is_some());
+        let popup = node.popup().unwrap();
+        assert_eq!(popup.offset(), None);
+    }
+    #[test]
+    fn test_rhai_vnode_key_is_reconciliation_identity() {
+        // `key` reaches `VNode` with zero Rust-side parsing: `ui.flex`/`ui.grid`
+        // pass an arbitrary props map straight through (see dsl_elements.rs),
+        // and `VNode` deserializes `key` like any other field. This test is the
+        // guard against that assumption silently breaking.
+        let source = r#"
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
@@ -239,23 +245,31 @@ fn test_rhai_vnode_key_is_reconciliation_identity() {
             });
         }
     "#;
-    let module = RhaiModule::new("test_key".into(), source).unwrap();
-    let node = module.render(&MonitorId::new("DP-1"));
-    assert_eq!(node.key().map(crate::features::vdom::domain::NodeKey::as_str), Some("ws-3"));
-    assert_eq!(node.element_id().map(crate::features::styling::domain::ElementId::as_str), Some("ws-3"));
-}
+        let module = RhaiModule::new("test_key".into(), source).unwrap();
+        let node = module.render(&MonitorId::new("DP-1"));
+        assert_eq!(
+            node.key()
+                .map(crate::features::vdom::domain::NodeKey::as_str),
+            Some("ws-3")
+        );
+        assert_eq!(
+            node.element_id()
+                .map(crate::features::styling::domain::ElementId::as_str),
+            Some("ws-3")
+        );
+    }
 
-#[test]
-fn test_rhai_vnode_without_key_has_none() {
-    let source = r#"
+    #[test]
+    fn test_rhai_vnode_without_key_has_none() {
+        let source = r#"
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
             return ui.rect("box");
         }
     "#;
-    let module = RhaiModule::new("test_no_key".into(), source).unwrap();
-    let node = module.render(&MonitorId::new("DP-1"));
-    assert_eq!(node.key(), None);
-}
+        let module = RhaiModule::new("test_no_key".into(), source).unwrap();
+        let node = module.render(&MonitorId::new("DP-1"));
+        assert_eq!(node.key(), None);
+    }
 }

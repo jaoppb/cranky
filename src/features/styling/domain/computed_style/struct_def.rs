@@ -4,8 +4,8 @@ use crate::features::layout_engine::domain::{
     AlignItems, BoxMargin, FlexDirection, Gap, JustifyContent, PositionType,
 };
 use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSize};
-use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::TextAlign;
+use crate::shared::primitives::color::DrawingColor;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ComputedStyle {

@@ -30,10 +30,13 @@ fn register_rhai_flex_and_grid(engine: &mut Engine) {
 
 fn register_rhai_module_and_floating(engine: &mut Engine) {
     for fn_name in ["module", "widget", "load_module", "mod_element"] {
-        engine.register_fn(fn_name, |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-            props.insert("type".into(), Dynamic::from("module"));
-            props
-        });
+        engine.register_fn(
+            fn_name,
+            |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+                props.insert("type".into(), Dynamic::from("module"));
+                props
+            },
+        );
         engine.register_fn(fn_name, |_target: rhai::Map, name: String| -> rhai::Map {
             let mut m = rhai::Map::new();
             m.insert("type".into(), Dynamic::from("module"));
@@ -52,14 +55,20 @@ fn register_rhai_module_and_floating(engine: &mut Engine) {
         );
     }
 
-    engine.register_fn("popup", |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-        props.insert("type".into(), Dynamic::from("popup"));
-        props
-    });
-    engine.register_fn("panel", |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
-        props.insert("type".into(), Dynamic::from("panel"));
-        props
-    });
+    engine.register_fn(
+        "popup",
+        |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+            props.insert("type".into(), Dynamic::from("popup"));
+            props
+        },
+    );
+    engine.register_fn(
+        "panel",
+        |_target: rhai::Map, mut props: rhai::Map| -> rhai::Map {
+            props.insert("type".into(), Dynamic::from("panel"));
+            props
+        },
+    );
     engine.register_fn("popup", |mut props: rhai::Map| -> rhai::Map {
         props.insert("type".into(), Dynamic::from("popup"));
         props

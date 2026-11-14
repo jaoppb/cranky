@@ -748,7 +748,11 @@ mod tests {
         let mut measurer = MockMeasurer;
 
         let tree = adapter
-            .calculate_layout(text_leaf("hello", style), &mut measurer, Position::new(0, 0))
+            .calculate_layout(
+                text_leaf("hello", style),
+                &mut measurer,
+                Position::new(0, 0),
+            )
             .unwrap();
 
         assert_eq!(tree.rect().width(), 54);
@@ -800,7 +804,10 @@ mod tests {
         let RenderNode::Grid { children, .. } = tree else {
             panic!("Expected RenderNode::Grid");
         };
-        let xs: Vec<u32> = children.iter().map(|c| u32::try_from(c.rect().x()).unwrap()).collect();
+        let xs: Vec<u32> = children
+            .iter()
+            .map(|c| u32::try_from(c.rect().x()).unwrap())
+            .collect();
         assert_eq!(xs, vec![0, 40, 80, 120, 160, 200, 240]);
     }
 

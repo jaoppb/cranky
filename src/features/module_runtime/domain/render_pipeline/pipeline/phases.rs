@@ -1,11 +1,15 @@
 use super::RenderPipeline;
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
-use crate::features::module_runtime::domain::render_pipeline::context::{LayoutContext, PipelineDiff};
+use crate::features::module_runtime::domain::render_pipeline::context::{
+    LayoutContext, PipelineDiff,
+};
 use crate::features::module_runtime::domain::render_pipeline::diff_phase::diff_pipeline;
 use crate::features::module_runtime::domain::render_pipeline::floating_phase::FloatingLayouts;
 use crate::features::module_runtime::domain::render_pipeline::layout_phase::layout_pipeline;
-use crate::features::module_runtime::domain::render_pipeline::outcome::{RenderOutcome, SizeChange};
+use crate::features::module_runtime::domain::render_pipeline::outcome::{
+    RenderOutcome, SizeChange,
+};
 use crate::features::module_runtime::domain::render_pipeline::paint_phase::paint_pipeline;
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::features::vdom::domain::InteractionContext;
@@ -42,7 +46,12 @@ impl RenderPipeline {
         monitor_id: &MonitorId,
         diff: PipelineDiff,
         ctx: &mut LayoutContext<'_, F, E>,
-    ) -> Option<(RenderNode, Option<SizeChange>, Vec<ChildModuleLayout>, FloatingLayouts)> {
+    ) -> Option<(
+        RenderNode,
+        Option<SizeChange>,
+        Vec<ChildModuleLayout>,
+        FloatingLayouts,
+    )> {
         layout_pipeline(self, monitor_id, diff, ctx)
     }
 

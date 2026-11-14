@@ -24,8 +24,14 @@ async fn resolve_all_icons(
     all_props: &mut HashMap<String, OwnedValue>,
     icon_name: Option<String>,
     theme_path: Option<String>,
-) -> (Option<SystrayIcon>, Option<SystrayIcon>, Option<SystrayIcon>) {
-    let icon_pixmap = all_props.remove("IconPixmap").and_then(|v| v.try_into().ok());
+) -> (
+    Option<SystrayIcon>,
+    Option<SystrayIcon>,
+    Option<SystrayIcon>,
+) {
+    let icon_pixmap = all_props
+        .remove("IconPixmap")
+        .and_then(|v| v.try_into().ok());
     let icon = resolve_systray_icon(icon_name, theme_path.clone(), icon_pixmap).await;
 
     let att_name = all_props

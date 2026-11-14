@@ -34,7 +34,12 @@ pub struct SystrayItemParams {
 
 impl SystrayItemParams {
     #[must_use]
-    pub const fn new(id: SystrayId, destination: Destination, path: ObjectPath, title: Title) -> Self {
+    pub const fn new(
+        id: SystrayId,
+        destination: Destination,
+        path: ObjectPath,
+        title: Title,
+    ) -> Self {
         Self {
             id,
             destination,

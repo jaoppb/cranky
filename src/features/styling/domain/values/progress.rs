@@ -79,4 +79,3 @@ mod tests {
         assert!((from_pct.value() - 0.75).abs() < f32::EPSILON);
     }
 }
-

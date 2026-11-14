@@ -2,9 +2,11 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::shared::config::domain::{self, CreatePartialRootConfigCommand, CreateRootConfigCommand};
-use crate::shared::primitives::geometry::BarHeight;
+use crate::shared::config::domain::{
+    self, CreatePartialRootConfigCommand, CreateRootConfigCommand,
+};
 use crate::shared::primitives::ModuleName;
+use crate::shared::primitives::geometry::BarHeight;
 
 use super::helpers::{default_height, default_root_name, json_map_to_options};
 use super::margin::{MarginConfigDto, PartialMarginConfigDto};

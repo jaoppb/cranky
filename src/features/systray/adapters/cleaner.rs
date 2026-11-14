@@ -44,10 +44,7 @@ pub fn parse_raw_tooltip(v: zbus::zvariant::OwnedValue) -> Option<SystrayTooltip
             Some(icon_name)
         };
         let icon_img_opt = resolve_pixmap_data(&pixmap, 3.0);
-        let tooltip_icon = SystrayIcon::new(
-            icon_name_opt.map(IconName::new),
-            icon_img_opt,
-        );
+        let tooltip_icon = SystrayIcon::new(icon_name_opt.map(IconName::new), icon_img_opt);
         Some(SystrayTooltip::new(
             tooltip_icon,
             SystrayTooltipTitle::new(clean_sni_text(&title)),

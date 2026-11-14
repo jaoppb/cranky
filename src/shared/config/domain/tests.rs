@@ -91,9 +91,15 @@ fn test_popup_config() {
     );
     assert_eq!(popup.embed(), PopupEmbed::Subsurface);
     assert_eq!(popup.behavior(), PopupBehavior::PerMonitor);
-    assert_eq!(popup.offset(), crate::shared::primitives::PopupOffset::new(0, 8));
+    assert_eq!(
+        popup.offset(),
+        crate::shared::primitives::PopupOffset::new(0, 8)
+    );
     assert_eq!(PopupBehavior::default(), PopupBehavior::Global);
-    assert_eq!(PopupConfig::default().offset(), crate::shared::primitives::PopupOffset::new(0, 8));
+    assert_eq!(
+        PopupConfig::default().offset(),
+        crate::shared::primitives::PopupOffset::new(0, 8)
+    );
 }
 
 #[test]
@@ -122,9 +128,15 @@ fn test_module_config_engine() {
 
 #[test]
 fn test_tooltip_config_builder() {
-    let bg = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(10, 20, 30, 255));
-    let bc = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(40, 50, 60, 255));
-    let tc = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(70, 80, 90, 255));
+    let bg = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(
+        10, 20, 30, 255,
+    ));
+    let bc = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(
+        40, 50, 60, 255,
+    ));
+    let tc = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(
+        70, 80, 90, 255,
+    ));
     let font = Some(FontFamily::new("Roboto".to_string()));
     let size = Some(FontSize::new(14.0));
     let radius = BorderRadius::new(6.0);

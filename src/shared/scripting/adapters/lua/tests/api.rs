@@ -1,6 +1,6 @@
 use crate::shared::primitives::geometry::{Scale, Size};
 use crate::shared::primitives::{MonitorId, ScriptMonitorInfo};
-use crate::shared::scripting::adapters::lua::{register_cranky_api, LuaMonitor};
+use crate::shared::scripting::adapters::lua::{LuaMonitor, register_cranky_api};
 use mlua::Lua;
 
 #[test]

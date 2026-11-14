@@ -1,5 +1,5 @@
-use crate::shared::primitives::color::{Color, DrawingColor};
 use crate::shared::primitives::PopupOffset;
+use crate::shared::primitives::color::{Color, DrawingColor};
 use serde::{Deserialize, Serialize};
 
 use super::types::{BorderRadius, BorderSize, FontFamily, FontSize, PaddingOffset};

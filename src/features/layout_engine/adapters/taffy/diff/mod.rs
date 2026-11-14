@@ -73,7 +73,12 @@ fn diff_leaf<'a>(
             StyledNode::Rect {
                 style: new_style, ..
             },
-        ) => Some(leaf_patch(old_state, new_layout, measurer, old_style == new_style)),
+        ) => Some(leaf_patch(
+            old_state,
+            new_layout,
+            measurer,
+            old_style == new_style,
+        )),
         (
             StyledNode::Image {
                 pixel_size: old_size,

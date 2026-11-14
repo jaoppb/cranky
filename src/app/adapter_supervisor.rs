@@ -88,12 +88,10 @@ impl AdapterSupervisor {
                     async move {
                         loop {
                             let now = chrono::Local::now();
-                            let ms_until_next_sec = 1000_u64
-                                .saturating_sub(u64::from(now.timestamp_subsec_millis()));
-                            tokio::time::sleep(std::time::Duration::from_millis(
-                                ms_until_next_sec,
-                            ))
-                            .await;
+                            let ms_until_next_sec =
+                                1000_u64.saturating_sub(u64::from(now.timestamp_subsec_millis()));
+                            tokio::time::sleep(std::time::Duration::from_millis(ms_until_next_sec))
+                                .await;
                             let _ = hub.time_tx().send(chrono::Local::now());
                         }
                     }

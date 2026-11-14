@@ -1,16 +1,11 @@
-use crate::features::systray::domain::{
-    IconCacheKey, IconImage, IconName, IconThemePath,
-};
+use crate::features::systray::domain::{IconCacheKey, IconImage, IconName, IconThemePath};
 use crate::features::systray::ports::SystrayIconCachePort;
 use freedesktop_icons::lookup;
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 #[must_use]
-pub fn resolve_pixmap_data(
-    pixmaps: &[(i32, i32, Vec<u8>)],
-    max_scale: f32,
-) -> Option<IconImage> {
+pub fn resolve_pixmap_data(pixmaps: &[(i32, i32, Vec<u8>)], max_scale: f32) -> Option<IconImage> {
     if pixmaps.is_empty() {
         return None;
     }

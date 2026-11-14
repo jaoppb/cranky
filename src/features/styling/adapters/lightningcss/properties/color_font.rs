@@ -2,8 +2,8 @@ use crate::features::styling::domain::{
     ComputedStyle, CssWideKeyword, InheritableKeywords, Opacity,
 };
 use crate::shared::config::domain::{FontFamily, FontSize};
-use crate::shared::primitives::color::{Color, DrawingColor};
 use crate::shared::primitives::TextAlign;
+use crate::shared::primitives::color::{Color, DrawingColor};
 use lightningcss::properties::Property;
 use lightningcss::properties::font::{AbsoluteFontSize, FontSize as LightningFontSize};
 use lightningcss::properties::text::TextAlign as LightningTextAlign;

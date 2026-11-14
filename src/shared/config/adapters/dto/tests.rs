@@ -125,7 +125,10 @@ fn test_popup_config_dto_offset_map() {
     "#;
     let dto: PopupConfigDto = toml::from_str(toml_str).unwrap();
     let domain = dto.into_domain();
-    assert_eq!(domain.behavior(), crate::shared::config::domain::PopupBehavior::PerMonitor);
+    assert_eq!(
+        domain.behavior(),
+        crate::shared::config::domain::PopupBehavior::PerMonitor
+    );
     assert_eq!(domain.offset().dx(), 4);
     assert_eq!(domain.offset().dy(), 16);
 }
