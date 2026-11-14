@@ -101,7 +101,9 @@ Cranky is split into two main components:
 ### Running Tests
 
 ```bash
-cargo test
+just test
+# The full gate a pull request must pass:
+just check
 # For coverage reporting:
-cargo llvm-cov
+just coverage
 ```

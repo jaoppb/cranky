@@ -4,21 +4,19 @@
 pre-commit:
   parallel: true
   commands:
-    clippy:
+    lint:
       glob: "*.rs"
       stage_fixed: true
-      run: cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features && cargo clippy --all-targets --all-features -- -D warnings
-    arch-lint:
+      run: just lint-fix && just lint
+    arch-check:
       glob: "*.rs"
-      run: cargo test --test architecture
-    loc-lint:
+      run: just arch-check
+    loc-check:
       glob: "*.rs"
-      run: ./scripts/lint-loc.sh
+      run: just loc-check
 
 pre-push:
   parallel: false
   commands:
-    build-release:
-      run: cargo build --release
-    test:
-      run: cargo test
+    check:
+      run: just check
