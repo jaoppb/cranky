@@ -5,6 +5,7 @@ pub mod diff;
 pub mod grid_converter;
 mod leaf_size;
 pub mod reconciler;
+mod render_leaf_builder;
 pub mod render_tree_builder;
 pub mod style_builder;
 pub mod style_converter;
