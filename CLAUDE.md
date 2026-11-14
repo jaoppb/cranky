@@ -15,15 +15,17 @@ The `Justfile` is the entry point (`just --list`). Key recipes:
 | Build / run | `just build`, `just release`, `just run` |
 | Tests | `just test` (= `cargo test`) |
 | Single test | `cargo test <name>` — e.g. `cargo test test_find_module_clock_rhai_format` |
-| Lints | `just clippy` (`--all-targets --all-features`) |
-| Architecture gate | `just arch-lint` (= `cargo test --test architecture`) |
+| Full gate | `just check` (fmt-check, lint, arch-check, loc-check, test) |
+| Lints | `just lint` (Clippy, `--all-targets --all-features -- -D warnings`), `just lint-fix` |
+| Architecture gate | `just arch-check` (= `cargo test --test architecture`) |
+| LOC limit | `just loc-check` (= `scripts/lint-loc.sh`) |
 | Format | `just fmt`, `just fmt-check` |
 | Coverage | `just coverage` (needs `cargo-llvm-cov` + `genhtml`) |
 | Benchmarks | `just bench` (criterion, `benches/benchmarks.rs`) |
 | Profiling | `just release && just record-profile` then `just analyze-profile` (see the `analyze-profile` skill in `.agents/skills/`) |
-| Git hooks | `just setup-hooks` (lefthook) |
+| Git hooks | `just setup` (lefthook) |
 
-`lefthook.yml` runs clippy (with `--fix`), arch-lint, and `scripts/lint-loc.sh` pre-commit; release build + tests pre-push.
+`lefthook.yml` calls the recipes: `lint-fix` + `lint`, `arch-check`, and `loc-check` pre-commit; `check` pre-push.
 
 Commit messages follow Conventional Commits with a scope: `feat(popup): ...`, `refactor(wayland): ...`.
 
