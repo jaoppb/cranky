@@ -84,14 +84,7 @@ fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
                 instance_id_str.map(ModuleInstanceId::new),
                 options,
             );
-            VNode::new_module(
-                params,
-                class,
-                id,
-                on_click,
-                on_hover,
-                tooltip,
-            )
+            VNode::new_module(params, class, id, on_click, on_hover, tooltip)
         }
         _ => return lua.from_value::<VNode>(mlua::Value::Table(table)),
     };

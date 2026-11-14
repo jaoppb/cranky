@@ -1,5 +1,7 @@
 use super::box_model::{parse_length_str, parse_size_str};
-use crate::features::layout_engine::domain::{AlignItems, FlexDirection, Gap, JustifyContent, PositionType};
+use crate::features::layout_engine::domain::{
+    AlignItems, FlexDirection, Gap, JustifyContent, PositionType,
+};
 use crate::features::styling::domain::{ComputedStyle, FlexGrow, FlexShrink};
 use lightningcss::properties::Property;
 use lightningcss::stylesheet::PrinterOptions;

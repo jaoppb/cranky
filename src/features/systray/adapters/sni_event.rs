@@ -18,7 +18,11 @@ pub enum SniEvent {
 }
 
 impl SniEvent {
-    pub async fn apply(self, item: SystrayItem, proxy: &StatusNotifierItemProxy<'_>) -> SystrayItem {
+    pub async fn apply(
+        self,
+        item: SystrayItem,
+        proxy: &StatusNotifierItemProxy<'_>,
+    ) -> SystrayItem {
         match self {
             Self::Title => {
                 let title = proxy.title().await.unwrap_or_default();
@@ -45,10 +49,7 @@ impl SniEvent {
                 );
                 let icon_image =
                     resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
-                let icon = SystrayIcon::new(
-                    icon_name.map(IconName::new),
-                    icon_image,
-                );
+                let icon = SystrayIcon::new(icon_name.map(IconName::new), icon_image);
                 item.with_icon(icon)
             }
             Self::AttentionIcon => {
@@ -58,10 +59,7 @@ impl SniEvent {
                 tracing::trace!("SniEvent::AttentionIcon: updated attention icon");
                 let icon_image =
                     resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
-                let icon = SystrayIcon::new(
-                    icon_name.map(IconName::new),
-                    icon_image,
-                );
+                let icon = SystrayIcon::new(icon_name.map(IconName::new), icon_image);
                 item.with_attention_icon(icon)
             }
             Self::OverlayIcon => {
@@ -71,32 +69,21 @@ impl SniEvent {
                 tracing::trace!("SniEvent::OverlayIcon: updated overlay icon");
                 let icon_image =
                     resolve_icon(icon_name.clone(), icon_theme_path, icon_pixmap).await;
-                let icon = SystrayIcon::new(
-                    icon_name.map(IconName::new),
-                    icon_image,
-                );
+                let icon = SystrayIcon::new(icon_name.map(IconName::new), icon_image);
                 item.with_overlay_icon(icon)
             }
             Self::ToolTip => {
-                let tooltip = proxy
-                    .tool_tip()
-                    .await
-                    .ok()
-                    .and_then(parse_raw_tooltip);
+                let tooltip = proxy.tool_tip().await.ok().and_then(parse_raw_tooltip);
                 tracing::trace!("SniEvent::ToolTip: updated tooltip");
                 item.with_tooltip(tooltip)
             }
             Self::Menu => {
                 let mut item = item;
                 if let Ok(menu_path) = proxy.menu().await {
-                    item = item.with_menu_path(Some(
-                        ObjectPath::new(menu_path.as_str()),
-                    ));
+                    item = item.with_menu_path(Some(ObjectPath::new(menu_path.as_str())));
                 }
                 if let Ok(item_is_menu_val) = proxy.item_is_menu().await {
-                    item = item.with_item_is_menu(
-                        ItemIsMenu::new(item_is_menu_val),
-                    );
+                    item = item.with_item_is_menu(ItemIsMenu::new(item_is_menu_val));
                 }
                 tracing::trace!("SniEvent::Menu: updated menu");
                 item

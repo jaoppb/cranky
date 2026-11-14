@@ -1,8 +1,8 @@
-use super::leaf_size::apply_node_dimensions;
 use super::grid_converter::{
     grid_auto_flow_to_taffy, grid_line_placement_to_taffy, grid_track_to_template_component,
     grid_track_to_track_sizing_function,
 };
+use super::leaf_size::apply_node_dimensions;
 use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
 use crate::features::styling::domain::{ComputedStyle, DisplayMode};
 use crate::utils::f64_to_f32;
@@ -108,17 +108,27 @@ pub fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Styl
     let col_gap = computed
         .column_gap()
         .or_else(|| computed.gap())
-        .map_or_else(|| LengthPercentage::length(0.0), |g| LengthPercentage::length(f64_to_f32(g.value())));
-    let row_gap = computed
-        .row_gap()
-        .or_else(|| computed.gap())
-        .map_or_else(|| LengthPercentage::length(0.0), |g| LengthPercentage::length(f64_to_f32(g.value())));
+        .map_or_else(
+            || LengthPercentage::length(0.0),
+            |g| LengthPercentage::length(f64_to_f32(g.value())),
+        );
+    let row_gap = computed.row_gap().or_else(|| computed.gap()).map_or_else(
+        || LengthPercentage::length(0.0),
+        |g| LengthPercentage::length(f64_to_f32(g.value())),
+    );
 
     let mut style = Style {
         position: computed.position().unwrap_or_default().into(),
-        padding: computed.padding().map_or_else(taffy::geometry::Rect::zero, Into::into),
-        margin: computed.margin().map_or_else(taffy::geometry::Rect::zero, Into::into),
-        gap: TaffySize { width: col_gap, height: row_gap },
+        padding: computed
+            .padding()
+            .map_or_else(taffy::geometry::Rect::zero, Into::into),
+        margin: computed
+            .margin()
+            .map_or_else(taffy::geometry::Rect::zero, Into::into),
+        gap: TaffySize {
+            width: col_gap,
+            height: row_gap,
+        },
         justify_content: computed.justify_content().map(Into::into),
         align_items: computed.align_items().map(Into::into),
         ..Default::default()

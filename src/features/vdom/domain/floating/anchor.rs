@@ -125,13 +125,19 @@ fn parse_anchor_str(s: &str) -> u8 {
 impl From<PanelAnchorHelper> for PanelAnchor {
     fn from(helper: PanelAnchorHelper) -> Self {
         match helper {
-            PanelAnchorHelper::Flags { top, bottom, left, right } => Self::new(
+            PanelAnchorHelper::Flags {
+                top,
+                bottom,
+                left,
+                right,
+            } => Self::new(
                 VerticalAnchor::from_edges(top, bottom),
                 HorizontalAnchor::from_edges(left, right),
             ),
-            PanelAnchorHelper::List(list) => {
-                Self::from_flags(list.iter().fold(0, |acc, item| acc | parse_anchor_str(item)))
-            }
+            PanelAnchorHelper::List(list) => Self::from_flags(
+                list.iter()
+                    .fold(0, |acc, item| acc | parse_anchor_str(item)),
+            ),
             PanelAnchorHelper::Single(s) => Self::from_flags(parse_anchor_str(&s)),
         }
     }
@@ -158,7 +164,9 @@ impl PanelAnchor {
 
     #[must_use]
     pub const fn all() -> Self {
-        Self { flags: TOP_FLAG | BOTTOM_FLAG | LEFT_FLAG | RIGHT_FLAG }
+        Self {
+            flags: TOP_FLAG | BOTTOM_FLAG | LEFT_FLAG | RIGHT_FLAG,
+        }
     }
 
     #[must_use]

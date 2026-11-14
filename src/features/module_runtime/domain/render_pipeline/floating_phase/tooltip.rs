@@ -1,11 +1,11 @@
-use super::content::{layout_floating_content_cached, FloatingCache};
+use super::content::{FloatingCache, layout_floating_content_cached};
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::vdom::domain::{
     InteractionContext, NodePath, NodeRef, SurfaceSpace, resolve_segment,
 };
-use crate::shared::primitives::{ChildSizesMap, MonitorId};
 use crate::shared::primitives::geometry::Scale;
+use crate::shared::primitives::{ChildSizesMap, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
 /// Picks the render tree that owns the hover, so the tooltip lookup walks

@@ -1,7 +1,7 @@
 use super::vnode_parser::value_to_vnode;
 use crate::features::vdom::domain::{
-    AnchorDirection, ExclusiveZone, HorizontalAnchor, KeyboardInteractivity,
-    PanelAnchor, PanelLayer, PanelSpec, PopupOffset, PopupSpec, VerticalAnchor,
+    AnchorDirection, ExclusiveZone, HorizontalAnchor, KeyboardInteractivity, PanelAnchor,
+    PanelLayer, PanelSpec, PopupOffset, PopupSpec, VerticalAnchor,
 };
 use crate::shared::config::domain::{MarginConfig, MarginOffset};
 use mlua::Lua;
@@ -28,7 +28,11 @@ fn parse_margin(table: &mlua::Table) -> MarginConfig {
     table.get::<mlua::Table>("margin").map_or_else(
         |_| MarginConfig::default(),
         |m_table| {
-            let t = m_table.get::<Option<i32>>("top").ok().flatten().unwrap_or(0);
+            let t = m_table
+                .get::<Option<i32>>("top")
+                .ok()
+                .flatten()
+                .unwrap_or(0);
             let r = m_table
                 .get::<Option<i32>>("right")
                 .ok()

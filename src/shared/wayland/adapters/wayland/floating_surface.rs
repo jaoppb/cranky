@@ -2,8 +2,8 @@ use super::floating_anchor::{handle_conflicts, resolve_anchor};
 use super::floating_setup::{FloatingPlacement, create_new_floating, update_existing_floating};
 use super::floating_teardown::teardown_floating;
 use super::state::WaylandState;
-use crate::features::layout_engine::domain::popup::ancestors;
 use crate::features::layout_engine::domain::FloatingKind;
+use crate::features::layout_engine::domain::popup::ancestors;
 use crate::shared::primitives::geometry::{Rect, Size};
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{MonitorId, PopupOffset};
@@ -36,7 +36,10 @@ pub(crate) fn show_floating(
         if *k == kind {
             parent.clone()
         } else {
-            state.floating_surfaces.get(k).and_then(|f| f.parent.clone())
+            state
+                .floating_surfaces
+                .get(k)
+                .and_then(|f| f.parent.clone())
         }
     };
     let Ok(ancestor_kinds) = ancestors(&kind, parent_of) else {
@@ -70,7 +73,15 @@ pub(crate) fn show_floating(
     if state.floating_surfaces.contains_key(&kind) {
         update_existing_floating(state, qh, &kind, payload.buffer, &anchor_info, &placement)
     } else {
-        create_new_floating(state, qh, kind, payload.buffer, &anchor_info, &placement, parent)
+        create_new_floating(
+            state,
+            qh,
+            kind,
+            payload.buffer,
+            &anchor_info,
+            &placement,
+            parent,
+        )
     }
 }
 

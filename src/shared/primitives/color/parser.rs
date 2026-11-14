@@ -103,7 +103,8 @@ fn parse_css_rgba(s: &str) -> Option<Color> {
         let green = green_str.parse::<u8>().ok()?;
         let blue = blue_str.parse::<u8>().ok()?;
         let alpha_f = alpha_str.parse::<f32>().ok()?;
-        let alpha = u8::try_from(crate::utils::f32_to_u32((alpha_f * 255.0).round())).unwrap_or(255);
+        let alpha =
+            u8::try_from(crate::utils::f32_to_u32((alpha_f * 255.0).round())).unwrap_or(255);
         return Some(Color::new(red, green, blue, alpha));
     }
     None

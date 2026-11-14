@@ -1,7 +1,7 @@
 use super::floating_bounds::ChildPlacement;
 use crate::shared::config::domain::MarginConfig;
-use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::ModuleId;
+use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::composite::CompositeLayers;

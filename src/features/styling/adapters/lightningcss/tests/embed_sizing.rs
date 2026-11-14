@@ -1,7 +1,7 @@
+use crate::features::layout_engine::domain::TextMeasurer;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
-use crate::features::layout_engine::domain::TextMeasurer;
 use crate::features::styling::domain::{ClassNameList, CssLength, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
 use crate::features::vdom::domain::VNode;
@@ -25,8 +25,14 @@ fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
     }
     let parser = LightningCssAdapter::new();
     let sheets = [
-        ("base", include_str!("../../../../../../assets/styles/base.css")),
-        ("clock", include_str!("../../../../../../assets/styles/clock.css")),
+        (
+            "base",
+            include_str!("../../../../../../assets/styles/base.css"),
+        ),
+        (
+            "clock",
+            include_str!("../../../../../../assets/styles/clock.css"),
+        ),
     ]
     .into_iter()
     .map(|(name, css)| {

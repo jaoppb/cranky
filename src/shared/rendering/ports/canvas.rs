@@ -1,8 +1,8 @@
 use crate::shared::primitives::color::DrawingColor;
 
 use crate::shared::config::domain::{FontFamily, FontSize};
-use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
 use crate::shared::primitives::TextAlignment;
+use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
 
 pub trait CanvasFactory: Send + Sync + Clone {
     #[must_use]

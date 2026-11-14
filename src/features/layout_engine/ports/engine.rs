@@ -1,6 +1,6 @@
 use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
-use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::SizeConstraint;
+use crate::shared::primitives::geometry::{Position, Size};
 
 pub trait LayoutEnginePort: Send + Sync {
     /// Calculates the layout tree for the given styled node, measuring

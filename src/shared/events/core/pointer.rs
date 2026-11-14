@@ -81,7 +81,9 @@ impl ScrollDelta {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub enum SurfaceKind {
     #[default]
     Bar,
@@ -183,4 +185,3 @@ impl std::fmt::Display for PointerSerial {
         write!(f, "{}", self.0)
     }
 }
-

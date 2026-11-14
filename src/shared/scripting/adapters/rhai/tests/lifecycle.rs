@@ -81,7 +81,10 @@ fn test_rhai_all_builtins() {
             "mpris",
             include_str!("../../../../../../assets/widgets/mpris.rhai"),
         ),
-        ("bar", include_str!("../../../../../../assets/widgets/bar.rhai")),
+        (
+            "bar",
+            include_str!("../../../../../../assets/widgets/bar.rhai"),
+        ),
     ] {
         let res = RhaiModule::new(name.into(), source);
         if let Err(e) = &res {

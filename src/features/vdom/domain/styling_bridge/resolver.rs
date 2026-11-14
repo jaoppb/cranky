@@ -139,11 +139,7 @@ impl VNode {
                 Some(&query),
                 &detached_inherited,
             ));
-            StyledPopup::new(
-                content,
-                p.anchor_direction(),
-                p.offset(),
-            )
+            StyledPopup::new(content, p.anchor_direction(), p.offset())
         });
         let panel = self.panel().map(|p| {
             let panel_resolved = interaction

@@ -1,11 +1,11 @@
-use super::mmap::{create_shm_file, safe_borrowed_fd_from_file, safe_mmap_file, MmappedShm};
+use super::mmap::{MmappedShm, create_shm_file, safe_borrowed_fd_from_file, safe_mmap_file};
 use super::slot::{BufferSlot, BufferUserData};
 use std::io::Result;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
-use wayland_client::QueueHandle;
 
 pub struct ShmBuffer {
     shm: MmappedShm,

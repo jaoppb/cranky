@@ -40,8 +40,16 @@ pub(super) fn compute_module_bounds(
 ) -> ModuleAnchorBounds {
     match (placement, anchor_rect) {
         (Some(ms), Some(r)) => {
-            let y = if precise { ms.y.saturating_add(r.y()) } else { 0 };
-            let h = if precise { to_i32(r.height()) } else { default_h };
+            let y = if precise {
+                ms.y.saturating_add(r.y())
+            } else {
+                0
+            };
+            let h = if precise {
+                to_i32(r.height())
+            } else {
+                default_h
+            };
             ModuleAnchorBounds {
                 x: ms.x.saturating_add(r.x()),
                 y,
@@ -51,7 +59,11 @@ pub(super) fn compute_module_bounds(
         }
         (Some(ms), None) => {
             let y = if precise { ms.y } else { 0 };
-            let h = if precise { to_i32(ms.size.height()) } else { default_h };
+            let h = if precise {
+                to_i32(ms.size.height())
+            } else {
+                default_h
+            };
             ModuleAnchorBounds {
                 x: ms.x,
                 y,
@@ -61,7 +73,11 @@ pub(super) fn compute_module_bounds(
         }
         (None, Some(r)) => {
             let y = if precise { r.y() } else { 0 };
-            let h = if precise { to_i32(r.height()) } else { default_h };
+            let h = if precise {
+                to_i32(r.height())
+            } else {
+                default_h
+            };
             ModuleAnchorBounds {
                 x: r.x(),
                 y,

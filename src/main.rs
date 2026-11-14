@@ -81,7 +81,12 @@ async fn init_secondary_adapters(
         metrics_config.clone(),
         conn.clone(),
     );
-    for kind in [SignalKind::Mpris, SignalKind::Metrics, SignalKind::Hyprland, SignalKind::Time] {
+    for kind in [
+        SignalKind::Mpris,
+        SignalKind::Metrics,
+        SignalKind::Hyprland,
+        SignalKind::Time,
+    ] {
         if active_signals.contains(&kind) {
             supervisor.ensure(kind).await;
         }
@@ -145,18 +150,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         layout_sender,
         ui_sender,
     );
-    let channels = cranky::app::state::StateChannels::new(
-        display_rx,
-        layout_rx,
-        ui_rx,
-        system_rx,
-    );
-    let mut app = CrankyApp::new(
-        initial_config.clone(),
-        services,
-        channels,
-        registry,
-    )?;
+    let channels = cranky::app::state::StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+    let mut app = CrankyApp::new(initial_config.clone(), services, channels, registry)?;
 
     let active_signals = app.active_signals();
 

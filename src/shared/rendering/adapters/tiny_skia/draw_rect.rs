@@ -43,17 +43,38 @@ impl TinySkiaCosmicCanvas<'_> {
                 );
                 builder.move_to(rect_x + clamped_radius, rect_y);
                 builder.line_to(rect_x + rect_w - clamped_radius, rect_y);
-                builder.quad_to(rect_x + rect_w, rect_y, rect_x + rect_w, rect_y + clamped_radius);
+                builder.quad_to(
+                    rect_x + rect_w,
+                    rect_y,
+                    rect_x + rect_w,
+                    rect_y + clamped_radius,
+                );
                 builder.line_to(rect_x + rect_w, rect_y + rect_h - clamped_radius);
-                builder.quad_to(rect_x + rect_w, rect_y + rect_h, rect_x + rect_w - clamped_radius, rect_y + rect_h);
+                builder.quad_to(
+                    rect_x + rect_w,
+                    rect_y + rect_h,
+                    rect_x + rect_w - clamped_radius,
+                    rect_y + rect_h,
+                );
                 builder.line_to(rect_x + clamped_radius, rect_y + rect_h);
-                builder.quad_to(rect_x, rect_y + rect_h, rect_x, rect_y + rect_h - clamped_radius);
+                builder.quad_to(
+                    rect_x,
+                    rect_y + rect_h,
+                    rect_x,
+                    rect_y + rect_h - clamped_radius,
+                );
                 builder.line_to(rect_x, rect_y + clamped_radius);
                 builder.quad_to(rect_x, rect_y, rect_x + clamped_radius, rect_y);
                 builder.close();
 
                 if let Some(path) = builder.finish() {
-                    pixmap.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+                    pixmap.fill_path(
+                        &path,
+                        &paint,
+                        FillRule::Winding,
+                        Transform::identity(),
+                        None,
+                    );
                 }
             }
         }
@@ -108,7 +129,8 @@ impl TinySkiaCosmicCanvas<'_> {
             );
 
             let max_radius = (border_w / 2.0).min(border_h / 2.0);
-            let clamped_radius = (radius.apply_scale(&self.scale).value() - half_stroke).clamp(0.0, max_radius);
+            let clamped_radius =
+                (radius.apply_scale(&self.scale).value() - half_stroke).clamp(0.0, max_radius);
 
             let mut builder = PathBuilder::new();
             if clamped_radius <= 0.0 {
@@ -119,11 +141,26 @@ impl TinySkiaCosmicCanvas<'_> {
             } else {
                 builder.move_to(border_x + clamped_radius, border_y);
                 builder.line_to(border_x + border_w - clamped_radius, border_y);
-                builder.quad_to(border_x + border_w, border_y, border_x + border_w, border_y + clamped_radius);
+                builder.quad_to(
+                    border_x + border_w,
+                    border_y,
+                    border_x + border_w,
+                    border_y + clamped_radius,
+                );
                 builder.line_to(border_x + border_w, border_y + border_h - clamped_radius);
-                builder.quad_to(border_x + border_w, border_y + border_h, border_x + border_w - clamped_radius, border_y + border_h);
+                builder.quad_to(
+                    border_x + border_w,
+                    border_y + border_h,
+                    border_x + border_w - clamped_radius,
+                    border_y + border_h,
+                );
                 builder.line_to(border_x + clamped_radius, border_y + border_h);
-                builder.quad_to(border_x, border_y + border_h, border_x, border_y + border_h - clamped_radius);
+                builder.quad_to(
+                    border_x,
+                    border_y + border_h,
+                    border_x,
+                    border_y + border_h - clamped_radius,
+                );
                 builder.line_to(border_x, border_y + clamped_radius);
                 builder.quad_to(border_x, border_y, border_x + clamped_radius, border_y);
             }

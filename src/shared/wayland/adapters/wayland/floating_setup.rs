@@ -5,9 +5,9 @@ use super::state::WaylandState;
 use super::types::FloatingSurface;
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::shared::events::core::SurfaceKind;
+use crate::shared::primitives::PopupOffset;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::primitives::PopupOffset;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::composite::composite_into;
 use crate::shared::wayland::ports::DisplayServerError;
@@ -43,9 +43,12 @@ pub(super) fn create_new_floating(
     placement: &FloatingPlacement,
     parent: Option<FloatingKind>,
 ) -> Result<(), DisplayServerError> {
-    let shm = state.shm.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "SHM not bound".to_string(),
-    })?;
+    let shm = state
+        .shm
+        .as_ref()
+        .ok_or_else(|| DisplayServerError::ConnectionFailed {
+            reason: "SHM not bound".to_string(),
+        })?;
     let shm_buffer = ShmBuffer::new(
         shm,
         placement.size.width(),
@@ -55,9 +58,13 @@ pub(super) fn create_new_floating(
     )
     .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
 
-    let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "XDG WM Base not bound".to_string(),
-    })?;
+    let xdg_wm_base =
+        state
+            .xdg_wm_base
+            .as_ref()
+            .ok_or_else(|| DisplayServerError::ConnectionFailed {
+                reason: "XDG WM Base not bound".to_string(),
+            })?;
     let positioner = create_positioner(
         xdg_wm_base,
         qh,
@@ -90,12 +97,20 @@ fn setup_new_floating(
     mut info: NewFloatingInfo,
     parent: Option<FloatingKind>,
 ) -> Result<(), DisplayServerError> {
-    let xdg_wm_base = state.xdg_wm_base.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "XDG WM Base not bound".to_string(),
-    })?;
-    let compositor = state.compositor.as_ref().ok_or_else(|| DisplayServerError::ConnectionFailed {
-        reason: "Compositor not bound".to_string(),
-    })?;
+    let xdg_wm_base =
+        state
+            .xdg_wm_base
+            .as_ref()
+            .ok_or_else(|| DisplayServerError::ConnectionFailed {
+                reason: "XDG WM Base not bound".to_string(),
+            })?;
+    let compositor =
+        state
+            .compositor
+            .as_ref()
+            .ok_or_else(|| DisplayServerError::ConnectionFailed {
+                reason: "Compositor not bound".to_string(),
+            })?;
     // Past every fallible step: claim children that rendered before this
     // surface existed. Blend only; the configure handler attaches it.
     let layers = state.pending_children.remove(&kind).unwrap_or_default();
@@ -138,13 +153,21 @@ fn setup_new_floating(
         FloatingKind::Popup(target) => {
             state.surface_to_id.insert(
                 surface.clone(),
-                (target.module_id(), anchor_info.target_monitor_id.clone(), SurfaceKind::Popup),
+                (
+                    target.module_id(),
+                    anchor_info.target_monitor_id.clone(),
+                    SurfaceKind::Popup,
+                ),
             );
         }
         FloatingKind::Panel(target) => {
             state.surface_to_id.insert(
                 surface.clone(),
-                (target.module_id(), anchor_info.target_monitor_id.clone(), SurfaceKind::Panel),
+                (
+                    target.module_id(),
+                    anchor_info.target_monitor_id.clone(),
+                    SurfaceKind::Panel,
+                ),
             );
         }
         FloatingKind::Tooltip => {}

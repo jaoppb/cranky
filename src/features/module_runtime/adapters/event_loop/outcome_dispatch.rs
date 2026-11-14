@@ -45,13 +45,12 @@ impl<
         // `dispatch_outcome_buffer` just used to parent this module's own
         // subsurface, since a module opening its own popup while itself
         // embedded in someone else's is exactly what nests a popup.
-        let floating_parent = self
-            .ctx
-            .parent_id()
-            .and_then(|pid| match surface_parent_for(pid, self.ctx.surface(), monitor_id) {
+        let floating_parent = self.ctx.parent_id().and_then(|pid| {
+            match surface_parent_for(pid, self.ctx.surface(), monitor_id) {
                 SurfaceParent::Bar => None,
                 SurfaceParent::Floating(kind) => Some(kind),
-            });
+            }
+        });
         dispatch_outcome_popups(
             self.ctx.display_sender(),
             &mut self.popup_render_trees,

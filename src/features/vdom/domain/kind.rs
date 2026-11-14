@@ -2,9 +2,7 @@ use super::tag::TextContent;
 use super::vnode::VNode;
 use crate::features::styling::domain::{Orientation, ProgressValue};
 use crate::shared::primitives::geometry::Size;
-use crate::shared::primitives::{
-    BinaryData, ModuleInstanceId, ModuleName, ModuleOptions,
-};
+use crate::shared::primitives::{BinaryData, ModuleInstanceId, ModuleName, ModuleOptions};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -84,4 +82,3 @@ impl ModuleParams {
         &self.options
     }
 }
-

@@ -153,9 +153,7 @@ fn test_calendar_lua_config_monday() {
 
     let node = module.render(&MonitorId::new("DP-1"));
     let weekdays = &node.children()[1];
-    if let crate::features::vdom::domain::VNodeKind::Text { text } =
-        weekdays.children()[0].kind()
-    {
+    if let crate::features::vdom::domain::VNodeKind::Text { text } = weekdays.children()[0].kind() {
         assert_eq!(
             text.as_str(),
             "Mo",

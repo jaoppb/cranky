@@ -86,4 +86,3 @@ mod tests {
         assert!(FlexShrink::new(f32::NAN).is_err());
     }
 }
-

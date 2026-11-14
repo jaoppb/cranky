@@ -4,8 +4,8 @@ use super::state::WaylandState;
 use super::tooltip_anchor::resolve_tooltip_anchor;
 use super::types::ModuleSurface;
 use crate::features::layout_engine::domain::{FloatingKind, PopupExclusivity, PopupTarget};
-use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::Rect;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 

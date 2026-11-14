@@ -4,6 +4,6 @@ mod target;
 #[cfg(test)]
 mod tests;
 
-pub use chain::{ancestors, descendants_deepest_first, PopupCycle};
+pub use chain::{PopupCycle, ancestors, descendants_deepest_first};
 pub use styled::{ActivePanel, AnchoredPopup, StyledPanel, StyledPopup};
 pub use target::{FloatingKind, PopupExclusivity, PopupTarget};

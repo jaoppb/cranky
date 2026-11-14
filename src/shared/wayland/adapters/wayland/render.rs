@@ -72,10 +72,7 @@ pub(crate) fn render_outputs<Snd: LayoutSender>(
 
         let monitor_id = MonitorId::new(&bar.output_name);
         if let Some(root_id) = read_model.root_module() {
-            let bar_rect = Rect::new(
-                Position::new(0, 0),
-                Size::new(width, bar.config_height),
-            );
+            let bar_rect = Rect::new(Position::new(0, 0), Size::new(width, bar.config_height));
             // The root always gets a full, two-axis pin matching its own
             // layer-surface bounds — it has no parent to leave an axis free
             // for, so this reproduces exactly the sizing it always had.

@@ -1,4 +1,3 @@
-
 pub mod adapter;
 pub mod command;
 pub mod dispatch_keyboard;

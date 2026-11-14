@@ -1,8 +1,8 @@
-use super::mmap::{create_shm_file, MmappedShm};
+use super::mmap::{MmappedShm, create_shm_file};
 use super::slot::BufferUserData;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 #[test]
 fn test_shm_logic() {

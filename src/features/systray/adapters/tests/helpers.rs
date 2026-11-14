@@ -1,4 +1,4 @@
-use crate::features::systray::adapters::cleaner::{clean_sni_text, parse_raw_tooltip, RawTooltip};
+use crate::features::systray::adapters::cleaner::{RawTooltip, clean_sni_text, parse_raw_tooltip};
 use crate::features::systray::adapters::sni_event::SniEvent;
 use zbus::zvariant::Value;
 

@@ -26,10 +26,7 @@ pub struct ConfigAdapter<V: FontValidatorPort + Send + Sync + 'static> {
 
 impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
     #[must_use]
-    pub fn new(
-        validator: V,
-        app_env: &crate::shared::env::domain::AppEnvironment,
-    ) -> Self {
+    pub fn new(validator: V, app_env: &crate::shared::env::domain::AppEnvironment) -> Self {
         let config_path = app_env.home().as_path().join(".config/cranky/config.toml");
         Self {
             config_path,

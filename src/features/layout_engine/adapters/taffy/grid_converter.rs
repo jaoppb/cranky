@@ -1,6 +1,4 @@
-use crate::features::styling::domain::{
-    GridAutoFlow, GridLinePlacement, GridPlacement, GridTrack,
-};
+use crate::features::styling::domain::{GridAutoFlow, GridLinePlacement, GridPlacement, GridTrack};
 use taffy::style_helpers::{
     auto, fr, length, line, max_content, min_content, minmax, percent, repeat, span,
 };
@@ -29,9 +27,7 @@ pub fn grid_track_to_max_track(track: &GridTrack) -> taffy::style::MaxTrackSizin
 }
 
 #[must_use]
-pub fn grid_track_to_track_sizing_function(
-    track: &GridTrack,
-) -> taffy::style::TrackSizingFunction {
+pub fn grid_track_to_track_sizing_function(track: &GridTrack) -> taffy::style::TrackSizingFunction {
     match track {
         GridTrack::MinMax(min_t, max_t) => minmax(
             grid_track_to_min_track(min_t),
