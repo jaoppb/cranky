@@ -12,7 +12,9 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Only a pull request's superseded run is cancelled: every commit on `main`
+  # keeps its checks, and a release is never cut short.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # One job per kind of error, each running one `just` recipe, so a red pull
@@ -54,6 +56,8 @@ jobs:
             compiles: true
           - name: workflows
             recipe: workflows-check
+            # actionlint runs shellcheck over the `run` blocks when it finds it.
+            tools: shellcheck@0.11.0
     steps:
       - uses: actions/checkout@v7
 
@@ -85,9 +89,13 @@ jobs:
         if: matrix.name == 'workflows'
         env:
           ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        working-directory: ${{ runner.temp }}
         run: |
-          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
-            | tar -xz -C "${RUNNER_TEMP}" actionlint
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum --check
+          tar -xzf "${archive}" actionlint
           echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
 
       - name: Run just ${{ matrix.recipe }}

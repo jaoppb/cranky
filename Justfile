@@ -66,7 +66,7 @@ loc-check:
 deps-check:
     cargo deny check
 
-# Lint the GitHub workflows (requires actionlint)
+# Lint the GitHub workflows and their shell scripts (requires actionlint and shellcheck)
 [group('quality')]
 workflows-check:
     actionlint
@@ -95,7 +95,7 @@ coverage:
 # Check that unit tests cover at least 80% of lines (requires cargo-llvm-cov)
 [group('test')]
 coverage-check:
-    cargo llvm-cov --fail-under-lines 80
+    cargo llvm-cov --workspace --fail-under-lines 80
 
 # Run performance benchmarks with criterion
 [group('profile')]
@@ -105,7 +105,7 @@ bench *args:
 # Check that the benchmarks compile, without running them
 [group('profile')]
 bench-check:
-    cargo bench --no-run
+    cargo bench --workspace --no-run
 
 # Record performance profile with samply
 [group('profile')]

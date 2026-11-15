@@ -64,8 +64,8 @@ jobs:
             git push origin HEAD:main
 
             # Re-tag the commit with the updated files
-            git tag -f $GITHUB_REF_NAME
-            git push origin $GITHUB_REF_NAME --force
+            git tag -f "$GITHUB_REF_NAME"
+            git push origin "$GITHUB_REF_NAME" --force
           else
             echo "Versions already match. No commit needed."
           fi
@@ -100,7 +100,7 @@ jobs:
         id: vars
         run: |
           VERSION=${{ github.ref_name }}
-          echo "version=${VERSION#v}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Generate checksums and .SRCINFO
         run: |

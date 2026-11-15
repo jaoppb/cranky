@@ -15,7 +15,7 @@ The `Justfile` is the entry point (`just --list`). Key recipes:
 | Build / run | `just build`, `just release`, `just run` |
 | Tests | `just test` (= `cargo test`) |
 | Single test | `cargo test <name>` — e.g. `cargo test test_find_module_clock_rhai_format` |
-| Full gate | `just check` (fmt-check, lint, arch-check, loc-check, test) |
+| Full gate | `just check` (fmt-check, lint, arch-check, loc-check, test, deps-check, workflows-check) |
 | Lints | `just lint` (Clippy, `--all-targets --all-features -- -D warnings`), `just lint-fix` |
 | Architecture gate | `just arch-check` (= `cargo test --test architecture`) |
 | LOC limit | `just loc-check` (= `scripts/lint-loc.sh`) |

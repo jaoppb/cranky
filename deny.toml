@@ -38,6 +38,8 @@ allow = [
 [bans]
 multiple-versions = "deny"
 wildcards = "deny"
+# Path dependencies between the members of a workspace carry no version.
+allow-wildcard-paths = true
 
 [sources]
 unknown-registry = "deny"
