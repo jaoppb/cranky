@@ -1,0 +1,44 @@
+# Dependency policy, checked by `just deps-check` (cargo-deny 0.20.2).
+
+[graph]
+# Cranky is a Wayland bar: only the Linux targets it is packaged for are
+# evaluated, so crates other platforms would pull in are not judged.
+targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
+all-features = true
+
+[advisories]
+unmaintained = "all"
+yanked = "deny"
+# Vulnerability and unsound advisories are never ignored. An unmaintained
+# crate may be ignored only when it is transitive and upstream has no fix, and
+# each entry names the issue that removes it.
+ignore = [
+    { id = "RUSTSEC-2026-0249", reason = "smartstring is unmaintained and rhai still depends on it: https://github.com/jaoppb/cranky/issues/36" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained and cosmic-text still depends on it through fontdb: https://github.com/jaoppb/cranky/issues/37" },
+]
+
+[licenses]
+# Permissive licences plus MPL-2.0, whose copyleft is per file and does not
+# reach a binary that uses the crates unmodified. Anything else is denied.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CC0-1.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+
+[bans]
+multiple-versions = "deny"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
