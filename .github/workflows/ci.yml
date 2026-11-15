@@ -73,9 +73,9 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: rustfmt clippy ${{ matrix.components }}
-          # The action denies compiler warnings by default; the recipes decide
-          # that, so CI and a local run fail on the same things.
-          build-warnings: ""
+          # The action sets RUSTFLAGS to `-D warnings` by default; the recipes
+          # decide that, so CI and a local run fail on the same things.
+          rustflags: ""
           cache: ${{ matrix.compiles == true }}
           cache-key: ${{ matrix.name }}
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -95,8 +95,9 @@ jobs:
           archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
           curl -sSfLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
           echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum --check
-          tar -xzf "${archive}" actionlint
-          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+          mkdir actionlint-bin
+          tar -xzf "${archive}" -C actionlint-bin actionlint
+          echo "${RUNNER_TEMP}/actionlint-bin" >> "${GITHUB_PATH}"
 
       - name: Run just ${{ matrix.recipe }}
         run: just ${{ matrix.recipe }}
