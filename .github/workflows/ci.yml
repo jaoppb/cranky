@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # release.yml calls this workflow so a release runs the same gate.
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # One job per kind of error, each running one `just` recipe, so a red pull
+  # request names what failed. The job names are the required status checks on
+  # `main`: renaming one means updating the branch protection.
+  check:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: fmt
+            recipe: fmt-check
+          - name: lint
+            recipe: lint
+            compiles: true
+          - name: arch
+            recipe: arch-check
+            compiles: true
+          - name: loc
+            recipe: loc-check
+          - name: test
+            recipe: test
+            compiles: true
+          - name: build
+            recipe: release
+            compiles: true
+          - name: deps
+            recipe: deps-check
+            tools: cargo-deny@0.20.2
+          - name: coverage
+            recipe: coverage-check
+            compiles: true
+            tools: cargo-llvm-cov@0.8.5
+            components: llvm-tools-preview
+          - name: bench
+            recipe: bench-check
+            compiles: true
+          - name: workflows
+            recipe: workflows-check
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        if: matrix.compiles
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libwayland-dev libdbus-1-dev libxkbcommon-dev
+
+      # With no `toolchain` input the action follows rust-toolchain.toml when
+      # the repository has one, and installs stable otherwise.
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt clippy ${{ matrix.components }}
+          # The action denies compiler warnings by default; the recipes decide
+          # that, so CI and a local run fail on the same things.
+          build-warnings: ""
+          cache: ${{ matrix.compiles == true }}
+          cache-key: ${{ matrix.name }}
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Install just and the recipe's tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just@1.59.0 ${{ matrix.tools }}
+
+      - name: Install actionlint
+        if: matrix.name == 'workflows'
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+        run: |
+          curl -sSfL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C "${RUNNER_TEMP}" actionlint
+          echo "${RUNNER_TEMP}" >> "${GITHUB_PATH}"
+
+      - name: Run just ${{ matrix.recipe }}
+        run: just ${{ matrix.recipe }}
