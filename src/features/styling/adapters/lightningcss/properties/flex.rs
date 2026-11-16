@@ -7,7 +7,7 @@ use lightningcss::properties::Property;
 use lightningcss::stylesheet::PrinterOptions;
 use lightningcss::traits::ToCss;
 
-pub fn apply_flex_container_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+pub fn apply_flex_container_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
         Property::Gap(gap) => {
             let row_str = gap
@@ -87,7 +87,7 @@ pub fn apply_flex_container_properties(style: &mut ComputedStyle, prop: &Propert
     }
 }
 
-pub fn apply_flex_item_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+pub fn apply_flex_item_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
         Property::FlexGrow(fg, _) => {
             if let Ok(val) = FlexGrow::new(*fg) {

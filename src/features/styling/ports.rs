@@ -37,7 +37,7 @@ pub trait ParsedStyleSheetPort: Send + Sync {
     /// should inherit from.
     fn resolve_style(
         &self,
-        query: &ElementQuery,
+        query: &ElementQuery<'_>,
         inherited: &InheritedStyle,
         reparser: &dyn PropertyReparser,
     ) -> (ComputedStyle, InheritedStyle);
@@ -45,7 +45,7 @@ pub trait ParsedStyleSheetPort: Send + Sync {
     /// importance, specificity, and position in this sheet's source order.
     /// Layer and cross-sheet ordering are the composite resolver's job —
     /// this sheet doesn't know about any other.
-    fn matching_rules(&self, query: &ElementQuery) -> Vec<RuleMatch>;
+    fn matching_rules(&self, query: &ElementQuery<'_>) -> Vec<RuleMatch>;
 }
 
 pub trait CssParserPort: Send + Sync {
@@ -93,7 +93,7 @@ pub trait StyleResolverPort: Send + Sync {
     /// `query`'s children should inherit from.
     fn resolve_style(
         &self,
-        query: &ElementQuery,
+        query: &ElementQuery<'_>,
         inherited: &InheritedStyle,
     ) -> (ComputedStyle, InheritedStyle);
 }

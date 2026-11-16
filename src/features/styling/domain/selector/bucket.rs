@@ -56,7 +56,7 @@ impl RuleIndex {
     /// the element actually has — not just one — is what guarantees a
     /// matching selector's bucket is always among the ones searched.
     #[must_use]
-    pub fn candidates(&self, query: &ElementQuery) -> Vec<usize> {
+    pub fn candidates(&self, query: &ElementQuery<'_>) -> Vec<usize> {
         let mut found = self.universal.clone();
 
         if let Some(id) = query.id()

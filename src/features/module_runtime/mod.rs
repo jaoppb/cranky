@@ -255,7 +255,7 @@ pub mod test_support {
     impl crate::features::styling::ports::StyleResolverPort for MockStyleResolver {
         fn resolve_style(
             &self,
-            _query: &crate::features::styling::domain::ElementQuery,
+            _query: &crate::features::styling::domain::ElementQuery<'_>,
             _inherited: &crate::features::styling::domain::InheritedStyle,
         ) -> (
             crate::features::styling::domain::ComputedStyle,

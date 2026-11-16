@@ -36,7 +36,7 @@ mod tests {
     impl StyleResolverPort for RecordingResolver {
         fn resolve_style(
             &self,
-            query: &ElementQuery,
+            query: &ElementQuery<'_>,
             _inherited: &InheritedStyle,
         ) -> (
             crate::features::styling::domain::ComputedStyle,

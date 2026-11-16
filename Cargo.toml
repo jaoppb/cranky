@@ -5,10 +5,21 @@ edition = "2024"
 authors = ["jao"]
 description = "A minimalist, performant, and modular bar for Hyprland"
 license = "MIT"
+repository = "https://github.com/jaoppb/cranky"
+readme = "README.md"
+keywords = ["wayland", "hyprland", "bar", "statusbar", "lua"]
+categories = ["gui"]
+
+[lints.rust]
+unused = { level = "deny", priority = -1 }
+rust_2018_idioms = { level = "deny", priority = -1 }
+future_incompatible = { level = "deny", priority = -1 }
 
 [lints.clippy]
+all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
+cargo = { level = "deny", priority = -1 }
 unwrap_used = "deny"
 expect_used = "deny"
 indexing_slicing = "deny"
@@ -22,6 +33,12 @@ panic_in_result_fn = "deny"
 panic = "deny"
 exit = "deny"
 as_conversions = "deny"
+unwrap_in_result = "deny"
+get_unwrap = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+self_named_module_files = "deny"
 
 [dependencies]
 # Async Runtime

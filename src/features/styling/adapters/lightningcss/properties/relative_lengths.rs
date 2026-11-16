@@ -16,7 +16,7 @@ use lightningcss::values::length::LengthPercentageOrAuto;
 /// against the *parent's* size, not the element's own, so `DeclaredStyle`
 /// treats it differently.
 #[must_use]
-pub fn detect_relative_font_size(props: &[Property]) -> Option<DeclaredLength> {
+pub fn detect_relative_font_size(props: &[Property<'_>]) -> Option<DeclaredLength> {
     for prop in props {
         if let Property::FontSize(LightningFontSize::Length(l)) = prop {
             let s = l
@@ -43,7 +43,7 @@ pub fn detect_relative_font_size(props: &[Property]) -> Option<DeclaredLength> {
 /// (possibly wrong, until this pass corrects it) pixel guess to
 /// `ComputedStyle`, so non-relative values need no changes here at all.
 #[must_use]
-pub fn detect_relative_lengths(props: &[Property]) -> DeclaredLengths {
+pub fn detect_relative_lengths(props: &[Property<'_>]) -> DeclaredLengths {
     let mut lengths = DeclaredLengths::default();
     for prop in props {
         apply_sizing(&mut lengths, prop);
@@ -72,7 +72,7 @@ pub(super) fn relative(value: &impl ToCss) -> Option<DeclaredLength> {
     }
 }
 
-fn apply_sizing(lengths: &mut DeclaredLengths, prop: &Property) {
+fn apply_sizing(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
     match prop {
         Property::Width(v) => set_size(lengths, v, DeclaredLengths::set_width),
         Property::Height(v) => set_size(lengths, v, DeclaredLengths::set_height),
@@ -110,7 +110,7 @@ fn set_max_size(
     }
 }
 
-fn apply_border(lengths: &mut DeclaredLengths, prop: &Property) {
+fn apply_border(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
     match prop {
         Property::BorderRadius(radius, _) => {
             relative(&radius.top_left.0).inspect(|&v| lengths.set_border_radius(v))
@@ -125,7 +125,7 @@ fn apply_border(lengths: &mut DeclaredLengths, prop: &Property) {
     };
 }
 
-fn apply_flex(lengths: &mut DeclaredLengths, prop: &Property) {
+fn apply_flex(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
     match prop {
         Property::FlexBasis(v, _) => set_flex_basis(lengths, v),
         Property::Flex(flex, _) => set_flex_basis(lengths, &flex.basis),
@@ -149,7 +149,7 @@ fn set_flex_basis(lengths: &mut DeclaredLengths, value: &LengthPercentageOrAuto)
 /// `column-gap`/`row-gap` longhands: like the ordinary applier in
 /// `grid::container`, matched by serialized property name rather than a
 /// typed variant.
-fn apply_gap_longhand(lengths: &mut DeclaredLengths, prop: &Property) {
+fn apply_gap_longhand(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
     let Ok(full) = prop.to_css_string(false, PrinterOptions::default()) else {
         return;
     };

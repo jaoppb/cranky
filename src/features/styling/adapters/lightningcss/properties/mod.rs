@@ -28,7 +28,7 @@ use lightningcss::properties::Property;
 /// its `!important` ones — callers keep the two separate so importance can
 /// be tracked per matched rule in the cascade).
 #[must_use]
-pub fn parse_property_list(props: &[Property]) -> ComputedStyle {
+pub fn parse_property_list(props: &[Property<'_>]) -> ComputedStyle {
     let mut style = ComputedStyle::default();
 
     for prop in props {

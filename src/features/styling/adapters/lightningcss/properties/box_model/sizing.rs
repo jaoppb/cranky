@@ -4,7 +4,7 @@ use lightningcss::properties::Property;
 use lightningcss::stylesheet::PrinterOptions;
 use lightningcss::traits::ToCss;
 
-pub fn apply_sizing_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+pub fn apply_sizing_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
         Property::Width(size) => {
             let s = size

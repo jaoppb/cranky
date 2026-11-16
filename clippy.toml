@@ -2,3 +2,29 @@ allow-unwrap-in-tests = true
 allow-expect-in-tests = true
 allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
+allow-print-in-tests = true
+allow-dbg-in-tests = true
+# Older versions that only a dependency can drop, for `clippy::multiple_crate_versions`.
+# The list names the same crates as the `skip` entries of the `[bans]` section in
+# `deny.toml`, which records the dependency that still requires each one; keep both
+# in step.
+allowed-duplicate-crates = [
+    "font-types",
+    "fontdb",
+    "getrandom",
+    "harfrust",
+    "miniz_oxide",
+    "phf",
+    "phf_generator",
+    "phf_shared",
+    "read-fonts",
+    "roxmltree",
+    "skrifa",
+    "syn",
+    "thiserror",
+    "thiserror-impl",
+    # Pulled only on targets `deny.toml` does not evaluate (UEFI and Windows), so
+    # they have no `skip` entry there; clippy reads the lockfile for every target.
+    "r-efi",
+    "windows-sys",
+]

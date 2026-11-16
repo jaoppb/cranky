@@ -11,7 +11,7 @@ use lightningcss::stylesheet::PrinterOptions;
 use lightningcss::traits::ToCss;
 use lightningcss::values::color::CssColor as LightningCssColor;
 
-pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property) -> bool {
+pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
         Property::BackgroundColor(color) => {
             if let Some(c) = convert_color(color) {
@@ -126,7 +126,7 @@ pub fn apply_font_size(style: &mut ComputedStyle, size: &LightningFontSize) {
 /// falls back to `Property::Unparsed` (lightningcss's catch-all for exactly
 /// this case), which is where these keywords actually live.
 #[must_use]
-pub fn detect_inheritable_keywords(props: &[Property]) -> InheritableKeywords {
+pub fn detect_inheritable_keywords(props: &[Property<'_>]) -> InheritableKeywords {
     let mut found = InheritableKeywords::default();
     for prop in props {
         let Property::Unparsed(unparsed) = prop else {
@@ -147,7 +147,7 @@ pub fn detect_inheritable_keywords(props: &[Property]) -> InheritableKeywords {
     found
 }
 
-fn css_wide_keyword(prop: &Property) -> Option<CssWideKeyword> {
+fn css_wide_keyword(prop: &Property<'_>) -> Option<CssWideKeyword> {
     let full = prop.to_css_string(false, PrinterOptions::default()).ok()?;
     let value = full
         .split_once(':')

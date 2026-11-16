@@ -9,7 +9,7 @@ use lightningcss::properties::Property;
 /// (they never carried `Percent` at all before `calc()` existed), so a
 /// `calc()` value here still falls through to the ordinary pipeline's
 /// pixel guess, same as before this stage.
-pub(super) fn apply_spacing(lengths: &mut DeclaredLengths, prop: &Property) {
+pub(super) fn apply_spacing(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
     match prop {
         Property::Padding(p) => {
             relative(&p.top).inspect(|&v| lengths.set_padding_top(v));

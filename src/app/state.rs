@@ -1427,14 +1427,8 @@ mod tests {
             if current.contains_key(&MonitorId::new("DP-1"))
                 && current.contains_key(&MonitorId::new("DP-2"))
             {
-                assert_eq!(
-                    current.get(&MonitorId::new("DP-1")).unwrap().rect().x(),
-                    100
-                );
-                assert_eq!(
-                    current.get(&MonitorId::new("DP-2")).unwrap().rect().x(),
-                    150
-                );
+                assert_eq!(current[&MonitorId::new("DP-1")].rect().x(), 100);
+                assert_eq!(current[&MonitorId::new("DP-2")].rect().x(), 150);
                 break;
             }
             attempts += 1;
@@ -1553,9 +1547,9 @@ mod tests {
         )
         .await;
 
-        let layouts = app.read_model.computed_layouts.get(&monitor).unwrap();
-        assert_eq!(layouts.get(&site_a).unwrap().rect().x(), 10);
-        assert_eq!(layouts.get(&site_b).unwrap().rect().x(), 90);
+        let layouts = &app.read_model.computed_layouts[&monitor];
+        assert_eq!(layouts[&site_a].rect().x(), 10);
+        assert_eq!(layouts[&site_b].rect().x(), 90);
         assert_eq!(layouts.len(), 2);
     }
 

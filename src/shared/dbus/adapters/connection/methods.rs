@@ -29,7 +29,7 @@ impl ZbusConnectionAdapter<Connected> {
             .await
             .map_err(|e| DbusConnectionError::MethodCallFailed(e.to_string()))?;
         let msg_body = msg.body();
-        let body: zbus::Variant = msg_body
+        let body: zbus::Variant<'_> = msg_body
             .deserialize()
             .map_err(|e| DbusConnectionError::MethodCallFailed(e.to_string()))?;
         Ok(parse_value(&body))
@@ -55,7 +55,7 @@ impl ZbusConnectionAdapter<Connected> {
             .map_err(|e| DbusConnectionError::MethodCallFailed(e.to_string()))?;
 
         let msg_body = msg.body();
-        let dict: HashMap<String, zbus::Variant> = msg_body.deserialize().map_err(|e| {
+        let dict: HashMap<String, zbus::Variant<'_>> = msg_body.deserialize().map_err(|e| {
             DbusConnectionError::MethodCallFailed(format!("Failed to deserialize properties: {e}"))
         })?;
 

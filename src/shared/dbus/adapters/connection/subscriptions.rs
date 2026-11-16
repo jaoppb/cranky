@@ -42,9 +42,11 @@ impl ZbusConnectionAdapter<Connected> {
         tokio::spawn(async move {
             while let Some(msg_result) = stream.next().await {
                 if let Ok(msg) = msg_result
-                    && let Ok((iface, changed, _invalidated)) =
-                        msg.body()
-                            .deserialize::<(String, HashMap<String, zbus::Variant>, Vec<String>)>()
+                    && let Ok((iface, changed, _invalidated)) = msg.body().deserialize::<(
+                        String,
+                        HashMap<String, zbus::Variant<'_>>,
+                        Vec<String>,
+                    )>()
                 {
                     let mut map = HashMap::new();
                     for (k, v) in changed {

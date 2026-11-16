@@ -117,7 +117,7 @@ impl Drop for TestHome {
 ///
 /// Panics if pixel coordinates are out of bounds.
 #[must_use]
-pub fn get_pixel_color(pixmap: &mut tiny_skia::PixmapMut, x: u32, y: u32) -> (u8, u8, u8, u8) {
+pub fn get_pixel_color(pixmap: &mut tiny_skia::PixmapMut<'_>, x: u32, y: u32) -> (u8, u8, u8, u8) {
     let width = pixmap.width();
     let height = pixmap.height();
     assert!(

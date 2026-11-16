@@ -24,7 +24,7 @@ impl CompositeStyleResolver {
 impl StyleResolverPort for CompositeStyleResolver {
     fn resolve_style(
         &self,
-        query: &ElementQuery,
+        query: &ElementQuery<'_>,
         inherited: &InheritedStyle,
     ) -> (ComputedStyle, InheritedStyle) {
         // "base" is the one shared origin sheet, always loaded first by the
@@ -213,7 +213,7 @@ mod tests {
     }
 
     fn load(home: &TestHome, name: &str) -> Result<String, StylingError> {
-        FsStyleLoader::new(home.env()).load_stylesheet(&StyleSheetName::new(name).unwrap())
+        FsStyleLoader::new(home.env()).load_stylesheet(&StyleSheetName::new(name)?)
     }
 
     const USER_DIR: &str = ".config/cranky/styles";
