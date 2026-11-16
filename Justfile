@@ -61,10 +61,20 @@ arch-check:
 loc-check:
     ./scripts/lint-loc.sh
 
-# Run all unit tests
+# Run every test: unit, architecture and integration (needs dbus-daemon, sway and grim)
 [group('test')]
 test:
     cargo test
+
+# Run the unit tests and the architecture gate, which need no running service
+[group('test')]
+test-unit:
+    cargo test --lib --bins --test architecture
+
+# Run the D-Bus and Wayland integration tests alone, optionally only the cases matching a name
+[group('test')]
+test-integration *args:
+    cargo test --test integration -- {{args}}
 
 # Run unit tests and generate coverage report (requires cargo-llvm-cov and genhtml)
 [group('test')]

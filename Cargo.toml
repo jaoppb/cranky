@@ -76,6 +76,11 @@ arch-lint = "0.5.0"
 mockall = "0.14"
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
 
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+harness = false
+
 [[bench]]
 name = "benchmarks"
 harness = false
