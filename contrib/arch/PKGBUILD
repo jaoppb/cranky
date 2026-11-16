@@ -23,12 +23,16 @@ build() {
 	export CARGO_HOME="${srcdir}/cargo-home"
 	export RUSTUP_TOOLCHAIN=stable
 	export CARGO_TARGET_DIR=target
+	# A package build may use a newer Rust than rust-toolchain.toml pins; the
+	# lints Cargo.toml denies must not fail it.
+	export RUSTFLAGS="${RUSTFLAGS:-} --cap-lints warn"
 	cargo build --frozen --release --all-features
 }
 
 check() {
 	cd "${srcdir}/${pkgname}-${pkgver}"
 	export CARGO_HOME="${srcdir}/cargo-home"
+	export RUSTFLAGS="${RUSTFLAGS:-} --cap-lints warn"
 	cargo test --frozen --all-features
 }
 

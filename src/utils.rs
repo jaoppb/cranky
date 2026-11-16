@@ -232,7 +232,7 @@ mod tests {
         let (w, h, data) = rasterized.unwrap();
         assert_eq!(w, 16);
         assert_eq!(h, 16);
-        assert_ne!(data, [0_u8; 0]);
+        assert_eq!(data.len(), 16 * 16 * 4);
     }
 
     #[test]
@@ -255,7 +255,7 @@ mod tests {
         let (w, h, data) = loaded.unwrap();
         assert_eq!(w, 32);
         assert_eq!(h, 32);
-        assert_ne!(data, [0_u8; 0]);
+        assert_eq!(data.len(), 32 * 32 * 4);
     }
 
     #[test]
