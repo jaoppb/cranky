@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Cranky is a modular Wayland bar for Hyprland. Rust 2024 edition, single binary (`src/main.rs`) + library (`src/lib.rs`).
+Cranky is a modular Wayland bar for Hyprland. Rust 2024 edition, single binary (`src/main.rs`) + library (`src/lib.rs`). The repository is a Cargo workspace: the `cranky` package at the root plus `crates/cranky-unsafe`, so cargo commands that must cover everything take `--workspace` (the `just` recipes already do).
 
 `AGENTS.md` holds the project's coding conventions (encapsulation, `thiserror`, surgical changes, CSS class naming). Read it — this file covers commands and architecture only.
 
@@ -13,10 +13,10 @@ The `Justfile` is the entry point (`just --list`). Key recipes:
 | Task | Command |
 | --- | --- |
 | Build / run | `just build`, `just release`, `just run` |
-| Tests | `just test` (= `cargo test`) |
+| Tests | `just test` (= `cargo test --workspace`) |
 | Single test | `cargo test <name>` — e.g. `cargo test test_find_module_clock_rhai_format` |
 | Full gate | `just check` (fmt-check, lint, arch-check, loc-check, test, deps-check, workflows-check) |
-| Lints | `just lint` (Clippy, `--all-targets --all-features -- -D warnings`), `just lint-fix` |
+| Lints | `just lint` (Clippy, `--workspace --all-targets --all-features -- -D warnings`), `just lint-fix` |
 | Architecture gate | `just arch-check` (= `cargo test --test architecture`) |
 | LOC limit | `just loc-check` (= `scripts/lint-loc.sh`) |
 | Format | `just fmt`, `just fmt-check` |
@@ -31,8 +31,13 @@ Commit messages follow Conventional Commits with a scope: `feat(popup): ...`, `r
 
 ## Hard constraints (these fail the build, not just review)
 
-- **Deny-level clippy lints** (`Cargo.toml [lints.clippy]`): `pedantic`, `nursery`, plus `unwrap_used`, `expect_used`, `indexing_slicing`, `arithmetic_side_effects`, `panic`, `as_conversions`, `string_slice`, `todo`, `unimplemented`, `unreachable`, `exit`. Use `checked_*`/`saturating_*`, `get()`, `TryFrom`, and `Result` instead. `clippy.toml` relaxes these inside `#[cfg(test)]` only.
-- **`#![deny(unsafe_code)]`** in both crate roots.
+- **Pinned toolchain** (`rust-toolchain.toml`): Rust 1.100.0 with `rustfmt` and `clippy`. The gate is only meaningful on that version.
+- **Lint groups at deny** (`Cargo.toml [lints]`): rustc `unused`, `rust_2018_idioms`, `future_incompatible`; clippy `all`, `pedantic`, `nursery`, `cargo`.
+- **Restriction lints at forbid**, so no attribute can lower them: `unwrap_used`, `expect_used`, `unwrap_in_result`, `get_unwrap`, `indexing_slicing`, `string_slice`, `arithmetic_side_effects`, `as_conversions`, `panic`, `panic_in_result_fn`, `todo`, `unimplemented`, `unreachable`, `exit`, `unchecked_time_subtraction`, `dbg_macro`, `print_stdout`, `print_stderr`, `self_named_module_files`. Use `checked_*`/`saturating_*`, `get()`, `TryFrom`, and `Result` instead. `clippy.toml` relaxes `unwrap`, `expect`, `panic`, indexing, `print` and `dbg` inside tests only.
+- **Zero lint exceptions**: no `#[allow]` or `#[expect]` anywhere (`allow_attributes` is forbidden, and `no_source_file_suppresses_a_lint` in `tests/architecture.rs` scans `src/`, `tests/`, `benches/` and `crates/`). Code that cannot meet a rule is redesigned, or the rule is changed in `Cargo.toml` for everyone.
+- **No macro that emits an `allow`** for a forbidden lint, because `forbid` turns it into a hard error (`E0453`). That rules out `#[tokio::test]` and `#[tokio::main]` (tests use `crate::test_utils::block_on`), `mockall` (ports get hand-written fakes) and `#[tracing::instrument]` (use an explicit span).
+- **`unsafe_code` is forbidden** in the `cranky` crate. The only unsafe code lives in the member crate `crates/cranky-unsafe` (the shm memory mapping and the `Send` taffy tree), whose lint table is the main one minus that rule; `member_crate_lints_differ_only_where_unsafe_requires` keeps the two in step.
+- **`cargo` group**: a crate that appears twice in `Cargo.lock` must be listed in `allowed-duplicate-crates` (`clippy.toml`) and in the `skip` entries of `deny.toml`, which records why.
 - **200 production LOC per file** under `src/features/` and `src/shared/` (`#[cfg(test)]` blocks excluded). Enforced by `verify_file_loc_limits` in `tests/architecture.rs` and `scripts/lint-loc.sh`. This is why nearly every unit is a directory of small submodules — when a file grows, split it, don't allowlist it.
 - **Layer dependency rules** (`arch-lint.toml`, checked by `arch_lint::check!()` in `tests/architecture.rs`): `domain` and `ports` must not import `adapters` or `app`; `features` and `shared` must not import `app`.
 

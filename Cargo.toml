@@ -33,31 +33,37 @@ publish.workspace = true
 unused = { level = "deny", priority = -1 }
 rust_2018_idioms = { level = "deny", priority = -1 }
 future_incompatible = { level = "deny", priority = -1 }
+unsafe_code = "forbid"
 
+# Groups are denied; every single lint below is forbidden, so no attribute in
+# the code can lower it. `crates/cranky-unsafe/Cargo.toml` repeats this table
+# without `unsafe_code`, and `tests/architecture.rs` checks the two agree.
 [lints.clippy]
 all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
 cargo = { level = "deny", priority = -1 }
-unwrap_used = "deny"
-expect_used = "deny"
-indexing_slicing = "deny"
-arithmetic_side_effects = "deny"
-unreachable = "deny"
-unimplemented = "deny"
-unchecked_time_subtraction = "deny"
-todo = "deny"
-string_slice = "deny"
-panic_in_result_fn = "deny"
-panic = "deny"
-exit = "deny"
-as_conversions = "deny"
-unwrap_in_result = "deny"
-get_unwrap = "deny"
-dbg_macro = "deny"
-print_stdout = "deny"
-print_stderr = "deny"
-self_named_module_files = "deny"
+allow_attributes = "forbid"
+allow_attributes_without_reason = "forbid"
+unwrap_used = "forbid"
+expect_used = "forbid"
+indexing_slicing = "forbid"
+arithmetic_side_effects = "forbid"
+unreachable = "forbid"
+unimplemented = "forbid"
+unchecked_time_subtraction = "forbid"
+todo = "forbid"
+string_slice = "forbid"
+panic_in_result_fn = "forbid"
+panic = "forbid"
+exit = "forbid"
+as_conversions = "forbid"
+unwrap_in_result = "forbid"
+get_unwrap = "forbid"
+dbg_macro = "forbid"
+print_stdout = "forbid"
+print_stderr = "forbid"
+self_named_module_files = "forbid"
 
 [dependencies]
 # Async Runtime
