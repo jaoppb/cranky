@@ -73,7 +73,30 @@ impl Screenshot {
         (maximum == 255 && pixels.len() == expected).then_some(Self { width, pixels })
     }
 
-    pub fn pixel(&self, x: usize, y: usize) -> Option<Rgb> {
+    /// Whether the bar, `bar_height` pixels tall, is `colour` from edge to
+    /// edge and the output below it is not.
+    pub fn shows_bar(&self, colour: Rgb, bar_height: usize) -> Outcome<bool> {
+        let last_row = bar_height.saturating_sub(1);
+        let last_column = self.width.saturating_sub(1);
+        let corners = [
+            (0, 0),
+            (last_column, 0),
+            (0, last_row),
+            (last_column, last_row),
+        ];
+        for (x, y) in corners {
+            if self.pixel(x, y).context("pixel inside the bar")? != colour {
+                return Ok(false);
+            }
+        }
+        let below = self.pixel(0, bar_height).context("pixel below the bar")?;
+        ensure(below != colour, || {
+            format!("{colour:?} also covers the output below the bar")
+        })?;
+        Ok(true)
+    }
+
+    fn pixel(&self, x: usize, y: usize) -> Option<Rgb> {
         let start = y.checked_mul(self.width)?.checked_add(x)?.checked_mul(3)?;
         let end = start.checked_add(3)?;
         self.pixels.get(start..end)?.try_into().ok()

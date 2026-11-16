@@ -12,6 +12,9 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 
+/// Start of the name of every sandbox runtime directory.
+const DIR_PREFIX: &str = "cranky-integration-";
+
 /// Printed by sway's own `exec` once its sockets exist.
 const READY: &str = "cranky-ready";
 
@@ -79,6 +82,21 @@ impl Sandbox {
     }
 }
 
+/// Child side: refuses to run a case anywhere but inside a sandbox, whatever
+/// the environment says, so a stray [`CHILD_CASE`] cannot point the adapters
+/// at the developer's own bus or compositor.
+pub fn ensure_inside() -> Outcome {
+    let dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_default();
+    let bus = std::env::var("DBUS_SESSION_BUS_ADDRESS").unwrap_or_default();
+    let private = Path::new(&dir)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with(DIR_PREFIX));
+    ensure(private && bus.contains(&dir), || {
+        format!("{CHILD_CASE} is set outside a sandbox (XDG_RUNTIME_DIR={dir:?}); refusing to run")
+    })
+}
+
 /// A missing program fails the run by name; nothing is ever skipped.
 fn require(program: &str) -> Outcome {
     let found = std::env::var_os("PATH")
@@ -93,7 +111,7 @@ struct RuntimeDir(PathBuf);
 
 impl RuntimeDir {
     fn create() -> Outcome<Self> {
-        let path = std::env::temp_dir().join(format!("cranky-integration-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("{DIR_PREFIX}{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&path);
         std::fs::DirBuilder::new()
             .mode(0o700)
@@ -154,8 +172,8 @@ fn bus_config(dir: &Path) -> String {
   <type>session</type>
   <listen>unix:dir={}</listen>
   <policy context="default">
-    <allow send_destination="*" eavesdrop="true"/>
-    <allow eavesdrop="true"/>
+    <allow send_destination="*"/>
+    <allow receive_sender="*"/>
     <allow own="*"/>
   </policy>
 </busconfig>

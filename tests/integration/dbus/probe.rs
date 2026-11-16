@@ -40,13 +40,13 @@ impl Probe {
 
     #[allow(clippy::unused_self)]
     #[zbus(property)]
-    fn count(&self) -> i32 {
+    const fn count(&self) -> i32 {
         7
     }
 
     #[allow(clippy::unused_self)]
     #[zbus(property)]
-    fn enabled(&self) -> bool {
+    const fn enabled(&self) -> bool {
         true
     }
 

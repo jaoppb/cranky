@@ -17,7 +17,7 @@ use tokio_stream::StreamExt;
 
 pub fn cases() -> Vec<Case> {
     vec![
-        case!(dbus::connects_to_both_buses),
+        case!(dbus::connects_on_both_bus_addresses),
         case!(dbus::lists_an_owned_name),
         case!(dbus::calls_a_method_returning_a_variant),
         case!(dbus::rejects_a_reply_that_is_not_a_variant),
@@ -47,7 +47,9 @@ fn probe_interface() -> Interface {
     Interface::new(probe::INTERFACE)
 }
 
-async fn connects_to_both_buses() -> Outcome {
+/// Both addresses lead to the same private daemon, so this proves that both
+/// connections are made, not that they are told apart.
+async fn connects_on_both_bus_addresses() -> Outcome {
     let adapter = adapter().await?;
     for bus in [BusType::Session, BusType::System] {
         let names = adapter
@@ -105,6 +107,24 @@ async fn calls_a_method_returning_a_variant() -> Outcome {
 async fn rejects_a_reply_that_is_not_a_variant() -> Outcome {
     let adapter = adapter().await?;
     let _probe = ProbeService::start().await?;
+    // The method exists and answers: the failure below is about the reply.
+    let direct: String = zbus::Connection::session()
+        .await
+        .context("direct connection")?
+        .call_method(
+            Some(probe::NAME),
+            probe::PATH,
+            Some(probe::INTERFACE),
+            "Bare",
+            &(),
+        )
+        .await
+        .context("call Bare directly")?
+        .body()
+        .deserialize()
+        .context("read the Bare reply")?;
+    ensure_eq("direct Bare reply", &direct.as_str(), &"bare reply")?;
+
     let reply = call(&adapter, "Bare").await;
     ensure(
         matches!(reply, Err(DbusConnectionError::MethodCallFailed(_))),

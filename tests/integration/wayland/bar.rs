@@ -2,7 +2,7 @@
 //! `CrankyApp::run` drives it: flush, wait for events, dispatch.
 
 use super::sway::{Rgb, Screenshot};
-use crate::support::{Context, Outcome, ensure, within};
+use crate::support::{Context, Outcome, within};
 use cranky::features::layout_engine::domain::DisplayCommand;
 use cranky::shared::config::domain::Config;
 use cranky::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
@@ -59,6 +59,10 @@ impl Bar {
     /// Height the bar asks for, from the default configuration.
     pub fn height() -> u32 {
         Config::default().root().height().value()
+    }
+
+    fn height_pixels() -> Outcome<usize> {
+        usize::try_from(Self::height()).context("bar height")
     }
 
     /// How many times the adapter asked for a render (once per configure).
@@ -137,26 +141,35 @@ impl Bar {
         Ok(())
     }
 
-    /// Runs the loop while taking screenshots, until the bar shows `colour`
-    /// and the area below it does not. A screenshot is a round trip through
-    /// sway, not a sleep; one that a turn of the loop overtakes is retaken.
+    /// Runs the loop until a screenshot shows `colour` across the bar and
+    /// not below it. A screenshot is a round trip through sway, not a sleep,
+    /// and the loop keeps turning while each one is taken.
     pub async fn until_on_screen(&mut self, colour: Rgb) -> Outcome {
-        let below = usize::try_from(Self::height().saturating_mul(4)).context("row")?;
         within("the bar colour to be on screen", async {
             loop {
-                let shot = tokio::select! {
-                    turned = self.turn() => { turned?; continue; }
-                    shot = Screenshot::take() => shot?,
-                };
-                let bar = shot.pixel(10, 5).context("pixel inside the bar")?;
-                let rest = shot.pixel(10, below).context("pixel below the bar")?;
-                if bar == colour {
-                    return ensure(rest != colour, || {
-                        format!("{colour:?} also covers the area below the bar")
-                    });
+                let shot = std::pin::pin!(Screenshot::take());
+                if self
+                    .while_taking(shot)
+                    .await?
+                    .shows_bar(colour, Self::height_pixels()?)?
+                {
+                    return Ok(());
                 }
             }
         })
         .await?
+    }
+
+    /// Turns the loop until the screenshot `shot` is taken.
+    async fn while_taking(
+        &mut self,
+        mut shot: std::pin::Pin<&mut (impl Future<Output = Outcome<Screenshot>> + Send)>,
+    ) -> Outcome<Screenshot> {
+        loop {
+            tokio::select! {
+                taken = &mut shot => return taken,
+                turned = self.turn() => turned?,
+            }
+        }
     }
 }

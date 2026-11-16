@@ -4,7 +4,7 @@
 mod item;
 
 use crate::cases::{Case, case};
-use crate::support::{Context, Failure, Outcome, WAIT, ensure, ensure_eq, within};
+use crate::support::{Context, Outcome, ensure, ensure_eq, within};
 use cranky::features::systray::adapters::SniAdapter;
 use cranky::features::systray::domain::{SystrayActionName, SystrayId, SystrayState};
 use cranky::features::systray::ports::SniPort;
@@ -64,15 +64,7 @@ impl Tray {
         what: &str,
         accept: impl Fn(&Value) -> bool + Send + Sync,
     ) -> Outcome<Value> {
-        let id = self.id.clone();
-        let state = within(
-            what,
-            self.state
-                .wait_for(|state| item_json(state, &id).is_some_and(|item| accept(&item))),
-        )
-        .await?
-        .context("systray state channel")?;
-        item_json(&state, &id).context("tracked item")
+        within(what, tracked(&mut self.state, &self.id, accept)).await?
     }
 
     /// Emits a signal again and again until the tracked item satisfies
@@ -87,15 +79,12 @@ impl Tray {
     where
         F: Future<Output = Outcome> + Send,
     {
-        let id = self.id.clone();
-        let (item, state) = (&self.item, &mut self.state);
+        let (item, state, id) = (&self.item, &mut self.state, &self.id);
         within(what, async {
             loop {
                 emit(item).await?;
-                let seen =
-                    state.wait_for(|state| item_json(state, &id).is_some_and(|item| accept(&item)));
-                if tokio::time::timeout(RE_EMIT, seen).await.is_ok() {
-                    return Ok(());
+                if let Ok(seen) = tokio::time::timeout(RE_EMIT, tracked(state, id, &accept)).await {
+                    return seen.map(|_| ());
                 }
             }
         })
@@ -117,15 +106,40 @@ impl Tray {
     }
 }
 
-fn item_json(state: &SystrayState, id: &SystrayId) -> Option<Value> {
-    state
-        .items()
-        .get(id)
-        .and_then(|item| serde_json::to_value(item).ok())
+/// The item `id` as the scripts see it, once the tray tracks it and
+/// `accept` holds for it.
+async fn tracked(
+    state: &mut watch::Receiver<SystrayState>,
+    id: &SystrayId,
+    accept: impl Fn(&Value) -> bool + Send + Sync,
+) -> Outcome<Value> {
+    let json = |state: &SystrayState| {
+        state
+            .items()
+            .get(id)
+            .and_then(|item| serde_json::to_value(item).ok())
+    };
+    let state = state
+        .wait_for(|state| json(state).is_some_and(|item| accept(&item)))
+        .await
+        .context("systray state channel")?;
+    json(&state).context("tracked item")
 }
 
-/// Starts the adapter once the watcher name is free: the adapter of the
-/// previous case may still be leaving the bus.
+/// Waits until the tray no longer tracks the item `id`.
+async fn until_gone(state: &mut watch::Receiver<SystrayState>, id: &SystrayId) -> Outcome {
+    within(
+        "the item to be removed",
+        state.wait_for(|state| !state.items().contains_key(id)),
+    )
+    .await?
+    .map(|_| ())
+    .context("systray state channel")
+}
+
+/// Starts the adapter once the watcher name is free. The previous case's
+/// process has exited, but the daemon learns that on its own schedule, and
+/// an adapter that finds the name taken silently runs without a watcher.
 async fn start_adapter(hub: &Arc<SignalHub>) -> Outcome<SniAdapter> {
     let connection = zbus::Connection::session()
         .await
@@ -174,42 +188,43 @@ async fn fetches_a_registered_item() -> Outcome {
     let mut tray = Tray::with_item().await?;
     let item = tray.until("the fetched item", |_| true).await?;
     let expected = [
-        ("title", "Fake Title"),
-        ("status", "Active"),
-        ("category", "Communications"),
-        ("item_id", "fake-item"),
-        ("path", item::PATH),
+        ("/title", "Fake Title"),
+        ("/status", "Active"),
+        ("/category", "Communications"),
+        ("/item_id", "fake-item"),
+        ("/path", item::PATH),
+        // The tooltip arrives as markup and is cleaned on the way in.
+        ("/tooltip/title", "Tip"),
+        ("/tooltip/description", "a & b"),
     ];
-    for (field, value) in expected {
-        ensure_eq(field, &item[field], &Value::from(value))?;
+    for (pointer, value) in expected {
+        ensure_eq(pointer, &item.pointer(pointer), &Some(&Value::from(value)))?;
     }
-    ensure_eq("item_is_menu", &item["item_is_menu"], &Value::from(false))?;
-    // The tooltip arrives as markup and is cleaned on the way in.
     ensure_eq(
-        "tooltip title",
-        &item["tooltip"]["title"],
-        &Value::from("Tip"),
-    )?;
-    ensure_eq(
-        "tooltip description",
-        &item["tooltip"]["description"],
-        &Value::from("a & b"),
+        "/item_is_menu",
+        &item.pointer("/item_is_menu"),
+        &Some(&Value::from(false)),
     )
+}
+
+/// Whether the item, as serialised for the scripts, holds `expected` at the
+/// JSON `pointer`.
+fn shows(item: &Value, pointer: &str, expected: &str) -> bool {
+    item.pointer(pointer).and_then(Value::as_str) == Some(expected)
 }
 
 async fn follows_title_and_status_signals() -> Outcome {
     let mut tray = Tray::with_item().await?;
-    tray.item.set_title("Renamed");
     tray.emit_until(
         "NewTitle to reach the tray",
-        ItemService::emit_new_title,
-        |item| item["title"] == "Renamed",
+        |item| item.retitle("Renamed"),
+        |item| shows(item, "/title", "Renamed"),
     )
     .await?;
     tray.emit_until(
         "NewStatus to reach the tray",
-        |item| item.emit_new_status("NeedsAttention"),
-        |item| item["status"] == "NeedsAttention",
+        |item| item.restatus("NeedsAttention"),
+        |item| shows(item, "/status", "NeedsAttention"),
     )
     .await
 }
@@ -235,11 +250,5 @@ async fn drops_an_item_that_left_the_bus() -> Outcome {
         id,
     } = Tray::with_item().await?;
     item.disconnect().await?;
-    within(
-        "the item to be removed",
-        state.wait_for(|state| !state.items().contains_key(&id)),
-    )
-    .await?
-    .map(|_| ())
-    .map_err(|_| Failure::new(format!("systray state channel closed within {WAIT:?}")))
+    until_gone(&mut state, &id).await
 }

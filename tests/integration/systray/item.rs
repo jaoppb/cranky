@@ -19,8 +19,23 @@ pub enum Call {
     Scroll(i32, String),
 }
 
+/// A property the case can change behind the item's back.
+type Shared = Arc<Mutex<String>>;
+
+fn read(shared: &Shared) -> String {
+    shared
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+}
+
+fn write(shared: &Shared, value: &str) {
+    *shared.lock().unwrap_or_else(PoisonError::into_inner) = value.to_string();
+}
+
 struct Item {
-    title: Arc<Mutex<String>>,
+    title: Shared,
+    status: Shared,
     calls: mpsc::UnboundedSender<Call>,
 }
 
@@ -35,16 +50,12 @@ impl Item {
 impl Item {
     #[zbus(property)]
     fn title(&self) -> String {
-        self.title
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone()
+        read(&self.title)
     }
 
-    #[allow(clippy::unused_self)]
     #[zbus(property)]
     fn status(&self) -> String {
-        "Active".to_string()
+        read(&self.status)
     }
 
     #[allow(clippy::unused_self)]
@@ -61,7 +72,7 @@ impl Item {
 
     #[allow(clippy::unused_self)]
     #[zbus(property)]
-    fn item_is_menu(&self) -> bool {
+    const fn item_is_menu(&self) -> bool {
         false
     }
 
@@ -98,16 +109,19 @@ impl Item {
 /// The fake item's own connection to the private bus.
 pub struct ItemService {
     connection: zbus::Connection,
-    title: Arc<Mutex<String>>,
+    title: Shared,
+    status: Shared,
     calls: mpsc::UnboundedReceiver<Call>,
 }
 
 impl ItemService {
     pub async fn start() -> Outcome<Self> {
         let title = Arc::new(Mutex::new("Fake Title".to_string()));
+        let status = Arc::new(Mutex::new("Active".to_string()));
         let (sender, calls) = mpsc::unbounded_channel();
         let item = Item {
             title: Arc::clone(&title),
+            status: Arc::clone(&status),
             calls: sender,
         };
         let connection = zbus::connection::Builder::session()
@@ -120,6 +134,7 @@ impl ItemService {
         Ok(Self {
             connection,
             title,
+            status,
             calls,
         })
     }
@@ -153,18 +168,18 @@ impl ItemService {
             .context("item: interface")
     }
 
-    pub fn set_title(&self, title: &str) {
-        *self.title.lock().unwrap_or_else(PoisonError::into_inner) = title.to_string();
-    }
-
-    pub async fn emit_new_title(&self) -> Outcome {
+    /// Changes `Title` and announces it with `NewTitle`.
+    pub async fn retitle(&self, title: &str) -> Outcome {
+        write(&self.title, title);
         let interface = self.interface().await?;
         Item::new_title(interface.signal_emitter())
             .await
             .context("item: emit NewTitle")
     }
 
-    pub async fn emit_new_status(&self, status: &str) -> Outcome {
+    /// Changes `Status` and announces it with `NewStatus`.
+    pub async fn restatus(&self, status: &str) -> Outcome {
+        write(&self.status, status);
         let interface = self.interface().await?;
         Item::new_status(interface.signal_emitter(), status)
             .await

@@ -1,14 +1,16 @@
 //! The case list and the runner that replaces libtest.
 
-use crate::sandbox::Sandbox;
+use crate::args::Selection;
+use crate::sandbox::{self, Sandbox};
 use crate::support::{Context, Failure, Outcome, ensure, within_for};
 use crate::{dbus, systray, wayland};
 use std::future::Future;
 use std::pin::Pin;
 use std::time::{Duration, Instant};
+use tokio::signal::unix::{SignalKind, signal};
 
 /// Deadline of the whole run, on top of the one on every wait.
-const RUN: Duration = Duration::from_secs(60);
+const RUN: Duration = Duration::from_mins(1);
 
 pub type CaseFuture = Pin<Box<dyn Future<Output = Outcome>>>;
 
@@ -48,36 +50,53 @@ fn runtime() -> Outcome<tokio::runtime::Runtime> {
         .context("build the tokio runtime")
 }
 
-/// Parent side: starts the sandbox and runs, each in a process of its own,
-/// the cases whose name contains any of `filters` (all of them without
-/// filters). A process per case means nothing a case leaves behind, such as
-/// a bus name it owns, reaches the next one.
-pub fn run_selected(filters: &[String]) -> Outcome {
+/// Parent side: starts the sandbox and runs the selected cases, each in a
+/// process of its own, so the tasks and connections a case leaves behind end
+/// with it.
+pub fn run_selected(selection: &Selection) -> Outcome {
     let names: Vec<&str> = all()
         .iter()
         .map(|case| case.name)
-        .filter(|name| filters.is_empty() || filters.iter().any(|f| name.contains(f.as_str())))
+        .filter(|name| selection.accepts(name))
         .collect();
+    if selection.list() {
+        for name in &names {
+            println!("{name}: test");
+        }
+        return Ok(());
+    }
     if names.is_empty() {
-        println!("integration: no case matches {filters:?}, nothing to run");
+        println!("integration: no case matches {selection:?}, nothing to run");
         return Ok(());
     }
 
     runtime()?.block_on(async {
-        let sandbox = Sandbox::start().await?;
-        println!("\nrunning {} integration cases", names.len());
-        let failed = within_for(RUN, "the cases to finish", run_each(&sandbox, &names)).await;
-        sandbox.stop().await;
-        let failed = failed?;
-        println!();
-        ensure(failed.is_empty(), || {
-            format!(
-                "{} of {} cases failed: {}",
-                failed.len(),
-                names.len(),
-                failed.join(", ")
-            )
-        })
+        let mut interrupt = signal(SignalKind::interrupt()).context("watch SIGINT")?;
+        let mut terminate = signal(SignalKind::terminate()).context("watch SIGTERM")?;
+        // Dropping the run, on a signal as on any error, kills the servers
+        // and the running case and removes the runtime directory.
+        tokio::select! {
+            outcome = run_in_sandbox(&names) => outcome,
+            _ = interrupt.recv() => Err(Failure::new("interrupted")),
+            _ = terminate.recv() => Err(Failure::new("terminated")),
+        }
+    })
+}
+
+async fn run_in_sandbox(names: &[&str]) -> Outcome {
+    let sandbox = Sandbox::start().await?;
+    println!("\nrunning {} integration cases", names.len());
+    let failed = within_for(RUN, "the cases to finish", run_each(&sandbox, names)).await;
+    sandbox.stop().await;
+    let failed = failed?;
+    println!();
+    ensure(failed.is_empty(), || {
+        format!(
+            "{} of {} cases failed: {}",
+            failed.len(),
+            names.len(),
+            failed.join(", ")
+        )
     })
 }
 
@@ -99,6 +118,7 @@ async fn run_each<'a>(sandbox: &Sandbox, names: &[&'a str]) -> Vec<&'a str> {
 
 /// Child side: runs the case called exactly `name`, inside the sandbox.
 pub fn run_one(name: &str) -> Outcome {
+    sandbox::ensure_inside()?;
     let case = all()
         .into_iter()
         .find(|case| case.name == name)
