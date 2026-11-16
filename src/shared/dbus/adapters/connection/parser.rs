@@ -2,35 +2,35 @@ use std::collections::HashMap;
 
 use crate::shared::dbus::domain::DBusValue;
 
-pub(crate) fn parse_value(val: &zbus::zvariant::Value<'_>) -> DBusValue {
-    use zbus::zvariant::Value;
+pub(crate) fn parse_value(val: &zbus::Variant<'_>) -> DBusValue {
+    use zbus::Variant;
     match val {
-        Value::Str(s) => DBusValue::String(s.as_str().to_string()),
-        Value::I16(i) => DBusValue::Int(i64::from(*i)),
-        Value::I32(i) => DBusValue::Int(i64::from(*i)),
-        Value::I64(i) => DBusValue::Int(*i),
-        Value::U16(u) => DBusValue::Int(i64::from(*u)),
-        Value::U32(u) => DBusValue::Int(i64::from(*u)),
-        Value::U64(u) => DBusValue::Int(i64::try_from(*u).unwrap_or(i64::MAX)),
-        Value::F64(f) => DBusValue::Float(*f),
-        Value::Bool(b) => DBusValue::Bool(*b),
-        Value::Array(a) => {
+        Variant::Str(s) => DBusValue::String(s.as_str().to_string()),
+        Variant::I16(i) => DBusValue::Int(i64::from(*i)),
+        Variant::I32(i) => DBusValue::Int(i64::from(*i)),
+        Variant::I64(i) => DBusValue::Int(*i),
+        Variant::U16(u) => DBusValue::Int(i64::from(*u)),
+        Variant::U32(u) => DBusValue::Int(i64::from(*u)),
+        Variant::U64(u) => DBusValue::Int(i64::try_from(*u).unwrap_or(i64::MAX)),
+        Variant::F64(f) => DBusValue::Float(*f),
+        Variant::Bool(b) => DBusValue::Bool(*b),
+        Variant::Array(a) => {
             let mut items = Vec::new();
             for item in a.iter() {
                 items.push(parse_value(item));
             }
             DBusValue::Array(items)
         }
-        Value::Dict(d) => {
+        Variant::Dict(d) => {
             let mut map = HashMap::new();
             for (k, v) in d.iter() {
-                if let Value::Str(key_str) = k {
+                if let Variant::Str(key_str) = k {
                     map.insert(key_str.as_str().to_string(), parse_value(v));
                 }
             }
             DBusValue::Dict(map)
         }
-        Value::Value(v) => parse_value(v),
+        Variant::Variant(v) => parse_value(v),
         _ => DBusValue::Null,
     }
 }

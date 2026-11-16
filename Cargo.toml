@@ -43,7 +43,7 @@ cosmic-text = "0.19"
 memmap2 = "0.9"
 
 # System Integration
-zbus = { version = "5.14", features = ["tokio"] }
+zbus = { version = "6.3", features = ["tokio"] }
 sysinfo = "0.39"
 serde_json = "1.0"
 chrono = "0.4"

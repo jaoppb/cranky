@@ -106,9 +106,7 @@ impl ItemService {
             calls: sender,
         };
         let connection = zbus::connection::Builder::session()
-            .context("item: session builder")?
             .serve_at(PATH, item)
-            .context("item: serve")?
             .build()
             .await
             .context("item: connect")?;

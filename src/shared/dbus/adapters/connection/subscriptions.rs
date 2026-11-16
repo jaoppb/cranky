@@ -20,19 +20,18 @@ impl ZbusConnectionAdapter<Connected> {
     ) -> Result<PropertyChangedStream, DbusConnectionError> {
         let conn = self.get_conn(bus)?.clone();
 
+        let sender = zbus::names::BusName::try_from(sender.as_str())
+            .map_err(|e| DbusConnectionError::SubscriptionFailed(format!("Invalid sender: {e}")))?;
+        let path = zbus::ObjectPath::try_from(path.as_str())
+            .map_err(|e| DbusConnectionError::SubscriptionFailed(format!("Invalid path: {e}")))?;
         let rule = zbus::MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
-            .sender(sender.as_str())
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(format!("Invalid sender: {e}")))?
-            .path(path.as_str())
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(format!("Invalid path: {e}")))?
+            .sender(sender)
+            .path(path)
             .interface("org.freedesktop.DBus.Properties")
-            .map_err(|e| {
-                DbusConnectionError::SubscriptionFailed(format!("Invalid interface: {e}"))
-            })?
             .member("PropertiesChanged")
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(format!("Invalid member: {e}")))?
-            .build();
+            .build()
+            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
 
         let mut stream = zbus::MessageStream::for_match_rule(rule, &conn, None)
             .await
@@ -43,11 +42,9 @@ impl ZbusConnectionAdapter<Connected> {
         tokio::spawn(async move {
             while let Some(msg_result) = stream.next().await {
                 if let Ok(msg) = msg_result
-                    && let Ok((iface, changed, _invalidated)) = msg.body().deserialize::<(
-                        String,
-                        HashMap<String, zbus::zvariant::Value>,
-                        Vec<String>,
-                    )>()
+                    && let Ok((iface, changed, _invalidated)) =
+                        msg.body()
+                            .deserialize::<(String, HashMap<String, zbus::Variant>, Vec<String>)>()
                 {
                     let mut map = HashMap::new();
                     for (k, v) in changed {
@@ -75,14 +72,11 @@ impl ZbusConnectionAdapter<Connected> {
         let rule = zbus::MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
             .sender("org.freedesktop.DBus")
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?
             .path("/org/freedesktop/DBus")
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?
             .interface("org.freedesktop.DBus")
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?
             .member("NameOwnerChanged")
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?
-            .build();
+            .build()
+            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
 
         let mut stream = zbus::MessageStream::for_match_rule(rule, &conn, None)
             .await
@@ -129,27 +123,21 @@ impl ZbusConnectionAdapter<Connected> {
         let mut rule_builder = zbus::MatchRule::builder().msg_type(zbus::message::Type::Signal);
 
         if let Some(dest) = sub.destination() {
-            rule_builder = rule_builder
-                .sender(dest.as_str())
-                .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
+            rule_builder = rule_builder.sender(dest.as_str());
         }
         if let Some(path) = sub.path() {
-            rule_builder = rule_builder
-                .path(path.as_str())
-                .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
+            rule_builder = rule_builder.path(path.as_str());
         }
         if let Some(iface) = sub.interface() {
-            rule_builder = rule_builder
-                .interface(iface.as_str())
-                .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
+            rule_builder = rule_builder.interface(iface.as_str());
         }
         if let Some(member) = sub.member() {
-            rule_builder = rule_builder
-                .member(member.as_str())
-                .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
+            rule_builder = rule_builder.member(member.as_str());
         }
 
-        let rule = rule_builder.build();
+        let rule = rule_builder
+            .build()
+            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
         let mut stream = zbus::MessageStream::for_match_rule(rule, &conn, None)
             .await
             .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
@@ -167,7 +155,7 @@ impl ZbusConnectionAdapter<Connected> {
                         .member()
                         .map_or_else(|| Member::new(""), |m| Member::new(m.as_str()));
 
-                    if let Ok(body_val) = msg.body().deserialize::<zbus::zvariant::Value<'_>>() {
+                    if let Ok(body_val) = msg.body().deserialize::<zbus::Variant<'_>>() {
                         let parsed = parse_value(&body_val);
                         if tx.send((path, member, parsed)).is_err() {
                             break;

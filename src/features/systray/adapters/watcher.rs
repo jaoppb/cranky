@@ -91,8 +91,8 @@ impl Watcher {
         let id = format!("{dest}{path_str}");
 
         let proxy = StatusNotifierItemProxy::builder(&conn)
-            .destination(dest.clone())?
-            .path(path_str.clone())?
+            .destination(dest.clone())
+            .path(path_str.clone())
             .build()
             .await?;
 

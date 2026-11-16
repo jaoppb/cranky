@@ -36,7 +36,7 @@ pub fn clean_sni_text(input: &str) -> String {
         .to_string()
 }
 
-pub fn parse_raw_tooltip(v: zbus::zvariant::OwnedValue) -> Option<SystrayTooltip> {
+pub fn parse_raw_tooltip(v: zbus::OwnedVariant) -> Option<SystrayTooltip> {
     if let Ok((icon_name, pixmap, title, description)) = RawTooltip::try_from(v) {
         let icon_name_opt = if icon_name.is_empty() {
             None
