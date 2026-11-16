@@ -205,4 +205,57 @@ mod tests {
             .unwrap();
         assert!(base.contains("bar {"));
     }
+
+    fn write_style(home: &TestHome, dir: &str, name: &str, content: &str) {
+        let dir = home.home().as_path().join(dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(format!("{name}.css")), content).unwrap();
+    }
+
+    fn load(home: &TestHome, name: &str) -> Result<String, StylingError> {
+        FsStyleLoader::new(home.env()).load_stylesheet(&StyleSheetName::new(name).unwrap())
+    }
+
+    const USER_DIR: &str = ".config/cranky/styles";
+    const SHARE_DIR: &str = ".local/share/cranky/styles";
+
+    #[test]
+    fn user_stylesheet_wins_over_the_deployed_and_embedded_ones() {
+        let home = TestHome::new("styling");
+        write_style(&home, SHARE_DIR, "base", "/* share */");
+        assert_eq!(load(&home, "base").unwrap(), "/* share */");
+
+        write_style(&home, USER_DIR, "base", "/* user */");
+        assert_eq!(load(&home, "base").unwrap(), "/* user */");
+    }
+
+    #[test]
+    fn stylesheet_with_no_builtin_is_found_on_disk_or_reported_missing() {
+        let home = TestHome::new("styling");
+        let err = load(&home, "mine").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            StylingError::LoaderError("Stylesheet 'mine' not found".to_string()).to_string()
+        );
+
+        write_style(&home, USER_DIR, "mine", "/* mine */");
+        assert_eq!(load(&home, "mine").unwrap(), "/* mine */");
+    }
+
+    #[test]
+    fn ensure_builtin_styles_deploys_every_builtin_and_repairs_edited_copies() {
+        let home = TestHome::new("styling");
+        // A stale deployed copy from an older version must be overwritten.
+        write_style(&home, SHARE_DIR, "clock", "/* stale */");
+
+        FsStyleLoader::new(home.env())
+            .ensure_builtin_styles()
+            .unwrap();
+
+        let deployed = home.home().as_path().join(SHARE_DIR);
+        for (name, content) in FsStyleLoader::BUILTIN_STYLES {
+            let on_disk = fs::read_to_string(deployed.join(format!("{name}.css"))).unwrap();
+            assert_eq!(on_disk, *content, "{name}");
+        }
+    }
 }

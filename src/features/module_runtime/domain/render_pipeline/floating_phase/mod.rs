@@ -2,6 +2,8 @@ mod content;
 mod gate;
 mod panel;
 mod popup;
+#[cfg(test)]
+mod tests;
 mod tooltip;
 
 pub use content::FloatingCache;
