@@ -3,7 +3,6 @@
 //! Plain Rust types only, so the `zbus` bump of #30 has nothing to migrate.
 
 use crate::support::{Context, Outcome};
-use std::sync::{Arc, Mutex, PoisonError};
 use tokio::sync::mpsc;
 use zbus::object_server::{InterfaceRef, SignalEmitter};
 
@@ -19,23 +18,9 @@ pub enum Call {
     Scroll(i32, String),
 }
 
-/// A property the case can change behind the item's back.
-type Shared = Arc<Mutex<String>>;
-
-fn read(shared: &Shared) -> String {
-    shared
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
-}
-
-fn write(shared: &Shared, value: &str) {
-    *shared.lock().unwrap_or_else(PoisonError::into_inner) = value.to_string();
-}
-
 struct Item {
-    title: Shared,
-    status: Shared,
+    title: String,
+    status: String,
     calls: mpsc::UnboundedSender<Call>,
 }
 
@@ -50,12 +35,12 @@ impl Item {
 impl Item {
     #[zbus(property)]
     fn title(&self) -> String {
-        read(&self.title)
+        self.title.clone()
     }
 
     #[zbus(property)]
     fn status(&self) -> String {
-        read(&self.status)
+        self.status.clone()
     }
 
     #[allow(clippy::unused_self)]
@@ -109,19 +94,15 @@ impl Item {
 /// The fake item's own connection to the private bus.
 pub struct ItemService {
     connection: zbus::Connection,
-    title: Shared,
-    status: Shared,
     calls: mpsc::UnboundedReceiver<Call>,
 }
 
 impl ItemService {
     pub async fn start() -> Outcome<Self> {
-        let title = Arc::new(Mutex::new("Fake Title".to_string()));
-        let status = Arc::new(Mutex::new("Active".to_string()));
         let (sender, calls) = mpsc::unbounded_channel();
         let item = Item {
-            title: Arc::clone(&title),
-            status: Arc::clone(&status),
+            title: "Fake Title".to_string(),
+            status: "Active".to_string(),
             calls: sender,
         };
         let connection = zbus::connection::Builder::session()
@@ -131,17 +112,15 @@ impl ItemService {
             .build()
             .await
             .context("item: connect")?;
-        Ok(Self {
-            connection,
-            title,
-            status,
-            calls,
-        })
+        Ok(Self { connection, calls })
     }
 
     /// The id the tray gives an item that registers by object path.
     pub fn tray_id(&self) -> Outcome<String> {
-        let name = self.connection.unique_name().context("item: unique name")?;
+        let name = self
+            .connection
+            .unique_name()
+            .context("the item connection has no unique name")?;
         Ok(format!("{name}{PATH}"))
     }
 
@@ -170,8 +149,8 @@ impl ItemService {
 
     /// Changes `Title` and announces it with `NewTitle`.
     pub async fn retitle(&self, title: &str) -> Outcome {
-        write(&self.title, title);
         let interface = self.interface().await?;
+        interface.get_mut().await.title = title.to_string();
         Item::new_title(interface.signal_emitter())
             .await
             .context("item: emit NewTitle")
@@ -179,8 +158,8 @@ impl ItemService {
 
     /// Changes `Status` and announces it with `NewStatus`.
     pub async fn restatus(&self, status: &str) -> Outcome {
-        write(&self.status, status);
         let interface = self.interface().await?;
+        interface.get_mut().await.status = status.to_string();
         Item::new_status(interface.signal_emitter(), status)
             .await
             .context("item: emit NewStatus")

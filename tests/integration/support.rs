@@ -26,7 +26,8 @@ impl Display for Failure {
 
 pub type Outcome<T = ()> = Result<T, Failure>;
 
-/// Turns any error into a [`Failure`] that says what was being attempted.
+/// Turns an error into a [`Failure`] that says what was being attempted, and
+/// an absent value into one that says what was absent.
 pub trait Context<T> {
     fn context(self, what: &str) -> Outcome<T>;
 }
@@ -39,7 +40,7 @@ impl<T, E: Display> Context<T> for Result<T, E> {
 
 impl<T> Context<T> for Option<T> {
     fn context(self, what: &str) -> Outcome<T> {
-        self.ok_or_else(|| Failure(format!("{what}: missing")))
+        self.ok_or_else(|| Failure(what.to_string()))
     }
 }
 

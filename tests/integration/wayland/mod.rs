@@ -28,6 +28,9 @@ pub fn cases() -> Vec<Case> {
 }
 
 async fn binds_the_output() -> Outcome {
+    // The sway is shared, and a case that failed half-way may have left it
+    // at another scale.
+    sway::set_scale(bar::OUTPUT, 1).await?;
     let mut bar = Bar::connect()?;
     bar.drive_until("the output to be announced", |bar| bar.scale().is_some())
         .await?;

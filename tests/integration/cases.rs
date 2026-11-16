@@ -4,6 +4,7 @@ use crate::args::Selection;
 use crate::sandbox::{self, Sandbox};
 use crate::support::{Context, Failure, Outcome, ensure, within_for};
 use crate::{dbus, systray, wayland};
+use futures::future::select_all;
 use std::future::Future;
 use std::pin::Pin;
 use std::time::{Duration, Instant};
@@ -11,6 +12,15 @@ use tokio::signal::unix::{SignalKind, signal};
 
 /// Deadline of the whole run, on top of the one on every wait.
 const RUN: Duration = Duration::from_mins(1);
+
+/// Signals that end the run early: a closed terminal, Ctrl-C, Ctrl-\ and
+/// a plain `kill`.
+const STOP_SIGNALS: [SignalKind; 4] = [
+    SignalKind::hangup(),
+    SignalKind::interrupt(),
+    SignalKind::quit(),
+    SignalKind::terminate(),
+];
 
 pub type CaseFuture = Pin<Box<dyn Future<Output = Outcome>>>;
 
@@ -66,19 +76,21 @@ pub fn run_selected(selection: &Selection) -> Outcome {
         return Ok(());
     }
     if names.is_empty() {
-        println!("integration: no case matches {selection:?}, nothing to run");
+        println!("integration: the arguments select no case, nothing to run");
         return Ok(());
     }
 
     runtime()?.block_on(async {
-        let mut interrupt = signal(SignalKind::interrupt()).context("watch SIGINT")?;
-        let mut terminate = signal(SignalKind::terminate()).context("watch SIGTERM")?;
+        let mut signals = STOP_SIGNALS
+            .iter()
+            .map(|kind| signal(*kind).context("watch for a stop signal"))
+            .collect::<Outcome<Vec<_>>>()?;
+        let stopped = select_all(signals.iter_mut().map(|signal| Box::pin(signal.recv())));
         // Dropping the run, on a signal as on any error, kills the servers
         // and the running case and removes the runtime directory.
         tokio::select! {
             outcome = run_in_sandbox(&names) => outcome,
-            _ = interrupt.recv() => Err(Failure::new("interrupted")),
-            _ = terminate.recv() => Err(Failure::new("terminated")),
+            _ = stopped => Err(Failure::new("stopped by a signal")),
         }
     })
 }

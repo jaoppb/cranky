@@ -161,7 +161,9 @@ async fn reads_all_properties_with_their_types() -> Outcome {
         ),
     ];
     for (name, value) in expected {
-        let actual = properties.get(&PropertyName::new(name)).context(name)?;
+        let actual = properties
+            .get(&PropertyName::new(name))
+            .context(&format!("the probe has no {name} property"))?;
         ensure_eq(name, actual, &value)?;
     }
     Ok(())
@@ -177,9 +179,11 @@ async fn streams_property_changes() -> Outcome {
     probe.relabel("second").await?;
     let (interface, changed) = within("a PropertiesChanged signal", updates.next())
         .await?
-        .context("property stream")?;
+        .context("the property stream ended")?;
     ensure_eq("changed interface", &interface, &probe_interface())?;
-    let label = changed.get(&PropertyName::new("Label")).context("Label")?;
+    let label = changed
+        .get(&PropertyName::new("Label"))
+        .context("the change does not carry Label")?;
     ensure_eq("Label", label, &DBusValue::String("second".to_string()))
 }
 
@@ -198,7 +202,7 @@ async fn next_probe_change(
         }
     })
     .await?
-    .context("name stream")
+    .context("the name stream ended")
 }
 
 async fn streams_name_owner_changes() -> Outcome {
@@ -238,7 +242,7 @@ async fn streams_a_signal_with_a_variant_body() -> Outcome {
     probe.ping("hello").await?;
     let (path, member, body) = within("the Pinged signal", signals.next())
         .await?
-        .context("signal stream")?;
+        .context("the signal stream ended")?;
     ensure_eq("signal path", &path, &probe_path())?;
     ensure_eq("signal member", &member, &Member::new("Pinged"))?;
     ensure_eq(

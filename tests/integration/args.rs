@@ -17,12 +17,13 @@ const IGNORED: [&str; 6] = [
 ];
 
 /// Which cases the command line asks for.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Selection {
     filters: Vec<String>,
     skips: Vec<String>,
     exact: bool,
     list: bool,
+    only_ignored: bool,
 }
 
 impl Selection {
@@ -36,6 +37,7 @@ impl Selection {
                 "--skip" => selection.skips.push(value_of(&arg, &mut args)?),
                 "--exact" => selection.exact = true,
                 "--list" => selection.list = true,
+                "--ignored" => selection.only_ignored = true,
                 _ if WITH_VALUE.contains(&flag) => drop(value_of(&arg, &mut args)?),
                 _ if IGNORED.contains(&flag) => {}
                 _ if flag.starts_with('-') => {
@@ -52,8 +54,11 @@ impl Selection {
         self.list
     }
 
-    /// Whether the case called `name` is asked for.
+    /// Whether the case called `name` is asked for. No case is ever ignored, so `--ignored` asks for none of them.
     pub fn accepts(&self, name: &str) -> bool {
+        if self.only_ignored {
+            return false;
+        }
         let matches = |pattern: &String| {
             if self.exact {
                 name == pattern

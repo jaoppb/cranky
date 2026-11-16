@@ -35,7 +35,7 @@ impl Bar {
     pub fn connect() -> Outcome<Self> {
         let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
-            .context("XDG_RUNTIME_DIR")?;
+            .context("XDG_RUNTIME_DIR is not set")?;
         let env = Arc::new(AppEnvironment::new(
             HomeDir::new(runtime_dir.clone()),
             XdgCacheHome::new(runtime_dir.clone()),
@@ -129,7 +129,7 @@ impl Bar {
             .width()
             .checked_mul(size.height())
             .and_then(|pixels| usize::try_from(pixels).ok())
-            .context("buffer size")?;
+            .context("the buffer size overflows")?;
         // Premultiplied ARGB8888, little endian.
         let buffer = RenderBuffer::new([blue, green, red, 255].repeat(pixels), size);
         self.manager.submit_buffer(

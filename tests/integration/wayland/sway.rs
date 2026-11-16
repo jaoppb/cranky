@@ -33,7 +33,7 @@ pub async fn workspace_top() -> Outcome<i64> {
         .and_then(|workspace| workspace.get("rect"))
         .and_then(|rect| rect.get("y"))
         .and_then(Value::as_i64)
-        .context("workspace rect.y")
+        .context("swaymsg reported no workspace rect.y")
 }
 
 /// Sets the scale of `output`, which sway announces to every client.
@@ -53,7 +53,7 @@ pub struct Screenshot {
 impl Screenshot {
     pub async fn take() -> Outcome<Self> {
         let ppm = output_of("grim", &["-t", "ppm", "-"]).await?;
-        Self::parse(&ppm).context("parse the grim PPM")
+        Self::parse(&ppm).context("grim did not print a binary PPM")
     }
 
     /// Binary PPM: `P6`, width, height, maximum value, then RGB bytes.
@@ -85,11 +85,17 @@ impl Screenshot {
             (last_column, last_row),
         ];
         for (x, y) in corners {
-            if self.pixel(x, y).context("pixel inside the bar")? != colour {
+            if self
+                .pixel(x, y)
+                .context("the screenshot is smaller than the bar")?
+                != colour
+            {
                 return Ok(false);
             }
         }
-        let below = self.pixel(0, bar_height).context("pixel below the bar")?;
+        let below = self
+            .pixel(0, bar_height)
+            .context("the screenshot ends at the bar")?;
         ensure(below != colour, || {
             format!("{colour:?} also covers the output below the bar")
         })?;
