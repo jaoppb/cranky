@@ -13,7 +13,7 @@ pub const NAME: &str = "org.cranky.Probe";
 pub const PATH: &str = "/org/cranky/Probe";
 pub const INTERFACE: &str = "org.cranky.Probe";
 
-type Variant = zbus::zvariant::Value<'static>;
+type Variant = zbus::Variant<'static>;
 
 pub struct Probe {
     label: String,
@@ -77,11 +77,8 @@ impl ProbeService {
             label: "first".to_string(),
         };
         let connection = zbus::connection::Builder::session()
-            .context("probe: session builder")?
             .name(NAME)
-            .context("probe: name")?
             .serve_at(PATH, probe)
-            .context("probe: serve")?
             .build()
             .await
             .context("probe: connect")?;

@@ -24,9 +24,9 @@ pub trait StatusNotifierItem {
     #[zbus(property(emits_changed_signal = "false"))]
     fn item_is_menu(&self) -> zbus::Result<bool>;
     #[zbus(property(emits_changed_signal = "false"))]
-    fn menu(&self) -> zbus::Result<zbus::zvariant::OwnedObjectPath>;
+    fn menu(&self) -> zbus::Result<zbus::OwnedObjectPath>;
     #[zbus(property(emits_changed_signal = "false"))]
-    fn tool_tip(&self) -> zbus::Result<zbus::zvariant::OwnedValue>;
+    fn tool_tip(&self) -> zbus::Result<zbus::OwnedVariant>;
 
     #[zbus(signal)]
     fn new_title(&self) -> zbus::Result<()>;

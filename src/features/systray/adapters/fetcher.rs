@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use zbus::Connection;
 use zbus::fdo::PropertiesProxy;
 use zbus::names::InterfaceName;
-use zbus::zvariant::{ObjectPath as ZObjectPath, OwnedValue, Value};
+use zbus::{ObjectPath as ZObjectPath, OwnedVariant, Variant};
 
 async fn resolve_systray_icon(
     name: Option<String>,
@@ -21,7 +21,7 @@ async fn resolve_systray_icon(
 }
 
 async fn resolve_all_icons(
-    all_props: &mut HashMap<String, OwnedValue>,
+    all_props: &mut HashMap<String, OwnedVariant>,
     icon_name: Option<String>,
     theme_path: Option<String>,
 ) -> (
@@ -56,7 +56,7 @@ async fn resolve_all_icons(
     (icon, attention_icon, overlay_icon)
 }
 
-fn parse_window_id(all_props: &mut HashMap<String, OwnedValue>) -> Option<u32> {
+fn parse_window_id(all_props: &mut HashMap<String, OwnedVariant>) -> Option<u32> {
     all_props
         .remove("WindowId")
         .and_then(|v| v.try_into().ok())
@@ -68,13 +68,13 @@ fn parse_window_id(all_props: &mut HashMap<String, OwnedValue>) -> Option<u32> {
         })
 }
 
-fn parse_menu_path(all_props: &mut HashMap<String, OwnedValue>) -> Option<String> {
+fn parse_menu_path(all_props: &mut HashMap<String, OwnedVariant>) -> Option<String> {
     all_props
         .remove("Menu")
         .and_then(|v| v.try_into().ok())
         .or_else(|| {
             all_props.remove("Menu").and_then(|v| {
-                if let Value::ObjectPath(p) = &*v {
+                if let Variant::ObjectPath(p) = &*v {
                     Some(p.as_str().to_string())
                 } else {
                     None
@@ -96,12 +96,15 @@ async fn fetch_all_props(
     conn: &Connection,
     dest: &str,
     path_str: &str,
-) -> Option<HashMap<String, OwnedValue>> {
+) -> Option<HashMap<String, OwnedVariant>> {
     let iface = InterfaceName::try_from("org.kde.StatusNotifierItem").ok()?;
     let path = ZObjectPath::try_from(path_str).ok()?;
-    let props_builder = PropertiesProxy::builder(conn).destination(dest).ok()?;
-    let props_builder = props_builder.path(path).ok()?;
-    let props = props_builder.build().await.ok()?;
+    let props = PropertiesProxy::builder(conn)
+        .destination(dest)
+        .path(path)
+        .build()
+        .await
+        .ok()?;
     Some(props.get_all(iface).await.unwrap_or_default())
 }
 

@@ -1,6 +1,6 @@
 use crate::features::systray::adapters::cleaner::{RawTooltip, clean_sni_text, parse_raw_tooltip};
 use crate::features::systray::adapters::sni_event::SniEvent;
-use zbus::zvariant::Value;
+use zbus::Variant;
 
 #[test]
 fn test_sni_event_variants() {
@@ -29,7 +29,7 @@ fn test_parse_raw_tooltip() {
         "<b>Title</b>".to_string(),
         "Description<br/>Line 2".to_string(),
     );
-    let val = Value::from(raw_tuple).try_into().unwrap();
+    let val = Variant::from(raw_tuple).try_into().unwrap();
     let tooltip = parse_raw_tooltip(val).expect("Should parse tooltip");
     assert_eq!(tooltip.title().as_str(), "Title");
     assert_eq!(tooltip.description().as_str(), "Description\nLine 2");

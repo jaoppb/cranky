@@ -24,7 +24,7 @@ as_conversions = "deny"
 
 [dependencies]
 # Async Runtime
-tokio = { version = "1.40", features = ["full"] }
+tokio = { version = "1.54", features = ["full"] }
 
 # Wayland
 wayland-client = "0.31"
@@ -40,18 +40,35 @@ toml = "1.0"
 # Rendering
 tiny-skia = "0.12"
 cosmic-text = "0.19"
-memmap2 = "0.9"
+memmap2 = "0.9.11"
 
 # System Integration
-zbus = { version = "5.14", features = ["tokio"] }
+zbus = { version = "6.3", features = ["tokio"] }
 sysinfo = "0.39"
 serde_json = "1.0"
 chrono = "0.4"
 uuid = { version = "1.23", features = ["v4", "serde"] }
 notify = "8.2"
 freedesktop-icons = "0.4"
-image = "0.25"
-resvg = "0.47"
+# Default features minus avif: its encoder brings the unmaintained paste (RUSTSEC-2024-0436)
+image = { version = "0.25", default-features = false, features = [
+	"rayon",
+	"bmp",
+	"dds",
+	"exr",
+	"ff",
+	"gif",
+	"hdr",
+	"ico",
+	"jpeg",
+	"png",
+	"pnm",
+	"qoi",
+	"tga",
+	"tiff",
+	"webp",
+] }
+resvg = "0.50"
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
@@ -67,14 +84,15 @@ tracing-appender = "0.2.5"
 futures-util = "0.3.32"
 taffy = "0.12"
 futures = "0.3.34"
-lightningcss = "1.0.0-alpha.63"
+# No default features: sourcemap brings rkyv 0.7 (RUSTSEC-2026-0235)
+lightningcss = { version = "1.0.0-alpha.63", default-features = false }
 parcel_selectors = "0.28"
 xkbcommon = "0.9.0"
 
 [dev-dependencies]
-arch-lint = "0.5.0"
+arch-lint = "0.11"
 mockall = "0.14"
-criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+criterion = { version = "0.8", features = ["async_tokio", "html_reports"] }
 
 [[test]]
 name = "integration"

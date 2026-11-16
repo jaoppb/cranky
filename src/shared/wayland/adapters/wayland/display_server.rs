@@ -9,6 +9,7 @@ use crate::shared::primitives::ModuleId;
 use crate::shared::wayland::ports::{AppReadModel, DisplayServerError, DisplayServerPort};
 use async_trait::async_trait;
 use std::collections::HashMap;
+use tokio::io::Interest;
 use wayland_client::backend::WaylandError;
 
 #[async_trait]
@@ -17,16 +18,18 @@ impl DisplayServerPort for WaylandAdapter {
         let mut read_guard = self.event_queue.prepare_read();
         if let Some(r_guard) = read_guard.take() {
             tokio::select! {
-                result = self.async_fd.readable() => {
-                    if let Ok(mut guard) = result {
-                        match r_guard.read() {
-                            Ok(_) => {
-                                guard.retain_ready();
-                            }
-                            Err(WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                                guard.clear_ready();
-                            }
-                            Err(e) => return Err(DisplayServerError::ConnectionFailed { reason: e.to_string() }),
+                result = self.socket.readable() => {
+                    if result.is_ok() {
+                        // The outer `Err` is only ever `WouldBlock`: `try_io` clears the
+                        // readiness and the next call waits again. A real failure travels
+                        // as the inner `Err`.
+                        let read = self.socket.try_io(Interest::READABLE, || match r_guard.read() {
+                            Ok(_) => Ok(Ok(())),
+                            Err(WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => Err(e),
+                            Err(e) => Ok(Err(e)),
+                        });
+                        if let Ok(Err(e)) = read {
+                            return Err(DisplayServerError::ConnectionFailed { reason: e.to_string() });
                         }
                     }
                 }

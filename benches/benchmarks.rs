@@ -1,5 +1,6 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use std::fmt::Write;
+use std::hint::black_box;
 
 use cranky::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use cranky::features::layout_engine::domain::{

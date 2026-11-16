@@ -74,7 +74,7 @@ impl SniPort for SniAdapter {
                     conn: conn.clone(),
                     runtime: tokio::runtime::Handle::current(),
                 };
-                let _res: bool = conn
+                let _rejected: Option<Watcher> = conn
                     .object_server()
                     .at::<&str, Watcher>("/StatusNotifierWatcher", watcher)
                     .await
