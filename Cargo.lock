@@ -93,40 +93,47 @@ checksum = "3bc62ac97cc33321f50863d514c3bc38a453947a8f9e781137e47c7401020aed"
 
 [[package]]
 name = "arch-lint"
-version = "0.5.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a00b951a0120d36e144aebb475a54f620a3af72631f282422ce47a785aaa121c"
+checksum = "eec23ff961de3ea2c4772ca0f7f4958f92e17a727891793299e3c55ae26c0576"
 dependencies = [
  "arch-lint-core",
  "arch-lint-macros",
  "arch-lint-rules",
+ "home",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
  "toml 0.8.23",
+ "tracing",
 ]
 
 [[package]]
 name = "arch-lint-core"
-version = "0.5.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7621d2692b7fcef68c5bcb0340714b0976df3c574d490b78011117908f8b173"
+checksum = "88dc208d4080bc9c57c185ccd5ab83f289fc984c0502c5e9fe397956efe3b774"
 dependencies = [
  "glob",
  "ignore",
  "miette",
  "proc-macro2",
  "quote",
+ "regex",
+ "schemars",
  "serde",
  "syn 2.0.119",
  "thiserror 2.0.21",
  "toml 0.8.23",
  "tracing",
- "walkdir",
 ]
 
 [[package]]
 name = "arch-lint-macros"
-version = "0.5.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66e15c74c2d70b3842c89159ffb53224d62c8fd423eb3a31cbf6606061df7395"
+checksum = "7b607ff7720e37cca787baeb1c05fefdfa91a549e0a34d7b6519569b4c0ef93e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -135,15 +142,18 @@ dependencies = [
 
 [[package]]
 name = "arch-lint-rules"
-version = "0.5.0"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7405df98f62ea03887e8c98816383c6401711d0bb9a402823b7656e6b3440bb1"
+checksum = "77553d241741d09762d0791f2f0aa026ddb2aae4265aaff1c30ffc6a2dc82522"
 dependencies = [
  "arch-lint-core",
  "proc-macro2",
  "quote",
+ "schemars",
+ "serde",
  "syn 2.0.119",
- "tracing",
+ "thiserror 2.0.21",
+ "toml 0.8.23",
 ]
 
 [[package]]
@@ -784,6 +794,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dyn-clone"
+version = "1.0.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
+
+[[package]]
 name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1211,6 +1227,15 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
+name = "home"
+version = "0.5.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
+dependencies = [
+ "windows-sys 0.61.2",
+]
 
 [[package]]
 name = "iana-time-zone"
@@ -2655,6 +2680,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ref-cast"
+version = "1.0.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e440fb4e4b4147295338efb76001ab9e4efc0e5839df2c47fc5ac2381d365c3"
+dependencies = [
+ "ref-cast-impl",
+]
+
+[[package]]
+name = "ref-cast-impl"
+version = "1.0.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92ecd8964f8453721699a1ed72037b0db49ce2f5a5138486ee89bed6f67cdf3a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
+]
+
+[[package]]
 name = "regex"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2797,6 +2842,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemars"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab508826f74a77ca9d5aba6ff19b522583ee3eaf28a19384ff3d0e5835fadf6e"
+dependencies = [
+ "dyn-clone",
+ "ref-cast",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1c3a92094fa7d61aa124645844facb6b554dfc797136d0f5fd1f890e2bffc69"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn 3.0.10",
+]
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2852,6 +2922,17 @@ name = "serde_derive"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f852137cce035d6a4df67ccce505ff6b3e9fd3a10e3e52b24dc71e650bb1a9bd"
 dependencies = [
  "proc-macro2",
  "quote",

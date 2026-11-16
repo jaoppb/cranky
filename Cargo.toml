@@ -88,7 +88,7 @@ parcel_selectors = "0.28"
 xkbcommon = "0.9.0"
 
 [dev-dependencies]
-arch-lint = "0.5.0"
+arch-lint = "0.11"
 mockall = "0.14"
 criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
 
