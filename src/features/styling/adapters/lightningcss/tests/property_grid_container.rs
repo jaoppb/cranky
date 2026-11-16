@@ -20,10 +20,14 @@ fn display_maps_the_three_supported_modes() {
 }
 
 #[test]
-fn row_and_column_gap_longhands_stay_independent() {
-    let style = declared("column-gap: 12px; row-gap: 8px;");
-    assert_eq!(style.column_gap(), Some(&Gap::new(12.0)));
-    assert_eq!(style.row_gap(), Some(&Gap::new(8.0)));
+fn gap_longhand_sets_only_its_own_axis() {
+    let column = declared("column-gap: 12px;");
+    assert_eq!(column.column_gap(), Some(&Gap::new(12.0)));
+    assert_eq!(column.row_gap(), None);
+
+    let row = declared("row-gap: 8px;");
+    assert_eq!(row.row_gap(), Some(&Gap::new(8.0)));
+    assert_eq!(row.column_gap(), None);
 }
 
 #[test]

@@ -2,7 +2,7 @@ use super::declared;
 use crate::features::layout_engine::domain::{
     AlignItems, FlexDirection, Gap, JustifyContent, PositionType,
 };
-use crate::features::styling::domain::{CssLength, FlexGrow, FlexShrink};
+use crate::features::styling::domain::{ComputedStyle, CssLength, FlexGrow, FlexShrink};
 
 #[test]
 fn gap_shorthand_splits_into_row_and_column() {
@@ -48,7 +48,12 @@ fn justify_content_maps_every_keyword() {
 }
 
 #[test]
-fn align_items_maps_every_keyword() {
+fn align_items_and_align_self_map_every_keyword() {
+    type Alignment = fn(&ComputedStyle) -> Option<AlignItems>;
+    let properties: [(&str, Alignment); 2] = [
+        ("align-items", ComputedStyle::align_items),
+        ("align-self", ComputedStyle::align_self),
+    ];
     let cases = [
         ("center", AlignItems::Center),
         ("flex-end", AlignItems::End),
@@ -56,24 +61,11 @@ fn align_items_maps_every_keyword() {
         ("stretch", AlignItems::Stretch),
         ("flex-start", AlignItems::Start),
     ];
-    for (keyword, expected) in cases {
-        let style = declared(&format!("align-items: {keyword};"));
-        assert_eq!(style.align_items(), Some(expected), "{keyword}");
-    }
-}
-
-#[test]
-fn align_self_maps_every_keyword() {
-    let cases = [
-        ("center", AlignItems::Center),
-        ("flex-end", AlignItems::End),
-        ("end", AlignItems::End),
-        ("stretch", AlignItems::Stretch),
-        ("flex-start", AlignItems::Start),
-    ];
-    for (keyword, expected) in cases {
-        let style = declared(&format!("align-self: {keyword};"));
-        assert_eq!(style.align_self(), Some(expected), "{keyword}");
+    for (property, alignment) in properties {
+        for (keyword, expected) in cases {
+            let css = format!("{property}: {keyword};");
+            assert_eq!(alignment(&declared(&css)), Some(expected), "{css}");
+        }
     }
 }
 
