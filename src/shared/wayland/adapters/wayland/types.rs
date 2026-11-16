@@ -6,20 +6,11 @@ use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::composite::CompositeLayers;
 use std::collections::HashMap;
-use std::os::unix::io::{AsRawFd, RawFd};
 use wayland_client::protocol::{
     wl_output::WlOutput, wl_subsurface::WlSubsurface, wl_surface::WlSurface,
 };
 use wayland_protocols::xdg::shell::client::{xdg_popup::XdgPopup, xdg_surface::XdgSurface};
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
-
-pub(crate) struct WaylandFd(pub(crate) RawFd);
-
-impl AsRawFd for WaylandFd {
-    fn as_raw_fd(&self) -> RawFd {
-        self.0
-    }
-}
 
 pub(crate) struct FloatingSurface {
     pub(crate) surface: WlSurface,

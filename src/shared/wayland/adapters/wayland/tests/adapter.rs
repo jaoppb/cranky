@@ -1,6 +1,5 @@
 use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use std::collections::HashMap;
-use std::os::unix::io::{AsFd, AsRawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex};
 
@@ -12,7 +11,6 @@ use crate::shared::wayland::adapters::wayland::adapter::WaylandAdapter;
 use crate::shared::wayland::adapters::wayland::command::SurfaceCommand;
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::surface_handler::handle_cmd;
-use crate::shared::wayland::adapters::wayland::types::WaylandFd;
 use crate::shared::wayland::ports::DisplayServerPort;
 
 #[tokio::test]
@@ -66,8 +64,8 @@ async fn test_wayland_adapter_methods() {
     let backend = wayland_client::backend::Backend::connect(client_stream).unwrap();
     let connection = Connection::from_backend(backend);
     let event_queue = connection.new_event_queue::<WaylandState>();
-    let async_fd =
-        tokio::io::unix::AsyncFd::new(WaylandFd(connection.as_fd().as_raw_fd())).unwrap();
+    let socket =
+        crate::shared::wayland::adapters::wayland::adapter::readiness_socket(&connection).unwrap();
 
     let (command_tx, _) = tokio::sync::mpsc::channel(10);
     let config = crate::shared::config::domain::Config::default();
@@ -112,7 +110,7 @@ async fn test_wayland_adapter_methods() {
         connection,
         event_queue,
         state,
-        async_fd,
+        socket,
         pending_surfaces,
         notify_rx,
         config_rx,

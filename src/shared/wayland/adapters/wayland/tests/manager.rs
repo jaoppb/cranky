@@ -1,17 +1,10 @@
 use std::collections::HashMap;
-use std::os::unix::io::AsRawFd;
 use std::sync::{Arc, Mutex};
 
 use crate::shared::wayland::adapters::wayland::command::SurfaceCommand;
 use crate::shared::wayland::adapters::wayland::surface_manager::WaylandSurfaceManager;
-use crate::shared::wayland::adapters::wayland::types::{ModuleSurface, WaylandBar, WaylandFd};
+use crate::shared::wayland::adapters::wayland::types::{ModuleSurface, WaylandBar};
 use crate::shared::wayland::ports::SurfaceManagerPort;
-
-#[test]
-fn test_wayland_fd() {
-    let fd = WaylandFd(42);
-    assert_eq!(fd.as_raw_fd(), 42);
-}
 
 #[tokio::test]
 async fn test_wayland_surface_manager() {

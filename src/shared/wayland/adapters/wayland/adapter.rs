@@ -1,7 +1,6 @@
 use super::command::SurfaceCommand;
 use super::state::WaylandState;
 use super::surface_manager::WaylandSurfaceManager;
-use super::types::WaylandFd;
 use crate::features::layout_engine::domain::DisplayCommand;
 use crate::shared::config::domain::Config;
 use crate::shared::env::domain::AppEnvironment;
@@ -9,16 +8,19 @@ use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::ports::DisplayServerError;
 use std::collections::HashMap;
-use std::os::unix::io::{AsFd, AsRawFd};
+use std::os::unix::io::AsFd;
+use std::os::unix::net::UnixStream as StdUnixStream;
 use std::sync::{Arc, Mutex};
-use tokio::io::unix::AsyncFd;
+use tokio::net::UnixStream;
 use wayland_client::{Connection, EventQueue};
 
 pub struct WaylandAdapter {
     pub(crate) connection: Connection,
     pub(crate) event_queue: EventQueue<WaylandState>,
     pub(crate) state: WaylandState,
-    pub(crate) async_fd: AsyncFd<WaylandFd>,
+    /// A duplicate of the connection's socket, registered with tokio only to
+    /// learn when the connection has events to read.
+    pub(crate) socket: UnixStream,
     pub(crate) pending_surfaces: Arc<Mutex<HashMap<(ModuleId, MonitorId), SurfaceCommand>>>,
     pub(crate) notify_rx: tokio::sync::mpsc::Receiver<()>,
     pub(crate) config_rx: tokio::sync::watch::Receiver<Config>,
@@ -42,9 +44,8 @@ impl WaylandAdapter {
 
         connection.display().get_registry(&qh, ());
 
-        let raw_fd = connection.as_fd().as_raw_fd();
-        let async_fd =
-            AsyncFd::new(WaylandFd(raw_fd)).map_err(|e| DisplayServerError::ConnectionFailed {
+        let socket =
+            readiness_socket(&connection).map_err(|e| DisplayServerError::ConnectionFailed {
                 reason: e.to_string(),
             })?;
 
@@ -80,7 +81,7 @@ impl WaylandAdapter {
             connection,
             event_queue,
             state,
-            async_fd,
+            socket,
             pending_surfaces: pending_surfaces.clone(),
             notify_rx,
             config_rx,
@@ -93,4 +94,13 @@ impl WaylandAdapter {
 
         Ok((adapter, manager))
     }
+}
+
+/// Duplicates the connection's socket into a tokio stream. The duplicate
+/// shares the open socket, so its readiness is the connection's readiness;
+/// nothing is ever read from or written to it.
+pub(crate) fn readiness_socket(connection: &Connection) -> std::io::Result<UnixStream> {
+    let socket = StdUnixStream::from(connection.as_fd().try_clone_to_owned()?);
+    socket.set_nonblocking(true)?;
+    UnixStream::from_std(socket)
 }
