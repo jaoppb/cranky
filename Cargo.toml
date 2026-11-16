@@ -50,6 +50,7 @@ chrono = "0.4"
 uuid = { version = "1.23", features = ["v4", "serde"] }
 notify = "8.2"
 freedesktop-icons = "0.4"
+# Default features minus avif: its encoder brings the unmaintained paste (RUSTSEC-2024-0436)
 image = { version = "0.25", default-features = false, features = [
 	"rayon",
 	"bmp",
@@ -83,6 +84,7 @@ tracing-appender = "0.2.5"
 futures-util = "0.3.32"
 taffy = "0.12"
 futures = "0.3.34"
+# No default features: sourcemap brings rkyv 0.7 (RUSTSEC-2026-0235)
 lightningcss = { version = "1.0.0-alpha.63", default-features = false }
 parcel_selectors = "0.28"
 xkbcommon = "0.9.0"

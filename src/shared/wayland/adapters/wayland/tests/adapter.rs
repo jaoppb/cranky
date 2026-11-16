@@ -7,7 +7,7 @@ use wayland_client::Connection;
 
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::wayland::adapters::wayland::adapter::WaylandAdapter;
+use crate::shared::wayland::adapters::wayland::adapter::{WaylandAdapter, readiness_socket};
 use crate::shared::wayland::adapters::wayland::command::SurfaceCommand;
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::surface_handler::handle_cmd;
@@ -64,8 +64,7 @@ async fn test_wayland_adapter_methods() {
     let backend = wayland_client::backend::Backend::connect(client_stream).unwrap();
     let connection = Connection::from_backend(backend);
     let event_queue = connection.new_event_queue::<WaylandState>();
-    let socket =
-        crate::shared::wayland::adapters::wayland::adapter::readiness_socket(&connection).unwrap();
+    let socket = readiness_socket(&connection).unwrap();
 
     let (command_tx, _) = tokio::sync::mpsc::channel(10);
     let config = crate::shared::config::domain::Config::default();

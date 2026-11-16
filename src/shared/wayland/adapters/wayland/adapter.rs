@@ -98,7 +98,9 @@ impl WaylandAdapter {
 
 /// Duplicates the connection's socket into a tokio stream. The duplicate
 /// shares the open socket, so its readiness is the connection's readiness;
-/// nothing is ever read from or written to it.
+/// nothing is ever read from or written to it. Making the duplicate
+/// non-blocking makes the connection's socket non-blocking too, which changes
+/// nothing: `wayland-backend` always reads and writes with `MSG_DONTWAIT`.
 pub(crate) fn readiness_socket(connection: &Connection) -> std::io::Result<UnixStream> {
     let socket = StdUnixStream::from(connection.as_fd().try_clone_to_owned()?);
     socket.set_nonblocking(true)?;

@@ -20,7 +20,9 @@ impl DisplayServerPort for WaylandAdapter {
             tokio::select! {
                 result = self.socket.readable() => {
                     if result.is_ok() {
-                        // `try_io` clears the readiness when the read would block.
+                        // The outer `Err` is only ever `WouldBlock`: `try_io` clears the
+                        // readiness and the next call waits again. A real failure travels
+                        // as the inner `Err`.
                         let read = self.socket.try_io(Interest::READABLE, || match r_guard.read() {
                             Ok(_) => Ok(Ok(())),
                             Err(WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => Err(e),
