@@ -1,17 +1,19 @@
-#![allow(unsafe_code)]
-
-use memmap2::MmapMut;
+use cranky_unsafe::SharedMapping;
 use std::fs::File;
 use std::io::Result;
-use std::os::unix::io::{AsRawFd, BorrowedFd};
 
 pub struct MmappedShm {
-    mmap: MmapMut,
+    mmap: SharedMapping,
 }
 
 impl MmappedShm {
-    pub(crate) const fn from_mmap(mmap: MmapMut) -> Self {
-        Self { mmap }
+    /// # Errors
+    ///
+    /// Returns an I/O error if memory-mapping the file fails.
+    pub(crate) fn from_file(file: &File) -> Result<Self> {
+        Ok(Self {
+            mmap: SharedMapping::map(file)?,
+        })
     }
 
     #[cfg(test)]
@@ -19,14 +21,12 @@ impl MmappedShm {
     ///
     /// Returns an I/O error if creating or memory-mapping the SHM file fails.
     pub fn new(size: usize, xdg_runtime_dir: &std::path::Path) -> Result<Self> {
-        let file = create_shm_file(size, xdg_runtime_dir)?;
-        let mmap = safe_mmap_file(&file)?;
-        Ok(Self { mmap })
+        Self::from_file(&create_shm_file(size, xdg_runtime_dir)?)
     }
 
     #[must_use]
     pub fn mmap_mut(&mut self) -> &mut [u8] {
-        &mut self.mmap
+        self.mmap.bytes_mut()
     }
 
     #[cfg(test)]
@@ -55,14 +55,4 @@ pub(crate) fn create_shm_file(size: usize, xdg_runtime_dir: &std::path::Path) ->
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     file.set_len(len)?;
     Ok(file)
-}
-
-// Safe wrapper around unsafe mmap creation
-pub(crate) fn safe_mmap_file(file: &File) -> Result<MmapMut> {
-    unsafe { MmapMut::map_mut(file) }
-}
-
-// Safe wrapper around unsafe BorrowedFd creation for file descriptors
-pub(crate) fn safe_borrowed_fd_from_file(file: &File) -> BorrowedFd<'_> {
-    unsafe { BorrowedFd::borrow_raw(file.as_raw_fd()) }
 }

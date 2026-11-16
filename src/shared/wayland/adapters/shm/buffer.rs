@@ -1,6 +1,7 @@
-use super::mmap::{MmappedShm, create_shm_file, safe_borrowed_fd_from_file, safe_mmap_file};
+use super::mmap::{MmappedShm, create_shm_file};
 use super::slot::{BufferSlot, BufferUserData};
 use std::io::Result;
+use std::os::fd::AsFd;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use wayland_client::QueueHandle;
@@ -37,9 +38,13 @@ impl ShmBuffer {
         let total_size = frame_size.saturating_mul(2);
         let file = create_shm_file(total_size, xdg_runtime_dir)?;
 
-        let mmap = safe_mmap_file(&file)?;
-        let fd = safe_borrowed_fd_from_file(&file);
-        let pool = shm_proxy.create_pool(fd, i32::try_from(total_size).unwrap_or(i32::MAX), qh, ());
+        let shm = MmappedShm::from_file(&file)?;
+        let pool = shm_proxy.create_pool(
+            file.as_fd(),
+            i32::try_from(total_size).unwrap_or(i32::MAX),
+            qh,
+            (),
+        );
 
         let width_i32 = i32::try_from(width).unwrap_or_default();
         let height_i32 = i32::try_from(height).unwrap_or_default();
@@ -75,7 +80,7 @@ impl ShmBuffer {
         ];
 
         Ok(Self {
-            shm: MmappedShm::from_mmap(mmap),
+            shm,
             pool,
             width,
             height,

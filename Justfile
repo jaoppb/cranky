@@ -44,12 +44,12 @@ fmt-check:
 # Run Clippy, denying warnings
 [group('quality')]
 lint:
-    cargo clippy --all-targets --all-features -- -D warnings
+    cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 # Apply Clippy's automatic fixes, including to dirty and staged files
 [group('quality')]
 lint-fix:
-    cargo clippy --fix --allow-dirty --allow-staged --all-targets --all-features
+    cargo clippy --fix --allow-dirty --allow-staged --workspace --all-targets --all-features
 
 # Run architecture lint checks
 [group('quality')]
@@ -75,12 +75,12 @@ workflows-check:
 # Run every test: unit, architecture and integration (needs dbus-daemon, sway and grim)
 [group('test')]
 test:
-    cargo test
+    cargo test --workspace
 
 # Run the unit tests and the architecture gate, which need no running service
 [group('test')]
 test-unit:
-    cargo test --lib --bins --test architecture
+    cargo test --workspace --lib --bins --test architecture
 
 # Run the D-Bus and Wayland integration tests alone, optionally only the cases matching a name
 [group('test')]
@@ -90,7 +90,7 @@ test-integration *args:
 # Run every test and generate a coverage report (requires cargo-llvm-cov and genhtml)
 [group('test')]
 coverage:
-    cargo llvm-cov --lcov --output-path lcov.info
+    cargo llvm-cov --workspace --lcov --output-path lcov.info
     genhtml lcov.info --output-directory coverage_report
 
 # Check that the tests cover at least 80% of lines (requires cargo-llvm-cov)

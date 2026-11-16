@@ -865,131 +865,142 @@ mod tests {
         assert!(registry.modules.is_empty());
     }
 
-    #[tokio::test]
-    async fn test_module_registry_register_dbus() {
-        let home = crate::test_utils::TestHome::new("registry");
-        let mut registry = ModuleRegistry::new(home.env());
-        let toml_str = r#"
+    #[test]
+    fn test_module_registry_register_dbus() {
+        crate::test_utils::block_on(async {
+            let home = crate::test_utils::TestHome::new("registry");
+            let mut registry = ModuleRegistry::new(home.env());
+            let toml_str = r#"
             [root]
             name = "bar"
             left = ["clock"]
         "#;
-        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
-        let config = dto.into_domain(&MockValidator);
-        TestRegistryPort::load(&mut registry, &config).unwrap();
+            let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+            let config = dto.into_domain(&MockValidator);
+            TestRegistryPort::load(&mut registry, &config).unwrap();
 
-        let hub = std::sync::Arc::new(crate::shared::events::signals::SignalHub::new(
-            config.clone(),
-        ));
-        let mock_conn = crate::shared::dbus::ports::MockDbusConnectionPort::new();
-        let mut mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
-            std::sync::Arc::new(mock_conn),
-            &hub,
-        );
-        TestRegistryPort::register_dbus_subscriptions(&registry, &mut mock_dbus).await;
+            let hub = std::sync::Arc::new(crate::shared::events::signals::SignalHub::new(
+                config.clone(),
+            ));
+            let mock_conn = crate::shared::dbus::ports::DisconnectedBus;
+            let mut mock_dbus =
+                crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
+                    std::sync::Arc::new(mock_conn),
+                    &hub,
+                );
+            TestRegistryPort::register_dbus_subscriptions(&registry, &mut mock_dbus).await;
+        });
     }
 
-    #[tokio::test]
-    async fn test_module_registry_spawn_all() {
-        let home = crate::test_utils::TestHome::new("registry");
-        let mut registry = ModuleRegistry::new(home.env());
-        let toml_str = r#"
+    #[test]
+    fn test_module_registry_spawn_all() {
+        crate::test_utils::block_on(async {
+            let home = crate::test_utils::TestHome::new("registry");
+            let mut registry = ModuleRegistry::new(home.env());
+            let toml_str = r#"
             [root]
             name = "bar"
             left = ["clock"]
         "#;
-        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
-        let config = dto.into_domain(&MockValidator);
+            let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+            let config = dto.into_domain(&MockValidator);
 
-        let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
-        let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
-            std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
+            let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
+            let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
+                std::sync::Arc::new(
+                    crate::features::module_runtime::test_support::MockSurfaceManager,
+                );
 
-        let layout_sender = std::sync::Arc::new(|_| ());
-        let display_sender = std::sync::Arc::new(|_| ());
-        let ui_sender = std::sync::Arc::new(|_| ());
-        let canvas_factory =
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+            let layout_sender = std::sync::Arc::new(|_| ());
+            let display_sender = std::sync::Arc::new(|_| ());
+            let ui_sender = std::sync::Arc::new(|_| ());
+            let canvas_factory =
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
-        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            hub,
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
-            canvas_factory,
-        );
+            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+                hub,
+                surface_manager,
+                layout_sender,
+                display_sender,
+                ui_sender,
+                canvas_factory,
+            );
 
-        TestRegistryPort::load(&mut registry, &config).unwrap();
-        let senders = registry.spawn_all(&deps);
+            TestRegistryPort::load(&mut registry, &config).unwrap();
+            let senders = registry.spawn_all(&deps);
 
-        assert_eq!(senders.len(), 2); // bar + clock
-        assert!(registry.modules.is_empty());
-        assert!(
-            TestRegistryPort::active_signal_subscriptions(&registry)
-                .contains(&crate::shared::events::signals::SignalKind::Time)
-        );
+            assert_eq!(senders.len(), 2); // bar + clock
+            assert!(registry.modules.is_empty());
+            assert!(
+                TestRegistryPort::active_signal_subscriptions(&registry)
+                    .contains(&crate::shared::events::signals::SignalKind::Time)
+            );
+        });
     }
 
-    #[tokio::test]
-    async fn test_spawn_module_lazy_mints_a_working_site() {
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let mut registry = ModuleRegistry::new(app_env);
-        let toml_str = r#"
+    #[test]
+    fn test_spawn_module_lazy_mints_a_working_site() {
+        crate::test_utils::block_on(async {
+            let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::RustLog::new(String::new()),
+                None,
+            ));
+            let mut registry = ModuleRegistry::new(app_env);
+            let toml_str = r#"
             [root]
             name = "bar"
         "#;
-        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
-        let config = dto.into_domain(&MockValidator);
-        TestRegistryPort::load(&mut registry, &config).unwrap();
-        let root_id = TestRegistryPort::root_module(&registry).unwrap();
+            let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+            let config = dto.into_domain(&MockValidator);
+            TestRegistryPort::load(&mut registry, &config).unwrap();
+            let root_id = TestRegistryPort::root_module(&registry).unwrap();
 
-        let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
-        let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
-            std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
-        let layout_sender = std::sync::Arc::new(|_| ());
-        let display_sender = std::sync::Arc::new(|_| ());
-        let ui_sender = std::sync::Arc::new(|_| ());
-        let canvas_factory =
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
-        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            hub,
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
-            canvas_factory,
-        );
+            let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
+            let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
+                std::sync::Arc::new(
+                    crate::features::module_runtime::test_support::MockSurfaceManager,
+                );
+            let layout_sender = std::sync::Arc::new(|_| ());
+            let display_sender = std::sync::Arc::new(|_| ());
+            let ui_sender = std::sync::Arc::new(|_| ());
+            let canvas_factory =
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+                hub,
+                surface_manager,
+                layout_sender,
+                display_sender,
+                ui_sender,
+                canvas_factory,
+            );
 
-        let name = crate::shared::primitives::ModuleName::new("calendar");
-        let key = crate::shared::primitives::ModuleKey::from_name(name);
-        let spawned = registry
-            .spawn_module(
-                root_id,
-                &key,
-                crate::shared::primitives::ModuleOptions::default(),
-                crate::shared::primitives::LayoutSurface::Popup,
-                &config,
-                &deps,
-            )
-            .unwrap();
-        let id = spawned.id();
+            let name = crate::shared::primitives::ModuleName::new("calendar");
+            let key = crate::shared::primitives::ModuleKey::from_name(name);
+            let spawned = registry
+                .spawn_module(
+                    root_id,
+                    &key,
+                    crate::shared::primitives::ModuleOptions::default(),
+                    crate::shared::primitives::LayoutSurface::Popup,
+                    &config,
+                    &deps,
+                )
+                .unwrap();
+            let id = spawned.id();
 
-        assert_ne!(id, root_id);
-        assert_eq!(
-            TestRegistryPort::resolve_site(&registry, Some(root_id), &key),
-            Some(id)
-        );
-        assert_eq!(TestRegistryPort::parent_of(&registry, id), Some(root_id));
-        // The lazily spawned module was handed off to its own actor task,
-        // not left sitting in the pre-spawn pool.
-        assert!(!registry.modules.contains_key(&id));
+            assert_ne!(id, root_id);
+            assert_eq!(
+                TestRegistryPort::resolve_site(&registry, Some(root_id), &key),
+                Some(id)
+            );
+            assert_eq!(TestRegistryPort::parent_of(&registry, id), Some(root_id));
+            // The lazily spawned module was handed off to its own actor task,
+            // not left sitting in the pre-spawn pool.
+            assert!(!registry.modules.contains_key(&id));
+        });
     }
 
     #[test]
@@ -1013,7 +1024,7 @@ mod tests {
 
         let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
         let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
-            std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
+            std::sync::Arc::new(crate::features::module_runtime::test_support::MockSurfaceManager);
         let layout_sender = std::sync::Arc::new(|_| ());
         let display_sender = std::sync::Arc::new(|_| ());
         let ui_sender = std::sync::Arc::new(|_| ());
@@ -1052,82 +1063,86 @@ mod tests {
     /// Wayland subsurface gets parented. `build_site_context` — now shared
     /// by `spawn_all`, `spawn_module_lazy` and `reload_module` — must carry
     /// the site's recorded surface forward across a reload instead.
-    #[tokio::test]
-    async fn test_reload_preserves_embedded_surface() {
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let mut registry = ModuleRegistry::new(app_env);
-        let toml_str = r#"
+    #[test]
+    fn test_reload_preserves_embedded_surface() {
+        crate::test_utils::block_on(async {
+            let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::RustLog::new(String::new()),
+                None,
+            ));
+            let mut registry = ModuleRegistry::new(app_env);
+            let toml_str = r#"
             [root]
             name = "bar"
         "#;
-        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
-        let config = dto.into_domain(&MockValidator);
-        TestRegistryPort::load(&mut registry, &config).unwrap();
-        let root_id = TestRegistryPort::root_module(&registry).unwrap();
+            let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+            let config = dto.into_domain(&MockValidator);
+            TestRegistryPort::load(&mut registry, &config).unwrap();
+            let root_id = TestRegistryPort::root_module(&registry).unwrap();
 
-        let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
-        let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
-            std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
-        let layout_sender = std::sync::Arc::new(|_| ());
-        let display_sender = std::sync::Arc::new(|_| ());
-        let ui_sender = std::sync::Arc::new(|_| ());
-        let canvas_factory =
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
-        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            hub,
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
-            canvas_factory,
-        );
+            let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
+            let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
+                std::sync::Arc::new(
+                    crate::features::module_runtime::test_support::MockSurfaceManager,
+                );
+            let layout_sender = std::sync::Arc::new(|_| ());
+            let display_sender = std::sync::Arc::new(|_| ());
+            let ui_sender = std::sync::Arc::new(|_| ());
+            let canvas_factory =
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+                hub,
+                surface_manager,
+                layout_sender,
+                display_sender,
+                ui_sender,
+                canvas_factory,
+            );
 
-        // Spawn "calendar" lazily, embedded under the root as a Popup site
-        // — mirroring a module embedded via `ui.module()` inside an open
-        // `ui.popup`.
-        let name = crate::shared::primitives::ModuleName::new("calendar");
-        let key = crate::shared::primitives::ModuleKey::from_name(name.clone());
-        let spawned = registry
-            .spawn_module(
-                root_id,
-                &key,
-                crate::shared::primitives::ModuleOptions::default(),
-                crate::shared::primitives::LayoutSurface::Popup,
-                &config,
-                &deps,
-            )
-            .unwrap();
-        let id = spawned.id();
-        assert_eq!(
-            registry.sites.get(&id).map(ModuleSiteInfo::surface),
-            Some(crate::shared::primitives::LayoutSurface::Popup)
-        );
+            // Spawn "calendar" lazily, embedded under the root as a Popup site
+            // — mirroring a module embedded via `ui.module()` inside an open
+            // `ui.popup`.
+            let name = crate::shared::primitives::ModuleName::new("calendar");
+            let key = crate::shared::primitives::ModuleKey::from_name(name.clone());
+            let spawned = registry
+                .spawn_module(
+                    root_id,
+                    &key,
+                    crate::shared::primitives::ModuleOptions::default(),
+                    crate::shared::primitives::LayoutSurface::Popup,
+                    &config,
+                    &deps,
+                )
+                .unwrap();
+            let id = spawned.id();
+            assert_eq!(
+                registry.sites.get(&id).map(ModuleSiteInfo::surface),
+                Some(crate::shared::primitives::LayoutSurface::Popup)
+            );
 
-        // Trigger a reload for that module name — the same path a widget
-        // script or config hot-reload drives.
-        registry.reload_module(&name, &config, &deps).unwrap();
+            // Trigger a reload for that module name — the same path a widget
+            // script or config hot-reload drives.
+            registry.reload_module(&name, &config, &deps).unwrap();
 
-        // The recorded site facts must survive the reload...
-        assert_eq!(
-            registry.sites.get(&id).map(ModuleSiteInfo::surface),
-            Some(crate::shared::primitives::LayoutSurface::Popup)
-        );
+            // The recorded site facts must survive the reload...
+            assert_eq!(
+                registry.sites.get(&id).map(ModuleSiteInfo::surface),
+                Some(crate::shared::primitives::LayoutSurface::Popup)
+            );
 
-        // ...and the ModuleContext `reload_module` actually builds for the
-        // rebuilt actor must carry that surface, not reset to
-        // `ModuleContext::new`'s `LayoutSurface::Bar` default.
-        let (_layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
-        let ctx = registry.build_site_context(id, layout_rx, &deps);
-        assert_eq!(
-            ctx.surface(),
-            crate::shared::primitives::LayoutSurface::Popup
-        );
+            // ...and the ModuleContext `reload_module` actually builds for the
+            // rebuilt actor must carry that surface, not reset to
+            // `ModuleContext::new`'s `LayoutSurface::Bar` default.
+            let (_layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
+            let ctx = registry.build_site_context(id, layout_rx, &deps);
+            assert_eq!(
+                ctx.surface(),
+                crate::shared::primitives::LayoutSurface::Popup
+            );
+        });
     }
 
     /// Regression: `clear()` used to reset `next_module_id` without ever
@@ -1136,82 +1151,86 @@ mod tests {
     /// past the config reload that cleared the registry, and could end up
     /// sharing a freshly re-minted `ModuleId` with a brand-new
     /// config-declared module once `next_module_id` restarted at 0.
-    #[tokio::test]
-    async fn test_clear_aborts_orphaned_lazy_actors() {
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let mut registry = ModuleRegistry::new(app_env);
-        let toml_str = r#"
+    #[test]
+    fn test_clear_aborts_orphaned_lazy_actors() {
+        crate::test_utils::block_on(async {
+            let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::RustLog::new(String::new()),
+                None,
+            ));
+            let mut registry = ModuleRegistry::new(app_env);
+            let toml_str = r#"
             [root]
             name = "bar"
         "#;
-        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
-        let config = dto.into_domain(&MockValidator);
-        TestRegistryPort::load(&mut registry, &config).unwrap();
-        let root_id = TestRegistryPort::root_module(&registry).unwrap();
+            let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+            let config = dto.into_domain(&MockValidator);
+            TestRegistryPort::load(&mut registry, &config).unwrap();
+            let root_id = TestRegistryPort::root_module(&registry).unwrap();
 
-        let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
-        let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
-            std::sync::Arc::new(crate::shared::wayland::ports::MockSurfaceManagerPort::new());
-        let layout_sender = std::sync::Arc::new(|_| ());
-        let display_sender = std::sync::Arc::new(|_| ());
-        let ui_sender = std::sync::Arc::new(|_| ());
-        let canvas_factory =
-            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
-        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            hub,
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
-            canvas_factory,
-        );
+            let hub = std::sync::Arc::new(SignalHub::new(config.clone()));
+            let surface_manager: crate::shared::wayland::ports::DynSurfaceManager =
+                std::sync::Arc::new(
+                    crate::features::module_runtime::test_support::MockSurfaceManager,
+                );
+            let layout_sender = std::sync::Arc::new(|_| ());
+            let display_sender = std::sync::Arc::new(|_| ());
+            let ui_sender = std::sync::Arc::new(|_| ());
+            let canvas_factory =
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+                hub,
+                surface_manager,
+                layout_sender,
+                display_sender,
+                ui_sender,
+                canvas_factory,
+            );
 
-        let name = crate::shared::primitives::ModuleName::new("calendar");
-        let key = crate::shared::primitives::ModuleKey::from_name(name);
-        let spawned = registry
-            .spawn_module(
-                root_id,
-                &key,
-                crate::shared::primitives::ModuleOptions::default(),
-                crate::shared::primitives::LayoutSurface::Popup,
-                &config,
-                &deps,
-            )
-            .unwrap();
-        let id = spawned.id();
+            let name = crate::shared::primitives::ModuleName::new("calendar");
+            let key = crate::shared::primitives::ModuleKey::from_name(name);
+            let spawned = registry
+                .spawn_module(
+                    root_id,
+                    &key,
+                    crate::shared::primitives::ModuleOptions::default(),
+                    crate::shared::primitives::LayoutSurface::Popup,
+                    &config,
+                    &deps,
+                )
+                .unwrap();
+            let id = spawned.id();
 
-        let abort_handle = registry
-            .lazy_actor_handles
-            .get(&id)
-            .expect("the lazily spawned actor's JoinHandle must be tracked")
-            .abort_handle();
-        assert!(
-            !abort_handle.is_finished(),
-            "the actor must still be running right after it's spawned"
-        );
+            let abort_handle = registry
+                .lazy_actor_handles
+                .get(&id)
+                .expect("the lazily spawned actor's JoinHandle must be tracked")
+                .abort_handle();
+            assert!(
+                !abort_handle.is_finished(),
+                "the actor must still be running right after it's spawned"
+            );
 
-        registry.clear();
-        assert!(
-            registry.lazy_actor_handles.is_empty(),
-            "clear() must drop every tracked handle"
-        );
+            registry.clear();
+            assert!(
+                registry.lazy_actor_handles.is_empty(),
+                "clear() must drop every tracked handle"
+            );
 
-        // Give the aborted task a chance to actually stop.
-        for _ in 0..10 {
-            if abort_handle.is_finished() {
-                break;
+            // Give the aborted task a chance to actually stop.
+            for _ in 0..10 {
+                if abort_handle.is_finished() {
+                    break;
+                }
+                tokio::task::yield_now().await;
             }
-            tokio::task::yield_now().await;
-        }
-        assert!(
-            abort_handle.is_finished(),
-            "clear() must abort every lazily spawned actor, not just stop tracking it"
-        );
+            assert!(
+                abort_handle.is_finished(),
+                "clear() must abort every lazily spawned actor, not just stop tracking it"
+            );
+        });
     }
 }

@@ -1,7 +1,5 @@
 use super::dispatch::{dispatch_outcome_buffer, dispatch_outcome_layouts, surface_parent_for};
-use super::floating_dispatch::{
-    dispatch_outcome_panels, dispatch_outcome_popups, dispatch_outcome_tooltips,
-};
+use super::floating_dispatch::FloatingDispatcher;
 use super::runner::EventLoop;
 use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::module_runtime::domain::RenderOutcome;
@@ -51,34 +49,16 @@ impl<
                 SurfaceParent::Floating(kind) => Some(kind),
             }
         });
-        dispatch_outcome_popups(
-            self.ctx.display_sender(),
-            &mut self.popup_render_trees,
-            &mut self.canvas_factory,
-            scale,
-            self.ctx.id(),
-            monitor_id,
-            outcome,
-            floating_parent.clone(),
-        );
-        dispatch_outcome_panels(
-            self.ctx.display_sender(),
-            &mut self.panel_render_trees,
-            &mut self.canvas_factory,
-            scale,
-            self.ctx.id(),
-            monitor_id,
-            outcome,
-            floating_parent.clone(),
-        );
-        dispatch_outcome_tooltips(
-            self.ctx.display_sender(),
-            &mut self.tooltip_render_trees,
-            &mut self.canvas_factory,
+        let module_id = self.ctx.id();
+        let mut floating = FloatingDispatcher {
+            display_sender: self.ctx.display_sender(),
+            canvas_factory: &mut self.canvas_factory,
             scale,
             monitor_id,
-            outcome,
-            floating_parent,
-        );
+            parent: floating_parent,
+        };
+        floating.popups(&mut self.popup_render_trees, module_id, outcome);
+        floating.panels(&mut self.panel_render_trees, module_id, outcome);
+        floating.tooltips(&mut self.tooltip_render_trees, outcome);
     }
 }

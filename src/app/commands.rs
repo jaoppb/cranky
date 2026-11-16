@@ -50,15 +50,17 @@ mod tests {
         assert_ne!(cmd1, cmd3);
     }
 
-    #[tokio::test]
-    async fn test_channel_system_sender() {
-        let (tx, mut rx) = tokio::sync::mpsc::channel(10);
-        let sender = ChannelSystemSender::new(tx);
-        sender.send_system_command(SystemCommand::ReloadModule(ModuleName::new("clock")));
-        let received = rx.try_recv().unwrap();
-        assert_eq!(
-            received,
-            SystemCommand::ReloadModule(ModuleName::new("clock"))
-        );
+    #[test]
+    fn test_channel_system_sender() {
+        crate::test_utils::block_on(async {
+            let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+            let sender = ChannelSystemSender::new(tx);
+            sender.send_system_command(SystemCommand::ReloadModule(ModuleName::new("clock")));
+            let received = rx.try_recv().unwrap();
+            assert_eq!(
+                received,
+                SystemCommand::ReloadModule(ModuleName::new("clock"))
+            );
+        });
     }
 }

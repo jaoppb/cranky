@@ -1,0 +1,21 @@
+[package]
+name = "cranky-unsafe"
+version = "0.14.0"
+description = "The unsafe code Cranky needs, behind safe wrappers"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lints.rust]
+unused = { level = "deny", priority = -1 }
+rust_2018_idioms = { level = "deny", priority = -1 }
+future_incompatible = { level = "deny", priority = -1 }
+
+[dependencies]
+memmap2 = "0.9.11"
+taffy = { workspace = true }

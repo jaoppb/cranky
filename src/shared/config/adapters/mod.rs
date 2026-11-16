@@ -204,38 +204,40 @@ mod tests {
         assert!(res.is_ok());
     }
 
-    #[tokio::test]
-    async fn test_config_adapter_watch_modify_event() {
-        // Create a temporary file
-        let dir = std::env::temp_dir();
-        let file_path = dir.join(format!(
-            "config_test_{}.toml",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::write(&file_path, "root = { height = 50 }").unwrap();
+    #[test]
+    fn test_config_adapter_watch_modify_event() {
+        crate::test_utils::block_on(async {
+            // Create a temporary file
+            let dir = std::env::temp_dir();
+            let file_path = dir.join(format!(
+                "config_test_{}.toml",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            std::fs::write(&file_path, "root = { height = 50 }").unwrap();
 
-        let adapter = ConfigAdapter::with_path(file_path.clone(), MockValidator);
-        let hub = Arc::new(SignalHub::new(Config::default()));
-        let mut rx = hub.config_rx().clone();
+            let adapter = ConfigAdapter::with_path(file_path.clone(), MockValidator);
+            let hub = Arc::new(SignalHub::new(Config::default()));
+            let mut rx = hub.config_rx().clone();
 
-        let _watcher = adapter.watch(&hub).unwrap();
+            let _watcher = adapter.watch(&hub).unwrap();
 
-        // Wait a bit for watcher to initialize
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            // Wait a bit for watcher to initialize
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        // Modify file
-        std::fs::write(&file_path, "root = { height = 60 }").unwrap();
+            // Modify file
+            std::fs::write(&file_path, "root = { height = 60 }").unwrap();
 
-        // Wait for event to propagate
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            // Wait for event to propagate
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        // It should have sent a new config with height 60
-        let _new_config = rx.borrow_and_update().clone();
-        // Depending on timing, it might be 50 (if watcher missed the modify) or 60.
-        // If it picked it up, it's 60.
+            // It should have sent a new config with height 60
+            let _new_config = rx.borrow_and_update().clone();
+            // Depending on timing, it might be 50 (if watcher missed the modify) or 60.
+            // If it picked it up, it's 60.
+        });
     }
 
     #[test]

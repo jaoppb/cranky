@@ -24,8 +24,6 @@ pub trait CanvasFactory: Send + Sync + Clone {
     ) -> impl crate::features::layout_engine::domain::TextMeasurer + '_;
 }
 
-#[cfg_attr(test, allow(clippy::ref_option_ref, clippy::struct_field_names))]
-#[cfg_attr(test, mockall::automock)]
 pub trait Canvas: Send + Sync {
     /// Draw a filled rectangle with optional radius
     fn draw_rect(
@@ -50,7 +48,6 @@ pub trait Canvas: Send + Sync {
 
     /// Draw text starting at `position`, shifted within
     /// `alignment.available_width()` per `alignment.align()`.
-    #[cfg_attr(test, mockall::concretize)]
     fn draw_text(
         &mut self,
         text: &str,
@@ -69,4 +66,100 @@ pub trait Canvas: Send + Sync {
         logical_size: Size,
         position: Position,
     );
+}
+
+/// One request a [`RecordingCanvas`] received.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CanvasCall {
+    Rect,
+    Border,
+    Text {
+        text: String,
+        position: Position,
+        alignment: TextAlignment,
+    },
+    Image,
+}
+
+#[cfg(test)]
+impl CanvasCall {
+    /// The request's name, for asserting on which requests were made.
+    #[must_use]
+    pub const fn kind(&self) -> &'static str {
+        match self {
+            Self::Rect => "rect",
+            Self::Border => "border",
+            Self::Text { .. } => "text",
+            Self::Image => "image",
+        }
+    }
+}
+
+/// A canvas that draws nothing and remembers every request, in order.
+#[cfg(test)]
+#[derive(Debug, Default)]
+pub struct RecordingCanvas {
+    pub calls: Vec<CanvasCall>,
+}
+
+#[cfg(test)]
+impl RecordingCanvas {
+    /// The name of every request received, in order.
+    #[must_use]
+    pub fn kinds(&self) -> Vec<&'static str> {
+        self.calls.iter().map(CanvasCall::kind).collect()
+    }
+}
+
+#[cfg(test)]
+impl Canvas for RecordingCanvas {
+    fn draw_rect(
+        &mut self,
+        _x: LogicalPx,
+        _y: LogicalPx,
+        _width: LogicalPx,
+        _height: LogicalPx,
+        _color: DrawingColor,
+        _radius: LogicalPx,
+    ) {
+        self.calls.push(CanvasCall::Rect);
+    }
+
+    fn draw_border(
+        &mut self,
+        _position: Position,
+        _size: Size,
+        _color: DrawingColor,
+        _radius: LogicalPx,
+        _border_size: LogicalPx,
+    ) {
+        self.calls.push(CanvasCall::Border);
+    }
+
+    fn draw_text(
+        &mut self,
+        text: &str,
+        _font_family: Option<&FontFamily>,
+        _font_size: Option<FontSize>,
+        _color: DrawingColor,
+        position: Position,
+        alignment: TextAlignment,
+    ) {
+        self.calls.push(CanvasCall::Text {
+            text: text.to_string(),
+            position,
+            alignment,
+        });
+    }
+
+    fn draw_image(
+        &mut self,
+        _image_data: &[u8],
+        _pixel_size: Size,
+        _logical_size: Size,
+        _position: Position,
+    ) {
+        self.calls.push(CanvasCall::Image);
+    }
 }

@@ -11,7 +11,6 @@ pub enum HyprError {
     Io(#[from] std::io::Error),
 }
 
-#[cfg_attr(test, mockall::automock)]
 pub trait HyprlandProvider: Send + Sync {
     /// Queries the monitors from Hyprland.
     ///

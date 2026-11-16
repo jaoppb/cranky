@@ -1,28 +1,31 @@
-use super::content::{FloatingCache, layout_floating_content_cached};
+use super::content::{FloatingCache, FloatingPass, layout_floating_content_cached};
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::vdom::domain::{
     InteractionContext, NodePath, NodeRef, SurfaceSpace, resolve_segment,
 };
-use crate::shared::primitives::geometry::Scale;
-use crate::shared::primitives::{ChildSizesMap, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
-/// Picks the render tree that owns the hover, so the tooltip lookup walks
-/// the same surface the hover actually happened on.
-const fn hovered_tree<'a>(
-    bar: &'a RenderNode,
-    popup: Option<&'a RenderNode>,
-    panel: Option<&'a RenderNode>,
-    surface: SurfaceSpace,
-) -> Option<&'a RenderNode> {
-    match surface {
-        SurfaceSpace::Bar => Some(bar),
-        SurfaceSpace::Popup => popup,
-        SurfaceSpace::Panel => panel,
-        // A tooltip cannot itself own the hover that opens a tooltip —
-        // tooltip content isn't hit-tested (it receives no pointer events).
-        SurfaceSpace::Tooltip => None,
+/// The laid-out trees a hover can land on.
+#[derive(Clone, Copy)]
+pub(super) struct HoverTrees<'a> {
+    pub(super) bar: &'a RenderNode,
+    pub(super) popup: Option<&'a RenderNode>,
+    pub(super) panel: Option<&'a RenderNode>,
+}
+
+impl<'a> HoverTrees<'a> {
+    /// Picks the render tree that owns the hover, so the tooltip lookup walks
+    /// the same surface the hover actually happened on.
+    const fn hovered(self, surface: SurfaceSpace) -> Option<&'a RenderNode> {
+        match surface {
+            SurfaceSpace::Bar => Some(self.bar),
+            SurfaceSpace::Popup => self.popup,
+            SurfaceSpace::Panel => self.panel,
+            // A tooltip cannot itself own the hover that opens a tooltip —
+            // tooltip content isn't hit-tested (it receives no pointer events).
+            SurfaceSpace::Tooltip => None,
+        }
     }
 }
 
@@ -46,30 +49,16 @@ fn resolve_node_ref(root: &RenderNode, node_ref: &NodeRef) -> Option<NodePath> {
 /// tooltip wins — but works from the hovered `NodeRef` against the
 /// already-laid-out trees instead of a hit-test result, since the pipeline
 /// never hit-tests.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn layout_tooltip<F: CanvasFactory, E: LayoutEnginePort>(
-    bar: &RenderNode,
-    popup: Option<&RenderNode>,
-    panel: Option<&RenderNode>,
+    trees: HoverTrees<'_>,
     interaction: Option<&InteractionContext>,
     cache: &mut FloatingCache,
-    monitor_id: &MonitorId,
     layout_engine: &mut E,
-    canvas_factory: &mut F,
-    scale: Scale,
-    current_child_sizes: Option<&ChildSizesMap>,
+    pass: &mut FloatingPass<'_, F>,
 ) -> Option<RenderNode> {
     let hovered_ref = interaction?.hovered()?;
-    let tree = hovered_tree(bar, popup, panel, hovered_ref.relative_path().surface())?;
+    let tree = trees.hovered(hovered_ref.relative_path().surface())?;
     let hovered_path = resolve_node_ref(tree, hovered_ref)?;
     let tooltip = tree.find_tooltip_along(&hovered_path)?;
-    layout_floating_content_cached(
-        cache,
-        monitor_id,
-        layout_engine,
-        canvas_factory,
-        scale,
-        current_child_sizes,
-        tooltip,
-    )
+    layout_floating_content_cached(cache, layout_engine, pass, tooltip)
 }

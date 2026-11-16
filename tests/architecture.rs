@@ -1,46 +1,43 @@
 //! Architecture tests gating structural constraints using `arch-lint` and LOC bounds.
 
-#![allow(
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::expect_used,
-    clippy::cast_possible_wrap,
-    clippy::cast_possible_truncation
-)]
-
 arch_lint::check!();
 
 const MAX_PROD_LOC: usize = 200;
 
 const ALLOWLIST: &[&str] = &[];
 
+/// Opening braces minus closing braces on `line`.
+fn brace_delta(line: &str) -> i32 {
+    line.chars().fold(0, |depth: i32, c| match c {
+        '{' => depth.saturating_add(1),
+        '}' => depth.saturating_sub(1),
+        _ => depth,
+    })
+}
+
 fn count_prod_lines(path: &std::path::Path) -> usize {
     let content = std::fs::read_to_string(path).expect("Failed to read file");
     let mut in_test = false;
     let mut brace_depth: i32 = 0;
-    let mut prod_lines = 0;
+    let mut prod_lines: usize = 0;
 
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("#[cfg(test)]") {
             in_test = true;
-            let opens = line.chars().filter(|&c| c == '{').count() as i32;
-            let closes = line.chars().filter(|&c| c == '}').count() as i32;
-            brace_depth = opens - closes;
+            brace_depth = brace_delta(line);
             continue;
         }
 
         if in_test {
-            let opens = line.chars().filter(|&c| c == '{').count() as i32;
-            let closes = line.chars().filter(|&c| c == '}').count() as i32;
-            brace_depth += opens - closes;
+            brace_depth = brace_depth.saturating_add(brace_delta(line));
             if brace_depth <= 0 && (line.contains('}') || line.contains(';')) {
                 in_test = false;
             }
             continue;
         }
 
-        prod_lines += 1;
+        prod_lines = prod_lines.saturating_add(1);
     }
 
     prod_lines

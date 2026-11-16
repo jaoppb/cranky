@@ -6,7 +6,6 @@ pub use crate::shared::wayland::surface_parent::SurfaceParent;
 use async_trait::async_trait;
 use std::sync::Arc;
 
-#[cfg_attr(test, mockall::automock)]
 pub trait SurfaceManagerPort: Send + Sync {
     /// Submit a rendered buffer for a specific module on a specific monitor.
     fn submit_buffer(
@@ -50,7 +49,6 @@ pub enum DisplayServerError {
 }
 
 #[async_trait]
-#[cfg_attr(test, mockall::automock)]
 pub trait DisplayServerPort: Send + Sync {
     /// # Errors
     ///

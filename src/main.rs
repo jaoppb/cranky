@@ -1,6 +1,3 @@
-#![deny(unsafe_code)]
-#![warn(clippy::type_complexity, clippy::needless_lifetimes)]
-
 use cranky::app::adapter_supervisor::AdapterSupervisor;
 use cranky::app::commands::{ChannelSystemSender, SystemCommand};
 use cranky::app::state::CrankyApp;
@@ -103,91 +100,97 @@ async fn init_secondary_adapters(
     Ok((dbus_manager, sni_adapter, supervisor))
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let env_adapter = cranky::shared::env::adapters::os::OsEnvironmentAdapter;
-    let app_env = std::sync::Arc::new(env_adapter.read_environment()?);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(async {
+        let env_adapter = cranky::shared::env::adapters::os::OsEnvironmentAdapter;
+        let app_env = std::sync::Arc::new(env_adapter.read_environment()?);
 
-    let _guard = init_tracing(&app_env);
+        let _guard = init_tracing(&app_env);
 
-    let main_span = info_span!("cranky_main");
-    let _main_enter = main_span.enter();
+        let main_span = info_span!("cranky_main");
+        let _main_enter = main_span.enter();
 
-    info!("Starting Cranky bar (Hexagonal + Reactive)...");
+        info!("Starting Cranky bar (Hexagonal + Reactive)...");
 
-    // 1. Initial configuration and Core Hub
-    let font_validator = CosmicFontValidatorAdapter::new();
-    let config_adapter = ConfigAdapter::new(font_validator, &app_env);
-    let initial_config = config_adapter.load_initial()?;
+        // 1. Initial configuration and Core Hub
+        let font_validator = CosmicFontValidatorAdapter::new();
+        let config_adapter = ConfigAdapter::new(font_validator, &app_env);
+        let initial_config = config_adapter.load_initial()?;
 
-    let hub = Arc::new(SignalHub::new(initial_config.clone()));
+        let hub = Arc::new(SignalHub::new(initial_config.clone()));
 
-    // 2. Initialize Wayland and Core App
-    let (display_tx, display_rx) = mpsc::channel::<DisplayCommand>(100);
-    let (layout_tx, layout_rx) = mpsc::channel::<LayoutEvent>(100);
-    let (ui_tx, ui_rx) = mpsc::channel::<UiCommand>(100);
-    let (system_tx, system_rx) = mpsc::channel::<SystemCommand>(100);
+        // 2. Initialize Wayland and Core App
+        let (display_tx, display_rx) = mpsc::channel::<DisplayCommand>(100);
+        let (layout_tx, layout_rx) = mpsc::channel::<LayoutEvent>(100);
+        let (ui_tx, ui_rx) = mpsc::channel::<UiCommand>(100);
+        let (system_tx, system_rx) = mpsc::channel::<SystemCommand>(100);
 
-    let (wayland_adapter, surface_manager) =
-        WaylandAdapter::new(hub.clone(), display_tx.clone(), app_env.clone())?;
-    let surface_manager: cranky::shared::wayland::ports::DynSurfaceManager =
-        std::sync::Arc::new(surface_manager);
+        let (wayland_adapter, surface_manager) =
+            WaylandAdapter::new(hub.clone(), display_tx.clone(), app_env.clone())?;
+        let surface_manager: cranky::shared::wayland::ports::DynSurfaceManager =
+            std::sync::Arc::new(surface_manager);
 
-    let registry = Box::new(cranky::app::registry::ModuleRegistry::new(app_env.clone()));
+        let registry = Box::new(cranky::app::registry::ModuleRegistry::new(app_env.clone()));
 
-    let canvas_factory =
-        cranky::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+        let canvas_factory =
+            cranky::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
-    let display_sender = std::sync::Arc::new(display_tx);
-    let layout_sender = std::sync::Arc::new(layout_tx);
-    let ui_sender = std::sync::Arc::new(ui_tx);
+        let display_sender = std::sync::Arc::new(display_tx);
+        let layout_sender = std::sync::Arc::new(layout_tx);
+        let ui_sender = std::sync::Arc::new(ui_tx);
 
-    let services = cranky::app::state::StateServices::new(
-        hub.clone(),
-        surface_manager,
-        canvas_factory,
-        display_sender,
-        layout_sender,
-        ui_sender,
-    );
-    let channels = cranky::app::state::StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-    let mut app = CrankyApp::new(initial_config.clone(), services, channels, registry)?;
+        let services = cranky::app::state::StateServices::new(
+            hub.clone(),
+            surface_manager,
+            canvas_factory,
+            display_sender,
+            layout_sender,
+            ui_sender,
+        );
+        let channels =
+            cranky::app::state::StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let mut app = CrankyApp::new(initial_config.clone(), services, channels, registry)?;
 
-    let active_signals = app.active_signals();
+        let active_signals = app.active_signals();
 
-    // 3. Initialize secondary adapters, and wire the supervisor in for
-    // later on-demand starts triggered by a lazily-spawned module.
-    let (zbus_adapter, sni_adapter, adapter_supervisor) =
-        init_secondary_adapters(&hub, &app_env, initial_config.metrics(), active_signals).await?;
-    app.set_adapter_supervisor(adapter_supervisor);
+        // 3. Initialize secondary adapters, and wire the supervisor in for
+        // later on-demand starts triggered by a lazily-spawned module.
+        let (zbus_adapter, sni_adapter, adapter_supervisor) =
+            init_secondary_adapters(&hub, &app_env, initial_config.metrics(), active_signals)
+                .await?;
+        app.set_adapter_supervisor(adapter_supervisor);
 
-    let _config_watcher = config_adapter.watch(&hub)?;
+        let _config_watcher = config_adapter.watch(&hub)?;
 
-    let style_loader =
-        cranky::features::styling::adapters::fs_loader::FsStyleLoader::new(app_env.clone());
-    if let Err(e) = style_loader.ensure_builtin_styles() {
-        error!("Failed to deploy builtin styles: {e}");
-    }
-
-    let style_system_tx = system_tx.clone();
-    let _style_watcher = match style_loader.watch_styles(Arc::new(move |sheet| {
-        let _ = style_system_tx.try_send(SystemCommand::ReloadStyle(sheet));
-    })) {
-        Ok(w) => Some(w),
-        Err(e) => {
-            error!("Failed to watch style directories: {e}");
-            None
+        let style_loader =
+            cranky::features::styling::adapters::fs_loader::FsStyleLoader::new(app_env.clone());
+        if let Err(e) = style_loader.ensure_builtin_styles() {
+            error!("Failed to deploy builtin styles: {e}");
         }
-    };
 
-    let _script_watcher = cranky::app::builtins::BuiltinModules::watch_scripts(
-        Arc::new(ChannelSystemSender::new(system_tx)),
-        &app_env,
-    )?;
+        let style_system_tx = system_tx.clone();
+        let _style_watcher = match style_loader.watch_styles(Arc::new(move |sheet| {
+            let _ = style_system_tx.try_send(SystemCommand::ReloadStyle(sheet));
+        })) {
+            Ok(w) => Some(w),
+            Err(e) => {
+                error!("Failed to watch style directories: {e}");
+                None
+            }
+        };
 
-    // 5. Start the Core App Orchestrator
-    info!("Cranky started successfully.");
-    app.run(wayland_adapter, zbus_adapter, sni_adapter).await?;
+        let _script_watcher = cranky::app::builtins::BuiltinModules::watch_scripts(
+            Arc::new(ChannelSystemSender::new(system_tx)),
+            &app_env,
+        )?;
 
-    Ok(())
+        // 5. Start the Core App Orchestrator
+        info!("Cranky started successfully.");
+        app.run(wayland_adapter, zbus_adapter, sni_adapter).await?;
+
+        Ok(())
+    })
 }

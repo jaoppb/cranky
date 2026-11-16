@@ -185,12 +185,11 @@ mod tests {
     use crate::shared::primitives::color::{Color, DrawingColor};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
     use crate::shared::primitives::{TextAlign, TextAlignment};
-    use crate::shared::rendering::ports::canvas::MockCanvas;
+    use crate::shared::rendering::ports::canvas::{CanvasCall, RecordingCanvas};
 
     #[test]
     fn test_render_to_canvas() {
-        let mut canvas = MockCanvas::new();
-        canvas.expect_draw_rect().times(1).return_const(());
+        let mut canvas = RecordingCanvas::default();
 
         let mut rect_style = ComputedStyle::default();
         rect_style.set_background(DrawingColor::Solid(Color::new(255, 255, 255, 255)));
@@ -207,9 +206,9 @@ mod tests {
         };
 
         rect.render_to_canvas(&mut canvas);
+        assert_eq!(canvas.kinds(), ["rect"]);
 
-        let mut canvas = MockCanvas::new();
-        canvas.expect_draw_rect().times(1).return_const(());
+        let mut canvas = RecordingCanvas::default();
         let mut flex_style = ComputedStyle::default();
         flex_style.set_background(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         let flex = RenderNode::Flex {
@@ -225,9 +224,9 @@ mod tests {
             panel: None,
         };
         flex.render_to_canvas(&mut canvas);
+        assert_eq!(canvas.kinds(), ["rect"]);
 
-        let mut canvas = MockCanvas::new();
-        canvas.expect_draw_text().times(1).return_const(());
+        let mut canvas = RecordingCanvas::default();
         let mut text_style = ComputedStyle::default();
         text_style.set_color(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         let text = RenderNode::Text {
@@ -243,9 +242,9 @@ mod tests {
             panel: None,
         };
         text.render_to_canvas(&mut canvas);
+        assert_eq!(canvas.kinds(), ["text"]);
 
-        let mut canvas = MockCanvas::new();
-        canvas.expect_draw_rect().times(2).return_const(());
+        let mut canvas = RecordingCanvas::default();
         let mut prog_style = ComputedStyle::default();
         prog_style.set_background(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
         prog_style.set_accent_color(DrawingColor::Solid(Color::new(255, 0, 0, 255)));
@@ -263,9 +262,9 @@ mod tests {
             panel: None,
         };
         progress.render_to_canvas(&mut canvas);
+        assert_eq!(canvas.kinds(), ["rect", "rect"]);
 
-        let mut canvas = MockCanvas::new();
-        canvas.expect_draw_image().times(1).return_const(());
+        let mut canvas = RecordingCanvas::default();
         let image = RenderNode::Image {
             path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
@@ -277,6 +276,7 @@ mod tests {
             panel: None,
         };
         image.render_to_canvas(&mut canvas);
+        assert_eq!(canvas.kinds(), ["image"]);
     }
 
     fn text_node(style: ComputedStyle) -> RenderNode {
@@ -294,25 +294,31 @@ mod tests {
         }
     }
 
+    /// Where the one text request `canvas` received was drawn, and how aligned.
+    fn drawn_text(canvas: &RecordingCanvas) -> (Position, TextAlignment) {
+        match canvas.calls.as_slice() {
+            [
+                CanvasCall::Text {
+                    position,
+                    alignment,
+                    ..
+                },
+            ] => (*position, *alignment),
+            calls => panic!("expected exactly one text request, got {calls:?}"),
+        }
+    }
+
     #[test]
     fn test_text_is_drawn_inside_its_padding() {
         let mut padded = ComputedStyle::default();
         padded.set_padding(BoxMargin::new(4.0, 4.0, 2.0, 2.0));
-        let mut canvas = MockCanvas::new();
-        canvas
-            .expect_draw_text()
-            .withf(|_, _, _, _, pos, _| *pos == Position::new(22, 34))
-            .times(1)
-            .return_const(());
+        let mut canvas = RecordingCanvas::default();
         text_node(padded).render_to_canvas(&mut canvas);
+        assert_eq!(drawn_text(&canvas).0, Position::new(22, 34));
 
-        let mut canvas = MockCanvas::new();
-        canvas
-            .expect_draw_text()
-            .withf(|_, _, _, _, pos, _| *pos == Position::new(20, 30))
-            .times(1)
-            .return_const(());
+        let mut canvas = RecordingCanvas::default();
         text_node(ComputedStyle::default()).render_to_canvas(&mut canvas);
+        assert_eq!(drawn_text(&canvas).0, Position::new(20, 30));
     }
 
     #[test]
@@ -320,25 +326,21 @@ mod tests {
         let mut centered = ComputedStyle::default();
         centered.set_padding(BoxMargin::new(4.0, 4.0, 2.0, 2.0));
         centered.set_text_align(TextAlign::Center);
-        let mut canvas = MockCanvas::new();
-        canvas
-            .expect_draw_text()
-            .withf(|_, _, _, _, _, alignment| {
-                *alignment == TextAlignment::new(TextAlign::Center, 26)
-            })
-            .times(1)
-            .return_const(());
+        let mut canvas = RecordingCanvas::default();
         text_node(centered).render_to_canvas(&mut canvas);
+        assert_eq!(
+            drawn_text(&canvas).1,
+            TextAlignment::new(TextAlign::Center, 26)
+        );
     }
 
     #[test]
     fn test_text_alignment_defaults_to_left_over_full_box() {
-        let mut canvas = MockCanvas::new();
-        canvas
-            .expect_draw_text()
-            .withf(|_, _, _, _, _, alignment| *alignment == TextAlignment::new(TextAlign::Left, 30))
-            .times(1)
-            .return_const(());
+        let mut canvas = RecordingCanvas::default();
         text_node(ComputedStyle::default()).render_to_canvas(&mut canvas);
+        assert_eq!(
+            drawn_text(&canvas).1,
+            TextAlignment::new(TextAlign::Left, 30)
+        );
     }
 }

@@ -60,7 +60,7 @@ skip = [
     { crate = "getrandom@0.2", reason = "const-random-macro 0.1, under ahash 0.8" },
     { crate = "getrandom@0.3", reason = "ahash 0.8 (uuid is on 0.4)" },
     { crate = "syn@1", reason = "lightningcss-derive 1.0.0-alpha.43" },
-    { crate = "syn@2", reason = "arch-lint 0.11, miette-derive 7, mockall_derive 0.14, multiversion-macros 0.8, phf_macros 0.13, rhai_codegen 3, thiserror-impl 1, tracing-attributes 0.1 and zerocopy-derive 0.8 (the rest are on syn 3)" },
+    { crate = "syn@2", reason = "arch-lint 0.11, miette-derive 7, multiversion-macros 0.8, phf_macros 0.13, rhai_codegen 3, thiserror-impl 1, tracing-attributes 0.1 and zerocopy-derive 0.8 (the rest are on syn 3)" },
 ]
 
 [sources]

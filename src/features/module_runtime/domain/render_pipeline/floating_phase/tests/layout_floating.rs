@@ -1,4 +1,6 @@
-use super::super::{FloatingContentCaches, FloatingLayouts, layout_floating};
+use super::super::{
+    FloatingContentCaches, FloatingEngines, FloatingLayouts, FloatingPass, layout_floating,
+};
 use super::{RecordingEngine, Spec, content, tooltip_content};
 use crate::features::layout_engine::domain::{RenderNode, StyledNode, StyledPanel, StyledPopup};
 use crate::features::module_runtime::test_support::MockCanvasFactory;
@@ -23,18 +25,22 @@ fn run(bar: &RenderNode, interaction: Option<&InteractionContext>) -> (FloatingL
     let layouts = layout_floating(
         bar,
         interaction,
-        &MonitorId::new("DP-1"),
         FloatingContentCaches {
             popup: &mut HashMap::new(),
             panel: &mut HashMap::new(),
             tooltip: &mut HashMap::new(),
         },
-        &mut engines.popup,
-        &mut engines.panel,
-        &mut engines.tooltip,
-        &mut MockCanvasFactory,
-        Scale::new(1.0),
-        None,
+        FloatingEngines {
+            popup: &mut engines.popup,
+            panel: &mut engines.panel,
+            tooltip: &mut engines.tooltip,
+        },
+        &mut FloatingPass {
+            monitor_id: &MonitorId::new("DP-1"),
+            canvas_factory: &mut MockCanvasFactory,
+            scale: Scale::new(1.0),
+            current_child_sizes: None,
+        },
         &mut Vec::new(),
     );
     (layouts, engines)

@@ -8,151 +8,135 @@ use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
 
-/// Shows, updates or hides one floating kind for one monitor.
-///
-/// `trees` is this module's own cache of what it last showed for `kind` on
-/// this monitor — the same cache the module's hit-testing reads, so there is
-/// exactly one place that remembers "what's currently there," not a
-/// hit-testing copy and a separate dedup copy. The cached pair is the
-/// content *and* the anchor it was positioned against: content identical to
-/// what's cached is never repainted or resent, but a dispatch still goes out
-/// whenever the anchor moved even if the content didn't, since that's what
-/// actually repositions the floating surface on screen (a sibling module's
-/// width changing this module's x-offset on the same render tick, while the
-/// popup's own content stays the same). Comparing the node alone would miss
-/// that and leave the popup visually stuck at its old position.
-#[allow(clippy::too_many_arguments)]
-fn dispatch_floating_kind<DS: DisplayCommandSender, F: CanvasFactory>(
-    display_sender: &DS,
-    trees: &mut HashMap<MonitorId, (Option<Rect>, RenderNode)>,
-    canvas_factory: &mut F,
-    scale: Scale,
+/// One module's cache of what it last showed for one floating kind, per monitor.
+type FloatingTrees = HashMap<MonitorId, (Option<Rect>, RenderNode)>;
+
+/// What one render asks of one floating kind.
+struct FloatingRequest<'a> {
     kind: FloatingKind,
-    monitor_id: &MonitorId,
-    node: Option<&RenderNode>,
+    node: Option<&'a RenderNode>,
     anchor_rect: Option<Rect>,
     offset: Option<PopupOffset>,
-    parent: Option<FloatingKind>,
+    /// An embedded child has not settled on its host width yet.
     hold: bool,
-) {
-    // An embedded child has not settled on its host width yet: leave the
-    // surface exactly as it is (closed, or showing its previous frame)
-    // rather than present a frame at the wrong width.
-    if hold {
-        return;
-    }
-    let Some(node) = node else {
-        if trees.remove(monitor_id).is_some() {
-            display_sender.send_display_command(DisplayCommand::HideFloatingSurface { kind });
+}
+
+/// Everything the three floating kinds of one module share on one monitor for
+/// one render.
+pub(super) struct FloatingDispatcher<'a, DS: DisplayCommandSender, F: CanvasFactory> {
+    pub(super) display_sender: &'a DS,
+    pub(super) canvas_factory: &'a mut F,
+    pub(super) scale: Scale,
+    pub(super) monitor_id: &'a MonitorId,
+    /// The floating surface this module is itself embedded in, if any: a
+    /// popup, panel or tooltip opened from inside it nests under that one.
+    pub(super) parent: Option<FloatingKind>,
+}
+
+impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
+    /// Shows, updates or hides one floating kind for one monitor.
+    ///
+    /// `trees` is this module's own cache of what it last showed for `kind` on
+    /// this monitor — the same cache the module's hit-testing reads, so there is
+    /// exactly one place that remembers "what's currently there," not a
+    /// hit-testing copy and a separate dedup copy. The cached pair is the
+    /// content *and* the anchor it was positioned against: content identical to
+    /// what's cached is never repainted or resent, but a dispatch still goes out
+    /// whenever the anchor moved even if the content didn't, since that's what
+    /// actually repositions the floating surface on screen (a sibling module's
+    /// width changing this module's x-offset on the same render tick, while the
+    /// popup's own content stays the same). Comparing the node alone would miss
+    /// that and leave the popup visually stuck at its old position.
+    fn dispatch(&mut self, trees: &mut FloatingTrees, request: FloatingRequest<'_>) {
+        // An embedded child has not settled on its host width yet: leave the
+        // surface exactly as it is (closed, or showing its previous frame)
+        // rather than present a frame at the wrong width.
+        if request.hold {
+            return;
         }
-        return;
-    };
+        let kind = request.kind;
+        let Some(node) = request.node else {
+            if trees.remove(self.monitor_id).is_some() {
+                self.display_sender
+                    .send_display_command(DisplayCommand::HideFloatingSurface { kind });
+            }
+            return;
+        };
 
-    let unchanged = trees
-        .get(monitor_id)
-        .is_some_and(|(cached_anchor, cached_node)| {
-            *cached_anchor == anchor_rect && cached_node == node
-        });
-    trees.insert(monitor_id.clone(), (anchor_rect, node.clone()));
-    if unchanged {
-        return;
+        let anchor_rect = request.anchor_rect;
+        let unchanged = trees
+            .get(self.monitor_id)
+            .is_some_and(|(cached_anchor, cached_node)| {
+                *cached_anchor == anchor_rect && cached_node == node
+            });
+        trees.insert(self.monitor_id.clone(), (anchor_rect, node.clone()));
+        if unchanged {
+            return;
+        }
+
+        let logical_size = *node.rect().size();
+        let Some((buffer, _)) =
+            paint_pipeline(node, Some(node.rect()), self.scale, self.canvas_factory)
+        else {
+            return;
+        };
+        self.display_sender
+            .send_display_command(DisplayCommand::ShowFloatingSurface(ShowFloating {
+                kind,
+                monitor_id: Some(self.monitor_id.clone()),
+                anchor_rect,
+                buffer,
+                logical_size,
+                offset: request.offset,
+                parent: self.parent.clone(),
+            }));
     }
 
-    let logical_size = *node.rect().size();
-    let Some((buffer, _)) = paint_pipeline(node, Some(node.rect()), scale, canvas_factory) else {
-        return;
-    };
-    display_sender.send_display_command(DisplayCommand::ShowFloatingSurface(ShowFloating {
-        kind,
-        monitor_id: Some(monitor_id.clone()),
-        anchor_rect,
-        buffer,
-        logical_size,
-        offset,
-        parent,
-    }));
-}
+    pub(super) fn popups(
+        &mut self,
+        trees: &mut FloatingTrees,
+        module_id: ModuleId,
+        outcome: &RenderOutcome,
+    ) {
+        let popup_layout = outcome.popup_layout();
+        let request = FloatingRequest {
+            kind: FloatingKind::Popup(PopupTarget::new(module_id, self.monitor_id.clone())),
+            node: popup_layout.map(PopupRenderLayout::node),
+            anchor_rect: popup_layout.map(PopupRenderLayout::anchor_rect),
+            offset: popup_layout.and_then(PopupRenderLayout::offset),
+            hold: outcome.popup_held(),
+        };
+        self.dispatch(trees, request);
+    }
 
-#[allow(clippy::too_many_arguments)]
-pub(super) fn dispatch_outcome_popups<DS: DisplayCommandSender, F: CanvasFactory>(
-    display_sender: &DS,
-    popup_render_trees: &mut HashMap<MonitorId, (Option<Rect>, RenderNode)>,
-    canvas_factory: &mut F,
-    scale: Scale,
-    module_id: ModuleId,
-    monitor_id: &MonitorId,
-    outcome: &RenderOutcome,
-    parent: Option<FloatingKind>,
-) {
-    let kind = FloatingKind::Popup(PopupTarget::new(module_id, monitor_id.clone()));
-    let popup_layout = outcome.popup_layout();
-    dispatch_floating_kind(
-        display_sender,
-        popup_render_trees,
-        canvas_factory,
-        scale,
-        kind,
-        monitor_id,
-        popup_layout.map(PopupRenderLayout::node),
-        popup_layout.map(PopupRenderLayout::anchor_rect),
-        popup_layout.and_then(PopupRenderLayout::offset),
-        parent,
-        outcome.popup_held(),
-    );
-}
+    pub(super) fn panels(
+        &mut self,
+        trees: &mut FloatingTrees,
+        module_id: ModuleId,
+        outcome: &RenderOutcome,
+    ) {
+        let request = FloatingRequest {
+            kind: FloatingKind::Panel(PopupTarget::new(module_id, self.monitor_id.clone())),
+            node: outcome.panel_layout(),
+            anchor_rect: None,
+            offset: None,
+            hold: outcome.panel_held(),
+        };
+        self.dispatch(trees, request);
+    }
 
-#[allow(clippy::too_many_arguments)]
-pub(super) fn dispatch_outcome_panels<DS: DisplayCommandSender, F: CanvasFactory>(
-    display_sender: &DS,
-    panel_render_trees: &mut HashMap<MonitorId, (Option<Rect>, RenderNode)>,
-    canvas_factory: &mut F,
-    scale: Scale,
-    module_id: ModuleId,
-    monitor_id: &MonitorId,
-    outcome: &RenderOutcome,
-    parent: Option<FloatingKind>,
-) {
-    let kind = FloatingKind::Panel(PopupTarget::new(module_id, monitor_id.clone()));
-    dispatch_floating_kind(
-        display_sender,
-        panel_render_trees,
-        canvas_factory,
-        scale,
-        kind,
-        monitor_id,
-        outcome.panel_layout(),
-        None,
-        None,
-        parent,
-        outcome.panel_held(),
-    );
-}
-
-pub(super) fn dispatch_outcome_tooltips<DS: DisplayCommandSender, F: CanvasFactory>(
-    display_sender: &DS,
-    tooltip_render_trees: &mut HashMap<MonitorId, (Option<Rect>, RenderNode)>,
-    canvas_factory: &mut F,
-    scale: Scale,
-    monitor_id: &MonitorId,
-    outcome: &RenderOutcome,
-    parent: Option<FloatingKind>,
-) {
-    // A tooltip triggered on an element inside a module embedded in an
-    // open popup/panel (`ui.module()` nested inside floating content) nests
-    // the same way that module's own popup/panel would — `parent` is the
-    // same floating surface `dispatch_outcome_popups`/`dispatch_outcome_panels`
-    // compute for this module, not always `None`.
-    dispatch_floating_kind(
-        display_sender,
-        tooltip_render_trees,
-        canvas_factory,
-        scale,
-        FloatingKind::Tooltip,
-        monitor_id,
-        outcome.tooltip_layout(),
-        None,
-        None,
-        parent,
-        outcome.tooltip_held(),
-    );
+    /// A tooltip triggered on an element inside a module embedded in an open
+    /// popup/panel (`ui.module()` nested inside floating content) nests the
+    /// same way that module's own popup/panel would: under `self.parent`, not
+    /// always under nothing.
+    pub(super) fn tooltips(&mut self, trees: &mut FloatingTrees, outcome: &RenderOutcome) {
+        let request = FloatingRequest {
+            kind: FloatingKind::Tooltip,
+            node: outcome.tooltip_layout(),
+            anchor_rect: None,
+            offset: None,
+            hold: outcome.tooltip_held(),
+        };
+        self.dispatch(trees, request);
+    }
 }

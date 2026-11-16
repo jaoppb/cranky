@@ -243,21 +243,23 @@ mod tests {
         assert!(state.temperature().value() >= 32.0 || state.temperature().value() == 0.0);
     }
 
-    #[tokio::test]
-    async fn test_sysinfo_adapter_start() {
-        let config: MetricsConfig = serde_json::from_value(serde_json::json!({
-            "update_interval_ms": 10
-        }))
-        .unwrap();
-        let hub = Arc::new(SignalHub::new(Config::default()));
-        let mut rx = hub.metrics_rx().clone();
+    #[test]
+    fn test_sysinfo_adapter_start() {
+        crate::test_utils::block_on(async {
+            let config: MetricsConfig = serde_json::from_value(serde_json::json!({
+                "update_interval_ms": 10
+            }))
+            .unwrap();
+            let hub = Arc::new(SignalHub::new(Config::default()));
+            let mut rx = hub.metrics_rx().clone();
 
-        let adapter = SysinfoAdapter::new(config, hub);
-        adapter.start();
+            let adapter = SysinfoAdapter::new(config, hub);
+            adapter.start();
 
-        // Wait for first update
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let state = rx.borrow_and_update().clone();
-        assert!(state.memory_total().value() > 0);
+            // Wait for first update
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            let state = rx.borrow_and_update().clone();
+            assert!(state.memory_total().value() > 0);
+        });
     }
 }
