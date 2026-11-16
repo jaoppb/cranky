@@ -4,5 +4,35 @@ mod embed_sizing;
 mod grid_selectors;
 mod inheritance;
 mod layout_integration;
+mod property_box_model;
+mod property_color_font;
+mod property_flex;
+mod property_grid_container;
+mod property_grid_item;
 mod selectors;
 mod text_align;
+
+use crate::features::styling::adapters::lightningcss::{
+    LightningCssAdapter, LightningPropertyReparser,
+};
+use crate::features::styling::domain::{
+    ComputedStyle, ElementQuery, InheritedStyle, StyleSheetName,
+};
+use crate::features::styling::ports::CssParserPort;
+
+/// The style a `flex` element ends up with when `declarations` is the body
+/// of the only rule that matches it.
+fn declared(declarations: &str) -> ComputedStyle {
+    let css = format!("flex {{ {declarations} }}");
+    let parsed = LightningCssAdapter::new()
+        .parse_stylesheet(StyleSheetName::new("test").unwrap(), &css)
+        .unwrap();
+    let query = ElementQuery::new("flex", None, &[], &[], None);
+    parsed
+        .resolve_style(
+            &query,
+            &InheritedStyle::default(),
+            &LightningPropertyReparser,
+        )
+        .0
+}

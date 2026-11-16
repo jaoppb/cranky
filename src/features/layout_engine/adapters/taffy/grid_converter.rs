@@ -86,3 +86,89 @@ pub const fn grid_auto_flow_to_taffy(flow: GridAutoFlow) -> taffy::style::GridAu
         GridAutoFlow::ColumnDense => taffy::style::GridAutoFlow::ColumnDense,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use taffy::style::GridTemplateComponent;
+
+    #[test]
+    fn fixed_and_content_tracks_use_the_same_size_for_min_and_max() {
+        assert_eq!(
+            grid_track_to_track_sizing_function(&GridTrack::Px(40.0)),
+            minmax(length(40.0_f32), length(40.0_f32))
+        );
+        assert_eq!(
+            grid_track_to_track_sizing_function(&GridTrack::MinContent),
+            minmax(min_content(), min_content())
+        );
+        assert_eq!(
+            grid_track_to_track_sizing_function(&GridTrack::MaxContent),
+            minmax(max_content(), max_content())
+        );
+        assert_eq!(
+            grid_track_to_track_sizing_function(&GridTrack::Auto),
+            minmax(auto(), auto())
+        );
+    }
+
+    #[test]
+    fn percent_tracks_are_converted_from_percent_to_a_fraction() {
+        assert_eq!(
+            grid_track_to_track_sizing_function(&GridTrack::Percent(25.0)),
+            minmax(percent(0.25_f32), percent(0.25_f32))
+        );
+    }
+
+    #[test]
+    fn fr_tracks_flex_only_on_the_max_side() {
+        // A flexible minimum is not valid in CSS grid: `1fr` means
+        // `minmax(auto, 1fr)`.
+        assert_eq!(
+            grid_track_to_track_sizing_function(&GridTrack::Fr(2.0)),
+            minmax(auto(), fr(2.0_f32))
+        );
+    }
+
+    #[test]
+    fn minmax_tracks_take_min_and_max_from_their_own_sides() {
+        let track = GridTrack::MinMax(Box::new(GridTrack::Px(10.0)), Box::new(GridTrack::Fr(1.0)));
+        assert_eq!(
+            grid_track_to_track_sizing_function(&track),
+            minmax(length(10.0_f32), fr(1.0_f32))
+        );
+    }
+
+    #[test]
+    fn repeat_tracks_become_a_repeat_component_with_the_same_count() {
+        let track = GridTrack::Repeat(3, vec![GridTrack::Px(10.0), GridTrack::Fr(1.0)]);
+        let expected: GridTemplateComponent<String> = repeat(
+            3,
+            vec![
+                minmax(length(10.0_f32), length(10.0_f32)),
+                minmax(auto(), fr(1.0_f32)),
+            ],
+        );
+        assert_eq!(grid_track_to_template_component(&track), expected);
+    }
+
+    #[test]
+    fn non_repeat_tracks_become_a_single_component() {
+        assert_eq!(
+            grid_track_to_template_component(&GridTrack::Px(5.0)),
+            GridTemplateComponent::Single(minmax(length(5.0_f32), length(5.0_f32)))
+        );
+    }
+
+    #[test]
+    fn line_placement_maps_start_and_end_separately() {
+        let placement = GridLinePlacement::new(GridPlacement::Line(2), GridPlacement::Span(3));
+        let converted = grid_line_placement_to_taffy(placement);
+        assert_eq!(converted.start, line(2));
+        assert_eq!(converted.end, span(3));
+        assert_eq!(
+            grid_placement_to_taffy(GridPlacement::Auto),
+            taffy::style::GridPlacement::Auto
+        );
+    }
+}

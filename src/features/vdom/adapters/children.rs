@@ -134,3 +134,155 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::vdom::domain::{NodeKey, TextContent};
+
+    fn text(content: &str) -> VNode {
+        VNode::new_text(
+            TextContent::new(content.to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+    }
+
+    fn keyed(key: &str, content: &str) -> VNode {
+        text(content).with_key(NodeKey::new(key).unwrap())
+    }
+
+    /// Stands in for the node differ: equal nodes are unchanged, anything
+    /// else is replaced.
+    fn replace_if_different(old: &VNode, new: &VNode) -> Patch {
+        if old == new {
+            Patch::NoChange
+        } else {
+            Patch::Replace {
+                old_node_id: old.node_id(),
+                new_node: Box::new(new.clone()),
+            }
+        }
+    }
+
+    fn child_patches(old: &[VNode], new: &[VNode]) -> Vec<ChildPatchOp> {
+        let parent = text("parent").node_id();
+        match diff_children_with(parent, old, new, replace_if_different) {
+            Patch::UpdateChildren {
+                node_id,
+                child_patches,
+            } => {
+                assert_eq!(node_id, parent);
+                child_patches
+            }
+            Patch::NoChange => Vec::new(),
+            other => panic!("unexpected patch: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn identical_lists_produce_no_change() {
+        let children = [keyed("a", "1"), keyed("b", "2")];
+        let parent = text("parent").node_id();
+        assert_eq!(
+            diff_children_with(parent, &children, &children, replace_if_different),
+            Patch::NoChange
+        );
+    }
+
+    #[test]
+    fn keyed_lists_move_matches_insert_new_keys_and_remove_missing_ones() {
+        let (a, b, c) = (keyed("a", "1"), keyed("b", "2"), keyed("c", "3"));
+        let d = keyed("d", "4");
+        let old = [a.clone(), b.clone(), c.clone()];
+        let new = [c.clone(), a.clone(), d.clone()];
+
+        assert_eq!(
+            child_patches(&old, &new),
+            vec![
+                ChildPatchOp::Move {
+                    node_id: c.node_id(),
+                    from: 2,
+                    to: 0,
+                },
+                ChildPatchOp::Move {
+                    node_id: a.node_id(),
+                    from: 0,
+                    to: 1,
+                },
+                ChildPatchOp::Insert {
+                    index: 2,
+                    node: Box::new(d),
+                },
+                ChildPatchOp::Remove {
+                    node_id: b.node_id(),
+                    index: 1,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn keyed_match_in_place_is_updated_against_its_old_node_without_a_move() {
+        let old = [keyed("a", "1"), keyed("b", "2")];
+        let changed = keyed("b", "two");
+        let new = [old[0].clone(), changed.clone()];
+
+        assert_eq!(
+            child_patches(&old, &new),
+            vec![ChildPatchOp::Update {
+                node_id: old[1].node_id(),
+                patch: Box::new(Patch::Replace {
+                    old_node_id: old[1].node_id(),
+                    new_node: Box::new(changed),
+                }),
+            }]
+        );
+    }
+
+    #[test]
+    fn unkeyed_lists_are_matched_by_position_and_the_tail_is_removed() {
+        let old = [text("1"), text("2"), text("3")];
+        let changed = text("one");
+        let new = [changed.clone()];
+
+        assert_eq!(
+            child_patches(&old, &new),
+            vec![
+                ChildPatchOp::Update {
+                    node_id: old[0].node_id(),
+                    patch: Box::new(Patch::Replace {
+                        old_node_id: old[0].node_id(),
+                        new_node: Box::new(changed),
+                    }),
+                },
+                ChildPatchOp::Remove {
+                    node_id: old[1].node_id(),
+                    index: 1,
+                },
+                ChildPatchOp::Remove {
+                    node_id: old[2].node_id(),
+                    index: 2,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn unkeyed_lists_insert_the_extra_tail() {
+        let old = [text("1")];
+        let added = text("2");
+        let new = [old[0].clone(), added.clone()];
+
+        assert_eq!(
+            child_patches(&old, &new),
+            vec![ChildPatchOp::Insert {
+                index: 1,
+                node: Box::new(added),
+            }]
+        );
+    }
+}

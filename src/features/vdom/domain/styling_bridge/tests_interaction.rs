@@ -268,4 +268,124 @@ mod tests {
             vec![crate::features::styling::domain::PseudoClass::Hover]
         );
     }
+
+    fn panel_margin() -> crate::shared::config::domain::MarginConfig {
+        use crate::shared::config::domain::{MarginConfig, MarginOffset};
+        MarginConfig::new(
+            MarginOffset::new(1),
+            MarginOffset::new(2),
+            MarginOffset::new(3),
+            MarginOffset::new(4),
+        )
+    }
+
+    /// A bar button (`#button`) carrying a tooltip (`#tip`), a popup
+    /// (`#pop`) and a panel (`#pan`), each a single text node.
+    fn button_with_every_floating_kind() -> VNode {
+        use crate::features::styling::domain::ElementId;
+        use crate::features::vdom::domain::{
+            AnchorDirection, ExclusiveZone, KeyboardInteractivity, PanelAnchor, PanelLayer,
+            PanelSpec, PopupOffset, PopupSpec,
+        };
+
+        let text = |id: &str, tooltip: Option<Box<VNode>>| {
+            VNode::new_text(
+                TextContent::new(id.to_string()),
+                None,
+                Some(ElementId::new(id).unwrap()),
+                None,
+                None,
+                tooltip,
+            )
+        };
+        text("button", Some(Box::new(text("tip", None))))
+            .with_popup(
+                PopupSpec::new(Box::new(text("pop", None)))
+                    .with_anchor(AnchorDirection::Top)
+                    .with_offset(Some(PopupOffset::new(3, 4))),
+            )
+            .with_panel(
+                PanelSpec::new(Box::new(text("pan", None)))
+                    .with_layer(PanelLayer::Overlay)
+                    .with_anchor(PanelAnchor::all())
+                    .with_margin(panel_margin())
+                    .with_exclusive_zone(ExclusiveZone::new(7))
+                    .with_keyboard(KeyboardInteractivity::Exclusive),
+            )
+    }
+
+    /// The button and each of its floating contents sit at the root path of
+    /// their own surface. A hover captured on one surface must reach only
+    /// the node on that surface, never the same-shaped path on another.
+    #[test]
+    fn test_hover_stays_on_the_surface_it_was_captured_on() {
+        use crate::features::styling::domain::PseudoClass;
+        use crate::features::vdom::domain::{NodePath, NodeRef, SurfaceSpace};
+
+        let cases = [
+            (SurfaceSpace::Bar, "button"),
+            (SurfaceSpace::Tooltip, "tip"),
+            (SurfaceSpace::Popup, "pop"),
+            (SurfaceSpace::Panel, "pan"),
+        ];
+        for (surface, hovered_id) in cases {
+            let hovered = NodeRef::new(Vec::new(), NodePath::root_in(surface));
+            let interaction = InteractionContext::new(Some(hovered), None, None, false);
+            let resolver = RecordingResolver::new();
+            let _ = button_with_every_floating_kind().resolve_styles(
+                &resolver,
+                Some(&interaction),
+                None,
+            );
+
+            for id in ["button", "tip", "pop", "pan"] {
+                let expected = if id == hovered_id {
+                    vec![PseudoClass::Hover]
+                } else {
+                    Vec::new()
+                };
+                assert_eq!(
+                    resolver.pseudo_classes_of(id),
+                    expected,
+                    "hover on {surface:?}, element #{id}"
+                );
+            }
+        }
+    }
+
+    /// Resolving styles must hand the layout engine the same popup and
+    /// panel placement the script declared, on a tree rooted in that
+    /// floating kind's own surface.
+    #[test]
+    fn test_floating_specs_keep_their_placement_through_style_resolution() {
+        use crate::features::vdom::domain::{
+            AnchorDirection, ExclusiveZone, KeyboardInteractivity, NodePath, PanelAnchor,
+            PanelLayer, PopupOffset, SurfaceSpace,
+        };
+
+        let styled =
+            button_with_every_floating_kind().resolve_styles(&RecordingResolver::new(), None, None);
+
+        let tooltip = styled.tooltip().unwrap();
+        assert_eq!(*tooltip.path(), NodePath::root_in(SurfaceSpace::Tooltip));
+
+        let popup = styled.popup().unwrap();
+        assert_eq!(
+            *popup.content().path(),
+            NodePath::root_in(SurfaceSpace::Popup)
+        );
+        assert_eq!(popup.anchor_direction(), AnchorDirection::Top);
+        assert_eq!(popup.offset(), Some(PopupOffset::new(3, 4)));
+
+        let panel = styled.panel().unwrap();
+        assert_eq!(
+            *panel.content().path(),
+            NodePath::root_in(SurfaceSpace::Panel)
+        );
+        assert_eq!(panel.layer(), PanelLayer::Overlay);
+        assert_eq!(panel.anchor(), PanelAnchor::all());
+        assert_eq!(*panel.margin(), panel_margin());
+        assert_eq!(panel.exclusive_zone(), ExclusiveZone::new(7));
+        assert_eq!(panel.keyboard(), KeyboardInteractivity::Exclusive);
+    }
 }

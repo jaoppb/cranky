@@ -194,3 +194,171 @@ impl AppReadModel {
         layouts
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::metrics::domain::MetricsConfig;
+    use crate::shared::config::domain::{
+        CreateRootConfigCommand, MarginConfig, ModulesConfig, PopupConfig, RenderingMode,
+        TooltipConfig, VerticalAlignment,
+    };
+    use crate::shared::primitives::geometry::BarHeight;
+    use crate::shared::primitives::{ModuleOptions, SizeConstraint};
+
+    const BAR_WIDTH: u32 = 1000;
+    const BAR_HEIGHT: u32 = 30;
+
+    /// A read model whose bar declares `slots` (slot name to module names),
+    /// with module `n` (1-based, in declaration order) reporting `sizes[n-1]`
+    /// on `DP-1`.
+    fn model(slots: &[(&str, &[&str])], sizes: &[Size]) -> AppReadModel {
+        let mut options = HashMap::new();
+        let mut name_to_ids = HashMap::new();
+        for (slot, names) in slots {
+            let values = names.iter().map(|n| DynamicValue::from(*n)).collect();
+            options.insert((*slot).to_string(), DynamicValue::Array(values));
+        }
+        let declared = slots.iter().flat_map(|(_, names)| names.iter());
+        for (id, name) in (1_u32..).zip(declared) {
+            name_to_ids.insert(ModuleName::new(*name), vec![ModuleId::new(id)]);
+        }
+        let root = RootConfig::new(CreateRootConfigCommand::new(
+            ModuleName::new("bar"),
+            BarHeight::new(BAR_HEIGHT),
+            VerticalAlignment::Center,
+            MarginConfig::default(),
+            None,
+            ModuleOptions::new(options),
+        ));
+        let config = Config::new(
+            root,
+            ModulesConfig::default(),
+            RenderingMode::default(),
+            MetricsConfig::default(),
+            TooltipConfig::default(),
+            PopupConfig::default(),
+        );
+        let mut read_model =
+            AppReadModel::new(config, None, Vec::new(), HashMap::new(), name_to_ids);
+        let reported = (1_u32..)
+            .zip(sizes)
+            .map(|(id, size)| (ModuleId::new(id), *size))
+            .collect();
+        read_model
+            .module_sizes
+            .insert(MonitorId::new("DP-1"), reported);
+        read_model
+    }
+
+    fn placed(read_model: &AppReadModel, monitor: &str) -> Vec<(ModuleId, Rect)> {
+        read_model
+            .calculate_layout(
+                &MonitorId::new(monitor),
+                BarWidth::new(BAR_WIDTH),
+                read_model.config().root(),
+            )
+            .iter()
+            .map(|layout| (layout.id(), *layout.bounds()))
+            .collect()
+    }
+
+    fn rect(x: i32, y: i32, size: Size) -> Rect {
+        Rect::new(Position::new(x, y), size)
+    }
+
+    #[test]
+    fn center_slot_is_centred_as_one_block_with_gaps_between_modules() {
+        let (a, b) = (Size::new(100, 10), Size::new(60, 20));
+        let read_model = model(&[("center", &["a", "b"])], &[a, b]);
+
+        // Block width is 100 + 8 + 60 = 168, so it starts at (1000 - 168) / 2.
+        assert_eq!(
+            placed(&read_model, "DP-1"),
+            vec![
+                (ModuleId::new(1), rect(416, 10, a)),
+                (ModuleId::new(2), rect(524, 5, b)),
+            ]
+        );
+    }
+
+    #[test]
+    fn right_slot_is_packed_against_the_right_edge_in_declaration_order() {
+        let (a, b) = (Size::new(100, 30), Size::new(60, 30));
+        let read_model = model(&[("right", &["a", "b"])], &[a, b]);
+
+        assert_eq!(
+            placed(&read_model, "DP-1"),
+            vec![
+                (ModuleId::new(1), rect(824, 0, a)),
+                (ModuleId::new(2), rect(932, 0, b)),
+            ]
+        );
+    }
+
+    #[test]
+    fn module_that_has_not_reported_a_size_is_placed_with_an_empty_box() {
+        let read_model = model(&[("left", &["a", "b"])], &[Size::new(100, 10)]);
+
+        // "b" has no report on DP-1; nothing has one on DP-2.
+        assert_eq!(
+            placed(&read_model, "DP-1"),
+            vec![
+                (ModuleId::new(1), rect(8, 10, Size::new(100, 10))),
+                (ModuleId::new(2), rect(116, 15, Size::new(0, 0))),
+            ]
+        );
+        assert_eq!(
+            placed(&read_model, "DP-2"),
+            vec![
+                (ModuleId::new(1), rect(8, 15, Size::new(0, 0))),
+                (ModuleId::new(2), rect(16, 15, Size::new(0, 0))),
+            ]
+        );
+    }
+
+    #[test]
+    fn root_module_always_spans_the_whole_bar() {
+        let mut read_model = model(&[], &[]);
+        read_model.root_module = Some(ModuleId::new(9));
+
+        assert_eq!(
+            placed(&read_model, "DP-1"),
+            vec![(
+                ModuleId::new(9),
+                rect(0, 0, Size::new(BAR_WIDTH, BAR_HEIGHT))
+            )]
+        );
+    }
+
+    #[test]
+    fn computed_layouts_replace_the_slot_fallback_on_their_monitor_only() {
+        let mut read_model = model(&[("left", &["a"])], &[Size::new(100, 10)]);
+        let root = ModuleId::new(9);
+        read_model.root_module = Some(root);
+        let computed = rect(300, 4, Size::new(40, 12));
+        let bounds = |r| ChildBounds::new(r, SizeConstraint::none());
+        read_model.computed_layouts.insert(
+            MonitorId::new("DP-1"),
+            HashMap::from([
+                (ModuleId::new(1), bounds(computed)),
+                // The root's own entry never overrides its full-bar box.
+                (root, bounds(rect(1, 1, Size::new(1, 1)))),
+            ]),
+        );
+        let full_bar = rect(0, 0, Size::new(BAR_WIDTH, BAR_HEIGHT));
+
+        assert_eq!(
+            placed(&read_model, "DP-1"),
+            vec![(root, full_bar), (ModuleId::new(1), computed)]
+        );
+        // DP-2 has no computed layout, so it still gets the slot fallback.
+        assert_eq!(
+            placed(&read_model, "DP-2"),
+            vec![
+                (root, full_bar),
+                (ModuleId::new(1), rect(8, 15, Size::new(0, 0)))
+            ]
+        );
+    }
+}
