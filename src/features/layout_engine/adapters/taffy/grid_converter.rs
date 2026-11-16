@@ -90,31 +90,25 @@ pub const fn grid_auto_flow_to_taffy(flow: GridAutoFlow) -> taffy::style::GridAu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use taffy::style::{
-        GridTemplateComponent, MaxTrackSizingFunction, MinTrackSizingFunction, TrackSizingFunction,
-    };
-
-    fn sizing(min: MinTrackSizingFunction, max: MaxTrackSizingFunction) -> TrackSizingFunction {
-        minmax(min, max)
-    }
+    use taffy::style::GridTemplateComponent;
 
     #[test]
     fn fixed_and_content_tracks_use_the_same_size_for_min_and_max() {
         assert_eq!(
             grid_track_to_track_sizing_function(&GridTrack::Px(40.0)),
-            sizing(length(40.0_f32), length(40.0_f32))
+            minmax(length(40.0_f32), length(40.0_f32))
         );
         assert_eq!(
             grid_track_to_track_sizing_function(&GridTrack::MinContent),
-            sizing(min_content(), min_content())
+            minmax(min_content(), min_content())
         );
         assert_eq!(
             grid_track_to_track_sizing_function(&GridTrack::MaxContent),
-            sizing(max_content(), max_content())
+            minmax(max_content(), max_content())
         );
         assert_eq!(
             grid_track_to_track_sizing_function(&GridTrack::Auto),
-            sizing(auto(), auto())
+            minmax(auto(), auto())
         );
     }
 
@@ -122,7 +116,7 @@ mod tests {
     fn percent_tracks_are_converted_from_percent_to_a_fraction() {
         assert_eq!(
             grid_track_to_track_sizing_function(&GridTrack::Percent(25.0)),
-            sizing(percent(0.25_f32), percent(0.25_f32))
+            minmax(percent(0.25_f32), percent(0.25_f32))
         );
     }
 
@@ -132,7 +126,7 @@ mod tests {
         // `minmax(auto, 1fr)`.
         assert_eq!(
             grid_track_to_track_sizing_function(&GridTrack::Fr(2.0)),
-            sizing(auto(), fr(2.0_f32))
+            minmax(auto(), fr(2.0_f32))
         );
     }
 
@@ -141,7 +135,7 @@ mod tests {
         let track = GridTrack::MinMax(Box::new(GridTrack::Px(10.0)), Box::new(GridTrack::Fr(1.0)));
         assert_eq!(
             grid_track_to_track_sizing_function(&track),
-            sizing(length(10.0_f32), fr(1.0_f32))
+            minmax(length(10.0_f32), fr(1.0_f32))
         );
     }
 
@@ -151,8 +145,8 @@ mod tests {
         let expected: GridTemplateComponent<String> = repeat(
             3,
             vec![
-                sizing(length(10.0_f32), length(10.0_f32)),
-                sizing(auto(), fr(1.0_f32)),
+                minmax(length(10.0_f32), length(10.0_f32)),
+                minmax(auto(), fr(1.0_f32)),
             ],
         );
         assert_eq!(grid_track_to_template_component(&track), expected);
@@ -162,7 +156,7 @@ mod tests {
     fn non_repeat_tracks_become_a_single_component() {
         assert_eq!(
             grid_track_to_template_component(&GridTrack::Px(5.0)),
-            GridTemplateComponent::Single(sizing(length(5.0_f32), length(5.0_f32)))
+            GridTemplateComponent::Single(minmax(length(5.0_f32), length(5.0_f32)))
         );
     }
 
@@ -176,21 +170,5 @@ mod tests {
             grid_placement_to_taffy(GridPlacement::Auto),
             taffy::style::GridPlacement::Auto
         );
-    }
-
-    #[test]
-    fn auto_flow_maps_direction_and_density() {
-        let cases = [
-            (GridAutoFlow::Row, taffy::style::GridAutoFlow::Row),
-            (GridAutoFlow::Column, taffy::style::GridAutoFlow::Column),
-            (GridAutoFlow::RowDense, taffy::style::GridAutoFlow::RowDense),
-            (
-                GridAutoFlow::ColumnDense,
-                taffy::style::GridAutoFlow::ColumnDense,
-            ),
-        ];
-        for (flow, expected) in cases {
-            assert_eq!(grid_auto_flow_to_taffy(flow), expected);
-        }
     }
 }

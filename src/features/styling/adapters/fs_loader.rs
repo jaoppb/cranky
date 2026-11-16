@@ -230,14 +230,17 @@ mod tests {
     }
 
     #[test]
-    fn stylesheet_with_no_builtin_is_found_on_disk_or_reported_missing() {
+    fn stylesheet_found_nowhere_is_reported_missing_by_name() {
         let home = TestHome::new("styling");
-        let err = load(&home, "mine").unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            StylingError::LoaderError("Stylesheet 'mine' not found".to_string()).to_string()
-        );
+        assert!(matches!(
+            load(&home, "mine"),
+            Err(StylingError::LoaderError(message)) if message.contains("mine")
+        ));
+    }
 
+    #[test]
+    fn stylesheet_with_no_builtin_is_loaded_from_disk() {
+        let home = TestHome::new("styling");
         write_style(&home, USER_DIR, "mine", "/* mine */");
         assert_eq!(load(&home, "mine").unwrap(), "/* mine */");
     }

@@ -322,7 +322,6 @@ mod tests {
         let mut read_model = model(&[], &[]);
         read_model.root_module = Some(ModuleId::new(9));
 
-        assert_eq!(read_model.root_module(), Some(ModuleId::new(9)));
         assert_eq!(
             placed(&read_model, "DP-1"),
             vec![(

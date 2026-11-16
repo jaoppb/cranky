@@ -80,7 +80,7 @@ fn panel_anchor_deserializes_from_edge_flags_with_missing_edges_off() {
 }
 
 #[test]
-fn panel_anchor_deserializes_from_a_corner_name_in_either_spelling() {
+fn panel_anchor_deserializes_from_an_edge_or_corner_name() {
     let cases = [
         ("top", (true, false, false, false)),
         ("bottom", (false, true, false, false)),
@@ -91,12 +91,19 @@ fn panel_anchor_deserializes_from_a_corner_name_in_either_spelling() {
         ("bottom-left", (false, true, true, false)),
         ("bottom_right", (false, true, false, true)),
         ("Top", (true, false, false, false)),
-        ("middle", (false, false, false, false)),
     ];
     for (name, expected) in cases {
         let anchor: PanelAnchor = serde_json::from_str(&format!("\"{name}\"")).unwrap();
         assert_eq!(edges(anchor), expected, "{name}");
     }
+}
+
+#[test]
+fn panel_anchor_with_an_unknown_name_anchors_no_edge() {
+    let anchor: PanelAnchor = serde_json::from_str("\"middle\"").unwrap();
+    assert_eq!(edges(anchor), (false, false, false, false));
+    let anchor: PanelAnchor = serde_json::from_str(r#"["middle", "left"]"#).unwrap();
+    assert_eq!(edges(anchor), (false, false, true, false));
 }
 
 #[test]

@@ -1,52 +1,55 @@
 use super::declared;
 use crate::features::layout_engine::domain::BoxMargin;
-use crate::features::styling::domain::CssLength;
+use crate::features::styling::domain::{ComputedStyle, CssLength};
+
+type Sides = fn(&ComputedStyle) -> Option<&BoxMargin>;
+
+/// `padding` and `margin` share one shape: a four-side shorthand plus a
+/// longhand per side.
+const BOX_PROPERTIES: [(&str, Sides); 2] = [
+    ("padding", ComputedStyle::padding),
+    ("margin", ComputedStyle::margin),
+];
 
 #[test]
-fn padding_shorthand_maps_css_order_to_each_side() {
+fn box_shorthand_maps_css_order_to_each_side() {
     // CSS order is top, right, bottom, left; `BoxMargin::new` takes top,
     // bottom, left, right.
-    let style = declared("padding: 1px 2px 3px 4px;");
-    assert_eq!(style.padding(), Some(&BoxMargin::new(1.0, 3.0, 4.0, 2.0)));
-}
-
-#[test]
-fn padding_longhand_replaces_only_its_own_side() {
-    let cases = [
-        ("padding-top: 9px;", BoxMargin::new(9.0, 3.0, 4.0, 2.0)),
-        ("padding-right: 9px;", BoxMargin::new(1.0, 3.0, 4.0, 9.0)),
-        ("padding-bottom: 9px;", BoxMargin::new(1.0, 9.0, 4.0, 2.0)),
-        ("padding-left: 9px;", BoxMargin::new(1.0, 3.0, 9.0, 2.0)),
-    ];
-    for (longhand, expected) in cases {
-        let style = declared(&format!("padding: 1px 2px 3px 4px; {longhand}"));
-        assert_eq!(style.padding(), Some(&expected), "{longhand}");
+    for (property, sides) in BOX_PROPERTIES {
+        let style = declared(&format!("{property}: 1px 2px 3px 4px;"));
+        assert_eq!(
+            sides(&style),
+            Some(&BoxMargin::new(1.0, 3.0, 4.0, 2.0)),
+            "{property}"
+        );
     }
 }
 
 #[test]
-fn padding_longhand_alone_leaves_the_other_sides_at_zero() {
-    let style = declared("padding-left: 7px;");
-    assert_eq!(style.padding(), Some(&BoxMargin::new(0.0, 0.0, 7.0, 0.0)));
-}
-
-#[test]
-fn margin_shorthand_maps_css_order_to_each_side() {
-    let style = declared("margin: 1px 2px 3px 4px;");
-    assert_eq!(style.margin(), Some(&BoxMargin::new(1.0, 3.0, 4.0, 2.0)));
-}
-
-#[test]
-fn margin_longhand_replaces_only_its_own_side() {
+fn box_longhand_replaces_only_its_own_side() {
     let cases = [
-        ("margin-top: 9px;", BoxMargin::new(9.0, 3.0, 4.0, 2.0)),
-        ("margin-right: 9px;", BoxMargin::new(1.0, 3.0, 4.0, 9.0)),
-        ("margin-bottom: 9px;", BoxMargin::new(1.0, 9.0, 4.0, 2.0)),
-        ("margin-left: 9px;", BoxMargin::new(1.0, 3.0, 9.0, 2.0)),
+        ("top", BoxMargin::new(9.0, 3.0, 4.0, 2.0)),
+        ("right", BoxMargin::new(1.0, 3.0, 4.0, 9.0)),
+        ("bottom", BoxMargin::new(1.0, 9.0, 4.0, 2.0)),
+        ("left", BoxMargin::new(1.0, 3.0, 9.0, 2.0)),
     ];
-    for (longhand, expected) in cases {
-        let style = declared(&format!("margin: 1px 2px 3px 4px; {longhand}"));
-        assert_eq!(style.margin(), Some(&expected), "{longhand}");
+    for (property, sides) in BOX_PROPERTIES {
+        for (side, expected) in &cases {
+            let css = format!("{property}: 1px 2px 3px 4px; {property}-{side}: 9px;");
+            assert_eq!(sides(&declared(&css)), Some(expected), "{css}");
+        }
+    }
+}
+
+#[test]
+fn box_longhand_alone_leaves_the_other_sides_at_zero() {
+    for (property, sides) in BOX_PROPERTIES {
+        let style = declared(&format!("{property}-left: 7px;"));
+        assert_eq!(
+            sides(&style),
+            Some(&BoxMargin::new(0.0, 0.0, 7.0, 0.0)),
+            "{property}"
+        );
     }
 }
 

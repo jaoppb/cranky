@@ -1,0 +1,107 @@
+mod layout_floating;
+mod tooltip;
+
+use crate::features::layout_engine::domain::{
+    LayoutError, RenderNode, StyledNode, StyledPanel, StyledPopup, TextMeasurer,
+};
+use crate::features::layout_engine::ports::LayoutEnginePort;
+use crate::features::styling::domain::ComputedStyle;
+use crate::features::vdom::domain::{NodeKey, NodePath, SurfaceSpace, TextContent};
+use crate::shared::primitives::SizeConstraint;
+use crate::shared::primitives::geometry::{Position, Rect, Size};
+
+/// Records the content it was asked to lay out, and returns a node on the
+/// same surface that keeps the content's own tooltip.
+#[derive(Default)]
+struct RecordingEngine {
+    laid_out: Vec<StyledNode>,
+}
+
+impl LayoutEnginePort for RecordingEngine {
+    fn calculate_layout_with_constraints(
+        &mut self,
+        node: StyledNode,
+        _measurer: &mut dyn TextMeasurer,
+        _start_pos: Position,
+        _constraint: SizeConstraint,
+    ) -> Result<RenderNode, LayoutError> {
+        let laid_out = Spec {
+            tooltip: node.tooltip().cloned(),
+            ..Spec::at(node.path().surface(), &[])
+        }
+        .leaf();
+        self.laid_out.push(node);
+        Ok(laid_out)
+    }
+}
+
+/// Styled text content rooted in `surface`, as a floating kind's content is.
+fn content(surface: SurfaceSpace, text: &str, tooltip: Option<StyledNode>) -> StyledNode {
+    StyledNode::Text {
+        path: NodePath::root_in(surface),
+        node_key: None,
+        text: TextContent::new(text.to_string()),
+        style: ComputedStyle::default(),
+        on_click: None,
+        on_hover: None,
+        tooltip: tooltip.map(Box::new),
+        popup: None,
+        panel: None,
+    }
+}
+
+fn tooltip_content(text: &str) -> StyledNode {
+    content(SurfaceSpace::Tooltip, text, None)
+}
+
+/// Everything a test may want to set on a laid-out node; the rest is fixed.
+struct Spec {
+    path: NodePath,
+    key: Option<&'static str>,
+    rect: Rect,
+    tooltip: Option<StyledNode>,
+    popup: Option<StyledPopup>,
+    panel: Option<StyledPanel>,
+}
+
+impl Spec {
+    fn at(surface: SurfaceSpace, indices: &[usize]) -> Self {
+        Self {
+            path: NodePath::new(surface, indices.to_vec()),
+            key: None,
+            rect: Rect::new(Position::new(0, 0), Size::new(1, 1)),
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    fn leaf(self) -> RenderNode {
+        RenderNode::Rect {
+            path: self.path,
+            node_key: self.key.map(|k| NodeKey::new(k).unwrap()),
+            rect: self.rect,
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: self.tooltip.map(Box::new),
+            popup: self.popup,
+            panel: self.panel,
+        }
+    }
+
+    fn flex(self, children: Vec<RenderNode>) -> RenderNode {
+        RenderNode::Flex {
+            path: self.path,
+            node_key: self.key.map(|k| NodeKey::new(k).unwrap()),
+            rect: self.rect,
+            children,
+            style: ComputedStyle::default(),
+            on_click: None,
+            on_hover: None,
+            tooltip: self.tooltip.map(Box::new),
+            popup: self.popup,
+            panel: self.panel,
+        }
+    }
+}

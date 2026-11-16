@@ -269,6 +269,16 @@ mod tests {
         );
     }
 
+    fn panel_margin() -> crate::shared::config::domain::MarginConfig {
+        use crate::shared::config::domain::{MarginConfig, MarginOffset};
+        MarginConfig::new(
+            MarginOffset::new(1),
+            MarginOffset::new(2),
+            MarginOffset::new(3),
+            MarginOffset::new(4),
+        )
+    }
+
     /// A bar button (`#button`) carrying a tooltip (`#tip`), a popup
     /// (`#pop`) and a panel (`#pan`), each a single text node.
     fn button_with_every_floating_kind() -> VNode {
@@ -298,6 +308,7 @@ mod tests {
                 PanelSpec::new(Box::new(text("pan", None)))
                     .with_layer(PanelLayer::Overlay)
                     .with_anchor(PanelAnchor::all())
+                    .with_margin(panel_margin())
                     .with_exclusive_zone(ExclusiveZone::new(7))
                     .with_keyboard(KeyboardInteractivity::Exclusive),
             )
@@ -373,6 +384,7 @@ mod tests {
         );
         assert_eq!(panel.layer(), PanelLayer::Overlay);
         assert_eq!(panel.anchor(), PanelAnchor::all());
+        assert_eq!(*panel.margin(), panel_margin());
         assert_eq!(panel.exclusive_zone(), ExclusiveZone::new(7));
         assert_eq!(panel.keyboard(), KeyboardInteractivity::Exclusive);
     }

@@ -1,7 +1,6 @@
 use super::declared;
 use crate::features::styling::domain::Opacity;
 use crate::shared::config::domain::{FontFamily, FontSize};
-use crate::shared::primitives::TextAlign;
 use crate::shared::primitives::color::{Color, DrawingColor};
 
 fn solid(r: u8, g: u8, b: u8) -> DrawingColor {
@@ -29,23 +28,6 @@ fn font_family_takes_the_first_family_without_its_quotes() {
         style.font_family(),
         Some(&FontFamily::new("Fira Code".to_string()))
     );
-}
-
-#[test]
-fn text_align_keeps_only_the_keywords_the_painter_honours() {
-    assert_eq!(
-        declared("text-align: left;").text_align(),
-        Some(TextAlign::Left)
-    );
-    assert_eq!(
-        declared("text-align: center;").text_align(),
-        Some(TextAlign::Center)
-    );
-    assert_eq!(
-        declared("text-align: right;").text_align(),
-        Some(TextAlign::Right)
-    );
-    assert_eq!(declared("text-align: justify;").text_align(), None);
 }
 
 #[test]

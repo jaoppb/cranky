@@ -9,7 +9,8 @@ fn gap_shorthand_splits_into_row_and_column() {
     let style = declared("gap: 4px 8px;");
     assert_eq!(style.row_gap(), Some(&Gap::new(4.0)));
     assert_eq!(style.column_gap(), Some(&Gap::new(8.0)));
-    // The single-axis `gap` a flex container reads follows the row value.
+    // `gap` itself, the fallback for an axis with no value of its own,
+    // follows the row value.
     assert_eq!(style.gap(), Some(&Gap::new(4.0)));
 }
 
@@ -66,6 +67,7 @@ fn align_self_maps_every_keyword() {
     let cases = [
         ("center", AlignItems::Center),
         ("flex-end", AlignItems::End),
+        ("end", AlignItems::End),
         ("stretch", AlignItems::Stretch),
         ("flex-start", AlignItems::Start),
     ];
