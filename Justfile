@@ -69,6 +69,7 @@ deps-check:
 # Lint the GitHub workflows and their shell scripts (requires actionlint and shellcheck)
 [group('quality')]
 workflows-check:
+    @command -v shellcheck >/dev/null || { echo "shellcheck not found: actionlint would skip the shell checks" >&2; exit 1; }
     actionlint
 
 # Run every test: unit, architecture and integration (needs dbus-daemon, sway and grim)
@@ -86,13 +87,13 @@ test-unit:
 test-integration *args:
     cargo test --test integration -- {{args}}
 
-# Run unit tests and generate coverage report (requires cargo-llvm-cov and genhtml)
+# Run every test and generate a coverage report (requires cargo-llvm-cov and genhtml)
 [group('test')]
 coverage:
     cargo llvm-cov --lcov --output-path lcov.info
     genhtml lcov.info --output-directory coverage_report
 
-# Check that unit tests cover at least 80% of lines (requires cargo-llvm-cov)
+# Check that the tests cover at least 80% of lines (requires cargo-llvm-cov)
 [group('test')]
 coverage-check:
     cargo llvm-cov --workspace --fail-under-lines 80

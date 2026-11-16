@@ -12,8 +12,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  # Only a pull request's superseded run is cancelled: every commit on `main`
-  # keeps its checks, and a release is never cut short.
+  # Only a pull request's superseded run is cancelled; a run on `main` or for a
+  # release is never cut short once it has started.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -40,6 +40,9 @@ jobs:
           - name: test
             recipe: test
             compiles: true
+            # The integration tests start their own D-Bus daemon and a
+            # headless sway, and take screenshots with grim.
+            packages: dbus-daemon sway grim
           - name: build
             recipe: release
             compiles: true
@@ -49,7 +52,8 @@ jobs:
           - name: coverage
             recipe: coverage-check
             compiles: true
-            tools: cargo-llvm-cov@0.8.5
+            packages: dbus-daemon sway grim
+            tools: cargo-llvm-cov@0.9.1
             components: llvm-tools-preview
           - name: bench
             recipe: bench-check
@@ -65,7 +69,7 @@ jobs:
         if: matrix.compiles
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libwayland-dev libdbus-1-dev libxkbcommon-dev
+          sudo apt-get install -y pkg-config libwayland-dev libdbus-1-dev libxkbcommon-dev ${{ matrix.packages }}
 
       # With no `toolchain` input the action follows rust-toolchain.toml when
       # the repository has one, and installs stable otherwise.

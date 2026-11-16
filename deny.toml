@@ -40,6 +40,28 @@ multiple-versions = "deny"
 wildcards = "deny"
 # Path dependencies between the members of a workspace carry no version.
 allow-wildcard-paths = true
+# Older versions that only a dependency can drop. Each entry names the crate
+# that still requires it; remove the entry when that crate moves on.
+skip = [
+    { crate = "fontdb@0.23", reason = "cosmic-text 0.19 (usvg is on 0.24)" },
+    { crate = "harfrust@0.5", reason = "cosmic-text 0.19 (usvg is on 0.15)" },
+    { crate = "skrifa@0.40", reason = "cosmic-text 0.19 (usvg is on 0.49)" },
+    { crate = "skrifa@0.44", reason = "swash 0.2, under cosmic-text" },
+    { crate = "read-fonts@0.37", reason = "harfrust 0.5 and skrifa 0.40, under cosmic-text" },
+    { crate = "read-fonts@0.41", reason = "skrifa 0.44, under swash" },
+    { crate = "font-types@0.11", reason = "read-fonts 0.37, under cosmic-text" },
+    { crate = "roxmltree@0.20", reason = "fontconfig-parser 0.5, under fontdb" },
+    { crate = "miniz_oxide@0.8", reason = "png 0.18 and exr 1.74, under image, resvg and tiny-skia" },
+    { crate = "phf@0.11", reason = "parcel_selectors 0.28 (cssparser is on 0.13)" },
+    { crate = "phf_generator@0.11", reason = "phf_codegen 0.11, under parcel_selectors" },
+    { crate = "phf_shared@0.11", reason = "phf 0.11, under parcel_selectors" },
+    { crate = "thiserror@1", reason = "freedesktop-icons 0.4" },
+    { crate = "thiserror-impl@1", reason = "thiserror 1, under freedesktop-icons" },
+    { crate = "getrandom@0.2", reason = "const-random-macro 0.1, under ahash 0.8" },
+    { crate = "getrandom@0.3", reason = "ahash 0.8 (uuid is on 0.4)" },
+    { crate = "syn@1", reason = "lightningcss-derive 1.0.0-alpha.43" },
+    { crate = "syn@2", reason = "most derive macros; the ecosystem is moving to syn 3" },
+]
 
 [sources]
 unknown-registry = "deny"
