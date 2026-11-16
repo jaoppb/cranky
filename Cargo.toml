@@ -24,7 +24,7 @@ as_conversions = "deny"
 
 [dependencies]
 # Async Runtime
-tokio = { version = "1.40", features = ["full"] }
+tokio = { version = "1.54", features = ["full"] }
 
 # Wayland
 wayland-client = "0.31"
@@ -40,7 +40,7 @@ toml = "1.0"
 # Rendering
 tiny-skia = "0.12"
 cosmic-text = "0.19"
-memmap2 = "0.9"
+memmap2 = "0.9.11"
 
 # System Integration
 zbus = { version = "6.3", features = ["tokio"] }
