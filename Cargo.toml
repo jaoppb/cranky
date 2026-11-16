@@ -51,7 +51,7 @@ uuid = { version = "1.23", features = ["v4", "serde"] }
 notify = "8.2"
 freedesktop-icons = "0.4"
 image = "0.25"
-resvg = "0.47"
+resvg = "0.50"
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 async-trait = "0.1"
