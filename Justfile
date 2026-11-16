@@ -27,9 +27,9 @@ run:
 run-release:
     cargo run --release
 
-# Run the full gate a pull request must pass: formatting, Clippy, architecture, LOC limits and tests
+# Run the full gate a pull request must pass: formatting, Clippy, architecture, LOC limits, tests, dependencies and workflows
 [group('quality')]
-check: fmt-check lint arch-check loc-check test
+check: fmt-check lint arch-check loc-check test deps-check workflows-check
 
 # Format all code with rustfmt
 [group('quality')]
@@ -61,6 +61,17 @@ arch-check:
 loc-check:
     ./scripts/lint-loc.sh
 
+# Check dependencies against deny.toml: advisories, licences, bans and sources (requires cargo-deny and the network)
+[group('quality')]
+deps-check:
+    cargo deny check
+
+# Lint the GitHub workflows and their shell scripts (requires actionlint and shellcheck)
+[group('quality')]
+workflows-check:
+    @command -v shellcheck >/dev/null || { echo "shellcheck not found: actionlint would skip the shell checks" >&2; exit 1; }
+    actionlint
+
 # Run every test: unit, architecture and integration (needs dbus-daemon, sway and grim)
 [group('test')]
 test:
@@ -76,16 +87,26 @@ test-unit:
 test-integration *args:
     cargo test --test integration -- {{args}}
 
-# Run unit tests and generate coverage report (requires cargo-llvm-cov and genhtml)
+# Run every test and generate a coverage report (requires cargo-llvm-cov and genhtml)
 [group('test')]
 coverage:
     cargo llvm-cov --lcov --output-path lcov.info
     genhtml lcov.info --output-directory coverage_report
 
+# Check that the tests cover at least 80% of lines (requires cargo-llvm-cov)
+[group('test')]
+coverage-check:
+    cargo llvm-cov --workspace --fail-under-lines 80
+
 # Run performance benchmarks with criterion
 [group('profile')]
 bench *args:
     cargo bench {{args}}
+
+# Check that the benchmarks compile, without running them
+[group('profile')]
+bench-check:
+    cargo bench --workspace --no-run
 
 # Record performance profile with samply
 [group('profile')]
