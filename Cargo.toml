@@ -50,7 +50,23 @@ chrono = "0.4"
 uuid = { version = "1.23", features = ["v4", "serde"] }
 notify = "8.2"
 freedesktop-icons = "0.4"
-image = "0.25"
+image = { version = "0.25", default-features = false, features = [
+	"rayon",
+	"bmp",
+	"dds",
+	"exr",
+	"ff",
+	"gif",
+	"hdr",
+	"ico",
+	"jpeg",
+	"png",
+	"pnm",
+	"qoi",
+	"tga",
+	"tiff",
+	"webp",
+] }
 resvg = "0.50"
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
