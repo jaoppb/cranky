@@ -123,6 +123,6 @@ mod tests {
         hub.hyprland_tx().send(h_state).unwrap();
 
         let infos = hub.get_monitor_infos();
-        assert!(infos.is_empty());
+        assert_eq!(infos, []);
     }
 }

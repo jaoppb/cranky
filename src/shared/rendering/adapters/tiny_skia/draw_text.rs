@@ -137,25 +137,23 @@ impl TinySkiaCosmicCanvas<'_> {
         let x = LogicalPx::new(pos_x);
         let y = LogicalPx::new(pos_y);
         let mut bgra_premul = Vec::with_capacity(image_data.len());
-        for chunk in image_data.chunks_exact(4) {
-            if let &[r, g, b, a] = chunk {
-                let premul = |c: u8| -> u8 {
-                    let val = u32::from(c)
-                        .saturating_mul(u32::from(a))
-                        .checked_div(255)
-                        .unwrap_or(0);
-                    u8::try_from(val).unwrap_or(0)
-                };
+        for &[r, g, b, a] in image_data.as_chunks::<4>().0 {
+            let premul = |c: u8| -> u8 {
+                let val = u32::from(c)
+                    .saturating_mul(u32::from(a))
+                    .checked_div(255)
+                    .unwrap_or(0);
+                u8::try_from(val).unwrap_or(0)
+            };
 
-                let r_p = premul(r);
-                let g_p = premul(g);
-                let b_p = premul(b);
+            let r_p = premul(r);
+            let g_p = premul(g);
+            let b_p = premul(b);
 
-                bgra_premul.push(b_p);
-                bgra_premul.push(g_p);
-                bgra_premul.push(r_p);
-                bgra_premul.push(a);
-            }
+            bgra_premul.push(b_p);
+            bgra_premul.push(g_p);
+            bgra_premul.push(r_p);
+            bgra_premul.push(a);
         }
 
         if let Some(image_pixmap) = tiny_skia::PixmapRef::from_bytes(&bgra_premul, width, height) {

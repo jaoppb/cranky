@@ -46,7 +46,7 @@ pub(crate) fn register_rhai_sys(engine: &mut Engine) {
             .and_then(|v| v.clone().try_cast::<rhai::Array>())
             .unwrap_or_default();
         for item in list {
-            let Some(map) = item.clone().try_cast::<rhai::Map>() else {
+            let Some(map) = item.try_cast::<rhai::Map>() else {
                 continue;
             };
             let is_focused = map
@@ -65,7 +65,7 @@ pub(crate) fn register_rhai_sys(engine: &mut Engine) {
             .and_then(|v| v.clone().try_cast::<rhai::Array>())
             .unwrap_or_default();
         for item in list {
-            let Some(map) = item.clone().try_cast::<rhai::Map>() else {
+            let Some(map) = item.try_cast::<rhai::Map>() else {
                 continue;
             };
             let item_name = map.get("name").and_then(|v| v.clone().try_cast::<String>());

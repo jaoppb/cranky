@@ -651,8 +651,7 @@ impl<
     ) {
         let new_focused = state
             .focused_monitor()
-            .map(|n| n.as_str().to_string())
-            .unwrap_or_default();
+            .map_or_default(|n| n.as_str().to_string());
 
         if new_focused != *current_focused_monitor {
             *current_focused_monitor = new_focused;

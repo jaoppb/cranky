@@ -135,8 +135,7 @@ impl ModuleRegistry {
     ) -> Vec<crate::shared::primitives::ModuleName> {
         self.style_to_modules
             .get(sheet)
-            .map(|set| set.iter().cloned().collect())
-            .unwrap_or_default()
+            .map_or_default(|set| set.iter().cloned().collect())
     }
 
     #[must_use]
@@ -513,7 +512,7 @@ impl<
                         let mod_name = crate::shared::primitives::ModuleName::new(name_str);
                         if !self.name_to_ids.contains_key(&mod_name) {
                             let auto_cfg = ModuleConfig::new(
-                                mod_name.clone(),
+                                mod_name,
                                 true,
                                 crate::shared::config::domain::EngineSelection::Auto,
                                 ModuleOptions::default(),
@@ -862,7 +861,7 @@ mod tests {
         TestRegistryPort::load(&mut registry, &config).unwrap();
         TestRegistryPort::clear(&mut registry);
 
-        assert!(registry.module_ids.is_empty());
+        assert_eq!(registry.module_ids, []);
         assert!(registry.modules.is_empty());
     }
 

@@ -100,5 +100,5 @@ fn test_find_state_inconsistencies_consistent() {
 
     let state = HyprlandState::new(workspaces, monitors, Some(MonitorName::new("DP-1")));
     let incs = find_state_inconsistencies(&state);
-    assert!(incs.is_empty());
+    assert_eq!(incs, []);
 }

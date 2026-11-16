@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn test_pointer_outcome_methods() {
         let empty = PointerOutcome::empty();
-        assert!(empty.actions().is_empty());
+        assert_eq!(empty.actions(), []);
         assert!(!empty.has_state_changed());
         assert_eq!(empty.into_actions(), Vec::<PointerAction>::new());
     }

@@ -27,13 +27,11 @@ pub fn resolve_pixmap_data(pixmaps: &[(i32, i32, Vec<u8>)], max_scale: f32) -> O
         let expected_len = usize::try_from(width.checked_mul(height)?.checked_mul(4)?).ok()?;
         if data.len() == expected_len {
             let mut rgba_data = Vec::with_capacity(data.len());
-            for chunk in data.chunks_exact(4) {
-                if let &[alpha, red, green, blue] = chunk {
-                    rgba_data.push(red);
-                    rgba_data.push(green);
-                    rgba_data.push(blue);
-                    rgba_data.push(alpha);
-                }
+            for &[alpha, red, green, blue] in data.as_chunks::<4>().0 {
+                rgba_data.push(red);
+                rgba_data.push(green);
+                rgba_data.push(blue);
+                rgba_data.push(alpha);
             }
             return Some(IconImage::new(
                 rgba_data,

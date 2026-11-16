@@ -44,6 +44,6 @@ mod tests {
         let id2 = NodeId::new();
         assert_ne!(id1, id2);
         assert_eq!(id1, NodeId::from_uuid(*id1.uuid()));
-        assert!(!id1.to_string().is_empty());
+        assert_ne!(id1.to_string(), "");
     }
 }

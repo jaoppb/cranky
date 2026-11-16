@@ -76,7 +76,7 @@ pub fn i64_to_f64(val: i64) -> f64 {
         |_| {
             let hi = i32::try_from(val >> 32).unwrap_or(0);
             let lo = u32::try_from(val & 0xFFFF_FFFF).unwrap_or(0);
-            f64::from(hi) * 4_294_967_296.0_f64 + f64::from(lo)
+            f64::mul_add(f64::from(hi), 4_294_967_296.0_f64, f64::from(lo))
         },
         f64::from,
     )
@@ -154,28 +154,26 @@ pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u
         let target_usize = usize::try_from(target).unwrap_or_default();
         let cap = target_usize.saturating_mul(target_usize).saturating_mul(4);
         let mut colors = Vec::with_capacity(cap);
-        for chunk in pixmap.data().chunks_exact(4) {
-            if let &[pr, pg, pb, a] = chunk {
-                let (r, g, b) = if a == 0 {
-                    (0, 0, 0)
-                } else {
-                    let unpremul = |c: u8| -> u8 {
-                        let c_u16 = u16::from(c);
-                        let a_u16 = u16::from(a);
-                        let val = c_u16
-                            .saturating_mul(255)
-                            .saturating_add(a_u16 / 2)
-                            .checked_div(a_u16)
-                            .unwrap_or(0);
-                        u8::try_from(val.min(255)).unwrap_or(255)
-                    };
-                    (unpremul(pr), unpremul(pg), unpremul(pb))
+        for &[pr, pg, pb, a] in pixmap.data().as_chunks::<4>().0 {
+            let (r, g, b) = if a == 0 {
+                (0, 0, 0)
+            } else {
+                let unpremul = |c: u8| -> u8 {
+                    let c_u16 = u16::from(c);
+                    let a_u16 = u16::from(a);
+                    let val = c_u16
+                        .saturating_mul(255)
+                        .saturating_add(a_u16 / 2)
+                        .checked_div(a_u16)
+                        .unwrap_or(0);
+                    u8::try_from(val.min(255)).unwrap_or(255)
                 };
-                colors.push(r);
-                colors.push(g);
-                colors.push(b);
-                colors.push(a);
-            }
+                (unpremul(pr), unpremul(pg), unpremul(pb))
+            };
+            colors.push(r);
+            colors.push(g);
+            colors.push(b);
+            colors.push(a);
         }
 
         Some((target, target, colors))
@@ -234,7 +232,7 @@ mod tests {
         let (w, h, data) = rasterized.unwrap();
         assert_eq!(w, 16);
         assert_eq!(h, 16);
-        assert!(!data.is_empty());
+        assert_ne!(data, [0_u8; 0]);
     }
 
     #[test]
@@ -257,7 +255,7 @@ mod tests {
         let (w, h, data) = loaded.unwrap();
         assert_eq!(w, 32);
         assert_eq!(h, 32);
-        assert!(!data.is_empty());
+        assert_ne!(data, [0_u8; 0]);
     }
 
     #[test]
