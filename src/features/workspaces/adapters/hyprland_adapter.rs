@@ -45,8 +45,15 @@ impl HyprlandAdapter {
 }
 
 impl WindowManagerPort for HyprlandAdapter {
-    #[tracing::instrument(skip(self), err)]
     fn get_state(&self) -> Result<WindowManagerState, WindowManagerError> {
+        let _span = tracing::info_span!("get_state").entered();
+        self.query_state()
+            .inspect_err(|error| tracing::error!(%error))
+    }
+}
+
+impl HyprlandAdapter {
+    fn query_state(&self) -> Result<WindowManagerState, WindowManagerError> {
         let ws_json =
             self.provider
                 .query_workspaces()

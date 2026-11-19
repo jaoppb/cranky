@@ -20,7 +20,6 @@ pub enum DbusConnectionError {
 /// High-level `DBus` bus operations port.
 /// Consumers use this to interact with `DBus` without knowing the underlying implementation.
 /// Implemented by a connected adapter.
-#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait DbusConnectionPort: Send + Sync {
     /// Call a method on a `DBus` interface and return the result as a `DBusValue`.
@@ -89,4 +88,60 @@ pub trait DbusConnectionPort: Send + Sync {
         &self,
         sub: DBusSubscription,
     ) -> Result<SignalStream, DbusConnectionError>;
+}
+
+/// A bus with no connection: every request fails with `NotInitialized`.
+#[cfg(test)]
+pub struct DisconnectedBus;
+
+#[cfg(test)]
+#[async_trait]
+impl DbusConnectionPort for DisconnectedBus {
+    async fn call_method(
+        &self,
+        bus: BusType,
+        _destination: &Destination,
+        _path: &Path,
+        _interface: &Interface,
+        _method: &Member,
+    ) -> Result<DBusValue, DbusConnectionError> {
+        Err(DbusConnectionError::NotInitialized(bus))
+    }
+
+    async fn get_all_properties(
+        &self,
+        bus: BusType,
+        _destination: &Destination,
+        _path: &Path,
+        _interface: &Interface,
+    ) -> Result<PropertiesMap, DbusConnectionError> {
+        Err(DbusConnectionError::NotInitialized(bus))
+    }
+
+    async fn subscribe_properties_changed(
+        &self,
+        bus: BusType,
+        _sender: &Destination,
+        _path: &Path,
+    ) -> Result<PropertyChangedStream, DbusConnectionError> {
+        Err(DbusConnectionError::NotInitialized(bus))
+    }
+
+    async fn list_names(&self, bus: BusType) -> Result<Vec<Destination>, DbusConnectionError> {
+        Err(DbusConnectionError::NotInitialized(bus))
+    }
+
+    async fn subscribe_name_changes(
+        &self,
+        bus: BusType,
+    ) -> Result<NameChangedStream, DbusConnectionError> {
+        Err(DbusConnectionError::NotInitialized(bus))
+    }
+
+    async fn subscribe_signal(
+        &self,
+        sub: DBusSubscription,
+    ) -> Result<SignalStream, DbusConnectionError> {
+        Err(DbusConnectionError::SubscriptionFailed(format!("{sub:?}")))
+    }
 }

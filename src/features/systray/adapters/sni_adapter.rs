@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info};
+use tracing::{Instrument, debug, error, info};
 use zbus::Connection;
 
 #[derive(Clone)]
@@ -68,12 +68,12 @@ impl SniPort for SniAdapter {
         match conn.request_name("org.kde.StatusNotifierWatcher").await {
             Ok(()) => {
                 info!("Successfully claimed org.kde.StatusNotifierWatcher");
-                let watcher = Watcher {
-                    items: self.items.clone(),
-                    hub: self.hub.clone(),
-                    conn: conn.clone(),
-                    runtime: tokio::runtime::Handle::current(),
-                };
+                let watcher = Watcher::new(
+                    self.items.clone(),
+                    self.hub.clone(),
+                    conn.clone(),
+                    tokio::runtime::Handle::current(),
+                );
                 let _rejected: Option<Watcher> = conn
                     .object_server()
                     .at::<&str, Watcher>("/StatusNotifierWatcher", watcher)
@@ -91,8 +91,20 @@ impl SniPort for SniAdapter {
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
     async fn trigger_action(
+        &self,
+        id: &SystrayId,
+        action: &SystrayActionName,
+        pos: Option<Position>,
+    ) -> Result<(), SniPortError> {
+        self.route_action(id, action, pos)
+            .instrument(tracing::info_span!("trigger_action", ?id, ?action, ?pos))
+            .await
+    }
+}
+
+impl SniAdapter {
+    async fn route_action(
         &self,
         id: &SystrayId,
         action: &SystrayActionName,

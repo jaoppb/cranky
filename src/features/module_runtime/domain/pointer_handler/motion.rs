@@ -18,12 +18,12 @@ impl PointerHandler {
 
         let hit = render_tree.hit_test(pos);
         let target_ref = capture_node_ref(&hit);
-        let old_hover = self.hovered_nodes.get(monitor_id).cloned();
+        let old_hover = self.hovered.get(monitor_id).cloned();
         if old_hover != target_ref {
             if let Some(r) = &target_ref {
-                self.hovered_nodes.insert(monitor_id.clone(), r.clone());
+                self.hovered.insert(monitor_id.clone(), r.clone());
             } else {
-                self.hovered_nodes.remove(monitor_id);
+                self.hovered.remove(monitor_id);
             }
             state_changed = true;
         }
@@ -56,8 +56,8 @@ impl PointerHandler {
         &mut self,
         monitor_id: &MonitorId,
     ) -> (Vec<PointerAction>, bool) {
-        let had_hover = self.hovered_nodes.remove(monitor_id).is_some();
-        let had_active = self.active_nodes.remove(monitor_id).is_some();
+        let had_hover = self.hovered.remove(monitor_id).is_some();
+        let had_active = self.active.remove(monitor_id).is_some();
         let state_changed = had_hover || had_active;
 
         (Vec::new(), state_changed)

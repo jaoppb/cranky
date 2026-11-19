@@ -1,6 +1,7 @@
-use super::mmap::{MmappedShm, create_shm_file, safe_borrowed_fd_from_file, safe_mmap_file};
 use super::slot::{BufferSlot, BufferUserData};
+use cranky_unsafe::SharedMapping;
 use std::io::Result;
+use std::os::fd::AsFd;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use wayland_client::QueueHandle;
@@ -8,7 +9,7 @@ use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 
 pub struct ShmBuffer {
-    shm: MmappedShm,
+    shm: SharedMapping,
     pool: WlShmPool,
     width: u32,
     height: u32,
@@ -35,11 +36,14 @@ impl ShmBuffer {
         let frame_size =
             usize::try_from(width.saturating_mul(height).saturating_mul(4)).unwrap_or_default();
         let total_size = frame_size.saturating_mul(2);
-        let file = create_shm_file(total_size, xdg_runtime_dir)?;
+        let (shm, file) = SharedMapping::create(total_size, xdg_runtime_dir)?;
 
-        let mmap = safe_mmap_file(&file)?;
-        let fd = safe_borrowed_fd_from_file(&file);
-        let pool = shm_proxy.create_pool(fd, i32::try_from(total_size).unwrap_or(i32::MAX), qh, ());
+        let pool = shm_proxy.create_pool(
+            file.as_fd(),
+            i32::try_from(total_size).unwrap_or(i32::MAX),
+            qh,
+            (),
+        );
 
         let width_i32 = i32::try_from(width).unwrap_or_default();
         let height_i32 = i32::try_from(height).unwrap_or_default();
@@ -75,7 +79,7 @@ impl ShmBuffer {
         ];
 
         Ok(Self {
-            shm: MmappedShm::from_mmap(mmap),
+            shm,
             pool,
             width,
             height,
@@ -98,7 +102,10 @@ impl ShmBuffer {
             );
         }
         let end = offset.saturating_add(frame_size);
-        self.shm.mmap_mut().get_mut(offset..end).unwrap_or_default()
+        self.shm
+            .bytes_mut()
+            .get_mut(offset..end)
+            .unwrap_or_default()
     }
 
     #[must_use]

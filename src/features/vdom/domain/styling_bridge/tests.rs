@@ -9,7 +9,7 @@ struct MockResolver;
 impl StyleResolverPort for MockResolver {
     fn resolve_style(
         &self,
-        _query: &ElementQuery,
+        _query: &ElementQuery<'_>,
         _inherited: &InheritedStyle,
     ) -> (
         crate::features::styling::domain::ComputedStyle,

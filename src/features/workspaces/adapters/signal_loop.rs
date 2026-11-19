@@ -191,9 +191,41 @@ pub async fn run_event_loop<P: WindowManagerPort + 'static>(
 mod tests {
     use super::*;
     use crate::features::workspaces::domain::{Monitor, MonitorName, WorkspaceId, WorkspaceName};
-    use crate::features::workspaces::ports::{MockWindowManagerPort, WindowManagerError};
+    use crate::features::workspaces::ports::{WindowManagerError, WindowManagerState};
     use std::collections::BTreeMap;
     use std::io::Cursor;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// A window manager that reports `state`, or an IPC error when it has
+    /// none, and counts how often it was asked.
+    struct FakeWindowManager {
+        state: Option<WindowManagerState>,
+        queries: AtomicUsize,
+    }
+
+    impl FakeWindowManager {
+        const fn new(state: Option<WindowManagerState>) -> Self {
+            Self {
+                state,
+                queries: AtomicUsize::new(0),
+            }
+        }
+
+        fn queries(&self) -> usize {
+            self.queries.load(Ordering::SeqCst)
+        }
+    }
+
+    impl WindowManagerPort for FakeWindowManager {
+        fn get_state(&self) -> Result<WindowManagerState, WindowManagerError> {
+            self.queries.fetch_add(1, Ordering::SeqCst);
+            self.state
+                .clone()
+                .ok_or_else(|| WindowManagerError::IpcError {
+                    reason: "boom".to_string(),
+                })
+        }
+    }
 
     #[test]
     fn test_drain_batch_coalesces_multiple_lines() {
@@ -304,14 +336,11 @@ mod tests {
             Monitor::new(MonitorName::new("eDP-1"), WorkspaceId::new(4), None),
         );
 
-        let mut mock = MockWindowManagerPort::new();
-        mock.expect_get_state().times(1).returning(move || {
-            Ok((
-                new_workspaces.clone(),
-                new_monitors.clone(),
-                Some(MonitorName::new("eDP-1")),
-            ))
-        });
+        let mock = FakeWindowManager::new(Some((
+            new_workspaces,
+            new_monitors,
+            Some(MonitorName::new("eDP-1")),
+        )));
 
         check_and_resync(
             &mock,
@@ -319,6 +348,8 @@ mod tests {
             &["monitorremoved>>HDMI-A-1".to_string()],
             false,
         );
+
+        assert_eq!(mock.queries(), 1);
 
         assert!(state.workspaces().contains_key(&WorkspaceId::new(4)));
         assert_eq!(
@@ -352,11 +383,11 @@ mod tests {
         let mut state = HyprlandState::new(workspaces, monitors, Some(MonitorName::new("DP-1")));
         let before = state.clone();
 
-        let mut mock = MockWindowManagerPort::new();
-        mock.expect_get_state().times(0);
+        let mock = FakeWindowManager::new(None);
 
         check_and_resync(&mock, &mut state, &[], false);
 
+        assert_eq!(mock.queries(), 0);
         assert_eq!(state, before);
     }
 
@@ -383,10 +414,7 @@ mod tests {
             MonitorName::new("HDMI-A-1"),
             Monitor::new(MonitorName::new("HDMI-A-1"), WorkspaceId::new(2), None),
         );
-        let mut mock = MockWindowManagerPort::new();
-        mock.expect_get_state()
-            .times(1)
-            .returning(move || Ok((BTreeMap::new(), new_monitors.clone(), None)));
+        let mock = FakeWindowManager::new(Some((BTreeMap::new(), new_monitors, None)));
 
         check_and_resync(
             &mock,
@@ -394,6 +422,8 @@ mod tests {
             &["monitoraddedv2>>1,HDMI-A-1,x".to_string()],
             true,
         );
+
+        assert_eq!(mock.queries(), 1);
 
         assert!(state.monitors().contains_key(&MonitorName::new("HDMI-A-1")));
         assert!(!state.monitors().contains_key(&MonitorName::new("DP-1")));
@@ -404,15 +434,11 @@ mod tests {
         let mut state = inconsistent_state();
         let before = state.clone();
 
-        let mut mock = MockWindowManagerPort::new();
-        mock.expect_get_state().times(1).returning(|| {
-            Err(WindowManagerError::IpcError {
-                reason: "boom".to_string(),
-            })
-        });
+        let mock = FakeWindowManager::new(None);
 
         check_and_resync(&mock, &mut state, &[], false);
 
+        assert_eq!(mock.queries(), 1);
         assert_eq!(state, before);
     }
 }

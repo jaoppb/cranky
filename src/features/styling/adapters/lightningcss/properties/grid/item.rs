@@ -4,7 +4,7 @@ use crate::features::styling::domain::{ComputedStyle, GridLinePlacement, GridPla
 use lightningcss::properties::Property;
 use lightningcss::stylesheet::PrinterOptions;
 
-pub fn apply_grid_item_properties(style: &mut ComputedStyle, prop: &Property) -> bool {
+pub fn apply_grid_item_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     let Ok(full) = prop.to_css_string(false, PrinterOptions::default()) else {
         return false;
     };

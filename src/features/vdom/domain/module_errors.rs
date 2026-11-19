@@ -70,8 +70,7 @@ pub fn substitute_failed_modules<S: std::hash::BuildHasher>(
 fn error_placeholder(original: &VNode, name: &ModuleName, reason: &str) -> VNode {
     let mut classes: Vec<ClassName> = original
         .class_names()
-        .map(|c| c.as_slice().to_vec())
-        .unwrap_or_default();
+        .map_or_default(|c| c.as_slice().to_vec());
     if let Ok(error_class) = ClassName::new("module-error") {
         classes.push(error_class);
     }

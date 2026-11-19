@@ -9,7 +9,6 @@ pub enum SniPortError {
     ActionFailed { id: String, error: String },
 }
 
-#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait SniPort: Send + Sync {
     /// Initialize the SNI Host (and optionally the Watcher)
@@ -24,7 +23,6 @@ pub trait SniPort: Send + Sync {
     ) -> Result<(), SniPortError>;
 }
 
-#[cfg_attr(test, mockall::automock)]
 pub trait SystrayIconCachePort: Send + Sync {
     fn get(
         &self,

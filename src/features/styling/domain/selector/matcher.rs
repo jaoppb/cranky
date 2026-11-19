@@ -3,7 +3,7 @@ use super::super::query::ElementQuery;
 use super::model::{Combinator, CompiledSelector, SelectorStep};
 
 #[must_use]
-pub fn matches_selector(selector: &CompiledSelector, query: &ElementQuery) -> bool {
+pub fn matches_selector(selector: &CompiledSelector, query: &ElementQuery<'_>) -> bool {
     let Some(first_step) = selector.steps.first() else {
         return false;
     };
@@ -64,7 +64,7 @@ pub fn matches_selector(selector: &CompiledSelector, query: &ElementQuery) -> bo
 }
 
 #[must_use]
-pub fn step_matches(step: &SelectorStep, query: &ElementQuery) -> bool {
+pub fn step_matches(step: &SelectorStep, query: &ElementQuery<'_>) -> bool {
     if let Some(tag) = &step.tag
         && tag != "*"
         && tag != &query.tag().to_lowercase()
@@ -101,7 +101,7 @@ pub fn step_matches(step: &SelectorStep, query: &ElementQuery) -> bool {
 }
 
 #[must_use]
-pub fn pseudo_matches(pseudo: &PseudoClass, query: &ElementQuery) -> bool {
+pub fn pseudo_matches(pseudo: &PseudoClass, query: &ElementQuery<'_>) -> bool {
     match pseudo {
         PseudoClass::Hover | PseudoClass::Active | PseudoClass::Focused => {
             query.pseudo_classes().contains(pseudo)

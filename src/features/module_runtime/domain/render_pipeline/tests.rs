@@ -54,7 +54,7 @@ fn test_pipeline_diff_and_layout_phases() {
         size_change,
         Some(SizeChange::new(Size::new(0, 0), Size::new(10, 10)))
     );
-    assert!(child_layouts.is_empty());
+    assert_eq!(child_layouts, []);
     assert_eq!(*node.rect().size(), Size::new(10, 10));
 
     // 3. Paint Phase without bounds returns None

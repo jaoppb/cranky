@@ -46,7 +46,7 @@ pub enum Patch<'a> {
 }
 
 pub(super) fn build_layout_state(
-    builder: &mut TaffyTreeBuilder,
+    builder: &mut TaffyTreeBuilder<'_>,
     node: &StyledNode,
     measurer: &mut dyn TextMeasurer,
 ) -> Result<LayoutState, LayoutError> {
@@ -79,8 +79,8 @@ pub(super) fn build_layout_state(
 }
 
 pub(super) fn apply_patch(
-    builder: &mut TaffyTreeBuilder,
-    patch: Patch,
+    builder: &mut TaffyTreeBuilder<'_>,
+    patch: Patch<'_>,
     measurer: &mut dyn TextMeasurer,
 ) -> Result<LayoutState, LayoutError> {
     match patch {

@@ -17,20 +17,24 @@ type Variant = zbus::Variant<'static>;
 
 pub struct Probe {
     label: String,
+    wrapped: &'static str,
+    bare: &'static str,
+    count: i32,
+    enabled: bool,
+    tags: Vec<String>,
+    limits: HashMap<String, i32>,
 }
 
 #[zbus::interface(name = "org.cranky.Probe")]
 impl Probe {
     /// Replies with a variant, the only reply `call_method` understands.
-    #[allow(clippy::unused_self)]
     fn wrapped(&self) -> Variant {
-        Variant::from("wrapped reply")
+        Variant::from(self.wrapped)
     }
 
     /// Replies with a bare string, which `call_method` rejects (#41).
-    #[allow(clippy::unused_self)]
     fn bare(&self) -> String {
-        "bare reply".to_string()
+        self.bare.to_string()
     }
 
     #[zbus(property)]
@@ -38,28 +42,24 @@ impl Probe {
         self.label.clone()
     }
 
-    #[allow(clippy::unused_self)]
     #[zbus(property)]
     const fn count(&self) -> i32 {
-        7
+        self.count
     }
 
-    #[allow(clippy::unused_self)]
     #[zbus(property)]
     const fn enabled(&self) -> bool {
-        true
+        self.enabled
     }
 
-    #[allow(clippy::unused_self)]
     #[zbus(property)]
     fn tags(&self) -> Vec<String> {
-        vec!["one".to_string(), "two".to_string()]
+        self.tags.clone()
     }
 
-    #[allow(clippy::unused_self)]
     #[zbus(property)]
     fn limits(&self) -> HashMap<String, i32> {
-        HashMap::from([("max".to_string(), 9)])
+        self.limits.clone()
     }
 
     #[zbus(signal)]
@@ -75,6 +75,12 @@ impl ProbeService {
     pub async fn start() -> Outcome<Self> {
         let probe = Probe {
             label: "first".to_string(),
+            wrapped: "wrapped reply",
+            bare: "bare reply",
+            count: 7,
+            enabled: true,
+            tags: vec!["one".to_string(), "two".to_string()],
+            limits: HashMap::from([("max".to_string(), 9)]),
         };
         let connection = zbus::connection::Builder::session()
             .name(NAME)

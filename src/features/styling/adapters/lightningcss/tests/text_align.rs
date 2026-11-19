@@ -10,8 +10,7 @@ use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{TextAlign, TextAlignment};
-use crate::shared::rendering::ports::canvas::MockCanvas;
-use std::sync::{Arc, Mutex};
+use crate::shared::rendering::ports::canvas::{CanvasCall, RecordingCanvas};
 
 fn resolver(css: &str) -> CompositeStyleResolver {
     let sheet = LightningCssAdapter::new()
@@ -146,18 +145,18 @@ fn paint_calendar() -> Vec<(String, TextAlignment)> {
         )
         .unwrap();
 
-    let drawn = Arc::new(Mutex::new(Vec::new()));
-    let sink = Arc::clone(&drawn);
-    let mut canvas = MockCanvas::new();
-    canvas.expect_draw_rect().returning(|_, _, _, _, _, _| ());
-    canvas.expect_draw_border().returning(|_, _, _, _, _| ());
-    canvas
-        .expect_draw_text()
-        .returning(move |t, _, _, _, _, alignment| {
-            sink.lock().unwrap().push((t.to_string(), alignment));
-        });
+    let mut canvas = RecordingCanvas::default();
     laid_out.render_to_canvas(&mut canvas);
-    drawn.lock().unwrap().clone()
+    canvas
+        .calls
+        .into_iter()
+        .filter_map(|call| match call {
+            CanvasCall::Text {
+                text, alignment, ..
+            } => Some((text, alignment)),
+            CanvasCall::Rect | CanvasCall::Border | CanvasCall::Image => None,
+        })
+        .collect()
 }
 
 #[test]

@@ -1,5 +1,3 @@
-#![allow(unsafe_code)]
-
 pub mod calc_resolve;
 pub mod diff;
 pub mod grid_converter;
@@ -16,19 +14,15 @@ use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
+use cranky_unsafe::SendTaffyTree;
 use reconciler::LayoutState;
-use taffy::TaffyTree;
 
 pub struct TaffyLayoutAdapter {
-    taffy: TaffyTree,
+    taffy: SendTaffyTree,
     state: Option<LayoutState>,
     /// Root size of the last pass's unpinned layout; `None` if it wasn't pinned.
     intrinsic: Option<Size>,
 }
-
-#[allow(clippy::non_send_fields_in_send_ty)]
-unsafe impl Send for TaffyLayoutAdapter {}
-unsafe impl Sync for TaffyLayoutAdapter {}
 
 impl Default for TaffyLayoutAdapter {
     fn default() -> Self {
@@ -40,7 +34,7 @@ impl TaffyLayoutAdapter {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            taffy: TaffyTree::new(),
+            taffy: SendTaffyTree::new(),
             state: None,
             intrinsic: None,
         }
@@ -55,7 +49,7 @@ impl TaffyLayoutAdapter {
     /// of returning an error, so a half-applied pass has to be thrown away
     /// whole.
     fn reset(&mut self) {
-        self.taffy = TaffyTree::new();
+        self.taffy = SendTaffyTree::new();
         self.state = None;
     }
 }

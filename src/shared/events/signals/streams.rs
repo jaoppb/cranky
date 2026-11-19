@@ -8,7 +8,6 @@ use super::hub::SignalHub;
 use super::kind::SignalKind;
 
 impl SignalHub {
-    #[must_use]
     pub fn signal_to_stream(&self, kind: &SignalKind) -> BoxStream<'static, SignalKind> {
         match kind {
             SignalKind::Time => WatchStream::new(self.time_rx())

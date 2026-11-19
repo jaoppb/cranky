@@ -13,7 +13,7 @@ use crate::features::styling::ports::CssParserPort;
 use crate::features::vdom::domain::{TextContent, VNode};
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Position, Size};
-use crate::shared::rendering::ports::canvas::MockCanvas;
+use crate::shared::rendering::ports::canvas::RecordingCanvas;
 
 struct DummyMeasurer;
 impl TextMeasurer for DummyMeasurer {
@@ -76,9 +76,9 @@ fn test_arbitrary_style_name_and_progress_rendering() {
     let render_h = engine
         .calculate_layout(styled_h, &mut DummyMeasurer, Position::new(0, 0))
         .unwrap();
-    let mut mock_canvas = MockCanvas::new();
-    mock_canvas.expect_draw_rect().times(2).return_const(());
-    render_h.render_to_canvas(&mut mock_canvas);
+    let mut canvas = RecordingCanvas::default();
+    render_h.render_to_canvas(&mut canvas);
+    assert_eq!(canvas.kinds(), ["rect", "rect"]);
 }
 
 #[test]

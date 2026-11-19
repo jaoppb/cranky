@@ -21,6 +21,10 @@ pub enum Call {
 struct Item {
     title: String,
     status: String,
+    category: &'static str,
+    id: &'static str,
+    is_menu: bool,
+    tool_tip: (String, Pixmaps, String, String),
     calls: mpsc::UnboundedSender<Call>,
 }
 
@@ -43,33 +47,24 @@ impl Item {
         self.status.clone()
     }
 
-    #[allow(clippy::unused_self)]
     #[zbus(property)]
     fn category(&self) -> String {
-        "Communications".to_string()
+        self.category.to_string()
     }
 
-    #[allow(clippy::unused_self)]
     #[zbus(property)]
     fn id(&self) -> String {
-        "fake-item".to_string()
+        self.id.to_string()
     }
 
-    #[allow(clippy::unused_self)]
     #[zbus(property)]
     const fn item_is_menu(&self) -> bool {
-        false
+        self.is_menu
     }
 
-    #[allow(clippy::unused_self)]
     #[zbus(property)]
     fn tool_tip(&self) -> (String, Pixmaps, String, String) {
-        (
-            String::new(),
-            Pixmaps::new(),
-            "<b>Tip</b>".to_string(),
-            "a &amp; b".to_string(),
-        )
+        self.tool_tip.clone()
     }
 
     fn activate(&self, x: i32, y: i32) {
@@ -103,6 +98,15 @@ impl ItemService {
         let item = Item {
             title: "Fake Title".to_string(),
             status: "Active".to_string(),
+            category: "Communications",
+            id: "fake-item",
+            is_menu: false,
+            tool_tip: (
+                String::new(),
+                Pixmaps::new(),
+                "<b>Tip</b>".to_string(),
+                "a &amp; b".to_string(),
+            ),
             calls: sender,
         };
         let connection = zbus::connection::Builder::session()

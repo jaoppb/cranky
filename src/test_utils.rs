@@ -52,6 +52,20 @@ macro_rules! assert_pixmap_has_color {
     };
 }
 
+/// Runs an async test body to completion on a single-threaded tokio runtime
+/// with every driver enabled, which is what `#[tokio::test]` set up.
+///
+/// # Panics
+///
+/// Panics if the runtime cannot be built.
+pub fn block_on<F: Future>(future: F) -> F::Output {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("the test runtime must build")
+        .block_on(future)
+}
+
 /// A throwaway `HOME` (and XDG dirs) for tests that write under it.
 ///
 /// `BuiltinModules::ensure_builtins`, for example, writes module scripts into
@@ -117,7 +131,7 @@ impl Drop for TestHome {
 ///
 /// Panics if pixel coordinates are out of bounds.
 #[must_use]
-pub fn get_pixel_color(pixmap: &mut tiny_skia::PixmapMut, x: u32, y: u32) -> (u8, u8, u8, u8) {
+pub fn get_pixel_color(pixmap: &mut tiny_skia::PixmapMut<'_>, x: u32, y: u32) -> (u8, u8, u8, u8) {
     let width = pixmap.width();
     let height = pixmap.height();
     assert!(

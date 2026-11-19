@@ -12,7 +12,7 @@ use std::collections::HashMap;
 /// declaration and splits on the first `:` instead of reading the value in
 /// isolation.
 #[must_use]
-pub fn detect_custom_property_declarations(props: &[Property]) -> HashMap<String, String> {
+pub fn detect_custom_property_declarations(props: &[Property<'_>]) -> HashMap<String, String> {
     let mut declared = HashMap::new();
     for prop in props {
         let Property::Custom(custom) = prop else {
@@ -51,7 +51,7 @@ pub fn detect_custom_property_declarations(props: &[Property]) -> HashMap<String
 /// which can't happen until `DeclaredStyle::collapse`, since substitution
 /// depends on inheritance.
 #[must_use]
-pub fn detect_pending_var_properties(props: &[Property]) -> HashMap<String, String> {
+pub fn detect_pending_var_properties(props: &[Property<'_>]) -> HashMap<String, String> {
     let mut pending = HashMap::new();
     for prop in props {
         let Property::Unparsed(unparsed) = prop else {

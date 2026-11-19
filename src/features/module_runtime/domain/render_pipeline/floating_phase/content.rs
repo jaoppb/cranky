@@ -13,6 +13,14 @@ use std::collections::HashMap;
 /// so the same content under different reports is a different layout.
 pub type FloatingCache = HashMap<MonitorId, (StyledNode, Option<ChildSizesMap>, RenderNode)>;
 
+/// What every floating kind is laid out with on one monitor during one render.
+pub struct FloatingPass<'a, F: CanvasFactory> {
+    pub monitor_id: &'a MonitorId,
+    pub canvas_factory: &'a mut F,
+    pub scale: Scale,
+    pub current_child_sizes: Option<&'a ChildSizesMap>,
+}
+
 /// Fallback font used when a floating node's own CSS specifies none —
 /// matches `paint_pipeline`'s fallback so a popup's fonts never disagree
 /// with what the bar tree would use for the same unstyled node.
@@ -25,14 +33,14 @@ const fn floating_font_fallback() -> (FontFamily, FontSize) {
 /// three so hit-testing and painting always agree, whichever kind it is.
 pub(super) fn layout_floating_content<F: CanvasFactory, E: LayoutEnginePort>(
     layout_engine: &mut E,
-    canvas_factory: &mut F,
-    scale: Scale,
-    current_child_sizes: Option<&ChildSizesMap>,
+    pass: &mut FloatingPass<'_, F>,
     content: &StyledNode,
 ) -> Option<RenderNode> {
     let (font_family, font_size) = floating_font_fallback();
-    let measurer_inner = canvas_factory.create_text_measurer(scale, font_family, font_size);
-    let mut measurer = ModuleSizeMeasurer::new(measurer_inner, current_child_sizes);
+    let measurer_inner =
+        pass.canvas_factory
+            .create_text_measurer(pass.scale, font_family, font_size);
+    let mut measurer = ModuleSizeMeasurer::new(measurer_inner, pass.current_child_sizes);
     match layout_engine.calculate_layout(content.clone(), &mut measurer, Position::new(0, 0)) {
         Ok(node) => Some(node),
         Err(e) => {
@@ -47,32 +55,26 @@ pub(super) fn layout_floating_content<F: CanvasFactory, E: LayoutEnginePort>(
 /// this monitor — a popup/panel/tooltip left open and unchanged otherwise
 /// pays a full layout + clone on every render where anything else (a
 /// sibling module's size, say) is what's actually dirty.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn layout_floating_content_cached<F: CanvasFactory, E: LayoutEnginePort>(
     cache: &mut FloatingCache,
-    monitor_id: &MonitorId,
     layout_engine: &mut E,
-    canvas_factory: &mut F,
-    scale: Scale,
-    current_child_sizes: Option<&ChildSizesMap>,
+    pass: &mut FloatingPass<'_, F>,
     content: &StyledNode,
 ) -> Option<RenderNode> {
-    if let Some((cached_content, cached_sizes, cached_node)) = cache.get(monitor_id)
+    if let Some((cached_content, cached_sizes, cached_node)) = cache.get(pass.monitor_id)
         && cached_content == content
-        && cached_sizes.as_ref() == current_child_sizes
+        && cached_sizes.as_ref() == pass.current_child_sizes
     {
         return Some(cached_node.clone());
     }
-    let node = layout_floating_content(
-        layout_engine,
-        canvas_factory,
-        scale,
-        current_child_sizes,
-        content,
-    )?;
+    let node = layout_floating_content(layout_engine, pass, content)?;
     cache.insert(
-        monitor_id.clone(),
-        (content.clone(), current_child_sizes.cloned(), node.clone()),
+        pass.monitor_id.clone(),
+        (
+            content.clone(),
+            pass.current_child_sizes.cloned(),
+            node.clone(),
+        ),
     );
     Some(node)
 }
@@ -120,6 +122,19 @@ mod tests {
         }
     }
 
+    fn pass<'a>(
+        monitor_id: &'a MonitorId,
+        canvas_factory: &'a mut MockCanvasFactory,
+        current_child_sizes: Option<&'a ChildSizesMap>,
+    ) -> FloatingPass<'a, MockCanvasFactory> {
+        FloatingPass {
+            monitor_id,
+            canvas_factory,
+            scale: Scale::new(1.0),
+            current_child_sizes,
+        }
+    }
+
     fn text_node(text: &str) -> StyledNode {
         StyledNode::Text {
             path: NodePath::root_in(SurfaceSpace::Tooltip),
@@ -147,11 +162,8 @@ mod tests {
 
         layout_floating_content_cached(
             &mut cache,
-            &monitor_id,
             &mut engine,
-            &mut canvas_factory,
-            Scale::new(1.0),
-            None,
+            &mut pass(&monitor_id, &mut canvas_factory, None),
             &content,
         );
         assert_eq!(
@@ -165,11 +177,8 @@ mod tests {
         // not, so this must be a cache hit, not a second taffy pass.
         layout_floating_content_cached(
             &mut cache,
-            &monitor_id,
             &mut engine,
-            &mut canvas_factory,
-            Scale::new(1.0),
-            None,
+            &mut pass(&monitor_id, &mut canvas_factory, None),
             &content,
         );
         assert_eq!(
@@ -198,11 +207,8 @@ mod tests {
 
         layout_floating_content_cached(
             &mut cache,
-            &monitor_id,
             &mut engine,
-            &mut canvas_factory,
-            Scale::new(1.0),
-            None,
+            &mut pass(&monitor_id, &mut canvas_factory, None),
             &content,
         );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -215,11 +221,8 @@ mod tests {
         for _ in 0..2 {
             layout_floating_content_cached(
                 &mut cache,
-                &monitor_id,
                 &mut engine,
-                &mut canvas_factory,
-                Scale::new(1.0),
-                Some(&sizes),
+                &mut pass(&monitor_id, &mut canvas_factory, Some(&sizes)),
                 &content,
             );
         }
@@ -242,22 +245,16 @@ mod tests {
 
         layout_floating_content_cached(
             &mut cache,
-            &monitor_id,
             &mut engine,
-            &mut canvas_factory,
-            Scale::new(1.0),
-            None,
+            &mut pass(&monitor_id, &mut canvas_factory, None),
             &text_node("first"),
         );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
         layout_floating_content_cached(
             &mut cache,
-            &monitor_id,
             &mut engine,
-            &mut canvas_factory,
-            Scale::new(1.0),
-            None,
+            &mut pass(&monitor_id, &mut canvas_factory, None),
             &text_node("second"),
         );
         assert_eq!(

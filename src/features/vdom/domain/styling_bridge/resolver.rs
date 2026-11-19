@@ -60,7 +60,7 @@ impl VNode {
         &self,
         resolver: &dyn StyleResolverPort,
         interaction: Option<&InteractionContext>,
-        parent: Option<&ElementQuery>,
+        parent: Option<&ElementQuery<'_>>,
     ) -> StyledNode {
         let resolved_interaction =
             interaction.map(|ctx| ResolvedInteraction::resolve(self, SurfaceSpace::Bar, ctx));
@@ -80,7 +80,7 @@ impl VNode {
         interaction: Interaction<'_>,
         path: &NodePath,
         position: SiblingPosition,
-        parent: Option<&ElementQuery>,
+        parent: Option<&ElementQuery<'_>>,
         inherited: &InheritedStyle,
     ) -> StyledNode {
         let pseudo_classes = compute_pseudo_classes(path, interaction.resolved);

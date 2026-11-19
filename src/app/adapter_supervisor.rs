@@ -107,7 +107,7 @@ impl AdapterSupervisor {
 mod tests {
     use super::*;
     use crate::shared::config::domain::Config;
-    use crate::shared::dbus::ports::MockDbusConnectionPort;
+    use crate::shared::dbus::ports::DisconnectedBus;
 
     fn test_env() -> Arc<AppEnvironment> {
         Arc::new(AppEnvironment::new(
@@ -119,38 +119,42 @@ mod tests {
         ))
     }
 
-    #[tokio::test]
-    async fn test_ensure_metrics_is_idempotent() {
-        let hub = Arc::new(SignalHub::new(Config::default()));
-        let mut supervisor = AdapterSupervisor::new(
-            hub,
-            test_env(),
-            MetricsConfig::default(),
-            Arc::new(MockDbusConnectionPort::new()),
-        );
+    #[test]
+    fn test_ensure_metrics_is_idempotent() {
+        crate::test_utils::block_on(async {
+            let hub = Arc::new(SignalHub::new(Config::default()));
+            let mut supervisor = AdapterSupervisor::new(
+                hub,
+                test_env(),
+                MetricsConfig::default(),
+                Arc::new(DisconnectedBus),
+            );
 
-        assert!(!supervisor.started.contains(&SignalKind::Metrics));
-        supervisor.ensure(SignalKind::Metrics).await;
-        assert!(supervisor.started.contains(&SignalKind::Metrics));
-        // Second call must not start a second poller — nothing observable
-        // to assert on directly, but it must not panic or double-insert.
-        supervisor.ensure(SignalKind::Metrics).await;
-        assert_eq!(supervisor.started.len(), 1);
+            assert!(!supervisor.started.contains(&SignalKind::Metrics));
+            supervisor.ensure(SignalKind::Metrics).await;
+            assert!(supervisor.started.contains(&SignalKind::Metrics));
+            // Second call must not start a second poller — nothing observable
+            // to assert on directly, but it must not panic or double-insert.
+            supervisor.ensure(SignalKind::Metrics).await;
+            assert_eq!(supervisor.started.len(), 1);
+        });
     }
 
-    #[tokio::test]
-    async fn test_mark_started_prevents_later_ensure() {
-        let hub = Arc::new(SignalHub::new(Config::default()));
-        let mut supervisor = AdapterSupervisor::new(
-            hub,
-            test_env(),
-            MetricsConfig::default(),
-            Arc::new(MockDbusConnectionPort::new()),
-        );
+    #[test]
+    fn test_mark_started_prevents_later_ensure() {
+        crate::test_utils::block_on(async {
+            let hub = Arc::new(SignalHub::new(Config::default()));
+            let mut supervisor = AdapterSupervisor::new(
+                hub,
+                test_env(),
+                MetricsConfig::default(),
+                Arc::new(DisconnectedBus),
+            );
 
-        supervisor.mark_started(SignalKind::Time);
-        // No task should be spawned for a kind marked started at boot.
-        supervisor.ensure(SignalKind::Time).await;
-        assert_eq!(supervisor.started.len(), 1);
+            supervisor.mark_started(SignalKind::Time);
+            // No task should be spawned for a kind marked started at boot.
+            supervisor.ensure(SignalKind::Time).await;
+            assert_eq!(supervisor.started.len(), 1);
+        });
     }
 }

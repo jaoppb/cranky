@@ -87,7 +87,7 @@ impl SysinfoAdapter {
         if config.network().is_some()
             && config.network() != Some(&crate::features::metrics::domain::NetworkMode::Disabled)
         {
-            for (_interface_name, data) in networks.iter() {
+            for data in networks.values() {
                 network_tx = network_tx.saturating_add(data.transmitted());
                 network_rx = network_rx.saturating_add(data.received());
             }
@@ -215,7 +215,7 @@ mod tests {
 
         assert_eq!(state.network_tx().value(), 0);
         assert_eq!(state.network_rx().value(), 0);
-        assert!(state.disks().is_empty());
+        assert_eq!(state.disks(), []);
         assert!(state.temperature().value().abs() < f32::EPSILON);
     }
 
@@ -243,21 +243,23 @@ mod tests {
         assert!(state.temperature().value() >= 32.0 || state.temperature().value() == 0.0);
     }
 
-    #[tokio::test]
-    async fn test_sysinfo_adapter_start() {
-        let config: MetricsConfig = serde_json::from_value(serde_json::json!({
-            "update_interval_ms": 10
-        }))
-        .unwrap();
-        let hub = Arc::new(SignalHub::new(Config::default()));
-        let mut rx = hub.metrics_rx().clone();
+    #[test]
+    fn test_sysinfo_adapter_start() {
+        crate::test_utils::block_on(async {
+            let config: MetricsConfig = serde_json::from_value(serde_json::json!({
+                "update_interval_ms": 10
+            }))
+            .unwrap();
+            let hub = Arc::new(SignalHub::new(Config::default()));
+            let mut rx = hub.metrics_rx().clone();
 
-        let adapter = SysinfoAdapter::new(config, hub);
-        adapter.start();
+            let adapter = SysinfoAdapter::new(config, hub);
+            adapter.start();
 
-        // Wait for first update
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        let state = rx.borrow_and_update().clone();
-        assert!(state.memory_total().value() > 0);
+            // Wait for first update
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            let state = rx.borrow_and_update().clone();
+            assert!(state.memory_total().value() > 0);
+        });
     }
 }

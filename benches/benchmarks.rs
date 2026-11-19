@@ -118,7 +118,7 @@ struct StaticStyleResolver {
 impl StyleResolverPort for StaticStyleResolver {
     fn resolve_style(
         &self,
-        _query: &ElementQuery,
+        _query: &ElementQuery<'_>,
         _inherited: &InheritedStyle,
     ) -> (ComputedStyle, InheritedStyle) {
         (self.style.clone(), InheritedStyle::default())

@@ -25,7 +25,7 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
 
     fn resolve_style(
         &self,
-        query: &ElementQuery,
+        query: &ElementQuery<'_>,
         inherited: &InheritedStyle,
         reparser: &dyn PropertyReparser,
     ) -> (ComputedStyle, InheritedStyle) {
@@ -52,7 +52,7 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
         (result, next_inherited)
     }
 
-    fn matching_rules(&self, query: &ElementQuery) -> Vec<RuleMatch> {
+    fn matching_rules(&self, query: &ElementQuery<'_>) -> Vec<RuleMatch> {
         // The index narrows to rules that *could* match based on the
         // element's own id/classes/tag; the full selector walk below (still
         // needed for ancestors, pseudo-classes and `:not()`) runs only on

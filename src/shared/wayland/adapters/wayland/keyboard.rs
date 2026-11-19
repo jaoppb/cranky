@@ -62,9 +62,7 @@ impl KeyboardInput {
     /// Replaces the keymap with the text read from `fd`; on any failure no
     /// key is recognised until the next keymap.
     pub(crate) fn load_keymap(&mut self, fd: OwnedFd, size: u32) {
-        self.escape_codes = read_keymap(fd, size)
-            .map(|keymap| escape_codes(&keymap))
-            .unwrap_or_default();
+        self.escape_codes = read_keymap(fd, size).map_or_default(|keymap| escape_codes(&keymap));
     }
 
     #[cfg(test)]

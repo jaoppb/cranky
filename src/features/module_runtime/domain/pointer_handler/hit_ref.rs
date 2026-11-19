@@ -119,7 +119,7 @@ mod tests {
         let hit = root.hit_test(Position::new(5, 5));
         let captured = capture_node_ref(&hit).unwrap();
 
-        assert!(captured.anchor().is_empty());
+        assert_eq!(captured.anchor(), []);
         assert_eq!(captured.relative_path().as_slice(), &[0]);
     }
 }

@@ -16,14 +16,14 @@ impl PointerHandler {
     ) -> bool {
         let hit = render_tree.hit_test(pos);
         let target_ref = capture_node_ref(&hit);
-        let old_active = self.active_nodes.get(monitor_id).cloned();
+        let old_active = self.active.get(monitor_id).cloned();
         if old_active == target_ref {
             false
         } else {
             if let Some(r) = target_ref {
-                self.active_nodes.insert(monitor_id.clone(), r);
+                self.active.insert(monitor_id.clone(), r);
             } else {
-                self.active_nodes.remove(monitor_id);
+                self.active.remove(monitor_id);
             }
             true
         }
@@ -35,16 +35,16 @@ impl PointerHandler {
         pos: Position,
         render_tree: &RenderNode,
     ) -> bool {
-        let mut changed = self.active_nodes.remove(monitor_id).is_some();
+        let mut changed = self.active.remove(monitor_id).is_some();
 
         let hit = render_tree.hit_test(pos);
         let target_ref = capture_node_ref(&hit);
-        let old_focus = self.focused_nodes.get(monitor_id).cloned();
+        let old_focus = self.focused.get(monitor_id).cloned();
         if old_focus != target_ref {
             if let Some(r) = target_ref {
-                self.focused_nodes.insert(monitor_id.clone(), r);
+                self.focused.insert(monitor_id.clone(), r);
             } else {
-                self.focused_nodes.remove(monitor_id);
+                self.focused.remove(monitor_id);
             }
             changed = true;
         }

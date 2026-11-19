@@ -1,4 +1,5 @@
-use super::super::tooltip::layout_tooltip;
+use super::super::FloatingPass;
+use super::super::tooltip::{HoverTrees, layout_tooltip};
 use super::{RecordingEngine, Spec, tooltip_content};
 use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::module_runtime::test_support::MockCanvasFactory;
@@ -45,16 +46,16 @@ fn picked(
 ) -> Vec<StyledNode> {
     let mut engine = RecordingEngine::default();
     let _ = layout_tooltip(
-        bar,
-        popup,
-        panel,
+        HoverTrees { bar, popup, panel },
         interaction,
         &mut HashMap::new(),
-        &MonitorId::new("DP-1"),
         &mut engine,
-        &mut MockCanvasFactory,
-        Scale::new(1.0),
-        None,
+        &mut FloatingPass {
+            monitor_id: &MonitorId::new("DP-1"),
+            canvas_factory: &mut MockCanvasFactory,
+            scale: Scale::new(1.0),
+            current_child_sizes: None,
+        },
     );
     engine.laid_out
 }

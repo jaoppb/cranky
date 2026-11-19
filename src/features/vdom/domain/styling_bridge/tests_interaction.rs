@@ -36,7 +36,7 @@ mod tests {
     impl StyleResolverPort for RecordingResolver {
         fn resolve_style(
             &self,
-            query: &ElementQuery,
+            query: &ElementQuery<'_>,
             _inherited: &InheritedStyle,
         ) -> (
             crate::features::styling::domain::ComputedStyle,
@@ -220,7 +220,7 @@ mod tests {
             resolver.pseudo_classes_of("list-a-item"),
             vec![crate::features::styling::domain::PseudoClass::Hover]
         );
-        assert!(resolver.pseudo_classes_of("list-b-item").is_empty());
+        assert_eq!(resolver.pseudo_classes_of("list-b-item"), []);
     }
 
     /// Two keyed lists whose containers are *unkeyed* both reduce to the
@@ -262,7 +262,7 @@ mod tests {
         let resolver = RecordingResolver::new();
         let _ = root.resolve_styles(&resolver, Some(&interaction), None);
 
-        assert!(resolver.pseudo_classes_of("a-item").is_empty());
+        assert_eq!(resolver.pseudo_classes_of("a-item"), []);
         assert_eq!(
             resolver.pseudo_classes_of("b-item"),
             vec![crate::features::styling::domain::PseudoClass::Hover]

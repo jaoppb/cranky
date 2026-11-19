@@ -46,7 +46,7 @@ pub fn compile_nth_data(
     }
 }
 
-pub fn compile_pseudo_class(pseudo: &LightningPseudoClass, step: &mut SelectorStep) {
+pub fn compile_pseudo_class(pseudo: &LightningPseudoClass<'_>, step: &mut SelectorStep) {
     match pseudo {
         LightningPseudoClass::Hover => step.pseudo_classes.push(PseudoClass::Hover),
         LightningPseudoClass::Active => step.pseudo_classes.push(PseudoClass::Active),
@@ -61,7 +61,7 @@ pub fn compile_pseudo_class(pseudo: &LightningPseudoClass, step: &mut SelectorSt
 }
 
 #[must_use]
-pub fn compile_selector(selector: &Selector) -> CompiledSelector {
+pub fn compile_selector(selector: &Selector<'_>) -> CompiledSelector {
     let mut steps = Vec::new();
     let mut current_step = SelectorStep::default();
 

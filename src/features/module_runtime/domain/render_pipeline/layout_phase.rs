@@ -1,5 +1,7 @@
 use super::context::{LayoutContext, PipelineDiff};
-use super::floating_phase::{FloatingLayouts, apply_gate, layout_floating};
+use super::floating_phase::{
+    FloatingEngines, FloatingLayouts, FloatingPass, apply_gate, layout_floating,
+};
 use super::measurer::ModuleSizeMeasurer;
 use super::outcome::SizeChange;
 use super::pipeline::RenderPipeline;
@@ -137,14 +139,18 @@ pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
     let floating = layout_floating(
         &render_node,
         ctx.interaction_context.as_ref(),
-        monitor_id,
         pipeline.floating_content_caches_mut(),
-        ctx.popup_layout_engine,
-        ctx.panel_layout_engine,
-        ctx.tooltip_layout_engine,
-        ctx.canvas_factory,
-        ctx.scale,
-        ctx.current_child_sizes,
+        FloatingEngines {
+            popup: ctx.popup_layout_engine,
+            panel: ctx.panel_layout_engine,
+            tooltip: ctx.tooltip_layout_engine,
+        },
+        &mut FloatingPass {
+            monitor_id,
+            canvas_factory: ctx.canvas_factory,
+            scale: ctx.scale,
+            current_child_sizes: ctx.current_child_sizes,
+        },
         &mut child_layouts,
     );
 

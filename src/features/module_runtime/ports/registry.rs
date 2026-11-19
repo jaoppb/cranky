@@ -36,7 +36,6 @@ impl<Snd: LayoutSender> SpawnedModule<Snd> {
 }
 
 #[async_trait]
-#[cfg_attr(test, mockall::automock)]
 pub trait ModuleRegistryPort<
     Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
     LS: LayoutEventSender + 'static,

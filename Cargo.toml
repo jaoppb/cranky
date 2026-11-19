@@ -1,27 +1,71 @@
-[package]
-name = "cranky"
+[workspace]
+members = ["crates/cranky-unsafe"]
+
+[workspace.package]
 version = "0.14.0"
 edition = "2024"
 authors = ["jao"]
-description = "A minimalist, performant, and modular bar for Hyprland"
 license = "MIT"
+repository = "https://github.com/jaoppb/cranky"
+readme = "README.md"
+keywords = ["wayland", "hyprland", "bar", "statusbar", "lua"]
+categories = ["gui"]
+# Neither crate is released to crates.io; `deny.toml` relies on this to accept
+# the path dependency between them.
+publish = false
 
+[workspace.dependencies]
+taffy = "0.12"
+uuid = { version = "1.23", features = ["v4"] }
+
+[package]
+name = "cranky"
+version.workspace = true
+description = "A minimalist, performant, and modular bar for Hyprland"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+
+[lints.rust]
+unused = { level = "deny", priority = -1 }
+rust_2018_idioms = { level = "deny", priority = -1 }
+future_incompatible = { level = "deny", priority = -1 }
+unsafe_code = "forbid"
+
+# Groups are denied; every single lint below is forbidden, so no attribute in
+# the code can lower it. `crates/cranky-unsafe/Cargo.toml` repeats this table
+# without `unsafe_code`, and `tests/architecture.rs` checks the two agree.
 [lints.clippy]
+all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
 nursery = { level = "deny", priority = -1 }
-unwrap_used = "deny"
-expect_used = "deny"
-indexing_slicing = "deny"
-arithmetic_side_effects = "deny"
-unreachable = "deny"
-unimplemented = "deny"
-unchecked_time_subtraction = "deny"
-todo = "deny"
-string_slice = "deny"
-panic_in_result_fn = "deny"
-panic = "deny"
-exit = "deny"
-as_conversions = "deny"
+cargo = { level = "deny", priority = -1 }
+allow_attributes = "forbid"
+allow_attributes_without_reason = "forbid"
+unwrap_used = "forbid"
+expect_used = "forbid"
+indexing_slicing = "forbid"
+arithmetic_side_effects = "forbid"
+unreachable = "forbid"
+unimplemented = "forbid"
+unchecked_time_subtraction = "forbid"
+todo = "forbid"
+string_slice = "forbid"
+panic_in_result_fn = "forbid"
+panic = "forbid"
+exit = "forbid"
+as_conversions = "forbid"
+unwrap_in_result = "forbid"
+get_unwrap = "forbid"
+dbg_macro = "forbid"
+print_stdout = "forbid"
+print_stderr = "forbid"
+self_named_module_files = "forbid"
 
 [dependencies]
 # Async Runtime
@@ -41,14 +85,14 @@ toml = "1.0"
 # Rendering
 tiny-skia = "0.12"
 cosmic-text = "0.19"
-memmap2 = "0.9.11"
+cranky-unsafe = { path = "crates/cranky-unsafe" }
 
 # System Integration
 zbus = { version = "6.3", features = ["tokio"] }
 sysinfo = "0.39"
 serde_json = "1.0"
 chrono = "0.4"
-uuid = { version = "1.23", features = ["v4", "serde"] }
+uuid = { workspace = true, features = ["serde"] }
 notify = "8.2"
 freedesktop-icons = "0.4"
 # Default features minus avif: its encoder brings the unmaintained paste (RUSTSEC-2024-0436)
@@ -83,7 +127,7 @@ rhai = { version = "1.25", features = ["sync", "serde"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tracing-appender = "0.2.5"
 futures-util = "0.3.32"
-taffy = "0.12"
+taffy = { workspace = true }
 futures = "0.3.34"
 # No default features: sourcemap brings rkyv 0.7 (RUSTSEC-2026-0235)
 lightningcss = { version = "1.0.0-alpha.63", default-features = false }
@@ -92,7 +136,6 @@ xkbcommon = "0.9.0"
 
 [dev-dependencies]
 arch-lint = "0.11"
-mockall = "0.14"
 criterion = { version = "0.8", features = ["async_tokio", "html_reports"] }
 
 [[test]]
