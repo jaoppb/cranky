@@ -34,7 +34,7 @@ check() {
 	cd "${srcdir}/${pkgname}-${pkgver}"
 	export CARGO_HOME="${srcdir}/cargo-home"
 	export RUSTFLAGS="${RUSTFLAGS:-} --cap-lints warn"
-	cargo test --frozen --all-features
+	cargo test --frozen --workspace --all-features
 }
 
 package() {

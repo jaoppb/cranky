@@ -601,6 +601,7 @@ version = "0.14.0"
 dependencies = [
  "memmap2",
  "taffy",
+ "uuid",
 ]
 
 [[package]]

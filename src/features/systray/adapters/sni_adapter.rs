@@ -68,7 +68,12 @@ impl SniPort for SniAdapter {
         match conn.request_name("org.kde.StatusNotifierWatcher").await {
             Ok(()) => {
                 info!("Successfully claimed org.kde.StatusNotifierWatcher");
-                let watcher = Watcher::new(self.items.clone(), self.hub.clone(), conn.clone());
+                let watcher = Watcher::new(
+                    self.items.clone(),
+                    self.hub.clone(),
+                    conn.clone(),
+                    tokio::runtime::Handle::current(),
+                );
                 let _rejected: Option<Watcher> = conn
                     .object_server()
                     .at::<&str, Watcher>("/StatusNotifierWatcher", watcher)

@@ -86,32 +86,96 @@ fn verify_file_loc_limits() {
     );
 }
 
-/// Whether `line` is an attribute that lowers a lint for the code under it.
-fn is_lint_suppression(line: &str) -> bool {
-    let line = line.trim_start();
-    (line.starts_with("#[") || line.starts_with("#!["))
-        && (line.contains("allow(") || line.contains("expect("))
+/// Every attribute in `source` that lowers a lint, with the line it starts on.
+///
+/// Reads whole attributes, not lines, so one split over several lines or
+/// written after other tokens is still found. Comment lines are ignored.
+fn lint_suppressions(source: &str) -> Vec<(usize, String)> {
+    let code = source
+        .lines()
+        .map(|line| {
+            if line.trim_start().starts_with("//") {
+                ""
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let mut found = Vec::new();
+    for (start, _) in code.match_indices('#') {
+        let rest = code.get(start.saturating_add(1)..).unwrap_or_default();
+        let rest = rest.strip_prefix('!').unwrap_or(rest);
+        if !rest.starts_with('[') {
+            continue;
+        }
+        let mut depth: usize = 0;
+        let mut attribute = String::new();
+        for character in rest.chars() {
+            match character {
+                '[' => depth = depth.saturating_add(1),
+                ']' => depth = depth.saturating_sub(1),
+                _ => {}
+            }
+            if !character.is_whitespace() {
+                attribute.push(character);
+            }
+            if depth == 0 {
+                break;
+            }
+        }
+        if attribute.contains("allow(") || attribute.contains("expect(") {
+            let line = code
+                .get(..start)
+                .unwrap_or_default()
+                .matches('\n')
+                .count()
+                .saturating_add(1);
+            found.push((line, attribute));
+        }
+    }
+    found
 }
 
 #[test]
-fn suppression_scan_recognises_every_attribute_form() {
+fn suppression_scan_finds_single_line_multi_line_and_inline_attributes() {
+    // Built from pieces so that this file does not contain an attribute the
+    // scan would report.
+    let hash = '#';
     for suppression in [
-        "#[allow(dead_code)]",
-        "    #![allow(clippy::unwrap_used)]",
-        "#[expect(unused, reason = \"x\")]",
-        "#![expect(clippy::panic)]",
-        "#[cfg_attr(test, allow(clippy::too_many_lines))]",
+        format!("{hash}[allow(dead_code)]"),
+        format!("    {hash}![allow(clippy::unwrap_used)]"),
+        format!("{hash}[expect(unused, reason = \"x\")]"),
+        format!("{hash}![expect(clippy::panic)]"),
+        format!("{hash}[cfg_attr(test, allow(clippy::too_many_lines))]"),
+        format!(
+            "{hash}[cfg_attr(\n    test,\n    expect(clippy::too_many_lines, reason = \"x\")\n)]"
+        ),
+        format!("{hash}[allow(\n    dead_code\n)]"),
+        format!("fn f({hash}[expect(unused_variables)] x: u8) {{}}"),
     ] {
-        assert!(is_lint_suppression(suppression), "{suppression}");
+        assert_eq!(lint_suppressions(&suppression).len(), 1, "{suppression}");
     }
     for ordinary in [
-        "#[test]",
-        "#[should_panic(expected = \"boom\")]",
-        "let value = result.expect(\"present\");",
-        "// #[allow(dead_code)] is not permitted here",
+        format!("{hash}[test]"),
+        format!("{hash}[should_panic(expected = \"boom\")]"),
+        "let value = result.expect(\"present\");".to_string(),
+        format!("// {hash}[allow(dead_code)] is not permitted here"),
+        format!("{hash}[derive(Debug)]\nstruct Allow(u8);"),
     ] {
-        assert!(!is_lint_suppression(ordinary), "{ordinary}");
+        assert_eq!(lint_suppressions(&ordinary), [], "{ordinary}");
     }
+}
+
+#[test]
+fn suppression_scan_reports_the_line_an_attribute_starts_on() {
+    let hash = '#';
+    let source = format!("fn a() {{}}\n\n{hash}[allow(\n    dead_code\n)]\nfn b() {{}}\n");
+    assert_eq!(
+        lint_suppressions(&source),
+        [(3, "[allow(dead_code)]".to_string())]
+    );
 }
 
 /// Zero lint exceptions: a rule that cannot be met is changed in `Cargo.toml`
@@ -127,11 +191,8 @@ fn no_source_file_suppresses_a_lint() {
     let mut suppressions = Vec::new();
     for file in files {
         let content = std::fs::read_to_string(&file).expect("Failed to read file");
-        for (index, line) in content.lines().enumerate() {
-            if is_lint_suppression(line) {
-                let number = index.saturating_add(1);
-                suppressions.push(format!("{}:{number}: {}", file.display(), line.trim()));
-            }
+        for (line, attribute) in lint_suppressions(&content) {
+            suppressions.push(format!("{}:{line}: #{attribute}", file.display()));
         }
     }
 

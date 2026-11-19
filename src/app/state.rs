@@ -897,7 +897,7 @@ mod tests {
 
             let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManager);
 
-            let mock_registry = FakeRegistry::default();
+            let fake_registry = FakeRegistry::default();
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
@@ -915,7 +915,7 @@ mod tests {
                 ui_sender,
             );
             let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let app_result = CrankyApp::new(config, services, channels, Box::new(mock_registry));
+            let app_result = CrankyApp::new(config, services, channels, Box::new(fake_registry));
 
             assert!(app_result.is_ok());
         });
@@ -933,7 +933,7 @@ mod tests {
 
             let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManager);
 
-            let mock_registry = FakeRegistry::default();
+            let fake_registry = FakeRegistry::default();
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
@@ -952,18 +952,19 @@ mod tests {
             );
             let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
             let mut app =
-                CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
 
-            let mock_display = FakeDisplayServer::failing("Test error");
+            let fake_display = FakeDisplayServer::failing("Test error");
 
-            let mock_conn = crate::shared::dbus::ports::DisconnectedBus;
-            let mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
-                std::sync::Arc::new(mock_conn),
-                &hub,
-            );
-            let mock_sni = FakeSni;
+            let disconnected_bus = crate::shared::dbus::ports::DisconnectedBus;
+            let dbus_manager =
+                crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
+                    std::sync::Arc::new(disconnected_bus),
+                    &hub,
+                );
+            let fake_sni = FakeSni;
 
-            let result = app.run(mock_display, mock_dbus, mock_sni).await;
+            let result = app.run(fake_display, dbus_manager, fake_sni).await;
             assert!(result.is_err());
         });
     }
@@ -1178,7 +1179,7 @@ mod tests {
 
             let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManager);
 
-            let mock_registry = FakeRegistry::default();
+            let fake_registry = FakeRegistry::default();
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
@@ -1197,11 +1198,11 @@ mod tests {
             );
             let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
             let mut app =
-                CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
 
             // Let it succeed twice, then fail to exit the loop
             let mut call_count = 0;
-            let mock_display = FakeDisplayServer {
+            let fake_display = FakeDisplayServer {
                 wait_for_events: Box::new(move || {
                     call_count += 1;
                     if call_count <= 2 {
@@ -1216,12 +1217,13 @@ mod tests {
                 }),
             };
 
-            let mock_conn = crate::shared::dbus::ports::DisconnectedBus;
-            let mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
-                std::sync::Arc::new(mock_conn),
-                &hub,
-            );
-            let mock_sni = FakeSni;
+            let disconnected_bus = crate::shared::dbus::ports::DisconnectedBus;
+            let dbus_manager =
+                crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
+                    std::sync::Arc::new(disconnected_bus),
+                    &hub,
+                );
+            let fake_sni = FakeSni;
 
             queue_one_of_each_command(&display_tx, &layout_tx, &ui_tx).await;
 
@@ -1241,7 +1243,7 @@ mod tests {
             );
             hub.monitor_scales_tx().send(scales).unwrap();
 
-            let result = app.run(mock_display, mock_dbus, mock_sni).await;
+            let result = app.run(fake_display, dbus_manager, fake_sni).await;
             assert!(result.is_err());
         });
     }
@@ -1259,8 +1261,8 @@ mod tests {
 
             let (bar_sender, _bar_layouts) = tokio::sync::watch::channel(HashMap::new());
             let (clock_sender, mut clock_layouts) = tokio::sync::watch::channel(HashMap::new());
-            let mut mock_registry = bar_embedding_clock();
-            mock_registry.senders = HashMap::from([
+            let mut fake_registry = bar_embedding_clock();
+            fake_registry.senders = HashMap::from([
                 (
                     ModuleId::new(0),
                     crate::app::registry::WatchLayoutSender::new(bar_sender),
@@ -1288,7 +1290,7 @@ mod tests {
             );
             let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
             let mut app =
-                CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
 
             // 1. Send ContainerLayoutsCalculated for DP-1
             layout_tx
@@ -1303,7 +1305,7 @@ mod tests {
                 .unwrap();
 
             let (stop_tx, stop_rx) = tokio::sync::watch::channel(false);
-            let mock_display = FakeDisplayServer {
+            let fake_display = FakeDisplayServer {
                 wait_for_events: Box::new(move || {
                     let mut stop_rx = stop_rx.clone();
                     Box::pin(async move {
@@ -1315,16 +1317,17 @@ mod tests {
                 }),
             };
 
-            let mock_conn = crate::shared::dbus::ports::DisconnectedBus;
-            let mock_dbus = crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
-                std::sync::Arc::new(mock_conn),
-                &hub,
-            );
-            let mock_sni = FakeSni;
+            let disconnected_bus = crate::shared::dbus::ports::DisconnectedBus;
+            let dbus_manager =
+                crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
+                    std::sync::Arc::new(disconnected_bus),
+                    &hub,
+                );
+            let fake_sni = FakeSni;
 
             // Run app in background task and verify clock_layouts gets both DP-1 and DP-2
             let app_handle = tokio::spawn(async move {
-                let _ = app.run(mock_display, mock_dbus, mock_sni).await;
+                let _ = app.run(fake_display, dbus_manager, fake_sni).await;
             });
 
             // Wait for clock_layouts to see both DP-1 and DP-2
@@ -1370,8 +1373,8 @@ mod tests {
             let site_a = ModuleId::new(11);
             let site_b = ModuleId::new(21);
 
-            let mut mock_registry = FakeRegistry::default();
-            mock_registry.resolve_site = Box::new(move |parent, key| {
+            let mut fake_registry = FakeRegistry::default();
+            fake_registry.resolve_site = Box::new(move |parent, key| {
                 if key.name().as_str() != "calendar" {
                     return None;
                 }
@@ -1386,7 +1389,7 @@ mod tests {
             // Each site's own parent — consulted when the *other* parent's
             // render touches the same monitor, to confirm `site_a`/`site_b`
             // belong to a different parent and so must not be suspended.
-            mock_registry.parent_of = Box::new(move |id| {
+            fake_registry.parent_of = Box::new(move |id| {
                 if id == site_a {
                     Some(parent_10)
                 } else if id == site_b {
@@ -1409,7 +1412,7 @@ mod tests {
             );
             let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
             let mut app =
-                CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
 
             let monitor = MonitorId::new("DP-1");
             let key = crate::shared::primitives::ModuleKey::from_name(
@@ -1466,10 +1469,10 @@ mod tests {
             let parent = ModuleId::new(1);
             let child = ModuleId::new(2);
 
-            let mut mock_registry = FakeRegistry::default();
-            mock_registry.resolve_site =
+            let mut fake_registry = FakeRegistry::default();
+            fake_registry.resolve_site =
                 Box::new(move |p, _| if p == Some(parent) { Some(child) } else { None });
-            mock_registry.parent_of =
+            fake_registry.parent_of =
                 Box::new(move |id| if id == child { Some(parent) } else { None });
 
             let canvas_factory =
@@ -1484,7 +1487,7 @@ mod tests {
             );
             let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
             let mut app =
-                CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
 
             let (child_layout_tx, child_layout_rx) = tokio::sync::watch::channel(HashMap::new());
             app.layout_senders.insert(
@@ -1540,7 +1543,7 @@ mod tests {
         crate::test_utils::block_on(async {
             // A parent named "calendar" embedding another "calendar" would
             // create a cycle — must be rejected and recorded without ever
-            // calling `spawn_module` (not stubbed, so a call would panic).
+            // calling `spawn_module`.
             let config = Config::default();
             let hub = Arc::new(SignalHub::new(config.clone()));
             let hub_check = hub.clone();
@@ -1564,10 +1567,10 @@ mod tests {
                 ),
             );
 
-            let mut mock_registry = FakeRegistry::default();
-            mock_registry.module_names = names;
-            mock_registry.module_keys = keys;
-            mock_registry.resolve_site = Box::new(|_, _| None);
+            let mut fake_registry = FakeRegistry::default();
+            fake_registry.module_names = names;
+            fake_registry.module_keys = keys;
+            fake_registry.resolve_site = Box::new(|_, _| None);
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
@@ -1579,9 +1582,10 @@ mod tests {
                 Arc::new(layout_tx),
                 Arc::new(ui_tx),
             );
+            let spawn_attempts = fake_registry.spawn_module_calls.clone();
             let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
             let mut app =
-                CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
 
             let monitor = MonitorId::new("DP-1");
             let key = crate::shared::primitives::ModuleKey::from_name(
@@ -1607,6 +1611,7 @@ mod tests {
                 ),
             );
             assert!(hub_check.module_errors_rx().borrow().contains_key(&site));
+            assert_eq!(spawn_attempts.load(Ordering::SeqCst), 0);
             assert!(app.read_model.computed_layouts.is_empty());
         });
     }
@@ -1627,11 +1632,11 @@ mod tests {
             let mut names = HashMap::new();
             names.insert(parent, crate::shared::primitives::ModuleName::new("bar"));
 
-            let mut mock_registry = FakeRegistry::default();
-            mock_registry.module_names = names;
-            mock_registry.resolve_site = Box::new(|_, _| None);
-            mock_registry.parent_of = Box::new(|_| None);
-            let spawn_attempts = mock_registry.spawn_module_calls.clone();
+            let mut fake_registry = FakeRegistry::default();
+            fake_registry.module_names = names;
+            fake_registry.resolve_site = Box::new(|_, _| None);
+            fake_registry.parent_of = Box::new(|_| None);
+            let spawn_attempts = fake_registry.spawn_module_calls.clone();
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
@@ -1645,7 +1650,7 @@ mod tests {
             );
             let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
             let mut app =
-                CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
 
             let monitor = MonitorId::new("DP-1");
             let key = crate::shared::primitives::ModuleKey::from_name(
@@ -1718,9 +1723,9 @@ mod tests {
                 ),
             );
 
-            let mut mock_registry = FakeRegistry::default();
-            mock_registry.module_keys = keys;
-            mock_registry.parent_of =
+            let mut fake_registry = FakeRegistry::default();
+            fake_registry.module_keys = keys;
+            fake_registry.parent_of =
                 Box::new(move |id| if id == inner { Some(outer) } else { None });
 
             let canvas_factory =
@@ -1734,7 +1739,7 @@ mod tests {
                 Arc::new(ui_tx),
             );
             let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let app = CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+            let app = CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
 
             let clock_b = crate::shared::primitives::ModuleKey::new(
                 crate::shared::primitives::ModuleName::new("clock"),
@@ -1781,7 +1786,7 @@ mod tests {
 
             let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManager);
 
-            let mock_registry = FakeRegistry::default();
+            let fake_registry = FakeRegistry::default();
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
@@ -1796,7 +1801,7 @@ mod tests {
             );
             let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
             let mut app =
-                CrankyApp::new(config, services, channels, Box::new(mock_registry)).unwrap();
+                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
 
             let live_mon = MonitorId::new("eDP-1");
             let dead_mon = MonitorId::new("HDMI-A-1");

@@ -1,6 +1,6 @@
 [package]
 name = "cranky-unsafe"
-version = "0.14.0"
+version.workspace = true
 description = "The unsafe code Cranky needs, behind safe wrappers"
 edition.workspace = true
 authors.workspace = true
@@ -50,3 +50,4 @@ self_named_module_files = "forbid"
 [dependencies]
 memmap2 = "0.9.11"
 taffy = { workspace = true }
+uuid = { workspace = true }

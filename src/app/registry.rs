@@ -882,13 +882,13 @@ mod tests {
             let hub = std::sync::Arc::new(crate::shared::events::signals::SignalHub::new(
                 config.clone(),
             ));
-            let mock_conn = crate::shared::dbus::ports::DisconnectedBus;
-            let mut mock_dbus =
+            let disconnected_bus = crate::shared::dbus::ports::DisconnectedBus;
+            let mut dbus_manager =
                 crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(
-                    std::sync::Arc::new(mock_conn),
+                    std::sync::Arc::new(disconnected_bus),
                     &hub,
                 );
-            TestRegistryPort::register_dbus_subscriptions(&registry, &mut mock_dbus).await;
+            TestRegistryPort::register_dbus_subscriptions(&registry, &mut dbus_manager).await;
         });
     }
 
