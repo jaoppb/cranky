@@ -46,8 +46,8 @@ impl Environment {
 
     /// The system settings, given the values of `TZ` and `TZDIR`.
     fn from_variables(tz: Option<OsString>, tzdir: Option<OsString>) -> Self {
-        // As in the C library, a `TZDIR` that is not an absolute path is not
-        // a database: it would be searched from wherever the process runs.
+        // A `TZDIR` that is not an absolute path is ignored. The C library
+        // would search it from wherever the process happens to run.
         let databases = tzdir
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())

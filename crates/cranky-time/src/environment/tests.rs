@@ -62,6 +62,7 @@ fn tz_may_not_name_a_directory() {
 fn tz_may_not_name_a_pipe() {
     use std::io::Write;
     use std::os::fd::AsRawFd;
+    use std::os::unix::fs::FileTypeExt;
 
     // Reading it would give a whole zone file; a pipe that is still open for
     // writing would never end.
@@ -71,6 +72,8 @@ fn tz_may_not_name_a_pipe() {
         .unwrap();
     drop(writer);
     let path = format!("/proc/self/fd/{}", reader.as_raw_fd());
+    // Without `/proc` the path would be refused for not existing.
+    assert!(std::fs::metadata(&path).unwrap().file_type().is_fifo());
     assert_eq!(from_tz(&path), None);
 }
 
