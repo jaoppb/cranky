@@ -1,0 +1,63 @@
+# Declarative GitHub configuration, read by jaoppb/tools (`tools`, provided by the flake devShell).
+# `just repo-check` and `just issues-check` compare GitHub with this file; `tools repo sync` applies it.
+
+[github.repository]
+owner = "jaoppb"
+name = "cranky"
+
+# Merge commits only: squash and rebase rewrite the commit SHAs .git-blame-ignore-revs lists.
+[github.repository.settings]
+allow_merge_commit = true
+allow_squash_merge = false
+allow_rebase_merge = false
+delete_branch_on_merge = true
+merge_commit_title = "PR_TITLE"
+merge_commit_message = "PR_BODY"
+
+[github.labels]
+# A label on GitHub that is not declared here fails `tools repo check`; it is never deleted automatically.
+unmanaged = "error"
+# GitHub's default labels. `tools repo sync` deletes them even from issues that still carry them,
+# so the issues are migrated first.
+deprecated = [
+    "bug",
+    "documentation",
+    "duplicate",
+    "enhancement",
+    "good first issue",
+    "help wanted",
+    "invalid",
+    "question",
+    "wontfix",
+]
+items = [
+    { name = "type:feat", color = "1d76db", description = "New behaviour or capability" },
+    { name = "type:fix", color = "d73a4a", description = "Something is broken" },
+    { name = "type:chore", color = "8b949e", description = "Tooling, CI, housekeeping, dependencies" },
+    { name = "type:docs", color = "0075ca", description = "Documentation, guides, specifications" },
+    { name = "type:refactor", color = "5319e7", description = "Restructure without changing behaviour" },
+    { name = "type:spike", color = "fbca04", description = "Time-boxed research that answers a question" },
+    { name = "area:wayland", color = "2ea44f", description = "Surfaces, popups, input and shared-memory buffers" },
+    { name = "area:rendering", color = "2ea44f", description = "Layout engine, styling, vdom and painting" },
+    { name = "area:scripting", color = "2ea44f", description = "Lua and Rhai adapters, module runtime and the script API" },
+    { name = "area:modules", color = "2ea44f", description = "Built-in widgets, their data sources and the configuration" },
+    { name = "area:tooling", color = "2ea44f", description = "Just, CI, lints, Nix and repository tooling" },
+    { name = "area:docs", color = "2ea44f", description = "Documentation, guides and contributor rules" },
+    # The issue audit recognises an epic by this exact name: the only open issues allowed without a parent.
+    { name = "epic", color = "3e4b9e", description = "Parent issue that groups sub-issues" },
+]
+
+# Applied by `tools issues migrate`; `tools issues check` fails while one is pending.
+[github.labels.migrations]
+bug = "type:fix"
+enhancement = "type:feat"
+documentation = "type:docs"
+
+# `tools issues check` requires an open issue's milestone to be a release (`vX.Y.Z`);
+# a milestone on GitHub missing from this list fails `tools repo check`.
+[github.milestones]
+unmanaged = "error"
+items = [
+    { title = "v0.14.0", description = "Project infrastructure baseline and Hyprland 0.57 compatibility", state = "open" },
+    { title = "v0.15.0", description = "Compositor compatibility and follow-up fixes", state = "open" },
+]
