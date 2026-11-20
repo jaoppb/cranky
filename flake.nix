@@ -1,8 +1,9 @@
 {
   description = "Cranky, a modular Wayland bar for Hyprland";
 
-  # flake.lock is the pin for every tool below: no version is written here.
-  # `just flake-update` moves it, in a pull request of its own.
+  # flake.lock is the pin for every tool below: the only version written here
+  # is the tag of jaoppb/tools. `just flake-update` moves the lock, in a pull
+  # request of its own.
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay = {
@@ -98,8 +99,9 @@
             pkgs.dbus
             pkgs.sway
             pkgs.grim
-            # `just record-profile` and `just analyze-profile`.
+            # `just record-profile`.
             pkgs.samply
+            # `just analyze-profile` and scripts/lint-loc.sh.
             pkgs.python3
           ];
           # The only system library the build links against.

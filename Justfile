@@ -129,7 +129,7 @@ analyze-profile *args:
 setup:
     lefthook install
 
-# Update flake.lock, the pin of every tool in the devShell: all inputs, or only the ones named
+# Update flake.lock, the pin of every tool in the devShell: all inputs, or only the ones named (flake.nix holds the jaoppb/tools tag)
 [group('setup')]
 flake-update *inputs:
     nix flake update {{inputs}}

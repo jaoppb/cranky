@@ -25,6 +25,7 @@ jobs:
   check:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -63,20 +64,23 @@ jobs:
       - name: Install Nix
         uses: nixbuild/nix-quick-install-action@v35
 
-      # One cache for every job: they all realise the same devShell. Only a
-      # run on `main` saves it, and a pull request reads that one.
+      # One cache for every job: they all realise the same devShell. One job
+      # of a run on `main` saves it, and a pull request reads that one. There
+      # is no fallback to an older key: a store restored from one would be
+      # saved again with the new closure on top, and grow at every update.
       - name: Restore the Nix store
         uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
-          save: ${{ github.ref == 'refs/heads/main' }}
+          save: ${{ github.ref == 'refs/heads/main' && matrix.name == 'fmt' }}
 
       - name: Restore the cargo cache
         if: matrix.compiles
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.name }}
+          # A new flake.lock can change the linker and the libraries the
+          # cached artifacts point at.
+          key: ${{ matrix.name }}-${{ hashFiles('flake.lock') }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
           # The action asks rustc and cargo for the cache key; they exist only
           # inside the devShell.
@@ -86,10 +90,12 @@ jobs:
         run: nix develop -c just ${{ matrix.recipe }}
 
   # The flake also exposes cranky as a package. Building it here keeps it from
-  # rotting, and starting it proves the binary loads its libraries: with no
-  # compositor it logs its first line and then fails to connect.
+  # rotting, and starting it proves the binary loads its libraries: given the
+  # runtime directory it requires and no compositor, it logs its first line
+  # and then fails to connect.
   nix:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -102,7 +108,6 @@ jobs:
         uses: nix-community/cache-nix-action@v7
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
           save: false
 
       - name: Build the package
@@ -110,6 +115,8 @@ jobs:
 
       - name: Start the binary
         run: |
+          XDG_RUNTIME_DIR="$(mktemp -d)"
+          export XDG_RUNTIME_DIR
           output="$(timeout 30 ./result/bin/cranky 2>&1 || true)"
           echo "${output}"
           grep --quiet "Starting Cranky" <<< "${output}"
