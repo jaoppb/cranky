@@ -519,7 +519,7 @@ mod tests {
             fixture
                 .hub
                 .time_tx()
-                .send(cranky_time::Clock::new().now())
+                .send(cranky_time::LocalTime::utc(0))
                 .unwrap();
             fixture
                 .hub

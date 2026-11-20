@@ -118,6 +118,7 @@ fn test_time_signal_is_whole_second_rfc_3339_with_a_numeric_offset() {
     assert!(module.init(&mod_config, &config).is_ok());
 
     let hub = SignalHub::new(crate::shared::config::domain::Config::default());
+    // 2026-11-18T11:06:40Z
     hub.time_tx()
         .send(cranky_time::LocalTime::utc(1_795_000_000))
         .unwrap();

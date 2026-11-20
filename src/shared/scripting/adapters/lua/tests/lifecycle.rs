@@ -144,6 +144,7 @@ fn test_calendar_lua_config_monday() {
     module.init(&module_config, &config).expect("Init failed");
 
     let hub = SignalHub::new(crate::shared::config::domain::Config::default());
+    // 2026-09-01T12:00:00Z
     let test_time = cranky_time::LocalTime::utc(1_788_264_000);
     hub.time_tx().send(test_time).unwrap();
     let subs = module.subscriptions().to_vec();
@@ -181,8 +182,13 @@ fn test_time_signal_is_whole_second_rfc_3339_with_a_numeric_offset() {
     module.init(&module_config, &config).expect("Init failed");
 
     let hub = SignalHub::new(crate::shared::config::domain::Config::default());
+    // 2026-11-18T11:06:40Z, three hours west of UTC.
+    let instant = std::time::UNIX_EPOCH
+        .checked_add(std::time::Duration::from_secs(1_795_000_000))
+        .unwrap();
+    let west = cranky_time::Environment::new(Some("<-03>3"), "/nonexistent", Vec::new());
     hub.time_tx()
-        .send(cranky_time::LocalTime::utc(1_795_000_000))
+        .send(cranky_time::Clock::new().at(instant, &west))
         .unwrap();
     module.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
 
@@ -190,5 +196,5 @@ fn test_time_signal_is_whole_second_rfc_3339_with_a_numeric_offset() {
     let crate::features::vdom::domain::VNodeKind::Text { text } = node.kind() else {
         panic!("Expected a text node, got {:?}", node.tag());
     };
-    assert_eq!(text.as_str(), "2026-11-18T11:06:40+00:00");
+    assert_eq!(text.as_str(), "2026-11-18T08:06:40-03:00");
 }

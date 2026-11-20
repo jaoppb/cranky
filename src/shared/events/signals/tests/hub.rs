@@ -54,7 +54,7 @@ mod tests {
             let mut time_rx = hub.time_rx();
             let time_tx = hub.time_tx();
 
-            time_tx.send(cranky_time::Clock::new().now()).unwrap();
+            time_tx.send(cranky_time::LocalTime::utc(0)).unwrap();
 
             assert!(time_rx.changed().await.is_ok());
         });
@@ -116,7 +116,7 @@ mod tests {
             let third = stream.next().await;
             assert!(third.is_some());
 
-            hub.time_tx().send(cranky_time::Clock::new().now()).unwrap();
+            hub.time_tx().send(cranky_time::LocalTime::utc(0)).unwrap();
             let sig = stream.next().await;
             assert_eq!(sig, Some(SignalKind::Time));
         });
