@@ -16,10 +16,12 @@ pub struct Clock {
     last_read: Option<Remembered>,
 }
 
-/// A zone, and the `TZ` value that was in force when it was read.
+/// A zone that was read, and the settings it was read under.
 #[derive(Debug)]
 struct Remembered {
     tz: Option<String>,
+    /// It came from the source the settings ask for, not from a fallback.
+    wanted: bool,
     located: Located,
 }
 
@@ -30,6 +32,8 @@ impl Clock {
     }
 
     /// The local time now, in the time zone of this process.
+    ///
+    /// Reads a small file, so it can block for as long as the disk does.
     pub fn now(&mut self) -> LocalTime {
         self.at(SystemTime::now(), &Environment::system())
     }
@@ -38,8 +42,8 @@ impl Clock {
     ///
     /// The zone is the one `TZ` names when it is set, and the one of the local
     /// time file otherwise. When that cannot be read the zone is, in order:
-    /// the one an earlier call read from the same setting, the local time file
-    /// (when `TZ` was the unusable one), UTC.
+    /// the one an earlier call read there, the local time file (when `TZ` was
+    /// the unusable one), the one an earlier call read from that file, UTC.
     pub fn at(&mut self, instant: SystemTime, environment: &Environment) -> LocalTime {
         let (wanted, source) = if environment.tz().is_some() {
             (environment.zone_from_tz(), Source::TzVariable)
@@ -47,25 +51,56 @@ impl Clock {
             (environment.zone_from_localtime(), Source::Localtime)
         };
         if let Some(located) = wanted {
-            let time = LocalTime::at(instant, &located, source);
-            self.last_read = Some(Remembered {
-                tz: environment.tz().map(str::to_string),
-                located,
-            });
-            return time;
+            return self.read(instant, environment, located, source);
         }
-        if let Some(remembered) = &self.last_read
-            && remembered.tz.as_deref() == environment.tz()
-        {
-            return LocalTime::at(instant, &remembered.located, Source::Previous);
+        if let Some(time) = self.remembered(instant, environment, true) {
+            return time;
         }
         let from_file = environment
             .tz()
             .and_then(|_| environment.zone_from_localtime());
-        from_file.map_or_else(
-            || LocalTime::at(instant, &Located::unnamed(Zone::utc()), Source::Utc),
-            |located| LocalTime::at(instant, &located, Source::LocaltimeAfterInvalidTz),
-        )
+        if let Some(located) = from_file {
+            return self.read(
+                instant,
+                environment,
+                located,
+                Source::LocaltimeAfterInvalidTz,
+            );
+        }
+        self.remembered(instant, environment, false)
+            .unwrap_or_else(|| LocalTime::at(instant, &Located::unnamed(Zone::utc()), Source::Utc))
+    }
+
+    /// The local time in a zone that was just read, which is remembered.
+    fn read(
+        &mut self,
+        instant: SystemTime,
+        environment: &Environment,
+        located: Located,
+        source: Source,
+    ) -> LocalTime {
+        let time = LocalTime::at(instant, &located, source);
+        self.last_read = Some(Remembered {
+            tz: environment.tz().map(str::to_string),
+            wanted: source != Source::LocaltimeAfterInvalidTz,
+            located,
+        });
+        time
+    }
+
+    /// The local time in the remembered zone, when it was read under the same
+    /// `TZ`, and from the wanted source if `only_wanted`.
+    fn remembered(
+        &self,
+        instant: SystemTime,
+        environment: &Environment,
+        only_wanted: bool,
+    ) -> Option<LocalTime> {
+        self.last_read
+            .as_ref()
+            .filter(|remembered| remembered.tz.as_deref() == environment.tz())
+            .filter(|remembered| remembered.wanted || !only_wanted)
+            .map(|remembered| LocalTime::at(instant, &remembered.located, Source::Previous))
     }
 }
 

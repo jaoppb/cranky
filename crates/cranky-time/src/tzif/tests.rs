@@ -70,6 +70,30 @@ fn the_rule_covers_the_years_after_the_table() {
 }
 
 #[test]
+fn a_version_three_rule_may_change_outside_its_day() {
+    // Jerusalem changes on a Friday, written as 26:00 on the Thursday before.
+    expect(
+        "Asia/Jerusalem",
+        &[
+            (2_531_779_199, 7200, "IST"),
+            (2_531_779_200, 10_800, "IDT"),
+            (2_550_697_199, 10_800, "IDT"),
+            (2_550_697_200, 7200, "IST"),
+        ],
+    );
+    // Nuuk changes on a Saturday night, written as -1:00 on the Sunday.
+    expect(
+        "America/Nuuk",
+        &[
+            (2_531_955_599, -7200, "-02"),
+            (2_531_955_600, -3600, "-01"),
+            (2_550_704_399, -3600, "-01"),
+            (2_550_704_400, -7200, "-02"),
+        ],
+    );
+}
+
+#[test]
 fn offsets_need_not_be_whole_hours() {
     expect(
         "Asia/Kolkata",
@@ -202,6 +226,54 @@ fn a_version_one_file_is_read_from_its_only_block() {
 }
 
 #[test]
+fn version_one_instants_are_signed() {
+    let zone = parse(&version_one(&[(-1000, 1), (1000, 0)], KINDS, NAMES)).unwrap();
+    assert_eq!(zone.at(-1001).kind.abbreviation, "OLD");
+    assert_eq!(zone.at(-1000).kind.abbreviation, "NEW");
+    assert_eq!(zone.at(999).kind.abbreviation, "NEW");
+    assert_eq!(zone.at(1000).kind.abbreviation, "OLD");
+}
+
+#[test]
+fn a_file_holds_no_more_kinds_than_a_transition_can_name() {
+    let kinds = |count| version_one(&[], &vec![(0, 0); count], NAMES);
+    assert!(parse(&kinds(256)).is_some());
+    assert_eq!(parse(&kinds(257)), None);
+}
+
+#[test]
+fn an_abbreviation_is_short_and_printable() {
+    let named = |name: &[u8]| {
+        let mut names = name.to_vec();
+        names.push(0);
+        parse(&version_one(&[], &[(0, 0)], &names))
+    };
+    assert!(named(&[b'x'; 32]).is_some());
+    assert_eq!(named(&[b'x'; 33]), None);
+    assert_eq!(named(b""), None);
+    assert_eq!(named(b"A\nB"), None);
+    assert_eq!(named(b"\x1b[31mX"), None);
+}
+
+#[test]
+fn many_kinds_cannot_share_one_long_name() {
+    // What would make each kind copy half a megabyte.
+    let mut names = vec![b'x'; 500_000];
+    names.push(0);
+    let file = version_one(&[], &vec![(0, 0); 200], &names);
+    assert_eq!(parse(&file), None);
+}
+
+#[test]
+fn an_offset_stays_within_twenty_six_hours() {
+    let offset = |seconds| parse(&version_one(&[], &[(seconds, 0)], NAMES));
+    assert!(offset(93_599).is_some());
+    assert!(offset(-93_599).is_some());
+    assert_eq!(offset(93_600), None);
+    assert_eq!(offset(-93_600), None);
+}
+
+#[test]
 fn a_later_version_is_read_from_its_second_block() {
     let zone = parse(&version_two(b"\n\n")).unwrap();
     assert_eq!(zone.at(999).kind.abbreviation, "OLD");
@@ -252,8 +324,6 @@ fn malformed_files_are_refused() {
     assert_eq!(parse(&name_without_end), None);
     let name_not_utf8 = version_one(&[], &[(0, 0)], b"\xff\xfe\0");
     assert_eq!(parse(&name_not_utf8), None);
-    let offset_too_far = version_one(&[], &[(93_600, 0)], NAMES);
-    assert_eq!(parse(&offset_too_far), None);
 
     // A count larger than the file must not be believed.
     let mut huge_count = good;

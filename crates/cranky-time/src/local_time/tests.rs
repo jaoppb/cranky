@@ -86,6 +86,25 @@ fn an_inserted_leap_second_is_second_sixty() {
 }
 
 #[test]
+fn a_rule_is_dated_without_the_leap_seconds() {
+    // Past the table, Lisbon changes at 01:00 UTC on 2050-03-27, which a
+    // clock that counts 27 leap seconds reaches at 2_531_955_627. GNU `date`
+    // changes at 2_531_955_600 instead: glibc dates the rule on the raw
+    // scale. These two values are therefore not what `date` prints.
+    for (unix_seconds, expected) in [
+        (2_531_955_600, "2050-03-27T00:59:33+00:00"),
+        (2_531_955_626, "2050-03-27T00:59:59+00:00"),
+        (2_531_955_627, "2050-03-27T02:00:00+01:00"),
+    ] {
+        assert_eq!(
+            text("right/Europe/Lisbon", unix_seconds),
+            expected,
+            "at {unix_seconds}"
+        );
+    }
+}
+
+#[test]
 fn an_offset_with_seconds_is_shown_to_the_minute() {
     // Local mean time, before standard time: 3 h 06 min 28 s west.
     let before_1970 = LocalTime::in_zone(

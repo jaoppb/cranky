@@ -1,12 +1,13 @@
 //! Where the system says its time zone is.
 
+use std::ffi::OsString;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use crate::posix_parse;
 use crate::tzif;
-use crate::zone::Zone;
+use crate::zone::{self, Zone};
 
 const LOCALTIME: &str = "/etc/localtime";
 /// The directories a zone database is installed in; NixOS uses the second.
@@ -38,14 +39,18 @@ impl Environment {
     /// `/etc/zoneinfo`.
     #[must_use]
     pub fn system() -> Self {
-        let variable = |name| std::env::var_os(name);
-        let databases = variable("TZDIR")
+        Self::from_variables(std::env::var_os("TZ"), std::env::var_os("TZDIR"))
+    }
+
+    /// The system settings, given the values of `TZ` and `TZDIR`.
+    fn from_variables(tz: Option<OsString>, tzdir: Option<OsString>) -> Self {
+        let databases = tzdir
             .map(PathBuf::from)
             .into_iter()
             .chain(DATABASES.map(PathBuf::from))
             .collect();
         Self {
-            tz: variable("TZ").map(|value| value.to_string_lossy().into_owned()),
+            tz: tz.map(|value| value.to_string_lossy().into_owned()),
             localtime: PathBuf::from(LOCALTIME),
             databases,
         }
@@ -65,8 +70,9 @@ impl Environment {
         self.tz.as_deref()
     }
 
-    /// The zone the `TZ` variable asks for. `None` when it is unset, or is
-    /// neither a zone file, a name in a database, nor a rule.
+    /// The zone the `TZ` variable asks for: UTC when it is empty, as in the C
+    /// library. `None` when it is unset, or is neither a zone file, a name in
+    /// a database, nor a rule.
     pub(crate) fn zone_from_tz(&self) -> Option<Located> {
         let value = self.tz.as_deref()?;
         let value = value.strip_prefix(':').unwrap_or(value);
@@ -111,13 +117,18 @@ impl Located {
     }
 }
 
-/// Whether a name can only lead to a file inside a database.
+/// Whether a name can only lead to a file inside a database, and is fit to
+/// be shown.
 fn is_database_name(name: &str) -> bool {
     name.split('/')
-        .all(|part| !part.is_empty() && part != "." && part != "..")
+        .all(|part| zone::is_name(part.as_bytes()) && part != "." && part != "..")
 }
 
 fn read_zone(path: &Path) -> Option<Zone> {
+    // Opening anything else can block: a pipe waits for its writer.
+    if !std::fs::metadata(path).ok()?.is_file() {
+        return None;
+    }
     let mut bytes = Vec::new();
     File::open(path)
         .ok()?

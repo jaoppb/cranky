@@ -126,6 +126,31 @@ fn an_unusable_tz_falls_back_to_the_local_time_file() {
 }
 
 #[test]
+fn the_local_time_file_is_remembered_while_tz_is_unusable() {
+    let scratch = Scratch::new();
+    let environment = environment(Some("Nope/Bogus"), &scratch.localtime());
+    let mut clock = Clock::new();
+    scratch.copy_zone("America/Sao_Paulo");
+    assert_eq!(
+        read(&mut clock, &environment),
+        (SAO_PAULO.to_string(), Source::LocaltimeAfterInvalidTz)
+    );
+
+    let whole = zone_bytes("Asia/Kolkata");
+    std::fs::write(scratch.localtime(), &whole[..whole.len().div_euclid(2)]).unwrap();
+    assert_eq!(
+        read(&mut clock, &environment),
+        (SAO_PAULO.to_string(), Source::Previous)
+    );
+    // The file is still read on every call, not replaced by the memory of it.
+    std::fs::write(scratch.localtime(), &whole).unwrap();
+    assert_eq!(
+        read(&mut clock, &environment),
+        (KOLKATA.to_string(), Source::LocaltimeAfterInvalidTz)
+    );
+}
+
+#[test]
 fn an_unusable_tz_and_no_local_time_file_mean_utc() {
     let scratch = Scratch::new();
     let environment = environment(Some("Nope/Bogus"), &scratch.localtime());

@@ -55,19 +55,22 @@ impl Rule {
         };
         let local = unix_seconds.saturating_add(self.standard.offset);
         let year = civil::date_from_days(local.div_euclid(SECONDS_PER_DAY)).year;
-        // Each change is written in the local time in force just before it.
-        let start = daylight.start.instant(year, self.standard.offset);
-        let end = daylight.end.instant(year, daylight.kind.offset);
-        let in_daylight = if start < end {
-            (start..end).contains(&unix_seconds)
-        } else {
-            // South of the equator daylight time spans the new year.
-            !(end..start).contains(&unix_seconds)
-        };
-        if in_daylight {
-            &daylight.kind
-        } else {
-            &self.standard
+        // The change in force is the latest one not after the instant. A
+        // change time may reach days outside its year, so the changes of the
+        // years next to this one are candidates too.
+        let latest = [year.saturating_sub(1), year, year.saturating_add(1)]
+            .into_iter()
+            .flat_map(|year| {
+                // Each change is written in the local time in force before it.
+                let start = daylight.start.instant(year, self.standard.offset);
+                let end = daylight.end.instant(year, daylight.kind.offset);
+                [(start, true), (end, false)]
+            })
+            .filter(|&(at, _)| at <= unix_seconds)
+            .max_by_key(|&(at, _)| at);
+        match latest {
+            Some((_, true)) => &daylight.kind,
+            _ => &self.standard,
         }
     }
 }
@@ -154,6 +157,31 @@ mod tests {
         assert_eq!(offset_at(rule, 2_532_528_000), (36_000, "AEST".to_string()));
         assert_eq!(offset_at(rule, 2_548_252_799), (36_000, "AEST".to_string()));
         assert_eq!(offset_at(rule, 2_548_252_800), (39_600, "AEDT".to_string()));
+    }
+
+    #[test]
+    fn a_change_time_may_reach_into_the_next_or_previous_year() {
+        // Daylight time starts an hour before the new year: at 23:00 UTC on
+        // December 31, written as day 0 at -1:00.
+        let rule = "AAA0BBB,0/-1,M6.1.0";
+        let new_year_2026 = civil::days_from_date(2026, 1, 1).saturating_mul(SECONDS_PER_DAY);
+        let name =
+            |seconds_before: i64| offset_at(rule, new_year_2026.saturating_sub(seconds_before)).1;
+        assert_eq!(name(3601), "AAA");
+        assert_eq!(name(3600), "BBB");
+        assert_eq!(name(1800), "BBB");
+        assert_eq!(name(-1), "BBB");
+        // And ends a day after the year it is dated in.
+        let rule = "AAA0BBB,M6.1.0,365/24";
+        let name =
+            |seconds_after: i64| offset_at(rule, new_year_2026.saturating_add(seconds_after)).1;
+        assert_eq!(name(0), "BBB");
+        assert_eq!(
+            name(82_799),
+            "BBB",
+            "the end is in daylight time, an hour ahead"
+        );
+        assert_eq!(name(82_800), "AAA");
     }
 
     #[test]

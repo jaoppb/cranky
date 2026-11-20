@@ -11,6 +11,8 @@ const MAGIC: &[u8] = b"TZif";
 const RESERVED: usize = 15;
 /// The bytes of one kind of local time: offset, daylight flag, name index.
 const KIND_SIZE: usize = 6;
+/// A transition names its kind in one byte, so a file has no use for more.
+const MAX_KINDS: usize = 256;
 /// A zone is never further than this from UTC, in seconds.
 const OFFSET_RANGE: std::ops::RangeInclusive<i64> = -93_599..=93_599;
 
@@ -100,6 +102,9 @@ fn integer(bytes: &[u8]) -> Option<i64> {
 type Block = (Vec<Kind>, Vec<Transition>, Vec<Leap>);
 
 fn block(reader: &mut Reader<'_>, counts: &Counts, width: usize) -> Option<Block> {
+    if counts.kinds > MAX_KINDS {
+        return None;
+    }
     let instants = reader.take(counts.transitions.checked_mul(width)?)?;
     let indexes = reader.take(counts.transitions)?;
     let kinds = reader.take(counts.kinds.checked_mul(KIND_SIZE)?)?;
@@ -146,11 +151,7 @@ fn kind(raw: [u8; KIND_SIZE], names: &[u8]) -> Option<Kind> {
     }
     let name = names.get(usize::from(name_index)..)?;
     let end = name.iter().position(|&byte| byte == 0)?;
-    let abbreviation = String::from_utf8(name.get(..end)?.to_vec()).ok()?;
-    Some(Kind {
-        offset,
-        abbreviation,
-    })
+    Kind::new(offset, name.get(..end)?)
 }
 
 /// The text of the rule after the data, which may be empty. `None` when the two

@@ -2,12 +2,39 @@
 
 use crate::posix_rule::Rule;
 
+/// No abbreviation or part of a zone name is longer than this.
+const MAX_NAME_LENGTH: usize = 32;
+
+/// Whether bytes may be an abbreviation, or one part of a zone name: short,
+/// and printable, since scripts and logs will show them.
+pub fn is_name(bytes: &[u8]) -> bool {
+    (1..=MAX_NAME_LENGTH).contains(&bytes.len()) && bytes.iter().all(u8::is_ascii_graphic)
+}
+
 /// One kind of local time a zone observes, such as its standard time.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Kind {
     /// Seconds east of UTC.
     pub offset: i64,
     pub abbreviation: String,
+}
+
+impl Kind {
+    /// `None` when the abbreviation is not a short, printable name.
+    pub fn new(offset: i64, abbreviation: &[u8]) -> Option<Self> {
+        let abbreviation = String::from_utf8(abbreviation.to_vec()).ok()?;
+        is_name(abbreviation.as_bytes()).then_some(Self {
+            offset,
+            abbreviation,
+        })
+    }
+
+    fn utc() -> Self {
+        Self {
+            offset: 0,
+            abbreviation: "UTC".to_string(),
+        }
+    }
 }
 
 /// The instant from which a zone observes one of its kinds.
@@ -65,10 +92,7 @@ impl Zone {
 
     pub fn utc() -> Self {
         Self {
-            kinds: vec![Kind {
-                offset: 0,
-                abbreviation: "UTC".to_string(),
-            }],
+            kinds: vec![Kind::utc()],
             transitions: Vec::new(),
             leaps: Vec::new(),
             rule: None,
@@ -90,8 +114,8 @@ impl Zone {
         let unix_seconds = instant.saturating_sub(correction);
         let passed = self.transitions.partition_point(|t| t.at <= instant);
         // The rule is read on the scale without leap seconds, where its dates
-        // mean what they say. The C library reads it on the raw scale, and so
-        // changes that many seconds early in a leap second zone.
+        // mean what they say. glibc reads it on the raw scale, and so changes
+        // that many seconds early in a leap second zone.
         let kind = match (&self.rule, passed.checked_sub(1)) {
             (Some(rule), _) if passed == self.transitions.len() => Some(rule.kind_at(unix_seconds)),
             (_, Some(last)) => self
@@ -101,10 +125,8 @@ impl Zone {
             (_, None) => self.kinds.first(),
         };
         Moment {
-            kind: kind.cloned().unwrap_or_else(|| Kind {
-                offset: 0,
-                abbreviation: "UTC".to_string(),
-            }),
+            // Every transition names a kind that exists, so one is always found.
+            kind: kind.cloned().unwrap_or_else(Kind::utc),
             unix_seconds,
             leap_second,
         }
@@ -178,6 +200,19 @@ mod tests {
             Zone::new(vec![kind(0, "X")], dangling, Vec::new(), None),
             None
         );
+    }
+
+    #[test]
+    fn a_name_is_short_and_printable() {
+        for name in ["-03", "WEST", "+0330", "Sao_Paulo", &"x".repeat(32)] {
+            assert!(is_name(name.as_bytes()), "{name:?}");
+            assert_eq!(Kind::new(0, name.as_bytes()), Some(kind(0, name)));
+        }
+        for name in ["", "a b", "a\nb", "\u{1b}[31m", "é", &"x".repeat(33)] {
+            assert!(!is_name(name.as_bytes()), "{name:?}");
+            assert_eq!(Kind::new(0, name.as_bytes()), None);
+        }
+        assert_eq!(Kind::new(0, b"\xff\xfe\xfd"), None);
     }
 
     #[test]

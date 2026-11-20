@@ -11,8 +11,8 @@ const SECONDS_PER_HOUR: i64 = 3600;
 /// A change happens at 02:00 unless the rule says otherwise.
 const DEFAULT_CHANGE_TIME: i64 = 7200;
 /// The changes of a rule that names daylight time without dating it: the
-/// second Sunday of March and the first Sunday of November, as the C library
-/// assumes.
+/// second Sunday of March and the first Sunday of November, the current rules
+/// of the United States.
 const DEFAULT_START: Day = Day::Weekday {
     month: 3,
     week: 2,
@@ -30,10 +30,7 @@ pub fn parse(text: &[u8]) -> Option<Rule> {
     let standard_name = cursor.name()?;
     // A rule counts its offsets west of UTC.
     let standard_offset = cursor.clock(MAX_OFFSET_HOURS)?.saturating_neg();
-    let standard = Kind {
-        offset: standard_offset,
-        abbreviation: standard_name,
-    };
+    let standard = Kind::new(standard_offset, standard_name)?;
     if cursor.rest.is_empty() {
         return Some(Rule::new(standard, None));
     }
@@ -54,10 +51,7 @@ pub fn parse(text: &[u8]) -> Option<Rule> {
         (cursor.change()?, cursor.change()?)
     };
     let daylight = Daylight {
-        kind: Kind {
-            offset,
-            abbreviation: name,
-        },
+        kind: Kind::new(offset, name)?,
         start,
         end,
     };
@@ -115,7 +109,7 @@ impl<'a> Cursor<'a> {
     }
 
     /// An abbreviation: three or more letters, or anything between `<` and `>`.
-    fn name(&mut self) -> Option<String> {
+    fn name(&mut self) -> Option<&'a [u8]> {
         let name = if self.eat(b'<') {
             let quoted = self.take_while(|byte| byte != b'>');
             if !self.eat(b'>') {
@@ -125,10 +119,7 @@ impl<'a> Cursor<'a> {
         } else {
             self.take_while(|byte| byte.is_ascii_alphabetic())
         };
-        if name.len() < 3 {
-            return None;
-        }
-        String::from_utf8(name.to_vec()).ok()
+        (name.len() >= 3).then_some(name)
     }
 
     /// `[+-]hh[:mm[:ss]]`, in seconds.
@@ -299,6 +290,9 @@ mod tests {
             "WET0WEST,M3.5.0,M10.5.0,",
             "WET0WEST M3.5.0",
             "<-03>3 ",
+            "<a b>3",
+            "<\u{1b}[31mX>3",
+            "<abcdefghijklmnopqrstuvwxyz0123456>3",
         ] {
             assert_eq!(parse(text.as_bytes()), None, "{text:?}");
         }
