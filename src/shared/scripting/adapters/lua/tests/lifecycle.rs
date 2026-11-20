@@ -144,9 +144,7 @@ fn test_calendar_lua_config_monday() {
     module.init(&module_config, &config).expect("Init failed");
 
     let hub = SignalHub::new(crate::shared::config::domain::Config::default());
-    let test_time = chrono::DateTime::parse_from_rfc3339("2026-09-01T12:00:00+00:00")
-        .unwrap()
-        .with_timezone(&chrono::Local);
+    let test_time = cranky_time::LocalTime::utc(1_788_264_000);
     hub.time_tx().send(test_time).unwrap();
     let subs = module.subscriptions().to_vec();
     module.refresh(&hub, &subs);
@@ -162,4 +160,35 @@ fn test_calendar_lua_config_monday() {
     } else {
         panic!("Expected text node for weekday");
     }
+}
+
+#[test]
+fn test_time_signal_is_whole_second_rfc_3339_with_a_numeric_offset() {
+    let source = r#"
+        function init() end
+        function metadata() return { subscriptions = { "time" }, styles = {} } end
+        function refresh() end
+        function render(monitor) return ui.text({ text = signals.time }) end
+    "#;
+    let mut module = LuaModule::new("time_text".into(), source.to_string());
+    let module_config = ModuleConfig::new(
+        "time_text".into(),
+        true,
+        crate::shared::config::domain::EngineSelection::Auto,
+        crate::shared::primitives::ModuleOptions::default(),
+    );
+    let config = crate::shared::config::domain::Config::default();
+    module.init(&module_config, &config).expect("Init failed");
+
+    let hub = SignalHub::new(crate::shared::config::domain::Config::default());
+    hub.time_tx()
+        .send(cranky_time::LocalTime::utc(1_795_000_000))
+        .unwrap();
+    module.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
+
+    let node = module.render(&MonitorId::new("DP-1"));
+    let crate::features::vdom::domain::VNodeKind::Text { text } = node.kind() else {
+        panic!("Expected a text node, got {:?}", node.tag());
+    };
+    assert_eq!(text.as_str(), "2026-11-18T11:06:40+00:00");
 }

@@ -22,8 +22,8 @@ impl LuaStateSynchronizer {
         for signal in changed {
             match signal {
                 SignalKind::Time => {
-                    let time = *hub.time_rx().borrow();
-                    signals_table.set("time", time.to_rfc3339())?;
+                    let time = hub.time_rx().borrow().to_string();
+                    signals_table.set("time", time)?;
                 }
                 SignalKind::Hyprland => {
                     let hypr = hub.hyprland_rx().borrow().clone();
