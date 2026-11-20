@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cranky-unsafe"]
+members = ["crates/cranky-time", "crates/cranky-unsafe"]
 
 [workspace.package]
 version = "0.14.0"
@@ -91,7 +91,7 @@ cranky-unsafe = { path = "crates/cranky-unsafe" }
 zbus = { version = "6.3", features = ["tokio"] }
 sysinfo = "0.39"
 serde_json = "1.0"
-chrono = "0.4"
+cranky-time = { path = "crates/cranky-time" }
 uuid = { workspace = true, features = ["serde"] }
 notify = "8.2"
 freedesktop-icons = "0.4"

@@ -301,16 +301,14 @@ mod tests {
         let hub = crate::shared::events::signals::SignalHub::new(
             crate::shared::config::domain::Config::default(),
         );
-        let test_time = chrono::DateTime::parse_from_rfc3339("2026-07-28T14:30:45+00:00")
-            .unwrap()
-            .with_timezone(&chrono::Local);
+        // 2026-07-28T14:30:45Z
+        let test_time = cranky_time::LocalTime::utc(1_785_249_045);
         hub.time_tx().send(test_time).unwrap();
         clock_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
         let node = clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
         assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Text);
         if let crate::features::vdom::domain::VNodeKind::Text { text } = node.kind() {
-            let expected = test_time.format("%H:%M").to_string();
-            assert_eq!(text.as_str(), expected.as_str());
+            assert_eq!(text.as_str(), "14:30");
         } else {
             panic!("Expected Text node");
         }
@@ -369,9 +367,8 @@ mod tests {
             let hub = crate::shared::events::signals::SignalHub::new(
                 crate::shared::config::domain::Config::default(),
             );
-            let test_time = chrono::DateTime::parse_from_rfc3339("2026-09-01T12:00:00+00:00")
-                .unwrap()
-                .with_timezone(&chrono::Local);
+            // 2026-09-01T12:00:00Z
+            let test_time = cranky_time::LocalTime::utc(1_788_264_000);
             hub.time_tx().send(test_time).unwrap();
             cal_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
 
@@ -454,9 +451,8 @@ mod tests {
             let hub = crate::shared::events::signals::SignalHub::new(
                 crate::shared::config::domain::Config::default(),
             );
-            let test_time = chrono::DateTime::parse_from_rfc3339("2026-09-01T12:00:00+00:00")
-                .unwrap()
-                .with_timezone(&chrono::Local);
+            // 2026-09-01T12:00:00Z
+            let test_time = cranky_time::LocalTime::utc(1_788_264_000);
             hub.time_tx().send(test_time).unwrap();
             clock_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
 
@@ -555,9 +551,8 @@ mod tests {
             let hub = crate::shared::events::signals::SignalHub::new(
                 crate::shared::config::domain::Config::default(),
             );
-            let test_time = chrono::DateTime::parse_from_rfc3339("2026-09-01T12:00:00+00:00")
-                .unwrap()
-                .with_timezone(&chrono::Local);
+            // 2026-09-01T12:00:00Z
+            let test_time = cranky_time::LocalTime::utc(1_788_264_000);
             hub.time_tx().send(test_time).unwrap();
             clock_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
 
@@ -732,9 +727,8 @@ mod tests {
             let hub = crate::shared::events::signals::SignalHub::new(
                 crate::shared::config::domain::Config::default(),
             );
-            let now = chrono::DateTime::parse_from_rfc3339("2026-10-15T12:00:00+00:00")
-                .unwrap()
-                .with_timezone(&chrono::Local);
+            // 2026-10-15T12:00:00Z
+            let now = cranky_time::LocalTime::utc(1_792_065_600);
             hub.time_tx().send(now).unwrap();
             cal.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
 

@@ -516,7 +516,11 @@ mod tests {
             let actor = fixture.event_loop.into_actor();
             actor.spawn();
 
-            fixture.hub.time_tx().send(chrono::Local::now()).unwrap();
+            fixture
+                .hub
+                .time_tx()
+                .send(cranky_time::LocalTime::utc(0))
+                .unwrap();
             fixture
                 .hub
                 .systray_tx()

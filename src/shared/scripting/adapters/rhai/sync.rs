@@ -17,8 +17,8 @@ impl RhaiStateSynchronizer {
         let mut signals_map = scope.get_value::<rhai::Map>("signals").unwrap_or_default();
 
         if changed.contains(&SignalKind::Time) {
-            let time = *hub.time_rx().borrow();
-            signals_map.insert("time".into(), Dynamic::from(time.to_rfc3339()));
+            let time = hub.time_rx().borrow().to_string();
+            signals_map.insert("time".into(), Dynamic::from(time));
         }
 
         if changed.contains(&SignalKind::Hyprland) {

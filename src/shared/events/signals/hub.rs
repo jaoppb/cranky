@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use chrono::{DateTime, Local};
+use cranky_time::{Clock, LocalTime};
 use tokio::sync::watch;
 
 use crate::features::metrics::domain::MetricsState;
@@ -27,10 +27,7 @@ pub type ModuleErrorsMap = HashMap<ModuleSite, String>;
 pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
     hyprland: (watch::Sender<HyprlandState>, watch::Receiver<HyprlandState>),
-    time: (
-        watch::Sender<DateTime<Local>>,
-        watch::Receiver<DateTime<Local>>,
-    ),
+    time: (watch::Sender<LocalTime>, watch::Receiver<LocalTime>),
     dbus: (watch::Sender<DBusState>, watch::Receiver<DBusState>),
     systray: (watch::Sender<SystrayState>, watch::Receiver<SystrayState>),
     metrics: (watch::Sender<MetricsState>, watch::Receiver<MetricsState>),
@@ -59,7 +56,7 @@ impl SignalHub {
             std::collections::BTreeMap::new(),
             None,
         ));
-        let time = watch::channel(Local::now());
+        let time = watch::channel(Clock::new().now());
         let dbus = watch::channel(DBusState::default());
         let systray = watch::channel(SystrayState::default());
         let metrics = watch::channel(MetricsState::default());
@@ -145,12 +142,12 @@ impl SignalHub {
     }
 
     #[must_use]
-    pub fn time_tx(&self) -> watch::Sender<DateTime<Local>> {
+    pub fn time_tx(&self) -> watch::Sender<LocalTime> {
         self.time.0.clone()
     }
 
     #[must_use]
-    pub fn time_rx(&self) -> watch::Receiver<DateTime<Local>> {
+    pub fn time_rx(&self) -> watch::Receiver<LocalTime> {
         self.time.1.clone()
     }
 

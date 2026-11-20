@@ -97,3 +97,36 @@ fn test_rhai_all_builtins() {
         );
     }
 }
+
+#[test]
+fn test_time_signal_is_whole_second_rfc_3339_with_a_numeric_offset() {
+    let source = "
+        fn subscriptions() { return [\"time\"]; }
+        fn refresh() {}
+        fn render(monitor) {
+            return ui.text(signals.time);
+        }
+    ";
+    let mut module = RhaiModule::new("time_text".into(), source).unwrap();
+    let mod_config = crate::shared::config::domain::ModuleConfig::new(
+        "time_text".into(),
+        true,
+        crate::shared::config::domain::EngineSelection::Auto,
+        crate::shared::primitives::ModuleOptions::default(),
+    );
+    let config = crate::shared::config::domain::Config::default();
+    assert!(module.init(&mod_config, &config).is_ok());
+
+    let hub = SignalHub::new(crate::shared::config::domain::Config::default());
+    // 2026-11-18T11:06:40Z
+    hub.time_tx()
+        .send(cranky_time::LocalTime::utc(1_795_000_000))
+        .unwrap();
+    module.refresh(&hub, &[SignalKind::Time]);
+
+    let node = module.render(&MonitorId::new("DP-1"));
+    let crate::features::vdom::domain::VNodeKind::Text { text } = node.kind() else {
+        panic!("Expected a text node, got {:?}", node.tag());
+    };
+    assert_eq!(text.as_str(), "2026-11-18T11:06:40+00:00");
+}
