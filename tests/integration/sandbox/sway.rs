@@ -2,14 +2,20 @@
 //! names, so waiting for that line is waiting for the compositor.
 
 use super::without_session;
-use crate::support::{Context, Failure, Outcome, within};
+use crate::support::{Context, Failure, Outcome, within_for};
 use std::path::Path;
 use std::process::Stdio;
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, ChildStdout, Command};
 
 /// Starts the line sway's `exec` prints once its sockets exist.
 const READY: &str = "cranky-ready";
+
+/// Deadline for sway to come up. Longer than a case's wait: on a fresh CI
+/// runner sway once did not report within those five seconds, while the same
+/// tests passed on two other runners. The cause was not measured.
+const STARTUP: Duration = Duration::from_secs(30);
 
 pub struct Sway {
     process: Child,
@@ -44,7 +50,7 @@ impl Sway {
             .stdout
             .take()
             .context("sway was started without a stdout pipe")?;
-        let ready = within("sway to report its sockets", ready_line(stdout))
+        let ready = within_for(STARTUP, "sway to report its sockets", ready_line(stdout))
             .await
             .and_then(|line| line)
             .map_err(|failure| with_log(dir, &failure))?;

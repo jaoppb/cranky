@@ -17,12 +17,15 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # One job per kind of error, each running one `just` recipe, so a red pull
-  # request names what failed. The job names are the required status checks on
-  # `main`: renaming one means updating the branch protection.
+  # One job per kind of error, each running one `just` recipe inside the flake
+  # devShell, so a red pull request names what failed and CI uses the tools a
+  # local `nix develop` does, at the versions flake.lock pins. The job names
+  # are the required status checks on `main`: renaming one means updating the
+  # branch protection.
   check:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -40,68 +43,80 @@ jobs:
           - name: test
             recipe: test
             compiles: true
-            # The integration tests start their own D-Bus daemon and a
-            # headless sway, and take screenshots with grim.
-            packages: dbus-daemon sway grim
           - name: build
             recipe: release
             compiles: true
           - name: deps
             recipe: deps-check
-            tools: cargo-deny@0.20.2
           - name: coverage
             recipe: coverage-check
             compiles: true
-            packages: dbus-daemon sway grim
-            tools: cargo-llvm-cov@0.9.1
-            components: llvm-tools-preview
           - name: bench
             recipe: bench-check
             compiles: true
           - name: workflows
             recipe: workflows-check
-            # actionlint runs shellcheck over the `run` blocks when it finds it.
-            tools: shellcheck@0.11.0
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install system dependencies
+      # Single-user Nix, so the store belongs to the runner's user and the
+      # next step can restore it.
+      - name: Install Nix
+        uses: nixbuild/nix-quick-install-action@v35
+
+      # One cache for every job: they all realise the same devShell. One job
+      # of a run on `main` saves it, and a pull request reads that one. There
+      # is no fallback to an older key: a store restored from one would be
+      # saved again with the new closure on top, and grow at every update.
+      - name: Restore the Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
+          save: ${{ github.ref == 'refs/heads/main' && matrix.name == 'fmt' }}
+
+      - name: Restore the cargo cache
         if: matrix.compiles
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libwayland-dev libdbus-1-dev libxkbcommon-dev ${{ matrix.packages }}
-
-      # With no `toolchain` input the action follows rust-toolchain.toml when
-      # the repository has one, and installs stable otherwise.
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: Swatinem/rust-cache@v2
         with:
-          components: rustfmt clippy ${{ matrix.components }}
-          # The action sets RUSTFLAGS to `-D warnings` by default; the recipes
-          # decide that, so CI and a local run fail on the same things.
-          rustflags: ""
-          cache: ${{ matrix.compiles == true }}
-          cache-key: ${{ matrix.name }}
-          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Install just and the recipe's tools
-        uses: taiki-e/install-action@v2
-        with:
-          tool: just@1.59.0 ${{ matrix.tools }}
-
-      - name: Install actionlint
-        if: matrix.name == 'workflows'
-        env:
-          ACTIONLINT_VERSION: 1.7.12
-          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-        working-directory: ${{ runner.temp }}
-        run: |
-          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -sSfLO "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
-          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum --check
-          mkdir actionlint-bin
-          tar -xzf "${archive}" -C actionlint-bin actionlint
-          echo "${RUNNER_TEMP}/actionlint-bin" >> "${GITHUB_PATH}"
+          # A new flake.lock can change the linker and the libraries the
+          # cached artifacts point at.
+          key: ${{ matrix.name }}-${{ hashFiles('flake.lock') }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # The action asks rustc and cargo for the cache key; they exist only
+          # inside the devShell.
+          cmd-format: nix develop -c {0}
 
       - name: Run just ${{ matrix.recipe }}
-        run: just ${{ matrix.recipe }}
+        run: nix develop -c just ${{ matrix.recipe }}
+
+  # The flake also exposes cranky as a package. Building it here keeps it from
+  # rotting, and starting it proves the binary loads its libraries: given the
+  # runtime directory it requires and no compositor, it logs its first line
+  # and then fails to connect.
+  nix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Nix
+        uses: nixbuild/nix-quick-install-action@v35
+
+      # Read-only: the cache holds the devShell, which shares the toolchain
+      # with the package.
+      - name: Restore the Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
+          save: false
+
+      - name: Build the package
+        run: nix build --print-build-logs
+
+      - name: Start the binary
+        run: |
+          XDG_RUNTIME_DIR="$(mktemp -d)"
+          export XDG_RUNTIME_DIR
+          output="$(timeout 30 ./result/bin/cranky 2>&1 || true)"
+          echo "${output}"
+          grep --quiet "Starting Cranky" <<< "${output}"
