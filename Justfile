@@ -124,6 +124,16 @@ record-profile *args:
 analyze-profile *args:
     python3 scripts/analyze_profile.py {{args}}
 
+# Audit the GitHub issues against tools.toml: type, area, milestone, parent and pending label migrations (needs gh authentication)
+[group('repo')]
+issues-check:
+    tools issues check
+
+# Check that the GitHub labels, milestones and merge settings match tools.toml (needs gh authentication)
+[group('repo')]
+repo-check:
+    tools repo check
+
 # Install git hooks with Lefthook
 [group('setup')]
 setup:

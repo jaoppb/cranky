@@ -1,0 +1,64 @@
+name: Tools
+
+# Audits GitHub itself (issues, labels, milestones, merge settings) against
+# tools.toml. The drift it finds comes from GitHub state, not from commits, so
+# it runs when an issue changes and when the declaration does, and it is not
+# part of ci.yml: a pull request must not go red because of an issue someone
+# else filed.
+on:
+  issues:
+    types: [opened, edited, reopened, labeled, unlabeled, milestoned, demilestoned]
+  pull_request:
+    paths: &declaration
+      - tools.toml
+      - .github/workflows/tools.yml
+      # They pin the `tools` binary the recipes run.
+      - flake.nix
+      - flake.lock
+  push:
+    branches: [main]
+    paths: *declaration
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'issues' && 'issues' || github.ref }}
+  # A burst of issue events (one per label) keeps only its last run: each run
+  # audits the whole repository, so the last one covers the others.
+  cancel-in-progress: true
+
+jobs:
+  # One job per recipe, each inside the flake devShell like the jobs of
+  # ci.yml, so the `tools` that runs here is the one flake.lock pins and a
+  # local `just` uses.
+  audit:
+    name: ${{ matrix.recipe }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    strategy:
+      fail-fast: false
+      matrix:
+        recipe: [issues-check, repo-check]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Nix
+        uses: nixbuild/nix-quick-install-action@v35
+
+      # Read-only: the cache is the devShell's store, saved by ci.yml on `main`.
+      - name: Restore the Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
+          save: false
+
+      - name: Run just ${{ matrix.recipe }}
+        run: nix develop -c just ${{ matrix.recipe }}
+        env:
+          GH_TOKEN: ${{ github.token }}

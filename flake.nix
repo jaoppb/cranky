@@ -85,6 +85,8 @@
           packages = [
             (toolchainFor pkgs)
             tools.packages.${pkgs.stdenv.hostPlatform.system}.default
+            # `tools` reads and writes GitHub through the gh CLI.
+            pkgs.gh
             pkgs.pkg-config
             pkgs.just
             pkgs.lefthook
