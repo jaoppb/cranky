@@ -3,15 +3,19 @@ name: Tools
 # Audits GitHub itself (issues, labels, milestones, merge settings) against
 # tools.toml. The drift it finds comes from GitHub state, not from commits, so
 # it runs when an issue changes and when the declaration does, and it is not
-# part of ci.yml: a pull request must not go red because of an issue someone
-# else filed.
+# part of ci.yml: an ordinary pull request must not go red because of an issue
+# someone else filed. Only one that changes the declaration or the pinned
+# `tools` runs it.
 on:
   issues:
-    types: [opened, edited, reopened, labeled, unlabeled, milestoned, demilestoned]
+    # Closing or deleting an issue can clear a finding: most rules look at open issues.
+    types: [opened, edited, reopened, closed, deleted, transferred, labeled, unlabeled, milestoned, demilestoned]
   pull_request:
     paths: &declaration
       - tools.toml
       - .github/workflows/tools.yml
+      # The Justfile is left out: its other recipes change far more often
+      # than the two this workflow runs.
       # They pin the `tools` binary the recipes run.
       - flake.nix
       - flake.lock
@@ -36,10 +40,12 @@ jobs:
   audit:
     name: ${{ matrix.recipe }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # A pull request that moves the flake misses the Nix cache and builds `tools`.
+    timeout-minutes: 30
     permissions:
       contents: read
       issues: read
+      # The issue audit also reads the open pull requests.
       pull-requests: read
     strategy:
       fail-fast: false
@@ -57,6 +63,19 @@ jobs:
         with:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
           save: false
+
+      # GitHub leaves the merge settings out of the answer for a token that may
+      # not see them, and `tools` then assumes its defaults, which are the
+      # values tools.toml declares: the check would pass without checking.
+      - name: Check that the token can read the merge settings
+        if: matrix.recipe == 'repo-check'
+        run: |
+          if [[ "$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.allow_squash_merge')" == "null" ]]; then
+            echo "::error::the token cannot read the merge settings, so repo-check would not audit them"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Run just ${{ matrix.recipe }}
         run: nix develop -c just ${{ matrix.recipe }}

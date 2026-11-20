@@ -53,7 +53,8 @@ bug = "type:fix"
 enhancement = "type:feat"
 documentation = "type:docs"
 
-# A milestone title must be a release (`vX.Y.Z`), and one missing from this list fails `tools repo check`.
+# `tools issues check` requires an open issue's milestone to be a release (`vX.Y.Z`);
+# a milestone on GitHub missing from this list fails `tools repo check`.
 [github.milestones]
 unmanaged = "error"
 items = [
