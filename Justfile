@@ -129,10 +129,10 @@ analyze-profile *args:
 issues-check:
     tools issues check
 
-# Check that the GitHub labels, milestones and merge settings match tools.toml (needs gh authentication)
+# Check that the GitHub labels, milestones and merge settings match tools.toml, or only the parts named, e.g. --labels (needs gh authentication with push access to see the settings)
 [group('repo')]
-repo-check:
-    tools repo check
+repo-check *args:
+    tools repo check {{args}}
 
 # Install git hooks with Lefthook
 [group('setup')]
