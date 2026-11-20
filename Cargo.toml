@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cranky-unsafe"]
+members = ["crates/cranky-time", "crates/cranky-unsafe"]
 
 [workspace.package]
 version = "0.14.0"

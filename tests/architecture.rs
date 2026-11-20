@@ -238,3 +238,13 @@ fn member_crate_lints_differ_only_where_unsafe_requires() {
 
     assert_eq!(lints_table("crates/cranky-unsafe/Cargo.toml"), expected);
 }
+
+/// The member crate that tells the time has no reason to differ: it follows
+/// every rule of the main crate, `unsafe_code` included.
+#[test]
+fn time_crate_lints_equal_the_main_crate() {
+    assert_eq!(
+        lints_table("crates/cranky-time/Cargo.toml"),
+        lints_table("Cargo.toml")
+    );
+}
