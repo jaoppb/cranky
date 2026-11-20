@@ -180,17 +180,41 @@ fn a_zone_tz_named_is_kept_when_its_file_goes_away() {
 }
 
 #[test]
-fn a_remembered_zone_is_not_used_for_another_tz() {
+fn a_zone_read_from_tz_is_not_used_for_another_value_of_tz() {
+    let scratch = Scratch::new();
+    let zone = scratch.path("zone");
+    std::fs::copy(zone_path("Asia/Kolkata"), &zone).unwrap();
+    let mut clock = Clock::new();
+    let named = environment(zone.to_str(), &scratch.localtime());
+    assert_eq!(read(&mut clock, &named).1, Source::TzVariable);
+
+    let bogus = environment(Some("Nope/Bogus"), &scratch.localtime());
+    assert_eq!(read(&mut clock, &bogus), (UTC.to_string(), Source::Utc));
+    std::fs::remove_file(&zone).unwrap();
+    assert_eq!(
+        read(&mut clock, &named),
+        (KOLKATA.to_string(), Source::Previous)
+    );
+}
+
+#[test]
+fn the_local_time_file_is_remembered_whatever_tz_says() {
     let scratch = Scratch::new();
     let mut clock = Clock::new();
     scratch.link_zone("America/Sao_Paulo");
-    let unset = environment(None, &scratch.localtime());
-    assert_eq!(read(&mut clock, &unset).1, Source::Localtime);
+    let bogus = environment(Some("Nope/Bogus"), &scratch.localtime());
+    assert_eq!(read(&mut clock, &bogus).1, Source::LocaltimeAfterInvalidTz);
 
     std::fs::remove_file(scratch.localtime()).unwrap();
-    let bogus = environment(Some("Nope/Bogus"), &scratch.localtime());
-    assert_eq!(read(&mut clock, &bogus), (UTC.to_string(), Source::Utc));
-    assert_eq!(read(&mut clock, &unset).1, Source::Previous);
+    let unset = environment(None, &scratch.localtime());
+    assert_eq!(
+        read(&mut clock, &unset),
+        (SAO_PAULO.to_string(), Source::Previous)
+    );
+    assert_eq!(
+        read(&mut clock, &bogus),
+        (SAO_PAULO.to_string(), Source::Previous)
+    );
 }
 
 #[test]

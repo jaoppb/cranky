@@ -59,6 +59,56 @@ fn tz_may_not_name_a_directory() {
 }
 
 #[test]
+fn tz_may_not_name_a_pipe() {
+    use std::io::Write;
+    use std::os::fd::AsRawFd;
+
+    // Reading it would give a whole zone file; a pipe that is still open for
+    // writing would never end.
+    let (reader, mut writer) = std::io::pipe().unwrap();
+    writer
+        .write_all(&crate::test_support::zone_bytes("America/Sao_Paulo"))
+        .unwrap();
+    drop(writer);
+    let path = format!("/proc/self/fd/{}", reader.as_raw_fd());
+    assert_eq!(from_tz(&path), None);
+}
+
+/// A zone file whose first block holds `padding` more bytes of names, which
+/// no kind refers to: still a valid file, only longer.
+fn padded_zone(padding: usize) -> Vec<u8> {
+    let mut bytes = crate::test_support::zone_bytes("Australia/Sydney");
+    let count = |at: usize| {
+        usize::try_from(u32::from_be_bytes(bytes[at..][..4].try_into().unwrap())).unwrap()
+    };
+    let (transitions, kinds, names) = (count(32), count(36), count(40));
+    let names_end = [
+        44,
+        transitions.checked_mul(5).unwrap(),
+        kinds.checked_mul(6).unwrap(),
+        names,
+    ]
+    .iter()
+    .sum::<usize>();
+    let longer = u32::try_from(names.checked_add(padding).unwrap()).unwrap();
+    bytes[40..44].copy_from_slice(&longer.to_be_bytes());
+    bytes.splice(names_end..names_end, vec![0; padding]);
+    bytes
+}
+
+#[test]
+fn a_zone_file_is_read_up_to_a_megabyte() {
+    let scratch = Scratch::new();
+    let path = scratch.path("zone");
+    let read = |padding| {
+        std::fs::write(&path, padded_zone(padding)).unwrap();
+        from_tz(path.to_str().unwrap())
+    };
+    assert_eq!(read(100_000), Some((39_600, None)));
+    assert_eq!(read(1_100_000), None);
+}
+
+#[test]
 fn bytes_after_a_zone_file_do_not_matter() {
     let scratch = Scratch::new();
     let mut bytes = crate::test_support::zone_bytes("Australia/Sydney");
@@ -100,7 +150,6 @@ fn a_name_cannot_leave_the_database() {
 #[test]
 fn databases_are_searched_in_order() {
     let scratch = Scratch::new();
-    std::fs::copy(zone_path("Asia/Kolkata"), scratch.path("Zone")).unwrap();
     let offset = |databases| {
         let located = Environment::new(Some("Europe/Lisbon"), "/nonexistent", databases)
             .zone_from_tz()
@@ -187,6 +236,27 @@ fn a_link_gives_no_name_that_leaves_the_database_or_cannot_be_shown() {
     );
     let long = format!("zoneinfo/{}", "x".repeat(33));
     assert_eq!(through_link(&scratch, &long, &long).name, None);
+    let deep = format!("zoneinfo/{}", ["x"; 65].join("/"));
+    assert_eq!(through_link(&scratch, &deep, &deep).name, None);
+}
+
+#[test]
+fn the_database_marker_is_a_whole_directory_name_and_the_last_one_counts() {
+    let scratch = Scratch::new();
+    assert_eq!(
+        through_link(&scratch, "myzoneinfo/Zone", "myzoneinfo/Zone").name,
+        None
+    );
+    let nested = scratch.path("zoneinfo/zoneinfo/Asia/Kolkata");
+    assert_eq!(
+        through_link(
+            &scratch,
+            "zoneinfo/zoneinfo/Asia/Kolkata",
+            nested.to_str().unwrap()
+        )
+        .name,
+        Some("Asia/Kolkata".to_string())
+    );
 }
 
 #[test]
@@ -236,6 +306,14 @@ fn tzdir_is_searched_before_the_usual_databases() {
             PathBuf::from("/etc/zoneinfo"),
         ]
     );
+}
+
+#[test]
+fn a_tzdir_that_is_not_absolute_is_ignored() {
+    for tzdir in ["", "relative/zoneinfo", "."] {
+        let environment = Environment::from_variables(None, Some(tzdir.into()));
+        assert_eq!(environment.databases.len(), 2, "{tzdir:?}");
+    }
 }
 
 #[test]

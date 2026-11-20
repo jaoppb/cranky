@@ -56,9 +56,17 @@ impl Rule {
         let local = unix_seconds.saturating_add(self.standard.offset);
         let year = civil::date_from_days(local.div_euclid(SECONDS_PER_DAY)).year;
         // The change in force is the latest one not after the instant. A
-        // change time may reach days outside its year, so the changes of the
-        // years next to this one are candidates too.
-        let latest = [year.saturating_sub(1), year, year.saturating_add(1)]
+        // change time may reach a week outside its year, so the changes of
+        // the years around this one are candidates too. When daylight time
+        // ends at the very instant it starts again, it never ends: the start
+        // wins the tie.
+        let years = [
+            year.saturating_sub(2),
+            year.saturating_sub(1),
+            year,
+            year.saturating_add(1),
+        ];
+        let latest = years
             .into_iter()
             .flat_map(|year| {
                 // Each change is written in the local time in force before it.
@@ -67,7 +75,7 @@ impl Rule {
                 [(start, true), (end, false)]
             })
             .filter(|&(at, _)| at <= unix_seconds)
-            .max_by_key(|&(at, _)| at);
+            .max();
         match latest {
             Some((_, true)) => &daylight.kind,
             _ => &self.standard,
@@ -182,6 +190,45 @@ mod tests {
             "the end is in daylight time, an hour ahead"
         );
         assert_eq!(name(82_800), "AAA");
+    }
+
+    #[test]
+    fn daylight_time_that_ends_as_it_starts_is_permanent() {
+        // The example of RFC 9636: the end of one year, written in daylight
+        // time, is the instant the next year's daylight time starts.
+        let rule = "EST5EDT,0/0,J365/25";
+        for instant in [
+            0,
+            1_767_243_599,
+            1_767_243_600,
+            1_767_243_601,
+            1_780_000_000,
+        ] {
+            assert_eq!(
+                offset_at(rule, instant),
+                (-14_400, "EDT".to_string()),
+                "at {instant}"
+            );
+        }
+    }
+
+    #[test]
+    fn both_changes_of_a_year_may_fall_in_the_next_one() {
+        // Day 365 plus 120 and 100 hours: January 5 and January 4 of the year
+        // after. On January 1 the latest change is therefore two years back.
+        let rule = "AAA0BBB,J365/120,J365/100";
+        assert_eq!(offset_at(rule, 1_767_225_600).1, "BBB", "2026-01-01");
+        assert_eq!(offset_at(rule, 1_767_312_000).1, "BBB", "2026-01-02");
+        // The end: 100 hours after the start of December 31 in daylight time,
+        // which is 03:00 UTC on January 4. The start: 00:00 UTC on January 5.
+        let end = civil::days_from_date(2026, 1, 4)
+            .saturating_mul(SECONDS_PER_DAY)
+            .saturating_add(10_800);
+        let start = civil::days_from_date(2026, 1, 5).saturating_mul(SECONDS_PER_DAY);
+        assert_eq!(offset_at(rule, end.saturating_sub(1)).1, "BBB");
+        assert_eq!(offset_at(rule, end).1, "AAA");
+        assert_eq!(offset_at(rule, start.saturating_sub(1)).1, "AAA");
+        assert_eq!(offset_at(rule, start).1, "BBB");
     }
 
     #[test]

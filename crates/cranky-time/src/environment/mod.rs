@@ -14,6 +14,8 @@ const LOCALTIME: &str = "/etc/localtime";
 const DATABASES: [&str; 2] = ["/usr/share/zoneinfo", "/etc/zoneinfo"];
 /// The directory name that marks a path as leading into a zone database.
 const DATABASE_MARKER: &str = "zoneinfo/";
+/// No name in a zone database comes near this length.
+const MAX_ZONE_NAME_LENGTH: usize = 128;
 /// No zone file comes near this size; it bounds what a stray `TZ` path can
 /// make the clock read.
 const MAX_FILE_SIZE: u64 = 1 << 20;
@@ -44,8 +46,11 @@ impl Environment {
 
     /// The system settings, given the values of `TZ` and `TZDIR`.
     fn from_variables(tz: Option<OsString>, tzdir: Option<OsString>) -> Self {
+        // As in the C library, a `TZDIR` that is not an absolute path is not
+        // a database: it would be searched from wherever the process runs.
         let databases = tzdir
             .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
             .into_iter()
             .chain(DATABASES.map(PathBuf::from))
             .collect();
@@ -104,7 +109,13 @@ impl Environment {
         // The file is usually a link into a zone database, and the path it
         // points to then ends with the name of the zone.
         let name = std::fs::read_link(&self.localtime).ok().and_then(|target| {
-            let (_, name) = target.to_str()?.split_once(DATABASE_MARKER)?;
+            let target = target.to_str()?;
+            // The marker is a whole directory name, and the last one counts:
+            // the name is what follows it.
+            let name = target
+                .rsplit_once(&format!("/{DATABASE_MARKER}"))
+                .map(|(_, name)| name)
+                .or_else(|| target.strip_prefix(DATABASE_MARKER))?;
             is_database_name(name).then(|| name.to_string())
         });
         Some(Located { zone, name })
@@ -120,12 +131,14 @@ impl Located {
 /// Whether a name can only lead to a file inside a database, and is fit to
 /// be shown.
 fn is_database_name(name: &str) -> bool {
-    name.split('/')
-        .all(|part| zone::is_name(part.as_bytes()) && part != "." && part != "..")
+    name.len() <= MAX_ZONE_NAME_LENGTH
+        && name
+            .split('/')
+            .all(|part| zone::is_name(part.as_bytes()) && part != "." && part != "..")
 }
 
 fn read_zone(path: &Path) -> Option<Zone> {
-    // Opening anything else can block: a pipe waits for its writer.
+    // Opening anything else can block: a named pipe waits for its writer.
     if !std::fs::metadata(path).ok()?.is_file() {
         return None;
     }

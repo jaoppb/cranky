@@ -22,7 +22,8 @@ pub enum Source {
     /// The local time file, because `TZ` is set to something unusable.
     LocaltimeAfterInvalidTz,
     /// The zone of an earlier call, because the source it came from can no
-    /// longer be read.
+    /// longer be read. That source is `TZ`, or the local time file, with `TZ`
+    /// unset or unusable.
     Previous,
     /// Nothing could be read: the time is in UTC.
     Utc,

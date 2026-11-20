@@ -22,11 +22,15 @@ pub struct Kind {
 impl Kind {
     /// `None` when the abbreviation is not a short, printable name.
     pub fn new(offset: i64, abbreviation: &[u8]) -> Option<Self> {
-        let abbreviation = String::from_utf8(abbreviation.to_vec()).ok()?;
-        is_name(abbreviation.as_bytes()).then_some(Self {
-            offset,
-            abbreviation,
-        })
+        if !is_name(abbreviation) {
+            return None;
+        }
+        String::from_utf8(abbreviation.to_vec())
+            .ok()
+            .map(|abbreviation| Self {
+                offset,
+                abbreviation,
+            })
     }
 
     fn utc() -> Self {

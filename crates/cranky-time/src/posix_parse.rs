@@ -291,6 +291,7 @@ mod tests {
             "WET0WEST M3.5.0",
             "<-03>3 ",
             "<a b>3",
+            "AAA0<a b>,M3.2.0,M11.1.0",
             "<\u{1b}[31mX>3",
             "<abcdefghijklmnopqrstuvwxyz0123456>3",
         ] {
