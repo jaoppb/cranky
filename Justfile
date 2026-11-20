@@ -1,3 +1,9 @@
+# Recipes run only inside the flake devShell (`nix develop`, or direnv with `.envrc`), so a local
+# run and CI use the same tools, at the versions flake.lock pins. just evaluates every assignment
+# before it runs a recipe, so this guard covers all of them, new ones included; `just --list`
+# evaluates nothing and works anywhere. flake.nix sets CRANKY_DEVSHELL.
+_devshell := if env("CRANKY_DEVSHELL", "") == "" { error("run just inside the flake devShell: 'nix develop -c just <recipe>', or enter it with 'nix develop' or 'direnv allow'") } else { "" }
+
 [private]
 default:
     @just --list --unsorted
@@ -122,3 +128,8 @@ analyze-profile *args:
 [group('setup')]
 setup:
     lefthook install
+
+# Update flake.lock, the pin of every tool in the devShell: all inputs, or only the ones named
+[group('setup')]
+flake-update *inputs:
+    nix flake update {{inputs}}

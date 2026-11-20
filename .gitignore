@@ -1,6 +1,10 @@
 # Rust
 /target
 
+# Nix and direnv
+/result
+.direnv/
+
 # IDEs
 .vscode/
 .idea/
