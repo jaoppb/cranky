@@ -1,7 +1,7 @@
 name: Tools
 
-# Audits GitHub itself (issues, labels, milestones, merge settings) against
-# tools.toml. The drift it finds comes from GitHub state, not from commits, so
+# Audits GitHub itself (issues, labels, milestones) against tools.toml; the
+# merge settings are audited only locally, see the matrix. The drift it finds comes from GitHub state, not from commits, so
 # it runs when an issue changes and when the declaration does, and it is not
 # part of ci.yml: an ordinary pull request must not go red because of an issue
 # someone else filed. Only one that changes the declaration or the pinned
@@ -74,7 +74,7 @@ jobs:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
           save: false
 
-      - name: Run just ${{ matrix.recipe }}
+      - name: Run just ${{ matrix.recipe }} ${{ matrix.args }}
         run: nix develop -c just ${{ matrix.recipe }} ${{ matrix.args }}
         env:
           GH_TOKEN: ${{ github.token }}
