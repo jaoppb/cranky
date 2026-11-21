@@ -2,7 +2,7 @@ use super::*;
 use crate::test_support::{instant, located};
 
 fn text(zone: &str, unix_seconds: u64) -> String {
-    LocalTime::at(instant(unix_seconds), &located(zone), Source::Localtime).to_string()
+    LocalTime::at_instant(instant(unix_seconds), &located(zone), Source::Localtime).to_string()
 }
 
 #[test]
@@ -134,7 +134,7 @@ fn the_parts_of_a_local_time_can_be_read() {
     let now = instant(1_795_000_000)
         .checked_add(std::time::Duration::from_millis(250))
         .unwrap();
-    let time = LocalTime::at(now, &located("Asia/Kolkata"), Source::TzVariable);
+    let time = LocalTime::at_instant(now, &located("Asia/Kolkata"), Source::TzVariable);
     assert_eq!((time.year(), time.month(), time.day()), (2026, 11, 18));
     assert_eq!((time.hour(), time.minute(), time.second()), (16, 36, 40));
     assert_eq!(time.subsec_millis(), 250);
@@ -171,6 +171,6 @@ fn a_clock_set_before_1970_reads_as_1970() {
     let before = std::time::UNIX_EPOCH
         .checked_sub(std::time::Duration::from_secs(10))
         .unwrap();
-    let time = LocalTime::at(before, &located("Europe/Lisbon"), Source::Localtime);
+    let time = LocalTime::at_instant(before, &located("Europe/Lisbon"), Source::Localtime);
     assert_eq!(time.to_string(), "1970-01-01T01:00:00+01:00");
 }

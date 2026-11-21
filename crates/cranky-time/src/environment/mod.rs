@@ -23,7 +23,7 @@ const MAX_FILE_SIZE: u64 = 1 << 20;
 /// The settings a time zone is found from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Environment {
-    tz: Option<String>,
+    timezone: Option<String>,
     localtime: PathBuf,
     databases: Vec<PathBuf>,
 }
@@ -45,7 +45,7 @@ impl Environment {
     }
 
     /// The system settings, given the values of `TZ` and `TZDIR`.
-    fn from_variables(tz: Option<OsString>, tzdir: Option<OsString>) -> Self {
+    fn from_variables(timezone: Option<OsString>, tzdir: Option<OsString>) -> Self {
         // A `TZDIR` that is not an absolute path is ignored. The C library
         // would search it from wherever the process happens to run.
         let databases = tzdir
@@ -55,7 +55,7 @@ impl Environment {
             .chain(DATABASES.map(PathBuf::from))
             .collect();
         Self {
-            tz: tz.map(|value| value.to_string_lossy().into_owned()),
+            timezone: timezone.map(|value| value.to_string_lossy().into_owned()),
             localtime: PathBuf::from(LOCALTIME),
             databases,
         }
@@ -63,23 +63,27 @@ impl Environment {
 
     /// Settings that do not come from this process.
     #[must_use]
-    pub fn new(tz: Option<&str>, localtime: impl Into<PathBuf>, databases: Vec<PathBuf>) -> Self {
+    pub fn new(
+        timezone: Option<&str>,
+        localtime: impl Into<PathBuf>,
+        databases: Vec<PathBuf>,
+    ) -> Self {
         Self {
-            tz: tz.map(str::to_string),
+            timezone: timezone.map(str::to_string),
             localtime: localtime.into(),
             databases,
         }
     }
 
-    pub(crate) fn tz(&self) -> Option<&str> {
-        self.tz.as_deref()
+    pub(crate) fn timezone(&self) -> Option<&str> {
+        self.timezone.as_deref()
     }
 
     /// The zone the `TZ` variable asks for: UTC when it is empty, as in the C
     /// library. `None` when it is unset, or is neither a zone file, a name in
     /// a database, nor a rule.
     pub(crate) fn zone_from_tz(&self) -> Option<Located> {
-        let value = self.tz.as_deref()?;
+        let value = self.timezone.as_deref()?;
         let value = value.strip_prefix(':').unwrap_or(value);
         if value.is_empty() {
             return Some(Located::unnamed(Zone::utc()));

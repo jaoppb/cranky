@@ -39,8 +39,8 @@ pub fn instant(unix_seconds: u64) -> SystemTime {
 
 /// An environment whose local time file is `localtime` and whose only zone
 /// database is the checked-in one.
-pub fn environment(tz: Option<&str>, localtime: &Path) -> Environment {
-    Environment::new(tz, localtime, vec![database()])
+pub fn environment(timezone: Option<&str>, localtime: &Path) -> Environment {
+    Environment::new(timezone, localtime, vec![database()])
 }
 
 /// A directory of its own for one test, removed when dropped.

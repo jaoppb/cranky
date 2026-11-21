@@ -123,9 +123,9 @@ fn block(reader: &mut Reader<'_>, counts: &Counts, width: usize) -> Option<Block
     let transitions = instants
         .chunks_exact(width)
         .zip(indexes)
-        .map(|(at, &index)| {
+        .map(|(raw, &index)| {
             Some(Transition {
-                at: integer(at)?,
+                instant: integer(raw)?,
                 kind: usize::from(index),
             })
         })
@@ -133,9 +133,9 @@ fn block(reader: &mut Reader<'_>, counts: &Counts, width: usize) -> Option<Block
     let leaps = leaps
         .chunks_exact(leap_size)
         .map(|raw| {
-            let (at, total) = raw.split_at_checked(width)?;
+            let (instant, total) = raw.split_at_checked(width)?;
             Some(Leap {
-                at: integer(at)?,
+                instant: integer(instant)?,
                 total: integer(total)?,
             })
         })
