@@ -281,7 +281,7 @@ def find_binary_path(
             return lib_path
 
     # Fallback to local build artifacts
-    for local_candidate in ["target/release/cranky", "target/debug/cranky"]:
+    for local_candidate in ["target/profiling/cranky", "target/debug/cranky"]:
         if os.path.exists(local_candidate):
             return local_candidate
 

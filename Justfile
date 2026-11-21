@@ -119,10 +119,11 @@ bench *args:
 bench-check:
     cargo bench --workspace --no-run
 
-# Record performance profile with samply
+# Build the profiling profile (release with debug info) and record a performance profile of it with samply
 [group('profile')]
 record-profile *args:
-    samply record --save-only -o scripts/profile.json.gz ./target/release/cranky {{args}}
+    cargo build --profile profiling --locked
+    samply record --save-only -o scripts/profile.json.gz ./target/profiling/cranky {{args}}
 
 # Analyze performance profile (JSON.GZ)
 [group('profile')]

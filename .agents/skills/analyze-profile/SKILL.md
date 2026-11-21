@@ -17,7 +17,7 @@ Cranky profile dumps are captured as Firefox Profiler / samply-compatible `JSON.
 
 ```mermaid
 flowchart LR
-    Build["1. Build Release\n(debug=1)"] --> Record["2. Record Profile\n(samply / just record-profile)"]
+    Build["1. Build Profiling\n(release + debug=1)"] --> Record["2. Record Profile\n(samply / just record-profile)"]
     Record --> Triage["3. Quick Triage\n(just analyze-profile --hide-system)"]
     Triage --> DeepDive["4. Deep Dive\n(Inclusive/Exclusive, Call Trees)"]
     DeepDive --> SourceFix["5. Source Correlation & Fix\n(file:line)"]
@@ -25,14 +25,13 @@ flowchart LR
 
 ---
 
-### Step 1: Build Release with Debug Symbols
+### Step 1: Build the Profiling Profile
 
-Cranky's `[profile.release]` in [`Cargo.toml`](file:///home/jao/code/cranky/Cargo.toml) is configured with `debug = 1` to include line tables and function names without disabling compiler optimizations.
+Cranky's `[profile.release]` in [`Cargo.toml`](file:///home/jao/code/cranky/Cargo.toml) strips the binary it ships, so it has no symbols to profile. `[profile.profiling]` inherits `release` and adds `debug = 1` and `strip = "none"`, keeping line tables and function names without disabling compiler optimizations. Its binary is `target/profiling/cranky`.
 
-Always build release before profiling:
+`just record-profile` builds it before every recording. To build it alone:
 ```bash
-just release
-# or: cargo build --release
+cargo build --profile profiling --locked
 ```
 
 ---
@@ -54,6 +53,8 @@ just record-profile -- -d 15 -- -c config.toml
 ```
 
 #### Option B: Attach to an Existing Cranky Process
+
+The process must run `target/profiling/cranky`: an installed or `just release` binary is stripped and yields no symbols.
 ```bash
 # Attach to running Cranky instance for 10 seconds
 samply record --save-only -o scripts/profile.json.gz -p $(pgrep cranky) -d 10
@@ -138,4 +139,4 @@ Common Cranky performance patterns and fixes:
 | `just analyze-profile --all-threads` | Output reports for all active threads in the profile |
 | `just analyze-profile -t <thread_name_or_tid>` | Filter analysis to a specific thread |
 | `just analyze-profile --json` | Output full analysis data as structured JSON |
-| `just analyze-profile -b target/release/cranky` | Specify binary explicitly for symbol resolution |
+| `just analyze-profile -b target/profiling/cranky` | Specify binary explicitly for symbol resolution |

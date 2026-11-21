@@ -46,6 +46,11 @@ docker run --rm \
 		rustup toolchain install
 		rustc --version
 		cargo build --release --locked
+		# [profile.release] strips the binary users install (#82).
+		if readelf --section-headers --wide /out/target/release/cranky | grep --quiet --extended-regexp "\.symtab|\.debug_"; then
+			echo "error: the release binary still has a symbol table or debug info" >&2
+			exit 1
+		fi
 	'
 
 staging="${OUT_DIR}/staging"

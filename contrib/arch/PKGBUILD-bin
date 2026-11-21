@@ -10,7 +10,8 @@ depends=('gcc-libs' 'glibc' 'wayland' 'libxkbcommon' 'fontconfig' 'dbus')
 optdepends=('uwsm: for systemd session management')
 provides=("cranky=${pkgver}")
 conflicts=('cranky')
-options=('!strip' '!debug')
+# The release binary is already stripped, and no debug info ships.
+options=('!debug')
 
 source=("${pkgname}-${pkgver}.tar.gz::${url}/releases/download/v${pkgver}/cranky-v${pkgver}-${CARCH}.tar.gz"
         "cranky.service::${url}/raw/v${pkgver}/contrib/systemd/cranky.service"
