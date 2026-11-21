@@ -58,7 +58,7 @@ Generate implementation code from a structured SPDD prompt (a REASONS Canvas). F
    b. **Apply the Norms** (`AGENTS.md` and the canvas Norms):
    - `AGENTS.md` "Hard constraints" is the full list; these are the rules generation breaks most often
    - Private fields with getters; newtypes for ids and names; `thiserror` errors per module or adapter
-   - No `as`, unchecked arithmetic or string slicing anywhere, tests included; no `unwrap`/`expect`/`panic!`/indexing outside tests (`clippy.toml` relaxes only those): use `get()`, `TryFrom`, `checked_*`/`saturating_*` and `Result`
+   - No `as`, unchecked arithmetic or string slicing anywhere, tests included; no `unwrap`/`expect`/`panic!`/indexing outside tests (`clippy.toml` relaxes those, and `print`/`dbg`, in tests): use `get()`, `TryFrom`, `checked_*`/`saturating_*` and `Result`
    - Identifiers of three or more characters, except `x`, `y`, `id`, `tx`, `rx`, `dx`, `dy` and `px`, tests included; name a binding after what it holds
    - Each item only as visible as its uses (`pub(super)`, `pub(in crate::…)`, `pub(crate)` only inside a `pub` module chain); every exported item has a doc that states its intent, and every exported type a `Debug` impl
    - No `#[tokio::test]`, `#[tokio::main]`, `#[tracing::instrument]` or `mockall`: tests use `crate::test_utils::block_on`, ports get hand-written fakes, spans are explicit
