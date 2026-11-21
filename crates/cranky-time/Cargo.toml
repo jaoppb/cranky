@@ -16,6 +16,7 @@ unused = { level = "deny", priority = -1 }
 rust_2018_idioms = { level = "deny", priority = -1 }
 future_incompatible = { level = "deny", priority = -1 }
 unreachable_pub = "forbid"
+missing_debug_implementations = "forbid"
 unsafe_code = "forbid"
 
 # The root `Cargo.toml` table, unchanged. `tests/architecture.rs` checks the

@@ -6,9 +6,12 @@ use zbus::Connection;
 use crate::shared::dbus::domain::BusType;
 use crate::shared::dbus::ports::DbusConnectionError;
 
+#[derive(Debug)]
 pub struct Connected;
+#[derive(Debug)]
 pub struct Disconnected;
 
+#[derive(Debug)]
 pub struct ZbusConnectionAdapter<State = Disconnected> {
     pub(crate) session_conn: Option<Connection>,
     pub(crate) system_conn: Option<Connection>,

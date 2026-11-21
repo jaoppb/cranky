@@ -6,6 +6,7 @@ use crate::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
 use cosmic_text::{FontSystem, SwashCache};
 use tiny_skia::PixmapMut;
 
+#[derive(Debug)]
 pub struct TinySkiaCanvasFactory {
     font_system: FontSystem,
     swash_cache: SwashCache,

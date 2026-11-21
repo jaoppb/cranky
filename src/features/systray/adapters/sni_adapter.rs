@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 use tracing::{Instrument, debug, error, info};
 use zbus::Connection;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SniAdapter {
     hub: Arc<SignalHub>,
     conn: Arc<tokio::sync::Mutex<Option<Connection>>>,

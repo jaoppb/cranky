@@ -24,6 +24,7 @@ pub(crate) type MonitorScalesMap = HashMap<MonitorId, Scale>;
 /// an entry) wakes the render loop exactly like a size change does.
 pub(crate) type ModuleErrorsMap = HashMap<ModuleSite, String>;
 
+#[derive(Debug)]
 pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
     hyprland: (watch::Sender<HyprlandState>, watch::Receiver<HyprlandState>),

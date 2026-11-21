@@ -38,6 +38,18 @@ pub struct LayoutContext<'a, F: CanvasFactory, E: LayoutEnginePort> {
     pub tooltip_layout_engine: &'a mut E,
 }
 
+impl<F: CanvasFactory, E: LayoutEnginePort> std::fmt::Debug for LayoutContext<'_, F, E> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LayoutContext")
+            .field("scale", &self.scale)
+            .field("current_bounds", &self.current_bounds)
+            .field("current_constraint", &self.current_constraint)
+            .field("child_errors", &self.child_errors)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PipelineDiff {
     new_vdom: VNode,

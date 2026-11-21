@@ -36,6 +36,7 @@ fn has_custom_or_pending(
     !custom.is_empty() || !pending.is_empty()
 }
 
+#[derive(Debug)]
 pub struct LightningCssAdapter;
 
 impl LightningCssAdapter {
