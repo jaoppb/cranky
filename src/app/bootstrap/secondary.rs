@@ -28,7 +28,8 @@ pub(super) async fn init_secondary_adapters(
 > {
     let conn_adapter = crate::shared::dbus::adapters::connection::ZbusConnectionAdapter::new()
         .connect()
-        .await?;
+        .await
+        .map_err(BootError::DbusConnection)?;
     let conn: Arc<dyn crate::shared::dbus::ports::DbusConnectionPort> = Arc::new(conn_adapter);
 
     let dbus_manager =

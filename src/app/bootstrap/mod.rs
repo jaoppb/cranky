@@ -35,7 +35,8 @@ use tracing_setup::init_tracing;
 pub fn run() -> Result<(), BootError> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
-        .build()?;
+        .build()
+        .map_err(BootError::Runtime)?;
     runtime.block_on(async {
         let env_adapter = crate::shared::env::adapters::system::OsEnvironmentAdapter;
         let app_env = std::sync::Arc::new(env_adapter.read_environment()?);

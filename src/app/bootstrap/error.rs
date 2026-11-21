@@ -9,7 +9,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum BootError {
     #[error(transparent)]
-    Runtime(#[from] std::io::Error),
+    Runtime(std::io::Error),
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
     #[error(transparent)]
@@ -17,7 +17,7 @@ pub enum BootError {
     #[error(transparent)]
     DisplayServer(#[from] DisplayServerError),
     #[error("DBus connection required: {0}")]
-    DbusConnection(#[from] DbusConnectionError),
+    DbusConnection(DbusConnectionError),
     #[error(transparent)]
     Builtins(#[from] BuiltinError),
     #[error(transparent)]
