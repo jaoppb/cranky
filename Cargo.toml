@@ -4,6 +4,10 @@ members = ["crates/cranky-time", "crates/cranky-unsafe"]
 [workspace.package]
 version = "0.14.0"
 edition = "2024"
+# The oldest Rust that builds cranky: the toolchain rust-toolchain.toml pins,
+# which scripts/release/build.sh checks. The AUR package builds with the
+# user's own stable Rust, and this makes an older one fail clearly.
+rust-version = "1.100"
 authors = ["jao"]
 license = "MIT"
 repository = "https://github.com/jaoppb/cranky"
@@ -23,6 +27,7 @@ name = "cranky"
 version.workspace = true
 description = "A minimalist, performant, and modular bar for Hyprland"
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true

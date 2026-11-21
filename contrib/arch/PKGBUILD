@@ -9,6 +9,11 @@ license=('MIT')
 depends=('gcc-libs' 'glibc' 'wayland' 'libxkbcommon' 'fontconfig' 'dbus')
 optdepends=('uwsm: for systemd session management')
 makedepends=('cargo' 'pkgconf')
+# The text rendering unit tests need a font, which a clean chroot lacks.
+checkdepends=('ttf-dejavu')
+# makepkg's default lto compiles the vendored Lua to GCC LTO bytecode, which
+# the Rust linker cannot read: the link fails on every lua_* symbol.
+options=('!lto')
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/v${pkgver}.tar.gz")
 sha256sums=('a9d13cfcd92beadab82820034dd9b2df3f6765f4776e246fe6f6a3dea1fa55da')
 
@@ -33,8 +38,12 @@ build() {
 check() {
 	cd "${srcdir}/${pkgname}-${pkgver}"
 	export CARGO_HOME="${srcdir}/cargo-home"
+	export RUSTUP_TOOLCHAIN=stable
+	export CARGO_TARGET_DIR=target
 	export RUSTFLAGS="${RUSTFLAGS:-} --cap-lints warn"
-	cargo test --frozen --workspace --all-features
+	# Unit tests only: the integration tests need dbus-daemon, a headless sway
+	# and grim, and tests/architecture.rs is a gate for the repository.
+	cargo test --frozen --workspace --lib --bins
 }
 
 package() {

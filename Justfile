@@ -16,7 +16,7 @@ build:
 # Run cargo build in release mode
 [group('build')]
 release:
-    cargo build --release
+    cargo build --release --locked
 
 # Run cargo clean to clean the build target
 [group('build')]
@@ -158,3 +158,10 @@ flake-update *inputs:
 [group('release')]
 bump-version version:
     ./scripts/bump-version.sh {{version}}
+
+# Build the release tarball outside Nix, start it on Arch and Debian, and build, install and start both AUR packages, as release-check.yml does (requires docker)
+[group('release')]
+release-check:
+    ./scripts/release/build.sh
+    ./scripts/release/smoke.sh
+    ./scripts/release/aur.sh local
