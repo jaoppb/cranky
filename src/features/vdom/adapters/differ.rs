@@ -3,8 +3,6 @@ use super::kind_differ::diff_node_kinds;
 use crate::features::vdom::domain::{DiffResult, Patch, VNode, VNodeKind};
 use crate::features::vdom::ports::VdomDiffPort;
 
-mod floating;
-
 #[derive(Debug, Default, Clone)]
 pub struct DefaultVdomDiffAdapter;
 
@@ -14,7 +12,7 @@ impl DefaultVdomDiffAdapter {
         Self
     }
 
-    fn diff_nodes(&self, old_node: &VNode, new_node: &VNode) -> Patch {
+    pub(super) fn diff_nodes(&self, old_node: &VNode, new_node: &VNode) -> Patch {
         if old_node.tag() != new_node.tag() {
             return Patch::Replace {
                 old_node_id: old_node.node_id(),

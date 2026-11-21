@@ -1,4 +1,4 @@
-use super::DefaultVdomDiffAdapter;
+use super::differ::DefaultVdomDiffAdapter;
 use crate::features::vdom::domain::{NodeId, Patch, VNode};
 
 impl DefaultVdomDiffAdapter {

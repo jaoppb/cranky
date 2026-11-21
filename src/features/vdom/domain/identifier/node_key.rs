@@ -11,13 +11,13 @@ impl NodeKey {
     ///
     /// Returns `VdomError::InvalidNodeKey` if the key is empty or whitespace.
     pub fn new(key: impl Into<String>) -> Result<Self, VdomError> {
-        let text = key.into();
-        if text.trim().is_empty() {
+        let node_key = key.into();
+        if node_key.trim().is_empty() {
             return Err(VdomError::InvalidNodeKey(
                 "NodeKey cannot be empty or whitespace".to_string(),
             ));
         }
-        Ok(Self(text))
+        Ok(Self(node_key))
     }
 
     #[must_use]
@@ -37,8 +37,8 @@ impl<'de> Deserialize<'de> for NodeKey {
     where
         D: serde::Deserializer<'de>,
     {
-        let text = String::deserialize(deserializer)?;
-        Self::new(text).map_err(serde::de::Error::custom)
+        let node_key = String::deserialize(deserializer)?;
+        Self::new(node_key).map_err(serde::de::Error::custom)
     }
 }
 

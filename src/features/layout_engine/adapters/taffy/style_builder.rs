@@ -76,17 +76,17 @@ fn apply_sizing_and_flex(style: &mut Style, computed: &ComputedStyle) {
     if let Some(height) = computed.height() {
         style.size.height = height.into();
     }
-    if let Some(minimum_width) = computed.min_width() {
-        style.min_size.width = minimum_width.into();
+    if let Some(min_width) = computed.min_width() {
+        style.min_size.width = min_width.into();
     }
-    if let Some(maximum_width) = computed.max_width() {
-        style.max_size.width = maximum_width.into();
+    if let Some(max_width) = computed.max_width() {
+        style.max_size.width = max_width.into();
     }
-    if let Some(minimum_height) = computed.min_height() {
-        style.min_size.height = minimum_height.into();
+    if let Some(min_height) = computed.min_height() {
+        style.min_size.height = min_height.into();
     }
-    if let Some(maximum_height) = computed.max_height() {
-        style.max_size.height = maximum_height.into();
+    if let Some(max_height) = computed.max_height() {
+        style.max_size.height = max_height.into();
     }
     if let Some(flex_grow) = computed.flex_grow() {
         style.flex_grow = flex_grow.value();

@@ -10,7 +10,7 @@ use lightningcss::values::length::LengthPercentageOrAuto;
 
 /// The declared `font-size`, if it used `em`/`rem`.
 ///
-/// A `Px`/`%`/absolute keyword result means `color_font::apply_font_size`
+/// A `Pixels`/`%`/absolute keyword result means `color_font::apply_font_size`
 /// already got it right, so there's nothing for the caller to correct.
 /// Kept separate from `detect_relative_lengths` below: font-size resolves
 /// against the *parent's* size, not the element's own, so `DeclaredStyle`
@@ -56,7 +56,7 @@ pub fn detect_relative_lengths(props: &[Property<'_>]) -> DeclaredLengths {
 }
 
 /// The declared length, if `value`'s serialized form used `em`/`rem` — a
-/// `Px`/`Percent`/`Auto` result means the ordinary pipeline already got it
+/// `Pixels`/`Percent`/`Auto` result means the ordinary pipeline already got it
 /// right, so there's nothing for this pass to do.
 pub(super) fn relative(value: &impl ToCss) -> Option<DeclaredLength> {
     let css_text = value.to_css_string(PrinterOptions::default()).ok()?;
