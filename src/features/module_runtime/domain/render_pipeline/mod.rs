@@ -11,6 +11,8 @@ pub mod paint_phase;
 pub mod pipeline;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_changes;
 
 pub use context::*;
 pub use floating_phase::*;

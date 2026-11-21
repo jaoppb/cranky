@@ -147,3 +147,50 @@ fn test_discover_monitors_bootstraps_unseen_monitor_with_no_live_layout() {
     let discovered = discover_monitors(&hub, &layouts, &seen, true);
     assert!(discovered.contains(&MonitorId::new("DP-1")));
 }
+
+/// A top-level actor has no embedding site to lose: it covers every monitor
+/// Wayland reports, even one it already rendered for and that no layout
+/// names, where an embedded actor stays suspended.
+#[test]
+fn test_discover_monitors_top_level_covers_every_wayland_monitor() {
+    use crate::features::module_runtime::adapters::event_loop::dispatch::discover_monitors;
+
+    let hub = SignalHub::new(Config::default());
+    let mut scales = hub.monitor_scales_rx().borrow().clone();
+    scales.insert(MonitorId::new("DP-1"), Scale::new(1.0));
+    scales.insert(MonitorId::new("HDMI-A-1"), Scale::new(1.0));
+    let _ = hub.monitor_scales_tx().send(scales);
+
+    let layouts: HashMap<MonitorId, crate::shared::primitives::ChildBounds> = HashMap::new();
+    let mut seen = std::collections::HashSet::new();
+    seen.insert(MonitorId::new("DP-1"));
+
+    let mut discovered = discover_monitors(&hub, &layouts, &seen, false);
+    discovered.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+    assert_eq!(
+        discovered,
+        vec![MonitorId::new("DP-1"), MonitorId::new("HDMI-A-1")]
+    );
+}
+
+/// An embedded actor keeps a seen monitor while its parent still gives it a
+/// layout there, and ignores a layout for a monitor Wayland does not know.
+#[test]
+fn test_discover_monitors_embedded_keeps_seen_monitor_with_a_live_layout() {
+    use crate::features::module_runtime::adapters::event_loop::dispatch::discover_monitors;
+
+    let hub = SignalHub::new(Config::default());
+    let mut scales = hub.monitor_scales_rx().borrow().clone();
+    scales.insert(MonitorId::new("DP-1"), Scale::new(1.0));
+    let _ = hub.monitor_scales_tx().send(scales);
+
+    let mut layouts: HashMap<MonitorId, u8> = HashMap::new();
+    layouts.insert(MonitorId::new("DP-1"), 0);
+    layouts.insert(MonitorId::new("GHOST-1"), 0);
+    let mut seen = std::collections::HashSet::new();
+    seen.insert(MonitorId::new("DP-1"));
+    seen.insert(MonitorId::new("GHOST-1"));
+
+    let discovered = discover_monitors(&hub, &layouts, &seen, true);
+    assert_eq!(discovered, vec![MonitorId::new("DP-1")]);
+}

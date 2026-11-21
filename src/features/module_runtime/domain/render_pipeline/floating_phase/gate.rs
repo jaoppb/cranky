@@ -114,6 +114,25 @@ mod tests {
         apply_gate(floating, sizes, rounds, &MonitorId::new("DP-1")).popup_held()
     }
 
+    /// Which of popup, panel and tooltip `floating` holds after the gate.
+    fn held_kinds(floating: FloatingLayouts) -> (bool, bool, bool) {
+        let gated = apply_gate(floating, None, &mut HashMap::new(), &MonitorId::new("DP-1"));
+        (gated.popup_held(), gated.panel_held(), gated.tooltip_held())
+    }
+
+    #[test]
+    fn holds_only_the_kind_whose_content_is_unsettled() {
+        assert_eq!(held_kinds(popup_of(host(280))), (true, false, false));
+        assert_eq!(
+            held_kinds(FloatingLayouts::new(None, Some(host(280)), None)),
+            (false, true, false)
+        );
+        assert_eq!(
+            held_kinds(FloatingLayouts::new(None, None, Some(host(280)))),
+            (false, false, true)
+        );
+    }
+
     #[test]
     fn holds_while_the_child_has_not_reported() {
         let mut rounds = HashMap::new();

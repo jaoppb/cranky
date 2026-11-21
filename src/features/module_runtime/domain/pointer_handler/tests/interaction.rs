@@ -83,6 +83,69 @@ mod tests {
         assert_eq!(handler.focused_node(&mon), Some(&root_ref()));
     }
 
+    /// A click runs actions but never changes hover, active or focus state,
+    /// and moving within the node already hovered changes nothing either.
+    #[test]
+    fn test_click_and_motion_within_the_hovered_node_leave_state_unchanged() {
+        let mut handler = PointerHandler::new();
+        let mon = MonitorId::new("DP-1");
+        let tree = make_test_tree();
+        let motion = |x| PointerEvent::PointerMotion {
+            surface: SurfaceKind::Bar,
+            pos: Position::new(x, 10),
+        };
+
+        assert!(
+            handler
+                .handle_event(&motion(10), &mon, &tree)
+                .has_state_changed()
+        );
+        assert!(
+            !handler
+                .handle_event(&motion(20), &mon, &tree)
+                .has_state_changed()
+        );
+
+        let click = handler.handle_event(
+            &PointerEvent::Click {
+                surface: SurfaceKind::Bar,
+                button: PointerButton::Left,
+                pos: Position::new(10, 10),
+            },
+            &mon,
+            &tree,
+        );
+        assert!(!click.has_state_changed());
+        assert_eq!(handler.hovered_node(&mon), Some(&root_ref()));
+    }
+
+    /// The interaction context carries this monitor's hovered, pressed and
+    /// focused nodes, and whether the monitor itself has focus, as given.
+    #[test]
+    fn test_interaction_context_carries_the_monitor_focus_as_given() {
+        let mut handler = PointerHandler::new();
+        let mon = MonitorId::new("DP-1");
+        let other = MonitorId::new("HDMI-A-1");
+        let _ = handler.handle_event(
+            &PointerEvent::PointerMotion {
+                surface: SurfaceKind::Bar,
+                pos: Position::new(10, 10),
+            },
+            &mon,
+            &make_test_tree(),
+        );
+
+        let focused = handler.interaction_context(&mon, true);
+        assert!(focused.is_monitor_focused());
+        assert_eq!(focused.hovered(), Some(&root_ref()));
+        assert_eq!(focused.active(), None);
+        assert_eq!(focused.focused(), None);
+
+        let unfocused = handler.interaction_context(&other, false);
+        assert!(!unfocused.is_monitor_focused());
+        assert_eq!(unfocused.hovered(), None);
+    }
+
     #[test]
     fn test_popup_dismissed_event() {
         let mon = MonitorId::new("DP-1");
