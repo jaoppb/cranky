@@ -46,6 +46,8 @@ impl<F: CanvasFactory, E: LayoutEnginePort> std::fmt::Debug for LayoutContext<'_
             .field("current_bounds", &self.current_bounds)
             .field("current_constraint", &self.current_constraint)
             .field("child_errors", &self.child_errors)
+            .field("current_child_sizes", &self.current_child_sizes)
+            .field("interaction_context", &self.interaction_context)
             .finish_non_exhaustive()
     }
 }
