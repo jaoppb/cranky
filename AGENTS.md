@@ -1,106 +1,47 @@
-# Cranky Agent Guide (AGENTS.md)
+# AGENTS.md
 
-This file provides instructions, architecture overview, and conventions for AI
-coding agents contributing to the Cranky codebase.
+The rules for anyone, agent or human, who changes Cranky. [`CONTRIBUTING.md`](CONTRIBUTING.md) is the procedure (setting up, filing an issue, opening a pull request, releasing); the rules it relies on are stated here, once.
 
 Cranky is a modular Wayland bar for Hyprland. Rust 2024 edition, single binary (`src/main.rs`) + library (`src/lib.rs`). The repository is a Cargo workspace: the `cranky` package at the root plus `crates/cranky-unsafe` and `crates/cranky-time`, so cargo commands that must cover everything take `--workspace` (the `just` recipes already do).
 
-## 🏗 Architecture Overview
+## Conventions
 
-Cranky uses a combination of **Hexagonal Architecture** (Ports and Adapters) and
-a **Reactive System** (using Tokio channels and a Signal Hub).
-
-### Directory Structure
-
-Cranky strictly follows **Feature-Sliced Design (FSD)** combined with Clean
-Architecture principles.
-
-- `src/features/`: Contains domain-specific vertical slices (e.g.,
-  `layout_engine`, `metrics`, `systray`, `workspaces`, `module_runtime`). Each
-  feature encapsulates its own `domain`, `ports`, and `adapters` related to that
-  business capability.
-- `src/shared/`: Unifies cross-cutting concerns, generic infrastructure, and
-  primitive types shared across features (e.g., `config`, `dbus`, `events`,
-  `primitives`, `rendering`, `scripting`, `wayland`).
-- `src/app/`: The application entry point and composition layer. It initializes
-  the system, registers actors/builtins, and manages the global state and module
-  registry.
-
-### The Module System
-
-Cranky is entirely modular. Every visual element (`workspace`, `clock`, `systray`,
-`metrics`) is an isolated module.
-
-- **Scripting:** Built-in modules are written in either **Lua** or **Rhai**. The
-  application detects and runs them using the `ScriptEnginePort`.
-- **Reactive Updates:** Modules subscribe to `SignalHub` events (e.g., Time,
-  DBus, Metrics) and only re-render when relevant state changes.
-
-## Conventions & Rules
-
-When modifying the codebase, adhere strictly to these principles:
-
-1. **Think Before Coding:** State your assumptions explicitly. If requirements
-   are ambiguous, clarify before proceeding.
-2. **Simplicity First:** Write the minimum code needed to solve the problem. Do
-   not introduce speculative features or over-engineer abstractions for
-   single-use code.
-3. **Surgical Changes:** Touch only what you must. Do not aggressively refactor
-   code adjacent to your task unless it is broken. Match the existing formatting
-   and style.
-4. **Encapsulation:** Struct fields should remain private; use getter methods to
-   expose necessary data.
-5. **Error Handling:** Use the `thiserror` crate to define granular, local
-   errors within modules and adapters.
-6. **Read Before You Write:** Check exports, shared utilities, and caller
-   functions before introducing new logic. Avoid silent conflicts; if two
-   patterns contradict, pick the better-tested one and explain why.
-7. **Styling & CSS Conventions:** Do not prefix CSS classes with the module
-   name. Styles are scoped per module (e.g. use `.container`, `.item`, `.label`,
-   `.root`, `.left`, `.center`, `.right`, rather than `.bar-left`,
-   `.workspace-item`, etc.).
-
-## 🧪 Testing Requirements
-
-- **Coverage:** Cranky targets an 80%+ unit test coverage for core logic and
-  module states.
-- **Intent-Driven Tests:** Tests must verify _intent_, not just behavior. Ensure
-  your tests fail if the underlying business logic changes incorrectly.
-- **Tools:** Use `cargo test` for running tests and `cargo llvm-cov` for
-  coverage reporting. New features must include unit tests.
-
-## 🔄 Execution Workflow
-
-1. **Goal-Driven Execution:** Define your success criteria before you start
-   typing code. Loop until these criteria are fully verified.
-2. **Checkpointing:** After every significant step, summarize what was done,
-   what has been verified, and what remains.
-3. **Fail Loudly:** Never skip tasks silently. If tests fail or an error occurs,
-   surface it immediately rather than masking it.
+1. **Think before coding:** state your assumptions explicitly. If requirements are ambiguous, clarify before proceeding.
+2. **Simplicity first:** write the minimum code needed to solve the problem. Do not introduce speculative features or over-engineer abstractions for single-use code.
+3. **Surgical changes:** touch only what you must. Do not refactor code adjacent to your task unless it is broken. Match the existing formatting and style.
+4. **Encapsulation:** struct fields stay private; use getter methods to expose necessary data.
+5. **Error handling:** use the `thiserror` crate to define granular, local errors within modules and adapters.
+6. **Read before you write:** check exports, shared utilities, and caller functions before introducing new logic. If two patterns contradict, pick the better-tested one and explain why.
+7. **CSS classes:** do not prefix them with the module name. Styles are scoped per module, so use `.container`, `.item`, `.label`, `.root`, `.left`, `.center`, `.right`, never `.bar-left` or `.workspace-item`.
+8. **Goal-driven execution:** define the success criteria before you start, and loop until they are verified.
+9. **Checkpointing:** after every significant step, summarize what was done, what has been verified, and what remains.
+10. **Fail loudly:** never skip a task silently. If a test fails or an error occurs, surface it rather than masking it.
 
 ## Commands
 
-The `Justfile` is the entry point (`just --list`). Key recipes:
+Every recipe runs only inside the flake devShell (`nix develop`, or direnv with `.envrc`): the `_devshell` guard at the top of the `Justfile` refuses otherwise, through the `CRANKY_DEVSHELL` variable `flake.nix` sets. `just --list` works anywhere; from outside the shell, run `nix develop -c just <recipe>`.
 
 | Task | Command |
 | --- | --- |
-| Build / run | `just build`, `just release`, `just run` |
-| Tests | `just test` (= `cargo test --workspace`) |
-| Single test | `cargo test <name>` — e.g. `cargo test test_find_module_clock_rhai_format` |
+| Build / run | `just build`, `just release`, `just run`, `just run-release`, `just clean` |
 | Full gate | `just check` (fmt-check, lint, arch-check, loc-check, test, deps-check, workflows-check) |
+| Tests | `just test` (= `cargo test --workspace`: unit, architecture and integration), `just test-unit` (no running service needed), `just test-integration [name]` |
+| Single test | `cargo test <name>` — e.g. `cargo test test_find_module_clock_rhai_format` |
 | Lints | `just lint` (Clippy, `--workspace --all-targets --all-features -- -D warnings`), `just lint-fix` |
 | Architecture gate | `just arch-check` (= `cargo test --test architecture`) |
 | LOC limit | `just loc-check` (= `scripts/lint-loc.sh`) |
 | Format | `just fmt`, `just fmt-check` |
-| Coverage | `just coverage` (needs `cargo-llvm-cov` + `genhtml`) |
-| Benchmarks | `just bench` (criterion, `benches/benchmarks.rs`) |
+| Dependencies | `just deps-check` (`cargo deny check` against `deny.toml`; needs the network) |
+| Workflows | `just workflows-check` (actionlint, with shellcheck) |
+| Coverage | `just coverage-check` (fails under 80% lines), `just coverage` (HTML report) |
+| Benchmarks | `just bench` (criterion, `benches/benchmarks.rs`), `just bench-check` (compile only) |
 | Profiling | `just release && just record-profile` then `just analyze-profile` (see the `analyze-profile` skill in `.agents/skills/`) |
+| GitHub audit | `just issues-check`, `just repo-check`, `just project-check`, `just project-sync` (see `CONTRIBUTING.md`) |
 | Git hooks | `just setup` (lefthook) |
-| Release | `just bump-version X.Y.Z` (edits `Cargo.toml`, `Cargo.lock` and `contrib/arch/PKGBUILD*` only), merge that as a pull request, then push the tag `vX.Y.Z` on `main` |
+| Tool pins | `just flake-update [input…]` (moves `flake.lock`, in a pull request of its own) |
+| Release | `just bump-version X.Y.Z` (see "Releasing" in `CONTRIBUTING.md`) |
 
 `lefthook.yml` calls the recipes: `lint-fix` + `lint`, `arch-check`, and `loc-check` pre-commit; `check` pre-push.
-
-Commit messages follow Conventional Commits with a scope: `feat(popup): ...`, `refactor(wayland): ...`.
 
 ## Hard constraints (these fail the build, not just review)
 
@@ -134,13 +75,13 @@ Reads env → loads config → builds `SignalHub` → creates four mpsc channels
 
 ### Signals (`src/shared/events/signals/`)
 
-`SignalHub` owns one `tokio::sync::watch` channel per state source — config, hyprland, time, dbus, systray, metrics, mpris, module sizes, monitor scales — plus a broadcast channel for pointer events. `SignalKind` (Time, Hyprland, DBus, Systray, Metrics, Mpris) is what modules declare in their `metadata()`; a module is only woken for signals it subscribes to.
+`SignalHub` owns one `tokio::sync::watch` channel per state source — config, hyprland, time, dbus, systray, metrics, mpris, module sizes, monitor scales, module errors — plus a broadcast channel for pointer events. `SignalKind` (Time, Hyprland, DBus, Systray, Metrics, Mpris) is what modules declare in their `metadata()`; a module is only woken for signals it subscribes to.
 
 ### Modules are scripts, and each one is an actor
 
 Every visual element — including the bar itself (`bar.lua`) — is a Lua or Rhai script in `assets/widgets/`, embedded via `include_str!` in `src/app/builtins.rs` and deployed to `~/.local/share/cranky/modules/`. User overrides live in `~/.config/cranky/modules/` and take precedence. `EngineSelection::Auto` tries Lua then Rhai; `EngineSelection::Explicit` pins one.
 
-The Rust side sees only `AnyModulePort` (`src/features/module_runtime/ports/module.rs`): `init`, `subscriptions`, `styles`, `refresh`, `render(monitor) -> VNode`, `call_function_with_args`. The Lua and Rhai adapters (`src/shared/scripting/adapters/`) both implement it — **any change to the scripting API must be mirrored in both, and both are covered by the same tests in `src/app/builtins.rs`.**
+The Rust side sees a module only through `AnyModulePort` (`src/features/module_runtime/ports/module.rs`): `init`, `subscriptions`, `dbus_subscriptions`, `styles`, `refresh`, `render(monitor) -> VNode`, `call_function`, `call_function_with_args`. The Lua and Rhai adapters (`src/shared/scripting/adapters/`) both implement it — **any change to the scripting API must be mirrored in both, and both are covered by the same tests in `src/app/builtins.rs`.**
 
 Script-side contract: define `init()`, `metadata()` (returns `subscriptions` + `styles`), `refresh()`, `render(monitor)`. Globals injected: `ui` (element constructors `flex`/`grid`/`text`/`progress`/`rect`/`image`/`module`/`popup`/`panel`, plus `ui.action.exec|call|systray`), `signals`, `config`, `sys`. `ui.module(name)` embeds a child module — that's how `bar.lua` composes the left/center/right slots.
 
@@ -156,7 +97,7 @@ State kept per `MonitorId`, so multi-monitor is a first-class dimension througho
 
 ### Styling
 
-CSS files in `assets/styles/`, deployed like widgets and resolved per module — a module declares its sheets in `metadata().styles`. Classes are scoped per module, so use `.container` / `.item` / `.root` / `.left`, never `.workspace-item`. Element tags (`bar`, `text`, `flex`, …) and pseudo-classes (`:focus`, `:hover`) are selectable.
+CSS files in `assets/styles/`, deployed like widgets and resolved per module — a module declares its sheets in `metadata().styles`. Classes are scoped per module (convention 7). Element tags (`bar`, `text`, `flex`, …) and pseudo-classes (`:focus`, `:hover`) are selectable.
 
 ### Hot reload
 
@@ -164,7 +105,42 @@ CSS files in `assets/styles/`, deployed like widgets and resolved per module —
 
 ## Testing
 
-Unit tests live inline in `#[cfg(test)] mod tests` next to the code; `src/test_utils.rs` holds shared macros/helpers (test-only). `tests/architecture.rs` is the only integration test and is a structural gate, not a behavior test. Target is 80%+ coverage on core logic and module state.
+- **Unit tests** live inline in `#[cfg(test)] mod tests` next to the code; `src/test_utils.rs` holds shared macros and helpers (test-only). New behaviour comes with unit tests.
+- **Intent, not just behaviour:** a test must fail when the logic it covers changes incorrectly.
+- **`tests/architecture.rs`** is a structural gate (lint tables, lint exceptions, LOC limits, layer rules, version files), not a behaviour test.
+- **`tests/integration/`** proves the D-Bus and Wayland adapters against real servers: it starts a private `dbus-daemon` and a headless `sway`, and takes screenshots with `grim`, all provided by the devShell. It never touches your own session bus or compositor.
+- **Coverage:** CI fails a pull request under 80% of lines (`just coverage-check`, `cargo-llvm-cov` 0.9.1).
+
+## Issues, branches and commits
+
+`tools.toml` declares the labels, milestones and Project board, and `just issues-check` audits every issue against it:
+
+- **Labels:** an issue carries exactly one `type:*` label and at least one `area:*` label, open or closed. The canonical labels are:
+
+<!-- labels:start -->
+- `type:feat`
+- `type:fix`
+- `type:chore`
+- `type:docs`
+- `type:refactor`
+- `type:spike`
+- `area:wayland`
+- `area:rendering`
+- `area:scripting`
+- `area:modules`
+- `area:tooling`
+- `area:docs`
+- `epic`
+<!-- labels:end -->
+
+- **Milestone:** an open issue has the release milestone (`vX.Y.Z`) it ships in.
+- **Parent:** an open issue is a sub-issue of an open parent (an epic or another issue), unless it carries the `epic` label itself. It never sits under an issue of an earlier release.
+- **Blockers:** "blocked by" relations are recorded natively and never form a cycle. An issue never blocks an issue of an earlier release.
+- **Board:** every issue, open or closed, is a card of the Project board.
+- **Branches:** `<type>/<issue>`, the type being the issue's `type:*` label (`docs/24`). A layer of stacked pull requests adds a suffix (`chore/31-shared`). One issue per branch.
+- **Commits:** Conventional Commits with a scope: `feat(popup): ...`, `refactor(wayland): ...`. Reference the issue with `Refs #<n>`; only the pull request body closes it, with `Closes #<n>`. Never close a parent epic from a commit.
+- **Gate:** `just check` passes before every push; the pre-push hook runs it, and it is never skipped with `--no-verify`. A pull request also needs the 11 required CI checks green: `fmt`, `lint`, `arch`, `loc`, `test`, `build`, `deps`, `coverage`, `bench`, `workflows`, `nix`. A change that can affect coverage or the benchmarks also passes `just coverage-check` or `just bench-check`, which CI runs. A change to `tools.toml`, the labels block of `AGENTS.md` or `CONTRIBUTING.md`, or the issue forms also passes `just repo-check`.
+- **Merging:** merge commits only (squash and rebase are disabled), done by the maintainer.
 
 <!-- ai-memory:start -->
 ## Long-term memory (ai-memory)
