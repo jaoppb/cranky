@@ -87,8 +87,8 @@ impl HyprlandAdapter {
                 })?
                 .into_iter()
                 .map(|dto| {
-                    let (mon, is_focused) = dto.into_domain();
-                    if is_focused {
+                    let (mon, focus) = dto.into_domain();
+                    if focus.is_focused() {
                         focused_monitor = Some(mon.name().clone());
                     }
                     (mon.name().clone(), mon)
