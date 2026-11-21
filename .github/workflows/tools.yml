@@ -6,9 +6,9 @@ name: Tools
 # from commits, so it runs when an issue changes and when the declaration
 # does, and it is not part of ci.yml: an ordinary pull request must not go
 # red because of an issue someone else filed. Only one that changes the
-# declaration or the pinned `tools` runs it. The labels blocks of the docs and
-# the issue forms, which repo-check also compares with tools.toml, run only
-# repo-check, in tools-docs.yml.
+# declaration or the pinned `tools` runs it. A change to the labels blocks of
+# the docs or to the issue forms, which repo-check also compares with
+# tools.toml, runs only repo-check, in tools-docs.yml.
 on:
   issues:
     # Closing or deleting an issue can clear a finding: most rules look at open issues.

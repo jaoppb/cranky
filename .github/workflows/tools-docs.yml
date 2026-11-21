@@ -2,10 +2,11 @@ name: Tools docs
 
 # The repo-check of tools.yml, for the files `tools repo check` compares with
 # tools.toml: the labels blocks of the docs [github.labels].docs lists, and the
-# issue forms [github.issue_templates] lists. GitHub filters paths per workflow,
-# not per job, so these paths live here rather than in tools.yml: a pull request
-# that only edits AGENTS.md must not run issues-check and go red because of an
-# issue someone else filed. repo-check still reads the labels and milestones on
+# issue forms [github.issue_templates] lists; a doc added to that list is added
+# to the paths below too. GitHub filters paths per workflow, not per job, so
+# these paths live here rather than in tools.yml: a pull request that only
+# edits AGENTS.md must not run issues-check and go red because of an issue
+# someone else filed. repo-check still reads the labels and milestones on
 # GitHub, so drift made there can turn such a pull request red too.
 on:
   pull_request:

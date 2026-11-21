@@ -25,6 +25,7 @@ title = "Cranky"
 
 [github.labels]
 # `tools repo check` fails when the labels block of these docs lists other labels than `items`.
+# CI runs that check on a change to them through the paths of .github/workflows/tools-docs.yml: list a new doc there too.
 docs = ["AGENTS.md", "CONTRIBUTING.md"]
 # A label on GitHub that is not declared here fails `tools repo check`; it is never deleted automatically.
 unmanaged = "error"
