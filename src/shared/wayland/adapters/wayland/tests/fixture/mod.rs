@@ -1,6 +1,7 @@
 //! A compositor-less `WaylandState` for unit tests: protocol objects are
 //! bound over a socket pair nobody reads from, so requests are just queued.
 
+mod bar;
 pub(in crate::shared::wayland::adapters::wayland) mod pointer;
 mod seat;
 mod state;
@@ -136,7 +137,7 @@ impl Fake {
         );
     }
 
-    /// A bar on output `name` with buffer scale `scale`.
+    /// A configured bar on output `name` with buffer scale `scale`.
     pub(crate) fn bar(&self, name: &str, scale: i32) -> WaylandBar {
         let surface = self.compositor.create_surface(&self.queue_handle, ());
         let layer_surface = self.layer_shell.get_layer_surface(

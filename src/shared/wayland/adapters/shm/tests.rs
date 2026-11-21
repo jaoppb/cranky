@@ -1,4 +1,4 @@
-use super::slot::BufferUserData;
+use super::slot::{BufferSlot, BufferUserData};
 use cranky_unsafe::SharedMapping;
 use std::path::Path;
 use std::sync::Arc;
@@ -22,6 +22,31 @@ fn test_buffer_user_data_and_busy_state() {
     user_data.set_busy(false);
     assert!(!user_data.is_busy());
     assert!(!cloned_data.is_busy());
+}
+
+/// A slot over an inert `wl_buffer`, sharing the busy flag `busy`.
+fn slot_sharing(busy: Arc<AtomicBool>) -> BufferSlot {
+    let (client, _server) = std::os::unix::net::UnixStream::pair().unwrap();
+    let backend = wayland_client::backend::Backend::connect(client).unwrap();
+    let buffer = <wayland_client::protocol::wl_buffer::WlBuffer as wayland_client::Proxy>::inert(
+        backend.downgrade(),
+    );
+    BufferSlot::new(buffer, busy)
+}
+
+/// The slot marks its buffer busy on hand-over; the release event, through the user data sharing
+/// the flag, frees it again.
+#[test]
+fn test_slot_busy_until_release() {
+    let busy = Arc::new(AtomicBool::new(false));
+    let slot = slot_sharing(busy.clone());
+    let user_data = BufferUserData::new(busy);
+    assert!(!slot.is_busy());
+    slot.set_busy(true);
+    assert!(slot.is_busy());
+    assert!(user_data.is_busy());
+    user_data.set_busy(false);
+    assert!(!slot.is_busy());
 }
 
 #[test]

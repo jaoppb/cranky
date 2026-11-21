@@ -106,3 +106,24 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::shared::config::domain::PopupEmbed;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::Fake;
+
+    /// The layer surface's first `configure` opens the bar's configure gate.
+    /// A zero size leaves the bar's size to the client, so no resize (and no
+    /// render request, which needs a runtime) follows.
+    #[test]
+    fn layer_surface_configure_marks_the_bar_configured() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let mut bar = fake.bar("DP-1", 1);
+        bar.configured = false;
+        state.bars.push(bar);
+        fake.configure_bar(&mut state, 0, 0, 0);
+        assert!(state.bars[0].configured);
+        assert_eq!((state.bars[0].width, state.bars[0].height), (1, 1));
+    }
+}
