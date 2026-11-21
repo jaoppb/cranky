@@ -281,7 +281,7 @@ impl ModuleRegistry {
     > {
         let cfg = ModuleConfig::new(
             key.name().clone(),
-            true,
+            crate::shared::config::domain::Enablement::Enabled,
             crate::shared::config::domain::EngineSelection::Auto,
             options,
         );
@@ -475,7 +475,7 @@ impl<
         let root_cfg = config.modules().get(root_name).cloned().unwrap_or_else(|| {
             ModuleConfig::new(
                 root_name.clone(),
-                true,
+                crate::shared::config::domain::Enablement::Enabled,
                 crate::shared::config::domain::EngineSelection::Auto,
                 config.root().options().clone(),
             )
@@ -514,7 +514,7 @@ impl<
                         if !self.name_to_ids.contains_key(&mod_name) {
                             let auto_cfg = ModuleConfig::new(
                                 mod_name,
-                                true,
+                                crate::shared::config::domain::Enablement::Enabled,
                                 crate::shared::config::domain::EngineSelection::Auto,
                                 ModuleOptions::default(),
                             );
@@ -737,7 +737,7 @@ mod tests {
 
         let calendar_cfg = ModuleConfig::new(
             crate::shared::primitives::ModuleName::new("calendar"),
-            true,
+            crate::shared::config::domain::Enablement::Enabled,
             crate::shared::config::domain::EngineSelection::Auto,
             crate::shared::primitives::ModuleOptions::default(),
         );

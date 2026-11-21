@@ -94,7 +94,7 @@ impl Dispatch<WlBuffer, BufferUserData> for WaylandState {
         _: &QueueHandle<Self>,
     ) {
         if matches!(event, wl_buffer::Event::Release) {
-            data.set_busy(false);
+            data.mark_released();
             tracing::trace!("WlBuffer released by compositor");
         }
     }

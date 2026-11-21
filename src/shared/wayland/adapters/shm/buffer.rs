@@ -129,7 +129,7 @@ impl ShmBuffer {
 
     pub(crate) fn swap_buffers(&mut self) {
         if let Some(slot) = self.slots.get(self.back_index) {
-            slot.set_busy(true);
+            slot.mark_busy();
         }
         self.back_index = 1usize.saturating_sub(self.back_index);
     }

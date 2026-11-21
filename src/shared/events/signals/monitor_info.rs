@@ -1,8 +1,8 @@
 //! The monitor list handed to scripts, built from Wayland's monitors and Hyprland's workspace data.
 
 use crate::features::workspaces::domain::MonitorName;
-use crate::shared::primitives::ScriptMonitorInfo;
 use crate::shared::primitives::geometry::Size;
+use crate::shared::primitives::{MonitorFocus, ScriptMonitorInfo};
 
 use super::hub::SignalHub;
 
@@ -43,7 +43,7 @@ impl SignalHub {
                     .with_name(mon_id.as_str().to_string())
                     .with_size(Size::new(0, 0))
                     .with_scale(*scale)
-                    .with_focused(is_focused)
+                    .with_focused(MonitorFocus::from(is_focused))
                     .with_workspaces(active_ws, special_ws),
             );
         }

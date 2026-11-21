@@ -3,6 +3,7 @@
 mod binary;
 pub mod color;
 pub mod dynamic;
+mod focus;
 pub mod geometry;
 mod ids;
 pub mod layout;
@@ -17,6 +18,7 @@ mod text_align;
 pub(crate) use binary::BinaryData;
 pub use color::{Color, DrawingColor};
 pub(crate) use dynamic::DynamicValue;
+pub(crate) use focus::MonitorFocus;
 #[cfg(test)]
 pub(crate) use geometry::Scale;
 pub(crate) use geometry::{Position, Size};

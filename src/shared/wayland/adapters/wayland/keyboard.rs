@@ -17,6 +17,15 @@ use xkbcommon::xkb;
 /// evdev key codes are offset by 8 in xkb.
 const EVDEV_OFFSET: u32 = 8;
 
+/// Whether the seat currently advertises the keyboard capability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KeyboardPresence {
+    /// The seat has a keyboard: one is bound if none is yet.
+    Present,
+    /// The seat lost its keyboard: the bound one is released.
+    Absent,
+}
+
 #[derive(Default)]
 pub(crate) struct KeyboardInput {
     device: Option<WlKeyboard>,
@@ -31,18 +40,25 @@ impl KeyboardInput {
     pub(crate) fn on_capability<D>(
         &mut self,
         seat: &WlSeat,
-        present: bool,
+        presence: KeyboardPresence,
         queue_handle: &QueueHandle<D>,
     ) where
         D: Dispatch<WlKeyboard, ()> + 'static,
     {
-        if present && self.device.is_none() {
-            self.device = Some(seat.get_keyboard(queue_handle, ()));
-        } else if !present && let Some(device) = self.device.take() {
-            if device.version() >= 3 {
-                device.release();
+        match presence {
+            KeyboardPresence::Present => {
+                if self.device.is_none() {
+                    self.device = Some(seat.get_keyboard(queue_handle, ()));
+                }
             }
-            *self = Self::default();
+            KeyboardPresence::Absent => {
+                if let Some(device) = self.device.take() {
+                    if device.version() >= 3 {
+                        device.release();
+                    }
+                    *self = Self::default();
+                }
+            }
         }
     }
 
@@ -124,6 +140,7 @@ fn escape_codes(keymap: &xkb::Keymap) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::Fake;
     use std::sync::atomic::{AtomicU32, Ordering};
 
     const ESC_EVDEV: u32 = 1;
@@ -186,6 +203,39 @@ mod tests {
     #[test]
     fn test_no_keymap_recognises_nothing() {
         assert!(!KeyboardInput::default().is_escape(ESC_EVDEV));
+    }
+
+    #[test]
+    fn test_keyboard_capability_binds_one_device() {
+        let fake = Fake::new();
+        let seat = fake.seat();
+        let mut input = KeyboardInput::default();
+        input.on_capability(&seat, KeyboardPresence::Present, &fake.queue_handle);
+        let first = input.device.clone().expect("keyboard bound");
+        input.on_capability(&seat, KeyboardPresence::Present, &fake.queue_handle);
+        assert_eq!(input.device, Some(first));
+    }
+
+    #[test]
+    fn test_lost_keyboard_capability_forgets_everything() {
+        let fake = Fake::new();
+        let seat = fake.seat();
+        let mut input = KeyboardInput::with_escape_code(ESC_EVDEV);
+        input.on_capability(&seat, KeyboardPresence::Present, &fake.queue_handle);
+        input.set_focus(fake.surface());
+        input.on_capability(&seat, KeyboardPresence::Absent, &fake.queue_handle);
+        assert!(input.device.is_none());
+        assert!(input.focus().is_none());
+        assert!(!input.is_escape(ESC_EVDEV));
+    }
+
+    #[test]
+    fn test_lost_capability_without_device_keeps_the_keymap() {
+        let fake = Fake::new();
+        let seat = fake.seat();
+        let mut input = KeyboardInput::with_escape_code(ESC_EVDEV);
+        input.on_capability(&seat, KeyboardPresence::Absent, &fake.queue_handle);
+        assert!(input.is_escape(ESC_EVDEV));
     }
 
     #[test]

@@ -1,3 +1,4 @@
+use super::focus::MonitorFocus;
 use super::geometry::{self, Size};
 use super::ids::MonitorId;
 use serde::{Deserialize, Serialize};
@@ -9,7 +10,8 @@ pub struct ScriptMonitorInfo {
     name: String,
     size: Size,
     scale: geometry::Scale,
-    is_focused: bool,
+    #[serde(rename = "is_focused")]
+    focus: MonitorFocus,
     active_workspace_id: Option<i32>,
     special_workspace_id: Option<i32>,
 }
@@ -34,8 +36,8 @@ impl ScriptMonitorInfo {
     }
 
     #[must_use]
-    pub(crate) const fn with_focused(mut self, is_focused: bool) -> Self {
-        self.is_focused = is_focused;
+    pub(crate) const fn with_focused(mut self, focus: MonitorFocus) -> Self {
+        self.focus = focus;
         self
     }
 
@@ -58,7 +60,7 @@ impl ScriptMonitorInfo {
             name,
             size: Size::new(0, 0),
             scale: geometry::Scale::new(1.0),
-            is_focused: false,
+            focus: MonitorFocus::Unfocused,
             active_workspace_id: None,
             special_workspace_id: None,
         }
@@ -86,7 +88,7 @@ impl ScriptMonitorInfo {
 
     #[must_use]
     pub(crate) const fn is_focused(&self) -> bool {
-        self.is_focused
+        self.focus.is_focused()
     }
 
     #[must_use]

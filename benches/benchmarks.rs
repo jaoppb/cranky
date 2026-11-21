@@ -543,7 +543,7 @@ fn bench_scripting(criterion: &mut Criterion) {
     let config = Config::default();
     let module_config = ModuleConfig::new(
         "test_bench".into(),
-        true,
+        cranky::shared::config::domain::Enablement::Enabled,
         EngineSelection::Auto,
         ModuleOptions::default(),
     );

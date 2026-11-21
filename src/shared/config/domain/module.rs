@@ -29,12 +29,31 @@ impl ModulesConfig {
     }
 }
 
+/// Whether a `[modules.<name>]` entry is loaded at startup; the TOML spells it `enable = true/false`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Enablement {
+    /// The module is loaded (`enable = true`, the default).
+    Enabled,
+    /// The module stays unloaded (`enable = false`).
+    Disabled,
+}
+
+impl From<bool> for Enablement {
+    fn from(enable: bool) -> Self {
+        if enable {
+            Self::Enabled
+        } else {
+            Self::Disabled
+        }
+    }
+}
+
 /// One `[modules.<name>]` entry: whether the module is enabled, which engine runs it and the
 /// options its script sees.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleConfig {
     name: ModuleName,
-    enable: bool,
+    enablement: Enablement,
     engine: EngineSelection,
     options: ModuleOptions,
 }
@@ -44,13 +63,13 @@ impl ModuleConfig {
     #[must_use]
     pub const fn new(
         name: ModuleName,
-        enable: bool,
+        enablement: Enablement,
         engine: EngineSelection,
         options: ModuleOptions,
     ) -> Self {
         Self {
             name,
-            enable,
+            enablement,
             engine,
             options,
         }
@@ -63,7 +82,7 @@ impl ModuleConfig {
 
     #[must_use]
     pub(crate) const fn is_enabled(&self) -> bool {
-        self.enable
+        matches!(self.enablement, Enablement::Enabled)
     }
 
     #[must_use]

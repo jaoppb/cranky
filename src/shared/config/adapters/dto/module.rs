@@ -44,14 +44,14 @@ impl ModulesConfigDto {
                     });
                     domain::ModuleConfig::new(
                         mod_name.clone(),
-                        enable,
+                        domain::Enablement::from(enable),
                         selection,
                         json_map_to_options(options),
                     )
                 }
                 ModuleEntryDto::OptionsOnly(options) => domain::ModuleConfig::new(
                     mod_name.clone(),
-                    true,
+                    domain::Enablement::Enabled,
                     domain::EngineSelection::Auto,
                     json_map_to_options(options),
                 ),

@@ -167,3 +167,29 @@ fn popup_embed_dto_defaults_to_composite() {
 fn popup_embed_dto_rejects_unknown_value() {
     assert!(toml::from_str::<PopupConfigDto>(r#"embed = "bogus""#).is_err());
 }
+
+#[test]
+fn modules_dto_maps_enable_to_enablement() {
+    let toml_str = r#"
+        [clock]
+        enable = false
+
+        [calendar]
+        format = "%d"
+
+        [time]
+        enable = true
+        engine = "rhai"
+    "#;
+    let dto: super::module::ModulesConfigDto = toml::from_str(toml_str).unwrap();
+    let domain = dto.into_domain();
+    let enabled = |name: &str| {
+        domain
+            .get(&crate::shared::primitives::ModuleName::new(name))
+            .unwrap()
+            .is_enabled()
+    };
+    assert!(!enabled("clock"));
+    assert!(enabled("calendar"));
+    assert!(enabled("time"));
+}

@@ -5,21 +5,35 @@ use crate::features::layout_engine::domain::FloatingKind;
 use crate::features::layout_engine::domain::popup::descendants_deepest_first;
 use crate::shared::events::core::{InteractionEvent, PointerEvent, SurfaceLifecycleEvent};
 
+/// Why a floating surface is torn down, which decides whether its own owner
+/// is told.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum TeardownCause {
+    /// The owning module closed its own popup or panel: it already knows, so
+    /// it gets no `PopupDismissed`/`PanelDismissed`.
+    OwnerClosed,
+    /// Every other path (an exclusivity conflict, a compositor-driven
+    /// `PopupDone`, Esc): the owner is sent its dismissal.
+    External,
+}
+
 /// Tears down `kind` and every floating surface nested inside it (decision
 /// 7), deepest first — destroying a non-topmost `xdg_popup` is a protocol
 /// error, so a parent can never be removed before its own children are.
 ///
-/// `notify_self` controls whether `kind` itself gets a
-/// `PopupDismissed`/`PanelDismissed` sent back to its owning module: `false`
-/// when that module closed its own popup (it already knows), `true` for
-/// every other teardown path — an exclusivity conflict or a
-/// compositor-driven `PopupDone`. Every descendant is always notified,
-/// regardless of `notify_self`: its owner needs to clear its own
+/// `cause` controls whether `kind` itself gets a
+/// `PopupDismissed`/`PanelDismissed` sent back to its owning module (see
+/// [`TeardownCause`]). Every descendant is always notified, regardless of
+/// `cause`: its owner needs to clear its own
 /// `popup_render_trees`/`panel_render_trees` cache and run its dismiss
 /// handler, or a suspended child could resurrect an in-place popup, or
 /// dedup could swallow a reopen, the next time its parent's popup opens
 /// again.
-pub(super) fn teardown_floating(state: &mut WaylandState, kind: &FloatingKind, notify_self: bool) {
+pub(super) fn teardown_floating(
+    state: &mut WaylandState,
+    kind: &FloatingKind,
+    cause: TeardownCause,
+) {
     let links: Vec<(FloatingKind, Option<FloatingKind>)> = state
         .floating_surfaces
         .iter()
@@ -42,7 +56,7 @@ pub(super) fn teardown_floating(state: &mut WaylandState, kind: &FloatingKind, n
         for child in floating.module_surfaces.values() {
             state.surface_to_id.remove(&child.surface);
         }
-        if index != last || notify_self {
+        if index != last || cause == TeardownCause::External {
             notify_dismissed(state, surface_kind);
         }
     }
@@ -130,7 +144,7 @@ mod tests {
         let mut rx = state.hub.pointer_rx();
         handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
         drain(&mut rx);
-        teardown_floating(&mut state, &popup_kind(), true);
+        teardown_floating(&mut state, &popup_kind(), TeardownCause::External);
         let expected = vec![child(leave(SurfaceKind::Bar)), dismissed()];
         assert_eq!(drain(&mut rx), expected);
         assert_eq!(state.pointer_target, None);
@@ -147,7 +161,7 @@ mod tests {
         handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
         drain(&mut rx);
         handle_pointer_leave(&mut state);
-        teardown_floating(&mut state, &popup_kind(), true);
+        teardown_floating(&mut state, &popup_kind(), TeardownCause::External);
         let expected = vec![child(leave(SurfaceKind::Bar)), dismissed()];
         assert_eq!(drain(&mut rx), expected);
     }
@@ -209,6 +223,50 @@ mod tests {
         assert_eq!(state.pointer_target, before);
     }
 
+    /// The owner closed its own popup: it gets no notice, but a nested
+    /// popup's owner still does.
+    #[test]
+    fn teardown_by_owner_notifies_only_descendants() {
+        let fake = Fake::new();
+        let (mut state, _) = popup(&fake, 1);
+        let nested = FloatingKind::Popup(PopupTarget::new(
+            ModuleId::new(CHILD),
+            MonitorId::new("DP-1"),
+        ));
+        let mut floating = fake.floating(Size::new(1, 1), solid(1, 1, [0; 4]));
+        floating.parent = Some(popup_kind());
+        state.floating_surfaces.insert(nested, floating);
+        let mut rx = state.hub.pointer_rx();
+        teardown_floating(&mut state, &popup_kind(), TeardownCause::OwnerClosed);
+        let event = InteractionEvent::Lifecycle(SurfaceLifecycleEvent::PopupDismissed);
+        let expected = vec![(ModuleId::new(CHILD), MonitorId::new("DP-1"), event)];
+        assert_eq!(drain(&mut rx), expected);
+        assert!(state.floating_surfaces.is_empty());
+    }
+
+    #[test]
+    fn teardown_unregisters_child_subsurfaces() {
+        let fake = Fake::new();
+        let (mut state, surface) = popup(&fake, 1);
+        let module_surface = fake.module_surface(&surface);
+        let child_surface = module_surface.surface.clone();
+        let route = (
+            ModuleId::new(CHILD),
+            MonitorId::new("DP-1"),
+            SurfaceKind::Popup,
+        );
+        state.surface_to_id.insert(child_surface.clone(), route);
+        state
+            .floating_surfaces
+            .get_mut(&popup_kind())
+            .expect("popup")
+            .module_surfaces
+            .insert(ModuleId::new(CHILD), module_surface);
+        teardown_floating(&mut state, &popup_kind(), TeardownCause::External);
+        assert!(!state.surface_to_id.contains_key(&child_surface));
+        assert!(!state.surface_to_id.contains_key(&surface));
+    }
+
     #[test]
     fn teardown_and_hide_discard_pending_children() {
         let fake = Fake::new();
@@ -229,7 +287,7 @@ mod tests {
         state.floating_surfaces.insert(nested.clone(), floating);
         state.pending_children.insert(popup_kind(), pending_layer());
         state.pending_children.insert(nested, pending_layer());
-        teardown_floating(&mut state, &popup_kind(), true);
+        teardown_floating(&mut state, &popup_kind(), TeardownCause::External);
         assert!(state.pending_children.is_empty());
     }
 }

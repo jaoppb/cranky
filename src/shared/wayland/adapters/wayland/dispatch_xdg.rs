@@ -73,7 +73,11 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
                     .find(|(_, floating)| &floating.xdg_popup == proxy)
                     .map(|(kind, _)| kind.clone());
                 if let Some(kind) = matching_kind {
-                    super::floating_teardown::teardown_floating(state, &kind, true);
+                    super::floating_teardown::teardown_floating(
+                        state,
+                        &kind,
+                        super::floating_teardown::TeardownCause::External,
+                    );
                 }
             }
             other => tracing::debug!("xdg_popup Event: {other:?}"),
