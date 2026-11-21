@@ -60,8 +60,8 @@ prepare() {
 			# Clone the source and run pkgver() alone, which writes the version
 			# it resolves into the PKGBUILD; nothing is built.
 			sudo -u builder makepkg --nobuild --noprepare --nodeps --noconfirm
-			# makepkg writes that version into the PKGBUILD as text, which the
-			# AUR and every user source: only a describe of a version tag passes.
+			# pkgver() itself refuses anything but a plain version; this checks
+			# again what makepkg wrote, before the AUR and every user source it.
 			if ! grep --quiet --extended-regexp --line-regexp \
 				'pkgver=[0-9]+(\.[0-9]+)*\.r[0-9]+\.g[0-9a-f]{7,}' PKGBUILD; then
 				echo "error: pkgver() resolved to an unexpected version" >&2

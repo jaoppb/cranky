@@ -18,7 +18,9 @@ permissions:
 # One publish at a time: a newer run waits for the running one, and replaces
 # any run still waiting.
 concurrency:
-  group: ${{ github.workflow }}
+  # Per ref, so a run from another branch, which the job condition skips,
+  # cannot replace a waiting run of main.
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -65,4 +67,4 @@ jobs:
           commit_username: ${{ secrets.AUR_USERNAME }}
           commit_email: ${{ secrets.AUR_EMAIL }}
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
-          commit_message: 'Update to ${{ github.sha }}'
+          commit_message: 'Update the recipe from main'
