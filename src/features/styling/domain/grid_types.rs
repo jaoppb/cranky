@@ -19,9 +19,11 @@ pub enum GridAutoFlow {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum GridTrack {
-    Px(f32),
+    #[serde(rename = "Px")]
+    Pixels(f32),
     Percent(f32),
-    Fr(f32),
+    #[serde(rename = "Fr")]
+    Fraction(f32),
     Auto,
     MinContent,
     MaxContent,
@@ -68,7 +70,7 @@ pub enum PseudoClass {
     FirstChild,
     LastChild,
     OnlyChild,
-    NthChild { a: i32, b: i32 },
-    NthLastChild { a: i32, b: i32 },
+    NthChild { step_size: i32, offset: i32 },
+    NthLastChild { step_size: i32, offset: i32 },
     Empty,
 }

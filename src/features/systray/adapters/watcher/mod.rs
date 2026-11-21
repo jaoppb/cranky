@@ -74,8 +74,8 @@ impl Watcher {
         let hub = self.hub.clone();
 
         self.runtime.spawn(async move {
-            if let Err(e) = Self::track_item(conn, items, hub, dbus_dest, full_path).await {
-                error!("Failed to track SNI item: {e}");
+            if let Err(error) = Self::track_item(conn, items, hub, dbus_dest, full_path).await {
+                error!("Failed to track SNI item: {error}");
             }
         });
     }

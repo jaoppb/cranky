@@ -54,16 +54,24 @@ fn substitute_vars_inner<S: BuildHasher>(
         let Some(inner) = after.get(..end) else {
             break;
         };
-        let (name, fallback) = inner
-            .split_once(',')
-            .map_or_else(|| (inner.trim(), None), |(n, f)| (n.trim(), Some(f.trim())));
+        let (name, fallback) = inner.split_once(',').map_or_else(
+            || (inner.trim(), None),
+            |(var_name, fallback_value)| (var_name.trim(), Some(fallback_value.trim())),
+        );
 
         let resolved = custom_properties
             .get(name)
-            .map(|v| substitute_vars_inner(v, custom_properties, depth.saturating_add(1)))
+            .map(|property_value| {
+                substitute_vars_inner(property_value, custom_properties, depth.saturating_add(1))
+            })
             .or_else(|| {
-                fallback
-                    .map(|f| substitute_vars_inner(f, custom_properties, depth.saturating_add(1)))
+                fallback.map(|fallback_value| {
+                    substitute_vars_inner(
+                        fallback_value,
+                        custom_properties,
+                        depth.saturating_add(1),
+                    )
+                })
             });
         if let Some(resolved) = resolved {
             result.push_str(&resolved);
@@ -75,17 +83,17 @@ fn substitute_vars_inner<S: BuildHasher>(
 }
 
 /// Index of the `)` matching the implicit `(` already consumed before
-/// `s`, respecting nested parens (a fallback value can itself contain a
+/// `text`, respecting nested parens (a fallback value can itself contain a
 /// function call, e.g. `var(--x, rgb(0, 0, 0))`).
-fn matching_close_paren(s: &str) -> Option<usize> {
+fn matching_close_paren(text: &str) -> Option<usize> {
     let mut depth = 1i32;
-    for (i, c) in s.char_indices() {
-        match c {
+    for (index, character) in text.char_indices() {
+        match character {
             '(' => depth = depth.saturating_add(1),
             ')' => {
                 depth = depth.saturating_sub(1);
                 if depth == 0 {
-                    return Some(i);
+                    return Some(index);
                 }
             }
             _ => {}
@@ -101,7 +109,7 @@ mod tests {
     fn vars(pairs: &[(&str, &str)]) -> HashMap<String, String> {
         pairs
             .iter()
-            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
             .collect()
     }
 

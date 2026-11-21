@@ -39,14 +39,14 @@ pub fn apply_border_properties(style: &mut ComputedStyle, prop: &Property<'_>) -
         Property::BorderColor(color) => {
             // A real `border-color` value is always one to four `<color>`s,
             // never a gradient — no string round-trip needed.
-            if let Some(c) = convert_color(&color.top) {
-                style.set_border_color(DrawingColor::Solid(c));
+            if let Some(top_color) = convert_color(&color.top) {
+                style.set_border_color(DrawingColor::Solid(top_color));
             }
             true
         }
         Property::BorderImageSource(image) => {
-            if let Some(c) = gradient_from_image(image) {
-                style.set_border_color(c);
+            if let Some(gradient) = gradient_from_image(image) {
+                style.set_border_color(gradient);
             }
             true
         }
@@ -55,8 +55,8 @@ pub fn apply_border_properties(style: &mut ComputedStyle, prop: &Property<'_>) -
             // `outset`/`repeat` (9-slice image compositing) have no
             // equivalent in this renderer and are silently left at their
             // defaults rather than attempted.
-            if let Some(c) = gradient_from_image(&border_image.source) {
-                style.set_border_color(c);
+            if let Some(gradient) = gradient_from_image(&border_image.source) {
+                style.set_border_color(gradient);
             }
             true
         }
@@ -72,7 +72,7 @@ pub fn apply_border(style: &mut ComputedStyle, border: &Border) {
             .unwrap_or_default(),
     );
     style.set_border_size(BorderSize::new(px));
-    if let Some(c) = convert_color(&border.color) {
-        style.set_border_color(DrawingColor::Solid(c));
+    if let Some(color) = convert_color(&border.color) {
+        style.set_border_color(DrawingColor::Solid(color));
     }
 }

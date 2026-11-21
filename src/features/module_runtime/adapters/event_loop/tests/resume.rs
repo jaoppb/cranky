@@ -56,13 +56,13 @@ fn embedded_event_loop(
     scales.insert(mon.clone(), Scale::new(1.0));
     let _ = hub.monitor_scales_tx().send(scales);
 
-    let sm = Arc::new(CountingSurfaceManager::default());
+    let surface_manager = Arc::new(CountingSurfaceManager::default());
     let (layout_tx, layout_rx) = tokio::sync::watch::channel(Layouts::new());
     // Embedded inside module 7's popup — the calendar-in-clock-popup case.
     let ctx = ModuleContext::new(
         ModuleId::new(42),
         hub,
-        sm.clone(),
+        surface_manager.clone(),
         Arc::new(MockLayoutSender),
         Arc::new(MockDisplaySender),
         Arc::new(MockUiSender),
@@ -82,7 +82,7 @@ fn embedded_event_loop(
         Arc::new(CompositeStyleResolver::new(vec![])),
         Arc::new(DefaultVdomDiffAdapter::new()),
     );
-    (event_loop, layout_tx, sm)
+    (event_loop, layout_tx, surface_manager)
 }
 
 fn site(mon: &MonitorId) -> Layouts {
@@ -100,12 +100,12 @@ fn site(mon: &MonitorId) -> Layouts {
 #[test]
 fn suspended_embedded_actor_rerenders_when_site_returns() {
     let mon = MonitorId::new("DP-1");
-    let (mut event_loop, layout_tx, sm) = embedded_event_loop(&mon);
+    let (mut event_loop, layout_tx, surface_manager) = embedded_event_loop(&mon);
     let mut engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
 
     let _ = layout_tx.send(site(&mon));
     event_loop.render_all_monitors(&mut engines);
-    assert_eq!(sm.child_submits.load(Ordering::SeqCst), 1);
+    assert_eq!(surface_manager.child_submits.load(Ordering::SeqCst), 1);
 
     // Popup closes: the parent withdraws the rect. Several passes happen
     // while suspended (any subscribed signal wakes the actor).
@@ -113,7 +113,7 @@ fn suspended_embedded_actor_rerenders_when_site_returns() {
     event_loop.render_all_monitors(&mut engines);
     event_loop.render_all_monitors(&mut engines);
     event_loop.render_all_monitors(&mut engines);
-    assert_eq!(sm.child_submits.load(Ordering::SeqCst), 1);
+    assert_eq!(surface_manager.child_submits.load(Ordering::SeqCst), 1);
 
     // Popup reopens at the same rect. Relies on `retain_monitors` having
     // cleared the suspended monitor's rendered bounds: a pruning change that
@@ -121,5 +121,5 @@ fn suspended_embedded_actor_rerenders_when_site_returns() {
     // hole in the composited popup.
     let _ = layout_tx.send(site(&mon));
     event_loop.render_all_monitors(&mut engines);
-    assert_eq!(sm.child_submits.load(Ordering::SeqCst), 2);
+    assert_eq!(surface_manager.child_submits.load(Ordering::SeqCst), 2);
 }

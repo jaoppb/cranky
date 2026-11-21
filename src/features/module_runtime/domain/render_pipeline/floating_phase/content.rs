@@ -43,8 +43,8 @@ pub(super) fn layout_floating_content<F: CanvasFactory, E: LayoutEnginePort>(
     let mut measurer = ModuleSizeMeasurer::new(measurer_inner, pass.current_child_sizes);
     match layout_engine.calculate_layout(content.clone(), &mut measurer, Position::new(0, 0)) {
         Ok(node) => Some(node),
-        Err(e) => {
-            tracing::error!(err = ?e, "Floating content layout calculation failed");
+        Err(error) => {
+            tracing::error!(err = ?error, "Floating content layout calculation failed");
             None
         }
     }

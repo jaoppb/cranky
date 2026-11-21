@@ -22,13 +22,13 @@ fn test_workspace_name() {
 
 #[test]
 fn test_workspace_operations() {
-    let mut ws = Workspace::new(WorkspaceId::new(1), WorkspaceName::new("1"), None);
-    assert_eq!(*ws.id(), WorkspaceId::new(1));
-    assert_eq!(ws.name(), &WorkspaceName::new("1"));
-    assert_eq!(ws.monitor(), None);
+    let mut workspace = Workspace::new(WorkspaceId::new(1), WorkspaceName::new("1"), None);
+    assert_eq!(*workspace.id(), WorkspaceId::new(1));
+    assert_eq!(workspace.name(), &WorkspaceName::new("1"));
+    assert_eq!(workspace.monitor(), None);
 
-    ws.set_monitor(MonitorName::new("eDP-1"));
-    assert_eq!(ws.monitor(), Some(&MonitorName::new("eDP-1")));
+    workspace.set_monitor(MonitorName::new("eDP-1"));
+    assert_eq!(workspace.monitor(), Some(&MonitorName::new("eDP-1")));
 }
 
 #[test]

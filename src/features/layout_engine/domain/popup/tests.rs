@@ -81,38 +81,44 @@ fn test_compute_conflicts_never_returns_an_ancestor() {
 
 #[test]
 fn test_ancestors_walks_the_chain_nearest_first() {
-    let a = FloatingKind::Popup(PopupTarget::new(ModuleId::new(1), MonitorId::new("DP-1")));
-    let b = FloatingKind::Popup(PopupTarget::new(ModuleId::new(2), MonitorId::new("DP-1")));
-    let c = FloatingKind::Popup(PopupTarget::new(ModuleId::new(3), MonitorId::new("DP-1")));
+    let topmost = FloatingKind::Popup(PopupTarget::new(ModuleId::new(1), MonitorId::new("DP-1")));
+    let middle = FloatingKind::Popup(PopupTarget::new(ModuleId::new(2), MonitorId::new("DP-1")));
+    let innermost = FloatingKind::Popup(PopupTarget::new(ModuleId::new(3), MonitorId::new("DP-1")));
 
-    // c's parent is b, b's parent is a, a has no parent (topmost).
-    let links = [(c.clone(), Some(b.clone())), (b.clone(), Some(a.clone()))];
-    let parent_of = |k: &FloatingKind| {
+    // innermost's parent is middle, middle's parent is topmost, topmost has no parent.
+    let links = [
+        (innermost.clone(), Some(middle.clone())),
+        (middle.clone(), Some(topmost.clone())),
+    ];
+    let parent_of = |child: &FloatingKind| {
         links
             .iter()
-            .find(|(kind, _)| kind == k)
-            .and_then(|(_, p)| p.clone())
+            .find(|(kind, _)| kind == child)
+            .and_then(|(_, parent)| parent.clone())
     };
 
-    let result = ancestors(&c, parent_of).expect("no cycle");
-    assert_eq!(result, vec![b, a]);
+    let result = ancestors(&innermost, parent_of).expect("no cycle");
+    assert_eq!(result, vec![middle, topmost]);
 }
 
 #[test]
 fn test_ancestors_rejects_a_cycle() {
-    let a = FloatingKind::Popup(PopupTarget::new(ModuleId::new(1), MonitorId::new("DP-1")));
-    let b = FloatingKind::Popup(PopupTarget::new(ModuleId::new(2), MonitorId::new("DP-1")));
+    let first = FloatingKind::Popup(PopupTarget::new(ModuleId::new(1), MonitorId::new("DP-1")));
+    let second = FloatingKind::Popup(PopupTarget::new(ModuleId::new(2), MonitorId::new("DP-1")));
 
-    // a's parent is b, b's parent is a: a cycle.
-    let links = [(a.clone(), Some(b.clone())), (b, Some(a.clone()))];
-    let parent_of = |k: &FloatingKind| {
+    // first's parent is second, second's parent is first: a cycle.
+    let links = [
+        (first.clone(), Some(second.clone())),
+        (second, Some(first.clone())),
+    ];
+    let parent_of = |child: &FloatingKind| {
         links
             .iter()
-            .find(|(kind, _)| kind == k)
-            .and_then(|(_, p)| p.clone())
+            .find(|(kind, _)| kind == child)
+            .and_then(|(_, parent)| parent.clone())
     };
 
-    assert_eq!(ancestors(&a, parent_of), Err(PopupCycle));
+    assert_eq!(ancestors(&first, parent_of), Err(PopupCycle));
 }
 
 #[test]

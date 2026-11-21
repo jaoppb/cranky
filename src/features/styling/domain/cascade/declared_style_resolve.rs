@@ -15,7 +15,7 @@ pub(super) fn cascade_from<T>(keyword: Option<CssWideKeyword>, value: Option<T>)
 
 pub(super) fn resolve<T: Clone>(cascade: Cascade<T>, inherited: Option<&T>) -> Option<T> {
     match cascade {
-        Cascade::Value(v) => Some(v),
+        Cascade::Value(value) => Some(value),
         Cascade::NotDeclared | Cascade::Inherit => inherited.cloned(),
         Cascade::Initial => None,
     }
@@ -38,20 +38,20 @@ pub(super) fn resolve_font_size(
             .unwrap_or(FontSize::new(DEFAULT_FONT_SIZE))
     };
     match cascade {
-        Cascade::Value(DeclaredLength::Px(v)) => Some(FontSize::new(v)),
-        Cascade::Value(DeclaredLength::Percent(v)) => {
-            Some(FontSize::new(v / 100.0 * parent_or_default().value()))
+        Cascade::Value(DeclaredLength::Pixels(pixels)) => Some(FontSize::new(pixels)),
+        Cascade::Value(DeclaredLength::Percent(percentage)) => Some(FontSize::new(
+            percentage / 100.0 * parent_or_default().value(),
+        )),
+        Cascade::Value(DeclaredLength::Ems(ems)) => {
+            Some(FontSize::new(ems * parent_or_default().value()))
         }
-        Cascade::Value(DeclaredLength::Em(v)) => {
-            Some(FontSize::new(v * parent_or_default().value()))
-        }
-        Cascade::Value(DeclaredLength::Rem(v)) => {
-            Some(FontSize::new(v * inherited.root_font_size().value()))
+        Cascade::Value(DeclaredLength::Rem(root_ems)) => {
+            Some(FontSize::new(root_ems * inherited.root_font_size().value()))
         }
         Cascade::Value(DeclaredLength::Calc {
             percent,
             px,
-            em,
+            ems,
             rem,
         }) => {
             // font-size is the one length where a calc() percent term is
@@ -60,7 +60,7 @@ pub(super) fn resolve_font_size(
             // relative to the *parent's* font-size, which is already known
             // here.
             let parent = parent_or_default().value();
-            let px_total = (percent / 100.0 + em).mul_add(parent, px);
+            let px_total = (percent / 100.0 + ems).mul_add(parent, px);
             Some(FontSize::new(
                 rem.mul_add(inherited.root_font_size().value(), px_total),
             ))

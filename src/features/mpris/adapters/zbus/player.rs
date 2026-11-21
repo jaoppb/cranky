@@ -21,9 +21,9 @@ pub(crate) async fn add_player(
         .get_all_properties(BusType::Session, &dest, &path, &iface)
         .await
     {
-        Ok(p) => p,
-        Err(e) => {
-            warn!("Failed to read MPRIS properties for {dest:?}: {e}");
+        Ok(properties) => properties,
+        Err(error) => {
+            warn!("Failed to read MPRIS properties for {dest:?}: {error}");
             return;
         }
     };

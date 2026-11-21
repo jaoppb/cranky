@@ -25,10 +25,10 @@ impl MatchedRule {
 /// the caller has a value to inherit from.
 #[must_use]
 pub fn fold_matches(mut matches: Vec<MatchedRule>) -> DeclaredStyle {
-    matches.sort_by_key(|m| m.priority);
+    matches.sort_by_key(|matched| matched.priority);
     let mut result = DeclaredStyle::default();
-    for m in &matches {
-        result.merge_with(&m.style);
+    for matched in &matches {
+        result.merge_with(&matched.style);
     }
     result
 }

@@ -15,7 +15,7 @@ impl<'a> TaffyTreeBuilder<'a> {
     pub(super) fn add_leaf(&mut self, style: Style) -> Result<NodeId, LayoutError> {
         self.taffy
             .new_leaf(style)
-            .map_err(|e| LayoutError::EngineError(e.to_string()))
+            .map_err(|error| LayoutError::EngineError(error.to_string()))
     }
 
     pub(super) fn add_node(
@@ -25,13 +25,13 @@ impl<'a> TaffyTreeBuilder<'a> {
     ) -> Result<NodeId, LayoutError> {
         self.taffy
             .new_with_children(style, children)
-            .map_err(|e| LayoutError::EngineError(e.to_string()))
+            .map_err(|error| LayoutError::EngineError(error.to_string()))
     }
 
     pub(super) fn set_style(&mut self, node_id: NodeId, style: Style) -> Result<(), LayoutError> {
         self.taffy
             .set_style(node_id, style)
-            .map_err(|e| LayoutError::EngineError(e.to_string()))
+            .map_err(|error| LayoutError::EngineError(error.to_string()))
     }
 
     pub(super) fn set_children(
@@ -41,7 +41,7 @@ impl<'a> TaffyTreeBuilder<'a> {
     ) -> Result<(), LayoutError> {
         self.taffy
             .set_children(node_id, children)
-            .map_err(|e| LayoutError::EngineError(e.to_string()))
+            .map_err(|error| LayoutError::EngineError(error.to_string()))
     }
 
     /// Frees `node_id` and everything under it.

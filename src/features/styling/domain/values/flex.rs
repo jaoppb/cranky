@@ -30,8 +30,8 @@ impl<'de> Deserialize<'de> for FlexGrow {
     where
         D: serde::Deserializer<'de>,
     {
-        let v = f32::deserialize(deserializer)?;
-        Self::new(v).map_err(serde::de::Error::custom)
+        let grow = f32::deserialize(deserializer)?;
+        Self::new(grow).map_err(serde::de::Error::custom)
     }
 }
 
@@ -64,8 +64,8 @@ impl<'de> Deserialize<'de> for FlexShrink {
     where
         D: serde::Deserializer<'de>,
     {
-        let v = f32::deserialize(deserializer)?;
-        Self::new(v).map_err(serde::de::Error::custom)
+        let shrink = f32::deserialize(deserializer)?;
+        Self::new(shrink).map_err(serde::de::Error::custom)
     }
 }
 

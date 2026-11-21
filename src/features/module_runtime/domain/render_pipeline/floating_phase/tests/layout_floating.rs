@@ -48,7 +48,7 @@ fn run(bar: &RenderNode, interaction: Option<&InteractionContext>) -> (FloatingL
 
 #[test]
 fn bar_with_nothing_open_lays_out_no_floating_content() {
-    let bar = Spec::at(SurfaceSpace::Bar, &[]).flex(vec![]);
+    let bar = Spec::at_path(SurfaceSpace::Bar, &[]).flex(vec![]);
     let (layouts, engines) = run(&bar, None);
 
     assert!(layouts.popup().is_none());
@@ -73,7 +73,7 @@ fn each_open_floating_kind_is_laid_out_by_its_own_engine() {
             AnchorDirection::Bottom,
             Some(PopupOffset::new(3, 4)),
         )),
-        ..Spec::at(SurfaceSpace::Bar, &[0])
+        ..Spec::at_path(SurfaceSpace::Bar, &[0])
     }
     .leaf();
     let launcher = Spec {
@@ -86,10 +86,10 @@ fn each_open_floating_kind_is_laid_out_by_its_own_engine() {
             ExclusiveZone::none(),
             KeyboardInteractivity::None,
         )),
-        ..Spec::at(SurfaceSpace::Bar, &[1])
+        ..Spec::at_path(SurfaceSpace::Bar, &[1])
     }
     .leaf();
-    let bar = Spec::at(SurfaceSpace::Bar, &[]).flex(vec![button, launcher]);
+    let bar = Spec::at_path(SurfaceSpace::Bar, &[]).flex(vec![button, launcher]);
     // The pointer is over the popup's content, which carries a tooltip.
     let hovered = NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Popup));
     let interaction = InteractionContext::new(Some(hovered), None, None, true);

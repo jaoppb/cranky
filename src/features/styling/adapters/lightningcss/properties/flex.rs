@@ -26,32 +26,32 @@ pub fn apply_flex_container_properties(style: &mut ComputedStyle, prop: &Propert
             true
         }
         Property::FlexDirection(dir, _) => {
-            let s = dir
+            let css_text = dir
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            let fd = match s.as_str() {
+            let flex_direction = match css_text.as_str() {
                 "column" => Some(FlexDirection::Column),
                 "row" => Some(FlexDirection::Row),
                 _ => None,
             };
-            if let Some(d) = fd {
-                style.set_flex_direction(d);
+            if let Some(direction) = flex_direction {
+                style.set_flex_direction(direction);
             }
             true
         }
-        Property::JustifyContent(jc, _) => {
-            let s = jc
+        Property::JustifyContent(justify, _) => {
+            let css_text = justify
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            let val = if s.contains("space-between") {
+            let val = if css_text.contains("space-between") {
                 JustifyContent::SpaceBetween
-            } else if s.contains("space-around") {
+            } else if css_text.contains("space-around") {
                 JustifyContent::SpaceAround
-            } else if s.contains("space-evenly") {
+            } else if css_text.contains("space-evenly") {
                 JustifyContent::SpaceEvenly
-            } else if s.contains("center") {
+            } else if css_text.contains("center") {
                 JustifyContent::Center
-            } else if s.contains("end") || s.contains("flex-end") {
+            } else if css_text.contains("end") || css_text.contains("flex-end") {
                 JustifyContent::End
             } else {
                 JustifyContent::Start
@@ -59,15 +59,15 @@ pub fn apply_flex_container_properties(style: &mut ComputedStyle, prop: &Propert
             style.set_justify_content(val);
             true
         }
-        Property::AlignItems(ai, _) => {
-            let s = ai
+        Property::AlignItems(align, _) => {
+            let css_text = align
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            let val = if s.contains("center") {
+            let val = if css_text.contains("center") {
                 AlignItems::Center
-            } else if s.contains("end") || s.contains("flex-end") {
+            } else if css_text.contains("end") || css_text.contains("flex-end") {
                 AlignItems::End
-            } else if s.contains("stretch") {
+            } else if css_text.contains("stretch") {
                 AlignItems::Stretch
             } else {
                 AlignItems::Start
@@ -89,23 +89,23 @@ pub fn apply_flex_container_properties(style: &mut ComputedStyle, prop: &Propert
 
 pub fn apply_flex_item_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
-        Property::FlexGrow(fg, _) => {
-            if let Ok(val) = FlexGrow::new(*fg) {
+        Property::FlexGrow(grow, _) => {
+            if let Ok(val) = FlexGrow::new(*grow) {
                 style.set_flex_grow(val);
             }
             true
         }
-        Property::FlexShrink(fs, _) => {
-            if let Ok(val) = FlexShrink::new(*fs) {
+        Property::FlexShrink(shrink, _) => {
+            if let Ok(val) = FlexShrink::new(*shrink) {
                 style.set_flex_shrink(val);
             }
             true
         }
-        Property::FlexBasis(fb, _) => {
-            let s = fb
+        Property::FlexBasis(basis, _) => {
+            let css_text = basis
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Some(val) = parse_size_str(&s) {
+            if let Some(val) = parse_size_str(&css_text) {
                 style.set_flex_basis(val);
             }
             true
@@ -117,24 +117,24 @@ pub fn apply_flex_item_properties(style: &mut ComputedStyle, prop: &Property<'_>
             if let Ok(val) = FlexShrink::new(flex.shrink) {
                 style.set_flex_shrink(val);
             }
-            let s = flex
+            let css_text = flex
                 .basis
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Some(val) = parse_size_str(&s) {
+            if let Some(val) = parse_size_str(&css_text) {
                 style.set_flex_basis(val);
             }
             true
         }
         Property::AlignSelf(as_, _) => {
-            let s = as_
+            let css_text = as_
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            let val = if s.contains("center") {
+            let val = if css_text.contains("center") {
                 AlignItems::Center
-            } else if s.contains("end") || s.contains("flex-end") {
+            } else if css_text.contains("end") || css_text.contains("flex-end") {
                 AlignItems::End
-            } else if s.contains("stretch") {
+            } else if css_text.contains("stretch") {
                 AlignItems::Stretch
             } else {
                 AlignItems::Start

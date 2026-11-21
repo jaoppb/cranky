@@ -46,14 +46,14 @@ pub(super) fn discover_monitors<V>(
         return wayland_monitors.into_iter().collect();
     }
     let mut all_monitors: HashSet<MonitorId> = HashSet::new();
-    for m in layouts.keys() {
-        if wayland_monitors.contains(m) {
-            all_monitors.insert(m.clone());
+    for monitor in layouts.keys() {
+        if wayland_monitors.contains(monitor) {
+            all_monitors.insert(monitor.clone());
         }
     }
-    for m in &wayland_monitors {
-        if !seen.contains(m) {
-            all_monitors.insert(m.clone());
+    for monitor in &wayland_monitors {
+        if !seen.contains(monitor) {
+            all_monitors.insert(monitor.clone());
         }
     }
     all_monitors.into_iter().collect()

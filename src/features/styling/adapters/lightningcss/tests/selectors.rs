@@ -51,8 +51,8 @@ fn test_structural_pseudo_classes() {
     assert_eq!(style_first.padding().map(BoxMargin::right), Some(0.0));
     assert!(style_first.background().is_some());
     // Odd: 1st is 2n+1 -> #111111
-    if let Some(DrawingColor::Solid(c)) = style_first.background() {
-        assert_eq!(*c, Color::new(17, 17, 17, 255));
+    if let Some(DrawingColor::Solid(background)) = style_first.background() {
+        assert_eq!(*background, Color::new(17, 17, 17, 255));
     }
 
     // 2. Second child (index 1, total 3)
@@ -66,8 +66,8 @@ fn test_structural_pseudo_classes() {
     );
     assert!(style_second.padding().is_none());
     // Even: 2nd is 2n -> #222222
-    if let Some(DrawingColor::Solid(c)) = style_second.background() {
-        assert_eq!(*c, Color::new(34, 34, 34, 255));
+    if let Some(DrawingColor::Solid(background)) = style_second.background() {
+        assert_eq!(*background, Color::new(34, 34, 34, 255));
     }
 
     // 3. Last child (index 2, total 3)
@@ -88,7 +88,10 @@ fn test_structural_pseudo_classes() {
         &InheritedStyle::default(),
         &LightningPropertyReparser,
     );
-    assert_eq!(style_only.border_radius().map(|r| r.value()), Some(8.0));
+    assert_eq!(
+        style_only.border_radius().map(|radius| radius.value()),
+        Some(8.0)
+    );
 
     // 5. Empty
     let query_empty = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)

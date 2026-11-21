@@ -71,8 +71,8 @@ impl DiskName {
 pub struct MountPoint(String);
 impl MountPoint {
     #[must_use]
-    pub fn new(mp: impl Into<String>) -> Self {
-        Self(mp.into())
+    pub fn new(mount_point: impl Into<String>) -> Self {
+        Self(mount_point.into())
     }
 
     #[must_use]

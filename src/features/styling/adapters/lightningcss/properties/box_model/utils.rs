@@ -4,15 +4,15 @@ use lightningcss::traits::ToCss;
 use lightningcss::values::length::LengthPercentageOrAuto;
 
 #[must_use]
-pub fn parse_size_str(s: &str) -> Option<CssLength> {
-    let trimmed = s.trim();
+pub fn parse_size_str(text: &str) -> Option<CssLength> {
+    let trimmed = text.trim();
     if trimmed == "auto" {
         Some(CssLength::Auto)
     } else if let Some(pct) = trimmed.strip_suffix('%') {
         pct.trim()
             .parse::<f32>()
             .ok()
-            .and_then(|v| CssLength::percent(v).ok())
+            .and_then(|percentage| CssLength::percent(percentage).ok())
     } else if trimmed == "none" {
         None
     } else {
@@ -22,24 +22,24 @@ pub fn parse_size_str(s: &str) -> Option<CssLength> {
 }
 
 #[must_use]
-pub fn parse_length_str(s: &str) -> f32 {
-    let s = s.trim();
-    if let Some(num) = s.strip_suffix("px") {
+pub fn parse_length_str(text: &str) -> f32 {
+    let text = text.trim();
+    if let Some(num) = text.strip_suffix("px") {
         return num.trim().parse::<f32>().unwrap_or(0.0);
     }
-    if let Some(num) = s.strip_suffix("rem") {
+    if let Some(num) = text.strip_suffix("rem") {
         return num.trim().parse::<f32>().unwrap_or(0.0) * 16.0;
     }
-    if let Some(num) = s.strip_suffix("em") {
+    if let Some(num) = text.strip_suffix("em") {
         return num.trim().parse::<f32>().unwrap_or(0.0) * 16.0;
     }
-    s.parse::<f32>().unwrap_or(0.0)
+    text.parse::<f32>().unwrap_or(0.0)
 }
 
 #[must_use]
 pub fn length_to_f64(len: &LengthPercentageOrAuto) -> f64 {
-    let s = len
+    let css_text = len
         .to_css_string(PrinterOptions::default())
         .unwrap_or_default();
-    f64::from(parse_length_str(&s))
+    f64::from(parse_length_str(&css_text))
 }

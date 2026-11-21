@@ -43,7 +43,9 @@ impl SniEvent {
                 let icon_name = proxy.icon_name().await.ok();
                 let icon_theme_path = proxy.icon_theme_path().await.ok();
                 let icon_pixmap = proxy.icon_pixmap().await.ok();
-                let has_pixmap = icon_pixmap.as_ref().is_some_and(|p| !p.is_empty());
+                let has_pixmap = icon_pixmap
+                    .as_ref()
+                    .is_some_and(|pixmaps| !pixmaps.is_empty());
                 tracing::trace!(
                     "SniEvent::Icon/ThemePath: updated icon_name={icon_name:?}, theme_path={icon_theme_path:?}, has_pixmap={has_pixmap}"
                 );

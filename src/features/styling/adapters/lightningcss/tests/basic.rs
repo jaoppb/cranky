@@ -62,8 +62,8 @@ fn test_parse_basic_css_rules() {
         &InheritedStyle::default(),
         &LightningPropertyReparser,
     );
-    if let Some(DrawingColor::Solid(c)) = style_ws_hover.background() {
-        assert_eq!(*c, Color::new(122, 162, 247, 255));
+    if let Some(DrawingColor::Solid(background)) = style_ws_hover.background() {
+        assert_eq!(*background, Color::new(122, 162, 247, 255));
     } else {
         panic!("Expected background color #7aa2f7");
     }
@@ -76,8 +76,8 @@ fn test_parse_basic_css_rules() {
         &InheritedStyle::default(),
         &LightningPropertyReparser,
     );
-    if let Some(DrawingColor::Solid(c)) = style_hour.color() {
-        assert_eq!(*c, Color::new(192, 202, 245, 255));
+    if let Some(DrawingColor::Solid(text_color)) = style_hour.color() {
+        assert_eq!(*text_color, Color::new(192, 202, 245, 255));
     } else {
         panic!("Expected text color #c0caf5");
     }

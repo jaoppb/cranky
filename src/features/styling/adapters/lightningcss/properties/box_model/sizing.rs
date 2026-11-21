@@ -7,56 +7,56 @@ use lightningcss::traits::ToCss;
 pub fn apply_sizing_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
         Property::Width(size) => {
-            let s = size
+            let css_text = size
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Some(w) = parse_size_str(&s) {
-                style.set_width(w);
+            if let Some(width) = parse_size_str(&css_text) {
+                style.set_width(width);
             }
             true
         }
         Property::Height(size) => {
-            let s = size
+            let css_text = size
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Some(h) = parse_size_str(&s) {
-                style.set_height(h);
+            if let Some(height) = parse_size_str(&css_text) {
+                style.set_height(height);
             }
             true
         }
         Property::MinWidth(size) => {
-            let s = size
+            let css_text = size
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Some(mw) = parse_size_str(&s) {
-                style.set_min_width(mw);
+            if let Some(min_width) = parse_size_str(&css_text) {
+                style.set_min_width(min_width);
             }
             true
         }
         Property::MaxWidth(size) => {
-            let s = size
+            let css_text = size
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Some(mw) = parse_size_str(&s) {
-                style.set_max_width(mw);
+            if let Some(max_width) = parse_size_str(&css_text) {
+                style.set_max_width(max_width);
             }
             true
         }
         Property::MinHeight(size) => {
-            let s = size
+            let css_text = size
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Some(mh) = parse_size_str(&s) {
-                style.set_min_height(mh);
+            if let Some(min_height) = parse_size_str(&css_text) {
+                style.set_min_height(min_height);
             }
             true
         }
         Property::MaxHeight(size) => {
-            let s = size
+            let css_text = size
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Some(mh) = parse_size_str(&s) {
-                style.set_max_height(mh);
+            if let Some(max_height) = parse_size_str(&css_text) {
+                style.set_max_height(max_height);
             }
             true
         }

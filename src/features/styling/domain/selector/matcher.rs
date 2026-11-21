@@ -22,7 +22,7 @@ pub fn matches_selector(selector: &CompiledSelector, query: &ElementQuery<'_>) -
         let prev_comb = selector
             .steps
             .get(step_idx.saturating_sub(1))
-            .and_then(|s| s.combinator)
+            .and_then(|previous_step| previous_step.combinator)
             .unwrap_or(Combinator::Descendant);
         let Some(step) = selector.steps.get(step_idx) else {
             return false;
@@ -30,25 +30,25 @@ pub fn matches_selector(selector: &CompiledSelector, query: &ElementQuery<'_>) -
 
         match prev_comb {
             Combinator::Child => {
-                let Some(q) = current_query else {
+                let Some(parent) = current_query else {
                     return false;
                 };
-                if !step_matches(step, q) {
+                if !step_matches(step, parent) {
                     return false;
                 }
-                current_query = q.parent();
+                current_query = parent.parent();
                 step_idx = step_idx.saturating_add(1);
             }
             Combinator::Descendant => {
                 let mut matched = false;
-                while let Some(q) = current_query {
-                    if step_matches(step, q) {
+                while let Some(ancestor) = current_query {
+                    if step_matches(step, ancestor) {
                         matched = true;
-                        current_query = q.parent();
+                        current_query = ancestor.parent();
                         step_idx = step_idx.saturating_add(1);
                         break;
                     }
-                    current_query = q.parent();
+                    current_query = ancestor.parent();
                 }
                 if !matched {
                     return false;
@@ -80,7 +80,11 @@ pub fn step_matches(step: &SelectorStep, query: &ElementQuery<'_>) -> bool {
     }
 
     for class in &step.classes {
-        if !query.classes().iter().any(|c| c.as_str() == class) {
+        if !query
+            .classes()
+            .iter()
+            .any(|query_class| query_class.as_str() == class)
+        {
             return false;
         }
     }
@@ -112,31 +116,31 @@ pub fn pseudo_matches(pseudo: &PseudoClass, query: &ElementQuery<'_>) -> bool {
                 && query.child_index().saturating_add(1) == query.total_children()
         }
         PseudoClass::OnlyChild => query.total_children() == 1,
-        PseudoClass::NthChild { a, b } => {
-            nth_matches(*a, *b, query.child_index().saturating_add(1))
+        PseudoClass::NthChild { step_size, offset } => {
+            nth_matches(*step_size, *offset, query.child_index().saturating_add(1))
         }
-        PseudoClass::NthLastChild { a, b } => {
+        PseudoClass::NthLastChild { step_size, offset } => {
             let from_end = query.total_children().saturating_sub(query.child_index());
-            nth_matches(*a, *b, from_end)
+            nth_matches(*step_size, *offset, from_end)
         }
         PseudoClass::Empty => query.is_empty(),
     }
 }
 
 #[must_use]
-pub fn nth_matches(a: i32, b: i32, index_1based: usize) -> bool {
+pub fn nth_matches(step_size: i32, offset: i32, index_1based: usize) -> bool {
     let Ok(n_pos) = i32::try_from(index_1based) else {
         return false;
     };
-    if a == 0 {
-        return n_pos == b;
+    if step_size == 0 {
+        return n_pos == offset;
     }
-    let Some(diff) = n_pos.checked_sub(b) else {
+    let Some(diff) = n_pos.checked_sub(offset) else {
         return false;
     };
-    if a > 0 {
-        diff >= 0 && diff.checked_rem(a) == Some(0)
+    if step_size > 0 {
+        diff >= 0 && diff.checked_rem(step_size) == Some(0)
     } else {
-        diff <= 0 && diff.checked_rem(a) == Some(0)
+        diff <= 0 && diff.checked_rem(step_size) == Some(0)
     }
 }

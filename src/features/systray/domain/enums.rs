@@ -24,8 +24,8 @@ pub enum SystrayActionName {
 
 impl SystrayActionName {
     #[must_use]
-    pub fn parse_str(s: &str) -> Self {
-        match s {
+    pub fn parse_str(name: &str) -> Self {
+        match name {
             "Primary" => Self::Primary,
             "ContextMenu" => Self::ContextMenu,
             "Activate" => Self::Activate,
@@ -55,14 +55,14 @@ impl SystrayActionName {
 }
 
 impl From<&str> for SystrayActionName {
-    fn from(s: &str) -> Self {
-        Self::parse_str(s)
+    fn from(name: &str) -> Self {
+        Self::parse_str(name)
     }
 }
 
 impl From<String> for SystrayActionName {
-    fn from(s: String) -> Self {
-        Self::parse_str(&s)
+    fn from(name: String) -> Self {
+        Self::parse_str(&name)
     }
 }
 
@@ -84,8 +84,8 @@ pub enum SystrayCategory {
 
 impl SystrayCategory {
     #[must_use]
-    pub fn parse_str(s: &str) -> Self {
-        match s {
+    pub fn parse_str(category: &str) -> Self {
+        match category {
             "ApplicationStatus" => Self::ApplicationStatus,
             "Communications" => Self::Communications,
             "SystemServices" => Self::SystemServices,
@@ -107,14 +107,14 @@ impl SystrayCategory {
 }
 
 impl From<&str> for SystrayCategory {
-    fn from(s: &str) -> Self {
-        Self::parse_str(s)
+    fn from(category: &str) -> Self {
+        Self::parse_str(category)
     }
 }
 
 impl From<String> for SystrayCategory {
-    fn from(s: String) -> Self {
-        Self::parse_str(&s)
+    fn from(category: String) -> Self {
+        Self::parse_str(&category)
     }
 }
 

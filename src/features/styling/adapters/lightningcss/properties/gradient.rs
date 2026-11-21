@@ -24,7 +24,9 @@ pub fn gradient_from_image(image: &Image<'_>) -> Option<DrawingColor> {
         return None;
     };
     match gradient.as_ref() {
-        Gradient::Linear(lg) | Gradient::RepeatingLinear(lg) => linear_gradient_colors(lg),
+        Gradient::Linear(linear) | Gradient::RepeatingLinear(linear) => {
+            linear_gradient_colors(linear)
+        }
         other => {
             tracing::warn!(?other, "only linear-gradient() border images are supported");
             None
@@ -32,16 +34,16 @@ pub fn gradient_from_image(image: &Image<'_>) -> Option<DrawingColor> {
     }
 }
 
-fn linear_gradient_colors(lg: &LinearGradient) -> Option<DrawingColor> {
-    let LineDirection::Angle(angle) = &lg.direction else {
+fn linear_gradient_colors(gradient: &LinearGradient) -> Option<DrawingColor> {
+    let LineDirection::Angle(angle) = &gradient.direction else {
         tracing::warn!(
-            direction = ?lg.direction,
+            direction = ?gradient.direction,
             "border-image linear-gradient() direction must be an angle; ignoring"
         );
         return None;
     };
 
-    let colors: Vec<_> = lg
+    let colors: Vec<_> = gradient
         .items
         .iter()
         .filter_map(|item| match item {

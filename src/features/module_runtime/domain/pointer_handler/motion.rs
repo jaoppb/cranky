@@ -20,15 +20,15 @@ impl PointerHandler {
         let target_ref = capture_node_ref(&hit);
         let old_hover = self.hovered.get(monitor_id).cloned();
         if old_hover != target_ref {
-            if let Some(r) = &target_ref {
-                self.hovered.insert(monitor_id.clone(), r.clone());
+            if let Some(node_ref) = &target_ref {
+                self.hovered.insert(monitor_id.clone(), node_ref.clone());
             } else {
                 self.hovered.remove(monitor_id);
             }
             state_changed = true;
         }
 
-        if let Some(cmd) = hit.iter().rev().find_map(|n| n.on_hover()) {
+        if let Some(cmd) = hit.iter().rev().find_map(|node| node.on_hover()) {
             match cmd {
                 UiAction::ScriptCall(func_name) => {
                     actions.push(PointerAction::CallFunction(

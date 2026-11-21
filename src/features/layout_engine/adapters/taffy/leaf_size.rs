@@ -22,13 +22,13 @@ fn apply_intrinsic(style: &mut Style, computed: &ComputedStyle, intrinsic: Size)
     if computed.width().is_none() {
         style.size.width = pad.map_or_else(
             || size_to_dimension(intrinsic.width()),
-            |p| padded_dimension(intrinsic.width(), p.left(), p.right()),
+            |padding| padded_dimension(intrinsic.width(), padding.left(), padding.right()),
         );
     }
     if computed.height().is_none() {
         style.size.height = pad.map_or_else(
             || size_to_dimension(intrinsic.height()),
-            |p| padded_dimension(intrinsic.height(), p.top(), p.bottom()),
+            |padding| padded_dimension(intrinsic.height(), padding.top(), padding.bottom()),
         );
     }
 }
@@ -41,8 +41,16 @@ pub(super) fn apply_node_dimensions(
 ) {
     match node {
         StyledNode::Flex { .. } | StyledNode::Grid { .. } => {}
-        StyledNode::Text { text, style: s, .. } => {
-            let text_size = measurer.measure(text.as_str(), s.font_family(), s.font_size());
+        StyledNode::Text {
+            text,
+            style: text_style,
+            ..
+        } => {
+            let text_size = measurer.measure(
+                text.as_str(),
+                text_style.font_family(),
+                text_style.font_size(),
+            );
             apply_intrinsic(style, computed, text_size);
         }
         StyledNode::Progress { orientation, .. } => {

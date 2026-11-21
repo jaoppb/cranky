@@ -266,7 +266,7 @@ mod tests {
                 Some("h1")
             );
             assert_eq!(
-                options.get("format").and_then(|v| v.as_str()),
+                options.get("format").and_then(|value| value.as_str()),
                 Some("%H:%M:%S")
             );
         } else {

@@ -11,26 +11,25 @@ impl StyleSheetName {
     ///
     /// Returns `StylingError::InvalidStyleSheetName` if name is empty, contains path separators, `.css` extension, or invalid characters.
     pub fn new(name: impl Into<String>) -> Result<Self, StylingError> {
-        let s = name.into();
-        if s.is_empty() {
-            return Err(StylingError::InvalidStyleSheetName(s));
+        let stylesheet_name = name.into();
+        if stylesheet_name.is_empty() {
+            return Err(StylingError::InvalidStyleSheetName(stylesheet_name));
         }
-        if s.contains('/')
-            || s.contains('\\')
-            || s.contains("..")
-            || std::path::Path::new(&s)
+        if stylesheet_name.contains('/')
+            || stylesheet_name.contains('\\')
+            || stylesheet_name.contains("..")
+            || std::path::Path::new(&stylesheet_name)
                 .extension()
                 .is_some_and(|ext| ext.eq_ignore_ascii_case("css"))
         {
-            return Err(StylingError::InvalidStyleSheetName(s));
+            return Err(StylingError::InvalidStyleSheetName(stylesheet_name));
         }
-        if !s
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-        {
-            return Err(StylingError::InvalidStyleSheetName(s));
+        if !stylesheet_name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '_' || character == '-'
+        }) {
+            return Err(StylingError::InvalidStyleSheetName(stylesheet_name));
         }
-        Ok(Self(s))
+        Ok(Self(stylesheet_name))
     }
 
     #[must_use]

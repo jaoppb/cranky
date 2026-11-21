@@ -11,23 +11,22 @@ impl ClassName {
     ///
     /// Returns `StylingError::InvalidClassName` if name is empty or contains invalid characters.
     pub fn new(name: impl Into<String>) -> Result<Self, StylingError> {
-        let s = name.into();
-        if s.is_empty() {
-            return Err(StylingError::InvalidClassName(s));
+        let class_name = name.into();
+        if class_name.is_empty() {
+            return Err(StylingError::InvalidClassName(class_name));
         }
-        let Some(first) = s.chars().next() else {
-            return Err(StylingError::InvalidClassName(s));
+        let Some(first) = class_name.chars().next() else {
+            return Err(StylingError::InvalidClassName(class_name));
         };
         if !first.is_ascii_alphabetic() && first != '_' && first != '-' {
-            return Err(StylingError::InvalidClassName(s));
+            return Err(StylingError::InvalidClassName(class_name));
         }
-        if !s
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-        {
-            return Err(StylingError::InvalidClassName(s));
+        if !class_name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '_' || character == '-'
+        }) {
+            return Err(StylingError::InvalidClassName(class_name));
         }
-        Ok(Self(s))
+        Ok(Self(class_name))
     }
 
     #[must_use]
@@ -47,8 +46,8 @@ impl<'de> Deserialize<'de> for ClassName {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Self::new(s).map_err(serde::de::Error::custom)
+        let class_name = String::deserialize(deserializer)?;
+        Self::new(class_name).map_err(serde::de::Error::custom)
     }
 }
 
@@ -106,7 +105,7 @@ impl<'de> Deserialize<'de> for ClassNameList {
         }
 
         match ClassRepr::deserialize(deserializer)? {
-            ClassRepr::Str(s) => Self::parse(&s).map_err(serde::de::Error::custom),
+            ClassRepr::Str(text) => Self::parse(&text).map_err(serde::de::Error::custom),
             ClassRepr::List(list) => {
                 let mut out = Vec::new();
                 for item in list {

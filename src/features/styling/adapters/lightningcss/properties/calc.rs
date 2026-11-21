@@ -12,7 +12,7 @@ use lightningcss::values::length::{LengthPercentage, LengthPercentageOrAuto, Len
 struct Accum {
     percent: f32,
     px: f32,
-    em: f32,
+    ems: f32,
     rem: f32,
 }
 
@@ -21,7 +21,7 @@ impl Accum {
         Self {
             percent: self.percent + other.percent,
             px: self.px + other.px,
-            em: self.em + other.em,
+            ems: self.ems + other.ems,
             rem: self.rem + other.rem,
         }
     }
@@ -31,10 +31,10 @@ impl Accum {
 /// `None` means the ordinary (non-calc) detection/parsing path handles it.
 #[must_use]
 pub fn calc_from_size(size: &Size) -> Option<DeclaredLength> {
-    let Size::LengthPercentage(lp) = size else {
+    let Size::LengthPercentage(length_percentage) = size else {
         return None;
     };
-    calc_from_length_percentage(lp)
+    calc_from_length_percentage(length_percentage)
 }
 
 /// As `calc_from_size`, for `max-width`/`max-height`'s separate `MaxSize`
@@ -42,10 +42,10 @@ pub fn calc_from_size(size: &Size) -> Option<DeclaredLength> {
 /// reusing `Size`'s `auto`).
 #[must_use]
 pub fn calc_from_max_size(size: &MaxSize) -> Option<DeclaredLength> {
-    let MaxSize::LengthPercentage(lp) = size else {
+    let MaxSize::LengthPercentage(length_percentage) = size else {
         return None;
     };
-    calc_from_length_percentage(lp)
+    calc_from_length_percentage(length_percentage)
 }
 
 /// As `calc_from_size`, for `flex-basis`'s `LengthPercentageOrAuto`.
@@ -53,21 +53,21 @@ pub fn calc_from_max_size(size: &MaxSize) -> Option<DeclaredLength> {
 pub fn calc_from_length_percentage_or_auto(
     value: &LengthPercentageOrAuto,
 ) -> Option<DeclaredLength> {
-    let LengthPercentageOrAuto::LengthPercentage(lp) = value else {
+    let LengthPercentageOrAuto::LengthPercentage(length_percentage) = value else {
         return None;
     };
-    calc_from_length_percentage(lp)
+    calc_from_length_percentage(length_percentage)
 }
 
-fn calc_from_length_percentage(lp: &LengthPercentage) -> Option<DeclaredLength> {
-    let LengthPercentage::Calc(calc) = lp else {
+fn calc_from_length_percentage(length_percentage: &LengthPercentage) -> Option<DeclaredLength> {
+    let LengthPercentage::Calc(calc) = length_percentage else {
         return None;
     };
     let accum = walk_calc(calc, 1.0);
     Some(DeclaredLength::Calc {
         percent: accum.percent,
         px: accum.px,
-        em: accum.em,
+        ems: accum.ems,
         rem: accum.rem,
     })
 }
@@ -83,22 +83,22 @@ fn calc_from_length_percentage(lp: &LengthPercentage) -> Option<DeclaredLength> 
 /// contribute zero rather than failing the whole expression.
 fn walk_calc(calc: &Calc<LengthPercentage>, scale: f32) -> Accum {
     match calc {
-        Calc::Value(v) => walk_value(v, scale),
+        Calc::Value(value) => walk_value(value, scale),
         Calc::Number(_) => Accum::default(),
-        Calc::Sum(a, b) => walk_calc(a, scale).add(walk_calc(b, scale)),
+        Calc::Sum(left, right) => walk_calc(left, scale).add(walk_calc(right, scale)),
         Calc::Product(num, inner) => walk_calc(inner, scale * *num),
-        Calc::Function(f) => match f.as_ref() {
+        Calc::Function(function) => match function.as_ref() {
             MathFunction::Calc(inner) => walk_calc(inner, scale),
             _ => Accum::default(),
         },
     }
 }
 
-fn walk_value(v: &LengthPercentage, scale: f32) -> Accum {
-    match v {
+fn walk_value(length_percentage: &LengthPercentage, scale: f32) -> Accum {
+    match length_percentage {
         LengthPercentage::Dimension(length_value) => walk_length_value(length_value, scale),
-        LengthPercentage::Percentage(p) => Accum {
-            percent: p.0 * 100.0 * scale,
+        LengthPercentage::Percentage(percentage) => Accum {
+            percent: percentage.0 * 100.0 * scale,
             ..Accum::default()
         },
         LengthPercentage::Calc(nested) => walk_calc(nested, scale),
@@ -109,18 +109,18 @@ fn walk_value(v: &LengthPercentage, scale: f32) -> Accum {
 /// other CSS length unit (`in`/`cm`/`mm`/`pt`/`pc`, and the `ex`/`ch`/`cap`/
 /// `ic`/`lh` family and their root-relative variants) contributes zero
 /// rather than being silently mis-scaled as pixels.
-fn walk_length_value(lv: &LengthValue, scale: f32) -> Accum {
-    match lv {
-        LengthValue::Px(v) => Accum {
-            px: v * scale,
+fn walk_length_value(length_value: &LengthValue, scale: f32) -> Accum {
+    match length_value {
+        LengthValue::Px(value) => Accum {
+            px: value * scale,
             ..Accum::default()
         },
-        LengthValue::Em(v) => Accum {
-            em: v * scale,
+        LengthValue::Em(value) => Accum {
+            ems: value * scale,
             ..Accum::default()
         },
-        LengthValue::Rem(v) => Accum {
-            rem: v * scale,
+        LengthValue::Rem(value) => Accum {
+            rem: value * scale,
             ..Accum::default()
         },
         _ => Accum::default(),
@@ -154,7 +154,7 @@ mod tests {
             DeclaredLength::Calc {
                 percent: 0.0,
                 px: 8.0,
-                em: 0.0,
+                ems: 0.0,
                 rem: 1.0,
             }
         );
@@ -169,7 +169,7 @@ mod tests {
             DeclaredLength::Calc {
                 percent: 100.0,
                 px: 0.0,
-                em: 0.0,
+                ems: 0.0,
                 rem: -2.0,
             }
         );

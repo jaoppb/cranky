@@ -74,8 +74,8 @@ impl RulePriority {
 mod tests {
     use super::*;
 
-    fn spec(n: u16) -> Specificity {
-        Specificity::new(0, n, 0)
+    fn spec(class_count: u16) -> Specificity {
+        Specificity::new(0, class_count, 0)
     }
 
     #[test]

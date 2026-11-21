@@ -26,13 +26,21 @@ pub(super) fn create_test_event_loop_and_channel() -> (
 ) {
     let id = ModuleId::new(42);
     let hub = Arc::new(SignalHub::new(Config::default()));
-    let sm = Arc::new(MockSurfaceManager);
+    let surface_manager = Arc::new(MockSurfaceManager);
     let layout_sender = Arc::new(MockLayoutSender);
     let (display_tx, display_rx) = std::sync::mpsc::channel();
     let display_sender = Arc::new(ChannelDisplaySender::new(display_tx));
     let ui_sender = Arc::new(MockUiSender);
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-    let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
+    let ctx = ModuleContext::new(
+        id,
+        hub,
+        surface_manager,
+        layout_sender,
+        display_sender,
+        ui_sender,
+        rx,
+    );
 
     let event_loop = EventLoop::new(
         Box::new(TestModulePort::new(VNode::new_rect(

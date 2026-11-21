@@ -27,12 +27,20 @@ fn test_discover_monitors_reads_wayland_monitor_scales() {
     scales.insert(MonitorId::new("HDMI-A-1"), Scale::new(1.0));
     let _ = hub.monitor_scales_tx().send(scales);
 
-    let sm = Arc::new(MockSurfaceManager);
+    let surface_manager = Arc::new(MockSurfaceManager);
     let layout_sender = Arc::new(MockLayoutSender);
     let display_sender = Arc::new(MockDisplaySender);
     let ui_sender = Arc::new(MockUiSender);
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-    let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
+    let ctx = ModuleContext::new(
+        id,
+        hub,
+        surface_manager,
+        layout_sender,
+        display_sender,
+        ui_sender,
+        rx,
+    );
 
     let event_loop = EventLoop::new(
         Box::new(TestModulePort::new(VNode::new_rect(
@@ -66,12 +74,20 @@ fn test_discover_monitors_ignores_module_sizes_cache() {
     );
     let _ = hub.module_sizes_tx().send(sizes);
 
-    let sm = Arc::new(MockSurfaceManager);
+    let surface_manager = Arc::new(MockSurfaceManager);
     let layout_sender = Arc::new(MockLayoutSender);
     let display_sender = Arc::new(MockDisplaySender);
     let ui_sender = Arc::new(MockUiSender);
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-    let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
+    let ctx = ModuleContext::new(
+        id,
+        hub,
+        surface_manager,
+        layout_sender,
+        display_sender,
+        ui_sender,
+        rx,
+    );
 
     let event_loop = EventLoop::new(
         Box::new(TestModulePort::new(VNode::new_rect(

@@ -83,16 +83,17 @@ impl<
         for action in outcome.actions() {
             match action {
                 PointerAction::CallFunction(func_name, mon_id) => {
-                    let res = if let Some(m) = mon_id {
-                        self.port.call_function_with_args(func_name, &[m.as_str()])
+                    let res = if let Some(monitor) = mon_id {
+                        self.port
+                            .call_function_with_args(func_name, &[monitor.as_str()])
                     } else {
                         self.port.call_function(func_name)
                     };
-                    if let Err(e) = res {
+                    if let Err(error) = res {
                         tracing::error!(
                             module = %ctx_id,
                             func = %func_name,
-                            "ScriptCall failed: {e}"
+                            "ScriptCall failed: {error}"
                         );
                     } else {
                         changed = true;

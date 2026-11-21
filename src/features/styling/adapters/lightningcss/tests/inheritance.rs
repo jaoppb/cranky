@@ -110,8 +110,11 @@ fn test_em_resolves_through_vdom_tree_not_hardcoded_16px() {
     let StyledNode::Text { style, .. } = &children[0] else {
         panic!("expected a Text child");
     };
-    assert_eq!(style.font_size().map(|fs| fs.value()), Some(30.0));
-    assert_eq!(style.width(), Some(CssLength::Px(60.0)));
+    assert_eq!(
+        style.font_size().map(|font_size| font_size.value()),
+        Some(30.0)
+    );
+    assert_eq!(style.width(), Some(CssLength::Pixels(60.0)));
 }
 
 #[test]

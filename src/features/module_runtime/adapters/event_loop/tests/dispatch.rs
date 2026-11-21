@@ -25,13 +25,21 @@ fn test_dispatch_render_outcome_emits_layout_events() {
 
         let id = ModuleId::new(1);
         let hub = Arc::new(SignalHub::new(Config::default()));
-        let sm = Arc::new(MockSurfaceManager);
+        let surface_manager = Arc::new(MockSurfaceManager);
         let (layout_tx, layout_rx) = std::sync::mpsc::channel();
         let layout_sender = Arc::new(ChannelLayoutSender::new(layout_tx));
         let display_sender = Arc::new(MockDisplaySender);
         let ui_sender = Arc::new(MockUiSender);
         let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
+        let ctx = ModuleContext::new(
+            id,
+            hub,
+            surface_manager,
+            layout_sender,
+            display_sender,
+            ui_sender,
+            rx,
+        );
 
         let mut event_loop = EventLoop::new(
             Box::new(TestModulePort::new(VNode::new_rect(
@@ -90,12 +98,20 @@ fn test_dispatch_render_outcome_emits_layout_events() {
 fn test_handle_pointer_event_no_tree_returns_false() {
     let id = ModuleId::new(1);
     let hub = Arc::new(SignalHub::new(Config::default()));
-    let sm = Arc::new(MockSurfaceManager);
+    let surface_manager = Arc::new(MockSurfaceManager);
     let layout_sender = Arc::new(MockLayoutSender);
     let display_sender = Arc::new(MockDisplaySender);
     let ui_sender = Arc::new(MockUiSender);
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-    let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
+    let ctx = ModuleContext::new(
+        id,
+        hub,
+        surface_manager,
+        layout_sender,
+        display_sender,
+        ui_sender,
+        rx,
+    );
 
     let mut event_loop = EventLoop::new(
         Box::new(TestModulePort::new(VNode::new_rect(
@@ -122,12 +138,20 @@ fn test_handle_pointer_event_no_tree_returns_false() {
 fn test_handle_lifecycle_event_popup_dismissed_returns_true() {
     let id = ModuleId::new(1);
     let hub = Arc::new(SignalHub::new(Config::default()));
-    let sm = Arc::new(MockSurfaceManager);
+    let surface_manager = Arc::new(MockSurfaceManager);
     let layout_sender = Arc::new(MockLayoutSender);
     let display_sender = Arc::new(MockDisplaySender);
     let ui_sender = Arc::new(MockUiSender);
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-    let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx);
+    let ctx = ModuleContext::new(
+        id,
+        hub,
+        surface_manager,
+        layout_sender,
+        display_sender,
+        ui_sender,
+        rx,
+    );
 
     let mut event_loop = EventLoop::new(
         Box::new(TestModulePort::new(VNode::new_rect(

@@ -114,11 +114,11 @@ impl VNode {
         // descending from `path` — a popup, panel, or tooltip is a different
         // tree from the one that owns it, not a subtree of it, so its nodes
         // must not be ancestor-matched (`starts_with`) against the owner's.
-        let tooltip = self.tooltip().map(|t| {
+        let tooltip = self.tooltip().map(|tooltip_node| {
             let tooltip_resolved = interaction
                 .ctx
-                .map(|ctx| ResolvedInteraction::resolve(t, SurfaceSpace::Tooltip, ctx));
-            Box::new(t.resolve_styles_recursive(
+                .map(|ctx| ResolvedInteraction::resolve(tooltip_node, SurfaceSpace::Tooltip, ctx));
+            Box::new(tooltip_node.resolve_styles_recursive(
                 resolver,
                 Interaction::new(interaction.ctx, tooltip_resolved.as_ref()),
                 &NodePath::root_in(SurfaceSpace::Tooltip),
@@ -127,11 +127,11 @@ impl VNode {
                 &detached_inherited,
             ))
         });
-        let popup = self.popup().map(|p| {
-            let popup_resolved = interaction
-                .ctx
-                .map(|ctx| ResolvedInteraction::resolve(p.content(), SurfaceSpace::Popup, ctx));
-            let content = Box::new(p.content().resolve_styles_recursive(
+        let popup = self.popup().map(|popup_spec| {
+            let popup_resolved = interaction.ctx.map(|ctx| {
+                ResolvedInteraction::resolve(popup_spec.content(), SurfaceSpace::Popup, ctx)
+            });
+            let content = Box::new(popup_spec.content().resolve_styles_recursive(
                 resolver,
                 Interaction::new(interaction.ctx, popup_resolved.as_ref()),
                 &NodePath::root_in(SurfaceSpace::Popup),
@@ -139,13 +139,13 @@ impl VNode {
                 Some(&query),
                 &detached_inherited,
             ));
-            StyledPopup::new(content, p.anchor_direction(), p.offset())
+            StyledPopup::new(content, popup_spec.anchor_direction(), popup_spec.offset())
         });
-        let panel = self.panel().map(|p| {
-            let panel_resolved = interaction
-                .ctx
-                .map(|ctx| ResolvedInteraction::resolve(p.content(), SurfaceSpace::Panel, ctx));
-            let content = Box::new(p.content().resolve_styles_recursive(
+        let panel = self.panel().map(|panel_spec| {
+            let panel_resolved = interaction.ctx.map(|ctx| {
+                ResolvedInteraction::resolve(panel_spec.content(), SurfaceSpace::Panel, ctx)
+            });
+            let content = Box::new(panel_spec.content().resolve_styles_recursive(
                 resolver,
                 Interaction::new(interaction.ctx, panel_resolved.as_ref()),
                 &NodePath::root_in(SurfaceSpace::Panel),
@@ -155,11 +155,11 @@ impl VNode {
             ));
             StyledPanel::new(
                 content,
-                p.layer(),
-                p.anchor(),
-                *p.margin(),
-                p.exclusive_zone(),
-                p.keyboard(),
+                panel_spec.layer(),
+                panel_spec.anchor(),
+                *panel_spec.margin(),
+                panel_spec.exclusive_zone(),
+                panel_spec.keyboard(),
             )
         });
 

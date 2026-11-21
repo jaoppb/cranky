@@ -8,7 +8,7 @@ fn fully_keyed(children: &[VNode]) -> bool {
     let mut seen = HashSet::new();
     children
         .iter()
-        .all(|c| c.key().is_some_and(|k| seen.insert(k.as_str())))
+        .all(|child| child.key().is_some_and(|key| seen.insert(key.as_str())))
 }
 
 #[must_use]
@@ -26,8 +26,8 @@ where
     // has no well-defined match and silently produced wrong Move/Remove
     // pairs before — falling back to positional (with a warning) is honest
     // about not knowing which child is which.
-    let any_keyed = old_children.iter().any(|c| c.key().is_some())
-        || new_children.iter().any(|c| c.key().is_some());
+    let any_keyed = old_children.iter().any(|child| child.key().is_some())
+        || new_children.iter().any(|child| child.key().is_some());
     let keyed = any_keyed && fully_keyed(old_children) && fully_keyed(new_children);
 
     if any_keyed && !keyed {
@@ -57,15 +57,15 @@ where
                     if old_idx != new_idx {
                         child_patches.push(ChildPatchOp::Move {
                             node_id: old_child.node_id(),
-                            from: old_idx,
-                            to: new_idx,
+                            source: old_idx,
+                            target: new_idx,
                         });
                     }
-                    let p = diff_nodes_fn(old_child, new_child);
-                    if !p.is_no_change() {
+                    let patch = diff_nodes_fn(old_child, new_child);
+                    if !patch.is_no_change() {
                         child_patches.push(ChildPatchOp::Update {
                             node_id: old_child.node_id(),
-                            patch: Box::new(p),
+                            patch: Box::new(patch),
                         });
                     }
                 } else {
@@ -92,27 +92,27 @@ where
         }
     } else {
         let max_len = std::cmp::max(old_children.len(), new_children.len());
-        for i in 0..max_len {
-            match (old_children.get(i), new_children.get(i)) {
+        for index in 0..max_len {
+            match (old_children.get(index), new_children.get(index)) {
                 (Some(old_child), Some(new_child)) => {
-                    let p = diff_nodes_fn(old_child, new_child);
-                    if !p.is_no_change() {
+                    let patch = diff_nodes_fn(old_child, new_child);
+                    if !patch.is_no_change() {
                         child_patches.push(ChildPatchOp::Update {
                             node_id: old_child.node_id(),
-                            patch: Box::new(p),
+                            patch: Box::new(patch),
                         });
                     }
                 }
                 (None, Some(new_child)) => {
                     child_patches.push(ChildPatchOp::Insert {
-                        index: i,
+                        index,
                         node: Box::new(new_child.clone()),
                     });
                 }
                 (Some(old_child), None) => {
                     child_patches.push(ChildPatchOp::Remove {
                         node_id: old_child.node_id(),
-                        index: i,
+                        index,
                     });
                 }
                 (None, None) => {}
@@ -195,30 +195,30 @@ mod tests {
 
     #[test]
     fn keyed_lists_move_matches_insert_new_keys_and_remove_missing_ones() {
-        let (a, b, c) = (keyed("a", "1"), keyed("b", "2"), keyed("c", "3"));
-        let d = keyed("d", "4");
-        let old = [a.clone(), b.clone(), c.clone()];
-        let new = [c.clone(), a.clone(), d.clone()];
+        let (first, second, third) = (keyed("a", "1"), keyed("b", "2"), keyed("c", "3"));
+        let fourth = keyed("d", "4");
+        let old = [first.clone(), second.clone(), third.clone()];
+        let new = [third.clone(), first.clone(), fourth.clone()];
 
         assert_eq!(
             child_patches(&old, &new),
             vec![
                 ChildPatchOp::Move {
-                    node_id: c.node_id(),
-                    from: 2,
-                    to: 0,
+                    node_id: third.node_id(),
+                    source: 2,
+                    target: 0,
                 },
                 ChildPatchOp::Move {
-                    node_id: a.node_id(),
-                    from: 0,
-                    to: 1,
+                    node_id: first.node_id(),
+                    source: 0,
+                    target: 1,
                 },
                 ChildPatchOp::Insert {
                     index: 2,
-                    node: Box::new(d),
+                    node: Box::new(fourth),
                 },
                 ChildPatchOp::Remove {
-                    node_id: b.node_id(),
+                    node_id: second.node_id(),
                     index: 1,
                 },
             ]

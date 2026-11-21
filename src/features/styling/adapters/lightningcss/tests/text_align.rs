@@ -22,7 +22,7 @@ fn resolver(css: &str) -> CompositeStyleResolver {
 fn text(content: &str, class: Option<&str>) -> VNode {
     VNode::new_text(
         TextContent::new(content.to_string()),
-        class.map(|c| ClassNameList::parse(c).unwrap()),
+        class.map(|names| ClassNameList::parse(names).unwrap()),
         None,
         None,
         None,
@@ -39,7 +39,7 @@ fn child_align(
 ) -> Option<TextAlign> {
     let root = VNode::new_flex(
         vec![text("hi", child_class)],
-        parent_class.map(|c| ClassNameList::parse(c).unwrap()),
+        parent_class.map(|names| ClassNameList::parse(names).unwrap()),
         None,
         None,
         None,
@@ -48,7 +48,9 @@ fn child_align(
     let StyledNode::Flex { children, .. } = root.resolve_styles(&resolver(css), None, None) else {
         panic!("expected a Flex root");
     };
-    children.first().and_then(|c| c.style().text_align())
+    children
+        .first()
+        .and_then(|child| child.style().text_align())
 }
 
 #[test]
@@ -105,7 +107,7 @@ impl TextMeasurer for EightPerChar {
 /// Lays out a calendar-shaped tree under the shipped `calendar.css` and
 /// returns every `draw_text` call as `(text, alignment)` in paint order.
 fn paint_calendar() -> Vec<(String, TextAlignment)> {
-    let class = |c: &str| Some(ClassNameList::parse(c).unwrap());
+    let class = |names: &str| Some(ClassNameList::parse(names).unwrap());
     let header = VNode::new_flex(
         vec![
             text("<", Some("nav-btn")),
@@ -120,10 +122,12 @@ fn paint_calendar() -> Vec<(String, TextAlignment)> {
     );
     let days = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
         .iter()
-        .map(|d| text(d, Some("weekday")))
+        .map(|day| text(day, Some("weekday")))
         .collect();
     let weekdays = VNode::new_grid(days, class("weekdays"), None, None, None, None);
-    let cells = (1..=7).map(|d| text(&d.to_string(), Some("day"))).collect();
+    let cells = (1..=7)
+        .map(|day| text(&day.to_string(), Some("day")))
+        .collect();
     let grid = VNode::new_grid(cells, class("grid"), None, None, None, None);
     let root = VNode::new_flex(
         vec![header, weekdays, grid],
@@ -162,7 +166,10 @@ fn paint_calendar() -> Vec<(String, TextAlignment)> {
 #[test]
 fn test_calendar_title_is_centered_across_the_space_between_nav_buttons() {
     let calls = paint_calendar();
-    let (_, title) = calls.iter().find(|(t, _)| t == "May 2026").unwrap();
+    let (_, title) = calls
+        .iter()
+        .find(|(painted, _)| painted == "May 2026")
+        .unwrap();
     // 280 host - 2*12 padding = 256 header; each nav button is
     // 8 (glyph) + 2*6 padding = 20 wide, so `flex-grow: 1` must hand the
     // title the remaining 216, not just its own 64-wide glyph run.
@@ -173,7 +180,7 @@ fn test_calendar_title_is_centered_across_the_space_between_nav_buttons() {
 fn test_calendar_day_and_weekday_cells_are_centered_in_their_column() {
     let calls = paint_calendar();
     for label in ["Su", "Sa", "1", "7"] {
-        let (_, alignment) = calls.iter().find(|(t, _)| t == label).unwrap();
+        let (_, alignment) = calls.iter().find(|(painted, _)| painted == label).unwrap();
         assert_eq!(alignment.align(), TextAlign::Center, "{label}");
         // 7 columns, 4px gaps across 254: ~32px wide (days lose 4px padding),
         // far more than the 16px glyph run a content-sized box would give.

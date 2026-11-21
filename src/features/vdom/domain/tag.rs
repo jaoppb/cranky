@@ -70,14 +70,14 @@ impl std::str::FromStr for TextContent {
 }
 
 impl From<&str> for TextContent {
-    fn from(s: &str) -> Self {
-        Self::new(s.to_string())
+    fn from(text: &str) -> Self {
+        Self::new(text.to_string())
     }
 }
 
 impl From<String> for TextContent {
-    fn from(s: String) -> Self {
-        Self::new(s)
+    fn from(text: String) -> Self {
+        Self::new(text)
     }
 }
 

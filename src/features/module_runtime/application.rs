@@ -270,8 +270,8 @@ mod tests {
 
             if !self.monitors.is_empty() {
                 let mut monitors_map = std::collections::BTreeMap::new();
-                for m in &self.monitors {
-                    let name = crate::features::workspaces::domain::MonitorName::new(*m);
+                for monitor in &self.monitors {
+                    let name = crate::features::workspaces::domain::MonitorName::new(*monitor);
                     monitors_map.insert(
                         name.clone(),
                         crate::features::workspaces::domain::Monitor::new(
@@ -284,7 +284,7 @@ mod tests {
                 let focused = self
                     .monitors
                     .first()
-                    .map(|m| crate::features::workspaces::domain::MonitorName::new(*m));
+                    .map(|monitor| crate::features::workspaces::domain::MonitorName::new(*monitor));
                 let h_state =
                     HyprlandState::new(std::collections::BTreeMap::new(), monitors_map, focused);
                 hub.hyprland_tx().send(h_state).unwrap();
@@ -293,16 +293,16 @@ mod tests {
                 // a monitor set up via `with_monitors` is one `EventLoop`
                 // will actually render for.
                 let mut scales = hub.monitor_scales_rx().borrow().clone();
-                for m in &self.monitors {
+                for monitor in &self.monitors {
                     scales.insert(
-                        MonitorId::new(*m),
+                        MonitorId::new(*monitor),
                         crate::shared::primitives::geometry::Scale::new(1.0),
                     );
                 }
                 hub.monitor_scales_tx().send(scales).unwrap();
             }
 
-            let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
+            let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManager);
             let (layout_event_tx, layout_event_rx) = std::sync::mpsc::channel();
             let (display_tx, display_rx) = std::sync::mpsc::channel();
             let (ui_tx, ui_rx) = std::sync::mpsc::channel();
@@ -317,7 +317,7 @@ mod tests {
             let ctx = ModuleContext::new(
                 self.id,
                 hub.clone(),
-                sm,
+                surface_manager,
                 layout_sender,
                 display_sender,
                 ui_sender,
@@ -355,7 +355,7 @@ mod tests {
     fn test_module_context_accessors() {
         let id = ModuleId::new(1);
         let hub = Arc::new(SignalHub::new(Config::default()));
-        let sm: DynSurfaceManager = Arc::new(MockSurfaceManager);
+        let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManager);
         let layout_sender = Arc::new(MockLayoutSender);
         let display_sender = Arc::new(MockDisplaySender);
         let ui_sender = Arc::new(MockUiSender);
@@ -364,7 +364,7 @@ mod tests {
         let mut ctx = ModuleContext::new(
             id,
             hub.clone(),
-            sm,
+            surface_manager,
             layout_sender,
             display_sender,
             ui_sender,

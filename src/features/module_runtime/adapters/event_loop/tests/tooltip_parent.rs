@@ -29,7 +29,7 @@ fn test_event_loop_tooltip_dispatch_carries_floating_parent_when_embedded() {
     let mon = MonitorId::new("DP-1");
 
     let hub = Arc::new(SignalHub::new(Config::default()));
-    let sm = Arc::new(MockSurfaceManager);
+    let surface_manager = Arc::new(MockSurfaceManager);
     let layout_sender = Arc::new(MockLayoutSender);
     let (display_tx, display_rx) = std::sync::mpsc::channel();
     let display_sender = Arc::new(ChannelDisplaySender::new(display_tx));
@@ -37,9 +37,17 @@ fn test_event_loop_tooltip_dispatch_carries_floating_parent_when_embedded() {
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     // This module is itself embedded (via `ui.module()`) inside module
     // `parent_id`'s open popup — exactly the "module-in-popup" case.
-    let ctx = ModuleContext::new(id, hub, sm, layout_sender, display_sender, ui_sender, rx)
-        .with_parent(Some(parent_id))
-        .with_surface(LayoutSurface::Popup);
+    let ctx = ModuleContext::new(
+        id,
+        hub,
+        surface_manager,
+        layout_sender,
+        display_sender,
+        ui_sender,
+        rx,
+    )
+    .with_parent(Some(parent_id))
+    .with_surface(LayoutSurface::Popup);
 
     let mut event_loop = EventLoop::new(
         Box::new(TestModulePort::new(VNode::new_rect(

@@ -70,7 +70,7 @@ pub fn substitute_failed_modules<S: std::hash::BuildHasher>(
 fn error_placeholder(original: &VNode, name: &ModuleName, reason: &str) -> VNode {
     let mut classes: Vec<ClassName> = original
         .class_names()
-        .map_or_default(|c| c.as_slice().to_vec());
+        .map_or_default(|class_list| class_list.as_slice().to_vec());
     if let Ok(error_class) = ClassName::new("module-error") {
         classes.push(error_class);
     }
@@ -125,11 +125,12 @@ mod tests {
             panic!("expected substituted child to be text");
         };
         assert_eq!(text.as_str(), "calendar: not found");
-        assert!(
-            children[0]
-                .class_names()
-                .is_some_and(|c| c.as_slice().iter().any(|c| c.as_str() == "module-error"))
-        );
+        assert!(children[0].class_names().is_some_and(|class_list| {
+            class_list
+                .as_slice()
+                .iter()
+                .any(|class| class.as_str() == "module-error")
+        }));
     }
 
     #[test]

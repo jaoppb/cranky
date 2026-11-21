@@ -39,13 +39,16 @@ fn track_list_keeps_every_track_kind_in_order() {
         style.grid_template_columns(),
         Some(
             [
-                GridTrack::Px(100.0),
+                GridTrack::Pixels(100.0),
                 GridTrack::Percent(25.0),
-                GridTrack::Fr(2.0),
+                GridTrack::Fraction(2.0),
                 GridTrack::Auto,
                 GridTrack::MinContent,
                 GridTrack::MaxContent,
-                GridTrack::MinMax(Box::new(GridTrack::Px(10.0)), Box::new(GridTrack::Fr(1.0))),
+                GridTrack::MinMax(
+                    Box::new(GridTrack::Pixels(10.0)),
+                    Box::new(GridTrack::Fraction(1.0))
+                ),
             ]
             .as_slice()
         )
@@ -59,7 +62,7 @@ fn repeat_keeps_its_count_and_inner_tracks() {
         style.grid_template_rows(),
         Some(
             [
-                GridTrack::Repeat(3, vec![GridTrack::Px(10.0), GridTrack::Fr(1.0)]),
+                GridTrack::Repeat(3, vec![GridTrack::Pixels(10.0), GridTrack::Fraction(1.0)]),
                 GridTrack::Auto,
             ]
             .as_slice()
@@ -72,11 +75,11 @@ fn auto_tracks_go_to_their_own_axis() {
     let style = declared("grid-auto-columns: 30px; grid-auto-rows: 1fr;");
     assert_eq!(
         style.grid_auto_columns(),
-        Some([GridTrack::Px(30.0)].as_slice())
+        Some([GridTrack::Pixels(30.0)].as_slice())
     );
     assert_eq!(
         style.grid_auto_rows(),
-        Some([GridTrack::Fr(1.0)].as_slice())
+        Some([GridTrack::Fraction(1.0)].as_slice())
     );
 }
 
@@ -117,7 +120,7 @@ fn font_relative_tracks_are_dropped_and_the_rest_keep_their_order() {
     let style = declared("grid-template-columns: 2em 10px 3rem 1fr;");
     assert_eq!(
         style.grid_template_columns(),
-        Some([GridTrack::Px(10.0), GridTrack::Fr(1.0)].as_slice())
+        Some([GridTrack::Pixels(10.0), GridTrack::Fraction(1.0)].as_slice())
     );
 }
 
@@ -126,6 +129,6 @@ fn repeat_of_only_unsupported_tracks_contributes_nothing() {
     let style = declared("grid-template-columns: repeat(2, 1em) 10px;");
     assert_eq!(
         style.grid_template_columns(),
-        Some([GridTrack::Px(10.0)].as_slice())
+        Some([GridTrack::Pixels(10.0)].as_slice())
     );
 }

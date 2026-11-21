@@ -37,8 +37,8 @@ impl<'de> Deserialize<'de> for ProgressValue {
     where
         D: serde::Deserializer<'de>,
     {
-        let v = f32::deserialize(deserializer)?;
-        Self::new(v).map_err(serde::de::Error::custom)
+        let progress = f32::deserialize(deserializer)?;
+        Self::new(progress).map_err(serde::de::Error::custom)
     }
 }
 

@@ -45,7 +45,7 @@ impl StyleResolverPort for CompositeStyleResolver {
                 sheet
                     .matching_rules(query)
                     .into_iter()
-                    .map(move |m| m.into_matched(layer, sheet_index))
+                    .map(move |rule_match| rule_match.into_matched(layer, sheet_index))
             })
             .collect();
         fold_matches(matches).collapse(inherited, &LightningPropertyReparser)
@@ -89,8 +89,8 @@ impl FsStyleLoader {
     pub fn builtin_content(name: &str) -> Option<&'static str> {
         Self::BUILTIN_STYLES
             .iter()
-            .find(|(n, _)| *n == name)
-            .map(|(_, c)| *c)
+            .find(|(style_name, _)| *style_name == name)
+            .map(|(_, content)| *content)
     }
 }
 
@@ -100,7 +100,7 @@ impl StyleLoaderPort for FsStyleLoader {
         let dir = PathBuf::from(home).join(".local/share/cranky/styles");
 
         tracing::debug!(dir = ?dir, "Ensuring built-in stylesheets are present on disk");
-        fs::create_dir_all(&dir).map_err(|e| StylingError::LoaderError(e.to_string()))?;
+        fs::create_dir_all(&dir).map_err(|error| StylingError::LoaderError(error.to_string()))?;
 
         for (name, content) in Self::BUILTIN_STYLES {
             let path = dir.join(format!("{name}.css"));
@@ -161,7 +161,7 @@ impl StyleLoaderPort for FsStyleLoader {
                 && event.kind.is_modify()
             {
                 for path in event.paths {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    if let Some(stem) = path.file_stem().and_then(|file_stem| file_stem.to_str()) {
                         tracing::debug!("Stylesheet modified: {:?}", path);
                         if let Ok(sheet_name) = StyleSheetName::new(stem) {
                             command_tx.reload_style(sheet_name);
@@ -170,7 +170,9 @@ impl StyleLoaderPort for FsStyleLoader {
                 }
             }
         })
-        .map_err(|e| StylingError::LoaderError(format!("Failed to create style watcher: {e}")))?;
+        .map_err(|error| {
+            StylingError::LoaderError(format!("Failed to create style watcher: {error}"))
+        })?;
 
         if user_dir.exists() {
             let _ = watcher.watch(&user_dir, RecursiveMode::NonRecursive);

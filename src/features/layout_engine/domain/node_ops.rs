@@ -68,12 +68,12 @@ impl RenderNode {
     }
 
     fn hit_test_internal<'a>(&'a self, pos: Position, path: &mut Vec<&'a Self>) {
-        let r = self.rect();
-        let width_i32 = i32::try_from(r.width()).unwrap_or(i32::MAX);
-        let height_i32 = i32::try_from(r.height()).unwrap_or(i32::MAX);
-        let max_x = r.x().saturating_add(width_i32);
-        let max_y = r.y().saturating_add(height_i32);
-        if pos.x() >= r.x() && pos.x() < max_x && pos.y() >= r.y() && pos.y() < max_y {
+        let rect = self.rect();
+        let width_i32 = i32::try_from(rect.width()).unwrap_or(i32::MAX);
+        let height_i32 = i32::try_from(rect.height()).unwrap_or(i32::MAX);
+        let max_x = rect.x().saturating_add(width_i32);
+        let max_y = rect.y().saturating_add(height_i32);
+        if pos.x() >= rect.x() && pos.x() < max_x && pos.y() >= rect.y() && pos.y() < max_y {
             path.push(self);
             if let Self::Flex { children, .. } | Self::Grid { children, .. } = self {
                 for child in children {
@@ -298,7 +298,7 @@ mod tests {
         // child's own 240; the child must be laid out at the host's 280.
         let rect = Rect::new(Position::new(0, 0), Size::new(280, 40));
         let mut style = ComputedStyle::default();
-        style.set_min_width(crate::features::styling::domain::CssLength::Px(280.0));
+        style.set_min_width(crate::features::styling::domain::CssLength::Pixels(280.0));
         let root = flex(&[], vec![module_leaf(rect, style)], None);
 
         let layouts = root.collect_module_layouts();

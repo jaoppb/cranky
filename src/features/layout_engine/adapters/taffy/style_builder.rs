@@ -42,11 +42,11 @@ fn apply_display_mode(style: &mut Style, computed: &ComputedStyle, node: &Styled
             if let Some(flow) = computed.grid_auto_flow() {
                 style.grid_auto_flow = grid_auto_flow_to_taffy(flow);
             }
-            if let Some(ji) = computed.justify_items() {
-                style.justify_items = Some(ji.into());
+            if let Some(justify_items) = computed.justify_items() {
+                style.justify_items = Some(justify_items.into());
             }
-            if let Some(ac) = computed.align_content() {
-                style.align_content = Some(ac.into());
+            if let Some(align_content) = computed.align_content() {
+                style.align_content = Some(align_content.into());
             }
         }
         DisplayMode::Flex => {
@@ -66,36 +66,36 @@ fn apply_sizing_and_flex(style: &mut Style, computed: &ComputedStyle) {
     if let Some(row) = computed.grid_row() {
         style.grid_row = grid_line_placement_to_taffy(*row);
     }
-    if let Some(js) = computed.justify_self() {
-        style.justify_self = Some(js.into());
+    if let Some(justify_self) = computed.justify_self() {
+        style.justify_self = Some(justify_self.into());
     }
 
-    if let Some(w) = computed.width() {
-        style.size.width = w.into();
+    if let Some(width) = computed.width() {
+        style.size.width = width.into();
     }
-    if let Some(h) = computed.height() {
-        style.size.height = h.into();
+    if let Some(height) = computed.height() {
+        style.size.height = height.into();
     }
-    if let Some(mw) = computed.min_width() {
-        style.min_size.width = mw.into();
+    if let Some(minimum_width) = computed.min_width() {
+        style.min_size.width = minimum_width.into();
     }
-    if let Some(mw) = computed.max_width() {
-        style.max_size.width = mw.into();
+    if let Some(maximum_width) = computed.max_width() {
+        style.max_size.width = maximum_width.into();
     }
-    if let Some(mh) = computed.min_height() {
-        style.min_size.height = mh.into();
+    if let Some(minimum_height) = computed.min_height() {
+        style.min_size.height = minimum_height.into();
     }
-    if let Some(mh) = computed.max_height() {
-        style.max_size.height = mh.into();
+    if let Some(maximum_height) = computed.max_height() {
+        style.max_size.height = maximum_height.into();
     }
-    if let Some(fg) = computed.flex_grow() {
-        style.flex_grow = fg.value();
+    if let Some(flex_grow) = computed.flex_grow() {
+        style.flex_grow = flex_grow.value();
     }
-    if let Some(fs) = computed.flex_shrink() {
-        style.flex_shrink = fs.value();
+    if let Some(flex_shrink) = computed.flex_shrink() {
+        style.flex_shrink = flex_shrink.value();
     }
-    if let Some(fb) = computed.flex_basis() {
-        style.flex_basis = fb.into();
+    if let Some(flex_basis) = computed.flex_basis() {
+        style.flex_basis = flex_basis.into();
     }
     if let Some(as_) = computed.align_self() {
         style.align_self = Some(as_.into());
@@ -110,11 +110,11 @@ pub fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Styl
         .or_else(|| computed.gap())
         .map_or_else(
             || LengthPercentage::length(0.0),
-            |g| LengthPercentage::length(f64_to_f32(g.value())),
+            |gap| LengthPercentage::length(f64_to_f32(gap.value())),
         );
     let row_gap = computed.row_gap().or_else(|| computed.gap()).map_or_else(
         || LengthPercentage::length(0.0),
-        |g| LengthPercentage::length(f64_to_f32(g.value())),
+        |gap| LengthPercentage::length(f64_to_f32(gap.value())),
     );
 
     let mut style = Style {

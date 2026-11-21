@@ -106,7 +106,7 @@ impl InheritedStyle {
         Self {
             color: style.color().cloned(),
             accent_color: style.accent_color().cloned(),
-            font_family: style.font_family().map(|f| Arc::from(f.as_str())),
+            font_family: style.font_family().map(|family| Arc::from(family.as_str())),
             font_size: style.font_size(),
             text_align: style.text_align(),
             root_font_size: self.root_font_size,

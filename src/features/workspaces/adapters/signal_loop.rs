@@ -58,7 +58,9 @@ fn drain_batch<R: BufRead>(
                 state_changed = state_changed || outcome.applied;
                 force_resync = force_resync || outcome.force_resync;
             }
-            Err(e) if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {
+            Err(error)
+                if error.kind() == ErrorKind::WouldBlock || error.kind() == ErrorKind::TimedOut =>
+            {
                 break;
             }
             Err(_) => break,
@@ -91,8 +93,8 @@ fn check_and_resync<P: WindowManagerPort>(
             Ok((workspaces, monitors, focused)) => {
                 *current_state = HyprlandState::new(workspaces, monitors, focused);
             }
-            Err(e) => {
-                tracing::error!("Failed to resync Hyprland state after inconsistency: {e}");
+            Err(error) => {
+                tracing::error!("Failed to resync Hyprland state after inconsistency: {error}");
             }
         }
     }
@@ -110,8 +112,8 @@ fn fetch_initial_state<P: WindowManagerPort>(
             }
             state
         }
-        Err(e) => {
-            tracing::error!("Hyprland adapter error on initial fetch: {e}");
+        Err(error) => {
+            tracing::error!("Hyprland adapter error on initial fetch: {error}");
             HyprlandState::new(
                 std::collections::BTreeMap::new(),
                 std::collections::BTreeMap::new(),
@@ -160,8 +162,8 @@ fn process_event_stream<P: WindowManagerPort>(
                     }
                 }
             }
-            Err(e) => {
-                tracing::error!("Hyprland event socket read error: {e}");
+            Err(error) => {
+                tracing::error!("Hyprland event socket read error: {error}");
                 break;
             }
         }
@@ -178,8 +180,8 @@ pub async fn run_event_loop<P: WindowManagerPort + 'static>(
         loop {
             match provider.listen_events() {
                 Ok(stream) => process_event_stream(stream, &adapter, &hypr_tx),
-                Err(e) => {
-                    tracing::error!("Failed to connect to Hyprland event socket: {e}");
+                Err(error) => {
+                    tracing::error!("Failed to connect to Hyprland event socket: {error}");
                 }
             }
             std::thread::sleep(std::time::Duration::from_secs(1));

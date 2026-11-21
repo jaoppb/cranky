@@ -30,14 +30,14 @@ impl TaffyLayoutAdapter {
     /// pinned size itself, not merely the room to grow into, so `1fr`
     /// tracks and `space-between` have a definite box to distribute.
     fn pin_root(&mut self, root: NodeId, constraint: SizeConstraint) -> Result<Style, LayoutError> {
-        let engine_err = |e: taffy::TaffyError| LayoutError::EngineError(e.to_string());
+        let engine_err = |error: taffy::TaffyError| LayoutError::EngineError(error.to_string());
         let original = self.taffy.style(root).map_err(engine_err)?.clone();
         let mut pinned = original.clone();
-        if let Some(w) = constraint.width() {
-            pinned.size.width = size_to_dimension(w);
+        if let Some(width) = constraint.width() {
+            pinned.size.width = size_to_dimension(width);
         }
-        if let Some(h) = constraint.height() {
-            pinned.size.height = size_to_dimension(h);
+        if let Some(height) = constraint.height() {
+            pinned.size.height = size_to_dimension(height);
         }
         self.taffy.set_style(root, pinned).map_err(engine_err)?;
         Ok(original)
@@ -77,11 +77,11 @@ impl TaffyLayoutAdapter {
                         height: axis_available_space(None),
                     },
                 )
-                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+                .map_err(|error| LayoutError::EngineError(error.to_string()))?;
             let size = self
                 .taffy
                 .layout(root_node_id)
-                .map_err(|e| LayoutError::EngineError(e.to_string()))?
+                .map_err(|error| LayoutError::EngineError(error.to_string()))?
                 .size;
             self.intrinsic = Some(Size::new(f32_to_u32(size.width), f32_to_u32(size.height)));
             Some(self.pin_root(root_node_id, constraint)?)
@@ -92,7 +92,7 @@ impl TaffyLayoutAdapter {
         // Compute layout
         self.taffy
             .compute_layout(root_node_id, available_space)
-            .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+            .map_err(|error| LayoutError::EngineError(error.to_string()))?;
 
         // A node styled with `calc(<percent>% + <px>px)` — e.g.
         // `width: calc(100% - 2rem)` — can't resolve its percent term
@@ -102,7 +102,7 @@ impl TaffyLayoutAdapter {
         if resolve_pending_calcs(&mut self.taffy, &new_state) {
             self.taffy
                 .compute_layout(root_node_id, available_space)
-                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+                .map_err(|error| LayoutError::EngineError(error.to_string()))?;
         }
 
         // Build RenderNode tree
@@ -113,7 +113,7 @@ impl TaffyLayoutAdapter {
         if let Some(original) = unpinned_root {
             self.taffy
                 .set_style(root_node_id, original)
-                .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+                .map_err(|error| LayoutError::EngineError(error.to_string()))?;
         }
 
         tracing::trace!(

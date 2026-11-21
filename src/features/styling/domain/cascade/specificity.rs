@@ -54,7 +54,7 @@ fn step_specificity(step: &SelectorStep) -> Specificity {
     let mut spec = Specificity::new(
         u16::from(step.id.is_some()),
         classes_and_pseudo,
-        u16::from(step.tag.as_deref().is_some_and(|t| t != "*")),
+        u16::from(step.tag.as_deref().is_some_and(|tag| tag != "*")),
     );
     if let Some(max_negation) = step.negations.iter().map(selector_specificity).max() {
         spec = spec.combine(max_negation);
@@ -71,7 +71,10 @@ mod tests {
         SelectorStep {
             tag: tag.map(str::to_string),
             id: id.map(str::to_string),
-            classes: classes.iter().map(|s| (*s).to_string()).collect(),
+            classes: classes
+                .iter()
+                .map(|class_name| (*class_name).to_string())
+                .collect(),
             pseudo_classes: Vec::new(),
             negations: Vec::new(),
             combinator: None,

@@ -64,7 +64,7 @@ impl RenderPipeline {
         canvas_factory: &mut F,
     ) -> Option<(RenderBuffer, Position)> {
         let res = paint_pipeline(render_node, current_bounds, scale, canvas_factory);
-        if let Some(bounds) = current_bounds.filter(|b| b.width() > 0 && b.height() > 0) {
+        if let Some(bounds) = current_bounds.filter(|rect| rect.width() > 0 && rect.height() > 0) {
             self.rendered_bounds.insert(monitor_id.clone(), bounds);
         }
         res

@@ -35,7 +35,7 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
         let matched = self
             .matching_rules(query)
             .into_iter()
-            .map(|m| m.into_matched(Layer::BASE, 0))
+            .map(|rule_match| rule_match.into_matched(Layer::BASE, 0))
             .collect();
         let (result, next_inherited) = fold_matches(matched).collapse(inherited, reparser);
 

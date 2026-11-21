@@ -52,10 +52,9 @@ pub async fn run_signal_loop(
         use tokio_stream::StreamExt;
         let mut events = new_title
             .map(|_| SniEvent::Title)
-            .merge(
-                new_status
-                    .map(|sig| SniEvent::Status(sig.args().map_or_default(|a| a.status().clone()))),
-            )
+            .merge(new_status.map(|sig| {
+                SniEvent::Status(sig.args().map_or_default(|args| args.status().clone()))
+            }))
             .merge(new_icon.map(|_| SniEvent::Icon))
             .merge(new_path.map(|_| SniEvent::ThemePath))
             .merge(new_attention_icon.map(|_| SniEvent::AttentionIcon))

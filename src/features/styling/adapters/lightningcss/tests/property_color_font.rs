@@ -3,8 +3,8 @@ use crate::features::styling::domain::Opacity;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::{Color, DrawingColor};
 
-fn solid(r: u8, g: u8, b: u8) -> DrawingColor {
-    DrawingColor::Solid(Color::new(r, g, b, 255))
+fn solid(red: u8, green: u8, blue: u8) -> DrawingColor {
+    DrawingColor::Solid(Color::new(red, green, blue, 255))
 }
 
 #[test]

@@ -31,26 +31,26 @@ async fn resolve_all_icons(
 ) {
     let icon_pixmap = all_props
         .remove("IconPixmap")
-        .and_then(|v| v.try_into().ok());
+        .and_then(|variant| variant.try_into().ok());
     let icon = resolve_systray_icon(icon_name, theme_path.clone(), icon_pixmap).await;
 
     let att_name = all_props
         .remove("AttentionIconName")
-        .and_then(|v| v.try_into().ok());
+        .and_then(|variant| variant.try_into().ok());
     let att_theme = all_props
         .remove("AttentionIconThemePath")
-        .and_then(|v| v.try_into().ok());
+        .and_then(|variant| variant.try_into().ok());
     let att_pixmap = all_props
         .remove("AttentionIconPixmap")
-        .and_then(|v| v.try_into().ok());
+        .and_then(|variant| variant.try_into().ok());
     let attention_icon = resolve_systray_icon(att_name, att_theme, att_pixmap).await;
 
     let ovr_name = all_props
         .remove("OverlayIconName")
-        .and_then(|v| v.try_into().ok());
+        .and_then(|variant| variant.try_into().ok());
     let ovr_pixmap = all_props
         .remove("OverlayIconPixmap")
-        .and_then(|v| v.try_into().ok());
+        .and_then(|variant| variant.try_into().ok());
     let overlay_icon = resolve_systray_icon(ovr_name, theme_path, ovr_pixmap).await;
 
     (icon, attention_icon, overlay_icon)
@@ -59,11 +59,11 @@ async fn resolve_all_icons(
 fn parse_window_id(all_props: &mut HashMap<String, OwnedVariant>) -> Option<u32> {
     all_props
         .remove("WindowId")
-        .and_then(|v| v.try_into().ok())
+        .and_then(|variant| variant.try_into().ok())
         .or_else(|| {
             all_props
                 .remove("WindowId")
-                .and_then(|v| v.try_into().ok())
+                .and_then(|variant| variant.try_into().ok())
                 .and_then(|id: i32| u32::try_from(id).ok())
         })
 }
@@ -71,11 +71,11 @@ fn parse_window_id(all_props: &mut HashMap<String, OwnedVariant>) -> Option<u32>
 fn parse_menu_path(all_props: &mut HashMap<String, OwnedVariant>) -> Option<String> {
     all_props
         .remove("Menu")
-        .and_then(|v| v.try_into().ok())
+        .and_then(|variant| variant.try_into().ok())
         .or_else(|| {
-            all_props.remove("Menu").and_then(|v| {
-                if let Variant::ObjectPath(p) = &*v {
-                    Some(p.as_str().to_string())
+            all_props.remove("Menu").and_then(|variant| {
+                if let Variant::ObjectPath(object_path) = &*variant {
+                    Some(object_path.as_str().to_string())
                 } else {
                     None
                 }
@@ -134,25 +134,29 @@ pub async fn fetch_systray_item(
 
     let title: String = all_props
         .remove("Title")
-        .and_then(|v| v.try_into().ok())
+        .and_then(|variant| variant.try_into().ok())
         .unwrap_or_default();
     let status_str: String = all_props
         .remove("Status")
-        .and_then(|v| v.try_into().ok())
+        .and_then(|variant| variant.try_into().ok())
         .unwrap_or_default();
-    let icon_name: Option<String> = all_props.remove("IconName").and_then(|v| v.try_into().ok());
+    let icon_name: Option<String> = all_props
+        .remove("IconName")
+        .and_then(|variant| variant.try_into().ok());
     let icon_theme_path: Option<String> = all_props
         .remove("IconThemePath")
-        .and_then(|v| v.try_into().ok());
+        .and_then(|variant| variant.try_into().ok());
     let category_str: String = all_props
         .remove("Category")
-        .and_then(|v| v.try_into().ok())
+        .and_then(|variant| variant.try_into().ok())
         .unwrap_or_default();
-    let item_id: Option<String> = all_props.remove("Id").and_then(|v| v.try_into().ok());
+    let item_id: Option<String> = all_props
+        .remove("Id")
+        .and_then(|variant| variant.try_into().ok());
     let window_id = parse_window_id(&mut all_props);
     let item_is_menu_val: bool = all_props
         .remove("ItemIsMenu")
-        .and_then(|v| v.try_into().ok())
+        .and_then(|variant| variant.try_into().ok())
         .unwrap_or_default();
     let menu_path_str = parse_menu_path(&mut all_props);
 

@@ -8,7 +8,7 @@ pub enum HyprError {
     #[error("Hyprland instance signature not found. Is Hyprland running?")]
     NoInstance,
     #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    InputOutput(#[from] std::io::Error),
 }
 
 pub trait HyprlandProvider: Send + Sync {
@@ -66,7 +66,7 @@ impl HyprlandProvider for RealHyprlandProvider {
             .join(signature.as_str())
             .join(".socket2.sock");
 
-        UnixStream::connect(socket_path).map_err(HyprError::Io)
+        UnixStream::connect(socket_path).map_err(HyprError::InputOutput)
     }
 }
 
@@ -99,14 +99,14 @@ mod tests {
 
     #[test]
     fn test_hypr_error_display() {
-        let err = HyprError::NoInstance;
+        let error = HyprError::NoInstance;
         assert_eq!(
-            format!("{err}"),
+            format!("{error}"),
             "Hyprland instance signature not found. Is Hyprland running?"
         );
 
-        let err = HyprError::Io(std::io::Error::other("test"));
-        assert!(format!("{err}").contains("IO error: test"));
+        let error = HyprError::InputOutput(std::io::Error::other("test"));
+        assert!(format!("{error}").contains("IO error: test"));
     }
 
     #[test]

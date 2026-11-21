@@ -10,7 +10,7 @@ use crate::shared::primitives::color::{Color, DrawingColor};
 
 fn solid(style: &ComputedStyle) -> Color {
     match style.background() {
-        Some(DrawingColor::Solid(c)) => *c,
+        Some(DrawingColor::Solid(background)) => *background,
         other => panic!("expected a solid background color, got {other:?}"),
     }
 }

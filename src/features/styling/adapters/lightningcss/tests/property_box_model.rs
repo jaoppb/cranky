@@ -66,12 +66,12 @@ fn each_sizing_property_sets_its_own_field() {
         "width: 10px; height: 20px; min-width: 30px; max-width: 40px; \
          min-height: 50px; max-height: 60px;",
     );
-    assert_eq!(style.width(), Some(CssLength::Px(10.0)));
-    assert_eq!(style.height(), Some(CssLength::Px(20.0)));
-    assert_eq!(style.min_width(), Some(CssLength::Px(30.0)));
-    assert_eq!(style.max_width(), Some(CssLength::Px(40.0)));
-    assert_eq!(style.min_height(), Some(CssLength::Px(50.0)));
-    assert_eq!(style.max_height(), Some(CssLength::Px(60.0)));
+    assert_eq!(style.width(), Some(CssLength::Pixels(10.0)));
+    assert_eq!(style.height(), Some(CssLength::Pixels(20.0)));
+    assert_eq!(style.min_width(), Some(CssLength::Pixels(30.0)));
+    assert_eq!(style.max_width(), Some(CssLength::Pixels(40.0)));
+    assert_eq!(style.min_height(), Some(CssLength::Pixels(50.0)));
+    assert_eq!(style.max_height(), Some(CssLength::Pixels(60.0)));
 }
 
 #[test]

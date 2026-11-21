@@ -7,22 +7,22 @@ pub type RawTooltip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);
 
 #[must_use]
 pub fn clean_sni_text(input: &str) -> String {
-    let s = input
+    let text = input
         .replace("<br>", "\n")
         .replace("<br/>", "\n")
         .replace("<br />", "\n")
         .replace("<BR>", "\n")
         .replace("<BR/>", "\n")
         .replace("<BR />", "\n");
-    let mut clean = String::with_capacity(s.len());
+    let mut clean = String::with_capacity(text.len());
     let mut in_tag = false;
-    for c in s.chars() {
-        if c == '<' {
+    for character in text.chars() {
+        if character == '<' {
             in_tag = true;
-        } else if c == '>' {
+        } else if character == '>' {
             in_tag = false;
         } else if !in_tag {
-            clean.push(c);
+            clean.push(character);
         }
     }
     clean
@@ -36,8 +36,8 @@ pub fn clean_sni_text(input: &str) -> String {
         .to_string()
 }
 
-pub fn parse_raw_tooltip(v: zbus::OwnedVariant) -> Option<SystrayTooltip> {
-    if let Ok((icon_name, pixmap, title, description)) = RawTooltip::try_from(v) {
+pub fn parse_raw_tooltip(variant: zbus::OwnedVariant) -> Option<SystrayTooltip> {
+    if let Ok((icon_name, pixmap, title, description)) = RawTooltip::try_from(variant) {
         let icon_name_opt = if icon_name.is_empty() {
             None
         } else {
