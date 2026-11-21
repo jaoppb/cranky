@@ -1,3 +1,4 @@
+//! Applies grid item properties: `grid-row`/`grid-column` placement and `justify-self`.
 use super::placement::{parse_line_placement, parse_single_placement};
 use crate::features::layout_engine::domain::AlignItems;
 use crate::features::styling::domain::{ComputedStyle, GridLinePlacement, GridPlacement};

@@ -1,3 +1,5 @@
+//! Detects `em`/`rem` (and `calc()`) values on length properties, so the cascade can resolve
+//! them against the right font size instead of the 16px guess.
 use super::calc::{calc_from_length_percentage_or_auto, calc_from_max_size, calc_from_size};
 use super::relative_spacing::apply_spacing;
 use crate::features::styling::domain::{DeclaredLength, DeclaredLengths};

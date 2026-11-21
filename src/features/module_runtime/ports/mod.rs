@@ -1,3 +1,5 @@
+//! The traits and error types the module runtime depends on, implemented by the scripting adapters
+//! and the app's registry.
 pub mod dependencies;
 pub mod errors;
 pub mod layout;

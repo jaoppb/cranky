@@ -1,3 +1,4 @@
+//! A resolved CSS length: pixels, a percentage, or `auto`.
 use super::super::errors::StylingError;
 use serde::{Deserialize, Serialize};
 

@@ -1,3 +1,4 @@
+//! One tray item as the bar sees it, with every property read from its `StatusNotifierItem`.
 use super::command::CreateSystrayItemCommand;
 use super::enums::{SystrayCategory, SystrayStatus};
 use super::icon::SystrayIcon;
@@ -5,6 +6,8 @@ use super::identifiers::{Destination, ItemId, ItemIsMenu, ObjectPath, SystrayId,
 use super::tooltip::SystrayTooltip;
 use serde::{Deserialize, Serialize};
 
+/// A tray item with the properties read from its `StatusNotifierItem`, as scripts receive it in
+/// the systray signal.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SystrayItem {
     id: SystrayId,

@@ -1,8 +1,15 @@
+//! Runs each loaded script module as its own actor.
+//!
+//! Holds the port every scripting engine implements, the per-module event loop, and the render
+//! pipeline that turns a module's `VNode` tree into a painted buffer per monitor.
+
 pub mod adapters;
 pub mod application;
 pub mod domain;
 pub mod ports;
 
+/// Test doubles for the module runtime's ports (senders, surface manager, canvas, layout engine,
+/// style resolver, module port), shared by unit tests across the crate.
 #[cfg(test)]
 pub mod test_support {
     use crate::features::layout_engine::domain::{

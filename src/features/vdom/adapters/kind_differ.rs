@@ -1,3 +1,5 @@
+//! Diffing of what two nodes of the same tag hold besides children: text, progress, image and
+//! embedded-module parameters.
 use crate::features::vdom::domain::{NodeId, Patch, VNodeKind};
 
 #[must_use]

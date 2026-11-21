@@ -1,3 +1,4 @@
+//! Value types for Hyprland workspaces and monitors, free of IPC and JSON concerns.
 pub mod identifiers;
 pub mod monitor;
 #[cfg(test)]

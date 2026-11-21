@@ -1,3 +1,4 @@
+//! Parses grid line placements (`auto`, a line number, `span N`, and `start / end` pairs).
 use crate::features::styling::domain::{GridLinePlacement, GridPlacement};
 
 #[must_use]

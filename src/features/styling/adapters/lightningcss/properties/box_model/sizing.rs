@@ -1,3 +1,4 @@
+//! Applies `width`, `height` and their `min-`/`max-` variants.
 use super::utils::parse_size_str;
 use crate::features::styling::domain::ComputedStyle;
 use lightningcss::properties::Property;

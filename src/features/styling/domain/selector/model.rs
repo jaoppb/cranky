@@ -1,3 +1,4 @@
+//! The compiled selector model and the rule entries a parsed stylesheet holds.
 use super::super::cascade::{DeclaredStyle, Importance};
 use super::super::grid_types::PseudoClass;
 

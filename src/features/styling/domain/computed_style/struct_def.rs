@@ -1,3 +1,4 @@
+//! The [`ComputedStyle`] struct, its flex and grid defaults, and the merge used by the cascade.
 use super::super::grid_types::{DisplayMode, GridAutoFlow, GridLinePlacement, GridTrack};
 use super::super::values::{CssLength, FlexGrow, FlexShrink, Opacity};
 use crate::features::layout_engine::domain::{
@@ -7,6 +8,8 @@ use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSi
 use crate::shared::primitives::TextAlign;
 use crate::shared::primitives::color::DrawingColor;
 
+/// Every property the renderer understands, each `None` until some rule declares it; the
+/// layout and paint phases fall back to their own defaults for `None`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ComputedStyle {
     pub(crate) background: Option<DrawingColor>,

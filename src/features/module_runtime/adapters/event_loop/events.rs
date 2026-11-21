@@ -1,3 +1,5 @@
+//! The events that wake a module's event loop, merged from its signal, layout and pointer
+//! channels.
 use crate::shared::events::signals::SignalKind;
 use crate::shared::primitives::MonitorId;
 

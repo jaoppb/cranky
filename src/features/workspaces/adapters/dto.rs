@@ -1,3 +1,5 @@
+//! Shapes of Hyprland's JSON replies to `j/monitors` and `j/workspaces`, and their mapping into
+//! domain types.
 use crate::features::workspaces::domain::{
     Monitor, MonitorName, Workspace, WorkspaceId, WorkspaceName,
 };

@@ -1,3 +1,5 @@
+//! The shared handles every module actor is built from: the signal hub, the surface manager, the
+//! three outbound channels and the canvas factory.
 use super::layout::LayoutEventSender;
 use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::vdom::domain::UiCommandSender;

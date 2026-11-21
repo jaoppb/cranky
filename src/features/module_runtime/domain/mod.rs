@@ -1,3 +1,5 @@
+//! Pure module-runtime logic: the identity of each module site, pointer handling, and the
+//! per-monitor render pipeline.
 pub mod identity;
 pub(super) mod pointer_handler;
 pub mod render_pipeline;

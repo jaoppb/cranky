@@ -1,3 +1,5 @@
+//! Styling domain: identifiers, value types, selectors and the cascade that turns matched
+//! rules into a computed style, free of any CSS parser.
 pub mod cascade;
 pub mod computed_style;
 pub mod errors;

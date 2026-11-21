@@ -1,3 +1,5 @@
+//! `VNodeKind`: what a node is (flex, grid, text, progress, rect, image or embedded module) and the
+//! data specific to that kind.
 use super::tag::TextContent;
 use super::vnode::VNode;
 use crate::features::styling::domain::{Orientation, ProgressValue};

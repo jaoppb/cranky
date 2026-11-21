@@ -1,3 +1,5 @@
+//! Layout messages between module actors and the app: the size and child-layout events modules send
+//! up, and the per-monitor bounds sent back down.
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{ChildBounds, ChildModuleLayout, ModuleId, MonitorId};
 
@@ -47,6 +49,8 @@ impl LayoutEventSender for std::sync::mpsc::Sender<LayoutEvent> {
     }
 }
 
+/// Delivers the per-monitor bounds the app assigned to a module to that module's actor.
 pub trait LayoutSender: Send + Sync {
+    /// Replaces the module's bounds with `layout`, one entry per monitor it is shown on.
     fn send_layout(&self, layout: std::collections::HashMap<MonitorId, ChildBounds>);
 }

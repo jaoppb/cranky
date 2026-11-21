@@ -1,3 +1,5 @@
+//! The `KeyedTree` trait that lets `VNode` and `RenderNode` share one way of resolving keyed
+//! anchors.
 use super::node_key::NodeKey;
 use super::node_path::NodePath;
 use super::node_ref::AnchorSegment;

@@ -1,3 +1,5 @@
+//! Checks a Hyprland state snapshot for references that do not resolve, such as a monitor whose
+//! active workspace is missing.
 use crate::features::workspaces::domain::{MonitorName, WorkspaceId, WorkspaceName};
 use crate::shared::events::signals::HyprlandState;
 use serde::Serialize;

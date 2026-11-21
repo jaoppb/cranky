@@ -1,3 +1,5 @@
+//! The module actor and the context it owns: its identity, the signal hub, its surface manager
+//! and the channels it sends layout, display and UI commands through.
 use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::module_runtime::adapters::EventLoop;
 use crate::features::module_runtime::domain::{ModuleIdentity, PointerHandler, RenderPipeline};

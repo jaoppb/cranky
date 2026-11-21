@@ -1,3 +1,5 @@
+//! The CSS cascade: orders matched rules by priority, merges their declarations, then resolves
+//! inheritance, `em`/`rem` and `var()` for one element.
 pub mod declared_length;
 pub mod declared_lengths;
 pub mod declared_lengths_apply;

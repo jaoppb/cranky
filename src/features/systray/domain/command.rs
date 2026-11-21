@@ -1,3 +1,4 @@
+//! Builders that gather every property of a tray item before a [`super::SystrayItem`] is made.
 use super::enums::{SystrayCategory, SystrayStatus};
 use super::icon::SystrayIcon;
 use super::identifiers::{Destination, ItemId, ItemIsMenu, ObjectPath, SystrayId, Title, WindowId};

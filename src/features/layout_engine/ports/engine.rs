@@ -1,7 +1,12 @@
+//! The port that turns a styled node tree into positioned render nodes, implemented by the
+//! taffy adapter.
+
 use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 
+/// Lays out a `StyledNode` tree into a `RenderNode` tree; an engine may keep state between
+/// passes to lay out incrementally.
 pub trait LayoutEnginePort: Send + Sync {
     /// Calculates the layout tree for the given styled node, measuring
     /// intrinsically on both axes.

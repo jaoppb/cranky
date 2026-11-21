@@ -1,3 +1,5 @@
+//! Matches a compiled selector against an element query, walking combinators from right to
+//! left.
 use super::super::grid_types::PseudoClass;
 use super::super::query::ElementQuery;
 use super::model::{Combinator, CompiledSelector, SelectorStep};

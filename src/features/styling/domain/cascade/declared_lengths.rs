@@ -1,3 +1,4 @@
+//! The cascaded, still unresolved lengths of the twenty length-bearing properties.
 use super::declared_length::DeclaredLength;
 use super::value::Cascade;
 use crate::shared::config::domain::FontSize;

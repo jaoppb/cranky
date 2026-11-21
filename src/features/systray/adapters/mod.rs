@@ -1,3 +1,5 @@
+//! The D-Bus side of the tray: claims or joins the `StatusNotifierWatcher`, follows each item's
+//! properties and signals, and routes click and scroll actions back to the item.
 mod action_invoker;
 mod cleaner;
 mod fetcher;

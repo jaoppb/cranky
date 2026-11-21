@@ -1,3 +1,4 @@
+//! Grid properties: `display`, gaps, container templates and item placement.
 pub mod container;
 pub mod item;
 pub mod placement;

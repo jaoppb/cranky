@@ -1,6 +1,9 @@
+//! The element description that selectors are matched against.
 use super::grid_types::PseudoClass;
 use super::identifiers::{ClassName, ElementId};
 
+/// What a selector can see of one element: tag, id, classes, active pseudo-classes, position
+/// among its siblings, emptiness and a chain to its parent's query for combinators.
 #[derive(Debug, Clone)]
 pub struct ElementQuery<'a> {
     tag: &'a str,
@@ -14,6 +17,8 @@ pub struct ElementQuery<'a> {
 }
 
 impl<'a> ElementQuery<'a> {
+    /// Describes an element as the first of one sibling and non-empty; the vdom bridge then sets
+    /// the real position and emptiness with `with_structural_context`.
     #[must_use]
     pub const fn new(
         tag: &'a str,

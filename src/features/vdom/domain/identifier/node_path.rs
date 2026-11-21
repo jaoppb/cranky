@@ -9,13 +9,19 @@ use serde::{Deserialize, Serialize};
 /// a node inside a popup must never mark the popup's owner node `:hover`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum SurfaceSpace {
+    /// The bar's own tree; the default.
     #[default]
     Bar,
+    /// A popup's content tree.
     Popup,
+    /// A panel's content tree.
     Panel,
+    /// A tooltip's content tree.
     Tooltip,
 }
 
+/// A node's position in one tree, as the child indices from its root, tagged with the surface that
+/// tree belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub struct NodePath {
     surface: SurfaceSpace,

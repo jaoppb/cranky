@@ -1,3 +1,5 @@
+//! Child-list diffing: keyed when every sibling on both sides carries a unique key, positional
+//! otherwise.
 use crate::features::vdom::domain::{ChildPatchOp, NodeId, Patch, VNode};
 use std::collections::{HashMap, HashSet};
 

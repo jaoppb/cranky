@@ -1,3 +1,5 @@
+//! The `[metrics]` table of `config.toml`: which readings to take, in which unit, and how
+//! often.
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -61,6 +63,9 @@ impl UpdateInterval {
     }
 }
 
+/// The `[metrics]` table: which readings the sampler takes, the unit each is shown in, and the
+/// sampling interval in milliseconds (1000 by default). Network, temperature and disk are off
+/// unless set.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MetricsConfig {
     #[serde(default)]

@@ -1,3 +1,5 @@
+//! VDOM value types: nodes and their kinds, identifiers, click and hover actions, floating content
+//! specs, patches, and the style-resolution bridge.
 pub mod action;
 pub mod constructors;
 pub mod diff;

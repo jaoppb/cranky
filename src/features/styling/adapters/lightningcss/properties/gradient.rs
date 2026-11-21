@@ -1,3 +1,4 @@
+//! Converts a `linear-gradient()` `border-image` source into a gradient drawing colour.
 use super::color_font::convert_color;
 use crate::shared::primitives::color::DrawingColor;
 use lightningcss::values::gradient::{Gradient, GradientItem, LineDirection, LinearGradient};

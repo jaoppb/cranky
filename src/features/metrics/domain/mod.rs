@@ -1,3 +1,4 @@
+//! Metrics value types, the `[metrics]` configuration and the snapshot sent to modules.
 pub mod command;
 pub mod config;
 pub mod state;

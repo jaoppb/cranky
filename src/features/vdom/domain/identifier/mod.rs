@@ -1,3 +1,5 @@
+//! Identifiers for VDOM nodes: per-build ids, script-given keys, positional paths, and the refs
+//! that remember pointer interaction across renders.
 pub mod keyed_tree;
 pub mod node_id;
 mod node_key;

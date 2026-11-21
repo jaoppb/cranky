@@ -1,3 +1,4 @@
+//! Tray icon data: theme names, decoded images, and the cache key for name lookups.
 use crate::shared::primitives::BinaryData;
 use crate::shared::primitives::geometry::Size;
 use serde::{Deserialize, Serialize};

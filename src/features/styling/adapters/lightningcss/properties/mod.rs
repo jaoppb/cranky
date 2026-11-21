@@ -1,3 +1,5 @@
+//! Converts lightningcss property values into [`ComputedStyle`] fields, one submodule per
+//! property family.
 pub mod box_model;
 pub mod calc;
 pub mod color_font;

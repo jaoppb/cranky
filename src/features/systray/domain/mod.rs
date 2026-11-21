@@ -1,3 +1,4 @@
+//! Value types for tray items and the state snapshot the hub publishes, free of D-Bus types.
 pub mod command;
 pub mod enums;
 pub mod icon;

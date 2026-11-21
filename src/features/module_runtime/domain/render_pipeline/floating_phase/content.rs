@@ -1,3 +1,4 @@
+//! The layout pass and per-monitor cache shared by all three floating kinds.
 use super::super::measurer::ModuleSizeMeasurer;
 use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::layout_engine::ports::LayoutEnginePort;

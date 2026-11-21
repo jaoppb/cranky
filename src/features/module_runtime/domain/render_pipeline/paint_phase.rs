@@ -1,3 +1,5 @@
+//! Last pipeline phase: paints a laid-out tree into a buffer of physical pixels (4 bytes each) at
+//! the monitor's scale.
 use crate::features::layout_engine::domain::RenderNode;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};

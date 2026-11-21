@@ -1,3 +1,4 @@
+//! Applies `padding` and `margin`, shorthand and per side.
 use super::utils::length_to_f64;
 use crate::features::layout_engine::domain::BoxMargin;
 use crate::features::styling::domain::ComputedStyle;

@@ -1,19 +1,28 @@
 use crate::features::vdom::domain::VNode;
 use serde::Deserialize;
 
+/// Which side of its anchor node a script asked a popup to open on; parsed and diffed, but popup
+/// placement does not read it yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AnchorDirection {
+    /// Above the anchor.
     Top,
+    /// Below the anchor.
     Bottom,
+    /// Left of the anchor.
     Left,
+    /// Right of the anchor.
     Right,
+    /// No side requested; the default.
     #[default]
     Auto,
 }
 
 pub use crate::shared::primitives::PopupOffset;
 
+/// A popup a node opens: its content, the requested anchor side and an optional offset; a script
+/// may give the content alone.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(from = "PopupSpecHelper")]
 pub struct PopupSpec {

@@ -1,3 +1,4 @@
+//! Box-model properties: borders, sizes, padding and margin.
 pub mod border;
 pub mod sizing;
 pub mod spacing;

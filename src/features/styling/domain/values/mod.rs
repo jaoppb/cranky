@@ -1,3 +1,4 @@
+//! Range-checked style values: flex factors, lengths, opacity and progress.
 pub mod flex;
 pub mod length;
 pub mod opacity;

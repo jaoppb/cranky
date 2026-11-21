@@ -1,3 +1,4 @@
+//! The tooltip a tray item asks to show: an optional icon, a title and a description.
 use super::icon::SystrayIcon;
 use serde::{Deserialize, Serialize};
 

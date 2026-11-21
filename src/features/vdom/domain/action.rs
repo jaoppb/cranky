@@ -1,17 +1,25 @@
+//! What a node does when clicked or hovered, and the UI commands those actions send to the app.
 use crate::shared::events::core::PointerButton;
 use crate::shared::primitives::geometry::Position;
 use serde::Deserialize;
 use std::collections::HashMap;
 
+/// What a script asked to happen when a node is clicked or hovered, as built with `ui.action`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub enum UiAction {
+    /// Runs the string as a shell command with `sh -c`.
     Exec(String),
+    /// Asks a tray item to perform an action.
     SystrayAction {
+        /// The tray item to act on.
         id: crate::features::systray::domain::SystrayId,
+        /// Which `StatusNotifierItem` method, or fallback chain, to invoke on it.
         action: crate::features::systray::domain::SystrayActionName,
+        /// Ignored when dispatched: the pointer position of the event is sent instead.
         #[serde(default)]
         pos: Option<Position>,
     },
+    /// Calls the named function in the module's own script, with the monitor name as its argument.
     ScriptCall(crate::shared::primitives::FunctionName),
 }
 
@@ -54,6 +62,8 @@ impl UiCommandSender for std::sync::mpsc::Sender<UiCommand> {
     }
 }
 
+/// The action bound to each pointer button on a node; a single action from a script binds left,
+/// middle and right alike.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ClickHandlers {
     handlers: HashMap<PointerButton, UiAction>,

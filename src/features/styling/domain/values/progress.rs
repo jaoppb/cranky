@@ -1,6 +1,8 @@
+//! The fill fraction and direction of a progress element.
 use super::super::errors::StylingError;
 use serde::{Deserialize, Serialize};
 
+/// How full a progress element is, as a fraction within `0.0..=1.0`.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Serialize, Default)]
 pub struct ProgressValue(f32);
 
@@ -43,11 +45,14 @@ impl<'de> Deserialize<'de> for ProgressValue {
     }
 }
 
+/// The direction a progress element fills in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Orientation {
+    /// Fills from the left edge rightwards; the default.
     #[default]
     Horizontal,
+    /// Fills from the bottom edge upwards.
     Vertical,
 }
 

@@ -1,3 +1,4 @@
+//! Player and track value types and the `MprisState` snapshot published to modules.
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

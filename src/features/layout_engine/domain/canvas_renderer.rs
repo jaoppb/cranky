@@ -1,3 +1,5 @@
+//! Paints a laid-out `RenderNode` tree onto a canvas: backgrounds, borders, text, progress bars
+//! and images.
 use super::render_node::RenderNode;
 use super::text_placement::{text_alignment, text_origin};
 use crate::features::styling::domain::{ComputedStyle, Orientation};

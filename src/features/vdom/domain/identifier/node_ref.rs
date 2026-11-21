@@ -1,3 +1,5 @@
+//! `NodeRef` and `InteractionContext`: which nodes are hovered, pressed and focused, captured so
+//! the state survives re-renders.
 use super::node_key::NodeKey;
 use super::node_path::NodePath;
 
@@ -85,6 +87,8 @@ impl NodeRef {
     }
 }
 
+/// Which nodes are hovered, pressed and focused on one monitor, and whether that monitor has focus;
+/// drives the `:hover`, `:active` and `:focus` pseudo-classes.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct InteractionContext {
     hovered: Option<NodeRef>,

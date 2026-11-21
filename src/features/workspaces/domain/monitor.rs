@@ -1,3 +1,4 @@
+//! A monitor as Hyprland reports it: its name and the workspaces shown on it.
 use super::identifiers::{MonitorName, WorkspaceId};
 use serde::Serialize;
 

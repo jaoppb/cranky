@@ -1,3 +1,5 @@
+//! The registry port that loads, reloads and spawns module actors and resolves embedded modules to
+//! them.
 use super::dependencies::ModuleRuntimeDependencies;
 use super::errors::RegistryLoadError;
 use super::layout::{LayoutEventSender, LayoutSender};

@@ -1,3 +1,5 @@
+//! The screen edges a panel is anchored to, as vertical and horizontal anchors packed into one
+//! value.
 use serde::{Deserialize, Serialize};
 
 const TOP_FLAG: u8 = 1 << 0;

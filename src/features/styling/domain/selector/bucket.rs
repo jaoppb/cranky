@@ -1,3 +1,4 @@
+//! Indexes a stylesheet's rules by their subject selector's id, class or tag.
 use std::collections::HashMap;
 
 use super::super::query::ElementQuery;

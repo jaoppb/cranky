@@ -1,3 +1,4 @@
+//! Which of `:hover`, `:active` and `:focus` apply to the node at a given path.
 use super::anchor::ResolvedInteraction;
 use crate::features::styling::domain::PseudoClass;
 use crate::features::vdom::domain::{NodePath, SurfaceSpace};

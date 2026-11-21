@@ -1,3 +1,5 @@
+//! Sorts an element's matched rules into cascade order and merges them into one declared
+//! style.
 use super::declared_style::DeclaredStyle;
 use super::priority::RulePriority;
 

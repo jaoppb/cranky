@@ -1,3 +1,4 @@
+//! Flexbox and grid layout on taffy, with an incremental tree reused across passes.
 mod calc_resolve;
 mod diff;
 mod grid_converter;
@@ -17,6 +18,8 @@ use crate::shared::primitives::geometry::{Position, Size};
 use cranky_unsafe::SendTaffyTree;
 use reconciler::LayoutState;
 
+/// Layout engine backed by taffy that keeps its tree between passes and patches it from the
+/// diff against the previous `StyledNode`.
 pub struct TaffyLayoutAdapter {
     taffy: SendTaffyTree,
     state: Option<LayoutState>,

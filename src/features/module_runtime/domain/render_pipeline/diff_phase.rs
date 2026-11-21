@@ -1,3 +1,5 @@
+//! First pipeline phase: renders the script and decides whether anything changed enough to need a
+//! new layout.
 use super::context::PipelineDiff;
 use super::pipeline::RenderPipeline;
 use crate::features::module_runtime::ports::AnyModulePort;

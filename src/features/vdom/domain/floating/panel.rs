@@ -1,3 +1,5 @@
+//! `PanelSpec`: a panel's content and its layer-shell placement (layer, anchor, margin, exclusive
+//! zone, keyboard interactivity).
 use super::anchor::PanelAnchor;
 use super::types::{ExclusiveZone, KeyboardInteractivity, PanelLayer};
 use crate::features::vdom::domain::VNode;

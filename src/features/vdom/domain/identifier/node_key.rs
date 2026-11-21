@@ -1,6 +1,8 @@
 use crate::features::vdom::domain::errors::VdomError;
 use serde::{Deserialize, Serialize};
 
+/// A script-given key that identifies a node among its siblings across renders, so a keyed list can
+/// reorder without losing interaction state; never empty or whitespace.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct NodeKey(String);
 

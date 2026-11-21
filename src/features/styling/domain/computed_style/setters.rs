@@ -1,3 +1,5 @@
+//! Write accessors on [`ComputedStyle`], used by the CSS adapter and the cascade to declare
+//! property values.
 use super::struct_def::ComputedStyle;
 use crate::features::layout_engine::domain::{
     AlignItems, BoxMargin, FlexDirection, Gap, JustifyContent, PositionType,
@@ -59,6 +61,7 @@ impl ComputedStyle {
     pub(crate) const fn set_padding(&mut self, padding: BoxMargin) {
         self.padding = Some(padding);
     }
+    /// Declares `margin` for all four sides, replacing any earlier value.
     pub const fn set_margin(&mut self, margin: BoxMargin) {
         self.margin = Some(margin);
     }
@@ -74,12 +77,15 @@ impl ComputedStyle {
     pub(crate) const fn set_display(&mut self, display: DisplayMode) {
         self.display = Some(display);
     }
+    /// Declares `flex-direction`, the main axis children are laid out along.
     pub const fn set_flex_direction(&mut self, flex_direction: FlexDirection) {
         self.flex_direction = Some(flex_direction);
     }
+    /// Declares `justify-content`, how children are distributed along the main axis.
     pub const fn set_justify_content(&mut self, justify_content: JustifyContent) {
         self.justify_content = Some(justify_content);
     }
+    /// Declares `align-items`, how children are aligned on the cross axis.
     pub const fn set_align_items(&mut self, align_items: AlignItems) {
         self.align_items = Some(align_items);
     }

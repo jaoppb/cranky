@@ -1,3 +1,5 @@
+//! Lays out the floating content (popup, panel, tooltip) a module's tree currently has open,
+//! after the bar tree's own layout.
 pub mod content;
 mod gate;
 mod panel;

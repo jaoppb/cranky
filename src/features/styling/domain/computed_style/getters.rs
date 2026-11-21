@@ -1,3 +1,4 @@
+//! Read accessors on [`ComputedStyle`], used by layout and paint.
 use super::struct_def::ComputedStyle;
 use crate::features::layout_engine::domain::{
     AlignItems, BoxMargin, FlexDirection, Gap, JustifyContent, PositionType,

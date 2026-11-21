@@ -1,3 +1,4 @@
+//! Compiled selectors, the per-sheet index that narrows candidate rules, and the matcher.
 pub mod bucket;
 pub mod matcher;
 pub mod model;

@@ -1,3 +1,5 @@
+//! Applies `border`, `border-width`, `border-color`, `border-radius` and `border-image`
+//! (gradient sources only).
 use super::super::color_font::convert_color;
 use super::super::gradient::gradient_from_image;
 use super::utils::parse_length_str;

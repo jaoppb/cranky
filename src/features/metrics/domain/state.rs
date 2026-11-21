@@ -1,3 +1,4 @@
+//! The metrics snapshot published to modules, with CPU usage scaled per the configured mode.
 use super::command::CreateMetricsCommand;
 use super::config::{CpuMode, MetricsConfig};
 use super::types::{CpuUsage, DiskMetric, MemoryBytes, NetworkSpeed, Temperature};

@@ -1,3 +1,4 @@
+//! Popups, panels and tooltips: their identities, styled content and nesting chains.
 pub mod chain;
 pub mod styled;
 pub mod target;

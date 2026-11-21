@@ -1,3 +1,4 @@
+//! Popup and panel content after styling, before layout.
 use crate::features::layout_engine::domain::styled_node::StyledNode;
 use crate::features::vdom::domain::{
     AnchorDirection, ExclusiveZone, KeyboardInteractivity, PanelAnchor, PanelLayer, PopupOffset,
@@ -5,6 +6,7 @@ use crate::features::vdom::domain::{
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::Rect;
 
+/// A popup's styled content with where it opens relative to its anchor node.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StyledPopup {
     content: Box<StyledNode>,
@@ -43,6 +45,8 @@ impl StyledPopup {
     }
 }
 
+/// A layer-shell panel's styled content with its layer, anchor edges, margin, exclusive zone
+/// and keyboard mode.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StyledPanel {
     content: Box<StyledNode>,

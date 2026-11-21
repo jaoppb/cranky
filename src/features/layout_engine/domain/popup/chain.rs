@@ -1,3 +1,4 @@
+//! Walks the parent links between nested floating surfaces, rejecting cycles.
 use super::target::FloatingKind;
 use std::cmp::Reverse;
 use std::collections::HashSet;

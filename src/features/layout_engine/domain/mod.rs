@@ -1,3 +1,5 @@
+//! Node trees before and after layout, the display commands they produce, and the floating
+//! surface model.
 pub mod canvas_renderer;
 pub mod commands;
 pub mod errors;

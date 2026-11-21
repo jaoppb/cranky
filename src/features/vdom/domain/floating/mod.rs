@@ -1,3 +1,5 @@
+//! Specs for the floating content a node can open: popups, panels and the layer-shell options
+//! panels carry.
 pub mod anchor;
 pub mod panel;
 mod popup;
