@@ -1,4 +1,4 @@
-//! Reads `calc()` expressions on sizes and `flex-basis` into a `Calc`, to be
+//! Reads `calc()` expressions on sizes and `flex-basis` into a `DeclaredLength::Calc`, to be
 //! resolved once the font size and container size are known.
 use crate::features::styling::domain::DeclaredLength;
 use lightningcss::properties::size::{MaxSize, Size};

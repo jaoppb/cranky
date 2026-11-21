@@ -131,7 +131,7 @@ pub enum RenderNode {
         /// Layer-shell panel shown while present, its content not yet laid out.
         panel: Option<StyledPanel>,
     },
-    /// Image leaf; it carries no style and takes no clicks or hovers.
+    /// Image leaf; it carries no style and has no click or hover actions.
     Image {
         /// Positional path of this node within its surface's tree.
         path: NodePath,

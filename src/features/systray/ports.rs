@@ -8,8 +8,8 @@ pub enum SniPortError {
     /// The session bus could not be reached or the watcher object could not be served.
     #[error("Failed to start SNI watcher: {0}")]
     StartFailed(String),
-    #[error("Failed to trigger action on {id}: {error}")]
     /// No D-Bus proxy could be built for the item an action targets.
+    #[error("Failed to trigger action on {id}: {error}")]
     ActionFailed {
         /// The [`SystrayId`](crate::features::systray::domain::SystrayId) of the targeted item.
         id: String,

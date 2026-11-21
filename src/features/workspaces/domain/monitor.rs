@@ -1,4 +1,5 @@
-//! A monitor as Hyprland reports it: its name and the workspaces shown on it.
+//! A monitor as Hyprland reports it: its name, its active workspace, and the special workspace
+//! open on it, if any.
 use super::identifiers::{MonitorName, WorkspaceId};
 use serde::Serialize;
 

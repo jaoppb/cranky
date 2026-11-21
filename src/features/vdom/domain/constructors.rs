@@ -1,5 +1,5 @@
-//! Constructors that build a `VNode` of each kind with a fresh `NodeId`, no key and no floating
-//! content.
+//! Constructors that build a `VNode` of each kind with a fresh `NodeId`, no key and no popup or
+//! panel.
 use super::action::{ClickHandlers, UiAction};
 use super::identifier::NodeId;
 use super::kind::{ModuleParams, VNodeKind};
@@ -10,7 +10,7 @@ use crate::shared::primitives::BinaryData;
 use crate::shared::primitives::geometry::Size;
 
 impl VNode {
-    /// Builds a flex container node, with a fresh `NodeId`, no key and no floating content.
+    /// Builds a flex container node, with a fresh `NodeId`, no key and no popup or panel.
     #[must_use]
     pub fn new_flex(
         children: Vec<Self>,
@@ -57,7 +57,7 @@ impl VNode {
         }
     }
 
-    /// Builds a text node, with a fresh `NodeId`, no key and no floating content.
+    /// Builds a text node, with a fresh `NodeId`, no key and no popup or panel.
     #[must_use]
     pub fn new_text(
         text: TextContent,

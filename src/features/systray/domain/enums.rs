@@ -14,14 +14,14 @@ pub(crate) enum SystrayStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(try_from = "String", into = "String")]
 pub enum SystrayActionName {
-    /// Left click: opens the menu if the item is only a menu, else `Activate` with a
-    /// `SecondaryActivate` fallback.
+    /// Left click: `ContextMenu` if the item sets `ItemIsMenu` (no fallback), else `Activate`
+    /// falling back to `SecondaryActivate`.
     Primary,
     /// Calls the item's `ContextMenu`, falling back to `SecondaryActivate` and then `Activate`.
     ContextMenu,
-    /// Calls the item's `Activate` method at the pointer position.
+    /// Calls the item's `Activate` method at the pointer position, or (0, 0) without one.
     Activate,
-    /// Calls the item's `SecondaryActivate` method, usually bound to a middle click.
+    /// Calls the item's `SecondaryActivate` method (a middle click in the SNI spec).
     SecondaryActivate,
     /// Sends the item a vertical `Scroll` of -1.
     ScrollUp,

@@ -69,9 +69,11 @@ impl GridLinePlacement {
 pub enum PseudoClass {
     /// `:hover`: the pointer is over the element or one of its descendants.
     Hover,
-    /// `:active`: a pointer button pressed on the element or a descendant is still held.
+    /// `:active`: a pointer button pressed on the element or a descendant is still held, with the
+    /// pointer still on the surface.
     Active,
-    /// `:focus`: the element holds keyboard focus, or it is the bar root of the focused monitor.
+    /// `:focus` (also `:focus-visible`, `:focused`): the element a pointer button was last released
+    /// over, or the bar root of the focused monitor; does not match ancestors.
     Focused,
     /// `:first-child`.
     FirstChild,
@@ -81,16 +83,18 @@ pub enum PseudoClass {
     OnlyChild,
     /// `:nth-child(An+B)`, counting siblings from 1 at the start.
     NthChild {
-        /// The `A` coefficient: the cycle length.
+        /// The `A` coefficient: the step between matching positions; 0 matches only position `B`,
+        /// a negative step matches `B` and the positions before it.
         step_size: i32,
-        /// The `B` term: the 1-based position within the cycle.
+        /// The `B` term: the 1-based position the pattern starts from; may be zero or negative.
         offset: i32,
     },
     /// `:nth-last-child(An+B)`, counting siblings from 1 at the end.
     NthLastChild {
-        /// The `A` coefficient: the cycle length.
+        /// The `A` coefficient: the step between matching positions; 0 matches only position `B`,
+        /// a negative step matches `B` and the positions before it.
         step_size: i32,
-        /// The `B` term: the 1-based position within the cycle.
+        /// The `B` term: the 1-based position the pattern starts from; may be zero or negative.
         offset: i32,
     },
     /// `:empty`: a container with no children, or a text element with only whitespace.

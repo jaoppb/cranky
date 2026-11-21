@@ -63,9 +63,11 @@ impl UpdateInterval {
     }
 }
 
-/// The `[metrics]` table: which readings the sampler takes, the unit each is shown in, and the
-/// sampling interval in milliseconds (1000 by default). Network, temperature and disk are off
-/// unless set.
+/// The `[metrics]` table: which readings the sampler takes and how often.
+///
+/// It also holds the unit each reading is shown in (the widget scripts apply the memory, swap and
+/// disk modes) and the sampling interval in milliseconds (1000 by default). Network, temperature
+/// and disk are off unless set.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MetricsConfig {
     #[serde(default)]

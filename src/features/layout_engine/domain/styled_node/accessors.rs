@@ -1,6 +1,6 @@
-use super::StyledNode;
 #[cfg(test)]
-use crate::features::layout_engine::domain::popup::{StyledPanel, StyledPopup};
+use super::super::popup::{StyledPanel, StyledPopup};
+use super::StyledNode;
 use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::{NodeKey, NodePath};
 

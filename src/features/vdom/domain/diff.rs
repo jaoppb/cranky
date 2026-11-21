@@ -77,8 +77,8 @@ pub(crate) enum ChildPatchOp {
     },
 }
 
-/// The outcome of diffing a module's previous tree against its new one; the render pipeline skips
-/// styling, layout and painting when it is unchanged.
+/// The outcome of diffing a module's previous tree against its new one; an unchanged result is
+/// one of the conditions for the render pipeline to skip styling, layout and painting.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiffResult {
     patch: Patch,

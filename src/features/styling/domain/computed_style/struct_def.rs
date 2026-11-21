@@ -8,7 +8,8 @@ use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSi
 use crate::shared::primitives::TextAlign;
 use crate::shared::primitives::color::DrawingColor;
 
-/// Every property the renderer understands, each `None` until some rule declares it; the
+/// Every property the renderer understands, each `None` unless a rule, inheritance or the
+/// flex/grid defaults set it; the
 /// layout and paint phases fall back to their own defaults for `None`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ComputedStyle {

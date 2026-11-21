@@ -10,7 +10,8 @@ pub enum ModuleInitError {
     /// The module's configuration could not be converted for the script.
     #[error("Configuration error: {0}")]
     ConfigError(String),
-    /// Any other failure inside the module adapter.
+    /// Reserved for adapter failures that are neither script nor config errors; no adapter raises
+    /// it today.
     #[error("Internal module error: {0}")]
     Internal(String),
 }
@@ -27,7 +28,8 @@ pub enum RegistryLoadError {
         #[source]
         source: ModuleInitError,
     },
-    /// Neither a user script nor a built-in exists for this module name.
+    /// No script for this name (and pinned engine) could be read and loaded from the user or
+    /// built-in modules directory.
     #[error("Module not found: {0}")]
     ModuleNotFound(crate::shared::primitives::ModuleName),
     /// The config pins an engine name that is not `lua` or `rhai`.
@@ -38,7 +40,7 @@ pub enum RegistryLoadError {
         /// The module it was asked for.
         module_name: crate::shared::primitives::ModuleName,
     },
-    /// Reading the module scripts failed, or `HOME` is not set.
+    /// Deploying the built-in scripts to the shared modules directory failed with an I/O error.
     #[error("Internal registry error: {0}")]
     Internal(String),
 }

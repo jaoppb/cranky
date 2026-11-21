@@ -1,5 +1,5 @@
-//! Newtypes for single metric readings (CPU percentage, bytes, bytes per second, degrees) and
-//! per-disk usage.
+//! Newtypes for single metric readings (CPU percentage, bytes, bytes transferred since the
+//! previous sample, degrees in the configured scale) and per-disk usage.
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]

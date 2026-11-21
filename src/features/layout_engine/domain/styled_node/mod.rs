@@ -74,7 +74,7 @@ pub enum StyledNode {
         /// Layer-shell panel shown while present in the tree.
         panel: Option<StyledPanel>,
     },
-    /// Progress bar leaf.
+    /// Progress bar leaf, filled along `orientation` in proportion to `value`.
     Progress {
         /// Positional path of this node within its surface's tree.
         path: NodePath,
@@ -97,7 +97,8 @@ pub enum StyledNode {
         /// Layer-shell panel shown while present in the tree.
         panel: Option<StyledPanel>,
     },
-    /// Plain box with no content, painted from its background and border.
+    /// Plain box with no content, filled with its background, or its `color` if it has none, plus
+    /// its border.
     Rect {
         /// Positional path of this node within its surface's tree.
         path: NodePath,
@@ -116,7 +117,7 @@ pub enum StyledNode {
         /// Layer-shell panel shown while present in the tree.
         panel: Option<StyledPanel>,
     },
-    /// Image leaf; it takes no clicks or hovers.
+    /// Image leaf; it has no click or hover actions.
     Image {
         /// Positional path of this node within its surface's tree.
         path: NodePath,

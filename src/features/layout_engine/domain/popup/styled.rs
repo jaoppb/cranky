@@ -6,7 +6,8 @@ use crate::features::vdom::domain::{
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::Rect;
 
-/// A popup's styled content with where it opens relative to its anchor node.
+/// A popup's styled content with its requested anchor side (not yet used for placement) and
+/// optional offset.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StyledPopup {
     content: Box<StyledNode>,
