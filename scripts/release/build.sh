@@ -36,7 +36,7 @@ docker run --rm \
 		trap "chown -R --reference=/out /out" EXIT
 		apt-get update -qq
 		DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
-			ca-certificates curl gcc libc6-dev pkg-config libxkbcommon-dev >/dev/null
+			binutils ca-certificates curl gcc libc6-dev pkg-config libxkbcommon-dev >/dev/null
 		if [[ ! -x "${CARGO_HOME}/bin/rustup" ]]; then
 			curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs |
 				sh -s -- -y --quiet --no-modify-path --default-toolchain none --profile minimal
@@ -47,7 +47,9 @@ docker run --rm \
 		rustc --version
 		cargo build --release --locked
 		# [profile.release] strips the binary users install (#82).
-		if readelf --section-headers --wide /out/target/release/cranky | grep --quiet --extended-regexp "\.symtab|\.debug_"; then
+		# Captured first, so a readelf failure stops the build instead of passing the check.
+		sections="$(readelf --section-headers --wide /out/target/release/cranky)"
+		if grep --quiet --extended-regexp "\.symtab|\.debug_" <<<"${sections}"; then
 			echo "error: the release binary still has a symbol table or debug info" >&2
 			exit 1
 		fi
