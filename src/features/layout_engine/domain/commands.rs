@@ -1,3 +1,5 @@
+//! Commands that modules and the Wayland adapter send to the app loop to render or to show and
+//! hide floating surfaces.
 use super::popup::FloatingKind;
 use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::{Rect, Size};
@@ -25,14 +27,19 @@ pub struct ShowFloating {
     pub(crate) parent: Option<FloatingKind>,
 }
 
+/// Request from a module or the Wayland adapter to the app loop, which owns the display server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisplayCommand {
+    /// Re-render every module; the Wayland adapter sends it after each non-zero bar configure
+    /// (including resizes) and when an output is removed.
     RequestRender,
     /// The module has already laid out and painted this floating surface's
     /// content — Wayland's job is placing and blitting a buffer, never
     /// computing one.
     ShowFloatingSurface(ShowFloating),
+    /// Unmap the floating surface identified by `kind`.
     HideFloatingSurface {
+        /// Which floating surface to hide.
         kind: FloatingKind,
     },
 }

@@ -1,3 +1,5 @@
+//! Resolves an `InteractionContext`'s refs to absolute paths in one tree, once per tree rather than
+//! once per node.
 use crate::features::vdom::domain::{
     InteractionContext, NodePath, NodeRef, SurfaceSpace, VNode, resolve_segment,
 };

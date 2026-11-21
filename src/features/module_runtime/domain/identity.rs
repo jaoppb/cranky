@@ -1,3 +1,5 @@
+//! Who a module actor is: its `ModuleId`, the parent that embedded it, its instance id and the
+//! surface it was embedded on.
 use crate::shared::primitives::{LayoutSurface, ModuleId, ModuleInstanceId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

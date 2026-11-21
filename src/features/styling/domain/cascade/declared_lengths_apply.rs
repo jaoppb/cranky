@@ -1,3 +1,5 @@
+//! Resolves the declared lengths against the element's font size and writes them as pixels
+//! onto a computed style.
 use super::super::computed_style::ComputedStyle;
 use super::declared_lengths::{DeclaredLengths, resolve, resolve_scalar};
 use super::value::Cascade;

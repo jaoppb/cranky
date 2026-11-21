@@ -1,6 +1,8 @@
+//! CSS class names as scripts set them on elements, singly and as a list.
 use super::super::errors::StylingError;
 use serde::{Deserialize, Serialize};
 
+/// One class an element carries, matched by `.name` selectors; always a valid CSS identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct ClassName(String);
 
@@ -51,6 +53,7 @@ impl<'de> Deserialize<'de> for ClassName {
     }
 }
 
+/// The classes of one element, in the order the script listed them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default, Serialize)]
 pub struct ClassNameList(Vec<ClassName>);
 
@@ -68,6 +71,7 @@ impl ClassNameList {
         Ok(Self(list))
     }
 
+    /// Wraps classes that are already validated, without parsing a string.
     #[must_use]
     pub const fn new(list: Vec<ClassName>) -> Self {
         Self(list)

@@ -1,3 +1,5 @@
+//! Compiles lightningcss selectors into the domain's `CompiledSelector` steps; components
+//! and pseudo-classes the matcher does not support are ignored.
 use crate::features::styling::domain::{Combinator, CompiledSelector, PseudoClass, SelectorStep};
 use lightningcss::selector::{
     Combinator as LightningCombinator, Component, PseudoClass as LightningPseudoClass, Selector,

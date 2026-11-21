@@ -1,3 +1,5 @@
+//! Node tags (the element names CSS selects, such as `flex` and `text`) and the string a text node
+//! shows.
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -45,6 +47,7 @@ impl std::fmt::Display for NodeTag {
     }
 }
 
+/// The string a text node displays, kept exactly as the script gave it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(transparent)]
 pub struct TextContent {
@@ -52,6 +55,7 @@ pub struct TextContent {
 }
 
 impl TextContent {
+    /// Wraps a script's string as text content, unchanged.
     #[must_use]
     pub const fn new(text: String) -> Self {
         Self { text }

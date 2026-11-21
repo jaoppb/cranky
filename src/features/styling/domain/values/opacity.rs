@@ -1,3 +1,4 @@
+//! Opacity, kept within `0.0..=1.0`.
 use super::super::errors::StylingError;
 use serde::{Deserialize, Serialize};
 

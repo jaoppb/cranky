@@ -1,3 +1,5 @@
+//! A rule that matched an element inside one stylesheet, before its layer and sheet position
+//! are attached.
 use super::declared_style::DeclaredStyle;
 use super::fold::MatchedRule;
 use super::priority::{Importance, Layer, RulePriority};

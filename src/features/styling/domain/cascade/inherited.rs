@@ -1,3 +1,5 @@
+//! The style values a parent passes to its children: the inherited properties, custom
+//! properties and the `rem` base.
 use super::super::computed_style::ComputedStyle;
 use crate::shared::config::domain::FontSize;
 use crate::shared::primitives::TextAlign;

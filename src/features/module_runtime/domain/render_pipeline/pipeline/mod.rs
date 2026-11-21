@@ -1,3 +1,4 @@
+//! The state a module keeps across renders, per monitor, and the phase methods that run against it.
 mod phases;
 
 use super::embed_state::EmbedState;
@@ -8,6 +9,8 @@ use crate::shared::primitives::geometry::{Rect, Size};
 use crate::shared::primitives::{ChildSizesMap, MonitorId};
 use std::collections::{HashMap, HashSet};
 
+/// Per-monitor state one module keeps between renders (its last VDOM and render trees, reported
+/// sizes, painted bounds, floating caches) so a render whose inputs did not change skips work.
 #[derive(Debug, Default)]
 pub struct RenderPipeline {
     sizes: HashMap<MonitorId, Size>,
@@ -25,6 +28,8 @@ pub struct RenderPipeline {
 }
 
 impl RenderPipeline {
+    /// Creates a pipeline with no monitor rendered yet, so the first render on each monitor runs
+    /// every phase.
     #[must_use]
     pub fn new() -> Self {
         Self::default()

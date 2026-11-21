@@ -1,3 +1,5 @@
+//! One rule's declarations, or several merged by the cascade, before inheritance, relative
+//! units and `var()` are resolved.
 use super::super::computed_style::ComputedStyle;
 use super::declared_length::DeclaredLength;
 use super::declared_lengths::DeclaredLengths;

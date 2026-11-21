@@ -1,3 +1,4 @@
+//! Raw access to Hyprland's command and event sockets, behind a trait so tests can fake them.
 use std::io::{Read, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;

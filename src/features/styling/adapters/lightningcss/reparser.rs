@@ -1,3 +1,4 @@
+//! Re-parses a single declaration once its `var()` references have been substituted.
 use super::properties::parse_property_list;
 use crate::features::styling::domain::ComputedStyle;
 use crate::features::styling::ports::PropertyReparser;

@@ -1,3 +1,5 @@
+//! The closed sets of values a tray item carries: status, category, and the actions a script
+//! can trigger on it.
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -8,17 +10,28 @@ pub(crate) enum SystrayStatus {
     Unknown,
 }
 
+/// An action a script asks a tray item to perform, (de)serialised as its bare name.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(try_from = "String", into = "String")]
 pub enum SystrayActionName {
+    /// Left click: `ContextMenu` if the item sets `ItemIsMenu` (no fallback), else `Activate`
+    /// falling back to `SecondaryActivate`.
     Primary,
+    /// Calls the item's `ContextMenu`, falling back to `SecondaryActivate` and then `Activate`.
     ContextMenu,
+    /// Calls the item's `Activate` method at the pointer position, or (0, 0) without one.
     Activate,
+    /// Calls the item's `SecondaryActivate` method (a middle click in the SNI spec).
     SecondaryActivate,
+    /// Sends the item a vertical `Scroll` of -1.
     ScrollUp,
+    /// Sends the item a vertical `Scroll` of +1.
     ScrollDown,
+    /// Sends the item a horizontal `Scroll` of -1.
     ScrollLeft,
+    /// Sends the item a horizontal `Scroll` of +1.
     ScrollRight,
+    /// Any other name; kept so it round-trips, but the adapter only logs it as unrecognised.
     Other(String),
 }
 

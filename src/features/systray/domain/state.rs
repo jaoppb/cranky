@@ -1,6 +1,9 @@
+//! The snapshot of all tray items that the hub's systray signal carries to modules.
 use super::identifiers::SystrayId;
 use super::item::SystrayItem;
 
+/// Every tray item currently registered, keyed by [`SystrayId`]; serialised as a plain `items`
+/// list in key order.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SystrayState {
     items: std::collections::BTreeMap<SystrayId, SystrayItem>,
@@ -43,6 +46,7 @@ impl SystrayState {
         Self { items }
     }
 
+    /// The registered items in [`SystrayId`] order.
     #[must_use]
     pub const fn items(&self) -> &std::collections::BTreeMap<SystrayId, SystrayItem> {
         &self.items

@@ -1,3 +1,5 @@
+//! The cascade state of one property (declared, reset by a CSS-wide keyword, or unset) and the
+//! CSS-wide keywords themselves.
 /// The four ways a cascaded value can resolve, per the CSS cascade's
 /// defaulting rules: declared to a real value, explicitly reset via a
 /// CSS-wide keyword, or simply not mentioned by any matching rule.

@@ -1,3 +1,5 @@
+//! Parses a stylesheet with lightningcss into rule entries, keeping each rule's normal and
+//! `!important` declarations, CSS-wide keywords, relative lengths and custom properties.
 use super::parsed_stylesheet::LightningParsedStyleSheet;
 use super::properties::{
     detect_custom_property_declarations, detect_inheritable_keywords,
@@ -36,10 +38,13 @@ fn has_custom_or_pending(
     !custom.is_empty() || !pending.is_empty()
 }
 
+/// Parses CSS source into a [`ParsedStyleSheetPort`]; the registry uses one to build every
+/// module's stylesheets.
 #[derive(Debug)]
 pub struct LightningCssAdapter;
 
 impl LightningCssAdapter {
+    /// Creates the parser; it holds no state, so one instance serves every stylesheet.
     #[must_use]
     pub const fn new() -> Self {
         Self

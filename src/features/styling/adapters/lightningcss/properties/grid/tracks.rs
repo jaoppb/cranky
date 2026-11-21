@@ -1,3 +1,4 @@
+//! Parses grid track sizes and track lists for the grid template properties.
 use crate::features::styling::domain::GridTrack;
 
 #[must_use]

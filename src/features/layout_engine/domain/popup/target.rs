@@ -1,6 +1,8 @@
+//! Identities of floating surfaces and the rule for which open popups a new one closes.
 use crate::shared::primitives::{ModuleId, MonitorId};
 use serde::{Deserialize, Serialize};
 
+/// Identifies an open popup or panel by the module that owns it and the monitor it shows on.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PopupTarget {
     module_id: ModuleId,
@@ -27,13 +29,18 @@ impl PopupTarget {
     }
 }
 
+/// Identifies one floating surface, the key under which it is shown, nested and hidden.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FloatingKind {
+    /// The single tooltip surface.
     Tooltip,
+    /// The popup owned by the target module on the target monitor.
     Popup(PopupTarget),
+    /// The panel owned by the target module on the target monitor.
     Panel(PopupTarget),
 }
 
+/// Decides which open popups a newly opened one closes, per the configured `PopupBehavior`.
 #[derive(Debug)]
 pub struct PopupExclusivity;
 

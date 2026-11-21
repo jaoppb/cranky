@@ -1,3 +1,5 @@
+//! Turns an item's icon name, theme path or pixmaps into RGBA image data, caching name lookups
+//! for the life of the process, including the ones that found nothing.
 use crate::features::systray::domain::{IconCacheKey, IconImage, IconName, IconThemePath};
 use crate::features::systray::ports::{CachedIcon, SystrayIconCachePort};
 use freedesktop_icons::lookup;

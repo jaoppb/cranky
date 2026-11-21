@@ -1,3 +1,5 @@
+//! Applies `display`, the gaps, and grid container properties (templates, auto tracks, auto
+//! flow, item and content alignment).
 use super::super::box_model::parse_length_str;
 use super::tracks::parse_track_list;
 use crate::features::layout_engine::domain::{AlignItems, Gap, JustifyContent};

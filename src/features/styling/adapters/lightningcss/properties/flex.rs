@@ -1,3 +1,5 @@
+//! Applies flex container properties (direction, alignment, gap) and flex item properties
+//! (`flex`, grow, shrink, basis, `align-self`).
 use super::box_model::{parse_length_str, parse_size_str};
 use crate::features::layout_engine::domain::{
     AlignItems, FlexDirection, Gap, JustifyContent, PositionType,

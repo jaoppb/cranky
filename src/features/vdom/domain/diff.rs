@@ -1,3 +1,4 @@
+//! The patch a tree diff produces, and the `DiffResult` the render pipeline checks for changes.
 use super::identifier::NodeId;
 use super::tag::TextContent;
 use super::vnode::VNode;
@@ -76,6 +77,8 @@ pub(crate) enum ChildPatchOp {
     },
 }
 
+/// The outcome of diffing a module's previous tree against its new one; an unchanged result is
+/// one of the conditions for the render pipeline to skip styling, layout and painting.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DiffResult {
     patch: Patch,

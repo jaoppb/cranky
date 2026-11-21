@@ -1,3 +1,5 @@
+//! One parsed stylesheet: its rules plus a selector index used to find the rules that can
+//! match an element.
 use crate::features::styling::domain::{
     ComputedStyle, ElementQuery, InheritedStyle, Layer, RuleEntry, RuleIndex, RuleMatch,
     StyleSheetName, fold_matches, matches_selector, selector_specificity,

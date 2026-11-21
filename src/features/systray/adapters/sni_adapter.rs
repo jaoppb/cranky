@@ -11,6 +11,11 @@ use tokio::sync::RwLock;
 use tracing::{Instrument, debug, error, info};
 use zbus::Connection;
 
+/// The tray's SNI host on the session bus, which also becomes the `StatusNotifierWatcher` when no
+/// other process holds that name.
+///
+/// Cloning shares the connection and the item registry, so every clone routes actions to the same
+/// items.
 #[derive(Debug, Clone)]
 pub struct SniAdapter {
     hub: Arc<SignalHub>,
@@ -19,6 +24,8 @@ pub struct SniAdapter {
 }
 
 impl SniAdapter {
+    /// Creates a host with no connection and no items; nothing touches D-Bus until
+    /// [`SniPort::start`] runs.
     #[must_use]
     pub fn new(hub: Arc<SignalHub>) -> Self {
         Self {

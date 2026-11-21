@@ -1,3 +1,4 @@
+//! `VNode`, one node of the tree a module's `render()` returns, and its accessors.
 use super::action::{ClickHandlers, UiAction};
 use super::identifier::{KeyedTree, NodeId, NodeKey};
 use super::kind::VNodeKind;
@@ -5,6 +6,8 @@ use super::tag::NodeTag;
 use crate::features::styling::domain::{ClassNameList, ElementId};
 use serde::Deserialize;
 
+/// One node of the tree a module's `render()` returns: its kind, key, CSS id and classes, click and
+/// hover actions, and any tooltip, popup or panel it opens.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct VNode {
     #[serde(skip_deserializing, default = "NodeId::new")]
@@ -40,6 +43,8 @@ impl VNode {
         self.key.as_ref()
     }
 
+    /// Sets the key that identifies this node among its siblings across renders, so keyed children
+    /// can reorder without losing interaction state.
     #[must_use]
     pub fn with_key(mut self, key: NodeKey) -> Self {
         self.key = Some(key);

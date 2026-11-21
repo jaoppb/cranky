@@ -1,3 +1,5 @@
+//! The per-module, per-monitor render pipeline: diff the script's new `VNode` tree, lay it out
+//! (with any open popup, panel or tooltip), and paint it into a buffer.
 pub mod context;
 pub mod diff_phase;
 mod embed_state;

@@ -20,6 +20,8 @@ use crate::shared::primitives::{ChildModuleLayout, ChildSizesMap, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
 impl RenderPipeline {
+    /// Renders the module for `monitor_id` and returns what changed, or `None` when the tree,
+    /// bounds, child sizes and interaction all match the last render on that monitor.
     #[must_use]
     pub fn diff(
         &self,
@@ -41,6 +43,11 @@ impl RenderPipeline {
         )
     }
 
+    /// Lays out the diffed tree and its floating content on `monitor_id`, returning the render
+    /// tree, any size change, child module layouts and floating layouts.
+    ///
+    /// Returns `None` when the layout engine fails, or when nothing is dirty and no earlier tree
+    /// exists.
     pub fn layout<F: CanvasFactory, E: LayoutEnginePort>(
         &mut self,
         monitor_id: &MonitorId,

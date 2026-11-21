@@ -1,3 +1,4 @@
+//! Selector specificity as an (id, class, element) triple.
 use super::super::selector::{CompiledSelector, SelectorStep};
 
 /// CSS specificity as an (id, class, element) triple.

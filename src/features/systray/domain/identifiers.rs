@@ -1,10 +1,14 @@
+//! Newtypes for the strings that identify a tray item on the bus and describe it.
 use serde::{Deserialize, Serialize};
 
+/// Key of a tray item in the registry and in the hub's state: its bus name followed by its object
+/// path, so it is unique across items.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(transparent)]
 pub struct SystrayId(String);
 
 impl SystrayId {
+    /// Wraps an id as given, without checking its shape.
     pub fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }
@@ -26,6 +30,8 @@ impl From<String> for SystrayId {
     }
 }
 
+/// D-Bus bus name that owns a tray item, used to address calls to it and to drop the item when
+/// that name loses its owner.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct Destination(String);

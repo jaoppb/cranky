@@ -1,3 +1,4 @@
+//! Swaps embedded `Module` nodes whose lazy spawn failed for a text node showing the error.
 use super::floating::{PanelSpec, PopupSpec};
 use super::kind::VNodeKind;
 use super::tag::TextContent;

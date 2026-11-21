@@ -1,3 +1,4 @@
+//! Detects `--name` custom-property declarations and properties whose value uses `var()`.
 use lightningcss::properties::Property;
 use lightningcss::properties::custom::CustomPropertyName;
 use lightningcss::stylesheet::PrinterOptions;

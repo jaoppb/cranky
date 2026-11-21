@@ -1,3 +1,4 @@
+//! Newtypes for the numbers and names Hyprland uses to identify workspaces and monitors.
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Hash)]

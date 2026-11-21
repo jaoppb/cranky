@@ -1,12 +1,16 @@
+//! `DefaultVdomDiffAdapter`, the `VdomDiffPort` implementation that walks two trees node by node.
 use super::children::diff_children_with;
 use super::kind_differ::diff_node_kinds;
 use crate::features::vdom::domain::{DiffResult, Patch, VNode, VNodeKind};
 use crate::features::vdom::ports::VdomDiffPort;
 
+/// Diffs two `VNode` trees recursively: a changed tag replaces the node, changed props or floating
+/// content update it, and children are reconciled by key when every sibling has one.
 #[derive(Debug, Default, Clone)]
 pub struct DefaultVdomDiffAdapter;
 
 impl DefaultVdomDiffAdapter {
+    /// Creates the differ; it holds no state, so one instance can serve every module.
     #[must_use]
     pub const fn new() -> Self {
         Self

@@ -1,3 +1,5 @@
+//! Layer-shell option types a panel spec carries: its layer, exclusive zone and keyboard
+//! interactivity.
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

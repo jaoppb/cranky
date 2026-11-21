@@ -1,3 +1,5 @@
+//! Applies colours, backgrounds, opacity, fonts and `text-align`, and detects CSS-wide keywords
+//! on the inherited properties.
 use crate::features::styling::domain::{
     ComputedStyle, CssWideKeyword, InheritableKeywords, Opacity,
 };

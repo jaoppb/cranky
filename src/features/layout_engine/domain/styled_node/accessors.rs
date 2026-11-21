@@ -1,91 +1,11 @@
-use super::popup::{StyledPanel, StyledPopup};
-use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
-use crate::features::vdom::domain::{ClickHandlers, NodeKey, NodePath, TextContent, UiAction};
-use crate::shared::primitives::geometry::Size;
-use crate::shared::primitives::{BinaryData, ModuleKey, ModuleOptions};
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum StyledNode {
-    Flex {
-        path: NodePath,
-        node_key: Option<NodeKey>,
-        children: Vec<Self>,
-        style: ComputedStyle,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
-        popup: Option<StyledPopup>,
-        panel: Option<StyledPanel>,
-    },
-    Grid {
-        path: NodePath,
-        node_key: Option<NodeKey>,
-        children: Vec<Self>,
-        style: ComputedStyle,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
-        popup: Option<StyledPopup>,
-        panel: Option<StyledPanel>,
-    },
-    Text {
-        path: NodePath,
-        node_key: Option<NodeKey>,
-        text: TextContent,
-        style: ComputedStyle,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
-        popup: Option<StyledPopup>,
-        panel: Option<StyledPanel>,
-    },
-    Progress {
-        path: NodePath,
-        node_key: Option<NodeKey>,
-        value: ProgressValue,
-        orientation: Orientation,
-        style: ComputedStyle,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
-        popup: Option<StyledPopup>,
-        panel: Option<StyledPanel>,
-    },
-    Rect {
-        path: NodePath,
-        node_key: Option<NodeKey>,
-        style: ComputedStyle,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
-        popup: Option<StyledPopup>,
-        panel: Option<StyledPanel>,
-    },
-    Image {
-        path: NodePath,
-        node_key: Option<NodeKey>,
-        data: BinaryData,
-        pixel_size: Size,
-        style: ComputedStyle,
-        tooltip: Option<Box<Self>>,
-        popup: Option<StyledPopup>,
-        panel: Option<StyledPanel>,
-    },
-    Module {
-        path: NodePath,
-        node_key: Option<NodeKey>,
-        key: ModuleKey,
-        options: ModuleOptions,
-        style: ComputedStyle,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
-        popup: Option<StyledPopup>,
-        panel: Option<StyledPanel>,
-    },
-}
+use super::StyledNode;
+#[cfg(test)]
+use crate::features::layout_engine::domain::popup::{StyledPanel, StyledPopup};
+use crate::features::styling::domain::ComputedStyle;
+use crate::features::vdom::domain::{NodeKey, NodePath};
 
 impl StyledNode {
+    /// Positional path of this node within its surface's tree, whatever the variant.
     #[must_use]
     pub const fn path(&self) -> &NodePath {
         match self {

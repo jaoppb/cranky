@@ -1,3 +1,4 @@
+//! Value types for `display`, the grid properties and the supported pseudo-classes.
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -62,15 +63,40 @@ impl GridLinePlacement {
     }
 }
 
+/// A pseudo-class a selector can require; the vdom bridge derives the interactive ones from
+/// pointer and focus state, the structural ones from the element's position among its siblings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PseudoClass {
+    /// `:hover`: the pointer is over the element or one of its descendants.
     Hover,
+    /// `:active`: a pointer button pressed on the element or a descendant is still held, with the
+    /// pointer still on the surface.
     Active,
+    /// `:focus` (also `:focus-visible`, `:focused`): the element a pointer button was last released
+    /// over, or the bar root of the focused monitor; does not match ancestors.
     Focused,
+    /// `:first-child`.
     FirstChild,
+    /// `:last-child`.
     LastChild,
+    /// `:only-child`.
     OnlyChild,
-    NthChild { step_size: i32, offset: i32 },
-    NthLastChild { step_size: i32, offset: i32 },
+    /// `:nth-child(An+B)`, counting siblings from 1 at the start.
+    NthChild {
+        /// The `A` coefficient: the step between matching positions; 0 matches only position `B`,
+        /// a negative step matches `B` and every |A|th position before it.
+        step_size: i32,
+        /// The `B` term: the 1-based position the pattern starts from; may be zero or negative.
+        offset: i32,
+    },
+    /// `:nth-last-child(An+B)`, counting siblings from 1 at the end.
+    NthLastChild {
+        /// The `A` coefficient: the step between matching positions; 0 matches only position `B`,
+        /// a negative step matches `B` and every |A|th position before it.
+        step_size: i32,
+        /// The `B` term: the 1-based position the pattern starts from; may be zero or negative.
+        offset: i32,
+    },
+    /// `:empty`: a container with no children, or a text element with only whitespace.
     Empty,
 }

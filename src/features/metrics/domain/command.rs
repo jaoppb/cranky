@@ -1,3 +1,4 @@
+//! The raw readings of one sampling pass, grouped before they become a `MetricsState`.
 use super::config::MetricsConfig;
 use super::types::{CpuUsage, DiskMetric, MemoryBytes, NetworkSpeed, Temperature};
 

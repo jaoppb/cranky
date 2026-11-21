@@ -1,3 +1,4 @@
+//! A declared length that may still be in `em`/`rem` or `calc()`, and its resolution to pixels.
 use super::super::values::CssLength;
 use crate::shared::config::domain::FontSize;
 

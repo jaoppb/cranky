@@ -1,3 +1,5 @@
+//! The `sysinfo`-backed sampler that gathers a `MetricsState` every update interval and
+//! sends it on the hub's metrics channel.
 use crate::features::metrics::domain::{DiskMetric, MetricsConfig, MetricsState};
 use crate::shared::events::signals::SignalHub;
 use std::sync::Arc;

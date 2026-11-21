@@ -1,3 +1,5 @@
+//! What one pipeline run produces: the laid-out tree, the painted buffer, child layouts, floating
+//! layouts and any size change.
 use super::floating_phase::{FloatingLayouts, PopupRenderLayout};
 use crate::features::layout_engine::domain::RenderNode;
 use crate::shared::primitives::ChildModuleLayout;
@@ -41,6 +43,8 @@ impl SizeChange {
     }
 }
 
+/// Everything one render of a module on one monitor produced, for the event loop to dispatch: the
+/// buffer, any size change, child module layouts and floating layouts.
 #[derive(Debug, Clone)]
 pub struct RenderOutcome {
     size_change: Option<SizeChange>,
@@ -108,6 +112,7 @@ impl RenderOutcome {
         &self.child_layouts
     }
 
+    /// The bar tree this render laid out, positioned from the module's own origin.
     #[must_use]
     pub const fn render_tree(&self) -> &RenderNode {
         &self.render_tree

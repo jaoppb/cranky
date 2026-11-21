@@ -1,3 +1,5 @@
+//! Parses serialized CSS lengths into pixels or `CssLength`, taking `em`/`rem` as 16px
+//! until the cascade resolves them against the real font size.
 use crate::features::styling::domain::CssLength;
 use lightningcss::stylesheet::PrinterOptions;
 use lightningcss::traits::ToCss;

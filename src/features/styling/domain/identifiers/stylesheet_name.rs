@@ -1,6 +1,9 @@
+//! The name of a stylesheet a module lists in `metadata().styles`.
 use super::super::errors::StylingError;
 use serde::{Deserialize, Serialize};
 
+/// Names a stylesheet file without its `.css` extension; restricted to alphanumerics, `-` and
+/// `_`, so it can never escape the styles directories.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StyleSheetName(String);
 

@@ -1,32 +1,48 @@
+//! Flexbox alignment enums and box spacing used by the computed style.
 use serde::{Deserialize, Serialize};
 
+/// Main axis of a flex container.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum FlexDirection {
+    /// Children run left to right.
     #[default]
     Row,
+    /// Children run top to bottom.
     Column,
 }
 
+/// How a flex container distributes free space along its main axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum JustifyContent {
+    /// Children packed at the start of the axis.
     #[default]
     Start,
+    /// Children packed at the end of the axis.
     End,
+    /// Children packed in the middle of the axis.
     Center,
+    /// Free space split between children, none at the edges.
     SpaceBetween,
+    /// Free space split around each child, so the edges get half a gap.
     SpaceAround,
+    /// Free space split into equal gaps, the edges included.
     SpaceEvenly,
 }
 
+/// How a flex container places children on its cross axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum AlignItems {
+    /// Children aligned to the start of the cross axis.
     #[default]
     Start,
+    /// Children aligned to the end of the cross axis.
     End,
+    /// Children centered on the cross axis.
     Center,
+    /// Children stretched to fill the cross axis.
     Stretch,
 }
 
@@ -55,6 +71,7 @@ impl Gap {
     }
 }
 
+/// Per-side lengths in logical pixels, used for both CSS `padding` and `margin`.
 #[derive(Debug, Clone, PartialEq, Deserialize, Default)]
 pub struct BoxMargin {
     #[serde(default)]
@@ -68,6 +85,7 @@ pub struct BoxMargin {
 }
 
 impl BoxMargin {
+    /// Takes the sides as top, bottom, left, right, not in the clockwise CSS shorthand order.
     #[must_use]
     pub const fn new(top: f64, bottom: f64, left: f64, right: f64) -> Self {
         Self {

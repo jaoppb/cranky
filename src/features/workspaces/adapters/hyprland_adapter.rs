@@ -1,3 +1,5 @@
+//! Implements the window manager port on Hyprland and runs the loop that feeds its events to the
+//! hub.
 use super::dto::{HyprMonitorDto, HyprWorkspaceDto};
 use super::hyprland_provider::{HyprlandProvider, RealHyprlandProvider};
 #[cfg(test)]

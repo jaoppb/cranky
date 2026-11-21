@@ -1,3 +1,5 @@
+//! Helpers that turn a cascaded value and the inherited one into the final value, with
+//! `font-size` resolved against the parent's size.
 use super::declared_length::DeclaredLength;
 use super::inherited::{DEFAULT_FONT_SIZE, InheritedStyle};
 use super::value::{Cascade, CssWideKeyword};

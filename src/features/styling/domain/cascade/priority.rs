@@ -1,3 +1,4 @@
+//! Cascade priority of a matched rule: importance, layer, specificity, then source order.
 use super::specificity::Specificity;
 
 /// Whether a declaration was marked `!important`. Important declarations

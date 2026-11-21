@@ -1,3 +1,5 @@
+//! Second pipeline phase: resolves styles, lays out the module's tree and its floating content,
+//! and records any size change to report to the embedder.
 use super::context::{LayoutContext, PipelineDiff};
 use super::floating_phase::{
     FloatingEngines, FloatingLayouts, FloatingPass, apply_gate, layout_floating,

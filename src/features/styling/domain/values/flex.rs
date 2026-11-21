@@ -1,3 +1,4 @@
+//! `flex-grow` and `flex-shrink` factors, never NaN or negative.
 use super::super::errors::StylingError;
 use serde::{Deserialize, Serialize};
 

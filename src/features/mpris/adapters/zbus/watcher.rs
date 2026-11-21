@@ -1,3 +1,5 @@
+//! Watches the session bus for MPRIS players appearing and leaving, keeping the hub's MPRIS
+//! state and active player up to date.
 use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::StreamExt;

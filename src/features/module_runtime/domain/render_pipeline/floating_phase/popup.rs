@@ -1,3 +1,4 @@
+//! Layout of an anchored popup's content, kept with its anchor rectangle and requested offset.
 use super::content::{FloatingCache, FloatingPass, layout_floating_content_cached};
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::domain::popup::AnchoredPopup;

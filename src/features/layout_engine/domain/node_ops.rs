@@ -1,3 +1,5 @@
+//! Queries over a laid-out tree: hit-testing, finding the open popup, panel or tooltip, and
+//! collecting embedded module layouts.
 use super::popup::{ActivePanel, AnchoredPopup};
 use super::render_node::RenderNode;
 use super::styled_node::StyledNode;

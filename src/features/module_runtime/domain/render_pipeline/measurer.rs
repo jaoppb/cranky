@@ -1,3 +1,5 @@
+//! A text measurer that also answers embedded child modules' sizes, from the sizes those children
+//! last reported.
 use crate::features::layout_engine::domain::TextMeasurer;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::Size;

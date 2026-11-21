@@ -1,3 +1,9 @@
+//! Loads, watches and composes the stylesheets modules declare.
+//!
+//! A sheet comes from `~/.config/cranky/styles/` (user overrides), then the deployed builtins in
+//! `~/.local/share/cranky/styles/`, then the embedded copies; both directories are watched for hot
+//! reload, and a module's sheets are composed into one resolver.
+
 use super::lightningcss::LightningPropertyReparser;
 use crate::features::styling::domain::{
     ComputedStyle, ElementQuery, InheritedStyle, Layer, StyleSheetName, StylingError, fold_matches,

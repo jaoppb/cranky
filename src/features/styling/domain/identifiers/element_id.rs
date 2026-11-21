@@ -1,6 +1,8 @@
+//! The `id` a script gives an element, matched by `#id` selectors.
 use super::super::errors::StylingError;
 use serde::{Deserialize, Serialize};
 
+/// An element's id, matched by `#id` selectors; always a valid CSS identifier.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct ElementId(String);
 

@@ -1,3 +1,5 @@
+//! Substitutes `var()` references in a declaration's value from the element's custom
+//! properties, with a depth limit against reference cycles.
 use std::collections::HashMap;
 use std::hash::BuildHasher;
 

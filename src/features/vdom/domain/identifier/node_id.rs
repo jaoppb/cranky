@@ -1,3 +1,4 @@
+//! `NodeId`, the random id every node gets when it is built, which names nodes in patches.
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
