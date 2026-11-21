@@ -1,0 +1,32 @@
+name: "Feature"
+description: "New behaviour or capability"
+title: "feat: "
+labels: ["type:feat"]
+body:
+  - type: markdown
+    attributes:
+      value: "After filing, the issue still needs one `area:*` label and the release milestone, which a form cannot set: the maintainer adds them at triage. Until then the Tools workflow fails, which is expected. See [CONTRIBUTING.md](https://github.com/jaoppb/cranky/blob/main/CONTRIBUTING.md#filing-an-issue)."
+  - type: textarea
+    id: description
+    attributes:
+      label: "Description"
+      description: "What capability is needed, who needs it, and why."
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: "Dependencies"
+      description: "Issues that must close first, or blocking relationships."
+      value: |
+        None.
+  - type: textarea
+    id: dod
+    attributes:
+      label: "Definition of Done"
+      description: "Observable, checkable outcomes."
+      value: |
+        - [ ] The new behaviour works and is covered by tests
+        - [ ] `just check` passes
+    validations:
+      required: true

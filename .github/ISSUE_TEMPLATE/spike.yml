@@ -1,0 +1,32 @@
+name: "Spike"
+description: "Time-boxed research that answers a question"
+title: "spike: "
+labels: ["type:spike"]
+body:
+  - type: markdown
+    attributes:
+      value: "After filing, the issue still needs one `area:*` label and the release milestone, which a form cannot set: the maintainer adds them at triage. Until then the Tools workflow fails, which is expected. See [CONTRIBUTING.md](https://github.com/jaoppb/cranky/blob/main/CONTRIBUTING.md#filing-an-issue)."
+  - type: textarea
+    id: description
+    attributes:
+      label: "Description"
+      description: "The question to answer, why it matters now, and the time box."
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: "Dependencies"
+      description: "Issues that must close first, or blocking relationships."
+      value: |
+        None.
+  - type: textarea
+    id: dod
+    attributes:
+      label: "Definition of Done"
+      description: "Observable, checkable outcomes."
+      value: |
+        - [ ] The question is answered and the decision is recorded in this issue
+        - [ ] `just check` passes
+    validations:
+      required: true

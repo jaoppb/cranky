@@ -24,6 +24,8 @@ number = 7
 title = "Cranky"
 
 [github.labels]
+# `tools repo check` fails when the labels block of these docs lists other labels than `items`.
+docs = ["AGENTS.md", "CONTRIBUTING.md"]
 # A label on GitHub that is not declared here fails `tools repo check`; it is never deleted automatically.
 unmanaged = "error"
 # GitHub's default labels. `tools repo sync` deletes them even from issues that still carry them,
@@ -54,6 +56,18 @@ items = [
     { name = "area:docs", color = "2ea44f", description = "Documentation, guides and contributor rules" },
     # The issue audit recognises an epic by this exact name: the only open issues allowed without a parent.
     { name = "epic", color = "3e4b9e", description = "Parent issue that groups sub-issues" },
+]
+
+# The issue forms in .github/ISSUE_TEMPLATE/: `tools repo check` fails when a form's `labels:`
+# is not exactly its label, its `title:` lacks the prefix, or a form is missing from this list.
+[github.issue_templates]
+items = [
+    { file = "feat.yml", label = "type:feat", title = "feat: " },
+    { file = "fix.yml", label = "type:fix", title = "fix: " },
+    { file = "chore.yml", label = "type:chore", title = "chore: " },
+    { file = "docs.yml", label = "type:docs", title = "docs: " },
+    { file = "refactor.yml", label = "type:refactor", title = "refactor: " },
+    { file = "spike.yml", label = "type:spike", title = "spike: " },
 ]
 
 # Applied by `tools issues migrate`; `tools issues check` fails while one is pending.
