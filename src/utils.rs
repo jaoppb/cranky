@@ -1,4 +1,5 @@
-//! Numeric conversions with saturation and SVG rasterisation used across the crate.
+//! Saturating numeric conversions and icon loading into RGBA (SVG rasterised, other formats
+//! decoded and resized).
 
 use resvg::usvg;
 use std::path::Path;

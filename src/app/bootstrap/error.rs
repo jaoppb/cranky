@@ -12,7 +12,7 @@ pub enum BootError {
     /// The Tokio runtime could not be built.
     #[error(transparent)]
     Runtime(std::io::Error),
-    /// A required environment variable is missing.
+    /// A required environment variable is unset or not valid Unicode.
     #[error(transparent)]
     Environment(#[from] EnvironmentError),
     /// The configuration could not be loaded or watched.
