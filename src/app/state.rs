@@ -51,9 +51,9 @@ pub(super) struct CrankyApp<
     ui_sender: Arc<US>,
     registry: Box<R>,
     canvas_factory: F,
-    /// `None` until `set_adapter_supervisor` is called — main.rs wires it in
-    /// once the (fallible, boot-fatal) `DBus` connection is established, which
-    /// happens after `CrankyApp::new`. A lazy spawn before that point simply
+    /// `None` until `set_adapter_supervisor` is called — `bootstrap` wires it
+    /// in once `init_secondary_adapters` has opened the `DBus` connections,
+    /// which happens after `CrankyApp::new`. A lazy spawn before that point simply
     /// can't ensure any adapter; nothing in v1 lazily spawns before boot
     /// finishes, so this is never actually observed empty in practice.
     adapter_supervisor: Option<crate::app::adapter_supervisor::AdapterSupervisor>,

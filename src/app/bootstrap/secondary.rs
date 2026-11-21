@@ -8,8 +8,8 @@ use std::sync::Arc;
 use tracing::error;
 
 /// Opens the `DBus` connections (an unreachable bus is logged, not fatal),
-/// builds the on-demand adapter supervisor around them, and eagerly `ensure`s every signal already
-/// active from the initial config load. Systray is handled separately: its
+/// builds the on-demand adapter supervisor around them, and eagerly
+/// `ensure`s every signal already active from the initial config load. Systray is handled separately: its
 /// `start()` needs `&mut self` on the very instance `CrankyApp::run` later
 /// drives via `SniPort::trigger_action`, so it isn't part of the supervisor
 /// — see `SPEC.md`'s Phase 3 write-up.
