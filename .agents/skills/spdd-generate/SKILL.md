@@ -58,9 +58,9 @@ Generate implementation code from a structured SPDD prompt (a REASONS Canvas). F
    b. **Apply the Norms** (`AGENTS.md` and the canvas Norms):
    - `AGENTS.md` "Hard constraints" is the full list; these are the rules generation breaks most often
    - Private fields with getters; newtypes for ids and names; `thiserror` errors per module or adapter
-   - No `unwrap`/`expect`/`panic!`/indexing/slicing/`as`/unchecked arithmetic outside tests: use `get()`, `TryFrom`, `checked_*`/`saturating_*` and `Result`
+   - No `as`, unchecked arithmetic or string slicing anywhere, tests included; no `unwrap`/`expect`/`panic!`/indexing outside tests (`clippy.toml` relaxes only those): use `get()`, `TryFrom`, `checked_*`/`saturating_*` and `Result`
    - Identifiers of three or more characters, except `x`, `y`, `id`, `tx`, `rx`, `dx`, `dy` and `px`, tests included; name a binding after what it holds
-   - Each item only as visible as its uses (`pub(super)`, `pub(in crate::…)`, `pub(crate)` only inside a `pub` module chain); every exported item has a doc that states its intent and a `Debug` impl
+   - Each item only as visible as its uses (`pub(super)`, `pub(in crate::…)`, `pub(crate)` only inside a `pub` module chain); every exported item has a doc that states its intent, and every exported type a `Debug` impl
    - No `#[tokio::test]`, `#[tokio::main]`, `#[tracing::instrument]` or `mockall`: tests use `crate::test_utils::block_on`, ports get hand-written fakes, spans are explicit
    - `#[must_use]` on constructors and getters, `const fn` where Clippy asks for it
    - At most 200 production LOC per file under `src/features/` and `src/shared/`: split into submodules, never allowlist
@@ -123,4 +123,4 @@ If the code was already changed by hand (a review fix) and more operations remai
 - Do NOT patch code directly when issues are found: update the canvas first
 - Always verify against the Definition of Done, and always finish with `just check` passing
 - Never stage the canvas: commit only code and tests
-- When generating reveals a trap too small for a rule in `AGENTS.md`, offer to save it as an ai-memory page (`memory_write_page`), and write it only if the user agrees (durable pages only when the user asks, as the ai-memory block in `AGENTS.md` says). A trap that later changes must obey goes in a code comment. The memory tools are optional: if they are unavailable, say so in one line and continue.
+- When generating reveals a trap too small for a rule in `AGENTS.md`, put it in a code comment if later changes must obey it, and otherwise in the step 8 report. The memory tools are read-only here and optional: if they are unavailable, say so in one line and continue.

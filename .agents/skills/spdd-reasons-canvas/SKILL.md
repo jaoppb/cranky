@@ -39,7 +39,7 @@ Generate an implementation-ready structured prompt using the REASONS Canvas, spe
 3. **Read the ground rules and the relevant code**
 
    Always read:
-   - `AGENTS.md`: the canonical rules
+   - Read `AGENTS.md` (the canonical rules)
    - Read the root `Cargo.toml` (workspace members, `[workspace.dependencies]`, `[lints]`)
    - Read `clippy.toml` (the identifier allow-list, the test-only relaxations, `allowed-duplicate-crates`)
    - Read `arch-lint.toml` (the layer scopes and the rules between them)
