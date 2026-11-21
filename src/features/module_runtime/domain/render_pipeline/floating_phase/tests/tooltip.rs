@@ -6,8 +6,8 @@ use crate::features::module_runtime::test_support::MockCanvasFactory;
 use crate::features::vdom::domain::{
     AnchorSegment, InteractionContext, NodeKey, NodePath, NodeRef, SurfaceSpace,
 };
-use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::Scale;
+use crate::shared::primitives::{MonitorFocus, MonitorId};
 use std::collections::HashMap;
 
 /// A surface's root node, carrying `tip` as its own tooltip.
@@ -30,7 +30,7 @@ fn child(index: usize, key: Option<&'static str>, tip: Option<&str>) -> RenderNo
 }
 
 fn hover(node_ref: NodeRef) -> InteractionContext {
-    InteractionContext::new(Some(node_ref), None, None, true)
+    InteractionContext::new(Some(node_ref), None, None, MonitorFocus::Focused)
 }
 
 fn unkeyed(surface: SurfaceSpace, path: &[usize]) -> NodeRef {
@@ -64,7 +64,7 @@ fn picked(
 fn no_hover_lays_out_no_tooltip() {
     let bar = root(SurfaceSpace::Bar, Some("bar"), vec![]);
     assert_eq!(picked(&bar, None, None, None), vec![]);
-    let idle = InteractionContext::new(None, None, None, true);
+    let idle = InteractionContext::new(None, None, None, MonitorFocus::Focused);
     assert_eq!(picked(&bar, None, None, Some(&idle)), vec![]);
 }
 

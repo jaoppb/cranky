@@ -9,7 +9,9 @@ use crate::features::vdom::domain::{
     InteractionContext, ModuleParams, NodePath, NodeRef, PanelSpec, PopupSpec, SurfaceSpace, VNode,
 };
 use crate::shared::primitives::geometry::Scale;
-use crate::shared::primitives::{ModuleName, ModuleOptions, MonitorId, SizeConstraint};
+use crate::shared::primitives::{
+    ModuleName, ModuleOptions, MonitorFocus, MonitorId, SizeConstraint,
+};
 use std::collections::HashMap;
 
 /// Renders `bar` with no child size reported, under `interaction`.
@@ -75,7 +77,12 @@ fn render_with_tooltip(content: VNode) -> RenderOutcome {
     let on_bar = NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Bar));
     render(
         hovered,
-        Some(InteractionContext::new(Some(on_bar), None, None, false)),
+        Some(InteractionContext::new(
+            Some(on_bar),
+            None,
+            None,
+            MonitorFocus::Unfocused,
+        )),
     )
 }
 

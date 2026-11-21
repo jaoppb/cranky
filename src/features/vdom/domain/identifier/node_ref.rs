@@ -2,6 +2,7 @@
 //! the state survives re-renders.
 use super::node_key::NodeKey;
 use super::node_path::NodePath;
+use crate::shared::primitives::MonitorFocus;
 
 /// One keyed level of a `NodeRef`'s anchor: the path from the previous
 /// keyed level (or the root) down to this keyed node, plus its key.
@@ -89,12 +90,12 @@ impl NodeRef {
 
 /// Which nodes are hovered, pressed and focused on one monitor, and whether that monitor has focus;
 /// drives the `:hover`, `:active` and `:focus` pseudo-classes.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InteractionContext {
     hovered: Option<NodeRef>,
     active: Option<NodeRef>,
     focused: Option<NodeRef>,
-    is_monitor_focused: bool,
+    monitor_focus: MonitorFocus,
 }
 
 impl InteractionContext {
@@ -103,13 +104,13 @@ impl InteractionContext {
         hovered: Option<NodeRef>,
         active: Option<NodeRef>,
         focused: Option<NodeRef>,
-        is_monitor_focused: bool,
+        monitor_focus: MonitorFocus,
     ) -> Self {
         Self {
             hovered,
             active,
             focused,
-            is_monitor_focused,
+            monitor_focus,
         }
     }
 
@@ -128,8 +129,9 @@ impl InteractionContext {
         self.focused.as_ref()
     }
 
+    /// The focus of the monitor this context belongs to, which `:focus` on the bar root follows.
     #[must_use]
-    pub(crate) const fn is_monitor_focused(&self) -> bool {
-        self.is_monitor_focused
+    pub(crate) const fn monitor_focus(&self) -> MonitorFocus {
+        self.monitor_focus
     }
 }

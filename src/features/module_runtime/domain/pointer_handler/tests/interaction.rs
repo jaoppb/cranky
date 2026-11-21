@@ -9,7 +9,7 @@ mod tests {
     use crate::features::vdom::domain::NodeRef;
     use crate::shared::events::core::{PointerButton, PointerEvent, SurfaceKind};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
-    use crate::shared::primitives::{FunctionName, MonitorId};
+    use crate::shared::primitives::{FunctionName, MonitorFocus, MonitorId};
 
     fn make_test_tree() -> RenderNode {
         RenderNode::Rect {
@@ -135,14 +135,14 @@ mod tests {
             &make_test_tree(),
         );
 
-        let focused = handler.interaction_context(&mon, true);
-        assert!(focused.is_monitor_focused());
+        let focused = handler.interaction_context(&mon, MonitorFocus::Focused);
+        assert_eq!(focused.monitor_focus(), MonitorFocus::Focused);
         assert_eq!(focused.hovered(), Some(&root_ref()));
         assert_eq!(focused.active(), None);
         assert_eq!(focused.focused(), None);
 
-        let unfocused = handler.interaction_context(&other, false);
-        assert!(!unfocused.is_monitor_focused());
+        let unfocused = handler.interaction_context(&other, MonitorFocus::Unfocused);
+        assert_eq!(unfocused.monitor_focus(), MonitorFocus::Unfocused);
         assert_eq!(unfocused.hovered(), None);
     }
 
