@@ -51,6 +51,9 @@ jobs:
     needs: tag
     uses: ./.github/workflows/ci.yml
 
+  # The binary is built outside Nix, in the image scripts/release/common.sh
+  # pins, with the toolchain and lockfile CI uses; it must start on Arch and on
+  # that image before the release is created.
   release:
     needs: ci
     runs-on: ubuntu-latest
@@ -59,64 +62,41 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libwayland-dev libdbus-1-dev libxkbcommon-dev
+      - name: Build the release tarball
+        run: scripts/release/build.sh
 
-      - name: Install Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          cache: true
-
-      - name: Build release binary
-        run: cargo build --release
-
-      - name: Package binary
-        run: |
-          mkdir -p dist
-          cp target/release/cranky dist/
-          cp README.md dist/
-          cp LICENSE dist/
-          tar -czvf dist/cranky-${{ github.ref_name }}-x86_64.tar.gz -C dist cranky README.md LICENSE
+      - name: Start the binary outside Nix
+        run: scripts/release/smoke.sh
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/cranky-${{ github.ref_name }}-x86_64.tar.gz
+          files: target/release-artifact/cranky-${{ github.ref_name }}-x86_64.tar.gz
           generate_release_notes: true
 
+  # Both packages are built from the published sources, installed and started
+  # before either is handed to publish-aur.
   prepare-aur:
     needs: release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
-      - name: Set up variables
-        id: vars
-        run: |
-          VERSION=${{ github.ref_name }}
-          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Generate checksums and .SRCINFO
-        run: |
-          # Run inside archlinux container
-          docker run --rm -v ${{ github.workspace }}:/workspace archlinux:base-devel bash /workspace/.github/scripts/update-aur.sh
+      - name: Build, install and start the AUR packages
+        run: scripts/release/aur.sh release
 
       - name: Upload cranky AUR package
         uses: actions/upload-artifact@v7
         with:
           name: aur-cranky
-          path: contrib/arch/pkg-src/
+          path: target/release-artifact/aur/pkg-src/
           retention-days: 1
 
       - name: Upload cranky-bin AUR package
         uses: actions/upload-artifact@v7
         with:
           name: aur-cranky-bin
-          path: contrib/arch/pkg-bin/
+          path: target/release-artifact/aur/pkg-bin/
           retention-days: 1
 
   publish-aur:

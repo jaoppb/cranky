@@ -1,0 +1,40 @@
+name: Release check
+
+# A pull request that changes what a release is built from proves it the way
+# release.yml will, before any tag exists: the binary built outside Nix
+# starts on Arch and on the build image, and both AUR packages build, install
+# and start. It is not a required check, since it runs only on these paths.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/workflows/release-check.yml
+      - scripts/release/**
+      - rust-toolchain.toml
+      - Cargo.toml
+      - Cargo.lock
+      - contrib/arch/**
+      - contrib/systemd/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the release tarball
+        run: scripts/release/build.sh
+
+      - name: Start the binary outside Nix
+        run: scripts/release/smoke.sh
+
+      - name: Build, install and start the AUR packages
+        run: scripts/release/aur.sh local
