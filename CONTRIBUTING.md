@@ -65,7 +65,7 @@ A local `just issues-check` also reports an issue missing from the board. CI's r
 
 ## Pull requests
 
-1. Branch from `main` with the name `AGENTS.md` gives (`<type>/<issue>`).
+1. Branch from `main` with the name `AGENTS.md` gives (`<type>/<issue>`). For an issue with Effort 5 or more, start with `/spdd-analysis #<n>` and follow the SPDD phases ("SPDD" in `AGENTS.md`); move its card to In progress by hand, until #97 automates it.
 2. Commit following `AGENTS.md`, and make sure `just check` passes.
 3. Open the pull request against `main`. The template asks for `Closes #<n>`, what changed, notes for the reviewer, and the test plan. Dependent changes can go out as a stack of pull requests, each based on the one below it.
 4. The 11 required checks must be green. The `test` job can fail once on the runner without a code cause; re-run the failed job once before investigating.

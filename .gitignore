@@ -36,3 +36,6 @@ __pycache__/
 # Local design notes
 /SPEC.md
 
+
+# SPDD canvases (local working files)
+/spdd/prompt/
