@@ -14,14 +14,18 @@
 #            .SRCINFO of each package land in OUT_DIR/aur/pkg-src and
 #            OUT_DIR/aur/pkg-bin, for publishing, only once both packages
 #            built, installed and started.
+#   git      cranky-git alone, from main on GitHub, with pkgver set to the
+#            version pkgver() resolves, since the AUR shows that one. Its
+#            PKGBUILD and .SRCINFO land in OUT_DIR/aur/pkg-git once it built,
+#            installed and started.
 #
 # Two containers keep what gets published out of reach of the build: the
 # first prepares the files and builds nothing; the second, which runs every
 # build script and test, mounts nothing writable.
 set -euo pipefail
 
-if [[ $# -ne 1 || ( "$1" != local && "$1" != release ) ]]; then
-	echo "usage: $0 local|release" >&2
+if [[ $# -ne 1 || ( "$1" != local && "$1" != release && "$1" != git ) ]]; then
+	echo "usage: $0 local|release|git" >&2
 	exit 2
 fi
 mode=$1
@@ -32,7 +36,7 @@ source scripts/release/common.sh
 
 out="${OUT_DIR}/aur"
 rm -rf "${out}"
-mkdir -p "${out}/sources/cranky" "${out}/sources/cranky-bin" "${out}/prepared"
+mkdir -p "${out}/sources/cranky" "${out}/sources/cranky-bin" "${out}/sources/cranky-git" "${out}/prepared"
 if [[ "${mode}" == local ]]; then
 	version="$(workspace_version)"
 	# HEAD with any uncommitted change to a tracked file, as a commit object
@@ -44,7 +48,6 @@ if [[ "${mode}" == local ]]; then
 	# Fetched into, not pushed from, so no hook of this repository runs. HEAD
 	# names main whatever init.defaultBranch says: makepkg checks it out. With
 	# uncommitted changes, pkgver() counts the two commits git stash made.
-	mkdir -p "${out}/sources/cranky-git"
 	git init --quiet --bare --initial-branch=main "${out}/sources/cranky-git/cranky.git"
 	git -C "${out}/sources/cranky-git/cranky.git" fetch --quiet --no-tags "${PWD}" \
 		"${tree:-HEAD}:refs/heads/main" 'refs/tags/*:refs/tags/*'
@@ -65,8 +68,12 @@ docker run --rm \
 	archlinux:base-devel \
 	bash /workspace/scripts/release/aur-container.sh build
 
-if [[ "${mode}" == release ]]; then
-	for pair in cranky:pkg-src cranky-bin:pkg-bin; do
+if [[ "${mode}" != local ]]; then
+	pairs=(cranky:pkg-src cranky-bin:pkg-bin)
+	if [[ "${mode}" == git ]]; then
+		pairs=(cranky-git:pkg-git)
+	fi
+	for pair in "${pairs[@]}"; do
 		mkdir -p "${out}/${pair#*:}"
 		cp "${out}/prepared/${pair%%:*}/PKGBUILD" "${out}/prepared/${pair%%:*}/.SRCINFO" "${out}/${pair#*:}/"
 	done
