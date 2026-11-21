@@ -1,11 +1,12 @@
 name: Tools
 
 # Audits GitHub itself (issues, labels, milestones) against tools.toml; the
-# merge settings are audited only locally, see the matrix. The drift it finds comes from GitHub state, not from commits, so
-# it runs when an issue changes and when the declaration does, and it is not
-# part of ci.yml: an ordinary pull request must not go red because of an issue
-# someone else filed. Only one that changes the declaration or the pinned
-# `tools` runs it.
+# merge settings, the Project title and Project membership are audited only
+# locally, see the matrix. The drift it finds comes from GitHub state, not
+# from commits, so it runs when an issue changes and when the declaration
+# does, and it is not part of ci.yml: an ordinary pull request must not go
+# red because of an issue someone else filed. Only one that changes the
+# declaration or the pinned `tools` runs it.
 on:
   issues:
     # Closing or deleting an issue can clear a finding: most rules look at open issues.
@@ -53,12 +54,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The rule that every issue is a card of the board is audited only
+          # locally, by a bare `just issues-check`: nothing in CI adds the
+          # cards. The audit still reads the board whenever tools.toml names
+          # it, which the workflow token can do only while the board is public.
           - recipe: issues-check
+            args: --no-membership
           # GitHub hides the merge settings from a read-only token, and
           # `tools` then assumes its defaults, which are the values
           # tools.toml declares: here that part would pass without checking
           # anything. A bare `just repo-check`, run locally by someone who
-          # may push, audits the settings as well.
+          # may push, audits the settings and the Project title as well; the
+          # title stays local by choice, with the rest of the board.
           - recipe: repo-check
             args: --labels --milestones
     steps:

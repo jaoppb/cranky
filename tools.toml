@@ -1,5 +1,6 @@
 # Declarative GitHub configuration, read by jaoppb/tools (`tools`, provided by the flake devShell).
 # `just repo-check` and `just issues-check` compare GitHub with this file; `tools repo sync` applies it.
+# `just project-check` and `just project-sync` place the cards of the Project by the `[workflow]` rules.
 
 [github.repository]
 owner = "jaoppb"
@@ -13,6 +14,14 @@ allow_rebase_merge = false
 delete_branch_on_merge = true
 merge_commit_title = "PR_TITLE"
 merge_commit_message = "PR_BODY"
+
+# The board at https://github.com/users/jaoppb/projects/7. Declaring the number makes
+# `tools issues check` require every issue, open or closed, to be a card of it, and `tools repo
+# check` compare the title. CI skips both parts (see .github/workflows/tools.yml) but still reads
+# the board, so it must stay public.
+[github.project]
+number = 7
+title = "Cranky"
 
 [github.labels]
 # A label on GitHub that is not declared here fails `tools repo check`; it is never deleted automatically.
@@ -61,3 +70,10 @@ items = [
     { title = "v0.15.0", description = "Project infrastructure baseline and Hyprland 0.57 compatibility", state = "open" },
     { title = "v0.16.0", description = "Compositor compatibility and follow-up fixes", state = "open" },
 ]
+
+# The Status rules of the board, whose columns are the preset's statuses: Backlog, Ready,
+# In progress, In review, Done. An open card can be Ready only with one `type:*`, an `area:*`, a
+# milestone, the Project fields Priority and Effort (at most 8), no open blocker and no unstarted
+# non-epic parent; an epic keeps its column. `just project-check --explain <issue>` shows why.
+[workflow]
+extends = "builtin:cosmo"
