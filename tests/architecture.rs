@@ -277,14 +277,4 @@ fn version_files_agree() {
 
     assert_eq!(pkgver(&read("contrib/arch/PKGBUILD")), version);
     assert_eq!(pkgver(&read("contrib/arch/PKGBUILD-bin")), version);
-
-    // The git package computes its version from the tags: the literal is a
-    // placeholder, and `pkgver()` falls back to it when the clone has no tag.
-    let git_pkgbuild = read("contrib/arch/PKGBUILD-git");
-    assert_eq!(pkgver(&git_pkgbuild), format!("{version}.r0.g0000000"));
-    let fallback = format!("printf \"{version}.r%s.%s\"");
-    assert!(
-        git_pkgbuild.contains(&fallback),
-        "PKGBUILD-git's pkgver() must fall back to {fallback}"
-    );
 }

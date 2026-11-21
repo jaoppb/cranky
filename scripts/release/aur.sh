@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Prove the two AUR packages in clean Arch Linux containers: fill in their
+# Prove the AUR packages in clean Arch Linux containers: fill in their
 # checksums, write .SRCINFO, build them with makepkg (check() included),
 # install each one and start the installed binary.
 #
-#   local    the sources are the tarball scripts/release/build.sh made and a
-#            `git archive` of the working tree's tracked files, so a pull
-#            request is checked before any tag exists. Nothing is kept.
-#   release  the sources are the published ones of the tag. The PKGBUILD and
+#   local    all three packages. The sources are the tarball
+#            scripts/release/build.sh made, a `git archive` of the working
+#            tree's tracked files, and, for cranky-git, a bare repository
+#            holding that same tree as its main branch, with the tags
+#            pkgver() describes it from. A pull request is checked before
+#            any tag exists. Nothing is kept.
+#   release  cranky and cranky-bin, from the published sources of the tag.
+#            cranky-git follows main, not the tag. The PKGBUILD and
 #            .SRCINFO of each package land in OUT_DIR/aur/pkg-src and
 #            OUT_DIR/aur/pkg-bin, for publishing, only once both packages
 #            built, installed and started.
@@ -28,7 +32,7 @@ source scripts/release/common.sh
 
 out="${OUT_DIR}/aur"
 rm -rf "${out}"
-mkdir -p "${out}/sources/cranky" "${out}/sources/cranky-bin" "${out}/prepared"
+mkdir -p "${out}/sources/cranky" "${out}/sources/cranky-bin" "${out}/sources/cranky-git" "${out}/prepared"
 if [[ "${mode}" == local ]]; then
 	version="$(workspace_version)"
 	# HEAD with any uncommitted change to a tracked file, as a commit object
@@ -37,6 +41,10 @@ if [[ "${mode}" == local ]]; then
 	git archive --format=tar.gz --prefix="cranky-${version}/" --output="${out}/sources/cranky/cranky-${version}.tar.gz" "${tree:-HEAD}"
 	cp "$(tarball_path)" "${out}/sources/cranky-bin/cranky-bin-${version}.tar.gz"
 	cp contrib/systemd/cranky.service contrib/systemd/cranky-uwsm.service "${out}/sources/cranky-bin/"
+	# Fetched into, not pushed from, so no hook of this repository runs.
+	git init --quiet --bare "${out}/sources/cranky-git/cranky.git"
+	git -C "${out}/sources/cranky-git/cranky.git" fetch --quiet --no-tags "${PWD}" \
+		"${tree:-HEAD}:refs/heads/main" 'refs/tags/*:refs/tags/*'
 fi
 
 docker run --rm \

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Write a new release version into every file that carries one: the workspace
-# version in Cargo.toml, Cargo.lock, and the Arch packaging in contrib/arch.
+# version in Cargo.toml, Cargo.lock, and the cranky and cranky-bin PKGBUILDs in
+# contrib/arch (cranky-git takes its version from the tags).
 # It only edits files. The release itself is a pull request with this change,
 # then the tag vX.Y.Z pushed on main, which starts .github/workflows/release.yml.
 # `version_files_agree` in tests/architecture.rs checks the same files.
@@ -42,14 +43,6 @@ for pkgbuild in contrib/arch/PKGBUILD contrib/arch/PKGBUILD-bin; do
 	sed -i -e "s/^pkgver=.*/pkgver=${new}/" -e "s/^pkgrel=.*/pkgrel=1/" "${pkgbuild}"
 done
 
-# The git package computes its version from the tags; the literal is what it
-# shows before a build, and its fallback when the clone has no tag.
-sed -i \
-	-e "s/^pkgver=.*/pkgver=${new}.r0.g0000000/" \
-	-e "s/^pkgrel=.*/pkgrel=1/" \
-	-e "s/printf \"[0-9.]*\.r%s\.%s\"/printf \"${new}.r%s.%s\"/" \
-	contrib/arch/PKGBUILD-git
-
 # Only the workspace's own entries change in Cargo.lock.
 cargo update --workspace --offline --quiet
 
@@ -64,11 +57,6 @@ expect() {
 expect Cargo.toml "version = \"${new}\""
 expect contrib/arch/PKGBUILD "pkgver=${new}"
 expect contrib/arch/PKGBUILD-bin "pkgver=${new}"
-expect contrib/arch/PKGBUILD-git "pkgver=${new}.r0.g0000000"
-if ! grep --quiet --fixed-strings -- "printf \"${new}.r%s.%s\"" contrib/arch/PKGBUILD-git; then
-	echo "error: contrib/arch/PKGBUILD-git does not carry ${new} in its pkgver() fallback" >&2
-	missing=1
-fi
 if [[ "$(grep --count --fixed-strings --line-regexp -- "version = \"${new}\"" Cargo.lock)" -lt 3 ]]; then
 	echo "error: Cargo.lock does not carry ${new} for the three workspace crates" >&2
 	missing=1

@@ -6,7 +6,7 @@ pkgdesc="A minimalist, performant, and modular bar for Hyprland"
 arch=('x86_64' 'aarch64')
 url="https://github.com/jaoppb/cranky"
 license=('MIT')
-depends=('gcc-libs' 'glibc' 'wayland' 'libxkbcommon' 'fontconfig' 'dbus')
+depends=('glibc' 'libgcc' 'libxkbcommon' 'fontconfig' 'dbus')
 optdepends=('uwsm: for systemd session management')
 makedepends=('cargo' 'pkgconf')
 # The text rendering unit tests need a font, which a clean chroot lacks.
