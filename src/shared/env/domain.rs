@@ -33,7 +33,8 @@ impl XdgCacheHome {
     }
 }
 
-/// `$XDG_RUNTIME_DIR`, where the Hyprland IPC sockets live.
+/// `$XDG_RUNTIME_DIR`, where the shared-memory buffer files are created and the Hyprland IPC
+/// sockets live; required.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XdgRuntimeDir(PathBuf);
 impl XdgRuntimeDir {

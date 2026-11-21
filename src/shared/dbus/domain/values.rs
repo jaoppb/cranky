@@ -11,9 +11,10 @@ use super::types::PropertyName;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DBusValue {
-    /// A string, object path or signature.
+    /// An `s` (string) value; object paths and signatures are not converted and become `Null`.
     String(String),
-    /// Any signed or unsigned integer, widened to `i64` (a `u64` above `i64::MAX` saturates).
+    /// An `n`, `q`, `i`, `u`, `x` or `t` integer widened to `i64` (a `u64` above `i64::MAX`
+    /// saturates); bytes become `Null`.
     Int(i64),
     /// A `d` (IEEE 754 double) value, unchanged.
     Float(f64),
@@ -21,9 +22,9 @@ pub enum DBusValue {
     Bool(bool),
     /// An array, element by element.
     Array(Vec<Self>),
-    /// A dictionary, with keys turned into strings.
+    /// A dictionary with string keys; entries with a non-string key are dropped.
     Dict(HashMap<String, Self>),
-    /// A variant type the conversion does not support.
+    /// A value the conversion does not support: bytes, object paths, signatures, structs and fds.
     Null,
 }
 

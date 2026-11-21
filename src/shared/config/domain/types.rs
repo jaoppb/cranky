@@ -19,7 +19,8 @@ impl FontFamily {
     }
 }
 
-/// Font size handed to the text measurer and the canvas when shaping text.
+/// Font size in logical pixels, scaled by the monitor scale and handed to the text measurer and
+/// the canvas when shaping text.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct FontSize(f32);
 
@@ -91,8 +92,8 @@ impl PaddingOffset {
     }
 }
 
-/// Vertical placement requested for the bar's content by `vertical_alignment` (`top`, `center` or
-/// `bottom`).
+/// Value of `vertical_alignment` in `[root]` (`top`, `center` or `bottom`); parsed and kept, but
+/// no layout code reads it yet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum VerticalAlignment {
     /// Aligned to the top edge.

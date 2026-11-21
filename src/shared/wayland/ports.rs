@@ -44,17 +44,20 @@ use thiserror::Error;
 /// Failure in the display server connection or in drawing its surfaces.
 #[derive(Error, Debug)]
 pub enum DisplayServerError {
-    /// Connecting to the compositor named by the environment failed.
+    /// The compositor connection failed, lacks a global or output the bar needs (such as `wl_shm`),
+    /// or reading or dispatching its events failed.
     #[error("Display server connection failed: {reason}")]
     ConnectionFailed {
         /// The connection error, as text.
         reason: String,
     },
 
-    /// An I/O operation failed, such as creating a shared-memory buffer.
+    /// An `std::io::Error` passed up with `?`; the Wayland adapter reports its own I/O failures as
+    /// `ConnectionFailed` or `Internal`.
     #[error("I/O error: {0}")]
     InputOutput(#[from] std::io::Error),
-    /// Any other failure, such as a missing bar or a rejected request; the message says which.
+    /// Any other failure, such as a missing bar or a shared-memory buffer that could not be
+    /// created; the message says which.
     #[error("Internal error: {0}")]
     Internal(String),
 }

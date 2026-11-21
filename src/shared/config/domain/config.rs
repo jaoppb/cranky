@@ -4,8 +4,8 @@ use super::root::RootConfig;
 use super::style::{PopupConfig, TooltipConfig};
 use super::types::RenderingMode;
 
-/// Everything `config.toml` configures, published to every module and adapter through the signal
-/// hub.
+/// Everything `config.toml` configures, published on the signal hub's config channel and re-sent
+/// on every edit that parses.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Config {
     root: RootConfig,

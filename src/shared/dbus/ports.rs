@@ -19,7 +19,8 @@ pub enum DbusConnectionError {
     /// Building the match rule or opening the signal stream failed.
     #[error("Subscription failed: {0}")]
     SubscriptionFailed(String),
-    /// Reading an interface's properties failed.
+    /// Reserved for property reads; not produced today, `GetAll` failures surface as
+    /// `MethodCallFailed`.
     #[error("Property read failed: {0}")]
     PropertyReadFailed(String),
 }

@@ -7,7 +7,8 @@ use super::partial_root::PartialRootConfig;
 use super::types::VerticalAlignment;
 
 /// Settings of the root module, the bar itself, from the `[root]` table.
-/// `[root.unfocused]` can override height, alignment and margin on unfocused monitors.
+/// `[root.unfocused]` overrides height and margin on unfocused monitors (its alignment is parsed
+/// but unused).
 #[derive(Debug, Clone, PartialEq)]
 pub struct RootConfig {
     name: ModuleName,
@@ -98,7 +99,8 @@ impl RootConfig {
         &self.margin
     }
 
-    /// The remaining `[root]` keys, handed to the bar script as its options.
+    /// The remaining `[root]` keys, handed to the bar script as its options when `[modules]` has
+    /// no entry for the root.
     #[must_use]
     pub const fn options(&self) -> &ModuleOptions {
         &self.options

@@ -1,4 +1,5 @@
-//! The embedded child modules' buffers a popup composites, keyed by module and monitor.
+//! The embedded child modules' buffers a popup composites: one layer per module, kept in z-order
+//! from bottom to top.
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId, Position};
 

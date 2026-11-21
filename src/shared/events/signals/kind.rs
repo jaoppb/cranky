@@ -1,7 +1,7 @@
 //! The kinds of signal a module can subscribe to.
 
 /// A state source a module can subscribe to in its `metadata()`; the module re-renders only when
-/// one of its sources changes, and the matching adapter starts only if some module subscribes.
+/// one of its sources changes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SignalKind {
     /// The local clock.

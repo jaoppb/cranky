@@ -4,7 +4,8 @@ use super::domain::AppEnvironment;
 /// Why the environment could not be read.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum EnvironmentError {
-    /// A required variable (`HOME` or `XDG_RUNTIME_DIR`) is unset; carries its name.
+    /// A required variable (`HOME` or `XDG_RUNTIME_DIR`) is unset or not valid Unicode; carries its
+    /// name.
     #[error("Missing required environment variable: {0}")]
     MissingVariable(String),
 }

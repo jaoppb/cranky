@@ -29,8 +29,8 @@ impl ModulesConfig {
     }
 }
 
-/// One `[modules.<name>]` entry: whether the module loads, which engine runs it and the options its
-/// script sees.
+/// One `[modules.<name>]` entry: whether the module is enabled, which engine runs it and the
+/// options its script sees.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleConfig {
     name: ModuleName,

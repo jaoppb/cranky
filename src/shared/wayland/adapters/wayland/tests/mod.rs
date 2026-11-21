@@ -1,4 +1,4 @@
-//! Tests of the Wayland adapter, sharing the fake compositor setup in `fixture`.
+//! Tests of the Wayland adapter, sharing the compositor-less fixture in `fixture`.
 mod adapter;
 pub mod fixture;
 mod floating_anchor_popup;

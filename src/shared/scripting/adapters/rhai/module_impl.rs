@@ -21,6 +21,9 @@ pub struct RhaiModule {
 }
 
 impl RhaiModule {
+    /// Compiles `source` and runs its top level once, so compile and top-level errors surface here
+    /// rather than from `init`.
+    ///
     /// # Errors
     ///
     /// Returns `ModuleError::Internal` if compiling or evaluating the script fails.

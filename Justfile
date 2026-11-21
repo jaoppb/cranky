@@ -33,7 +33,7 @@ run:
 run-release:
     cargo run --release
 
-# Run the full gate a pull request must pass: formatting, Clippy, architecture, LOC limits, tests, dependencies and workflows
+# Run the full gate a pull request must pass: formatting, Clippy, documentation, architecture, LOC limits, tests, dependencies and workflows
 [group('quality')]
 check: fmt-check lint doc-check arch-check loc-check test deps-check workflows-check
 
