@@ -146,22 +146,28 @@ fn count(value: usize) -> [u8; 4] {
     u32::try_from(value).unwrap().to_be_bytes()
 }
 
+/// How many bytes a block of data spends on each instant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Width {
+    /// Four bytes, as in the first block of every file.
+    Narrow,
+    /// Eight bytes, as in the second block of a later version.
+    Wide,
+}
+
 /// A header and a block of data: transitions as (instant, kind), kinds as
 /// (offset, index of the name), and leap seconds as (instant, total).
 fn file_part(
     version: u8,
-    wide: bool,
+    width: Width,
     transitions: &[(i64, u8)],
     kinds: &[(i32, u8)],
     names: &[u8],
     leaps: &[(i64, i32)],
 ) -> Vec<u8> {
-    let instant = |seconds: i64| {
-        if wide {
-            seconds.to_be_bytes().to_vec()
-        } else {
-            i32::try_from(seconds).unwrap().to_be_bytes().to_vec()
-        }
+    let instant = |seconds: i64| match width {
+        Width::Wide => seconds.to_be_bytes().to_vec(),
+        Width::Narrow => i32::try_from(seconds).unwrap().to_be_bytes().to_vec(),
     };
     let mut bytes = b"TZif".to_vec();
     bytes.push(version);
@@ -196,14 +202,14 @@ const KINDS: &[(i32, u8)] = &[(-3600, 0), (7200, 4)];
 const NAMES: &[u8] = b"OLD\0NEW\0";
 
 fn version_one(transitions: &[(i64, u8)], kinds: &[(i32, u8)], names: &[u8]) -> Vec<u8> {
-    file_part(0, false, transitions, kinds, names, &[])
+    file_part(0, Width::Narrow, transitions, kinds, names, &[])
 }
 
 fn version_two(footer: &[u8]) -> Vec<u8> {
-    let mut bytes = file_part(b'2', false, &[], &[(0, 0)], b"X\0", &[]);
+    let mut bytes = file_part(b'2', Width::Narrow, &[], &[(0, 0)], b"X\0", &[]);
     bytes.extend(file_part(
         b'2',
-        true,
+        Width::Wide,
         &[(1000, 1)],
         KINDS,
         NAMES,
