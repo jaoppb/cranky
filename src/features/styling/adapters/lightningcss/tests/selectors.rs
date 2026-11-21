@@ -1,9 +1,13 @@
 use crate::features::layout_engine::domain::BoxMargin;
+use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::{
     LightningCssAdapter, LightningPropertyReparser,
 };
-use crate::features::styling::domain::{ClassName, ElementQuery, InheritedStyle, StyleSheetName};
+use crate::features::styling::domain::{
+    ClassName, ClassNameList, ElementQuery, InheritedStyle, Opacity, StyleSheetName,
+};
 use crate::features::styling::ports::CssParserPort;
+use crate::features::vdom::domain::VNode;
 use crate::shared::config::domain::BorderRadius;
 use crate::shared::primitives::color::{Color, DrawingColor};
 
@@ -122,4 +126,57 @@ fn test_structural_pseudo_classes() {
         &LightningPropertyReparser,
     );
     assert!(style_active.color().is_none());
+}
+
+#[test]
+fn test_empty_pseudo_class_skips_an_element_with_content() {
+    let parsed = LightningCssAdapter::new()
+        .parse_stylesheet(
+            StyleSheetName::new("test").unwrap(),
+            ".item:empty { opacity: 0.5; }",
+        )
+        .unwrap();
+    let class_item = ClassName::new("item").unwrap();
+    let opacity = |is_empty| {
+        let query = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
+            .with_structural_context(0, 1, is_empty);
+        let (style, _) = parsed.resolve_style(
+            &query,
+            &InheritedStyle::default(),
+            &LightningPropertyReparser,
+        );
+        style.opacity().map(Opacity::value)
+    };
+    assert_eq!(opacity(true), Some(0.5));
+    assert_eq!(opacity(false), None);
+}
+
+/// The vdom bridge tells the cascade whether a node is empty: `:empty`
+/// styles a flex with no children and skips one with a child.
+#[test]
+fn test_empty_pseudo_class_follows_the_vnode_children() {
+    let sheet = LightningCssAdapter::new()
+        .parse_stylesheet(
+            StyleSheetName::new("test").unwrap(),
+            ".x:empty { opacity: 0.5; }",
+        )
+        .unwrap();
+    let resolver = CompositeStyleResolver::new(vec![sheet]);
+    let opacity = |children: Vec<VNode>| {
+        let node = VNode::new_flex(
+            children,
+            Some(ClassNameList::parse("x").unwrap()),
+            None,
+            None,
+            None,
+            None,
+        );
+        node.resolve_styles(&resolver, None, None)
+            .style()
+            .opacity()
+            .map(Opacity::value)
+    };
+    assert_eq!(opacity(Vec::new()), Some(0.5));
+    let child = VNode::new_rect(None, None, None, None, None);
+    assert_eq!(opacity(vec![child]), None);
 }
