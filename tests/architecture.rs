@@ -248,3 +248,41 @@ fn time_crate_lints_equal_the_main_crate() {
         lints_table("Cargo.toml")
     );
 }
+
+/// What an Arch `PKGBUILD` assigns to `pkgver`.
+fn pkgver(pkgbuild: &str) -> String {
+    pkgbuild
+        .lines()
+        .find_map(|line| line.strip_prefix("pkgver="))
+        .expect("the PKGBUILD sets pkgver")
+        .to_string()
+}
+
+/// A release is cut from one version: the tag must equal the workspace version
+/// (`.github/workflows/release.yml` checks that), and the Arch packages are
+/// published from the `PKGBUILD` files as they are at the tag.
+/// `just bump-version` writes all of them; this fails when one was missed.
+#[test]
+fn version_files_agree() {
+    let read = |path: &str| std::fs::read_to_string(path).expect("Failed to read file");
+    let manifest: toml::Table = read("Cargo.toml").parse().expect("Manifest is valid TOML");
+    let version = manifest
+        .get("workspace")
+        .and_then(|workspace| workspace.get("package"))
+        .and_then(|package| package.get("version"))
+        .and_then(toml::Value::as_str)
+        .expect("Manifest has [workspace.package].version");
+
+    assert_eq!(pkgver(&read("contrib/arch/PKGBUILD")), version);
+    assert_eq!(pkgver(&read("contrib/arch/PKGBUILD-bin")), version);
+
+    // The git package computes its version from the tags: the literal is a
+    // placeholder, and `pkgver()` falls back to it when the clone has no tag.
+    let git_pkgbuild = read("contrib/arch/PKGBUILD-git");
+    assert_eq!(pkgver(&git_pkgbuild), format!("{version}.r0.g0000000"));
+    let fallback = format!("printf \"{version}.r%s.%s\"");
+    assert!(
+        git_pkgbuild.contains(&fallback),
+        "PKGBUILD-git's pkgver() must fall back to {fallback}"
+    );
+}

@@ -143,3 +143,8 @@ setup:
 [group('setup')]
 flake-update *inputs:
     nix flake update {{inputs}}
+
+# Write a new version X.Y.Z into Cargo.toml, Cargo.lock and the Arch packaging; the release is that change merged, then the tag vX.Y.Z pushed on main
+[group('release')]
+bump-version version:
+    ./scripts/bump-version.sh {{version}}

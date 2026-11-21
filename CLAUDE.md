@@ -24,6 +24,7 @@ The `Justfile` is the entry point (`just --list`). Key recipes:
 | Benchmarks | `just bench` (criterion, `benches/benchmarks.rs`) |
 | Profiling | `just release && just record-profile` then `just analyze-profile` (see the `analyze-profile` skill in `.agents/skills/`) |
 | Git hooks | `just setup` (lefthook) |
+| Release | `just bump-version X.Y.Z` (edits `Cargo.toml`, `Cargo.lock` and `contrib/arch/PKGBUILD*` only), merge that as a pull request, then push the tag `vX.Y.Z` on `main` |
 
 `lefthook.yml` calls the recipes: `lint-fix` + `lint`, `arch-check`, and `loc-check` pre-commit; `check` pre-push.
 

@@ -9,7 +9,38 @@ permissions:
   contents: write
 
 jobs:
+  # A release is a version bump merged through a pull request (`just
+  # bump-version`), then this tag pushed on main. Nothing here pushes a commit
+  # or moves a tag: a tag that fails this job publishes nothing, and is deleted
+  # and pushed again on the right commit.
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Every branch, to tell whether main contains the tag.
+          fetch-depth: 0
+
+      - name: Ensure the tag is on main
+        run: |
+          if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} is not reachable from origin/main."
+            exit 1
+          fi
+
+      # tests/architecture.rs holds the PKGBUILD versions to this one.
+      - name: Ensure the tag is the workspace version
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match the workspace version ${version} in Cargo.toml (expected v${version})."
+            exit 1
+          fi
+
   ci:
+    needs: tag
     uses: ./.github/workflows/ci.yml
 
   release:
@@ -17,15 +48,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Ensure tag is on main branch
-        run: |
-          if ! git branch -r --contains ${{ github.ref }} | grep -q 'origin/main'; then
-            echo "Error: Tag ${{ github.ref_name }} is not reachable from origin/main."
-            exit 1
-          fi
 
       - name: Install system dependencies
         run: |
@@ -36,39 +58,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           cache: true
-
-      - name: Sync version and push
-        id: sync_version
-        run: |
-          TAG_VERSION=${GITHUB_REF_NAME#v}
-          echo "Tag version: $TAG_VERSION"
-
-          echo "Updating Cargo.toml and PKGBUILDs to $TAG_VERSION..."
-          sed -i "0,/^version = .*/s//version = \"$TAG_VERSION\"/" Cargo.toml
-
-          sed -i "s/^pkgver=.*/pkgver=$TAG_VERSION/" contrib/arch/PKGBUILD
-          sed -i "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD
-          sed -i "s/^pkgver=.*/pkgver=$TAG_VERSION/" contrib/arch/PKGBUILD-bin
-          sed -i "s/^pkgrel=.*/pkgrel=1/" contrib/arch/PKGBUILD-bin
-
-          # Update Cargo.lock
-          cargo check
-
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock contrib/arch/PKGBUILD contrib/arch/PKGBUILD-bin
-
-          if ! git diff --staged --quiet; then
-            git commit -m "chore: bump version to $TAG_VERSION"
-            git pull --rebase origin main
-            git push origin HEAD:main
-
-            # Re-tag the commit with the updated files
-            git tag -f "$GITHUB_REF_NAME"
-            git push origin "$GITHUB_REF_NAME" --force
-          else
-            echo "Versions already match. No commit needed."
-          fi
 
       - name: Build release binary
         run: cargo build --release
