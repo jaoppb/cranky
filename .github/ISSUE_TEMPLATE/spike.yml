@@ -27,6 +27,5 @@ body:
       description: "Observable, checkable outcomes."
       value: |
         - [ ] The question is answered and the decision is recorded in this issue
-        - [ ] `just check` passes
     validations:
       required: true

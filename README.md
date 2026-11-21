@@ -34,7 +34,7 @@ Cranky needs a Wayland compositor with layer-shell support; it is built for [Hyp
 
 - [`cranky`](https://aur.archlinux.org/packages/cranky): builds the latest release from source, and needs Rust 1.100 or newer.
 - [`cranky-bin`](https://aur.archlinux.org/packages/cranky-bin): the prebuilt release binary.
-- [`cranky-git`](https://aur.archlinux.org/packages/cranky-git): builds the latest `main`.
+- [`cranky-git`](https://aur.archlinux.org/packages/cranky-git): builds the latest `main`, and needs Rust 1.100 or newer.
 
 ```bash
 paru -S cranky   # or cranky-bin, cranky-git, with any AUR helper
@@ -125,11 +125,11 @@ function init()
 end
 
 function metadata()
-	return { subscriptions = { "time" }, styles = { "hello" } } -- styles/hello.css
+	return { subscriptions = {}, styles = { "hello" } } -- styles/hello.css
 end
 
 function refresh()
-	-- called when a subscribed signal changes; read it from `signals`
+	-- called when a subscribed signal (e.g. "time") changes; read it from `signals`
 end
 
 function render(monitor)

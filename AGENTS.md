@@ -33,7 +33,7 @@ Every recipe runs only inside the flake devShell (`nix develop`, or direnv with 
 | Format | `just fmt`, `just fmt-check` |
 | Dependencies | `just deps-check` (`cargo deny check` against `deny.toml`; needs the network) |
 | Workflows | `just workflows-check` (actionlint, with shellcheck) |
-| Coverage | `just coverage-check` (fails under 80% lines), `just coverage` (HTML report, needs `genhtml`) |
+| Coverage | `just coverage-check` (fails under 80% lines), `just coverage` (HTML report) |
 | Benchmarks | `just bench` (criterion, `benches/benchmarks.rs`), `just bench-check` (compile only) |
 | Profiling | `just release && just record-profile` then `just analyze-profile` (see the `analyze-profile` skill in `.agents/skills/`) |
 | GitHub audit | `just issues-check`, `just repo-check`, `just project-check`, `just project-sync` (see `CONTRIBUTING.md`) |
@@ -107,7 +107,7 @@ CSS files in `assets/styles/`, deployed like widgets and resolved per module —
 
 - **Unit tests** live inline in `#[cfg(test)] mod tests` next to the code; `src/test_utils.rs` holds shared macros and helpers (test-only). New behaviour comes with unit tests.
 - **Intent, not just behaviour:** a test must fail when the logic it covers changes incorrectly.
-- **`tests/architecture.rs`** is a structural gate (lint tables, lint exceptions, LOC limits, layer rules), not a behaviour test.
+- **`tests/architecture.rs`** is a structural gate (lint tables, lint exceptions, LOC limits, layer rules, version files), not a behaviour test.
 - **`tests/integration/`** proves the D-Bus and Wayland adapters against real servers: it starts a private `dbus-daemon` and a headless `sway`, and takes screenshots with `grim`, all provided by the devShell. It never touches your own session bus or compositor.
 - **Coverage:** CI fails a pull request under 80% of lines (`just coverage-check`, `cargo-llvm-cov` 0.9.1).
 
@@ -133,12 +133,13 @@ CSS files in `assets/styles/`, deployed like widgets and resolved per module —
 - `epic`
 <!-- labels:end -->
 
-- **Milestone:** an open issue has the release milestone (`vX.Y.Z`) it ships in. A sub-issue is never in a later release than its open parent.
-- **Parent:** an open issue is a sub-issue of an open epic, or carries the `epic` label itself.
+- **Milestone:** an open issue has the release milestone (`vX.Y.Z`) it ships in.
+- **Parent:** an open issue is a sub-issue of an open parent (an epic or another issue), unless it carries the `epic` label itself.
+- **Blockers:** "blocked by" relations are recorded natively and never form a cycle. An issue never sits under, or blocks, an issue of an earlier release.
 - **Board:** every issue, open or closed, is a card of the Project board.
 - **Branches:** `<type>/<issue>`, the type being the issue's `type:*` label (`docs/24`). A layer of stacked pull requests adds a suffix (`chore/31-shared`). One issue per branch.
 - **Commits:** Conventional Commits with a scope: `feat(popup): ...`, `refactor(wayland): ...`. Reference the issue with `Refs #<n>`; only the pull request body closes it, with `Closes #<n>`. Never close a parent epic from a commit.
-- **Gate:** `just check` passes before every push; the pre-push hook runs it, and it is never skipped with `--no-verify`. A pull request also needs the 11 required CI checks green: `fmt`, `lint`, `arch`, `loc`, `test`, `build`, `deps`, `coverage`, `bench`, `workflows`, `nix`. A change to `tools.toml`, this file's labels block, `CONTRIBUTING.md` or the issue forms also passes `just repo-check`.
+- **Gate:** `just check` passes before every push; the pre-push hook runs it, and it is never skipped with `--no-verify`. A pull request also needs the 11 required CI checks green: `fmt`, `lint`, `arch`, `loc`, `test`, `build`, `deps`, `coverage`, `bench`, `workflows`, `nix`. A change that can affect coverage or the benchmarks also passes `just coverage-check` or `just bench-check`, which CI runs. A change to `tools.toml`, the labels block of `AGENTS.md` or `CONTRIBUTING.md`, or the issue forms also passes `just repo-check`.
 - **Merging:** merge commits only (squash and rebase are disabled), done by the maintainer.
 
 <!-- ai-memory:start -->

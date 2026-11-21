@@ -22,15 +22,13 @@ This is the procedure: how to set up, file an issue, open a pull request and cut
 
 4. Check that everything works with `just check`.
 
-The tool pins move only through `just flake-update`, in a pull request of its own.
-
 ### GitHub access for the audit recipes
 
 `just issues-check`, `just repo-check` and `just project-check` read GitHub through `gh`, so run `gh auth login` first. `just repo-check` also audits the merge settings, which only an account with push access can see. `just project-sync` writes to the Project board and needs the `project` scope: `gh auth refresh -s project`. A contributor without that scope can skip these recipes; the maintainer runs them.
 
 ## Before you push
 
-Run `just check`. Its `deps-check` step needs the network. When your change can affect coverage or the benchmarks, also run `just coverage-check` or `just bench-check`: CI runs both. When it touches `tools.toml`, the labels blocks of `AGENTS.md` and this file, or the issue forms, run `just repo-check` too.
+Run the gate that "Issues, branches and commits" in `AGENTS.md` describes: `just check`, plus the extra recipes it names for your kind of change.
 
 ## Filing an issue
 
@@ -53,7 +51,7 @@ The card's Status follows the `builtin:cosmo` preset that `tools.toml` names:
 | Backlog | The default, and where an issue stays until it is triaged and unblocked |
 | Ready | One `type:*` label, an `area:*` label, a milestone, the board fields Priority (`P0`–`P3`) and Effort (at most 8), no open blocker, and no unstarted parent that is not an epic |
 | In progress | Moved here by hand when work starts |
-| In review | A started issue with a pull request linked to it |
+| In review | An issue with a linked pull request that is started, or that passes the Ready gate |
 | Done | The issue is closed |
 
 Epic cards are never moved by the sync; they are moved by hand.
@@ -70,7 +68,7 @@ A local `just issues-check` also reports an issue missing from the board. CI's r
 1. Branch from `main` with the name `AGENTS.md` gives (`<type>/<issue>`).
 2. Commit following `AGENTS.md`, and make sure `just check` passes.
 3. Open the pull request against `main`. The template asks for `Closes #<n>`, what changed, notes for the reviewer, and the test plan. Dependent changes can go out as a stack of pull requests, each based on the one below it.
-4. The 11 required checks must be green. The `test` job can fail once on the runner without a code cause; re-run the failed job once before investigating.
+4. The 11 required checks must be green. The `test` job can fail once on the runner without a code cause (#62); re-run the failed job once before investigating.
 5. The maintainer merges, with a merge commit.
 
 ## Releasing

@@ -9,4 +9,4 @@ Closes #
 
 - [ ] `just check`
 - [ ] `just coverage-check` / `just bench-check` (when the change can affect them)
-- [ ] `just repo-check` (when `tools.toml`, the labels blocks or the issue forms change)
+- [ ] `just repo-check` (when `tools.toml`, the labels block of `AGENTS.md` or `CONTRIBUTING.md`, or the issue forms change)
