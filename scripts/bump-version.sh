@@ -32,6 +32,10 @@ if [[ "${new}" == "${current}" || "${highest}" != "${new}" ]]; then
 	exit 1
 fi
 
+# From here on the files are being rewritten, and a second run would refuse the
+# version it finds half-written.
+trap 'echo "error: the bump stopped part-way; undo it with: git restore Cargo.toml Cargo.lock contrib/arch" >&2' ERR
+
 sed -i "0,/^version = .*/s//version = \"${new}\"/" Cargo.toml
 
 for pkgbuild in contrib/arch/PKGBUILD contrib/arch/PKGBUILD-bin; do
@@ -70,7 +74,7 @@ if [[ "$(grep --count --fixed-strings --line-regexp -- "version = \"${new}\"" Ca
 	missing=1
 fi
 if [[ "${missing}" -ne 0 ]]; then
-	exit 1
+	false
 fi
 
 echo "Bumped ${current} -> ${new}. Review with 'git diff', then open a pull request."

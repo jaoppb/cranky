@@ -262,6 +262,7 @@ fn pkgver(pkgbuild: &str) -> String {
 /// (`.github/workflows/release.yml` checks that), and the Arch packages are
 /// published from the `PKGBUILD` files as they are at the tag.
 /// `just bump-version` writes all of them; this fails when one was missed.
+/// `Cargo.lock` is not read here: cargo brings it up to date before a test runs.
 #[test]
 fn version_files_agree() {
     let read = |path: &str| std::fs::read_to_string(path).expect("Failed to read file");
