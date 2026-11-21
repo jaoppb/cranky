@@ -44,9 +44,9 @@ impl<T> Context<T> for Option<T> {
     }
 }
 
-/// Fails the case unless `condition` holds.
-pub(crate) fn ensure(condition: bool, message: impl FnOnce() -> String) -> Outcome {
-    if condition {
+/// Fails the case unless `check` holds; `message` is only built on a failure.
+pub(crate) fn ensure(check: impl FnOnce() -> bool, message: impl FnOnce() -> String) -> Outcome {
+    if check() {
         Ok(())
     } else {
         Err(Failure(message()))
@@ -59,9 +59,10 @@ pub(crate) fn ensure_eq<T: PartialEq + fmt::Debug>(
     actual: &T,
     expected: &T,
 ) -> Outcome {
-    ensure(actual == expected, || {
-        format!("{what}: expected {expected:?}, got {actual:?}")
-    })
+    ensure(
+        || actual == expected,
+        || format!("{what}: expected {expected:?}, got {actual:?}"),
+    )
 }
 
 /// Awaits `future`, failing once [`WAIT`] has passed.

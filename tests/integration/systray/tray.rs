@@ -213,8 +213,9 @@ pub(crate) async fn start_adapter(hub: &Arc<SignalHub>) -> Outcome<SniAdapter> {
 
     let mut adapter = SniAdapter::new(Arc::clone(hub));
     adapter.start().await.context("start the SNI adapter")?;
+    let owned = bus.name_has_owner(name).await.context("NameHasOwner")?;
     ensure(
-        bus.name_has_owner(name).await.context("NameHasOwner")?,
+        || owned,
         || format!("{WATCHER} has no owner after the adapter started"),
     )?;
     Ok(adapter)

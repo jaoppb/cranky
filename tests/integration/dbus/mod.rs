@@ -57,9 +57,11 @@ async fn connects_on_both_bus_addresses() -> Outcome {
             .await
             .context("list names right after connecting")?;
         ensure(
-            names
-                .iter()
-                .any(|bus_name| bus_name.as_str() == "org.freedesktop.DBus"),
+            || {
+                names
+                    .iter()
+                    .any(|bus_name| bus_name.as_str() == "org.freedesktop.DBus")
+            },
             || format!("{bus:?} bus did not list the bus driver"),
         )?;
     }
@@ -73,9 +75,10 @@ async fn lists_an_owned_name() -> Outcome {
         .list_names(BusType::Session)
         .await
         .context("list names")?;
-    ensure(names.contains(&probe_destination()), || {
-        format!("{} missing from {names:?}", probe::NAME)
-    })
+    ensure(
+        || names.contains(&probe_destination()),
+        || format!("{} missing from {names:?}", probe::NAME),
+    )
 }
 
 async fn call(
@@ -129,7 +132,7 @@ async fn rejects_a_reply_that_is_not_a_variant() -> Outcome {
 
     let reply = call(&adapter, "Bare").await;
     ensure(
-        matches!(reply, Err(DbusConnectionError::MethodCallFailed(_))),
+        || matches!(reply, Err(DbusConnectionError::MethodCallFailed(_))),
         || format!("expected MethodCallFailed for a bare string reply, got {reply:?}"),
     )
 }
@@ -215,15 +218,17 @@ async fn streams_name_owner_changes() -> Outcome {
         .context("subscribe to name changes")?;
     let probe = ProbeService::start().await?;
     let appeared = next_probe_change("the probe name to appear", &mut changes).await?;
-    ensure(appeared.is_new(), || {
-        format!("expected the name to be new, got {appeared:?}")
-    })?;
+    ensure(
+        || appeared.is_new(),
+        || format!("expected the name to be new, got {appeared:?}"),
+    )?;
 
     drop(probe);
     let vanished = next_probe_change("the probe name to vanish", &mut changes).await?;
-    ensure(vanished.is_gone(), || {
-        format!("expected the name to be gone, got {vanished:?}")
-    })
+    ensure(
+        || vanished.is_gone(),
+        || format!("expected the name to be gone, got {vanished:?}"),
+    )
 }
 
 /// A signal is only delivered when its body is a single variant (#41), so
