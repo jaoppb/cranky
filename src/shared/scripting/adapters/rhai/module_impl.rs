@@ -6,6 +6,7 @@ use crate::shared::scripting::ports::ModuleError;
 use rhai::{AST, Engine, Scope};
 use std::sync::Mutex;
 
+#[derive(Debug)]
 pub struct RhaiModule {
     pub(crate) engine: Mutex<Engine>,
     pub(crate) scope: Mutex<Scope<'static>>,

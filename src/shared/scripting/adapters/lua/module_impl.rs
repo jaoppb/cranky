@@ -30,6 +30,7 @@ impl LuaScriptLoader {
     }
 }
 
+#[derive(Debug)]
 pub struct LuaModule {
     pub(crate) lua: Mutex<Lua>,
     pub(crate) source: String,

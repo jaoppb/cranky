@@ -9,6 +9,7 @@ use lightningcss::stylesheet::{ParserOptions, StyleSheet};
 /// Runs it back through the ordinary property pipeline — the same one
 /// every other declaration in a sheet already goes through. The selector
 /// doesn't matter; nothing here ever matches it against an element.
+#[derive(Debug)]
 pub struct LightningPropertyReparser;
 
 impl PropertyReparser for LightningPropertyReparser {

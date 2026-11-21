@@ -26,6 +26,14 @@ pub struct WaylandAdapter {
     pub(crate) config_rx: tokio::sync::watch::Receiver<Config>,
 }
 
+impl std::fmt::Debug for WaylandAdapter {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("WaylandAdapter")
+            .finish_non_exhaustive()
+    }
+}
+
 impl WaylandAdapter {
     /// # Errors
     ///

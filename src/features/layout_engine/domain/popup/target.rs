@@ -34,6 +34,7 @@ pub enum FloatingKind {
     Panel(PopupTarget),
 }
 
+#[derive(Debug)]
 pub struct PopupExclusivity;
 
 impl PopupExclusivity {

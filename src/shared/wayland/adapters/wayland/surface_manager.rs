@@ -12,6 +12,14 @@ pub struct WaylandSurfaceManager {
     pub(crate) notify_tx: tokio::sync::mpsc::Sender<()>,
 }
 
+impl std::fmt::Debug for WaylandSurfaceManager {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("WaylandSurfaceManager")
+            .finish_non_exhaustive()
+    }
+}
+
 impl SurfaceManagerPort for WaylandSurfaceManager {
     fn submit_buffer(
         &self,

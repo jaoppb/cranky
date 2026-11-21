@@ -11,6 +11,7 @@ use crate::shared::primitives::{
 use std::collections::HashMap;
 
 #[cfg(test)]
+#[derive(Debug)]
 pub struct ModuleLayout {
     id: ModuleId,
     bounds: Rect,
@@ -29,6 +30,7 @@ impl ModuleLayout {
     }
 }
 
+#[derive(Debug)]
 pub struct AppReadModel {
     pub(crate) config: Config,
     pub(crate) root_module: Option<ModuleId>,
