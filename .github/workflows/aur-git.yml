@@ -1,0 +1,62 @@
+name: AUR cranky-git
+
+# cranky-git builds the latest main, so it needs republishing only when its
+# recipe changes, not on each release (#79). The first job builds, installs
+# and starts it in clean Arch containers with no secret in reach; only then
+# does the second publish it, with the AUR key of the aur-git environment,
+# which deploys from main only.
+on:
+  push:
+    branches: [main]
+    paths:
+      - contrib/arch/PKGBUILD-git
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One publish at a time, in push order.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Build, install and start cranky-git
+        run: scripts/release/aur.sh git
+
+      - name: Upload cranky-git AUR package
+        uses: actions/upload-artifact@v7
+        with:
+          name: aur-cranky-git
+          path: target/release-artifact/aur/pkg-git/
+          include-hidden-files: true
+          retention-days: 1
+
+  publish:
+    needs: prepare
+    runs-on: ubuntu-latest
+    environment: aur-git
+    steps:
+      - name: Download prepared package
+        uses: actions/download-artifact@v8
+        with:
+          name: aur-cranky-git
+          path: cranky-git
+
+      - name: Publish cranky-git to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.3
+        with:
+          pkgname: cranky-git
+          pkgbuild: cranky-git/PKGBUILD
+          commit_username: ${{ secrets.AUR_USERNAME }}
+          commit_email: ${{ secrets.AUR_EMAIL }}
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: 'Update to ${{ github.sha }}'

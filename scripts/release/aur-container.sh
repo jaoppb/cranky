@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # The parts of scripts/release/aur.sh that run inside archlinux:base-devel,
 # with the repository read-only at /workspace and the local sources, empty in
-# release mode, read-only at /sources. makepkg refuses to run as root, so it
+# release and git modes, read-only at /sources. makepkg refuses to run as root, so it
 # runs as an unprivileged user with no sudo.
 #
-#   prepare  copies each PKGBUILD (cranky-git's in local mode only), points it
-#            at the local sources in local mode, fills in its checksums and
+#   prepare  copies each PKGBUILD of the mode (cranky and cranky-bin in
+#            release mode, cranky-git alone in git mode, all three in local
+#            mode), points it at the local sources in local mode, resolves
+#            cranky-git's pkgver in git mode, fills in its checksums and
 #            writes its .SRCINFO, and leaves the two files in
 #            /prepared/<package>. It builds nothing.
 #   build    reads /prepared, read-only here like every other mount. As root,
@@ -53,6 +55,11 @@ prepare() {
 	fi
 	(
 		cd "${dir}"
+		if [[ "${MODE}" == git ]]; then
+			# Clone the source and run pkgver() alone, which writes the version
+			# it resolves into the PKGBUILD; nothing is built.
+			sudo -u builder makepkg --nobuild --noprepare --nodeps --noconfirm
+		fi
 		sudo -u builder updpkgsums
 		sudo -u builder makepkg --printsrcinfo | sudo -u builder tee .SRCINFO >/dev/null
 	)
@@ -85,9 +92,11 @@ install_and_start() {
 
 case "${phase}" in
 prepare)
-	prepare cranky PKGBUILD
-	prepare cranky-bin PKGBUILD-bin
-	if [[ "${MODE}" == local ]]; then
+	if [[ "${MODE}" != git ]]; then
+		prepare cranky PKGBUILD
+		prepare cranky-bin PKGBUILD-bin
+	fi
+	if [[ "${MODE}" != release ]]; then
 		prepare cranky-git PKGBUILD-git
 	fi
 	;;
