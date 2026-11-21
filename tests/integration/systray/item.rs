@@ -18,12 +18,22 @@ pub(crate) enum Call {
     Scroll(i32, String),
 }
 
+/// The `ItemIsMenu` property: whether the item only offers its context
+/// menu. Reported on the bus as the `bool` the property carries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ItemIsMenu {
+    /// The item only offers its menu (`true`).
+    MenuOnly,
+    /// The item can be activated (`false`).
+    Activatable,
+}
+
 struct Item {
     title: String,
     status: String,
     category: &'static str,
     id: &'static str,
-    is_menu: bool,
+    is_menu: ItemIsMenu,
     tool_tip: (String, Pixmaps, String, String),
     calls: mpsc::UnboundedSender<Call>,
 }
@@ -59,7 +69,7 @@ impl Item {
 
     #[zbus(property)]
     const fn item_is_menu(&self) -> bool {
-        self.is_menu
+        matches!(self.is_menu, ItemIsMenu::MenuOnly)
     }
 
     #[zbus(property)]
@@ -103,7 +113,7 @@ impl ItemService {
             status: "Active".to_string(),
             category: "Communications",
             id: "fake-item",
-            is_menu: false,
+            is_menu: ItemIsMenu::Activatable,
             tool_tip: (
                 String::new(),
                 Pixmaps::new(),
@@ -155,7 +165,7 @@ impl ItemService {
     /// Sets `ItemIsMenu`; done before the item registers, the tray fetches it
     /// as an item that only offers its menu.
     pub(crate) async fn mark_as_menu(&self) -> Outcome {
-        self.interface().await?.get_mut().await.is_menu = true;
+        self.interface().await?.get_mut().await.is_menu = ItemIsMenu::MenuOnly;
         Ok(())
     }
 
@@ -180,7 +190,7 @@ impl ItemService {
     /// Sets `ItemIsMenu` on a registered item and announces it with `NewMenu`.
     pub(crate) async fn become_menu(&self) -> Outcome {
         let interface = self.interface().await?;
-        interface.get_mut().await.is_menu = true;
+        interface.get_mut().await.is_menu = ItemIsMenu::MenuOnly;
         Item::new_menu(interface.signal_emitter())
             .await
             .context("item: emit NewMenu")

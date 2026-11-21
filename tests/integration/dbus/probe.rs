@@ -15,12 +15,20 @@ pub(crate) const INTERFACE: &str = "org.cranky.Probe";
 
 type Variant = zbus::Variant<'static>;
 
+/// What the `Enabled` property reports. The probe is always on: the case
+/// that reads it only checks that a boolean arrives as one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Switch {
+    /// Reported as `true`.
+    Enabled,
+}
+
 pub(crate) struct Probe {
     label: String,
     wrapped: &'static str,
     bare: &'static str,
     count: i32,
-    enabled: bool,
+    enabled: Switch,
     tags: Vec<String>,
     limits: HashMap<String, i32>,
 }
@@ -49,7 +57,7 @@ impl Probe {
 
     #[zbus(property)]
     const fn enabled(&self) -> bool {
-        self.enabled
+        matches!(self.enabled, Switch::Enabled)
     }
 
     #[zbus(property)]
@@ -78,7 +86,7 @@ impl ProbeService {
             wrapped: "wrapped reply",
             bare: "bare reply",
             count: 7,
-            enabled: true,
+            enabled: Switch::Enabled,
             tags: vec!["one".to_string(), "two".to_string()],
             limits: HashMap::from([("max".to_string(), 9)]),
         };

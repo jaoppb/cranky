@@ -1,5 +1,6 @@
 use super::*;
 use crate::test_support::zone_bytes;
+use crate::zone::LeapSecond;
 
 /// The offset and abbreviation a checked-in zone has at an instant.
 fn seen(name: &str, instant: i64) -> (i64, String) {
@@ -114,15 +115,15 @@ fn a_leap_second_file_counts_its_leap_seconds() {
     let after = zone.at_instant(1_483_228_827);
     assert_eq!(
         (before.unix_seconds, before.leap_second),
-        (1_483_228_799, false)
+        (1_483_228_799, LeapSecond::Ordinary)
     );
     assert_eq!(
         (inserted.unix_seconds, inserted.leap_second),
-        (1_483_228_799, true)
+        (1_483_228_799, LeapSecond::Inserted)
     );
     assert_eq!(
         (after.unix_seconds, after.leap_second),
-        (1_483_228_800, false)
+        (1_483_228_800, LeapSecond::Ordinary)
     );
     // Transitions are stored on the same scale as the instants asked about.
     assert_eq!(zone.at_instant(1_774_746_026).kind.abbreviation, "WET");
@@ -145,22 +146,28 @@ fn count(value: usize) -> [u8; 4] {
     u32::try_from(value).unwrap().to_be_bytes()
 }
 
+/// How many bytes a block of data spends on each instant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Width {
+    /// Four bytes, as in the first block of every file.
+    Narrow,
+    /// Eight bytes, as in the second block of a later version.
+    Wide,
+}
+
 /// A header and a block of data: transitions as (instant, kind), kinds as
 /// (offset, index of the name), and leap seconds as (instant, total).
 fn file_part(
     version: u8,
-    wide: bool,
+    width: Width,
     transitions: &[(i64, u8)],
     kinds: &[(i32, u8)],
     names: &[u8],
     leaps: &[(i64, i32)],
 ) -> Vec<u8> {
-    let instant = |seconds: i64| {
-        if wide {
-            seconds.to_be_bytes().to_vec()
-        } else {
-            i32::try_from(seconds).unwrap().to_be_bytes().to_vec()
-        }
+    let instant = |seconds: i64| match width {
+        Width::Wide => seconds.to_be_bytes().to_vec(),
+        Width::Narrow => i32::try_from(seconds).unwrap().to_be_bytes().to_vec(),
     };
     let mut bytes = b"TZif".to_vec();
     bytes.push(version);
@@ -195,14 +202,14 @@ const KINDS: &[(i32, u8)] = &[(-3600, 0), (7200, 4)];
 const NAMES: &[u8] = b"OLD\0NEW\0";
 
 fn version_one(transitions: &[(i64, u8)], kinds: &[(i32, u8)], names: &[u8]) -> Vec<u8> {
-    file_part(0, false, transitions, kinds, names, &[])
+    file_part(0, Width::Narrow, transitions, kinds, names, &[])
 }
 
 fn version_two(footer: &[u8]) -> Vec<u8> {
-    let mut bytes = file_part(b'2', false, &[], &[(0, 0)], b"X\0", &[]);
+    let mut bytes = file_part(b'2', Width::Narrow, &[], &[(0, 0)], b"X\0", &[]);
     bytes.extend(file_part(
         b'2',
-        true,
+        Width::Wide,
         &[(1000, 1)],
         KINDS,
         NAMES,
@@ -280,7 +287,7 @@ fn a_later_version_is_read_from_its_second_block() {
     assert_eq!(zone.at_instant(1000).kind.abbreviation, "NEW");
     assert_eq!(zone.at_instant(i64::MAX).kind.abbreviation, "NEW");
     assert_eq!(zone.at_instant(2000).unix_seconds, 1999);
-    assert!(zone.at_instant(2000).leap_second);
+    assert_eq!(zone.at_instant(2000).leap_second, LeapSecond::Inserted);
 }
 
 #[test]

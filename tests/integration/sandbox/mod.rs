@@ -68,13 +68,16 @@ impl Sandbox {
             .output()
             .await
             .context("re-execute this test binary inside the sandbox")?;
-        ensure(output.status.success(), || {
-            format!(
-                "    {}\n    ({})",
-                String::from_utf8_lossy(&output.stderr).trim_end(),
-                output.status
-            )
-        })
+        ensure(
+            || output.status.success(),
+            || {
+                format!(
+                    "    {}\n    ({})",
+                    String::from_utf8_lossy(&output.stderr).trim_end(),
+                    output.status
+                )
+            },
+        )
     }
 }
 
@@ -101,18 +104,24 @@ pub(crate) fn ensure_inside() -> Outcome {
         session_bus.contains(&dir) && variable("DBUS_SYSTEM_BUS_ADDRESS") == session_bus;
     let display = variable("WAYLAND_DISPLAY");
     let private_display = !display.is_empty() && Path::new(&dir).join(display).exists();
-    ensure(private_dir && private_buses && private_display, || {
-        format!("{CHILD_CASE} is set outside a sandbox (XDG_RUNTIME_DIR={dir:?}); refusing to run")
-    })
+    ensure(
+        || private_dir && private_buses && private_display,
+        || {
+            format!(
+                "{CHILD_CASE} is set outside a sandbox (XDG_RUNTIME_DIR={dir:?}); refusing to run"
+            )
+        },
+    )
 }
 
 /// A missing program fails the run by name; nothing is ever skipped.
 fn require(program: &str) -> Outcome {
     let found = std::env::var_os("PATH")
         .is_some_and(|path| std::env::split_paths(&path).any(|dir| dir.join(program).is_file()));
-    ensure(found, || {
-        format!("required program `{program}` was not found in PATH")
-    })
+    ensure(
+        || found,
+        || format!("required program `{program}` was not found in PATH"),
+    )
 }
 
 /// A throwaway `XDG_RUNTIME_DIR`, removed on drop.

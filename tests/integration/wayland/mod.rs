@@ -40,9 +40,10 @@ async fn binds_the_output() -> Outcome {
 async fn reserves_its_exclusive_zone_once_configured() -> Outcome {
     let mut bar = Bar::connect()?;
     bar.until_configured().await?;
-    ensure(bar.renders_requested() > 0, || {
-        "the configure did not ask for a render".to_string()
-    })?;
+    ensure(
+        || bar.renders_requested() > 0,
+        || "the configure did not ask for a render".to_string(),
+    )?;
     // sway maps a layer surface, and honours its zone, on its first buffer.
     bar.paint(RED)?;
     bar.until_on_screen(RED).await?;
@@ -84,9 +85,10 @@ async fn keeps_reading_the_socket_across_many_wakes() -> Outcome {
         .await?;
         bar.paint(colour)?;
     }
-    ensure(bar.renders_requested() > 1, || {
-        "the scale changes never reconfigured the bar".to_string()
-    })?;
+    ensure(
+        || bar.renders_requested() > 1,
+        || "the scale changes never reconfigured the bar".to_string(),
+    )?;
     bar.paint(BLUE)?;
     bar.until_on_screen(BLUE).await
 }

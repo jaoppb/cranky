@@ -12,6 +12,11 @@ allow-dbg-in-tests = true
 min-ident-chars-threshold = 2
 allowed-idents-below-min-chars = ["x", "y", "id", "tx", "rx", "dx", "dy", "px"]
 single-char-binding-names-threshold = 2
+# Bool flags (`clippy::fn_params_excessive_bools`, `clippy::struct_excessive_bools`):
+# no function takes a `bool` parameter and no struct holds a `bool` field, in
+# tests too; a two-state value is an enum whose variants name each state.
+max-fn-params-bools = 0
+max-struct-bools = 0
 # Older versions that only a dependency can drop, for `clippy::multiple_crate_versions`.
 # The list names the same crates as the `skip` entries of the `[bans]` section in
 # `deny.toml`, which records the dependency that still requires each one; keep both

@@ -14,13 +14,16 @@ async fn output_of(program: &str, args: &[&str]) -> Outcome<Vec<u8>> {
         .output()
         .await
         .context(program)?;
-    ensure(output.status.success(), || {
-        format!(
-            "{program} {args:?} ended with {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        )
-    })?;
+    ensure(
+        || output.status.success(),
+        || {
+            format!(
+                "{program} {args:?} ended with {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )
+        },
+    )?;
     Ok(output.stdout)
 }
 
@@ -96,9 +99,10 @@ impl Screenshot {
         let below = self
             .pixel(0, bar_height)
             .context("the screenshot ends at the bar")?;
-        ensure(below != colour, || {
-            format!("{colour:?} also covers the output below the bar")
-        })?;
+        ensure(
+            || below != colour,
+            || format!("{colour:?} also covers the output below the bar"),
+        )?;
         Ok(true)
     }
 

@@ -16,14 +16,44 @@ const IGNORED: [&str; 6] = [
     "-q",
 ];
 
+/// How a filter or a skip is compared with a case name.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Matching {
+    /// The name contains the pattern.
+    #[default]
+    Substring,
+    /// The name is the pattern (`--exact`).
+    Exact,
+}
+
+/// What the run does with the selected cases.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Action {
+    /// Runs them.
+    #[default]
+    Run,
+    /// Prints their names (`--list`).
+    List,
+}
+
+/// Which cases may be selected at all.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Scope {
+    /// Every case.
+    #[default]
+    All,
+    /// Only the ignored cases (`--ignored`), of which there are none.
+    OnlyIgnored,
+}
+
 /// Which cases the command line asks for.
 #[derive(Default)]
 pub(crate) struct Selection {
     filters: Vec<String>,
     skips: Vec<String>,
-    exact: bool,
-    list: bool,
-    only_ignored: bool,
+    matching: Matching,
+    action: Action,
+    scope: Scope,
 }
 
 impl Selection {
@@ -35,9 +65,9 @@ impl Selection {
             let flag = arg.split('=').next().unwrap_or_default();
             match flag {
                 "--skip" => selection.skips.push(value_of(&arg, &mut args)?),
-                "--exact" => selection.exact = true,
-                "--list" => selection.list = true,
-                "--ignored" => selection.only_ignored = true,
+                "--exact" => selection.matching = Matching::Exact,
+                "--list" => selection.action = Action::List,
+                "--ignored" => selection.scope = Scope::OnlyIgnored,
                 _ if WITH_VALUE.contains(&flag) => drop(value_of(&arg, &mut args)?),
                 _ if IGNORED.contains(&flag) => {}
                 _ if flag.starts_with('-') => {
@@ -51,20 +81,17 @@ impl Selection {
 
     /// Whether `--list` asked for the case names instead of a run.
     pub(crate) const fn list(&self) -> bool {
-        self.list
+        matches!(self.action, Action::List)
     }
 
     /// Whether the case called `name` is asked for. No case is ever ignored, so `--ignored` asks for none of them.
     pub(crate) fn accepts(&self, name: &str) -> bool {
-        if self.only_ignored {
+        if self.scope == Scope::OnlyIgnored {
             return false;
         }
-        let matches = |pattern: &String| {
-            if self.exact {
-                name == pattern
-            } else {
-                name.contains(pattern.as_str())
-            }
+        let matches = |pattern: &String| match self.matching {
+            Matching::Exact => name == pattern,
+            Matching::Substring => name.contains(pattern.as_str()),
         };
         (self.filters.is_empty() || self.filters.iter().any(matches))
             && !self.skips.iter().any(matches)

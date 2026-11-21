@@ -102,14 +102,17 @@ async fn run_in_sandbox(names: &[&str]) -> Outcome {
     sandbox.stop().await;
     let failed = failed?;
     println!();
-    ensure(failed.is_empty(), || {
-        format!(
-            "{} of {} cases failed: {}",
-            failed.len(),
-            names.len(),
-            failed.join(", ")
-        )
-    })
+    ensure(
+        || failed.is_empty(),
+        || {
+            format!(
+                "{} of {} cases failed: {}",
+                failed.len(),
+                names.len(),
+                failed.join(", ")
+            )
+        },
+    )
 }
 
 /// Runs and reports each case; returns the names of the ones that failed.
