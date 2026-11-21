@@ -19,8 +19,9 @@ impl BufferUserData {
         self.busy.load(Ordering::Acquire)
     }
 
-    pub(crate) fn set_busy(&self, busy: bool) {
-        self.busy.store(busy, Ordering::Release);
+    /// Frees the buffer for drawing again: the compositor released it.
+    pub(crate) fn mark_released(&self) {
+        self.busy.store(false, Ordering::Release);
     }
 }
 
@@ -48,7 +49,8 @@ impl BufferSlot {
         self.busy.load(Ordering::Acquire)
     }
 
-    pub(crate) fn set_busy(&self, busy: bool) {
-        self.busy.store(busy, Ordering::Release);
+    /// Holds the buffer until the compositor releases it: it was just handed over for display.
+    pub(crate) fn mark_busy(&self) {
+        self.busy.store(true, Ordering::Release);
     }
 }

@@ -1,5 +1,6 @@
 use super::dispatch_pointer::{handle_pointer_enter, handle_pointer_leave, handle_pointer_motion};
 use super::dispatch_pointer_button::{handle_pointer_axis, handle_pointer_button};
+use super::keyboard::KeyboardPresence;
 use super::state::WaylandState;
 use wayland_client::protocol::{
     wl_pointer::{self, WlPointer},
@@ -25,10 +26,12 @@ impl Dispatch<WlSeat, ()> for WaylandState {
             {
                 state.pointer = Some(proxy.get_pointer(queue_handle, ()));
             }
-            let has_keyboard = caps.contains(wl_seat::Capability::Keyboard);
-            state
-                .keyboard
-                .on_capability(proxy, has_keyboard, queue_handle);
+            let presence = if caps.contains(wl_seat::Capability::Keyboard) {
+                KeyboardPresence::Present
+            } else {
+                KeyboardPresence::Absent
+            };
+            state.keyboard.on_capability(proxy, presence, queue_handle);
         }
     }
 }

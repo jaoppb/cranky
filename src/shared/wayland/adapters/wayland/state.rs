@@ -1,7 +1,7 @@
 //! The Wayland dispatch state: bound globals, outputs, bars, input devices and floating surfaces.
 use super::dispatch_pointer_button::PointerGrab;
 use super::keyboard::KeyboardInput;
-use super::types::{FloatingSurface, WaylandBar, WaylandOutputInfo};
+use super::types::{ConfigureGate, FloatingSurface, WaylandBar, WaylandOutputInfo};
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
 use crate::shared::env::domain::AppEnvironment;
 use crate::shared::events::core::SurfaceKind;
@@ -156,7 +156,7 @@ impl WaylandState {
             config_margin: *margin,
             scale: output_scale,
             module_surfaces: HashMap::new(),
-            configured: false,
+            configure: ConfigureGate::Pending,
         });
 
         let mut scales = self.hub.monitor_scales_rx().borrow().clone();

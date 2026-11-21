@@ -1,5 +1,5 @@
-use super::floating_bounds::{compute_module_bounds, to_i32};
-use super::floating_teardown::teardown_floating;
+use super::floating_bounds::{AnchorExtent, compute_module_bounds, to_i32};
+use super::floating_teardown::{TeardownCause, teardown_floating};
 use super::state::WaylandState;
 use super::tooltip_anchor::resolve_tooltip_anchor;
 use super::types::ModuleSurface;
@@ -55,7 +55,7 @@ pub(super) fn handle_conflicts(
     let conflicts =
         PopupExclusivity::compute_conflicts(&active_targets, target, &ancestor_targets, behavior);
     for conf in conflicts {
-        teardown_floating(state, &FloatingKind::Popup(conf), true);
+        teardown_floating(state, &FloatingKind::Popup(conf), TeardownCause::External);
     }
 }
 
@@ -85,7 +85,11 @@ pub(super) fn resolve_anchor(
         }
         FloatingKind::Popup(target) | FloatingKind::Panel(target) => {
             let is_panel = matches!(kind, FloatingKind::Panel(_));
-            let precise = is_panel || parent.is_some();
+            let extent = if is_panel || parent.is_some() {
+                AnchorExtent::Exact
+            } else {
+                AnchorExtent::BarColumn
+            };
             let module_id = target.module_id();
             let mon_name = target.monitor_id().as_str();
             for bar in &state.bars {
@@ -115,7 +119,7 @@ pub(super) fn resolve_anchor(
                         },
                     );
                     let bounds =
-                        compute_module_bounds(placement, anchor_rect, to_i32(bar.height), precise);
+                        compute_module_bounds(placement, anchor_rect, to_i32(bar.height), extent);
                     anchor_x = bounds.x;
                     anchor_y = bounds.y;
                     anchor_w = bounds.width;

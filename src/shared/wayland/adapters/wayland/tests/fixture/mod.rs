@@ -159,7 +159,7 @@ impl Fake {
             config_margin: MarginConfig::default(),
             scale,
             module_surfaces: HashMap::new(),
-            configured: true,
+            configure: ConfigureGate::Configured,
         }
     }
 }

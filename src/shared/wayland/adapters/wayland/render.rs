@@ -25,7 +25,7 @@ pub(super) fn render_outputs<Snd: LayoutSender>(
         HashMap::new();
 
     for bar in &mut state.bars {
-        if !bar.configured {
+        if !bar.configure.is_configured() {
             debug!("Skipping render for unconfigured bar: {}", bar.output_name);
             continue;
         }
@@ -101,6 +101,7 @@ mod tests {
     use crate::shared::config::domain::{Config, PopupEmbed};
     use crate::shared::primitives::{ChildBounds, ModuleId, MonitorId};
     use crate::shared::wayland::adapters::wayland::tests::fixture::Fake;
+    use crate::shared::wayland::adapters::wayland::types::ConfigureGate;
     use crate::shared::wayland::ports::AppReadModel;
     use std::collections::HashMap;
     use std::sync::Mutex;
@@ -121,11 +122,11 @@ mod tests {
     /// Renders one bar on DP-1, configured or not, and returns how many
     /// layouts the root received and how many requests reached the bar's
     /// surfaces.
-    fn render_bar(configured: bool) -> (usize, usize) {
+    fn render_bar(configure: ConfigureGate) -> (usize, usize) {
         let fake = Fake::new();
         let mut state = fake.state(PopupEmbed::Composite);
         let mut bar = fake.bar("DP-1", 1);
-        bar.configured = configured;
+        bar.configure = configure;
         let bar_objects = [
             bar.surface.id().protocol_id(),
             bar.layer_surface.id().protocol_id(),
@@ -153,9 +154,9 @@ mod tests {
 
     #[test]
     fn unconfigured_bar_is_skipped() {
-        assert_eq!(render_bar(false), (0, 0));
+        assert_eq!(render_bar(ConfigureGate::Pending), (0, 0));
         // The same bar, configured, is resized to the config height and laid out.
-        let (layouts, to_bar) = render_bar(true);
+        let (layouts, to_bar) = render_bar(ConfigureGate::Configured);
         assert_eq!(layouts, 1);
         assert!(to_bar > 0);
     }

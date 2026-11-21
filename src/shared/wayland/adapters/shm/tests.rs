@@ -8,18 +8,19 @@ use std::sync::atomic::{AtomicBool, Ordering};
 fn test_buffer_user_data_and_busy_state() {
     let busy = Arc::new(AtomicBool::new(false));
     let user_data = BufferUserData::new(busy.clone());
+    let slot = slot_sharing(busy.clone());
 
     assert!(!user_data.is_busy());
     assert!(!busy.load(Ordering::SeqCst));
 
-    user_data.set_busy(true);
+    slot.mark_busy();
     assert!(user_data.is_busy());
     assert!(busy.load(Ordering::SeqCst));
 
     let cloned_data = user_data.clone();
     assert!(cloned_data.is_busy());
 
-    user_data.set_busy(false);
+    user_data.mark_released();
     assert!(!user_data.is_busy());
     assert!(!cloned_data.is_busy());
 }
@@ -42,10 +43,10 @@ fn test_slot_busy_until_release() {
     let slot = slot_sharing(busy.clone());
     let user_data = BufferUserData::new(busy);
     assert!(!slot.is_busy());
-    slot.set_busy(true);
+    slot.mark_busy();
     assert!(slot.is_busy());
     assert!(user_data.is_busy());
-    user_data.set_busy(false);
+    user_data.mark_released();
     assert!(!slot.is_busy());
 }
 

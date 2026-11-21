@@ -1,6 +1,6 @@
 use super::floating_anchor::{handle_conflicts, resolve_anchor};
 use super::floating_setup::{FloatingPlacement, create_new_floating, update_existing_floating};
-use super::floating_teardown::teardown_floating;
+use super::floating_teardown::{TeardownCause, teardown_floating};
 use super::state::WaylandState;
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::features::layout_engine::domain::popup::ancestors;
@@ -96,5 +96,5 @@ pub(super) fn hide_floating(state: &mut WaylandState, kind: &FloatingKind) {
     // The module closed its own popup/panel — it already knows, so its own
     // owner gets no dismissal notice; any nested descendant still does
     // (decision 7), the same as every other teardown path.
-    teardown_floating(state, kind, false);
+    teardown_floating(state, kind, TeardownCause::OwnerClosed);
 }

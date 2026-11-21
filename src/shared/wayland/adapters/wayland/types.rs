@@ -43,19 +43,25 @@ pub(crate) struct FloatingSurface {
     pub(crate) scale: i32,
 }
 
-/// Tracks a floating surface's first `xdg_surface.configure`.
-#[derive(Debug, Default)]
-pub(crate) struct ConfigureGate {
-    configured: bool,
+/// Tracks a surface's first configure event (`xdg_surface.configure` for a
+/// floating surface, the layer surface's `configure` for a bar): until it
+/// arrives nothing may be attached or committed.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ConfigureGate {
+    /// No configure event yet.
+    #[default]
+    Pending,
+    /// The first configure event arrived.
+    Configured,
 }
 
 impl ConfigureGate {
-    pub(crate) const fn is_configured(&self) -> bool {
-        self.configured
+    pub(crate) const fn is_configured(self) -> bool {
+        matches!(self, Self::Configured)
     }
 
     pub(crate) const fn mark_configured(&mut self) {
-        self.configured = true;
+        *self = Self::Configured;
     }
 }
 
@@ -85,7 +91,7 @@ pub(crate) struct WaylandBar {
     pub(crate) config_margin: MarginConfig,
     pub(crate) scale: i32,
     pub(crate) module_surfaces: HashMap<ModuleId, ModuleSurface>,
-    pub(crate) configured: bool,
+    pub(crate) configure: ConfigureGate,
 }
 
 pub(crate) struct ModuleSurface {

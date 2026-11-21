@@ -71,7 +71,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
                 .iter_mut()
                 .find(|bar| &bar.layer_surface == proxy)
             {
-                bar.configured = true;
+                bar.configure.mark_configured();
                 if width > 0 && height > 0 {
                     let old_width = bar.width;
                     let old_height = bar.height;
@@ -111,6 +111,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
 mod tests {
     use crate::shared::config::domain::PopupEmbed;
     use crate::shared::wayland::adapters::wayland::tests::fixture::Fake;
+    use crate::shared::wayland::adapters::wayland::types::ConfigureGate;
 
     /// The layer surface's first `configure` opens the bar's configure gate.
     /// A zero size leaves the bar's size to the client, so no resize (and no
@@ -120,10 +121,10 @@ mod tests {
         let fake = Fake::new();
         let mut state = fake.state(PopupEmbed::Composite);
         let mut bar = fake.bar("DP-1", 1);
-        bar.configured = false;
+        bar.configure = ConfigureGate::Pending;
         state.bars.push(bar);
         fake.configure_bar(&mut state, 0, 0, 0);
-        assert!(state.bars[0].configured);
+        assert_eq!(state.bars[0].configure, ConfigureGate::Configured);
         assert_eq!((state.bars[0].width, state.bars[0].height), (1, 1));
     }
 }

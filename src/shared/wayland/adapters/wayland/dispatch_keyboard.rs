@@ -5,7 +5,7 @@
 //! The compositor only focuses a popup that took an `xdg_popup` grab, so Esc
 //! works on exactly those; any other focus (the bar, a panel) is ignored.
 
-use super::floating_teardown::teardown_floating;
+use super::floating_teardown::{TeardownCause, teardown_floating};
 use super::state::WaylandState;
 use crate::features::layout_engine::domain::FloatingKind;
 use wayland_client::protocol::wl_keyboard::{self, KeyState, WlKeyboard};
@@ -59,7 +59,7 @@ pub(super) fn handle_key(state: &mut WaylandState, code: u32) -> bool {
     let Some(kind) = popup else {
         return false;
     };
-    teardown_floating(state, &kind, true);
+    teardown_floating(state, &kind, TeardownCause::External);
     true
 }
 
@@ -186,7 +186,7 @@ mod tests {
     fn tearing_down_the_focused_popup_drops_the_focus() {
         let fake = Fake::new();
         let mut state = nested(&fake);
-        teardown_floating(&mut state, &popup_kind(), true);
+        teardown_floating(&mut state, &popup_kind(), TeardownCause::External);
         assert!(state.keyboard.focus().is_none());
     }
 
