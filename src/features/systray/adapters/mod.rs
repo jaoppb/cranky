@@ -1,15 +1,14 @@
-pub mod action_invoker;
-pub mod cleaner;
-pub mod fetcher;
+mod action_invoker;
+mod cleaner;
+mod fetcher;
 pub mod icon_resolver;
-pub mod signal_loop;
-pub mod sni_adapter;
-pub mod sni_event;
-pub mod sni_proxy;
-pub mod watcher;
+mod signal_loop;
+mod sni_adapter;
+mod sni_event;
+mod sni_proxy;
+mod watcher;
 
 #[cfg(test)]
 mod tests;
 
-pub use icon_resolver::InMemorySystrayIconCache;
 pub use sni_adapter::SniAdapter;

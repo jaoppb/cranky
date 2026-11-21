@@ -5,7 +5,7 @@ use crate::shared::events::core::PointerEvent;
 use crate::shared::primitives::{FunctionName, MonitorId};
 
 impl PointerHandler {
-    pub fn handle_event(
+    pub(crate) fn handle_event(
         &mut self,
         event: &PointerEvent,
         monitor_id: &MonitorId,
@@ -37,8 +37,7 @@ impl PointerHandler {
         }
     }
 
-    pub fn handle_dismissal(
-        &mut self,
+    pub(crate) fn handle_dismissal(
         event: crate::shared::events::core::SurfaceLifecycleEvent,
         monitor_id: &MonitorId,
     ) -> PointerOutcome {

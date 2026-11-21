@@ -7,14 +7,14 @@ use crate::shared::dbus::domain::{DBusState, DBusSubscription};
 use crate::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
 use crate::shared::events::signals::SignalHub;
 
-pub struct DbusSubscriptionManager {
+pub(crate) struct DbusSubscriptionManager {
     conn: Arc<dyn DbusConnectionPort>,
     dbus_tx: watch::Sender<DBusState>,
 }
 
 impl DbusSubscriptionManager {
     #[must_use]
-    pub fn new(conn: Arc<dyn DbusConnectionPort>, hub: &SignalHub) -> Self {
+    pub(crate) fn new(conn: Arc<dyn DbusConnectionPort>, hub: &SignalHub) -> Self {
         Self {
             conn,
             dbus_tx: hub.dbus_tx(),
@@ -26,7 +26,7 @@ impl DbusSubscriptionManager {
     /// # Errors
     ///
     /// Returns `DbusConnectionError` if subscribing on the underlying `DBus` connection fails.
-    pub async fn subscribe(&mut self, sub: DBusSubscription) -> Result<(), DbusConnectionError> {
+    pub(crate) async fn subscribe(&self, sub: DBusSubscription) -> Result<(), DbusConnectionError> {
         let is_properties_changed = sub
             .member()
             .is_some_and(|member| member.as_str() == "PropertiesChanged");

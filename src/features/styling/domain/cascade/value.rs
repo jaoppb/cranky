@@ -2,7 +2,7 @@
 /// defaulting rules: declared to a real value, explicitly reset via a
 /// CSS-wide keyword, or simply not mentioned by any matching rule.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Cascade<T> {
+pub(crate) enum Cascade<T> {
     #[default]
     NotDeclared,
     Value(T),
@@ -18,7 +18,7 @@ pub enum Cascade<T> {
 /// naturally are, per spec), and `revert`/`revert-layer` have no earlier
 /// origin or layer to roll back to in a two-layer, single-origin cascade.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CssWideKeyword {
+pub(crate) enum CssWideKeyword {
     Inherit,
     Initial,
 }

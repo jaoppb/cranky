@@ -17,16 +17,16 @@ impl TinySkiaCosmicCanvas<'_> {
         let Some(pixmap) = &mut self.pixmap else {
             return;
         };
-        let physical_x = x.apply_scale(&self.scale).value();
-        let physical_y = y.apply_scale(&self.scale).value();
-        let physical_w = width.apply_scale(&self.scale).value();
-        let physical_h = height.apply_scale(&self.scale).value();
+        let physical_x = x.apply_scale(self.scale).value();
+        let physical_y = y.apply_scale(self.scale).value();
+        let physical_w = width.apply_scale(self.scale).value();
+        let physical_h = height.apply_scale(self.scale).value();
 
         if let Some(physical_rect) = Rect::from_xywh(physical_x, physical_y, physical_w, physical_h)
         {
             let paint = get_paint(color, physical_rect);
             let clamped_radius = radius
-                .apply_scale(&self.scale)
+                .apply_scale(self.scale)
                 .value()
                 .min(physical_rect.width() / 2.0)
                 .min(physical_rect.height() / 2.0);
@@ -99,11 +99,11 @@ impl TinySkiaCosmicCanvas<'_> {
         let y = LogicalPx::new(pos_y);
         let width = LogicalPx::new(width_val);
         let height = LogicalPx::new(height_val);
-        let physical_x = x.apply_scale(&self.scale).value();
-        let physical_y = y.apply_scale(&self.scale).value();
-        let physical_w = width.apply_scale(&self.scale).value();
-        let physical_h = height.apply_scale(&self.scale).value();
-        let stroke_w = border_size.apply_scale(&self.scale).value();
+        let physical_x = x.apply_scale(self.scale).value();
+        let physical_y = y.apply_scale(self.scale).value();
+        let physical_w = width.apply_scale(self.scale).value();
+        let physical_h = height.apply_scale(self.scale).value();
+        let stroke_w = border_size.apply_scale(self.scale).value();
 
         if stroke_w <= 0.0 {
             return;
@@ -130,7 +130,7 @@ impl TinySkiaCosmicCanvas<'_> {
 
             let max_radius = (border_w / 2.0).min(border_h / 2.0);
             let clamped_radius =
-                (radius.apply_scale(&self.scale).value() - half_stroke).clamp(0.0, max_radius);
+                (radius.apply_scale(self.scale).value() - half_stroke).clamp(0.0, max_radius);
 
             let mut builder = PathBuilder::new();
             if clamped_radius <= 0.0 {

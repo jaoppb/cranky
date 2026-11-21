@@ -1,12 +1,12 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum WindowManagerError {
+pub(super) enum WindowManagerError {
     #[error("Window manager IPC error: {reason}")]
     IpcError { reason: String },
 }
 
-pub type WindowManagerState = (
+pub(super) type WindowManagerState = (
     std::collections::BTreeMap<
         crate::features::workspaces::domain::WorkspaceId,
         crate::features::workspaces::domain::Workspace,
@@ -18,7 +18,7 @@ pub type WindowManagerState = (
     Option<crate::features::workspaces::domain::MonitorName>,
 );
 
-pub trait WindowManagerPort: Send + Sync {
+pub(super) trait WindowManagerPort: Send + Sync {
     /// Retrieves the current state of the window manager.
     ///
     /// # Errors

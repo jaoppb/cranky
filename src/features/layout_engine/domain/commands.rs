@@ -12,17 +12,17 @@ use crate::shared::primitives::render::RenderBuffer;
 /// logical units.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShowFloating {
-    pub kind: FloatingKind,
-    pub monitor_id: Option<MonitorId>,
-    pub anchor_rect: Option<Rect>,
-    pub buffer: RenderBuffer,
-    pub logical_size: Size,
-    pub offset: Option<crate::shared::primitives::PopupOffset>,
+    pub(crate) kind: FloatingKind,
+    pub(crate) monitor_id: Option<MonitorId>,
+    pub(crate) anchor_rect: Option<Rect>,
+    pub(crate) buffer: RenderBuffer,
+    pub(crate) logical_size: Size,
+    pub(crate) offset: Option<crate::shared::primitives::PopupOffset>,
     /// The floating surface this one nests inside (decision 7), if any —
     /// the `FloatingKind` whose surface contains the subsurface of the
     /// module that owns this popup/panel. `None` for one owned by a module
     /// embedded directly in the bar tree.
-    pub parent: Option<FloatingKind>,
+    pub(crate) parent: Option<FloatingKind>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,7 +37,7 @@ pub enum DisplayCommand {
     },
 }
 
-pub trait DisplayCommandSender: Send + Sync {
+pub(crate) trait DisplayCommandSender: Send + Sync {
     fn send_display_command(&self, cmd: DisplayCommand);
 }
 

@@ -11,17 +11,17 @@ pub struct ModulesConfig {
 
 impl ModulesConfig {
     #[must_use]
-    pub const fn new(modules: HashMap<ModuleName, ModuleConfig>) -> Self {
+    pub(crate) const fn new(modules: HashMap<ModuleName, ModuleConfig>) -> Self {
         Self { modules }
     }
 
     #[must_use]
-    pub fn get(&self, name: &ModuleName) -> Option<&ModuleConfig> {
+    pub(crate) fn get(&self, name: &ModuleName) -> Option<&ModuleConfig> {
         self.modules.get(name)
     }
 
     #[must_use]
-    pub const fn modules(&self) -> &HashMap<ModuleName, ModuleConfig> {
+    pub(crate) const fn modules(&self) -> &HashMap<ModuleName, ModuleConfig> {
         &self.modules
     }
 }
@@ -51,22 +51,22 @@ impl ModuleConfig {
     }
 
     #[must_use]
-    pub const fn name(&self) -> &ModuleName {
+    pub(crate) const fn name(&self) -> &ModuleName {
         &self.name
     }
 
     #[must_use]
-    pub const fn is_enabled(&self) -> bool {
+    pub(crate) const fn is_enabled(&self) -> bool {
         self.enable
     }
 
     #[must_use]
-    pub const fn engine(&self) -> &EngineSelection {
+    pub(crate) const fn engine(&self) -> &EngineSelection {
         &self.engine
     }
 
     #[must_use]
-    pub const fn options(&self) -> &ModuleOptions {
+    pub(crate) const fn options(&self) -> &ModuleOptions {
         &self.options
     }
 }

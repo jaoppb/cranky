@@ -7,5 +7,5 @@ pub mod streams;
 pub mod tests;
 
 pub use hub::*;
-pub use hyprland::*;
+pub(crate) use hyprland::*;
 pub use kind::*;

@@ -24,10 +24,10 @@ impl TinySkiaCosmicCanvas<'_> {
         let family = font_family.unwrap_or(&self.default_font_family).as_str();
         let pos_x = f32::from(i16::try_from(position.x()).unwrap_or(0));
         let pos_y = f32::from(i16::try_from(position.y()).unwrap_or(0));
-        let origin_x = LogicalPx::new(pos_x).apply_scale(&self.scale).value();
-        let physical_y = LogicalPx::new(pos_y).apply_scale(&self.scale).value();
+        let origin_x = LogicalPx::new(pos_x).apply_scale(self.scale).value();
+        let physical_y = LogicalPx::new(pos_y).apply_scale(self.scale).value();
 
-        let physical_size = LogicalPx::new(size).apply_scale(&self.scale).value();
+        let physical_size = LogicalPx::new(size).apply_scale(self.scale).value();
         let metrics = Metrics::new(physical_size, physical_size * 1.0);
         let mut buffer = Buffer::new(self.font_system, metrics);
         let attrs = Attrs::new().family(get_family(family));
@@ -41,7 +41,7 @@ impl TinySkiaCosmicCanvas<'_> {
         let available = LogicalPx::new(f32::from(
             u16::try_from(alignment.available_width()).unwrap_or(u16::MAX),
         ))
-        .apply_scale(&self.scale)
+        .apply_scale(self.scale)
         .value();
         let physical_x = origin_x + alignment.align().offset(available, text_width);
 
@@ -164,16 +164,16 @@ impl TinySkiaCosmicCanvas<'_> {
                 ..tiny_skia::PixmapPaint::default()
             };
 
-            let physical_w = logical_width.apply_scale(&self.scale).value();
-            let physical_h = logical_height.apply_scale(&self.scale).value();
+            let physical_w = logical_width.apply_scale(self.scale).value();
+            let physical_h = logical_height.apply_scale(self.scale).value();
 
             let px_w = f32::from(u16::try_from(width).unwrap_or(1));
             let px_h = f32::from(u16::try_from(height).unwrap_or(1));
             let scale_x = physical_w / px_w;
             let scale_y = physical_h / px_h;
 
-            let physical_x = x.apply_scale(&self.scale).value();
-            let physical_y = y.apply_scale(&self.scale).value();
+            let physical_x = x.apply_scale(self.scale).value();
+            let physical_y = y.apply_scale(self.scale).value();
 
             let transform =
                 Transform::from_scale(scale_x, scale_y).post_translate(physical_x, physical_y);

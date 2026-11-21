@@ -4,7 +4,7 @@ use super::types::{CpuUsage, DiskMetric, MemoryBytes, NetworkSpeed, Temperature}
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct MetricsState {
+pub(crate) struct MetricsState {
     pub(crate) cpu_usage: CpuUsage,
     pub(crate) per_core: Vec<CpuUsage>,
     pub(crate) memory_used: MemoryBytes,
@@ -20,7 +20,7 @@ pub struct MetricsState {
 
 impl MetricsState {
     #[must_use]
-    pub fn new(cmd: CreateMetricsCommand) -> Self {
+    pub(crate) fn new(cmd: CreateMetricsCommand) -> Self {
         let (cpu_usage, per_core, memory, disks, network, temperature, config) = cmd.into_parts();
         Self {
             cpu_usage,
@@ -38,7 +38,7 @@ impl MetricsState {
     }
 
     #[must_use]
-    pub fn normalize_cpu_usage(
+    pub(crate) fn normalize_cpu_usage(
         mode: &CpuMode,
         global_cpu: f32,
         nproc: f32,
@@ -60,28 +60,33 @@ impl MetricsState {
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn memory_total(&self) -> &MemoryBytes {
+    pub(crate) const fn memory_total(&self) -> &MemoryBytes {
         &self.memory_total
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn disks(&self) -> &[DiskMetric] {
+    pub(crate) fn disks(&self) -> &[DiskMetric] {
         &self.disks
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn network_tx(&self) -> &NetworkSpeed {
+    pub(crate) const fn network_tx(&self) -> &NetworkSpeed {
         &self.network_tx
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn network_rx(&self) -> &NetworkSpeed {
+    pub(crate) const fn network_rx(&self) -> &NetworkSpeed {
         &self.network_rx
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn temperature(&self) -> &Temperature {
+    pub(crate) const fn temperature(&self) -> &Temperature {
         &self.temperature
     }
 }

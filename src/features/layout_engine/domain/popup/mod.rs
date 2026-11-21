@@ -1,9 +1,11 @@
-mod chain;
-mod styled;
-mod target;
+pub mod chain;
+pub mod styled;
+pub mod target;
 #[cfg(test)]
 mod tests;
 
-pub use chain::{PopupCycle, ancestors, descendants_deepest_first};
-pub use styled::{ActivePanel, AnchoredPopup, StyledPanel, StyledPopup};
-pub use target::{FloatingKind, PopupExclusivity, PopupTarget};
+#[cfg(test)]
+pub(crate) use chain::PopupCycle;
+pub(crate) use chain::{ancestors, descendants_deepest_first};
+pub(crate) use styled::{ActivePanel, AnchoredPopup, StyledPanel, StyledPopup};
+pub(crate) use target::{FloatingKind, PopupExclusivity, PopupTarget};

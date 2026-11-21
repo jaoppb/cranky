@@ -1,16 +1,15 @@
 pub mod api;
-pub mod dsl_actions;
-pub mod dsl_elements;
+mod dsl_actions;
+mod dsl_elements;
 mod dsl_leaf;
-pub mod dsl_sys;
-pub mod helpers;
-pub mod metadata;
-pub mod module;
-pub mod module_impl;
-pub mod module_port;
-pub mod sync;
+mod dsl_sys;
+mod helpers;
+mod metadata;
+mod module;
+mod module_impl;
+mod module_port;
+mod sync;
 #[cfg(test)]
 mod tests;
 
-pub use api::register_rhai_cranky_api;
 pub use module::RhaiModule;

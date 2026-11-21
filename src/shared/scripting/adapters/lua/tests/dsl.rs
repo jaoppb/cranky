@@ -53,15 +53,15 @@ mod tests {
         let single_node = value_to_vnode(&lua, single_val).unwrap();
         let single_handlers = single_node.on_click().expect("on_click expected");
         assert_eq!(
-            single_handlers.get(&PointerButton::Left),
+            single_handlers.get(PointerButton::Left),
             Some(&UiAction::Exec("echo single".into()))
         );
         assert_eq!(
-            single_handlers.get(&PointerButton::Right),
+            single_handlers.get(PointerButton::Right),
             Some(&UiAction::Exec("echo single".into()))
         );
         assert_eq!(
-            single_handlers.get(&PointerButton::Middle),
+            single_handlers.get(PointerButton::Middle),
             Some(&UiAction::Exec("echo single".into()))
         );
 
@@ -80,22 +80,22 @@ mod tests {
         let multi_node = value_to_vnode(&lua, multi_val).unwrap();
         let multi_handlers = multi_node.on_click().expect("on_click expected");
         assert_eq!(
-            multi_handlers.get(&PointerButton::Left),
+            multi_handlers.get(PointerButton::Left),
             Some(&UiAction::Exec("echo left".into()))
         );
         assert_eq!(
-            multi_handlers.get(&PointerButton::Right),
+            multi_handlers.get(PointerButton::Right),
             Some(&UiAction::Exec("echo right".into()))
         );
         assert_eq!(
-            multi_handlers.get(&PointerButton::Side),
+            multi_handlers.get(PointerButton::Side),
             Some(&UiAction::Exec("echo side".into()))
         );
         assert_eq!(
-            multi_handlers.get(&PointerButton::Extra),
+            multi_handlers.get(PointerButton::Extra),
             Some(&UiAction::Exec("echo extra".into()))
         );
-        assert_eq!(multi_handlers.get(&PointerButton::Middle), None);
+        assert_eq!(multi_handlers.get(PointerButton::Middle), None);
     }
 
     #[test]

@@ -25,7 +25,7 @@ const DEFAULT_END: Day = Day::Weekday {
 };
 
 /// `None` when the text is not a whole, valid rule.
-pub fn parse(text: &[u8]) -> Option<Rule> {
+pub(crate) fn parse(text: &[u8]) -> Option<Rule> {
     let mut cursor = Cursor { rest: text };
     let standard_name = cursor.name()?;
     // A rule counts its offsets west of UTC.

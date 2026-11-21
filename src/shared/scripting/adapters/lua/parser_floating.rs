@@ -58,7 +58,7 @@ fn parse_margin(table: &mlua::Table) -> MarginConfig {
     )
 }
 
-pub(crate) fn parse_popup_spec(
+pub(super) fn parse_popup_spec(
     lua: &Lua,
     val: Option<mlua::Value>,
 ) -> mlua::Result<Option<PopupSpec>> {
@@ -104,7 +104,7 @@ pub(crate) fn parse_popup_spec(
     }
 }
 
-pub(crate) fn parse_panel_spec(
+pub(super) fn parse_panel_spec(
     lua: &Lua,
     val: Option<mlua::Value>,
 ) -> mlua::Result<Option<PanelSpec>> {

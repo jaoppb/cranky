@@ -1,11 +1,11 @@
-pub mod action;
-pub mod clicks;
-pub mod dispatch;
-pub mod handler;
+mod action;
+mod clicks;
+mod dispatch;
+mod handler;
 mod hit_ref;
-pub mod motion;
+mod motion;
 #[cfg(test)]
 mod tests;
 
-pub use action::*;
-pub use handler::*;
+pub(in crate::features::module_runtime) use action::*;
+pub(in crate::features::module_runtime) use handler::*;

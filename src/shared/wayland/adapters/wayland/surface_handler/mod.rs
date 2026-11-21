@@ -23,7 +23,7 @@ pub(super) fn copy_surface_data(shm_buffer: &mut ShmBuffer, src_data: &[u8]) {
     }
 }
 
-pub(crate) fn handle_cmd(
+pub(super) fn handle_cmd(
     state: &mut WaylandState,
     queue_handle: &QueueHandle<WaylandState>,
     cmd: &SurfaceCommand,

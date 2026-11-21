@@ -1,7 +1,7 @@
 use crate::shared::primitives::{LayoutSurface, ModuleId, ModuleInstanceId};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModuleIdentity {
+pub(crate) struct ModuleIdentity {
     id: ModuleId,
     parent_id: Option<ModuleId>,
     instance_id: Option<ModuleInstanceId>,
@@ -15,7 +15,7 @@ pub struct ModuleIdentity {
 
 impl ModuleIdentity {
     #[must_use]
-    pub const fn new(id: ModuleId) -> Self {
+    pub(crate) const fn new(id: ModuleId) -> Self {
         Self {
             id,
             parent_id: None,
@@ -25,40 +25,42 @@ impl ModuleIdentity {
     }
 
     #[must_use]
-    pub const fn with_parent(mut self, parent_id: Option<ModuleId>) -> Self {
+    pub(crate) const fn with_parent(mut self, parent_id: Option<ModuleId>) -> Self {
         self.parent_id = parent_id;
         self
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn with_instance_id(mut self, instance_id: Option<ModuleInstanceId>) -> Self {
+    pub(crate) fn with_instance_id(mut self, instance_id: Option<ModuleInstanceId>) -> Self {
         self.instance_id = instance_id;
         self
     }
 
     #[must_use]
-    pub const fn with_surface(mut self, surface: LayoutSurface) -> Self {
+    pub(crate) const fn with_surface(mut self, surface: LayoutSurface) -> Self {
         self.surface = surface;
         self
     }
 
     #[must_use]
-    pub const fn id(&self) -> ModuleId {
+    pub(crate) const fn id(&self) -> ModuleId {
         self.id
     }
 
     #[must_use]
-    pub const fn parent_id(&self) -> Option<ModuleId> {
+    pub(crate) const fn parent_id(&self) -> Option<ModuleId> {
         self.parent_id
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn instance_id(&self) -> Option<&ModuleInstanceId> {
+    pub(crate) const fn instance_id(&self) -> Option<&ModuleInstanceId> {
         self.instance_id.as_ref()
     }
 
     #[must_use]
-    pub const fn surface(&self) -> LayoutSurface {
+    pub(crate) const fn surface(&self) -> LayoutSurface {
         self.surface
     }
 }

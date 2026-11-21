@@ -8,10 +8,10 @@ pub mod state;
 mod tests;
 pub mod tooltip;
 
-pub use command::*;
+pub(crate) use command::*;
 pub use enums::*;
-pub use icon::*;
+pub(crate) use icon::*;
 pub use identifiers::*;
 pub use item::*;
 pub use state::*;
-pub use tooltip::*;
+pub(crate) use tooltip::*;

@@ -16,7 +16,7 @@ impl TextAlign {
     /// Text wider than the box clamps to 0 so an overflowing line keeps its
     /// start visible instead of bleeding out to the left.
     #[must_use]
-    pub fn offset(self, available_width: f32, text_width: f32) -> f32 {
+    pub(crate) fn offset(self, available_width: f32, text_width: f32) -> f32 {
         let free = (available_width - text_width).max(0.0);
         match self {
             Self::Left => 0.0,
@@ -37,7 +37,7 @@ pub struct TextAlignment {
 
 impl TextAlignment {
     #[must_use]
-    pub const fn new(align: TextAlign, available_width: u32) -> Self {
+    pub(crate) const fn new(align: TextAlign, available_width: u32) -> Self {
         Self {
             align,
             available_width,
@@ -45,12 +45,12 @@ impl TextAlignment {
     }
 
     #[must_use]
-    pub const fn align(&self) -> TextAlign {
+    pub(crate) const fn align(self) -> TextAlign {
         self.align
     }
 
     #[must_use]
-    pub const fn available_width(&self) -> u32 {
+    pub(crate) const fn available_width(self) -> u32 {
         self.available_width
     }
 }

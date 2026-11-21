@@ -25,7 +25,7 @@ pub struct SystrayItem {
 
 impl SystrayItem {
     #[must_use]
-    pub fn new(cmd: CreateSystrayItemCommand) -> Self {
+    pub(crate) fn new(cmd: CreateSystrayItemCommand) -> Self {
         Self {
             id: cmd.id,
             destination: cmd.destination,
@@ -45,129 +45,124 @@ impl SystrayItem {
     }
 
     #[must_use]
-    pub fn with_title(mut self, title: String) -> Self {
+    pub(crate) fn with_title(mut self, title: String) -> Self {
         self.title = Title::new(title);
         self
     }
 
     #[must_use]
-    pub const fn with_status(mut self, status: SystrayStatus) -> Self {
+    pub(crate) const fn with_status(mut self, status: SystrayStatus) -> Self {
         self.status = status;
         self
     }
 
     #[must_use]
-    pub fn with_icon(mut self, icon: Option<SystrayIcon>) -> Self {
+    pub(crate) fn with_icon(mut self, icon: Option<SystrayIcon>) -> Self {
         self.icon = icon;
         self
     }
 
     #[must_use]
-    pub fn with_menu_path(mut self, menu_path: Option<ObjectPath>) -> Self {
+    pub(crate) fn with_menu_path(mut self, menu_path: Option<ObjectPath>) -> Self {
         self.menu_path = menu_path;
         self
     }
 
     #[must_use]
-    pub const fn with_item_is_menu(mut self, item_is_menu: ItemIsMenu) -> Self {
+    pub(crate) const fn with_item_is_menu(mut self, item_is_menu: ItemIsMenu) -> Self {
         self.item_is_menu = item_is_menu;
         self
     }
 
     #[must_use]
-    pub fn with_attention_icon(mut self, attention_icon: Option<SystrayIcon>) -> Self {
+    pub(crate) fn with_attention_icon(mut self, attention_icon: Option<SystrayIcon>) -> Self {
         self.attention_icon = attention_icon;
         self
     }
 
     #[must_use]
-    pub fn with_overlay_icon(mut self, overlay_icon: Option<SystrayIcon>) -> Self {
+    pub(crate) fn with_overlay_icon(mut self, overlay_icon: Option<SystrayIcon>) -> Self {
         self.overlay_icon = overlay_icon;
         self
     }
 
     #[must_use]
-    pub fn with_tooltip(mut self, tooltip: Option<SystrayTooltip>) -> Self {
+    pub(crate) fn with_tooltip(mut self, tooltip: Option<SystrayTooltip>) -> Self {
         self.tooltip = tooltip;
         self
     }
 
     #[must_use]
-    pub const fn id(&self) -> &SystrayId {
+    pub(crate) const fn id(&self) -> &SystrayId {
         &self.id
     }
 
     #[must_use]
-    pub const fn destination(&self) -> &Destination {
+    pub(crate) const fn destination(&self) -> &Destination {
         &self.destination
     }
 
     #[must_use]
-    pub const fn path(&self) -> &ObjectPath {
+    pub(crate) const fn path(&self) -> &ObjectPath {
         &self.path
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn title(&self) -> &Title {
-        &self.title
-    }
-
-    #[cfg(test)]
-    #[must_use]
-    pub const fn status(&self) -> &SystrayStatus {
+    pub(crate) const fn status(&self) -> &SystrayStatus {
         &self.status
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn icon(&self) -> Option<&SystrayIcon> {
+    pub(crate) const fn icon(&self) -> Option<&SystrayIcon> {
         self.icon.as_ref()
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn menu_path(&self) -> Option<&ObjectPath> {
+    pub(crate) const fn menu_path(&self) -> Option<&ObjectPath> {
         self.menu_path.as_ref()
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn item_id(&self) -> Option<&ItemId> {
+    pub(crate) const fn item_id(&self) -> Option<&ItemId> {
         self.item_id.as_ref()
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn category(&self) -> &SystrayCategory {
+    pub(crate) const fn category(&self) -> &SystrayCategory {
         &self.category
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn window_id(&self) -> Option<WindowId> {
+    pub(crate) const fn window_id(&self) -> Option<WindowId> {
         self.window_id
     }
 
     #[must_use]
-    pub const fn item_is_menu(&self) -> ItemIsMenu {
+    pub(crate) const fn item_is_menu(&self) -> ItemIsMenu {
         self.item_is_menu
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn attention_icon(&self) -> Option<&SystrayIcon> {
+    pub(crate) const fn attention_icon(&self) -> Option<&SystrayIcon> {
         self.attention_icon.as_ref()
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn overlay_icon(&self) -> Option<&SystrayIcon> {
+    pub(crate) const fn overlay_icon(&self) -> Option<&SystrayIcon> {
         self.overlay_icon.as_ref()
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn tooltip(&self) -> Option<&SystrayTooltip> {
+    pub(crate) const fn tooltip(&self) -> Option<&SystrayTooltip> {
         self.tooltip.as_ref()
     }
 }

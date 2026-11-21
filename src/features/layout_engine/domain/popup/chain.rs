@@ -7,7 +7,7 @@ use thiserror::Error;
 /// (decision 7), but a chain can never loop back on itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 #[error("popup nesting cycle detected")]
-pub struct PopupCycle;
+pub(crate) struct PopupCycle;
 
 /// Walks `start`'s parent chain via `parent_of`, returning every ancestor
 /// nearest-first.
@@ -22,7 +22,7 @@ pub struct PopupCycle;
 /// uses for lazy module spawns, just over `FloatingKind` parentage instead
 /// of `ModuleId` parentage. No depth cap (decision 12/non-goals): only a
 /// genuine cycle is rejected.
-pub fn ancestors(
+pub(crate) fn ancestors(
     start: &FloatingKind,
     parent_of: impl Fn(&FloatingKind) -> Option<FloatingKind>,
 ) -> Result<Vec<FloatingKind>, PopupCycle> {
@@ -47,7 +47,7 @@ pub fn ancestors(
 /// protocol error. The result never includes `root` itself; the caller
 /// destroys that last.
 #[must_use]
-pub fn descendants_deepest_first(
+pub(crate) fn descendants_deepest_first(
     root: &FloatingKind,
     links: &[(FloatingKind, Option<FloatingKind>)],
 ) -> Vec<FloatingKind> {

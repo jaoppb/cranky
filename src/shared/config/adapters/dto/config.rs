@@ -8,7 +8,7 @@ use super::root::RootConfigDto;
 use super::style::{PopupConfigDto, RenderingModeDto, TooltipConfigDto};
 
 #[derive(Debug, Deserialize, Default)]
-pub struct ConfigDto {
+pub(crate) struct ConfigDto {
     #[serde(default)]
     root: RootConfigDto,
     #[serde(default)]
@@ -25,7 +25,7 @@ pub struct ConfigDto {
 
 impl ConfigDto {
     #[must_use]
-    pub fn into_domain<V: FontValidatorPort>(self, _validator: &V) -> domain::Config {
+    pub(crate) fn into_domain<V: FontValidatorPort>(self, _validator: &V) -> domain::Config {
         let root = self.root.into_domain();
         let modules = self.modules.into_domain();
         let rendering = self.rendering.into_domain();

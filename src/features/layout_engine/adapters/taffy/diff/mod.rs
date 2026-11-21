@@ -101,7 +101,7 @@ fn diff_leaf<'a>(
 }
 
 #[must_use]
-pub fn diff<'a>(
+pub(super) fn diff<'a>(
     old_state: &'a LayoutState,
     new_layout: &'a StyledNode,
     measurer: &mut dyn TextMeasurer,

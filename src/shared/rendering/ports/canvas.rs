@@ -71,7 +71,7 @@ pub trait Canvas: Send + Sync {
 /// One request a [`RecordingCanvas`] received.
 #[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CanvasCall {
+pub(crate) enum CanvasCall {
     Rect,
     Border,
     Text {
@@ -86,7 +86,7 @@ pub enum CanvasCall {
 impl CanvasCall {
     /// The request's name, for asserting on which requests were made.
     #[must_use]
-    pub const fn kind(&self) -> &'static str {
+    pub(crate) const fn kind(&self) -> &'static str {
         match self {
             Self::Rect => "rect",
             Self::Border => "border",
@@ -99,15 +99,15 @@ impl CanvasCall {
 /// A canvas that draws nothing and remembers every request, in order.
 #[cfg(test)]
 #[derive(Debug, Default)]
-pub struct RecordingCanvas {
-    pub calls: Vec<CanvasCall>,
+pub(crate) struct RecordingCanvas {
+    pub(crate) calls: Vec<CanvasCall>,
 }
 
 #[cfg(test)]
 impl RecordingCanvas {
     /// The name of every request received, in order.
     #[must_use]
-    pub fn kinds(&self) -> Vec<&'static str> {
+    pub(crate) fn kinds(&self) -> Vec<&'static str> {
         self.calls.iter().map(CanvasCall::kind).collect()
     }
 }

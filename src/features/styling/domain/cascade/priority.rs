@@ -4,7 +4,7 @@ use super::specificity::Specificity;
 /// always outrank normal ones, and layer order reverses for them, per the
 /// CSS cascade.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Importance {
+pub(crate) enum Importance {
     Normal,
     Important,
 }
@@ -19,14 +19,14 @@ pub enum Importance {
 /// module sheets are parsed independently, so there is no single document to
 /// carry a real `@layer` statement across them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Layer(u8);
+pub(crate) struct Layer(u8);
 
 impl Layer {
-    pub const BASE: Self = Self(0);
-    pub const MODULE: Self = Self(1);
+    pub(crate) const BASE: Self = Self(0);
+    pub(crate) const MODULE: Self = Self(1);
 
     #[must_use]
-    pub const fn value(self) -> u8 {
+    pub(crate) const fn value(self) -> u8 {
         self.0
     }
 }
@@ -35,7 +35,7 @@ impl Layer {
 /// ascending application order: sort matches by this and fold them in order
 /// so the last one applied — the highest priority — wins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct RulePriority {
+pub(crate) struct RulePriority {
     important: bool,
     layer_rank: u8,
     specificity: Specificity,
@@ -45,7 +45,7 @@ pub struct RulePriority {
 
 impl RulePriority {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         importance: Importance,
         layer: Layer,
         specificity: Specificity,

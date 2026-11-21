@@ -170,7 +170,7 @@ fn process_event_stream<P: WindowManagerPort>(
     }
 }
 
-pub async fn run_event_loop<P: WindowManagerPort + 'static>(
+pub(super) async fn run_event_loop<P: WindowManagerPort + 'static>(
     adapter: P,
     provider: Arc<dyn HyprlandProvider>,
     hub: Arc<SignalHub>,

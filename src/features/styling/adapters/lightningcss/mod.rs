@@ -7,5 +7,4 @@ pub mod selector;
 mod tests;
 
 pub use adapter::*;
-pub use parsed_stylesheet::*;
 pub use reparser::*;

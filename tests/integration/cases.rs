@@ -22,15 +22,15 @@ const STOP_SIGNALS: [SignalKind; 4] = [
     SignalKind::terminate(),
 ];
 
-pub type CaseFuture = Pin<Box<dyn Future<Output = Outcome>>>;
+pub(crate) type CaseFuture = Pin<Box<dyn Future<Output = Outcome>>>;
 
-pub struct Case {
+pub(crate) struct Case {
     name: &'static str,
     run: fn() -> CaseFuture,
 }
 
 impl Case {
-    pub const fn new(name: &'static str, run: fn() -> CaseFuture) -> Self {
+    pub(crate) const fn new(name: &'static str, run: fn() -> CaseFuture) -> Self {
         Self { name, run }
     }
 }
@@ -63,7 +63,7 @@ fn runtime() -> Outcome<tokio::runtime::Runtime> {
 /// Parent side: starts the sandbox and runs the selected cases, each in a
 /// process of its own, so the tasks and connections a case leaves behind end
 /// with it.
-pub fn run_selected(selection: &Selection) -> Outcome {
+pub(crate) fn run_selected(selection: &Selection) -> Outcome {
     let names: Vec<&str> = all()
         .iter()
         .map(|case| case.name)
@@ -129,7 +129,7 @@ async fn run_each<'a>(sandbox: &Sandbox, names: &[&'a str]) -> Vec<&'a str> {
 }
 
 /// Child side: runs the case called exactly `name`, inside the sandbox.
-pub fn run_one(name: &str) -> Outcome {
+pub(crate) fn run_one(name: &str) -> Outcome {
     sandbox::ensure_inside()?;
     let case = all()
         .into_iter()

@@ -4,7 +4,7 @@ use crate::features::vdom::domain::{TextContent, VNode};
 use crate::utils::f64_to_f32;
 use mlua::Lua;
 
-pub(crate) fn parse_text_node(
+pub(super) fn parse_text_node(
     lua: &Lua,
     val: mlua::Value,
     class_opt: Option<&str>,
@@ -80,7 +80,7 @@ pub(crate) fn parse_text_node(
     }
 }
 
-pub(crate) fn parse_progress_node(
+pub(super) fn parse_progress_node(
     lua: &Lua,
     val: mlua::Value,
     orientation_opt: Option<&str>,

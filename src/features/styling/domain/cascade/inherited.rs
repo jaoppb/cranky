@@ -53,27 +53,27 @@ impl Default for InheritedStyle {
 
 impl InheritedStyle {
     #[must_use]
-    pub const fn color(&self) -> Option<&DrawingColor> {
+    pub(crate) const fn color(&self) -> Option<&DrawingColor> {
         self.color.as_ref()
     }
 
     #[must_use]
-    pub const fn accent_color(&self) -> Option<&DrawingColor> {
+    pub(crate) const fn accent_color(&self) -> Option<&DrawingColor> {
         self.accent_color.as_ref()
     }
 
     #[must_use]
-    pub const fn font_family(&self) -> Option<&Arc<str>> {
+    pub(crate) const fn font_family(&self) -> Option<&Arc<str>> {
         self.font_family.as_ref()
     }
 
     #[must_use]
-    pub const fn font_size(&self) -> Option<&FontSize> {
+    pub(crate) const fn font_size(&self) -> Option<&FontSize> {
         self.font_size.as_ref()
     }
 
     #[must_use]
-    pub const fn text_align(&self) -> Option<TextAlign> {
+    pub(crate) const fn text_align(&self) -> Option<TextAlign> {
         self.text_align
     }
 
@@ -82,12 +82,12 @@ impl InheritedStyle {
     /// own declared font-size would need a two-pass resolution this
     /// renderer doesn't do).
     #[must_use]
-    pub const fn root_font_size(&self) -> FontSize {
+    pub(crate) const fn root_font_size(&self) -> FontSize {
         self.root_font_size
     }
 
     #[must_use]
-    pub const fn custom_properties(&self) -> &Arc<HashMap<String, String>> {
+    pub(crate) const fn custom_properties(&self) -> &Arc<HashMap<String, String>> {
         &self.custom_properties
     }
 
@@ -98,7 +98,7 @@ impl InheritedStyle {
     /// `root_font_size` carries forward unchanged, since it's fixed for the
     /// whole tree, not actually inherited element-to-element.
     #[must_use]
-    pub fn descend(
+    pub(crate) fn descend(
         &self,
         style: &ComputedStyle,
         custom_properties: Arc<HashMap<String, String>>,
@@ -133,7 +133,10 @@ mod tests {
             Some(&DrawingColor::parse("#ffffff").unwrap())
         );
         assert_eq!(inherited.font_family().map(AsRef::as_ref), Some("Mono"));
-        assert_eq!(inherited.font_size().map(FontSize::value), Some(14.0));
+        assert_eq!(
+            inherited.font_size().copied().map(FontSize::value),
+            Some(14.0)
+        );
         assert_eq!(inherited.accent_color(), None);
     }
 

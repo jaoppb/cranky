@@ -11,20 +11,26 @@ use wayland_client::WEnum;
 use wayland_client::protocol::wl_pointer::ButtonState;
 use wayland_client::protocol::wl_surface::WlSurface;
 
-pub type Event = (ModuleId, MonitorId, InteractionEvent);
+pub(in crate::shared::wayland::adapters::wayland) type Event =
+    (ModuleId, MonitorId, InteractionEvent);
 
 /// `popup_kind()`'s owner: module 1 on DP-1.
-pub const OWNER: u32 = 1;
-pub const CHILD: u32 = 9;
-pub const BAR_MODULE: u32 = 3;
-pub const LEFT: u32 = 0x110;
-pub const RIGHT: u32 = 0x111;
-pub const PRESSED: WEnum<ButtonState> = WEnum::Value(ButtonState::Pressed);
-pub const RELEASED: WEnum<ButtonState> = WEnum::Value(ButtonState::Released);
+pub(in crate::shared::wayland::adapters::wayland) const OWNER: u32 = 1;
+pub(in crate::shared::wayland::adapters::wayland) const CHILD: u32 = 9;
+const BAR_MODULE: u32 = 3;
+pub(in crate::shared::wayland::adapters::wayland) const LEFT: u32 = 0x110;
+pub(in crate::shared::wayland::adapters::wayland) const RIGHT: u32 = 0x111;
+pub(in crate::shared::wayland::adapters::wayland) const PRESSED: WEnum<ButtonState> =
+    WEnum::Value(ButtonState::Pressed);
+pub(in crate::shared::wayland::adapters::wayland) const RELEASED: WEnum<ButtonState> =
+    WEnum::Value(ButtonState::Released);
 
 /// A 20×10 popup owned by module 1 on DP-1, whose bar has `scale`, with
 /// module 9 composited as a 4×4 logical layer at (10, 2).
-pub fn popup(fake: &Fake, scale: u32) -> (WaylandState, WlSurface) {
+pub(in crate::shared::wayland::adapters::wayland) fn popup(
+    fake: &Fake,
+    scale: u32,
+) -> (WaylandState, WlSurface) {
     let mut state = fake.state(PopupEmbed::Composite);
     state
         .bars
@@ -51,7 +57,10 @@ pub fn popup(fake: &Fake, scale: u32) -> (WaylandState, WlSurface) {
 }
 
 /// Registers a bar module subsurface for module 3 on HDMI-A-1.
-pub fn bar_module(fake: &Fake, state: &mut WaylandState) -> WlSurface {
+pub(in crate::shared::wayland::adapters::wayland) fn bar_module(
+    fake: &Fake,
+    state: &mut WaylandState,
+) -> WlSurface {
     let surface = fake.surface();
     state.surface_to_id.insert(
         surface.clone(),
@@ -64,11 +73,11 @@ pub fn bar_module(fake: &Fake, state: &mut WaylandState) -> WlSurface {
     surface
 }
 
-pub fn drain(rx: &mut Receiver<Event>) -> Vec<Event> {
+pub(in crate::shared::wayland::adapters::wayland) fn drain(rx: &mut Receiver<Event>) -> Vec<Event> {
     std::iter::from_fn(|| rx.try_recv().ok()).collect()
 }
 
-pub fn routed_event(id: u32, monitor: &str, event: PointerEvent) -> Event {
+fn routed_event(id: u32, monitor: &str, event: PointerEvent) -> Event {
     (
         ModuleId::new(id),
         MonitorId::new(monitor),
@@ -76,34 +85,46 @@ pub fn routed_event(id: u32, monitor: &str, event: PointerEvent) -> Event {
     )
 }
 
-pub fn owner(event: PointerEvent) -> Event {
+pub(in crate::shared::wayland::adapters::wayland) fn owner(event: PointerEvent) -> Event {
     routed_event(OWNER, "DP-1", event)
 }
 
-pub fn child(event: PointerEvent) -> Event {
+pub(in crate::shared::wayland::adapters::wayland) fn child(event: PointerEvent) -> Event {
     routed_event(CHILD, "DP-1", event)
 }
 
-pub fn bar(event: PointerEvent) -> Event {
+pub(in crate::shared::wayland::adapters::wayland) fn bar(event: PointerEvent) -> Event {
     routed_event(BAR_MODULE, "HDMI-A-1", event)
 }
 
-pub const fn enter(surface: SurfaceKind) -> PointerEvent {
+pub(in crate::shared::wayland::adapters::wayland) const fn enter(
+    surface: SurfaceKind,
+) -> PointerEvent {
     PointerEvent::PointerEnter { surface }
 }
 
-pub const fn leave(surface: SurfaceKind) -> PointerEvent {
+pub(in crate::shared::wayland::adapters::wayland) const fn leave(
+    surface: SurfaceKind,
+) -> PointerEvent {
     PointerEvent::PointerLeave { surface }
 }
 
-pub const fn motion(surface: SurfaceKind, x: i32, y: i32) -> PointerEvent {
+pub(in crate::shared::wayland::adapters::wayland) const fn motion(
+    surface: SurfaceKind,
+    x: i32,
+    y: i32,
+) -> PointerEvent {
     PointerEvent::PointerMotion {
         surface,
         pos: Position::new(x, y),
     }
 }
 
-pub const fn press(surface: SurfaceKind, x: i32, y: i32) -> PointerEvent {
+pub(in crate::shared::wayland::adapters::wayland) const fn press(
+    surface: SurfaceKind,
+    x: i32,
+    y: i32,
+) -> PointerEvent {
     PointerEvent::ButtonPress {
         surface,
         button: PointerButton::Left,
@@ -112,7 +133,11 @@ pub const fn press(surface: SurfaceKind, x: i32, y: i32) -> PointerEvent {
 }
 
 /// The `ButtonRelease` + `Click` pair one left-button release produces.
-pub fn release(surface: SurfaceKind, x: i32, y: i32) -> [PointerEvent; 2] {
+pub(in crate::shared::wayland::adapters::wayland) fn release(
+    surface: SurfaceKind,
+    x: i32,
+    y: i32,
+) -> [PointerEvent; 2] {
     let (button, pos) = (PointerButton::Left, Position::new(x, y));
     [
         PointerEvent::ButtonRelease {
@@ -129,7 +154,11 @@ pub fn release(surface: SurfaceKind, x: i32, y: i32) -> [PointerEvent; 2] {
 }
 
 /// Press, release and click of the left button at one position.
-pub fn clicks(surface: SurfaceKind, x: i32, y: i32) -> [PointerEvent; 3] {
+pub(in crate::shared::wayland::adapters::wayland) fn clicks(
+    surface: SurfaceKind,
+    x: i32,
+    y: i32,
+) -> [PointerEvent; 3] {
     let [released, click] = release(surface, x, y);
     [press(surface, x, y), released, click]
 }

@@ -1,16 +1,16 @@
 //! Pure compositing of embedded child modules into a popup's own pixel buffer.
 
 mod blend;
-mod layers;
-pub mod route;
+pub mod layers;
+pub(super) mod route;
 
-pub use layers::{ChildLayer, CompositeLayers};
+pub(super) use layers::CompositeLayers;
 
 use crate::shared::primitives::{Position, Size};
 
 /// Copies `base` into `dst`, then blends every layer over it (bottom to top).
 /// Layer origins are logical and are multiplied by `scale` to physical pixels.
-pub fn composite_into(
+pub(super) fn composite_into(
     dst: &mut [u8],
     dst_size: Size,
     base: &[u8],

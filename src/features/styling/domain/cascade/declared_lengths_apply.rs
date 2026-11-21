@@ -11,7 +11,7 @@ impl DeclaredLengths {
     /// results into `computed`. Properties left `NotDeclared`/`Initial`
     /// here simply leave `computed`'s existing value alone — it was already
     /// set correctly by the ordinary (non-relative) property pipeline.
-    pub fn apply(
+    pub(crate) fn apply(
         &self,
         computed: &mut ComputedStyle,
         font_size: FontSize,
@@ -131,7 +131,9 @@ mod tests {
         lengths.apply(&mut computed, FontSize::new(14.0), FontSize::new(14.0));
 
         assert_eq!(
-            computed.border_size().map(|border| border.value()),
+            computed
+                .border_size()
+                .map(crate::shared::config::domain::types::BorderSize::value),
             Some(3.0)
         );
     }

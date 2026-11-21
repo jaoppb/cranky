@@ -9,7 +9,7 @@ impl HomeDir {
     }
 
     #[must_use]
-    pub const fn as_path(&self) -> &PathBuf {
+    pub(crate) const fn as_path(&self) -> &PathBuf {
         &self.0
     }
 }
@@ -23,7 +23,7 @@ impl XdgCacheHome {
     }
 
     #[must_use]
-    pub const fn as_path(&self) -> &PathBuf {
+    pub(crate) const fn as_path(&self) -> &PathBuf {
         &self.0
     }
 }
@@ -37,7 +37,7 @@ impl XdgRuntimeDir {
     }
 
     #[must_use]
-    pub const fn as_path(&self) -> &PathBuf {
+    pub(crate) const fn as_path(&self) -> &PathBuf {
         &self.0
     }
 }
@@ -51,7 +51,7 @@ impl RustLog {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -60,12 +60,12 @@ impl RustLog {
 pub struct HyprlandInstanceSignature(String);
 impl HyprlandInstanceSignature {
     #[must_use]
-    pub const fn new(sig: String) -> Self {
+    pub(crate) const fn new(sig: String) -> Self {
         Self(sig)
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -98,27 +98,27 @@ impl AppEnvironment {
     }
 
     #[must_use]
-    pub const fn home(&self) -> &HomeDir {
+    pub(crate) const fn home(&self) -> &HomeDir {
         &self.home
     }
 
     #[must_use]
-    pub const fn xdg_cache_home(&self) -> &XdgCacheHome {
+    pub(crate) const fn xdg_cache_home(&self) -> &XdgCacheHome {
         &self.xdg_cache_home
     }
 
     #[must_use]
-    pub const fn xdg_runtime_dir(&self) -> &XdgRuntimeDir {
+    pub(crate) const fn xdg_runtime_dir(&self) -> &XdgRuntimeDir {
         &self.xdg_runtime_dir
     }
 
     #[must_use]
-    pub const fn rust_log(&self) -> &RustLog {
+    pub(crate) const fn rust_log(&self) -> &RustLog {
         &self.rust_log
     }
 
     #[must_use]
-    pub const fn hyprland_instance_signature(&self) -> Option<&HyprlandInstanceSignature> {
+    pub(crate) const fn hyprland_instance_signature(&self) -> Option<&HyprlandInstanceSignature> {
         self.hyprland_instance_signature.as_ref()
     }
 }

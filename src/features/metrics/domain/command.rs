@@ -2,7 +2,7 @@ use super::config::MetricsConfig;
 use super::types::{CpuUsage, DiskMetric, MemoryBytes, NetworkSpeed, Temperature};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MemoryMetrics {
+pub(crate) struct MemoryMetrics {
     used: MemoryBytes,
     total: MemoryBytes,
     swap_used: MemoryBytes,
@@ -11,7 +11,7 @@ pub struct MemoryMetrics {
 
 impl MemoryMetrics {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         used: MemoryBytes,
         total: MemoryBytes,
         swap_used: MemoryBytes,
@@ -26,50 +26,50 @@ impl MemoryMetrics {
     }
 
     #[must_use]
-    pub const fn used(&self) -> MemoryBytes {
+    pub(crate) const fn used(&self) -> MemoryBytes {
         self.used
     }
 
     #[must_use]
-    pub const fn total(&self) -> MemoryBytes {
+    pub(crate) const fn total(&self) -> MemoryBytes {
         self.total
     }
 
     #[must_use]
-    pub const fn swap_used(&self) -> MemoryBytes {
+    pub(crate) const fn swap_used(&self) -> MemoryBytes {
         self.swap_used
     }
 
     #[must_use]
-    pub const fn swap_total(&self) -> MemoryBytes {
+    pub(crate) const fn swap_total(&self) -> MemoryBytes {
         self.swap_total
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NetworkMetrics {
+pub(crate) struct NetworkMetrics {
     tx: NetworkSpeed,
     rx: NetworkSpeed,
 }
 
 impl NetworkMetrics {
     #[must_use]
-    pub const fn new(tx: NetworkSpeed, rx: NetworkSpeed) -> Self {
+    pub(crate) const fn new(tx: NetworkSpeed, rx: NetworkSpeed) -> Self {
         Self { tx, rx }
     }
 
     #[must_use]
-    pub const fn tx(&self) -> NetworkSpeed {
+    pub(crate) const fn tx(&self) -> NetworkSpeed {
         self.tx
     }
 
     #[must_use]
-    pub const fn rx(&self) -> NetworkSpeed {
+    pub(crate) const fn rx(&self) -> NetworkSpeed {
         self.rx
     }
 }
 
-pub struct CreateMetricsCommand {
+pub(crate) struct CreateMetricsCommand {
     cpu_usage: CpuUsage,
     per_core: Vec<CpuUsage>,
     memory: MemoryMetrics,
@@ -81,7 +81,7 @@ pub struct CreateMetricsCommand {
 
 impl CreateMetricsCommand {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         cpu_usage: CpuUsage,
         per_core: Vec<CpuUsage>,
         memory: MemoryMetrics,
@@ -102,7 +102,7 @@ impl CreateMetricsCommand {
     }
 
     #[must_use]
-    pub fn into_parts(
+    pub(crate) fn into_parts(
         self,
     ) -> (
         CpuUsage,
@@ -124,68 +124,33 @@ impl CreateMetricsCommand {
         )
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn cpu_usage(&self) -> &CpuUsage {
+    pub(crate) const fn cpu_usage(&self) -> &CpuUsage {
         &self.cpu_usage
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn per_core(&self) -> &[CpuUsage] {
-        &self.per_core
-    }
-
-    #[must_use]
-    pub const fn memory(&self) -> &MemoryMetrics {
+    pub(crate) const fn memory(&self) -> &MemoryMetrics {
         &self.memory
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn memory_used(&self) -> MemoryBytes {
+    pub(crate) const fn memory_used(&self) -> MemoryBytes {
         self.memory.used()
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn memory_total(&self) -> MemoryBytes {
-        self.memory.total()
-    }
-
-    #[must_use]
-    pub const fn swap_used(&self) -> MemoryBytes {
-        self.memory.swap_used()
-    }
-
-    #[must_use]
-    pub const fn swap_total(&self) -> MemoryBytes {
-        self.memory.swap_total()
-    }
-
-    #[must_use]
-    pub fn disks(&self) -> &[DiskMetric] {
-        &self.disks
-    }
-
-    #[must_use]
-    pub const fn network(&self) -> &NetworkMetrics {
+    pub(crate) const fn network(&self) -> &NetworkMetrics {
         &self.network
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn network_tx(&self) -> NetworkSpeed {
+    pub(crate) const fn network_tx(&self) -> NetworkSpeed {
         self.network.tx()
-    }
-
-    #[must_use]
-    pub const fn network_rx(&self) -> NetworkSpeed {
-        self.network.rx()
-    }
-
-    #[must_use]
-    pub const fn temperature(&self) -> &Temperature {
-        &self.temperature
-    }
-
-    #[must_use]
-    pub const fn config(&self) -> &MetricsConfig {
-        &self.config
     }
 }

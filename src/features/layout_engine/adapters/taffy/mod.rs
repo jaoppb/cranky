@@ -1,14 +1,14 @@
-pub mod calc_resolve;
-pub mod diff;
-pub mod grid_converter;
+mod calc_resolve;
+mod diff;
+mod grid_converter;
 mod layout_pass;
 mod leaf_size;
-pub mod reconciler;
+mod reconciler;
 mod render_leaf_builder;
-pub mod render_tree_builder;
-pub mod style_builder;
-pub mod style_converter;
-pub mod tree_builder;
+mod render_tree_builder;
+mod style_builder;
+mod style_converter;
+mod tree_builder;
 
 use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
@@ -32,7 +32,7 @@ impl Default for TaffyLayoutAdapter {
 
 impl TaffyLayoutAdapter {
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             taffy: SendTaffyTree::new(),
             state: None,

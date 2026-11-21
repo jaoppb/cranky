@@ -14,7 +14,7 @@ pub struct StyledPopup {
 
 impl StyledPopup {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         content: Box<StyledNode>,
         anchor_direction: AnchorDirection,
         offset: Option<PopupOffset>,
@@ -27,17 +27,18 @@ impl StyledPopup {
     }
 
     #[must_use]
-    pub fn content(&self) -> &StyledNode {
+    pub(crate) fn content(&self) -> &StyledNode {
         &self.content
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn anchor_direction(&self) -> AnchorDirection {
+    pub(crate) const fn anchor_direction(&self) -> AnchorDirection {
         self.anchor_direction
     }
 
     #[must_use]
-    pub const fn offset(&self) -> Option<PopupOffset> {
+    pub(crate) const fn offset(&self) -> Option<PopupOffset> {
         self.offset
     }
 }
@@ -54,7 +55,7 @@ pub struct StyledPanel {
 
 impl StyledPanel {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         content: Box<StyledNode>,
         layer: PanelLayer,
         anchor: PanelAnchor,
@@ -73,82 +74,82 @@ impl StyledPanel {
     }
 
     #[must_use]
-    pub fn content(&self) -> &StyledNode {
+    pub(crate) fn content(&self) -> &StyledNode {
         &self.content
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn layer(&self) -> PanelLayer {
+    pub(crate) const fn layer(&self) -> PanelLayer {
         self.layer
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn anchor(&self) -> PanelAnchor {
+    pub(crate) const fn anchor(&self) -> PanelAnchor {
         self.anchor
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn margin(&self) -> &MarginConfig {
+    pub(crate) const fn margin(&self) -> &MarginConfig {
         &self.margin
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn exclusive_zone(&self) -> ExclusiveZone {
+    pub(crate) const fn exclusive_zone(&self) -> ExclusiveZone {
         self.exclusive_zone
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn keyboard(&self) -> KeyboardInteractivity {
+    pub(crate) const fn keyboard(&self) -> KeyboardInteractivity {
         self.keyboard
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct AnchoredPopup<'a> {
+pub(crate) struct AnchoredPopup<'a> {
     anchor_rect: Rect,
     popup: &'a StyledPopup,
 }
 
 impl<'a> AnchoredPopup<'a> {
     #[must_use]
-    pub const fn new(anchor_rect: Rect, popup: &'a StyledPopup) -> Self {
+    pub(crate) const fn new(anchor_rect: Rect, popup: &'a StyledPopup) -> Self {
         Self { anchor_rect, popup }
     }
 
     #[must_use]
-    pub const fn anchor_rect(&self) -> &Rect {
+    pub(crate) const fn anchor_rect(&self) -> &Rect {
         &self.anchor_rect
     }
 
     #[must_use]
-    pub const fn popup(&self) -> &'a StyledPopup {
+    pub(crate) const fn popup(&self) -> &'a StyledPopup {
         self.popup
     }
 
     #[must_use]
-    pub fn layout(&self) -> &'a StyledNode {
+    pub(crate) fn layout(&self) -> &'a StyledNode {
         self.popup.content()
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ActivePanel<'a> {
+pub(crate) struct ActivePanel<'a> {
     panel: &'a StyledPanel,
 }
 
 impl<'a> ActivePanel<'a> {
     #[must_use]
-    pub const fn new(panel: &'a StyledPanel) -> Self {
+    pub(crate) const fn new(panel: &'a StyledPanel) -> Self {
         Self { panel }
     }
 
     #[must_use]
-    pub const fn panel(&self) -> &'a StyledPanel {
-        self.panel
-    }
-
-    #[must_use]
-    pub fn layout(&self) -> &'a StyledNode {
+    pub(crate) fn layout(&self) -> &'a StyledNode {
         self.panel.content()
     }
 }

@@ -1,7 +1,7 @@
 use crate::features::styling::domain::{GridLinePlacement, GridPlacement};
 
 #[must_use]
-pub fn parse_single_placement(text: &str) -> GridPlacement {
+pub(crate) fn parse_single_placement(text: &str) -> GridPlacement {
     let text = text.trim();
     if text.is_empty() || text.eq_ignore_ascii_case("auto") {
         return GridPlacement::Auto;
@@ -18,7 +18,7 @@ pub fn parse_single_placement(text: &str) -> GridPlacement {
 }
 
 #[must_use]
-pub fn parse_line_placement(text: &str) -> GridLinePlacement {
+pub(crate) fn parse_line_placement(text: &str) -> GridLinePlacement {
     let text = text.trim();
     if let Some((start_s, end_s)) = text.split_once('/') {
         let start = parse_single_placement(start_s);

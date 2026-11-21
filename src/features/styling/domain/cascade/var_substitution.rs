@@ -19,7 +19,7 @@ const MAX_SUBSTITUTION_DEPTH: u8 = 8;
 /// comes from `find`/`char_indices`, which only ever land on char
 /// boundaries, but the indexing syntax can't express that guarantee.
 #[must_use]
-pub fn substitute_vars<S: BuildHasher>(
+pub(crate) fn substitute_vars<S: BuildHasher>(
     value: &str,
     custom_properties: &HashMap<String, String, S>,
 ) -> String {

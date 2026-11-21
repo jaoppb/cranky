@@ -6,7 +6,7 @@ pub enum EnvironmentError {
     MissingVariable(String),
 }
 
-pub trait EnvironmentPort: Send + Sync {
+pub(crate) trait EnvironmentPort: Send + Sync {
     /// Reads the current application environment.
     ///
     /// # Errors

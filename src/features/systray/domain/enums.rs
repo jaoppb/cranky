@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum SystrayStatus {
+pub(crate) enum SystrayStatus {
     Active,
     Passive,
     NeedsAttention,
@@ -24,7 +24,7 @@ pub enum SystrayActionName {
 
 impl SystrayActionName {
     #[must_use]
-    pub fn parse_str(name: &str) -> Self {
+    pub(crate) fn parse_str(name: &str) -> Self {
         match name {
             "Primary" => Self::Primary,
             "ContextMenu" => Self::ContextMenu,
@@ -39,7 +39,7 @@ impl SystrayActionName {
     }
 
     #[must_use]
-    pub const fn as_str(&self) -> &str {
+    pub(crate) const fn as_str(&self) -> &str {
         match self {
             Self::Primary => "Primary",
             Self::ContextMenu => "ContextMenu",
@@ -74,7 +74,7 @@ impl From<SystrayActionName> for String {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "String", into = "String")]
-pub enum SystrayCategory {
+pub(crate) enum SystrayCategory {
     ApplicationStatus,
     Communications,
     SystemServices,
@@ -84,7 +84,7 @@ pub enum SystrayCategory {
 
 impl SystrayCategory {
     #[must_use]
-    pub fn parse_str(category: &str) -> Self {
+    pub(crate) fn parse_str(category: &str) -> Self {
         match category {
             "ApplicationStatus" => Self::ApplicationStatus,
             "Communications" => Self::Communications,
@@ -95,7 +95,7 @@ impl SystrayCategory {
     }
 
     #[must_use]
-    pub const fn as_str(&self) -> &str {
+    pub(crate) const fn as_str(&self) -> &str {
         match self {
             Self::ApplicationStatus => "ApplicationStatus",
             Self::Communications => "Communications",

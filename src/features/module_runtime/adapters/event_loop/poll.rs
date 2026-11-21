@@ -16,7 +16,7 @@ impl<
     US: UiCommandSender + 'static,
 > EventLoop<F, LS, DS, US>
 {
-    pub async fn poll_next_event(
+    pub(crate) async fn poll_next_event(
         &mut self,
         events_stream: &mut futures_util::stream::SelectAll<
             futures_util::stream::BoxStream<'static, SignalKind>,

@@ -11,24 +11,24 @@ use super::node_path::NodePath;
 /// interaction. An empty `path` means this level is the starting node
 /// itself (only possible for a keyed root).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct AnchorSegment {
+pub(crate) struct AnchorSegment {
     path: NodePath,
     key: NodeKey,
 }
 
 impl AnchorSegment {
     #[must_use]
-    pub const fn new(path: NodePath, key: NodeKey) -> Self {
+    pub(crate) const fn new(path: NodePath, key: NodeKey) -> Self {
         Self { path, key }
     }
 
     #[must_use]
-    pub const fn path(&self) -> &NodePath {
+    pub(crate) const fn path(&self) -> &NodePath {
         &self.path
     }
 
     #[must_use]
-    pub const fn key(&self) -> &NodeKey {
+    pub(crate) const fn key(&self) -> &NodeKey {
         &self.key
     }
 }
@@ -60,14 +60,14 @@ impl AnchorSegment {
 /// captured inside a popup can never be mistaken for one captured in the
 /// bar, even before any anchor/key resolution happens.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
-pub struct NodeRef {
+pub(crate) struct NodeRef {
     anchor: Vec<AnchorSegment>,
     relative_path: NodePath,
 }
 
 impl NodeRef {
     #[must_use]
-    pub const fn new(anchor: Vec<AnchorSegment>, relative_path: NodePath) -> Self {
+    pub(crate) const fn new(anchor: Vec<AnchorSegment>, relative_path: NodePath) -> Self {
         Self {
             anchor,
             relative_path,
@@ -75,12 +75,12 @@ impl NodeRef {
     }
 
     #[must_use]
-    pub fn anchor(&self) -> &[AnchorSegment] {
+    pub(crate) fn anchor(&self) -> &[AnchorSegment] {
         &self.anchor
     }
 
     #[must_use]
-    pub const fn relative_path(&self) -> &NodePath {
+    pub(crate) const fn relative_path(&self) -> &NodePath {
         &self.relative_path
     }
 }
@@ -95,7 +95,7 @@ pub struct InteractionContext {
 
 impl InteractionContext {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         hovered: Option<NodeRef>,
         active: Option<NodeRef>,
         focused: Option<NodeRef>,
@@ -110,22 +110,22 @@ impl InteractionContext {
     }
 
     #[must_use]
-    pub const fn hovered(&self) -> Option<&NodeRef> {
+    pub(crate) const fn hovered(&self) -> Option<&NodeRef> {
         self.hovered.as_ref()
     }
 
     #[must_use]
-    pub const fn active(&self) -> Option<&NodeRef> {
+    pub(crate) const fn active(&self) -> Option<&NodeRef> {
         self.active.as_ref()
     }
 
     #[must_use]
-    pub const fn focused(&self) -> Option<&NodeRef> {
+    pub(crate) const fn focused(&self) -> Option<&NodeRef> {
         self.focused.as_ref()
     }
 
     #[must_use]
-    pub const fn is_monitor_focused(&self) -> bool {
+    pub(crate) const fn is_monitor_focused(&self) -> bool {
         self.is_monitor_focused
     }
 }

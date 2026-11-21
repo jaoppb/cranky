@@ -8,7 +8,7 @@ use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::Position;
 
 impl PointerHandler {
-    pub fn handle_button_press(
+    pub(crate) fn handle_button_press(
         &mut self,
         monitor_id: &MonitorId,
         pos: Position,
@@ -29,7 +29,7 @@ impl PointerHandler {
         }
     }
 
-    pub fn handle_button_release(
+    pub(crate) fn handle_button_release(
         &mut self,
         monitor_id: &MonitorId,
         pos: Position,
@@ -62,7 +62,7 @@ impl PointerHandler {
         let hit_cmd = hit
             .iter()
             .rev()
-            .find_map(|node| node.on_click().and_then(|handlers| handlers.get(&button)));
+            .find_map(|node| node.on_click().and_then(|handlers| handlers.get(button)));
 
         let mut actions = Vec::new();
         if let Some(cmd) = hit_cmd {

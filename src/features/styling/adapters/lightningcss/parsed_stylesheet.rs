@@ -4,7 +4,7 @@ use crate::features::styling::domain::{
 };
 use crate::features::styling::ports::{ParsedStyleSheetPort, PropertyReparser};
 
-pub struct LightningParsedStyleSheet {
+pub(crate) struct LightningParsedStyleSheet {
     name: StyleSheetName,
     rules: Vec<RuleEntry>,
     index: RuleIndex,
@@ -12,7 +12,7 @@ pub struct LightningParsedStyleSheet {
 
 impl LightningParsedStyleSheet {
     #[must_use]
-    pub fn new(name: StyleSheetName, rules: Vec<RuleEntry>) -> Self {
+    pub(crate) fn new(name: StyleSheetName, rules: Vec<RuleEntry>) -> Self {
         let index = RuleIndex::build(&rules);
         Self { name, rules, index }
     }

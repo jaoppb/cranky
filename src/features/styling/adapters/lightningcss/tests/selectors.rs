@@ -89,7 +89,9 @@ fn test_structural_pseudo_classes() {
         &LightningPropertyReparser,
     );
     assert_eq!(
-        style_only.border_radius().map(|radius| radius.value()),
+        style_only
+            .border_radius()
+            .map(crate::shared::config::domain::types::BorderRadius::value),
         Some(8.0)
     );
 

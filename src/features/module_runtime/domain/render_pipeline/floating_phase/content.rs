@@ -11,14 +11,14 @@ use std::collections::HashMap;
 ///
 /// An embedded module's host box is measured from what the child reported,
 /// so the same content under different reports is a different layout.
-pub type FloatingCache = HashMap<MonitorId, (StyledNode, Option<ChildSizesMap>, RenderNode)>;
+pub(crate) type FloatingCache = HashMap<MonitorId, (StyledNode, Option<ChildSizesMap>, RenderNode)>;
 
 /// What every floating kind is laid out with on one monitor during one render.
-pub struct FloatingPass<'a, F: CanvasFactory> {
-    pub monitor_id: &'a MonitorId,
-    pub canvas_factory: &'a mut F,
-    pub scale: Scale,
-    pub current_child_sizes: Option<&'a ChildSizesMap>,
+pub(crate) struct FloatingPass<'a, F: CanvasFactory> {
+    pub(crate) monitor_id: &'a MonitorId,
+    pub(crate) canvas_factory: &'a mut F,
+    pub(crate) scale: Scale,
+    pub(crate) current_child_sizes: Option<&'a ChildSizesMap>,
 }
 
 /// Fallback font used when a floating node's own CSS specifies none —

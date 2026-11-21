@@ -3,7 +3,7 @@ use super::super::query::ElementQuery;
 use super::model::{Combinator, CompiledSelector, SelectorStep};
 
 #[must_use]
-pub fn matches_selector(selector: &CompiledSelector, query: &ElementQuery<'_>) -> bool {
+pub(crate) fn matches_selector(selector: &CompiledSelector, query: &ElementQuery<'_>) -> bool {
     let Some(first_step) = selector.steps.first() else {
         return false;
     };
@@ -64,7 +64,7 @@ pub fn matches_selector(selector: &CompiledSelector, query: &ElementQuery<'_>) -
 }
 
 #[must_use]
-pub fn step_matches(step: &SelectorStep, query: &ElementQuery<'_>) -> bool {
+pub(crate) fn step_matches(step: &SelectorStep, query: &ElementQuery<'_>) -> bool {
     if let Some(tag) = &step.tag
         && tag != "*"
         && tag != &query.tag().to_lowercase()
@@ -105,7 +105,7 @@ pub fn step_matches(step: &SelectorStep, query: &ElementQuery<'_>) -> bool {
 }
 
 #[must_use]
-pub fn pseudo_matches(pseudo: &PseudoClass, query: &ElementQuery<'_>) -> bool {
+pub(crate) fn pseudo_matches(pseudo: &PseudoClass, query: &ElementQuery<'_>) -> bool {
     match pseudo {
         PseudoClass::Hover | PseudoClass::Active | PseudoClass::Focused => {
             query.pseudo_classes().contains(pseudo)
@@ -128,7 +128,7 @@ pub fn pseudo_matches(pseudo: &PseudoClass, query: &ElementQuery<'_>) -> bool {
 }
 
 #[must_use]
-pub fn nth_matches(step_size: i32, offset: i32, index_1based: usize) -> bool {
+pub(crate) fn nth_matches(step_size: i32, offset: i32, index_1based: usize) -> bool {
     let Ok(n_pos) = i32::try_from(index_1based) else {
         return false;
     };

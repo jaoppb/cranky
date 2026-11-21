@@ -30,7 +30,7 @@ impl ClassName {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -60,7 +60,7 @@ impl ClassNameList {
     /// # Errors
     ///
     /// Returns `StylingError::InvalidClassName` if any class name is invalid.
-    pub fn parse(classes: &str) -> Result<Self, StylingError> {
+    pub(crate) fn parse(classes: &str) -> Result<Self, StylingError> {
         let mut list = Vec::new();
         for item in classes.split_whitespace() {
             list.push(ClassName::new(item)?);
@@ -74,11 +74,11 @@ impl ClassNameList {
     }
 
     #[must_use]
-    pub fn as_slice(&self) -> &[ClassName] {
+    pub(crate) fn as_slice(&self) -> &[ClassName] {
         &self.0
     }
 
-    pub fn iter(&self) -> std::slice::Iter<'_, ClassName> {
+    pub(crate) fn iter(&self) -> std::slice::Iter<'_, ClassName> {
         self.0.iter()
     }
 }

@@ -11,7 +11,7 @@ pub struct MarginConfig {
 
 impl MarginConfig {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         top: MarginOffset,
         bottom: MarginOffset,
         left: MarginOffset,
@@ -26,27 +26,27 @@ impl MarginConfig {
     }
 
     #[must_use]
-    pub const fn top(&self) -> MarginOffset {
+    pub(crate) const fn top(&self) -> MarginOffset {
         self.top
     }
 
     #[must_use]
-    pub const fn bottom(&self) -> MarginOffset {
+    pub(crate) const fn bottom(&self) -> MarginOffset {
         self.bottom
     }
 
     #[must_use]
-    pub const fn left(&self) -> MarginOffset {
+    pub(crate) const fn left(&self) -> MarginOffset {
         self.left
     }
 
     #[must_use]
-    pub const fn right(&self) -> MarginOffset {
+    pub(crate) const fn right(&self) -> MarginOffset {
         self.right
     }
 
     #[must_use]
-    pub const fn with_partial_overrides(&self, partial: &PartialMarginConfig) -> Self {
+    pub(crate) const fn with_partial_overrides(&self, partial: &PartialMarginConfig) -> Self {
         let top = match partial.top() {
             Some(offset) => offset,
             None => self.top,
@@ -73,7 +73,7 @@ impl MarginConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct PartialMarginConfig {
+pub(crate) struct PartialMarginConfig {
     top: Option<MarginOffset>,
     bottom: Option<MarginOffset>,
     left: Option<MarginOffset>,
@@ -82,7 +82,7 @@ pub struct PartialMarginConfig {
 
 impl PartialMarginConfig {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         top: Option<MarginOffset>,
         bottom: Option<MarginOffset>,
         left: Option<MarginOffset>,
@@ -97,19 +97,19 @@ impl PartialMarginConfig {
     }
 
     #[must_use]
-    pub const fn top(&self) -> Option<MarginOffset> {
+    pub(crate) const fn top(&self) -> Option<MarginOffset> {
         self.top
     }
     #[must_use]
-    pub const fn bottom(&self) -> Option<MarginOffset> {
+    pub(crate) const fn bottom(&self) -> Option<MarginOffset> {
         self.bottom
     }
     #[must_use]
-    pub const fn left(&self) -> Option<MarginOffset> {
+    pub(crate) const fn left(&self) -> Option<MarginOffset> {
         self.left
     }
     #[must_use]
-    pub const fn right(&self) -> Option<MarginOffset> {
+    pub(crate) const fn right(&self) -> Option<MarginOffset> {
         self.right
     }
 }

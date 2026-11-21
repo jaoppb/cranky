@@ -1,7 +1,5 @@
 pub mod adapters;
 pub mod composite;
-pub mod domain;
+pub(crate) mod domain;
 pub mod ports;
-pub mod surface_parent;
-
-pub use surface_parent::SurfaceParent;
+mod surface_parent;

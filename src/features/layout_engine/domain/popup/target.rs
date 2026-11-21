@@ -9,7 +9,7 @@ pub struct PopupTarget {
 
 impl PopupTarget {
     #[must_use]
-    pub const fn new(module_id: ModuleId, monitor_id: MonitorId) -> Self {
+    pub(crate) const fn new(module_id: ModuleId, monitor_id: MonitorId) -> Self {
         Self {
             module_id,
             monitor_id,
@@ -17,12 +17,12 @@ impl PopupTarget {
     }
 
     #[must_use]
-    pub const fn module_id(&self) -> ModuleId {
+    pub(crate) const fn module_id(&self) -> ModuleId {
         self.module_id
     }
 
     #[must_use]
-    pub const fn monitor_id(&self) -> &MonitorId {
+    pub(crate) const fn monitor_id(&self) -> &MonitorId {
         &self.monitor_id
     }
 }
@@ -42,7 +42,7 @@ impl PopupExclusivity {
     /// `PopupBehavior`, so they're excluded from every arm up front rather
     /// than repeating the exclusion four times.
     #[must_use]
-    pub fn compute_conflicts(
+    pub(crate) fn compute_conflicts(
         active_popups: &[PopupTarget],
         target: &PopupTarget,
         ancestors: &[PopupTarget],

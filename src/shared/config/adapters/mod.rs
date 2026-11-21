@@ -19,14 +19,14 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{error, info, info_span};
 
-pub struct ConfigAdapter<V: FontValidatorPort + Send + Sync + 'static> {
+pub(crate) struct ConfigAdapter<V: FontValidatorPort + Send + Sync + 'static> {
     config_path: PathBuf,
     validator: Arc<V>,
 }
 
 impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
     #[must_use]
-    pub fn new(validator: V, app_env: &crate::shared::env::domain::AppEnvironment) -> Self {
+    pub(crate) fn new(validator: V, app_env: &crate::shared::env::domain::AppEnvironment) -> Self {
         let config_path = app_env.home().as_path().join(".config/cranky/config.toml");
         Self {
             config_path,
@@ -36,7 +36,7 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
 
     #[cfg(test)]
     #[must_use]
-    pub fn with_path(config_path: PathBuf, validator: V) -> Self {
+    pub(crate) fn with_path(config_path: PathBuf, validator: V) -> Self {
         Self {
             config_path,
             validator: Arc::new(validator),
@@ -48,7 +48,7 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
     /// # Errors
     ///
     /// Returns `ConfigAdapterError` if reading or parsing the configuration fails.
-    pub fn load_initial(&self) -> Result<Config, ConfigAdapterError> {
+    pub(crate) fn load_initial(&self) -> Result<Config, ConfigAdapterError> {
         if self.config_path.exists() {
             self.load_from_path(&self.config_path)
         } else {
@@ -82,7 +82,7 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
     /// # Errors
     ///
     /// Returns `ConfigAdapterError` if creating or starting the filesystem watcher fails.
-    pub fn watch(&self, hub: &SignalHub) -> Result<Box<dyn Watcher>, ConfigAdapterError> {
+    pub(crate) fn watch(&self, hub: &SignalHub) -> Result<Box<dyn Watcher>, ConfigAdapterError> {
         let config_tx = hub.config_tx();
         let path = self.config_path.clone();
         let validator = self.validator.clone();

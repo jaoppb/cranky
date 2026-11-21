@@ -4,11 +4,11 @@ use tiny_skia::{
     Color as SkiaColor, GradientStop, LinearGradient, Paint, Point, Rect, SpreadMode, Transform,
 };
 
-pub(crate) fn to_skia_color(color: DomainColor) -> SkiaColor {
+fn to_skia_color(color: DomainColor) -> SkiaColor {
     SkiaColor::from_rgba8(color.blue(), color.green(), color.red(), color.alpha())
 }
 
-pub(crate) fn get_paint(color: &DrawingColor, rect: Rect) -> Paint<'static> {
+pub(super) fn get_paint(color: &DrawingColor, rect: Rect) -> Paint<'static> {
     let mut paint = Paint {
         anti_alias: true,
         ..Paint::default()
@@ -57,7 +57,7 @@ pub(crate) fn get_paint(color: &DrawingColor, rect: Rect) -> Paint<'static> {
 }
 
 #[must_use]
-pub const fn get_family(name: &str) -> Family<'_> {
+pub(super) const fn get_family(name: &str) -> Family<'_> {
     if name.eq_ignore_ascii_case("monospace") {
         Family::Monospace
     } else if name.eq_ignore_ascii_case("serif") {

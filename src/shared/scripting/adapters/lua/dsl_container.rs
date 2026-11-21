@@ -5,7 +5,7 @@ use crate::features::vdom::domain::VNode;
 use crate::shared::primitives::{ModuleInstanceId, ModuleName, ModuleOptions};
 use mlua::Lua;
 
-pub(crate) fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
+pub(super) fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
     let mlua::Value::Table(table) = val else {
         return Ok(VNode::new_flex(Vec::new(), None, None, None, None, None));
     };
@@ -45,7 +45,7 @@ pub(crate) fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
     Ok(VNode::new_flex(children_vec, None, None, None, None, None))
 }
 
-pub(crate) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
+pub(super) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
     let mlua::Value::Table(table) = val else {
         return Ok(VNode::new_grid(Vec::new(), None, None, None, None, None));
     };
@@ -85,7 +85,7 @@ pub(crate) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
     Ok(VNode::new_grid(children_vec, None, None, None, None, None))
 }
 
-pub(crate) fn parse_rect_node(lua: &Lua, val: Option<mlua::Value>) -> mlua::Result<VNode> {
+pub(super) fn parse_rect_node(lua: &Lua, val: Option<mlua::Value>) -> mlua::Result<VNode> {
     match val {
         Some(mlua::Value::Table(table)) => {
             let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
@@ -113,7 +113,7 @@ pub(crate) fn parse_rect_node(lua: &Lua, val: Option<mlua::Value>) -> mlua::Resu
     }
 }
 
-pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
+pub(super) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
     match val {
         mlua::Value::Table(table) => {
             let name_str = table.get::<String>("name")?;

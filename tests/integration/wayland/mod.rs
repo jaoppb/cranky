@@ -2,8 +2,8 @@
 //! headless sway: connect, bind, configure, submit, and the wait on the
 //! display socket that #30 rewrites.
 
-mod bar;
-mod sway;
+pub mod bar;
+pub mod sway;
 
 use crate::cases::{Case, case};
 use crate::support::{Outcome, ensure, ensure_eq};
@@ -18,7 +18,7 @@ const BLUE: Rgb = [0, 0, 255];
 /// Rounds of the socket-wait case: each needs a fresh read of the socket.
 const ROUNDS: u8 = 50;
 
-pub fn cases() -> Vec<Case> {
+pub(crate) fn cases() -> Vec<Case> {
     vec![
         case!(wayland::binds_the_output),
         case!(wayland::reserves_its_exclusive_zone_once_configured),

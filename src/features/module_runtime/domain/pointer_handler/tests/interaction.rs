@@ -85,10 +85,9 @@ mod tests {
 
     #[test]
     fn test_popup_dismissed_event() {
-        let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
 
-        let outcome = handler.handle_dismissal(
+        let outcome = PointerHandler::handle_dismissal(
             crate::shared::events::core::SurfaceLifecycleEvent::PopupDismissed,
             &mon,
         );
@@ -104,10 +103,9 @@ mod tests {
 
     #[test]
     fn test_panel_dismissed_event() {
-        let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
 
-        let outcome = handler.handle_dismissal(
+        let outcome = PointerHandler::handle_dismissal(
             crate::shared::events::core::SurfaceLifecycleEvent::PanelDismissed,
             &mon,
         );

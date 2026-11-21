@@ -48,7 +48,7 @@ pub struct PipelineDiff {
 
 impl PipelineDiff {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         new_vdom: VNode,
         vdom_dirty: bool,
         bounds_changed: bool,
@@ -63,22 +63,22 @@ impl PipelineDiff {
     }
 
     #[must_use]
-    pub const fn new_vdom(&self) -> &VNode {
+    pub(crate) const fn new_vdom(&self) -> &VNode {
         &self.new_vdom
     }
 
     #[must_use]
-    pub const fn vdom_dirty(&self) -> bool {
+    pub(crate) const fn vdom_dirty(&self) -> bool {
         self.vdom_dirty
     }
 
     #[must_use]
-    pub const fn bounds_changed(&self) -> bool {
+    pub(crate) const fn bounds_changed(&self) -> bool {
         self.bounds_changed
     }
 
     #[must_use]
-    pub const fn child_sizes_changed(&self) -> bool {
+    pub(crate) const fn child_sizes_changed(&self) -> bool {
         self.child_sizes_changed
     }
 }

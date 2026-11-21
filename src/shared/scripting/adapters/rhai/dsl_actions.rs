@@ -12,7 +12,7 @@ macro_rules! register_script_call_aliases {
     };
 }
 
-pub(crate) fn register_rhai_ui_actions(engine: &mut Engine) {
+pub(super) fn register_rhai_ui_actions(engine: &mut Engine) {
     engine.register_fn("exec", |target: rhai::Map, cmd: String| -> Dynamic {
         let is_action = target
             .get("_ns")

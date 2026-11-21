@@ -4,8 +4,8 @@ pub mod layout;
 pub mod module;
 pub mod registry;
 
-pub use dependencies::*;
+pub(crate) use dependencies::*;
 pub use errors::*;
 pub use layout::*;
 pub use module::*;
-pub use registry::*;
+pub(crate) use registry::*;

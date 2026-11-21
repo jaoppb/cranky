@@ -7,7 +7,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type")]
-pub enum VNodeKind {
+pub(crate) enum VNodeKind {
     #[serde(rename = "flex")]
     Flex {
         #[serde(default)]
@@ -42,7 +42,7 @@ pub enum VNodeKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ModuleParams {
+pub(crate) struct ModuleParams {
     name: ModuleName,
     instance_id: Option<ModuleInstanceId>,
     options: ModuleOptions,
@@ -50,7 +50,7 @@ pub struct ModuleParams {
 
 impl ModuleParams {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         name: ModuleName,
         instance_id: Option<ModuleInstanceId>,
         options: ModuleOptions,
@@ -63,22 +63,7 @@ impl ModuleParams {
     }
 
     #[must_use]
-    pub fn into_parts(self) -> (ModuleName, Option<ModuleInstanceId>, ModuleOptions) {
+    pub(crate) fn into_parts(self) -> (ModuleName, Option<ModuleInstanceId>, ModuleOptions) {
         (self.name, self.instance_id, self.options)
-    }
-
-    #[must_use]
-    pub const fn name(&self) -> &ModuleName {
-        &self.name
-    }
-
-    #[must_use]
-    pub const fn instance_id(&self) -> Option<&ModuleInstanceId> {
-        self.instance_id.as_ref()
-    }
-
-    #[must_use]
-    pub const fn options(&self) -> &ModuleOptions {
-        &self.options
     }
 }

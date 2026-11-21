@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum PanelLayer {
+pub(crate) enum PanelLayer {
     Background,
     Bottom,
     #[default]
@@ -12,7 +12,7 @@ pub enum PanelLayer {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(from = "ExclusiveZoneHelper")]
-pub struct ExclusiveZone(i32);
+pub(crate) struct ExclusiveZone(i32);
 
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -35,29 +35,24 @@ impl From<ExclusiveZoneHelper> for ExclusiveZone {
 
 impl ExclusiveZone {
     #[must_use]
-    pub const fn new(value: i32) -> Self {
+    pub(crate) const fn new(value: i32) -> Self {
         Self(value)
     }
 
     #[must_use]
-    pub const fn auto() -> Self {
+    pub(crate) const fn auto() -> Self {
         Self(-1)
     }
 
     #[must_use]
-    pub const fn none() -> Self {
+    pub(crate) const fn none() -> Self {
         Self(0)
-    }
-
-    #[must_use]
-    pub const fn value(&self) -> i32 {
-        self.0
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum KeyboardInteractivity {
+pub(crate) enum KeyboardInteractivity {
     #[default]
     None,
     Exclusive,

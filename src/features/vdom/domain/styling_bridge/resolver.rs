@@ -56,7 +56,7 @@ impl<'a> Interaction<'a> {
 
 impl VNode {
     #[must_use]
-    pub fn resolve_styles(
+    pub(crate) fn resolve_styles(
         &self,
         resolver: &dyn StyleResolverPort,
         interaction: Option<&InteractionContext>,

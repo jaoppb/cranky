@@ -1,11 +1,11 @@
-mod child_module;
+pub mod child_module;
 mod module_key;
-mod module_site;
+pub mod module_site;
 mod size_constraint;
-mod surface;
+pub mod surface;
 
-pub use child_module::{ChildModuleLayout, ChildReport, ChildSizesMap};
-pub use module_key::ModuleKey;
-pub use module_site::ModuleSite;
+pub(crate) use child_module::{ChildModuleLayout, ChildReport, ChildSizesMap};
+pub(crate) use module_key::ModuleKey;
+pub(crate) use module_site::ModuleSite;
 pub use size_constraint::{ChildBounds, SizeConstraint};
-pub use surface::LayoutSurface;
+pub(crate) use surface::LayoutSurface;

@@ -1,10 +1,9 @@
 pub mod identity;
-pub mod pointer_handler;
+pub(super) mod pointer_handler;
 pub mod render_pipeline;
 
-pub use identity::ModuleIdentity;
-pub use pointer_handler::{PointerAction, PointerHandler};
-pub use render_pipeline::{
-    FloatingLayouts, LayoutContext, ModuleSizeMeasurer, PipelineDiff, PopupRenderLayout,
-    RenderOutcome, RenderPipeline, SizeChange,
-};
+pub(crate) use identity::ModuleIdentity;
+pub(in crate::features::module_runtime) use pointer_handler::{PointerAction, PointerHandler};
+#[cfg(test)]
+pub(crate) use render_pipeline::{FloatingLayouts, SizeChange};
+pub(crate) use render_pipeline::{LayoutContext, PopupRenderLayout, RenderOutcome, RenderPipeline};

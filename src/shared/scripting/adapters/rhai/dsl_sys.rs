@@ -11,7 +11,7 @@ macro_rules! register_rhai_log_methods {
     };
 }
 
-pub(crate) fn register_rhai_sys(engine: &mut Engine) {
+pub(super) fn register_rhai_sys(engine: &mut Engine) {
     // env & hostname
     engine.register_fn("env", |_target: rhai::Map, key: String| -> Dynamic {
         std::env::var(key).map_or(Dynamic::UNIT, Dynamic::from)

@@ -3,7 +3,7 @@ use crate::shared::events::signals::{SignalHub, SignalKind};
 use crate::shared::primitives::ScriptMonitorInfo;
 use rhai::{AST, Dynamic, Engine, Scope};
 
-pub(crate) struct RhaiStateSynchronizer;
+pub(super) struct RhaiStateSynchronizer;
 
 impl RhaiStateSynchronizer {
     pub(crate) fn sync(

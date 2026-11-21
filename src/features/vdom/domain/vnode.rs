@@ -31,18 +31,12 @@ pub struct VNode {
 
 impl VNode {
     #[must_use]
-    pub const fn node_id(&self) -> NodeId {
+    pub(crate) const fn node_id(&self) -> NodeId {
         self.node_id
     }
 
     #[must_use]
-    pub const fn with_node_id(mut self, node_id: NodeId) -> Self {
-        self.node_id = node_id;
-        self
-    }
-
-    #[must_use]
-    pub const fn key(&self) -> Option<&NodeKey> {
+    pub(crate) const fn key(&self) -> Option<&NodeKey> {
         self.key.as_ref()
     }
 
@@ -53,54 +47,54 @@ impl VNode {
     }
 
     #[must_use]
-    pub const fn element_id(&self) -> Option<&ElementId> {
+    pub(crate) const fn element_id(&self) -> Option<&ElementId> {
         self.id.as_ref()
     }
 
     #[must_use]
-    pub const fn class_names(&self) -> Option<&ClassNameList> {
+    pub(crate) const fn class_names(&self) -> Option<&ClassNameList> {
         self.class.as_ref()
     }
 
     #[must_use]
-    pub const fn on_click(&self) -> Option<&ClickHandlers> {
+    pub(crate) const fn on_click(&self) -> Option<&ClickHandlers> {
         self.on_click.as_ref()
     }
 
     #[must_use]
-    pub const fn on_hover(&self) -> Option<&UiAction> {
+    pub(crate) const fn on_hover(&self) -> Option<&UiAction> {
         self.on_hover.as_ref()
     }
 
     #[must_use]
-    pub fn tooltip(&self) -> Option<&Self> {
+    pub(crate) fn tooltip(&self) -> Option<&Self> {
         self.tooltip.as_deref()
     }
 
     #[must_use]
-    pub const fn popup(&self) -> Option<&super::floating::PopupSpec> {
+    pub(crate) const fn popup(&self) -> Option<&super::floating::PopupSpec> {
         self.popup.as_ref()
     }
 
     #[must_use]
-    pub fn with_popup(mut self, popup: super::floating::PopupSpec) -> Self {
+    pub(crate) fn with_popup(mut self, popup: super::floating::PopupSpec) -> Self {
         self.popup = Some(popup);
         self
     }
 
     #[must_use]
-    pub const fn panel(&self) -> Option<&super::floating::PanelSpec> {
+    pub(crate) const fn panel(&self) -> Option<&super::floating::PanelSpec> {
         self.panel.as_ref()
     }
 
     #[must_use]
-    pub fn with_panel(mut self, panel: super::floating::PanelSpec) -> Self {
+    pub(crate) fn with_panel(mut self, panel: super::floating::PanelSpec) -> Self {
         self.panel = Some(panel);
         self
     }
 
     #[must_use]
-    pub const fn tag(&self) -> NodeTag {
+    pub(crate) const fn tag(&self) -> NodeTag {
         match &self.kind {
             VNodeKind::Flex { .. } => NodeTag::Flex,
             VNodeKind::Grid { .. } => NodeTag::Grid,
@@ -113,31 +107,20 @@ impl VNode {
     }
 
     #[must_use]
-    pub const fn kind(&self) -> &VNodeKind {
+    pub(crate) const fn kind(&self) -> &VNodeKind {
         &self.kind
     }
 
-    pub const fn kind_mut(&mut self) -> &mut VNodeKind {
-        &mut self.kind
-    }
-
     #[must_use]
-    pub const fn children(&self) -> &[Self] {
+    pub(crate) const fn children(&self) -> &[Self] {
         match &self.kind {
             VNodeKind::Flex { children } | VNodeKind::Grid { children } => children.as_slice(),
             _ => &[],
         }
     }
 
-    pub const fn children_mut(&mut self) -> Option<&mut Vec<Self>> {
-        match &mut self.kind {
-            VNodeKind::Flex { children } | VNodeKind::Grid { children } => Some(children),
-            _ => None,
-        }
-    }
-
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         match &self.kind {
             VNodeKind::Flex { children } | VNodeKind::Grid { children } => children.is_empty(),
             VNodeKind::Text { text } => text.as_str().trim().is_empty(),

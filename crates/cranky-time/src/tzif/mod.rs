@@ -17,7 +17,7 @@ const MAX_KINDS: usize = 256;
 const OFFSET_RANGE: std::ops::RangeInclusive<i64> = -93_599..=93_599;
 
 /// `None` when the bytes are not one whole, valid zone file.
-pub fn parse(bytes: &[u8]) -> Option<Zone> {
+pub(crate) fn parse(bytes: &[u8]) -> Option<Zone> {
     let mut reader = Reader { rest: bytes };
     let (version, counts) = header(&mut reader)?;
     if version == 0 {

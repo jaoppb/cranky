@@ -4,14 +4,14 @@ use super::priority::RulePriority;
 /// One declaration set that matched an element, tagged with its full cascade
 /// priority. `fold_matches` sorts these into cascade order and applies them.
 #[derive(Debug, Clone)]
-pub struct MatchedRule {
+pub(crate) struct MatchedRule {
     priority: RulePriority,
     style: DeclaredStyle,
 }
 
 impl MatchedRule {
     #[must_use]
-    pub const fn new(priority: RulePriority, style: DeclaredStyle) -> Self {
+    pub(crate) const fn new(priority: RulePriority, style: DeclaredStyle) -> Self {
         Self { priority, style }
     }
 }
@@ -24,7 +24,7 @@ impl MatchedRule {
 /// Inheritance is resolved separately, by `DeclaredStyle::collapse`, once
 /// the caller has a value to inherit from.
 #[must_use]
-pub fn fold_matches(mut matches: Vec<MatchedRule>) -> DeclaredStyle {
+pub(crate) fn fold_matches(mut matches: Vec<MatchedRule>) -> DeclaredStyle {
     matches.sort_by_key(|matched| matched.priority);
     let mut result = DeclaredStyle::default();
     for matched in &matches {

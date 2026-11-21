@@ -1,5 +1,5 @@
 mod adapter;
-pub(super) mod fixture;
+pub mod fixture;
 mod floating_anchor_popup;
 mod floating_anchor_tooltip;
 mod input_region;

@@ -3,10 +3,10 @@ use crate::features::systray::domain::{
     IconName, SystrayIcon, SystrayTooltip, SystrayTooltipDescription, SystrayTooltipTitle,
 };
 
-pub type RawTooltip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);
+pub(super) type RawTooltip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);
 
 #[must_use]
-pub fn clean_sni_text(input: &str) -> String {
+pub(super) fn clean_sni_text(input: &str) -> String {
     let text = input
         .replace("<br>", "\n")
         .replace("<br/>", "\n")
@@ -36,7 +36,7 @@ pub fn clean_sni_text(input: &str) -> String {
         .to_string()
 }
 
-pub fn parse_raw_tooltip(variant: zbus::OwnedVariant) -> Option<SystrayTooltip> {
+pub(super) fn parse_raw_tooltip(variant: zbus::OwnedVariant) -> Option<SystrayTooltip> {
     if let Ok((icon_name, pixmap, title, description)) = RawTooltip::try_from(variant) {
         let icon_name_opt = if icon_name.is_empty() {
             None

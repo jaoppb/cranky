@@ -5,12 +5,12 @@ use mlua::Lua;
 use std::sync::Mutex;
 
 #[cfg(test)]
-pub struct LuaScriptLoader;
+pub(crate) struct LuaScriptLoader;
 
 #[cfg(test)]
 impl LuaScriptLoader {
     #[must_use]
-    pub fn load_built_in(name: &str) -> Option<String> {
+    pub(crate) fn load_built_in(name: &str) -> Option<String> {
         match name {
             "clock" => Some(include_str!("../../../../../assets/widgets/clock.lua").to_string()),
             "calendar" => {
@@ -56,7 +56,7 @@ impl LuaModule {
 
     #[cfg(test)]
     #[must_use]
-    pub fn built_in(name: &str) -> Option<Self> {
+    pub(crate) fn built_in(name: &str) -> Option<Self> {
         LuaScriptLoader::load_built_in(name).map(|source| Self::new(name.to_string(), source))
     }
 }

@@ -9,15 +9,20 @@ use crate::shared::rendering::ports::canvas::CanvasFactory;
 /// The pipeline's layout of an open popup: its anchor (on the parent's own
 /// tree), the laid-out content, and the offset the script requested.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PopupRenderLayout {
+pub(crate) struct PopupRenderLayout {
     anchor_rect: Rect,
     node: RenderNode,
     offset: Option<PopupOffset>,
 }
 
 impl PopupRenderLayout {
+    #[cfg(test)]
     #[must_use]
-    pub const fn new(anchor_rect: Rect, node: RenderNode, offset: Option<PopupOffset>) -> Self {
+    pub(crate) const fn new(
+        anchor_rect: Rect,
+        node: RenderNode,
+        offset: Option<PopupOffset>,
+    ) -> Self {
         Self {
             anchor_rect,
             node,
@@ -26,17 +31,17 @@ impl PopupRenderLayout {
     }
 
     #[must_use]
-    pub const fn anchor_rect(&self) -> Rect {
+    pub(crate) const fn anchor_rect(&self) -> Rect {
         self.anchor_rect
     }
 
     #[must_use]
-    pub const fn node(&self) -> &RenderNode {
+    pub(crate) const fn node(&self) -> &RenderNode {
         &self.node
     }
 
     #[must_use]
-    pub const fn offset(&self) -> Option<PopupOffset> {
+    pub(crate) const fn offset(&self) -> Option<PopupOffset> {
         self.offset
     }
 }

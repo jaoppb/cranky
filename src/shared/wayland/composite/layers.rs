@@ -3,7 +3,7 @@ use crate::shared::primitives::{ModuleId, MonitorId, Position};
 
 /// One embedded module's rendered pixels, positioned inside the popup.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChildLayer {
+pub(crate) struct ChildLayer {
     module_id: ModuleId,
     monitor_id: MonitorId,
     origin: Position,
@@ -12,35 +12,35 @@ pub struct ChildLayer {
 
 impl ChildLayer {
     #[must_use]
-    pub const fn module_id(&self) -> ModuleId {
+    pub(crate) const fn module_id(&self) -> ModuleId {
         self.module_id
     }
 
     #[must_use]
-    pub const fn monitor_id(&self) -> &MonitorId {
+    pub(crate) const fn monitor_id(&self) -> &MonitorId {
         &self.monitor_id
     }
 
     #[must_use]
-    pub const fn origin(&self) -> &Position {
+    pub(crate) const fn origin(&self) -> &Position {
         &self.origin
     }
 
     #[must_use]
-    pub const fn buffer(&self) -> &RenderBuffer {
+    pub(crate) const fn buffer(&self) -> &RenderBuffer {
         &self.buffer
     }
 }
 
 /// Ordered set of child layers, bottom to top.
 #[derive(Debug, Default)]
-pub struct CompositeLayers {
+pub(crate) struct CompositeLayers {
     layers: Vec<ChildLayer>,
 }
 
 impl CompositeLayers {
     /// Replaces the module's layer in place (keeping its z-position) or adds it on top.
-    pub fn upsert(
+    pub(crate) fn upsert(
         &mut self,
         module_id: ModuleId,
         monitor_id: MonitorId,
@@ -63,24 +63,26 @@ impl CompositeLayers {
         }
     }
 
-    pub fn remove(&mut self, module_id: ModuleId) {
+    #[cfg(test)]
+    pub(crate) fn remove(&mut self, module_id: ModuleId) {
         self.layers.retain(|layer| layer.module_id != module_id);
     }
 
     #[must_use]
-    pub fn get(&self, module_id: ModuleId) -> Option<&ChildLayer> {
+    pub(crate) fn get(&self, module_id: ModuleId) -> Option<&ChildLayer> {
         self.layers
             .iter()
             .find(|layer| layer.module_id == module_id)
     }
 
     /// Layers from bottom to top.
-    pub fn iter(&self) -> impl Iterator<Item = &ChildLayer> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &ChildLayer> {
         self.layers.iter()
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub(crate) const fn is_empty(&self) -> bool {
         self.layers.is_empty()
     }
 }

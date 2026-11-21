@@ -79,7 +79,7 @@ fn register_rhai_module_and_floating(engine: &mut Engine) {
     });
 }
 
-pub(crate) fn register_rhai_ui_elements(engine: &mut Engine) {
+pub(super) fn register_rhai_ui_elements(engine: &mut Engine) {
     register_rhai_flex_and_grid(engine);
     register_rhai_leaf_elements(engine);
     register_rhai_module_and_floating(engine);

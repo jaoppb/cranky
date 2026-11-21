@@ -3,7 +3,7 @@ use crate::features::styling::domain::{
 };
 use std::sync::Arc;
 
-pub trait StyleReloadSender: Send + Sync {
+pub(crate) trait StyleReloadSender: Send + Sync {
     fn reload_style(&self, name: StyleSheetName);
 }
 
@@ -61,7 +61,7 @@ pub trait CssParserPort: Send + Sync {
     ) -> Result<Box<dyn ParsedStyleSheetPort>, StylingError>;
 }
 
-pub trait StyleLoaderPort: Send + Sync {
+pub(crate) trait StyleLoaderPort: Send + Sync {
     /// Loads a stylesheet from disk.
     ///
     /// # Errors

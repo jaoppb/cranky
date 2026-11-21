@@ -2,7 +2,7 @@ use crate::features::systray::adapters::icon_resolver::{
     ICON_CACHE, InMemorySystrayIconCache, resolve_icon,
 };
 use crate::features::systray::domain::{IconCacheKey, IconImage, IconName, IconThemePath};
-use crate::features::systray::ports::SystrayIconCachePort;
+use crate::features::systray::ports::{CachedIcon, SystrayIconCachePort};
 
 #[test]
 fn test_in_memory_systray_icon_cache() {
@@ -20,7 +20,7 @@ fn test_in_memory_systray_icon_cache() {
     );
     cache.insert(key.clone(), Some(icon_img.clone()));
 
-    assert_eq!(cache.get(&key), Some(Some(icon_img)));
+    assert_eq!(cache.get(&key), Some(CachedIcon::Image(icon_img)));
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn test_resolve_icon_negative_cache_allows_pixmap_fallback() {
         assert!(icon_none.is_none());
 
         let key = IconCacheKey::new(IconName::new("nonexistent-theme-icon-67890"), None);
-        assert_eq!(ICON_CACHE.get(&key), Some(None));
+        assert_eq!(ICON_CACHE.get(&key), Some(CachedIcon::Unresolved));
 
         let pixmap = vec![(1, 1, vec![255, 5, 15, 25])];
         let icon_with_pixmap = resolve_icon(icon_name, None, Some(pixmap)).await;

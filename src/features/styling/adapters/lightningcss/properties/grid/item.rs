@@ -4,7 +4,7 @@ use crate::features::styling::domain::{ComputedStyle, GridLinePlacement, GridPla
 use lightningcss::properties::Property;
 use lightningcss::stylesheet::PrinterOptions;
 
-pub fn apply_grid_item_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
+pub(crate) fn apply_grid_item_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     let Ok(full) = prop.to_css_string(false, PrinterOptions::default()) else {
         return false;
     };
@@ -23,6 +23,7 @@ pub fn apply_grid_item_properties(style: &mut ComputedStyle, prop: &Property<'_>
             let start = parse_single_placement(val);
             let end = style
                 .grid_column()
+                .copied()
                 .map_or(GridPlacement::Auto, GridLinePlacement::end);
             style.set_grid_column(GridLinePlacement::new(start, end));
             true
@@ -31,6 +32,7 @@ pub fn apply_grid_item_properties(style: &mut ComputedStyle, prop: &Property<'_>
             let end = parse_single_placement(val);
             let start = style
                 .grid_column()
+                .copied()
                 .map_or(GridPlacement::Auto, GridLinePlacement::start);
             style.set_grid_column(GridLinePlacement::new(start, end));
             true
@@ -43,6 +45,7 @@ pub fn apply_grid_item_properties(style: &mut ComputedStyle, prop: &Property<'_>
             let start = parse_single_placement(val);
             let end = style
                 .grid_row()
+                .copied()
                 .map_or(GridPlacement::Auto, GridLinePlacement::end);
             style.set_grid_row(GridLinePlacement::new(start, end));
             true
@@ -51,6 +54,7 @@ pub fn apply_grid_item_properties(style: &mut ComputedStyle, prop: &Property<'_>
             let end = parse_single_placement(val);
             let start = style
                 .grid_row()
+                .copied()
                 .map_or(GridPlacement::Auto, GridLinePlacement::start);
             style.set_grid_row(GridLinePlacement::new(start, end));
             true

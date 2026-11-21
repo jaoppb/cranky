@@ -3,7 +3,7 @@ use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{LogicalPx, PhysicalPx, Scale, Size};
 use cosmic_text::{Attrs, Buffer, FontSystem, Metrics, Shaping};
 
-pub struct CosmicTextMeasurer<'a> {
+pub(crate) struct CosmicTextMeasurer<'a> {
     font_system: &'a mut FontSystem,
     scale: Scale,
     default_font_family: FontFamily,
@@ -12,7 +12,7 @@ pub struct CosmicTextMeasurer<'a> {
 
 impl<'a> CosmicTextMeasurer<'a> {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         font_system: &'a mut FontSystem,
         scale: Scale,
         default_font_family: FontFamily,
@@ -39,7 +39,7 @@ impl crate::features::layout_engine::domain::TextMeasurer for CosmicTextMeasurer
         let size = font_size.unwrap_or(self.default_font_size).value();
         let family = font_family.unwrap_or(&self.default_font_family).as_str();
 
-        let physical_size = LogicalPx::new(size).apply_scale(&self.scale).value();
+        let physical_size = LogicalPx::new(size).apply_scale(self.scale).value();
         let metrics = Metrics::new(physical_size, physical_size * 1.0);
         let mut buffer = Buffer::new(self.font_system, metrics);
         let attrs = Attrs::new().family(get_family(family));
@@ -54,8 +54,8 @@ impl crate::features::layout_engine::domain::TextMeasurer for CosmicTextMeasurer
             physical_height += metrics.line_height;
         }
 
-        let width = PhysicalPx::new(physical_width).apply_inverse_scale(&self.scale);
-        let height = PhysicalPx::new(physical_height).apply_inverse_scale(&self.scale);
+        let width = PhysicalPx::new(physical_width).apply_inverse_scale(self.scale);
+        let height = PhysicalPx::new(physical_height).apply_inverse_scale(self.scale);
 
         Size::new(
             f32_to_u32(width.value().ceil().max(0.0)),

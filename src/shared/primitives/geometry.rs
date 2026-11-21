@@ -13,12 +13,12 @@ impl Position {
     }
 
     #[must_use]
-    pub const fn x(&self) -> i32 {
+    pub(crate) const fn x(self) -> i32 {
         self.x
     }
 
     #[must_use]
-    pub const fn y(&self) -> i32 {
+    pub(crate) const fn y(self) -> i32 {
         self.y
     }
 }
@@ -54,38 +54,38 @@ pub struct Rect {
 
 impl Rect {
     #[must_use]
-    pub const fn new(position: Position, size: Size) -> Self {
+    pub(crate) const fn new(position: Position, size: Size) -> Self {
         Self { position, size }
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn position(&self) -> &Position {
+    pub(crate) const fn position(&self) -> &Position {
         &self.position
     }
 
     #[must_use]
-    pub const fn size(&self) -> &Size {
+    pub(crate) const fn size(&self) -> &Size {
         &self.size
     }
 
     #[must_use]
-    pub const fn x(&self) -> i32 {
+    pub(crate) const fn x(&self) -> i32 {
         self.position.x()
     }
 
     #[must_use]
-    pub const fn y(&self) -> i32 {
+    pub(crate) const fn y(&self) -> i32 {
         self.position.y()
     }
 
     #[must_use]
-    pub const fn width(&self) -> u32 {
+    pub(crate) const fn width(&self) -> u32 {
         self.size.width()
     }
 
     #[must_use]
-    pub const fn height(&self) -> u32 {
+    pub(crate) const fn height(&self) -> u32 {
         self.size.height()
     }
 }
@@ -100,32 +100,32 @@ impl LogicalPx {
     }
 
     #[must_use]
-    pub const fn value(&self) -> f32 {
+    pub(crate) const fn value(self) -> f32 {
         self.0
     }
 
     #[must_use]
-    pub fn apply_scale(&self, scale: &Scale) -> PhysicalPx {
+    pub(crate) fn apply_scale(self, scale: Scale) -> PhysicalPx {
         PhysicalPx::new(self.0 * scale.value())
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct PhysicalPx(f32);
+pub(crate) struct PhysicalPx(f32);
 
 impl PhysicalPx {
     #[must_use]
-    pub const fn new(value: f32) -> Self {
+    pub(crate) const fn new(value: f32) -> Self {
         Self(value)
     }
 
     #[must_use]
-    pub const fn value(&self) -> f32 {
+    pub(crate) const fn value(self) -> f32 {
         self.0
     }
 
     #[must_use]
-    pub fn apply_inverse_scale(&self, scale: &Scale) -> LogicalPx {
+    pub(crate) fn apply_inverse_scale(self, scale: Scale) -> LogicalPx {
         if scale.value() == 0.0 {
             LogicalPx::new(0.0)
         } else {
@@ -144,22 +144,26 @@ impl Scale {
     }
 
     #[must_use]
-    pub const fn value(&self) -> f32 {
+    pub(crate) const fn value(self) -> f32 {
         self.0
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct BarWidth(u32);
+pub(crate) struct BarWidth(u32);
 
+#[cfg(test)]
 impl BarWidth {
+    #[cfg(test)]
     #[must_use]
-    pub const fn new(value: u32) -> Self {
+    pub(crate) const fn new(value: u32) -> Self {
         Self(value)
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn value(&self) -> u32 {
+    pub(crate) const fn value(self) -> u32 {
         self.0
     }
 }
@@ -169,7 +173,7 @@ pub struct BarHeight(u32);
 
 impl BarHeight {
     #[must_use]
-    pub const fn new(value: u32) -> Self {
+    pub(crate) const fn new(value: u32) -> Self {
         Self(value)
     }
 

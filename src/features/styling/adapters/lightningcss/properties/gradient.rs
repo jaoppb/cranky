@@ -13,7 +13,7 @@ use lightningcss::values::image::Image;
 /// mis-rendered — the same policy this codebase applies to every other
 /// unrenderable CSS construct.
 #[must_use]
-pub fn gradient_from_image(image: &Image<'_>) -> Option<DrawingColor> {
+pub(crate) fn gradient_from_image(image: &Image<'_>) -> Option<DrawingColor> {
     let Image::Gradient(gradient) = image else {
         if !matches!(image, Image::None) {
             tracing::warn!(

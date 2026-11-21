@@ -6,7 +6,7 @@ use crate::features::workspaces::domain::{
 use crate::shared::events::core::WindowManagerEvent;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HyprlandState {
+pub(crate) struct HyprlandState {
     workspaces: BTreeMap<WorkspaceId, Workspace>,
     monitors: BTreeMap<MonitorName, Monitor>,
     focused_monitor: Option<MonitorName>,
@@ -33,7 +33,7 @@ impl serde::Serialize for HyprlandState {
 
 impl HyprlandState {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         workspaces: BTreeMap<WorkspaceId, Workspace>,
         monitors: BTreeMap<MonitorName, Monitor>,
         focused_monitor: Option<MonitorName>,
@@ -46,22 +46,22 @@ impl HyprlandState {
     }
 
     #[must_use]
-    pub const fn monitors(&self) -> &BTreeMap<MonitorName, Monitor> {
+    pub(crate) const fn monitors(&self) -> &BTreeMap<MonitorName, Monitor> {
         &self.monitors
     }
 
     #[must_use]
-    pub const fn workspaces(&self) -> &BTreeMap<WorkspaceId, Workspace> {
+    pub(crate) const fn workspaces(&self) -> &BTreeMap<WorkspaceId, Workspace> {
         &self.workspaces
     }
 
     #[must_use]
-    pub const fn focused_monitor(&self) -> Option<&MonitorName> {
+    pub(crate) const fn focused_monitor(&self) -> Option<&MonitorName> {
         self.focused_monitor.as_ref()
     }
 
     #[must_use]
-    pub fn effective_focused_monitor(&self) -> Option<MonitorName> {
+    pub(crate) fn effective_focused_monitor(&self) -> Option<MonitorName> {
         if let Some(focused) = &self.focused_monitor {
             return Some(focused.clone());
         }
@@ -112,7 +112,7 @@ impl HyprlandState {
         }
     }
 
-    pub fn apply_event(&mut self, event: &WindowManagerEvent) {
+    pub(crate) fn apply_event(&mut self, event: &WindowManagerEvent) {
         match event {
             WindowManagerEvent::WorkspaceActivated { id, name } => {
                 self.apply_workspace_activated(id, name);

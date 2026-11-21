@@ -6,7 +6,7 @@ use super::types::{BorderRadius, BorderSize, FontFamily, FontSize, PaddingOffset
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum PopupBehavior {
+pub(crate) enum PopupBehavior {
     PerMonitor,
     PerModule,
     PerModuleAndMonitor,
@@ -17,7 +17,7 @@ pub enum PopupBehavior {
 /// How a module embedded in a popup is rendered: painted into the popup's own
 /// buffer (`Composite`) or as a separate Wayland subsurface (`Subsurface`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum PopupEmbed {
+pub(crate) enum PopupEmbed {
     #[default]
     Composite,
     Subsurface,
@@ -42,7 +42,11 @@ impl Default for PopupConfig {
 
 impl PopupConfig {
     #[must_use]
-    pub const fn new(behavior: PopupBehavior, offset: PopupOffset, embed: PopupEmbed) -> Self {
+    pub(crate) const fn new(
+        behavior: PopupBehavior,
+        offset: PopupOffset,
+        embed: PopupEmbed,
+    ) -> Self {
         Self {
             behavior,
             offset,
@@ -51,17 +55,17 @@ impl PopupConfig {
     }
 
     #[must_use]
-    pub const fn behavior(&self) -> PopupBehavior {
+    pub(crate) const fn behavior(&self) -> PopupBehavior {
         self.behavior
     }
 
     #[must_use]
-    pub const fn offset(&self) -> PopupOffset {
+    pub(crate) const fn offset(&self) -> PopupOffset {
         self.offset
     }
 
     #[must_use]
-    pub const fn embed(&self) -> PopupEmbed {
+    pub(crate) const fn embed(&self) -> PopupEmbed {
         self.embed
     }
 }
@@ -80,83 +84,91 @@ pub struct TooltipConfig {
 
 impl TooltipConfig {
     #[must_use]
-    pub fn with_background(mut self, background: DrawingColor) -> Self {
+    pub(crate) fn with_background(mut self, background: DrawingColor) -> Self {
         self.background = background;
         self
     }
 
     #[must_use]
-    pub fn with_border_color(mut self, border_color: DrawingColor) -> Self {
+    pub(crate) fn with_border_color(mut self, border_color: DrawingColor) -> Self {
         self.border_color = border_color;
         self
     }
 
     #[must_use]
-    pub fn with_text_color(mut self, text_color: DrawingColor) -> Self {
+    pub(crate) fn with_text_color(mut self, text_color: DrawingColor) -> Self {
         self.text_color = text_color;
         self
     }
 
     #[must_use]
-    pub fn with_font(mut self, font: Option<FontFamily>) -> Self {
+    pub(crate) fn with_font(mut self, font: Option<FontFamily>) -> Self {
         self.font = font;
         self
     }
 
     #[must_use]
-    pub const fn with_size(mut self, size: Option<FontSize>) -> Self {
+    pub(crate) const fn with_size(mut self, size: Option<FontSize>) -> Self {
         self.size = size;
         self
     }
 
     #[must_use]
-    pub const fn with_radius(mut self, radius: BorderRadius) -> Self {
+    pub(crate) const fn with_radius(mut self, radius: BorderRadius) -> Self {
         self.radius = radius;
         self
     }
 
     #[must_use]
-    pub const fn with_border_width(mut self, border_width: BorderSize) -> Self {
+    pub(crate) const fn with_border_width(mut self, border_width: BorderSize) -> Self {
         self.border_width = border_width;
         self
     }
 
     #[must_use]
-    pub const fn with_padding(mut self, padding: PaddingOffset) -> Self {
+    pub(crate) const fn with_padding(mut self, padding: PaddingOffset) -> Self {
         self.padding = padding;
         self
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn background(&self) -> &DrawingColor {
+    pub(crate) const fn background(&self) -> &DrawingColor {
         &self.background
     }
+    #[cfg(test)]
     #[must_use]
-    pub const fn border_color(&self) -> &DrawingColor {
+    pub(crate) const fn border_color(&self) -> &DrawingColor {
         &self.border_color
     }
+    #[cfg(test)]
     #[must_use]
-    pub const fn text_color(&self) -> &DrawingColor {
+    pub(crate) const fn text_color(&self) -> &DrawingColor {
         &self.text_color
     }
+    #[cfg(test)]
     #[must_use]
-    pub const fn font(&self) -> Option<&FontFamily> {
+    pub(crate) const fn font(&self) -> Option<&FontFamily> {
         self.font.as_ref()
     }
+    #[cfg(test)]
     #[must_use]
-    pub const fn size(&self) -> Option<FontSize> {
+    pub(crate) const fn size(&self) -> Option<FontSize> {
         self.size
     }
+    #[cfg(test)]
     #[must_use]
-    pub const fn radius(&self) -> BorderRadius {
+    pub(crate) const fn radius(&self) -> BorderRadius {
         self.radius
     }
+    #[cfg(test)]
     #[must_use]
-    pub const fn border_width(&self) -> BorderSize {
+    pub(crate) const fn border_width(&self) -> BorderSize {
         self.border_width
     }
+    #[cfg(test)]
     #[must_use]
-    pub const fn padding(&self) -> PaddingOffset {
+    pub(crate) const fn padding(&self) -> PaddingOffset {
         self.padding
     }
 }

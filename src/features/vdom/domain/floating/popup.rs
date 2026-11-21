@@ -55,7 +55,7 @@ impl From<PopupSpecHelper> for PopupSpec {
 
 impl PopupSpec {
     #[must_use]
-    pub const fn new(content: Box<VNode>) -> Self {
+    pub(crate) const fn new(content: Box<VNode>) -> Self {
         Self {
             content,
             anchor_direction: AnchorDirection::Auto,
@@ -64,29 +64,29 @@ impl PopupSpec {
     }
 
     #[must_use]
-    pub const fn with_anchor(mut self, anchor_direction: AnchorDirection) -> Self {
+    pub(crate) const fn with_anchor(mut self, anchor_direction: AnchorDirection) -> Self {
         self.anchor_direction = anchor_direction;
         self
     }
 
     #[must_use]
-    pub const fn with_offset(mut self, offset: Option<PopupOffset>) -> Self {
+    pub(crate) const fn with_offset(mut self, offset: Option<PopupOffset>) -> Self {
         self.offset = offset;
         self
     }
 
     #[must_use]
-    pub fn content(&self) -> &VNode {
+    pub(crate) fn content(&self) -> &VNode {
         &self.content
     }
 
     #[must_use]
-    pub const fn anchor_direction(&self) -> AnchorDirection {
+    pub(crate) const fn anchor_direction(&self) -> AnchorDirection {
         self.anchor_direction
     }
 
     #[must_use]
-    pub const fn offset(&self) -> Option<PopupOffset> {
+    pub(crate) const fn offset(&self) -> Option<PopupOffset> {
         self.offset
     }
 }

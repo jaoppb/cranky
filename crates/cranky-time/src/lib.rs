@@ -6,18 +6,18 @@
 //! every [`LocalTime`] names the [`Source`] its zone came from, down to UTC
 //! when nothing else can be read.
 
-mod civil;
+pub mod civil;
 mod clock;
-mod environment;
+pub mod environment;
 mod local_time;
-mod posix_parse;
-mod posix_rule;
-mod tzif;
-mod zone;
+pub mod posix_parse;
+pub mod posix_rule;
+pub mod tzif;
+pub mod zone;
 
 pub use clock::Clock;
 pub use environment::Environment;
 pub use local_time::{LocalTime, Source};
 
 #[cfg(test)]
-mod test_support;
+pub mod test_support;

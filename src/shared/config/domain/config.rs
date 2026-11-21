@@ -15,7 +15,7 @@ pub struct Config {
 
 impl Config {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         root: RootConfig,
         modules: ModulesConfig,
         rendering: RenderingMode,

@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-pub async fn run_signal_loop(
+pub(super) async fn run_signal_loop(
     proxy: StatusNotifierItemProxy<'static>,
     items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
     hub: Arc<SignalHub>,

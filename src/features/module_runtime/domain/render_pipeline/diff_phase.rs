@@ -7,7 +7,7 @@ use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::{ChildSizesMap, MonitorId};
 
 #[must_use]
-pub fn diff_pipeline(
+pub(crate) fn diff_pipeline(
     pipeline: &RenderPipeline,
     monitor_id: &MonitorId,
     port: &dyn AnyModulePort,

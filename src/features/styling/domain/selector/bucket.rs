@@ -11,7 +11,7 @@ use super::model::{CompiledSelector, RuleEntry, SelectorStep};
 /// invalidation to manage since a reparsed sheet just rebuilds a fresh
 /// index alongside its fresh rule list.
 #[derive(Debug, Default)]
-pub struct RuleIndex {
+pub(crate) struct RuleIndex {
     by_id: HashMap<String, Vec<usize>>,
     by_class: HashMap<String, Vec<usize>>,
     by_tag: HashMap<String, Vec<usize>>,
@@ -23,7 +23,7 @@ pub struct RuleIndex {
 
 impl RuleIndex {
     #[must_use]
-    pub fn build(rules: &[RuleEntry]) -> Self {
+    pub(crate) fn build(rules: &[RuleEntry]) -> Self {
         let mut index = Self::default();
         for (rule_index, rule) in rules.iter().enumerate() {
             for selector in &rule.selectors {
@@ -56,7 +56,7 @@ impl RuleIndex {
     /// the element actually has — not just one — is what guarantees a
     /// matching selector's bucket is always among the ones searched.
     #[must_use]
-    pub fn candidates(&self, query: &ElementQuery<'_>) -> Vec<usize> {
+    pub(crate) fn candidates(&self, query: &ElementQuery<'_>) -> Vec<usize> {
         let mut found = self.universal.clone();
 
         if let Some(id) = query.id()

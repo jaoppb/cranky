@@ -35,12 +35,12 @@ impl NodePath {
     }
 
     #[must_use]
-    pub const fn new(surface: SurfaceSpace, indices: Vec<usize>) -> Self {
+    pub(crate) const fn new(surface: SurfaceSpace, indices: Vec<usize>) -> Self {
         Self { surface, indices }
     }
 
     #[must_use]
-    pub fn child(&self, index: usize) -> Self {
+    pub(crate) fn child(&self, index: usize) -> Self {
         let mut indices = self.indices.clone();
         indices.push(index);
         Self {
@@ -50,24 +50,24 @@ impl NodePath {
     }
 
     #[must_use]
-    pub fn as_slice(&self) -> &[usize] {
+    pub(crate) fn as_slice(&self) -> &[usize] {
         &self.indices
     }
 
     #[must_use]
-    pub const fn surface(&self) -> SurfaceSpace {
+    pub(crate) const fn surface(&self) -> SurfaceSpace {
         self.surface
     }
 
     /// The root of its own surface — a popup's root is still root, not a
     /// descendant of whatever node opened it.
     #[must_use]
-    pub const fn is_root(&self) -> bool {
+    pub(crate) const fn is_root(&self) -> bool {
         self.indices.is_empty()
     }
 
     #[must_use]
-    pub fn starts_with(&self, prefix: &Self) -> bool {
+    pub(crate) fn starts_with(&self, prefix: &Self) -> bool {
         self.surface == prefix.surface && self.indices.starts_with(&prefix.indices)
     }
 
@@ -77,7 +77,7 @@ impl NodePath {
     /// The surface of `self` wins — `suffix` is always relative and shares
     /// the same surface by construction.
     #[must_use]
-    pub fn extend(&self, suffix: &Self) -> Self {
+    pub(crate) fn extend(&self, suffix: &Self) -> Self {
         let mut indices = self.indices.clone();
         indices.extend_from_slice(&suffix.indices);
         Self {

@@ -7,7 +7,7 @@ use mlua::Lua;
 /// # Errors
 ///
 /// Returns `mlua::Error` if table creation or function registration fails.
-pub fn register_cranky_api(lua: &Lua) -> mlua::Result<()> {
+pub(crate) fn register_cranky_api(lua: &Lua) -> mlua::Result<()> {
     let ui_table = lua.create_table()?;
     let element_table = create_ui_element_table(lua)?;
     let action_table = create_ui_action_table(lua)?;
@@ -43,6 +43,6 @@ pub fn register_cranky_api(lua: &Lua) -> mlua::Result<()> {
 /// # Errors
 ///
 /// Returns `mlua::Error` if table creation or function registration fails.
-pub fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
+pub(crate) fn register_vdom_dsl(lua: &Lua) -> mlua::Result<()> {
     register_cranky_api(lua)
 }

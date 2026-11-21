@@ -10,7 +10,7 @@ impl FontFamily {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -25,68 +25,63 @@ impl FontSize {
     }
 
     #[must_use]
-    pub const fn value(&self) -> f32 {
+    pub(crate) const fn value(self) -> f32 {
         self.0
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct BorderSize(f32);
+pub(crate) struct BorderSize(f32);
 
 impl BorderSize {
     #[must_use]
-    pub const fn new(size: f32) -> Self {
+    pub(crate) const fn new(size: f32) -> Self {
         Self(size)
     }
 
     #[must_use]
-    pub const fn value(&self) -> f32 {
+    pub(crate) const fn value(self) -> f32 {
         self.0
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
-pub struct BorderRadius(f32);
+pub(crate) struct BorderRadius(f32);
 
 impl BorderRadius {
     #[must_use]
-    pub const fn new(radius: f32) -> Self {
+    pub(crate) const fn new(radius: f32) -> Self {
         Self(radius)
     }
 
     #[must_use]
-    pub const fn value(&self) -> f32 {
+    pub(crate) const fn value(self) -> f32 {
         self.0
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
-pub struct MarginOffset(i32);
+pub(crate) struct MarginOffset(i32);
 
 impl MarginOffset {
     #[must_use]
-    pub const fn new(offset: i32) -> Self {
+    pub(crate) const fn new(offset: i32) -> Self {
         Self(offset)
     }
 
     #[must_use]
-    pub const fn value(&self) -> i32 {
+    pub(crate) const fn value(self) -> i32 {
         self.0
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct PaddingOffset(u32);
+pub(crate) struct PaddingOffset(u32);
 
 impl PaddingOffset {
     #[must_use]
-    pub const fn new(offset: u32) -> Self {
+    pub(crate) const fn new(offset: u32) -> Self {
         Self(offset)
-    }
-
-    #[must_use]
-    pub const fn value(&self) -> u32 {
-        self.0
     }
 }
 
@@ -99,7 +94,7 @@ pub enum VerticalAlignment {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RenderingMode {
+pub(crate) enum RenderingMode {
     Immediate { fps_limit: Option<u32> },
     Timebased { duration_ms: u64 },
 }
@@ -112,12 +107,12 @@ impl Default for RenderingMode {
 
 impl RenderingMode {
     #[must_use]
-    pub const fn new_immediate(fps_limit: Option<u32>) -> Self {
+    pub(crate) const fn new_immediate(fps_limit: Option<u32>) -> Self {
         Self::Immediate { fps_limit }
     }
 
     #[must_use]
-    pub const fn new_timebased(duration_ms: u64) -> Self {
+    pub(crate) const fn new_timebased(duration_ms: u64) -> Self {
         Self::Timebased { duration_ms }
     }
 }
@@ -127,12 +122,12 @@ pub struct EngineId(String);
 
 impl EngineId {
     #[must_use]
-    pub fn new(id: impl Into<String>) -> Self {
+    pub(crate) fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -144,16 +139,16 @@ impl std::fmt::Display for EngineId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FileExtension(String);
+pub(crate) struct FileExtension(String);
 
 impl FileExtension {
     #[must_use]
-    pub fn new(ext: impl Into<String>) -> Self {
+    pub(crate) fn new(ext: impl Into<String>) -> Self {
         Self(ext.into())
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -179,7 +174,7 @@ impl EngineSelection {
     }
 
     #[must_use]
-    pub const fn as_explicit(&self) -> Option<&EngineId> {
+    pub(crate) const fn as_explicit(&self) -> Option<&EngineId> {
         match self {
             Self::Explicit(id) => Some(id),
             Self::Auto => None,

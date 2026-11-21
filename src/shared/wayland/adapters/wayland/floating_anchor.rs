@@ -16,22 +16,22 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrL
 /// wlr-layer-shell only associates the popup that is the layer surface's
 /// direct child that way; a nested popup names its parent via
 /// `xdg_surface.get_popup(Some(parent), ...)` instead.
-pub(crate) enum FloatingParentRole {
+pub(super) enum FloatingParentRole {
     Layer(ZwlrLayerSurfaceV1),
     Popup(XdgSurface),
 }
 
-pub(crate) struct AnchorInfo {
-    pub bar_scale: i32,
-    pub parent_role: FloatingParentRole,
-    pub anchor_x: i32,
-    pub anchor_y: i32,
-    pub anchor_w: i32,
-    pub anchor_h: i32,
-    pub target_monitor_id: MonitorId,
+pub(super) struct AnchorInfo {
+    pub(crate) bar_scale: i32,
+    pub(crate) parent_role: FloatingParentRole,
+    pub(crate) anchor_x: i32,
+    pub(crate) anchor_y: i32,
+    pub(crate) anchor_w: i32,
+    pub(crate) anchor_h: i32,
+    pub(crate) target_monitor_id: MonitorId,
 }
 
-pub(crate) fn handle_conflicts(
+pub(super) fn handle_conflicts(
     state: &mut WaylandState,
     target: &PopupTarget,
     ancestor_kinds: &[FloatingKind],
@@ -59,7 +59,7 @@ pub(crate) fn handle_conflicts(
     }
 }
 
-pub(crate) fn resolve_anchor(
+pub(super) fn resolve_anchor(
     state: &WaylandState,
     kind: &FloatingKind,
     monitor_id: Option<MonitorId>,

@@ -32,7 +32,7 @@ impl VNode {
     }
 
     #[must_use]
-    pub fn new_grid(
+    pub(crate) fn new_grid(
         children: Vec<Self>,
         class: Option<ClassNameList>,
         id: Option<ElementId>,
@@ -78,7 +78,7 @@ impl VNode {
     }
 
     #[must_use]
-    pub fn new_progress(
+    pub(crate) fn new_progress(
         value: ProgressValue,
         orientation: Orientation,
         class: Option<ClassNameList>,
@@ -102,7 +102,7 @@ impl VNode {
     }
 
     #[must_use]
-    pub fn new_rect(
+    pub(crate) fn new_rect(
         class: Option<ClassNameList>,
         id: Option<ElementId>,
         on_click: Option<ClickHandlers>,
@@ -124,7 +124,7 @@ impl VNode {
     }
 
     #[must_use]
-    pub fn new_image(
+    pub(crate) fn new_image(
         data: impl Into<BinaryData>,
         pixel_size: Size,
         class: Option<ClassNameList>,
@@ -149,7 +149,7 @@ impl VNode {
     }
 
     #[must_use]
-    pub fn new_module(
+    pub(crate) fn new_module(
         params: ModuleParams,
         class: Option<ClassNameList>,
         id: Option<ElementId>,

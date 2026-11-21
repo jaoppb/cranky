@@ -103,7 +103,7 @@ fn apply_sizing_and_flex(style: &mut Style, computed: &ComputedStyle) {
 }
 
 #[must_use]
-pub fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
+pub(super) fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
     let computed = node.style();
     let col_gap = computed
         .column_gap()

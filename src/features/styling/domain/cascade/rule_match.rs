@@ -18,7 +18,7 @@ pub struct RuleMatch {
 
 impl RuleMatch {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         importance: Importance,
         specificity: Specificity,
         source_order: u32,
@@ -36,7 +36,7 @@ impl RuleMatch {
     /// sheet (among however many are composed together) it came from —
     /// producing a fully-ordered `MatchedRule` ready to fold.
     #[must_use]
-    pub fn into_matched(self, layer: Layer, sheet_index: u32) -> MatchedRule {
+    pub(crate) fn into_matched(self, layer: Layer, sheet_index: u32) -> MatchedRule {
         let priority = RulePriority::new(
             self.importance,
             layer,

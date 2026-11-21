@@ -4,6 +4,6 @@ pub mod monitor;
 mod tests;
 pub mod workspace;
 
-pub use identifiers::*;
-pub use monitor::*;
-pub use workspace::*;
+pub(crate) use identifiers::*;
+pub(crate) use monitor::*;
+pub(crate) use workspace::*;

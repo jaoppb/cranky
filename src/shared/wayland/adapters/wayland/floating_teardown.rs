@@ -19,7 +19,7 @@ use crate::shared::events::core::{InteractionEvent, PointerEvent, SurfaceLifecyc
 /// handler, or a suspended child could resurrect an in-place popup, or
 /// dedup could swallow a reopen, the next time its parent's popup opens
 /// again.
-pub(crate) fn teardown_floating(state: &mut WaylandState, kind: &FloatingKind, notify_self: bool) {
+pub(super) fn teardown_floating(state: &mut WaylandState, kind: &FloatingKind, notify_self: bool) {
     let links: Vec<(FloatingKind, Option<FloatingKind>)> = state
         .floating_surfaces
         .iter()

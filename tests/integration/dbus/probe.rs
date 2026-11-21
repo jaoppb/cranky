@@ -9,13 +9,13 @@ use crate::support::{Context, Outcome};
 use std::collections::HashMap;
 use zbus::object_server::{InterfaceRef, SignalEmitter};
 
-pub const NAME: &str = "org.cranky.Probe";
-pub const PATH: &str = "/org/cranky/Probe";
-pub const INTERFACE: &str = "org.cranky.Probe";
+pub(crate) const NAME: &str = "org.cranky.Probe";
+pub(crate) const PATH: &str = "/org/cranky/Probe";
+pub(crate) const INTERFACE: &str = "org.cranky.Probe";
 
 type Variant = zbus::Variant<'static>;
 
-pub struct Probe {
+pub(crate) struct Probe {
     label: String,
     wrapped: &'static str,
     bare: &'static str,
@@ -67,12 +67,12 @@ impl Probe {
 }
 
 /// The fake's own connection to the private bus, owning [`NAME`].
-pub struct ProbeService {
+pub(crate) struct ProbeService {
     connection: zbus::Connection,
 }
 
 impl ProbeService {
-    pub async fn start() -> Outcome<Self> {
+    pub(crate) async fn start() -> Outcome<Self> {
         let probe = Probe {
             label: "first".to_string(),
             wrapped: "wrapped reply",
@@ -100,7 +100,7 @@ impl ProbeService {
     }
 
     /// Emits `Pinged` with a variant body holding `payload`.
-    pub async fn ping(&self, payload: &'static str) -> Outcome {
+    pub(crate) async fn ping(&self, payload: &'static str) -> Outcome {
         let interface = self.interface().await?;
         Probe::pinged(interface.signal_emitter(), Variant::from(payload))
             .await
@@ -108,7 +108,7 @@ impl ProbeService {
     }
 
     /// Changes `Label` and emits the matching `PropertiesChanged`.
-    pub async fn relabel(&self, label: &str) -> Outcome {
+    pub(crate) async fn relabel(&self, label: &str) -> Outcome {
         let interface = self.interface().await?;
         let mut probe = interface.get_mut().await;
         probe.label = label.to_string();

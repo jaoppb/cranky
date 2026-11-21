@@ -15,7 +15,7 @@ pub struct RootConfig {
     options: ModuleOptions,
 }
 
-pub struct CreateRootConfigCommand {
+pub(crate) struct CreateRootConfigCommand {
     name: ModuleName,
     height: BarHeight,
     vertical_alignment: VerticalAlignment,
@@ -26,7 +26,7 @@ pub struct CreateRootConfigCommand {
 
 impl CreateRootConfigCommand {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         name: ModuleName,
         height: BarHeight,
         vertical_alignment: VerticalAlignment,
@@ -42,31 +42,6 @@ impl CreateRootConfigCommand {
             unfocused,
             options,
         }
-    }
-
-    #[must_use]
-    pub const fn name(&self) -> &ModuleName {
-        &self.name
-    }
-    #[must_use]
-    pub const fn height(&self) -> BarHeight {
-        self.height
-    }
-    #[must_use]
-    pub const fn vertical_alignment(&self) -> VerticalAlignment {
-        self.vertical_alignment
-    }
-    #[must_use]
-    pub const fn margin(&self) -> &MarginConfig {
-        &self.margin
-    }
-    #[must_use]
-    pub const fn unfocused(&self) -> Option<&PartialRootConfig> {
-        self.unfocused.as_ref()
-    }
-    #[must_use]
-    pub const fn options(&self) -> &ModuleOptions {
-        &self.options
     }
 }
 
@@ -85,7 +60,7 @@ impl Default for RootConfig {
 
 impl RootConfig {
     #[must_use]
-    pub fn new(cmd: CreateRootConfigCommand) -> Self {
+    pub(crate) fn new(cmd: CreateRootConfigCommand) -> Self {
         Self {
             name: cmd.name,
             height: cmd.height,
@@ -97,7 +72,7 @@ impl RootConfig {
     }
 
     #[must_use]
-    pub const fn name(&self) -> &ModuleName {
+    pub(crate) const fn name(&self) -> &ModuleName {
         &self.name
     }
 
@@ -123,7 +98,7 @@ impl RootConfig {
     }
 
     #[must_use]
-    pub fn as_unfocused(&self) -> Self {
+    pub(crate) fn as_unfocused(&self) -> Self {
         let mut base = self.clone();
         if let Some(unfocused) = &self.unfocused {
             if let Some(height) = unfocused.height() {

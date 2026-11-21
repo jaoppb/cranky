@@ -9,7 +9,7 @@ use super::node_ref::AnchorSegment;
 /// (`layout_engine`) both shape their trees this way, so implementing this
 /// once lets `resolve_segment` be written once and shared between them
 /// instead of duplicated per tree type.
-pub trait KeyedTree: Sized {
+pub(crate) trait KeyedTree: Sized {
     /// This node's children, or an empty slice for a leaf.
     fn children(&self) -> &[Self];
 
@@ -22,7 +22,7 @@ pub trait KeyedTree: Sized {
 /// Every step but the last walks through unkeyed nodes by position, then
 /// the keyed node is picked out of that parent's children by key — its
 /// captured index is ignored, since a reorder is exactly what changes it.
-pub fn resolve_segment<'a, T: KeyedTree>(
+pub(crate) fn resolve_segment<'a, T: KeyedTree>(
     start: &'a T,
     start_path: NodePath,
     segment: &AnchorSegment,

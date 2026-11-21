@@ -1,5 +1,5 @@
-pub mod player;
-pub mod props;
+mod player;
+mod props;
 pub mod watcher;
 
-pub use watcher::ZbusMprisAdapter;
+pub(crate) use watcher::ZbusMprisAdapter;

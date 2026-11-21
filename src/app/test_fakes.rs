@@ -33,26 +33,26 @@ type Deps = ModuleRuntimeDependencies<
 >;
 
 /// Which actor, if any, `parent` embeds at a key.
-pub type SiteResolver = Box<dyn Fn(Option<ModuleId>, &ModuleKey) -> Option<ModuleId> + Send + Sync>;
+type SiteResolver = Box<dyn Fn(Option<ModuleId>, &ModuleKey) -> Option<ModuleId> + Send + Sync>;
 
 /// The parent a site was spawned under, if any.
-pub type ParentLookup = Box<dyn Fn(ModuleId) -> Option<ModuleId> + Send + Sync>;
+type ParentLookup = Box<dyn Fn(ModuleId) -> Option<ModuleId> + Send + Sync>;
 
 /// A registry that answers from the data a test puts in its fields.
 ///
 /// Nothing is loaded or spawned: `spawn_all` hands out `senders` once, and
 /// `spawn_module` always fails with `ModuleNotFound`, counting its calls in
 /// `spawn_module_calls`.
-pub struct FakeRegistry {
-    pub root_module: Option<ModuleId>,
-    pub module_ids: Vec<ModuleId>,
-    pub module_names: HashMap<ModuleId, ModuleName>,
-    pub name_to_ids: HashMap<ModuleName, Vec<ModuleId>>,
-    pub module_keys: HashMap<ModuleId, ModuleKey>,
-    pub senders: HashMap<ModuleId, WatchLayoutSender>,
-    pub resolve_site: SiteResolver,
-    pub parent_of: ParentLookup,
-    pub spawn_module_calls: Arc<AtomicUsize>,
+pub(super) struct FakeRegistry {
+    pub(crate) root_module: Option<ModuleId>,
+    pub(crate) module_ids: Vec<ModuleId>,
+    pub(crate) module_names: HashMap<ModuleId, ModuleName>,
+    pub(crate) name_to_ids: HashMap<ModuleName, Vec<ModuleId>>,
+    pub(crate) module_keys: HashMap<ModuleId, ModuleKey>,
+    pub(crate) senders: HashMap<ModuleId, WatchLayoutSender>,
+    pub(crate) resolve_site: SiteResolver,
+    pub(crate) parent_of: ParentLookup,
+    pub(crate) spawn_module_calls: Arc<AtomicUsize>,
     active_signals: HashSet<SignalKind>,
 }
 
@@ -155,17 +155,17 @@ impl
 }
 
 /// What one `wait_for_events` call resolves to.
-pub type WaitOutcome = Pin<Box<dyn Future<Output = Result<(), DisplayServerError>> + Send>>;
+type WaitOutcome = Pin<Box<dyn Future<Output = Result<(), DisplayServerError>> + Send>>;
 
 /// A display server whose only scripted behaviour is `wait_for_events`, which
 /// is what ends `CrankyApp::run`; every other request succeeds.
-pub struct FakeDisplayServer {
-    pub wait_for_events: Box<dyn FnMut() -> WaitOutcome + Send + Sync>,
+pub(super) struct FakeDisplayServer {
+    pub(crate) wait_for_events: Box<dyn FnMut() -> WaitOutcome + Send + Sync>,
 }
 
 impl FakeDisplayServer {
     /// A server whose first `wait_for_events` fails with `reason`.
-    pub fn failing(reason: &'static str) -> Self {
+    pub(crate) fn failing(reason: &'static str) -> Self {
         Self {
             wait_for_events: Box::new(move || {
                 Box::pin(std::future::ready(Err(DisplayServerError::Internal(
@@ -208,7 +208,7 @@ impl DisplayServerPort for FakeDisplayServer {
 }
 
 /// A systray host that accepts every request.
-pub struct FakeSni;
+pub(super) struct FakeSni;
 
 #[async_trait]
 impl SniPort for FakeSni {

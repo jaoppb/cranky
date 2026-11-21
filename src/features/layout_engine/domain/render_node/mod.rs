@@ -98,7 +98,7 @@ pub enum RenderNode {
 
 impl RenderNode {
     #[must_use]
-    pub const fn path(&self) -> &NodePath {
+    pub(crate) const fn path(&self) -> &NodePath {
         match self {
             Self::Flex { path, .. }
             | Self::Grid { path, .. }
@@ -115,7 +115,7 @@ impl RenderNode {
     /// this to remember hover/active/focus by identity rather than by
     /// position.
     #[must_use]
-    pub const fn node_key(&self) -> Option<&NodeKey> {
+    pub(crate) const fn node_key(&self) -> Option<&NodeKey> {
         match self {
             Self::Flex { node_key, .. }
             | Self::Grid { node_key, .. }
@@ -128,7 +128,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub const fn rect(&self) -> Rect {
+    pub(crate) const fn rect(&self) -> Rect {
         match self {
             Self::Flex { rect, .. }
             | Self::Grid { rect, .. }

@@ -15,7 +15,7 @@ macro_rules! register_lua_log_methods {
     };
 }
 
-pub(crate) fn create_sys_log_table(lua: &Lua) -> mlua::Result<mlua::Table> {
+fn create_sys_log_table(lua: &Lua) -> mlua::Result<mlua::Table> {
     let log_table = lua.create_table()?;
     register_lua_log_methods!(
         lua,
@@ -28,7 +28,7 @@ pub(crate) fn create_sys_log_table(lua: &Lua) -> mlua::Result<mlua::Table> {
     Ok(log_table)
 }
 
-pub(crate) fn create_sys_monitors_table(lua: &Lua) -> mlua::Result<mlua::Table> {
+fn create_sys_monitors_table(lua: &Lua) -> mlua::Result<mlua::Table> {
     let monitors_table = lua.create_table()?;
     monitors_table.set(
         "all",
@@ -79,7 +79,7 @@ pub(crate) fn create_sys_monitors_table(lua: &Lua) -> mlua::Result<mlua::Table> 
     Ok(monitors_table)
 }
 
-pub(crate) fn create_sys_table(lua: &Lua) -> mlua::Result<mlua::Table> {
+pub(super) fn create_sys_table(lua: &Lua) -> mlua::Result<mlua::Table> {
     let sys = lua.create_table()?;
 
     sys.set(

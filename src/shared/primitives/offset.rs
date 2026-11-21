@@ -37,17 +37,17 @@ impl From<PopupOffsetHelper> for PopupOffset {
 
 impl PopupOffset {
     #[must_use]
-    pub const fn new(dx: i32, dy: i32) -> Self {
+    pub(crate) const fn new(dx: i32, dy: i32) -> Self {
         Self { dx, dy }
     }
 
     #[must_use]
-    pub const fn dx(&self) -> i32 {
+    pub(crate) const fn dx(self) -> i32 {
         self.dx
     }
 
     #[must_use]
-    pub const fn dy(&self) -> i32 {
+    pub(crate) const fn dy(self) -> i32 {
         self.dy
     }
 }

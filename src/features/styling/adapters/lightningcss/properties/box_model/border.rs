@@ -9,7 +9,7 @@ use lightningcss::properties::border::Border;
 use lightningcss::stylesheet::PrinterOptions;
 use lightningcss::traits::ToCss;
 
-pub fn apply_border_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
+pub(crate) fn apply_border_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
         Property::Border(border) => {
             apply_border(style, border);
@@ -64,7 +64,7 @@ pub fn apply_border_properties(style: &mut ComputedStyle, prop: &Property<'_>) -
     }
 }
 
-pub fn apply_border(style: &mut ComputedStyle, border: &Border) {
+pub(crate) fn apply_border(style: &mut ComputedStyle, border: &Border) {
     let px = parse_length_str(
         &border
             .width

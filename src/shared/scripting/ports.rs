@@ -8,7 +8,7 @@ pub enum ModuleError {
     Internal { message: String },
 }
 
-pub trait ScriptEnginePort: Send + Sync {
+pub(crate) trait ScriptEnginePort: Send + Sync {
     #[must_use]
     fn id(&self) -> EngineId;
     #[must_use]

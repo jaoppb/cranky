@@ -17,7 +17,7 @@ use tracing::Instrument;
 /// on-demand Systray needs a live handle shared with the run loop's own
 /// `trigger_action` path, which `ensure` alone can't provide without a
 /// larger ownership change — see `SPEC.md`'s Phase 3 write-up.
-pub struct AdapterSupervisor {
+pub(super) struct AdapterSupervisor {
     hub: Arc<SignalHub>,
     app_env: Arc<AppEnvironment>,
     metrics_config: MetricsConfig,
@@ -27,7 +27,7 @@ pub struct AdapterSupervisor {
 
 impl AdapterSupervisor {
     #[must_use]
-    pub fn new(
+    pub(crate) fn new(
         hub: Arc<SignalHub>,
         app_env: Arc<AppEnvironment>,
         metrics_config: MetricsConfig,
@@ -44,7 +44,7 @@ impl AdapterSupervisor {
 
     /// Marks `kind` as already running at boot, so a later `ensure` for the
     /// same kind is a no-op instead of starting a second watcher.
-    pub fn mark_started(&mut self, kind: SignalKind) {
+    pub(crate) fn mark_started(&mut self, kind: SignalKind) {
         self.started.insert(kind);
     }
 
@@ -53,7 +53,7 @@ impl AdapterSupervisor {
     /// which is treated as terminal for the session rather than retried on
     /// every render (see `SPEC.md`'s Risks: a signal whose adapter refuses
     /// to start leaves its subscriber silently blank).
-    pub async fn ensure(&mut self, kind: SignalKind) {
+    pub(crate) async fn ensure(&mut self, kind: SignalKind) {
         if !self.started.insert(kind) {
             return;
         }

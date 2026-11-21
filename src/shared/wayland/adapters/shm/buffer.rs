@@ -8,7 +8,7 @@ use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
 
-pub struct ShmBuffer {
+pub(crate) struct ShmBuffer {
     shm: SharedMapping,
     pool: WlShmPool,
     width: u32,
@@ -21,7 +21,7 @@ impl ShmBuffer {
     /// # Errors
     ///
     /// Returns an I/O error if creating or mapping the SHM file fails.
-    pub fn new<S>(
+    pub(crate) fn new<S>(
         shm_proxy: &WlShm,
         width: u32,
         height: u32,
@@ -89,7 +89,7 @@ impl ShmBuffer {
     }
 
     #[must_use]
-    pub fn mmap_mut(&mut self) -> &mut [u8] {
+    pub(crate) fn mmap_mut(&mut self) -> &mut [u8] {
         let frame_size = usize::try_from(self.width.saturating_mul(self.height).saturating_mul(4))
             .unwrap_or_default();
         let offset = self.back_index.saturating_mul(frame_size);
@@ -109,23 +109,23 @@ impl ShmBuffer {
     }
 
     #[must_use]
-    pub fn current_buffer(&self) -> &wayland_client::protocol::wl_buffer::WlBuffer {
+    pub(crate) fn current_buffer(&self) -> &wayland_client::protocol::wl_buffer::WlBuffer {
         self.slots
             .get(self.back_index)
             .map_or_else(|| self.slots[0].buffer(), BufferSlot::buffer)
     }
 
     #[must_use]
-    pub const fn width(&self) -> u32 {
+    pub(crate) const fn width(&self) -> u32 {
         self.width
     }
 
     #[must_use]
-    pub const fn height(&self) -> u32 {
+    pub(crate) const fn height(&self) -> u32 {
         self.height
     }
 
-    pub fn swap_buffers(&mut self) {
+    pub(crate) fn swap_buffers(&mut self) {
         if let Some(slot) = self.slots.get(self.back_index) {
             slot.set_busy(true);
         }

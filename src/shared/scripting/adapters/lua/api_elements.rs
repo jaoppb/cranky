@@ -15,7 +15,7 @@ macro_rules! set_table_aliases {
     };
 }
 
-pub(crate) fn create_ui_action_table(lua: &Lua) -> mlua::Result<mlua::Table> {
+pub(super) fn create_ui_action_table(lua: &Lua) -> mlua::Result<mlua::Table> {
     let action_table = lua.create_table()?;
 
     action_table.set(
@@ -66,7 +66,7 @@ pub(crate) fn create_ui_action_table(lua: &Lua) -> mlua::Result<mlua::Table> {
     Ok(action_table)
 }
 
-pub(crate) fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
+pub(super) fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
     let element_table = lua.create_table()?;
 
     let flex_fn = lua.create_function(|lua, val: mlua::Value| {

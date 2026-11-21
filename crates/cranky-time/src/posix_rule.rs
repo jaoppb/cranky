@@ -8,7 +8,7 @@ use crate::zone::Kind;
 
 /// The day of a year on which a change happens.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Day {
+pub(crate) enum Day {
     /// `Mm.w.d`: a weekday (0 for Sunday) of a week of a month; week 5 is the
     /// last one.
     Weekday { month: i64, week: i64, weekday: i64 },
@@ -21,35 +21,35 @@ pub enum Day {
 /// A change between standard and daylight time: a day, and the seconds after
 /// its local midnight.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Change {
+pub(crate) struct Change {
     pub day: Day,
     pub time: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Daylight {
+pub(crate) struct Daylight {
     pub kind: Kind,
     pub start: Change,
     pub end: Change,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Rule {
+pub(crate) struct Rule {
     standard: Kind,
     daylight: Option<Daylight>,
 }
 
 impl Rule {
-    pub const fn new(standard: Kind, daylight: Option<Daylight>) -> Self {
+    pub(crate) const fn new(standard: Kind, daylight: Option<Daylight>) -> Self {
         Self { standard, daylight }
     }
 
-    pub const fn standard(&self) -> &Kind {
+    pub(crate) const fn standard(&self) -> &Kind {
         &self.standard
     }
 
     /// The kind of local time in force at an instant.
-    pub fn kind_at(&self, unix_seconds: i64) -> &Kind {
+    pub(crate) fn kind_at(&self, unix_seconds: i64) -> &Kind {
         let Some(daylight) = &self.daylight else {
             return &self.standard;
         };

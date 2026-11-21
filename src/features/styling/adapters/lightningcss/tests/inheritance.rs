@@ -111,7 +111,9 @@ fn test_em_resolves_through_vdom_tree_not_hardcoded_16px() {
         panic!("expected a Text child");
     };
     assert_eq!(
-        style.font_size().map(|font_size| font_size.value()),
+        style
+            .font_size()
+            .map(crate::shared::config::domain::types::FontSize::value),
         Some(30.0)
     );
     assert_eq!(style.width(), Some(CssLength::Pixels(60.0)));

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::shared::dbus::domain::DBusValue;
 
-pub(crate) fn parse_value(val: &zbus::Variant<'_>) -> DBusValue {
+pub(super) fn parse_value(val: &zbus::Variant<'_>) -> DBusValue {
     use zbus::Variant;
     match val {
         Variant::Str(text) => DBusValue::String(text.as_str().to_string()),

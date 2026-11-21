@@ -4,7 +4,7 @@ use lightningcss::traits::ToCss;
 use lightningcss::values::length::LengthPercentageOrAuto;
 
 #[must_use]
-pub fn parse_size_str(text: &str) -> Option<CssLength> {
+pub(crate) fn parse_size_str(text: &str) -> Option<CssLength> {
     let trimmed = text.trim();
     if trimmed == "auto" {
         Some(CssLength::Auto)
@@ -22,7 +22,7 @@ pub fn parse_size_str(text: &str) -> Option<CssLength> {
 }
 
 #[must_use]
-pub fn parse_length_str(text: &str) -> f32 {
+pub(crate) fn parse_length_str(text: &str) -> f32 {
     let text = text.trim();
     if let Some(num) = text.strip_suffix("px") {
         return num.trim().parse::<f32>().unwrap_or(0.0);
@@ -37,7 +37,7 @@ pub fn parse_length_str(text: &str) -> f32 {
 }
 
 #[must_use]
-pub fn length_to_f64(len: &LengthPercentageOrAuto) -> f64 {
+pub(crate) fn length_to_f64(len: &LengthPercentageOrAuto) -> f64 {
     let css_text = len
         .to_css_string(PrinterOptions::default())
         .unwrap_or_default();

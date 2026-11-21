@@ -9,7 +9,7 @@ use crate::shared::dbus::ports::DbusConnectionPort;
 
 use super::props::update_state_from_props;
 
-pub(crate) async fn add_player(
+pub(super) async fn add_player(
     conn: &Arc<dyn DbusConnectionPort>,
     mpris_tx: &watch::Sender<MprisState>,
     dest: Destination,
@@ -51,7 +51,7 @@ pub(crate) async fn add_player(
     let _ = mpris_tx.send(mpris_state);
 }
 
-pub(crate) fn spawn_property_listener(
+fn spawn_property_listener(
     conn: Arc<dyn DbusConnectionPort>,
     tx: watch::Sender<MprisState>,
     dest: Destination,

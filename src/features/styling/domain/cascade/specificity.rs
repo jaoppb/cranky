@@ -6,7 +6,7 @@ use super::super::selector::{CompiledSelector, SelectorStep};
 /// pseudo-elements are not modeled (none exist in the supported grammar);
 /// pseudo-classes count in the class column, matching spec.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
-pub struct Specificity {
+pub(crate) struct Specificity {
     id: u16,
     class: u16,
     element: u16,
@@ -14,12 +14,12 @@ pub struct Specificity {
 
 impl Specificity {
     #[must_use]
-    pub const fn new(id: u16, class: u16, element: u16) -> Self {
+    pub(crate) const fn new(id: u16, class: u16, element: u16) -> Self {
         Self { id, class, element }
     }
 
     #[must_use]
-    pub const fn combine(self, other: Self) -> Self {
+    pub(crate) const fn combine(self, other: Self) -> Self {
         Self {
             id: self.id.saturating_add(other.id),
             class: self.class.saturating_add(other.class),
@@ -38,7 +38,7 @@ impl Specificity {
 /// separately, matching neither an undercount nor overcount in practice for
 /// the selectors this codebase uses).
 #[must_use]
-pub fn selector_specificity(selector: &CompiledSelector) -> Specificity {
+pub(crate) fn selector_specificity(selector: &CompiledSelector) -> Specificity {
     selector
         .steps
         .iter()

@@ -18,7 +18,7 @@ use xkbcommon::xkb;
 const EVDEV_OFFSET: u32 = 8;
 
 #[derive(Default)]
-pub struct KeyboardInput {
+pub(crate) struct KeyboardInput {
     device: Option<WlKeyboard>,
     focus: Option<WlSurface>,
     /// evdev codes of every key that produces Escape in some layout or level.

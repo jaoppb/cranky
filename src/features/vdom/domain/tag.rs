@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum NodeTag {
+pub(crate) enum NodeTag {
     Flex,
     Grid,
     Text,
@@ -14,7 +14,7 @@ pub enum NodeTag {
 
 impl NodeTag {
     #[must_use]
-    pub const fn as_str(&self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Flex => "flex",
             Self::Grid => "grid",
@@ -26,13 +26,15 @@ impl NodeTag {
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn is_container(&self) -> bool {
+    pub(crate) const fn is_container(self) -> bool {
         matches!(self, Self::Flex | Self::Grid)
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn is_leaf(&self) -> bool {
+    pub(crate) const fn is_leaf(self) -> bool {
         !self.is_container()
     }
 }
@@ -56,7 +58,7 @@ impl TextContent {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.text
     }
 }

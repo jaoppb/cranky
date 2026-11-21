@@ -3,7 +3,7 @@ pub mod length;
 pub mod opacity;
 pub mod progress;
 
-pub use flex::*;
-pub use length::*;
-pub use opacity::*;
+pub(crate) use flex::*;
+pub(crate) use length::*;
+pub(crate) use opacity::*;
 pub use progress::*;

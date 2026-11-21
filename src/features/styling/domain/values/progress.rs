@@ -10,24 +10,25 @@ impl ProgressValue {
     /// # Errors
     ///
     /// Returns `StylingError::InvalidProgressValue` if `value` is NaN or not in 0.0..=1.0.
-    pub fn new(value: f32) -> Result<Self, StylingError> {
+    pub(crate) fn new(value: f32) -> Result<Self, StylingError> {
         if value.is_nan() || !(0.0..=1.0).contains(&value) {
             return Err(StylingError::InvalidProgressValue(format!("{value}")));
         }
         Ok(Self(value))
     }
 
+    #[cfg(test)]
     /// Creates a new `ProgressValue` from a percentage value (0.0 to 100.0).
     ///
     /// # Errors
     ///
     /// Returns `StylingError::InvalidProgressValue` if `pct` is NaN or not in 0.0..=100.0.
-    pub fn from_percentage(pct: f32) -> Result<Self, StylingError> {
+    pub(crate) fn from_percentage(pct: f32) -> Result<Self, StylingError> {
         Self::new(pct / 100.0)
     }
 
     #[must_use]
-    pub const fn value(&self) -> f32 {
+    pub(crate) const fn value(self) -> f32 {
         self.0
     }
 }
@@ -50,17 +51,7 @@ pub enum Orientation {
     Vertical,
 }
 
-impl Orientation {
-    #[must_use]
-    pub const fn is_horizontal(&self) -> bool {
-        matches!(self, Self::Horizontal)
-    }
-
-    #[must_use]
-    pub const fn is_vertical(&self) -> bool {
-        matches!(self, Self::Vertical)
-    }
-}
+impl Orientation {}
 
 #[cfg(test)]
 mod tests {

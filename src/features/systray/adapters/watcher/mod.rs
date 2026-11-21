@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, error};
 use zbus::{Connection, interface};
 
-pub struct Watcher {
+pub(super) struct Watcher {
     items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
     hub: Arc<SignalHub>,
     conn: Connection,
@@ -29,7 +29,7 @@ impl From<zbus::message::Header<'_>> for Sender {
 
 impl Watcher {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
         hub: Arc<SignalHub>,
         conn: Connection,

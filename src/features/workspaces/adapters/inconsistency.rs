@@ -5,7 +5,7 @@ use serde::Serialize;
 /// Represents a specific consistency failure in the internal Hyprland state.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum StateInconsistency {
+pub(crate) enum StateInconsistency {
     /// A workspace exists in state but has no assigned monitor.
     WorkspaceMissingMonitor {
         workspace_id: WorkspaceId,
@@ -115,7 +115,7 @@ impl std::fmt::Display for StateInconsistency {
 ///
 /// Returns a list of structured [`StateInconsistency`] items found.
 #[must_use]
-pub fn find_state_inconsistencies(state: &HyprlandState) -> Vec<StateInconsistency> {
+pub(super) fn find_state_inconsistencies(state: &HyprlandState) -> Vec<StateInconsistency> {
     let mut inconsistencies = Vec::new();
 
     for (ws_id, workspace) in state.workspaces() {

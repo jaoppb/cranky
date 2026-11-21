@@ -1,11 +1,11 @@
-mod keyed_tree;
-mod node_id;
+pub mod keyed_tree;
+pub mod node_id;
 mod node_key;
 mod node_path;
-mod node_ref;
+pub mod node_ref;
 
-pub use keyed_tree::{KeyedTree, resolve_segment};
-pub use node_id::NodeId;
+pub(crate) use keyed_tree::{KeyedTree, resolve_segment};
+pub(crate) use node_id::NodeId;
 pub use node_key::NodeKey;
 pub use node_path::{NodePath, SurfaceSpace};
-pub use node_ref::{AnchorSegment, InteractionContext, NodeRef};
+pub(crate) use node_ref::{AnchorSegment, InteractionContext, NodeRef};

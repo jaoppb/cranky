@@ -108,7 +108,7 @@ async fn fetch_all_props(
     Some(props.get_all(iface).await.unwrap_or_default())
 }
 
-pub async fn fetch_systray_item(
+pub(super) async fn fetch_systray_item(
     conn: &Connection,
     id: String,
     dest: String,

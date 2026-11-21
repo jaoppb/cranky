@@ -7,7 +7,7 @@ use crate::features::vdom::domain::{TextContent, VNode};
 use crate::shared::primitives::{ModuleInstanceId, ModuleName};
 use mlua::{Lua, LuaSerdeExt};
 
-pub(crate) fn parse_table_children(lua: &Lua, table: &mlua::Table) -> mlua::Result<Vec<VNode>> {
+pub(super) fn parse_table_children(lua: &Lua, table: &mlua::Table) -> mlua::Result<Vec<VNode>> {
     let mut children_vec = Vec::new();
     if let Ok(children) = table.get::<mlua::Table>("children") {
         for pair in children.sequence_values::<mlua::Value>() {
@@ -106,7 +106,7 @@ fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
 /// # Errors
 ///
 /// Returns `mlua::Error` if value conversion fails.
-pub fn value_to_vnode(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
+pub(crate) fn value_to_vnode(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
     match val {
         mlua::Value::UserData(user_data) => {
             if let Ok(lua_vnode) = user_data.borrow::<LuaVNode>() {

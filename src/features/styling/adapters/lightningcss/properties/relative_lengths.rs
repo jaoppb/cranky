@@ -16,7 +16,7 @@ use lightningcss::values::length::LengthPercentageOrAuto;
 /// against the *parent's* size, not the element's own, so `DeclaredStyle`
 /// treats it differently.
 #[must_use]
-pub fn detect_relative_font_size(props: &[Property<'_>]) -> Option<DeclaredLength> {
+pub(crate) fn detect_relative_font_size(props: &[Property<'_>]) -> Option<DeclaredLength> {
     for prop in props {
         if let Property::FontSize(LightningFontSize::Length(length)) = prop {
             let css_text = length
@@ -43,7 +43,7 @@ pub fn detect_relative_font_size(props: &[Property<'_>]) -> Option<DeclaredLengt
 /// (possibly wrong, until this pass corrects it) pixel guess to
 /// `ComputedStyle`, so non-relative values need no changes here at all.
 #[must_use]
-pub fn detect_relative_lengths(props: &[Property<'_>]) -> DeclaredLengths {
+pub(crate) fn detect_relative_lengths(props: &[Property<'_>]) -> DeclaredLengths {
     let mut lengths = DeclaredLengths::default();
     for prop in props {
         apply_sizing(&mut lengths, prop);

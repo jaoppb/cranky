@@ -12,7 +12,7 @@ mod text_placement;
 pub use commands::*;
 pub use errors::*;
 pub use measurer::*;
-pub use popup::*;
+pub(crate) use popup::*;
 pub use render_node::*;
 pub use style::*;
 pub use styled_node::*;

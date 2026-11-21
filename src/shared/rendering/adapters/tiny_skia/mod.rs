@@ -1,12 +1,10 @@
 pub mod canvas;
-pub mod draw_rect;
-pub mod draw_text;
-pub mod factory;
+mod draw_rect;
+mod draw_text;
+mod factory;
 pub mod measurer;
-pub mod paint;
+mod paint;
 #[cfg(test)]
 mod tests;
 
-pub use canvas::TinySkiaCosmicCanvas;
 pub use factory::TinySkiaCanvasFactory;
-pub use measurer::CosmicTextMeasurer;

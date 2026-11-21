@@ -3,7 +3,7 @@ use crate::shared::config::domain::ModuleConfig;
 use crate::shared::events::signals::SignalKind;
 use rhai::{AST, Dynamic, Engine, Scope};
 
-pub(crate) fn setup_config_maps(
+pub(super) fn setup_config_maps(
     scope: &mut Scope<'static>,
     engine: &Engine,
     config: &ModuleConfig,
@@ -42,7 +42,7 @@ pub(crate) fn setup_config_maps(
     Ok(())
 }
 
-pub(crate) fn parse_dbus_subscription(
+fn parse_dbus_subscription(
     map: &rhai::Map,
 ) -> Option<crate::shared::dbus::domain::DBusSubscription> {
     let is_dbus = map
@@ -80,7 +80,7 @@ pub(crate) fn parse_dbus_subscription(
     ))
 }
 
-pub(crate) fn parse_subscriptions_array(
+fn parse_subscriptions_array(
     subs: &rhai::Array,
     result: &mut Vec<SignalKind>,
     dbus_subs: &mut Vec<crate::shared::dbus::domain::DBusSubscription>,
@@ -104,7 +104,7 @@ pub(crate) fn parse_subscriptions_array(
     }
 }
 
-pub(crate) fn evaluate_metadata(
+pub(super) fn evaluate_metadata(
     engine: &Engine,
     scope: &mut Scope<'static>,
     ast: &AST,

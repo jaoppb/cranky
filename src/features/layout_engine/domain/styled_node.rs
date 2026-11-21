@@ -103,7 +103,7 @@ impl StyledNode {
     /// the DSL), distinct from `path` (positional) and from `Module`'s own
     /// `key: ModuleKey`. `None` unless the widget opted in.
     #[must_use]
-    pub const fn node_key(&self) -> Option<&NodeKey> {
+    pub(crate) const fn node_key(&self) -> Option<&NodeKey> {
         match self {
             Self::Flex { node_key, .. }
             | Self::Grid { node_key, .. }
@@ -116,7 +116,7 @@ impl StyledNode {
     }
 
     #[must_use]
-    pub const fn style(&self) -> &ComputedStyle {
+    pub(crate) const fn style(&self) -> &ComputedStyle {
         match self {
             Self::Flex { style, .. }
             | Self::Grid { style, .. }
@@ -128,34 +128,9 @@ impl StyledNode {
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn on_click(&self) -> Option<&ClickHandlers> {
-        match self {
-            Self::Text { on_click, .. }
-            | Self::Flex { on_click, .. }
-            | Self::Grid { on_click, .. }
-            | Self::Progress { on_click, .. }
-            | Self::Rect { on_click, .. }
-            | Self::Module { on_click, .. } => on_click.as_ref(),
-            Self::Image { .. } => None,
-        }
-    }
-
-    #[must_use]
-    pub const fn on_hover(&self) -> Option<&UiAction> {
-        match self {
-            Self::Flex { on_hover, .. }
-            | Self::Grid { on_hover, .. }
-            | Self::Text { on_hover, .. }
-            | Self::Progress { on_hover, .. }
-            | Self::Rect { on_hover, .. }
-            | Self::Module { on_hover, .. } => on_hover.as_ref(),
-            Self::Image { .. } => None,
-        }
-    }
-
-    #[must_use]
-    pub fn tooltip(&self) -> Option<&Self> {
+    pub(crate) fn tooltip(&self) -> Option<&Self> {
         match self {
             Self::Flex { tooltip, .. }
             | Self::Grid { tooltip, .. }
@@ -167,8 +142,9 @@ impl StyledNode {
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn popup(&self) -> Option<&StyledPopup> {
+    pub(crate) const fn popup(&self) -> Option<&StyledPopup> {
         match self {
             Self::Flex { popup, .. }
             | Self::Grid { popup, .. }
@@ -180,8 +156,9 @@ impl StyledNode {
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn panel(&self) -> Option<&StyledPanel> {
+    pub(crate) const fn panel(&self) -> Option<&StyledPanel> {
         match self {
             Self::Flex { panel, .. }
             | Self::Grid { panel, .. }

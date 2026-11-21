@@ -31,7 +31,7 @@ impl DrawingColor {
     /// # Errors
     ///
     /// Returns `ColorError` if input is empty, no colors found, invalid format, or invalid angle.
-    pub fn parse(input: &str) -> Result<Self, ColorError> {
+    pub(crate) fn parse(input: &str) -> Result<Self, ColorError> {
         let input = input.trim();
         if input.is_empty() {
             return Err(ColorError::Empty);

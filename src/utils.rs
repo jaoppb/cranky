@@ -3,7 +3,7 @@ use std::path::Path;
 use tiny_skia::Transform;
 
 #[must_use]
-pub fn f32_to_u32(val: f32) -> u32 {
+pub(crate) fn f32_to_u32(val: f32) -> u32 {
     if !val.is_finite() || val <= 0.0 {
         return 0;
     }
@@ -26,7 +26,7 @@ pub fn f32_to_u32(val: f32) -> u32 {
 }
 
 #[must_use]
-pub fn f32_to_i32(val: f32) -> i32 {
+pub(crate) fn f32_to_i32(val: f32) -> i32 {
     if !val.is_finite() {
         return 0;
     }
@@ -41,7 +41,7 @@ pub fn f32_to_i32(val: f32) -> i32 {
 }
 
 #[must_use]
-pub fn f64_to_u64(val: f64) -> u64 {
+pub(crate) fn f64_to_u64(val: f64) -> u64 {
     if !val.is_finite() || val <= 0.0 {
         return 0;
     }
@@ -64,7 +64,7 @@ pub fn f64_to_u64(val: f64) -> u64 {
 }
 
 #[must_use]
-pub fn f64_to_i64(val: f64) -> i64 {
+pub(crate) fn f64_to_i64(val: f64) -> i64 {
     if !val.is_finite() {
         return 0;
     }
@@ -79,7 +79,7 @@ pub fn f64_to_i64(val: f64) -> i64 {
 }
 
 #[must_use]
-pub fn i64_to_f64(val: i64) -> f64 {
+pub(crate) fn i64_to_f64(val: i64) -> f64 {
     i32::try_from(val).map_or_else(
         |_| {
             let high = i32::try_from(val >> 32).unwrap_or(0);
@@ -91,7 +91,7 @@ pub fn i64_to_f64(val: i64) -> f64 {
 }
 
 #[must_use]
-pub fn f64_to_f32(val: f64) -> f32 {
+pub(crate) fn f64_to_f32(val: f64) -> f32 {
     if !val.is_finite() {
         if val.is_nan() {
             return f32::NAN;
@@ -129,7 +129,11 @@ pub fn f64_to_f32(val: f64) -> f32 {
 }
 
 #[must_use]
-pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
+pub(crate) fn load_icon_rgba(
+    path: &Path,
+    icon_size: u16,
+    scale: f32,
+) -> Option<(u32, u32, Vec<u8>)> {
     let icon_px = f32_to_u32(
         (f32::from(icon_size) * scale.max(1.0))
             .ceil()

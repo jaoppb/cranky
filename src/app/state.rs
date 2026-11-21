@@ -21,7 +21,7 @@ pub enum AppError {
 
 pub use crate::shared::wayland::domain::{AppReadModel, ModuleLayout};
 
-pub struct CrankyApp<
+pub(super) struct CrankyApp<
     R: crate::features::module_runtime::ports::ModuleRegistryPort<F, LS, DS, US, Snd> + 'static,
     F: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
     LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
@@ -50,7 +50,7 @@ pub struct CrankyApp<
     adapter_supervisor: Option<crate::app::adapter_supervisor::AdapterSupervisor>,
 }
 
-pub struct StateServices<F, LS, DS, US> {
+pub(super) struct StateServices<F, LS, DS, US> {
     hub: Arc<SignalHub>,
     surface_manager: DynSurfaceManager,
     canvas_factory: F,
@@ -61,7 +61,7 @@ pub struct StateServices<F, LS, DS, US> {
 
 impl<F, LS, DS, US> StateServices<F, LS, DS, US> {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         hub: Arc<SignalHub>,
         surface_manager: DynSurfaceManager,
         canvas_factory: F,
@@ -80,7 +80,7 @@ impl<F, LS, DS, US> StateServices<F, LS, DS, US> {
     }
 }
 
-pub struct StateChannels {
+pub(super) struct StateChannels {
     display: mpsc::Receiver<DisplayCommand>,
     layout: mpsc::Receiver<LayoutEvent>,
     interface: mpsc::Receiver<UiCommand>,
@@ -89,7 +89,7 @@ pub struct StateChannels {
 
 impl StateChannels {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         display: mpsc::Receiver<DisplayCommand>,
         layout: mpsc::Receiver<LayoutEvent>,
         interface: mpsc::Receiver<UiCommand>,
@@ -118,7 +118,7 @@ impl<
     /// # Errors
     ///
     /// Returns [`AppError::Module`] if initial module loading fails.
-    pub fn new(
+    pub(crate) fn new(
         config: Config,
         services: StateServices<F, LS, DS, US>,
         channels: StateChannels,
@@ -174,7 +174,7 @@ impl<
     /// `main.rs` once the `DBus` connection it needs is established — after
     /// `CrankyApp::new`, since that connection failing is fatal at boot and
     /// must not be entangled with module loading.
-    pub fn set_adapter_supervisor(
+    pub(crate) fn set_adapter_supervisor(
         &mut self,
         supervisor: crate::app::adapter_supervisor::AdapterSupervisor,
     ) {
@@ -182,7 +182,7 @@ impl<
     }
 
     #[must_use]
-    pub fn active_signals(
+    pub(crate) fn active_signals(
         &self,
     ) -> &std::collections::HashSet<crate::shared::events::signals::SignalKind> {
         self.registry.active_signal_subscriptions()
@@ -452,17 +452,6 @@ impl<
                     self.handle_container_layouts(parent_id, &monitor_id, &layouts)
                         .await;
                 }
-                LayoutEvent::ChildModuleSizeChanged {
-                    parent_id: _,
-                    child_key,
-                    monitor_id,
-                    size,
-                } => {
-                    let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
-                    let mon_entry = sizes_map.entry(monitor_id).or_default();
-                    mon_entry.insert(child_key, size);
-                    let _ = self.hub.module_sizes_tx().send(sizes_map);
-                }
                 LayoutEvent::ModuleSizeChanged {
                     monitor_id,
                     module_id,
@@ -698,7 +687,7 @@ impl<
     /// # Errors
     ///
     /// Returns [`AppError::Internal`] if display server communication or event dispatching fails.
-    pub async fn run(
+    pub(crate) async fn run(
         &mut self,
         mut display: impl DisplayServerPort,
         mut dbus: crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
@@ -747,7 +736,7 @@ impl<
         }
     }
 
-    pub fn handle_size_changed(
+    pub(crate) fn handle_size_changed(
         &mut self,
         monitor_id: &MonitorId,
         module_id: ModuleId,

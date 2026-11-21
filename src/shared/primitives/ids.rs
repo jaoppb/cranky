@@ -10,8 +10,9 @@ impl ModuleId {
         Self(id)
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn value(&self) -> u32 {
+    pub(crate) const fn value(self) -> u32 {
         self.0
     }
 }
@@ -32,7 +33,7 @@ impl MonitorId {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -48,12 +49,12 @@ pub struct ModuleName(String);
 
 impl ModuleName {
     #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
+    pub(crate) fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -94,12 +95,13 @@ pub struct ModuleInstanceId(String);
 
 impl ModuleInstanceId {
     #[must_use]
-    pub fn new(id: impl Into<String>) -> Self {
+    pub(crate) fn new(id: impl Into<String>) -> Self {
         Self(id.into())
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -127,12 +129,12 @@ pub struct FunctionName(String);
 
 impl FunctionName {
     #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
+    pub(crate) fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
