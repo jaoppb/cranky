@@ -1,56 +1,72 @@
 #!/usr/bin/env bash
-# The part of scripts/release/aur.sh that runs inside archlinux:base-devel,
-# with the repository read-only at /workspace and the output at /out. makepkg
-# refuses to run as root, so the packages are built by an unprivileged user
-# with no sudo: root installs their dependencies first, and keeps what gets
-# published out of reach of the build scripts and tests.
+# The parts of scripts/release/aur.sh that run inside archlinux:base-devel,
+# with the repository read-only at /workspace and the local sources, empty in
+# release mode, read-only at /sources. makepkg refuses to run as root, so it
+# runs as an unprivileged user with no sudo.
+#
+#   prepare  copies each PKGBUILD, points it at the local sources in local
+#            mode, fills in its checksums and writes its .SRCINFO, and leaves
+#            the two files in /prepared/<package>. It builds nothing.
+#   build    reads /prepared, read-only here like every other mount. As root,
+#            it installs the dependencies both .SRCINFO files name; then it
+#            builds each package, installs it, starts the installed binary
+#            and removes it.
 set -euo pipefail
 
-# The output goes back to the owner of its directory, the caller's user.
-trap 'chown -R --reference=/out /out' EXIT
+phase=$1
 
 pacman -Syu --noconfirm --needed pacman-contrib sudo >/dev/null
 useradd --create-home builder
-
 work=/home/builder/work
+mkdir -p "${work}"
 
-# Copy a PKGBUILD into its own directory, point it at local sources in local
-# mode, then fill in its checksums and write its .SRCINFO.
-prepare() {
+# A package's directory: its PKGBUILD, or the prepared one, and its local
+# sources, owned by the build user.
+stage() {
 	local name=$1 pkgbuild=$2 dir="${work}/$1"
 	mkdir -p "${dir}"
-	cp "/workspace/contrib/arch/${pkgbuild}" "${dir}/PKGBUILD"
+	cp "${pkgbuild}" "${dir}/PKGBUILD"
+	cp -r "/sources/${name}/." "${dir}/"
+	chown -R builder:builder "${dir}"
+}
+
+prepare() {
+	local name=$1 dir="${work}/$1"
+	stage "${name}" "/workspace/contrib/arch/$2"
 	if [[ "${MODE}" == local ]]; then
-		# The local sources, under the names the PKGBUILD gives them. The last
-		# assignment wins when makepkg sources the file.
-		cp /out/sources/"${name}"/* "${dir}/"
-		local names=("${dir}"/*.tar.gz "${dir}"/*.service)
-		printf '\nsource=(' >>"${dir}/PKGBUILD"
-		local file
-		for file in "${names[@]}"; do
+		# Point the sources at the local files, under the names the PKGBUILD
+		# gives them. The last assignment wins when makepkg sources the file.
+		local file line='source=('
+		for file in "${dir}"/*.tar.gz "${dir}"/*.service; do
 			if [[ -e "${file}" ]]; then
-				printf ' "%s"' "${file##*/}" >>"${dir}/PKGBUILD"
+				line+=" \"${file##*/}\""
 			fi
 		done
-		printf ' )\n' >>"${dir}/PKGBUILD"
+		printf '\n%s )\n' "${line}" >>"${dir}/PKGBUILD"
 	fi
-	chown -R builder:builder "${work}"
 	(
 		cd "${dir}"
 		sudo -u builder updpkgsums
 		sudo -u builder makepkg --printsrcinfo | sudo -u builder tee .SRCINFO >/dev/null
 	)
+	mkdir -p "/prepared/${name}"
+	cp "${dir}/PKGBUILD" "${dir}/.SRCINFO" "/prepared/${name}/"
+	# The prepared files go back to the owner of the output directory.
+	chown -R --reference=/prepared "/prepared/${name}"
 }
 
-# Install a package's dependencies as root, build it, install it, start the
-# installed binary, then remove it: the two packages conflict.
+# Every dependency a .SRCINFO names, architecture-specific ones included.
+dependencies_of() {
+	sed -n 's/^\t\(make\|check\)\{0,1\}depends\(_x86_64\)\{0,1\} = //p' "$1"
+}
+
+# Build a package, install it, start the installed binary, then remove it:
+# the two packages conflict.
 install_and_start() {
 	local name=$1
+	stage "${name}" "/prepared/${name}/PKGBUILD"
 	(
 		cd "${work}/${name}"
-		local -a deps
-		mapfile -t deps < <(sed -n 's/^\t\(make\|check\)\{0,1\}depends = //p' .SRCINFO)
-		pacman -S --needed --noconfirm "${deps[@]}"
 		sudo -u builder makepkg --noconfirm
 		pacman -U --noconfirm ./*.pkg.tar.zst
 	)
@@ -58,18 +74,25 @@ install_and_start() {
 	pacman -R --noconfirm "${name}"
 }
 
-mkdir -p "${work}"
-prepare cranky PKGBUILD
-prepare cranky-bin PKGBUILD-bin
-
-# What gets published is each prepared PKGBUILD and its .SRCINFO, copied before
-# any build runs; /out is not writable by the build user.
-if [[ "${MODE}" == release ]]; then
-	for pair in cranky:pkg-src cranky-bin:pkg-bin; do
-		mkdir -p "/out/${pair#*:}"
-		cp "${work}/${pair%%:*}/PKGBUILD" "${work}/${pair%%:*}/.SRCINFO" "/out/${pair#*:}/"
-	done
-fi
-
-install_and_start cranky
-install_and_start cranky-bin
+case "${phase}" in
+prepare)
+	prepare cranky PKGBUILD
+	prepare cranky-bin PKGBUILD-bin
+	;;
+build)
+	# Read from the read-only mount before any build runs.
+	mapfile -t deps < <(
+		dependencies_of /prepared/cranky/.SRCINFO
+		dependencies_of /prepared/cranky-bin/.SRCINFO
+	)
+	if ((${#deps[@]} > 0)); then
+		pacman -S --needed --noconfirm -- "${deps[@]}"
+	fi
+	install_and_start cranky
+	install_and_start cranky-bin
+	;;
+*)
+	echo "usage: $0 prepare|build" >&2
+	exit 2
+	;;
+esac
