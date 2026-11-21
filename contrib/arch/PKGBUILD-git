@@ -24,8 +24,9 @@ sha256sums=('SKIP')
 pkgver() {
 	cd "${srcdir}/${pkgname}"
 	local version
-	# Only release tags (vX.Y.Z) count: a stray or prerelease tag is skipped.
-	version="$(git describe --long --tags --abbrev=7 --match 'v[0-9]*' --exclude '*-*' |
+	# Only release tags count: a tag that is not v followed by digits and dots
+	# is skipped.
+	version="$(git describe --long --tags --abbrev=7 --match 'v[0-9]*' --exclude 'v*[!0-9.]*' |
 		sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g')"
 	# makepkg writes the version into this file and sources it again, so a tag
 	# that is not a plain version must stop the build here.
