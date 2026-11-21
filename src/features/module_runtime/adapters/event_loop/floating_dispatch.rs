@@ -1,7 +1,7 @@
 use crate::features::layout_engine::domain::{
     DisplayCommand, DisplayCommandSender, FloatingKind, PopupTarget, RenderNode, ShowFloating,
 };
-use crate::features::module_runtime::domain::render_pipeline::paint_pipeline;
+use crate::features::module_runtime::domain::render_pipeline::{FloatingHold, paint_pipeline};
 use crate::features::module_runtime::domain::{PopupRenderLayout, RenderOutcome};
 use crate::shared::primitives::geometry::{Rect, Scale};
 use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset};
@@ -17,8 +17,8 @@ struct FloatingRequest<'a> {
     node: Option<&'a RenderNode>,
     anchor_rect: Option<Rect>,
     offset: Option<PopupOffset>,
-    /// An embedded child has not settled on its host width yet.
-    hold: bool,
+    /// Whether an embedded child has not settled on its host width yet.
+    hold: FloatingHold,
 }
 
 /// Everything the three floating kinds of one module share on one monitor for
@@ -51,7 +51,7 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
         // An embedded child has not settled on its host width yet: leave the
         // surface exactly as it is (closed, or showing its previous frame)
         // rather than present a frame at the wrong width.
-        if request.hold {
+        if request.hold == FloatingHold::Held {
             return;
         }
         let kind = request.kind;
@@ -104,7 +104,7 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
             node: popup_layout.map(PopupRenderLayout::node),
             anchor_rect: popup_layout.map(PopupRenderLayout::anchor_rect),
             offset: popup_layout.and_then(PopupRenderLayout::offset),
-            hold: outcome.popup_held(),
+            hold: outcome.popup_hold(),
         };
         self.dispatch(trees, request);
     }
@@ -120,7 +120,7 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
             node: outcome.panel_layout(),
             anchor_rect: None,
             offset: None,
-            hold: outcome.panel_held(),
+            hold: outcome.panel_hold(),
         };
         self.dispatch(trees, request);
     }
@@ -135,7 +135,7 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
             node: outcome.tooltip_layout(),
             anchor_rect: None,
             offset: None,
-            hold: outcome.tooltip_held(),
+            hold: outcome.tooltip_hold(),
         };
         self.dispatch(trees, request);
     }

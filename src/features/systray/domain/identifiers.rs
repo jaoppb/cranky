@@ -101,17 +101,31 @@ impl WindowId {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
-#[serde(transparent)]
-pub(crate) struct ItemIsMenu(bool);
+/// The SNI `ItemIsMenu` property: whether a tray item only offers its context menu, which makes a
+/// primary click open the menu instead of activating the item. Serialized as the `bool` the
+/// property and the scripts carry (`true` for a menu-only item).
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(from = "bool", into = "bool")]
+pub(crate) enum ItemIsMenu {
+    /// The item only offers its context menu.
+    MenuOnly,
+    /// The item can be activated.
+    Activatable,
+}
 
-impl ItemIsMenu {
-    #[must_use]
-    pub(crate) const fn new(val: bool) -> Self {
-        Self(val)
+impl From<bool> for ItemIsMenu {
+    /// `true` is [`ItemIsMenu::MenuOnly`], as on the bus.
+    fn from(item_is_menu: bool) -> Self {
+        if item_is_menu {
+            Self::MenuOnly
+        } else {
+            Self::Activatable
+        }
     }
-    #[must_use]
-    pub(crate) const fn value(self) -> bool {
-        self.0
+}
+
+impl From<ItemIsMenu> for bool {
+    fn from(item_is_menu: ItemIsMenu) -> Self {
+        matches!(item_is_menu, ItemIsMenu::MenuOnly)
     }
 }

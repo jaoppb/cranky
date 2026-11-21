@@ -3,6 +3,7 @@ mod tests {
     use crate::features::styling::domain::{ElementQuery, InheritedStyle};
     use crate::features::styling::ports::StyleResolverPort;
     use crate::features::vdom::domain::{InteractionContext, TextContent, VNode};
+    use crate::shared::primitives::MonitorFocus;
 
     /// Records the pseudo-classes each element id was resolved with, so a
     /// test can check `:hover`/`:active`/`:focus` landed on the right node
@@ -87,7 +88,8 @@ mod tests {
             )],
             NodePath::root_in(SurfaceSpace::Bar),
         );
-        let interaction = InteractionContext::new(Some(hovered), None, None, false);
+        let interaction =
+            InteractionContext::new(Some(hovered), None, None, MonitorFocus::Unfocused);
 
         // Re-render with "a" removed: "b" is now at path [0].
         let root = VNode::new_flex(vec![item_b], None, None, None, None, None);
@@ -144,7 +146,8 @@ mod tests {
             )],
             NodePath::new(SurfaceSpace::Bar, vec![0]),
         );
-        let interaction = InteractionContext::new(Some(hovered), None, None, false);
+        let interaction =
+            InteractionContext::new(Some(hovered), None, None, MonitorFocus::Unfocused);
 
         // Re-render with "a" removed: "b" is now at [0], its label at [0, 0].
         let root = VNode::new_flex(vec![item_b], None, None, None, None, None);
@@ -211,7 +214,8 @@ mod tests {
             ],
             NodePath::root_in(SurfaceSpace::Bar),
         );
-        let interaction = InteractionContext::new(Some(hovered), None, None, false);
+        let interaction =
+            InteractionContext::new(Some(hovered), None, None, MonitorFocus::Unfocused);
 
         let resolver = RecordingResolver::new();
         let _ = root.resolve_styles(&resolver, Some(&interaction), None);
@@ -257,7 +261,8 @@ mod tests {
             )],
             NodePath::root_in(SurfaceSpace::Bar),
         );
-        let interaction = InteractionContext::new(Some(hovered), None, None, false);
+        let interaction =
+            InteractionContext::new(Some(hovered), None, None, MonitorFocus::Unfocused);
 
         let resolver = RecordingResolver::new();
         let _ = root.resolve_styles(&resolver, Some(&interaction), None);
@@ -330,7 +335,8 @@ mod tests {
         ];
         for (surface, hovered_id) in cases {
             let hovered = NodeRef::new(Vec::new(), NodePath::root_in(surface));
-            let interaction = InteractionContext::new(Some(hovered), None, None, false);
+            let interaction =
+                InteractionContext::new(Some(hovered), None, None, MonitorFocus::Unfocused);
             let resolver = RecordingResolver::new();
             let _ = button_with_every_floating_kind().resolve_styles(
                 &resolver,

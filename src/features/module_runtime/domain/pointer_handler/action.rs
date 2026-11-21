@@ -1,3 +1,4 @@
+use crate::features::module_runtime::domain::Change;
 use crate::features::vdom::domain::UiCommand;
 use crate::shared::primitives::{FunctionName, MonitorId};
 
@@ -10,15 +11,15 @@ pub(in crate::features::module_runtime) enum PointerAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::features::module_runtime) struct PointerOutcome {
     actions: Vec<PointerAction>,
-    state_changed: bool,
+    state_change: Change,
 }
 
 impl PointerOutcome {
     #[must_use]
-    pub(crate) const fn new(actions: Vec<PointerAction>, state_changed: bool) -> Self {
+    pub(crate) const fn new(actions: Vec<PointerAction>, state_change: Change) -> Self {
         Self {
             actions,
-            state_changed,
+            state_change,
         }
     }
 
@@ -26,7 +27,7 @@ impl PointerOutcome {
     pub(crate) const fn empty() -> Self {
         Self {
             actions: Vec::new(),
-            state_changed: false,
+            state_change: Change::Unchanged,
         }
     }
 
@@ -37,7 +38,7 @@ impl PointerOutcome {
 
     #[must_use]
     pub(crate) const fn has_state_changed(&self) -> bool {
-        self.state_changed
+        self.state_change.is_changed()
     }
 
     #[cfg(test)]

@@ -124,7 +124,7 @@ pub(super) async fn fetch_systray_item(
             )
             .with_status(SystrayStatus::Unknown)
             .with_category(SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(ItemIsMenu::new(false)),
+            .with_item_is_menu(ItemIsMenu::Activatable),
         ))
     };
 
@@ -184,7 +184,7 @@ pub(super) async fn fetch_systray_item(
         .with_icon(icon)
         .with_menu_path(menu_path_str.map(ObjectPath::new))
         .with_category(SystrayCategory::parse_str(&category_str))
-        .with_item_is_menu(ItemIsMenu::new(item_is_menu_val)),
+        .with_item_is_menu(ItemIsMenu::from(item_is_menu_val)),
     )
     .with_item_id(item_id.map(ItemId::new))
     .with_window_id(window_id.map(WindowId::new))

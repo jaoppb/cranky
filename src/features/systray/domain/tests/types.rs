@@ -34,7 +34,7 @@ fn test_icon_image_debug_omission() {
 fn test_value_objects() {
     assert_eq!(ItemId::new("item1").as_str(), "item1");
     assert_eq!(WindowId::new(42).value(), 42);
-    assert!(ItemIsMenu::new(true).value());
+    assert!(bool::from(ItemIsMenu::MenuOnly));
     assert_eq!(SystrayTooltipTitle::new("T").as_str(), "T");
     assert_eq!(SystrayTooltipDescription::new("D").as_str(), "D");
 }

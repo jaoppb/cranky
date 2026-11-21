@@ -130,26 +130,24 @@ pub(super) fn parse_panel_spec(
                 Some("overlay") => PanelLayer::Overlay,
                 _ => PanelLayer::Top,
             };
-            let mut top = false;
-            let mut bottom = false;
-            let mut left = false;
-            let mut right = false;
+            let mut vertical = VerticalAnchor::None;
+            let mut horizontal = HorizontalAnchor::None;
             if let Ok(anchor_table) = table.get::<mlua::Table>("anchor") {
                 for edge in anchor_table.sequence_values::<String>().flatten() {
                     match edge.to_lowercase().as_str() {
-                        "top" => top = true,
-                        "bottom" => bottom = true,
-                        "left" => left = true,
-                        "right" => right = true,
+                        "top" => vertical = vertical.with_top(),
+                        "bottom" => vertical = vertical.with_bottom(),
+                        "left" => horizontal = horizontal.with_left(),
+                        "right" => horizontal = horizontal.with_right(),
                         _ => {}
                     }
                 }
             } else if let Ok(anchor) = table.get::<String>("anchor") {
                 match anchor.to_lowercase().as_str() {
-                    "top" => top = true,
-                    "bottom" => bottom = true,
-                    "left" => left = true,
-                    "right" => right = true,
+                    "top" => vertical = vertical.with_top(),
+                    "bottom" => vertical = vertical.with_bottom(),
+                    "left" => horizontal = horizontal.with_left(),
+                    "right" => horizontal = horizontal.with_right(),
                     _ => {}
                 }
             }
@@ -169,10 +167,7 @@ pub(super) fn parse_panel_spec(
             Ok(Some(
                 PanelSpec::new(content)
                     .with_layer(layer)
-                    .with_anchor(PanelAnchor::new(
-                        VerticalAnchor::from_edges(top, bottom),
-                        HorizontalAnchor::from_edges(left, right),
-                    ))
+                    .with_anchor(PanelAnchor::new(vertical, horizontal))
                     .with_margin(margin)
                     .with_exclusive_zone(exclusive_zone)
                     .with_keyboard(keyboard),

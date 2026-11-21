@@ -2,6 +2,26 @@
 use super::grid_types::PseudoClass;
 use super::identifiers::{ClassName, ElementId};
 
+/// Whether an element has no children, which the `:empty` pseudo-class matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Emptiness {
+    /// The element has no children.
+    Empty,
+    /// The element has children.
+    NonEmpty,
+}
+
+impl From<bool> for Emptiness {
+    /// `true` is [`Emptiness::Empty`].
+    fn from(is_empty: bool) -> Self {
+        if is_empty {
+            Self::Empty
+        } else {
+            Self::NonEmpty
+        }
+    }
+}
+
 /// What a selector can see of one element: tag, id, classes, active pseudo-classes, position
 /// among its siblings, emptiness and a chain to its parent's query for combinators.
 #[derive(Debug, Clone)]
@@ -12,7 +32,7 @@ pub struct ElementQuery<'a> {
     pseudo_classes: &'a [PseudoClass],
     child_index: usize,
     total_children: usize,
-    is_empty: bool,
+    emptiness: Emptiness,
     parent: Option<&'a Self>,
 }
 
@@ -34,7 +54,7 @@ impl<'a> ElementQuery<'a> {
             pseudo_classes,
             child_index: 0,
             total_children: 1,
-            is_empty: false,
+            emptiness: Emptiness::NonEmpty,
             parent,
         }
     }
@@ -44,11 +64,11 @@ impl<'a> ElementQuery<'a> {
         mut self,
         child_index: usize,
         total_children: usize,
-        is_empty: bool,
+        emptiness: Emptiness,
     ) -> Self {
         self.child_index = child_index;
         self.total_children = total_children;
-        self.is_empty = is_empty;
+        self.emptiness = emptiness;
         self
     }
 
@@ -84,7 +104,7 @@ impl<'a> ElementQuery<'a> {
 
     #[must_use]
     pub(crate) const fn is_empty(&self) -> bool {
-        self.is_empty
+        matches!(self.emptiness, Emptiness::Empty)
     }
 
     #[must_use]

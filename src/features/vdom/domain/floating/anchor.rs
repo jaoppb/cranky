@@ -1,75 +1,7 @@
 //! The screen edges a panel is anchored to, as vertical and horizontal anchors packed into one
 //! value.
+use super::edge::{BOTTOM_FLAG, HorizontalAnchor, LEFT_FLAG, RIGHT_FLAG, TOP_FLAG, VerticalAnchor};
 use serde::{Deserialize, Serialize};
-
-const TOP_FLAG: u8 = 1 << 0;
-const BOTTOM_FLAG: u8 = 1 << 1;
-const LEFT_FLAG: u8 = 1 << 2;
-const RIGHT_FLAG: u8 = 1 << 3;
-
-/// Vertical edge anchor for floating panels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum VerticalAnchor {
-    #[default]
-    None,
-    Top,
-    Bottom,
-    Both,
-}
-
-impl VerticalAnchor {
-    #[must_use]
-    pub(crate) const fn from_edges(top: bool, bottom: bool) -> Self {
-        match (top, bottom) {
-            (true, true) => Self::Both,
-            (true, false) => Self::Top,
-            (false, true) => Self::Bottom,
-            (false, false) => Self::None,
-        }
-    }
-
-    #[must_use]
-    pub(crate) const fn to_flags(self) -> u8 {
-        match self {
-            Self::None => 0,
-            Self::Top => TOP_FLAG,
-            Self::Bottom => BOTTOM_FLAG,
-            Self::Both => TOP_FLAG | BOTTOM_FLAG,
-        }
-    }
-}
-
-/// Horizontal edge anchor for floating panels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum HorizontalAnchor {
-    #[default]
-    None,
-    Left,
-    Right,
-    Both,
-}
-
-impl HorizontalAnchor {
-    #[must_use]
-    pub(crate) const fn from_edges(left: bool, right: bool) -> Self {
-        match (left, right) {
-            (true, true) => Self::Both,
-            (true, false) => Self::Left,
-            (false, true) => Self::Right,
-            (false, false) => Self::None,
-        }
-    }
-
-    #[must_use]
-    pub(crate) const fn to_flags(self) -> u8 {
-        match self {
-            Self::None => 0,
-            Self::Left => LEFT_FLAG,
-            Self::Right => RIGHT_FLAG,
-            Self::Both => LEFT_FLAG | RIGHT_FLAG,
-        }
-    }
-}
 
 /// Wayland Layer-Shell anchor configuration for floating panels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -132,10 +64,20 @@ impl From<PanelAnchorHelper> for PanelAnchor {
                 bottom,
                 left,
                 right,
-            } => Self::new(
-                VerticalAnchor::from_edges(top, bottom),
-                HorizontalAnchor::from_edges(left, right),
-            ),
+            } => {
+                let edges = [
+                    (top, TOP_FLAG),
+                    (bottom, BOTTOM_FLAG),
+                    (left, LEFT_FLAG),
+                    (right, RIGHT_FLAG),
+                ];
+                Self::from_flags(
+                    edges
+                        .iter()
+                        .filter(|(anchored, _)| *anchored)
+                        .fold(0, |acc, (_, flag)| acc | flag),
+                )
+            }
             PanelAnchorHelper::List(list) => Self::from_flags(
                 list.iter()
                     .fold(0, |acc, item| acc | parse_anchor_str(item)),

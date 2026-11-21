@@ -10,7 +10,7 @@ use crate::features::vdom::domain::{
 };
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
-use crate::shared::primitives::{MonitorId, PopupOffset};
+use crate::shared::primitives::{MonitorFocus, MonitorId, PopupOffset};
 use std::collections::HashMap;
 
 #[derive(Default)]
@@ -92,7 +92,7 @@ fn each_open_floating_kind_is_laid_out_by_its_own_engine() {
     let bar = Spec::at_path(SurfaceSpace::Bar, &[]).flex(vec![button, launcher]);
     // The pointer is over the popup's content, which carries a tooltip.
     let hovered = NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Popup));
-    let interaction = InteractionContext::new(Some(hovered), None, None, true);
+    let interaction = InteractionContext::new(Some(hovered), None, None, MonitorFocus::Focused);
 
     let (layouts, engines) = run(&bar, Some(&interaction));
 

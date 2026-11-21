@@ -5,7 +5,7 @@ use crate::features::module_runtime::domain::LayoutContext;
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::primitives::geometry::Scale;
-use crate::shared::primitives::{ChildBounds, MonitorId, SizeConstraint};
+use crate::shared::primitives::{ChildBounds, MonitorFocus, MonitorId, SizeConstraint};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::{HashMap, HashSet};
 
@@ -57,16 +57,17 @@ impl<
             let module_sizes_guard = self.ctx.hub().module_sizes_rx().borrow().clone();
             let current_child_sizes = module_sizes_guard.get(&monitor_id);
 
-            let is_monitor_focused = self
-                .ctx
-                .hub()
-                .hyprland_rx()
-                .borrow()
-                .focused_monitor()
-                .is_some_and(|focused| focused.as_str() == monitor_id.as_str());
+            let monitor_focus = MonitorFocus::from(
+                self.ctx
+                    .hub()
+                    .hyprland_rx()
+                    .borrow()
+                    .focused_monitor()
+                    .is_some_and(|focused| focused.as_str() == monitor_id.as_str()),
+            );
             let interaction_context = Some(
                 self.pointer_handler
-                    .interaction_context(&monitor_id, is_monitor_focused),
+                    .interaction_context(&monitor_id, monitor_focus),
             );
 
             let engine = layout_engines.entry(monitor_id.clone()).or_default();

@@ -2,6 +2,7 @@
 //! new layout.
 use super::context::PipelineDiff;
 use super::pipeline::RenderPipeline;
+use crate::features::module_runtime::domain::Change;
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::features::vdom::domain::InteractionContext;
 use crate::features::vdom::ports::VdomDiffPort;
@@ -50,8 +51,8 @@ pub(crate) fn diff_pipeline(
 
     Some(PipelineDiff::new(
         new_vdom,
-        vdom_dirty,
-        bounds_changed,
-        child_sizes_changed,
+        Change::from(vdom_dirty),
+        Change::from(bounds_changed),
+        Change::from(child_sizes_changed),
     ))
 }

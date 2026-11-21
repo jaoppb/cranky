@@ -3,6 +3,7 @@
 use crate::features::vdom::domain::{
     InteractionContext, NodePath, NodeRef, SurfaceSpace, VNode, resolve_segment,
 };
+use crate::shared::primitives::MonitorFocus;
 
 /// The three interaction refs, pre-resolved into concrete absolute
 /// `NodePath`s against one specific tree (`None` if a ref's keyed anchor no
@@ -13,7 +14,7 @@ pub(crate) struct ResolvedInteraction {
     hovered: Option<NodePath>,
     active: Option<NodePath>,
     focused: Option<NodePath>,
-    is_monitor_focused: bool,
+    monitor_focus: MonitorFocus,
 }
 
 impl ResolvedInteraction {
@@ -29,13 +30,13 @@ impl ResolvedInteraction {
             focused: ctx
                 .focused()
                 .and_then(|node_ref| resolve_target_path(root, surface, node_ref)),
-            is_monitor_focused: ctx.is_monitor_focused(),
+            monitor_focus: ctx.monitor_focus(),
         }
     }
 
     #[must_use]
     pub(crate) const fn is_monitor_focused(&self) -> bool {
-        self.is_monitor_focused
+        self.monitor_focus.is_focused()
     }
 
     /// Whether `path` is the hovered node, or an ancestor of it.

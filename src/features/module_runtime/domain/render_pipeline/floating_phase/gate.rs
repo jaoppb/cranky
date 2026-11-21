@@ -1,4 +1,4 @@
-use super::FloatingLayouts;
+use super::{FloatingHold, FloatingLayouts, PopupRenderLayout};
 use crate::features::layout_engine::domain::RenderNode;
 use crate::shared::primitives::{ChildSizesMap, MonitorId};
 use std::collections::HashMap;
@@ -25,6 +25,15 @@ fn is_unsettled(node: &RenderNode, sizes: Option<&ChildSizesMap>) -> bool {
     })
 }
 
+/// Holds a floating kind whose content has an embedded module that has not settled yet.
+fn hold_for(node: Option<&RenderNode>, sizes: Option<&ChildSizesMap>) -> FloatingHold {
+    if node.is_some_and(|content| is_unsettled(content, sizes)) {
+        FloatingHold::Held
+    } else {
+        FloatingHold::Present
+    }
+}
+
 /// Marks floating layouts whose embedded children have not converged on the
 /// host box as held, so the surface keeps what it last showed (or stays
 /// closed) instead of presenting a wrong-width frame.
@@ -38,16 +47,10 @@ pub(in super::super) fn apply_gate(
     rounds: &mut HashMap<MonitorId, u8>,
     monitor_id: &MonitorId,
 ) -> FloatingLayouts {
-    let popup = floating
-        .popup()
-        .is_some_and(|popup_layout| is_unsettled(popup_layout.node(), sizes));
-    let panel = floating
-        .panel()
-        .is_some_and(|panel_node| is_unsettled(panel_node, sizes));
-    let tooltip = floating
-        .tooltip()
-        .is_some_and(|tooltip_node| is_unsettled(tooltip_node, sizes));
-    if !(popup || panel || tooltip) {
+    let popup = hold_for(floating.popup().map(PopupRenderLayout::node), sizes);
+    let panel = hold_for(floating.panel(), sizes);
+    let tooltip = hold_for(floating.tooltip(), sizes);
+    if ![popup, panel, tooltip].contains(&FloatingHold::Held) {
         rounds.remove(monitor_id);
         return floating;
     }
@@ -111,7 +114,28 @@ mod tests {
         sizes: Option<&ChildSizesMap>,
         rounds: &mut HashMap<MonitorId, u8>,
     ) -> bool {
-        apply_gate(floating, sizes, rounds, &MonitorId::new("DP-1")).popup_held()
+        apply_gate(floating, sizes, rounds, &MonitorId::new("DP-1")).popup_hold()
+            == FloatingHold::Held
+    }
+
+    /// Which of popup, panel and tooltip `floating` holds after the gate.
+    fn held_kinds(floating: FloatingLayouts) -> (FloatingHold, FloatingHold, FloatingHold) {
+        let gated = apply_gate(floating, None, &mut HashMap::new(), &MonitorId::new("DP-1"));
+        (gated.popup_hold(), gated.panel_hold(), gated.tooltip_hold())
+    }
+
+    #[test]
+    fn holds_only_the_kind_whose_content_is_unsettled() {
+        use FloatingHold::{Held, Present};
+        assert_eq!(held_kinds(popup_of(host(280))), (Held, Present, Present));
+        assert_eq!(
+            held_kinds(FloatingLayouts::new(None, Some(host(280)), None)),
+            (Present, Held, Present)
+        );
+        assert_eq!(
+            held_kinds(FloatingLayouts::new(None, None, Some(host(280)))),
+            (Present, Present, Held)
+        );
     }
 
     #[test]

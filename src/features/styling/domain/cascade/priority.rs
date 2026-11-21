@@ -3,8 +3,8 @@ use super::specificity::Specificity;
 
 /// Whether a declaration was marked `!important`. Important declarations
 /// always outrank normal ones, and layer order reverses for them, per the
-/// CSS cascade.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// CSS cascade. `Ord` follows that: `Normal` sorts before `Important`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Importance {
     Normal,
     Important,
@@ -37,7 +37,7 @@ impl Layer {
 /// so the last one applied — the highest priority — wins.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct RulePriority {
-    important: bool,
+    importance: Importance,
     layer_rank: u8,
     specificity: Specificity,
     sheet_index: u32,
@@ -53,16 +53,15 @@ impl RulePriority {
         sheet_index: u32,
         source_order: u32,
     ) -> Self {
-        let important = matches!(importance, Importance::Important);
         // Important declarations reverse layer order: the earliest-declared
         // layer wins, so its rank must sort highest.
-        let layer_rank = if important {
+        let layer_rank = if matches!(importance, Importance::Important) {
             u8::MAX.saturating_sub(layer.value())
         } else {
             layer.value()
         };
         Self {
-            important,
+            importance,
             layer_rank,
             specificity,
             sheet_index,

@@ -6,10 +6,19 @@ use crate::shared::primitives::{LayoutSurface, ModuleId, MonitorId};
 use crate::shared::wayland::ports::{DynSurfaceManager, SurfaceParent};
 use std::collections::{HashMap, HashSet};
 
+/// Whether a module actor is embedded in a parent's tree or stands on its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Embedding {
+    /// The bar itself, or any module with no parent: it covers every monitor.
+    TopLevel,
+    /// A module some parent embeds, present on a monitor only while that parent gives it a site.
+    Embedded,
+}
+
 /// Only ever consults which monitors have *some* entry, never a value — kept
 /// generic so it isn't coupled to whatever a layout channel's value type is.
 ///
-/// A top-level actor (`is_embedded` false — the bar itself, or any module
+/// A top-level actor (`Embedding::TopLevel` — the bar itself, or any module
 /// with no parent) has no "site" to lose: it always covers every monitor
 /// Wayland currently reports, on every pass. Suspension (decision 14) only
 /// makes sense for an *embedded* actor, whose presence on a monitor is a
@@ -38,11 +47,11 @@ pub(super) fn discover_monitors<V>(
     hub: &SignalHub,
     layouts: &HashMap<MonitorId, V>,
     seen: &HashSet<MonitorId>,
-    is_embedded: bool,
+    embedding: Embedding,
 ) -> Vec<MonitorId> {
     let wayland_monitors: HashSet<MonitorId> =
         hub.monitor_scales_rx().borrow().keys().cloned().collect();
-    if !is_embedded {
+    if embedding == Embedding::TopLevel {
         return wayland_monitors.into_iter().collect();
     }
     let mut all_monitors: HashSet<MonitorId> = HashSet::new();

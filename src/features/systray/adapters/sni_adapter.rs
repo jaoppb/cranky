@@ -129,7 +129,7 @@ impl SniAdapter {
                 id.as_str(),
                 item.destination().as_str(),
                 item.path().as_str(),
-                item.item_is_menu().value(),
+                bool::from(item.item_is_menu()),
                 action.as_str()
             );
             let proxy = zbus::Proxy::new(

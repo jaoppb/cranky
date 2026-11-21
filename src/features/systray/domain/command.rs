@@ -50,7 +50,7 @@ impl SystrayItemParams {
             icon: None,
             menu_path: None,
             category: SystrayCategory::ApplicationStatus,
-            item_is_menu: ItemIsMenu::new(false),
+            item_is_menu: ItemIsMenu::Activatable,
         }
     }
 

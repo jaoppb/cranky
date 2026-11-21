@@ -8,13 +8,20 @@ use tokio::sync::RwLock;
 use tracing::{debug, error};
 use zbus::{Connection, interface};
 
+/// Which host the watcher reports as registered. Cranky is itself the host, so one is registered
+/// from the start and never leaves while the watcher runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HostRegistration {
+    /// Cranky's own host.
+    Registered,
+}
+
 pub(super) struct Watcher {
     items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
     hub: Arc<SignalHub>,
     conn: Connection,
     runtime: tokio::runtime::Handle,
-    /// Cranky is itself the host, so one is registered from the start.
-    host_registered: bool,
+    host: HostRegistration,
     protocol_version: i32,
 }
 
@@ -40,7 +47,7 @@ impl Watcher {
             hub,
             conn,
             runtime,
-            host_registered: true,
+            host: HostRegistration::Registered,
             protocol_version: 0,
         }
     }
@@ -81,10 +88,7 @@ impl Watcher {
     }
 
     fn register_status_notifier_host(&self, service: &str) {
-        debug!(
-            host_registered = self.host_registered,
-            "Registered SNI host: {service}"
-        );
+        debug!(host = ?self.host, "Registered SNI host: {service}");
     }
 
     #[zbus(property)]
@@ -95,7 +99,7 @@ impl Watcher {
 
     #[zbus(property)]
     const fn is_status_notifier_host_registered(&self) -> bool {
-        self.host_registered
+        matches!(self.host, HostRegistration::Registered)
     }
 
     #[zbus(property)]

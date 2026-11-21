@@ -42,6 +42,17 @@ pub(crate) struct FloatingEngines<'a, E: LayoutEnginePort> {
     pub(crate) tooltip: &'a mut E,
 }
 
+/// Whether a floating surface must keep what it shows because an embedded child has not settled
+/// on its host width yet, or may present its latest layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum FloatingHold {
+    /// Leave the surface as it is: closed, or showing its previous frame.
+    Held,
+    /// Show, update or hide the surface from the latest layout.
+    #[default]
+    Present,
+}
+
 /// The layout results for whatever floating content is currently open on a monitor.
 ///
 /// Computed once per render, from the same measurer, scale and font fallback as
@@ -53,7 +64,7 @@ pub struct FloatingLayouts {
     tooltip: Option<RenderNode>,
     /// Per kind: an embedded child has not settled on the host width yet,
     /// so the dispatcher must not present or update that surface.
-    held: [bool; 3],
+    held: [FloatingHold; 3],
 }
 
 impl FloatingLayouts {
@@ -67,28 +78,33 @@ impl FloatingLayouts {
             popup,
             panel,
             tooltip,
-            held: [false; 3],
+            held: [FloatingHold::Present; 3],
         }
     }
 
     #[must_use]
-    pub(super) const fn with_held(mut self, popup: bool, panel: bool, tooltip: bool) -> Self {
+    pub(super) const fn with_held(
+        mut self,
+        popup: FloatingHold,
+        panel: FloatingHold,
+        tooltip: FloatingHold,
+    ) -> Self {
         self.held = [popup, panel, tooltip];
         self
     }
 
     #[must_use]
-    pub(crate) const fn popup_held(&self) -> bool {
+    pub(crate) const fn popup_hold(&self) -> FloatingHold {
         self.held[0]
     }
 
     #[must_use]
-    pub(crate) const fn panel_held(&self) -> bool {
+    pub(crate) const fn panel_hold(&self) -> FloatingHold {
         self.held[1]
     }
 
     #[must_use]
-    pub(crate) const fn tooltip_held(&self) -> bool {
+    pub(crate) const fn tooltip_hold(&self) -> FloatingHold {
         self.held[2]
     }
 

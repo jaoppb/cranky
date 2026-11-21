@@ -1,10 +1,10 @@
-use crate::features::systray::domain::{SystrayActionName, SystrayItem};
+use crate::features::systray::domain::{ItemIsMenu, SystrayActionName, SystrayItem};
 use crate::shared::primitives::geometry::Position;
 use tracing::{debug, error, warn};
 use zbus::Proxy;
 
-async fn invoke_primary(proxy: &Proxy<'_>, is_menu: bool, pos_x: i32, pos_y: i32) {
-    if is_menu {
+async fn invoke_primary(proxy: &Proxy<'_>, item_is_menu: ItemIsMenu, pos_x: i32, pos_y: i32) {
+    if item_is_menu == ItemIsMenu::MenuOnly {
         debug!("trigger_action: item_is_menu=true, calling ContextMenu({pos_x}, {pos_y}) on D-Bus");
         match proxy.call_method("ContextMenu", &(pos_x, pos_y)).await {
             Ok(_) => debug!("trigger_action: ContextMenu({pos_x}, {pos_y}) succeeded"),
@@ -74,7 +74,7 @@ pub(super) async fn invoke_action(
     let pos_y = pos.map_or(0, crate::shared::primitives::geometry::Position::y);
 
     match action.as_str() {
-        "Primary" => invoke_primary(proxy, item.item_is_menu().value(), pos_x, pos_y).await,
+        "Primary" => invoke_primary(proxy, item.item_is_menu(), pos_x, pos_y).await,
         "Activate" => {
             debug!("trigger_action: Calling Activate({pos_x}, {pos_y}) on D-Bus");
             match proxy.call_method("Activate", &(pos_x, pos_y)).await {

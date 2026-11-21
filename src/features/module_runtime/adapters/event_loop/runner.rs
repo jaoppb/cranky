@@ -1,4 +1,4 @@
-use super::dispatch::discover_monitors;
+use super::dispatch::{Embedding, discover_monitors};
 use super::events::EventLoopEvent;
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::{DisplayCommandSender, RenderNode};
@@ -103,12 +103,12 @@ impl<
             .keys()
             .cloned()
             .collect();
-        discover_monitors(
-            self.ctx.hub(),
-            layouts,
-            &seen,
-            self.ctx.parent_id().is_some(),
-        )
+        let embedding = if self.ctx.parent_id().is_some() {
+            Embedding::Embedded
+        } else {
+            Embedding::TopLevel
+        };
+        discover_monitors(self.ctx.hub(), layouts, &seen, embedding)
     }
 
     pub(crate) async fn run(mut self) {

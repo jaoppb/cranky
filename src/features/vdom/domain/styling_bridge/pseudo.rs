@@ -36,6 +36,7 @@ pub(crate) fn compute_pseudo_classes(
 mod tests {
     use super::*;
     use crate::features::vdom::domain::{InteractionContext, NodeRef, VNode};
+    use crate::shared::primitives::MonitorFocus;
 
     /// `ResolvedInteraction::resolve` only needs to walk the tree when an
     /// anchor is non-empty; every test here captures a keyless ref, so an
@@ -53,7 +54,8 @@ mod tests {
 
         let hovered_in_popup =
             NodeRef::new(Vec::new(), NodePath::new(SurfaceSpace::Popup, vec![0, 1]));
-        let interaction = InteractionContext::new(Some(hovered_in_popup), None, None, false);
+        let interaction =
+            InteractionContext::new(Some(hovered_in_popup), None, None, MonitorFocus::Unfocused);
 
         // Hovering inside the popup must not mark the bar node that owns it
         // as :hover, even though the indices happen to line up.
@@ -86,7 +88,7 @@ mod tests {
         // is_root() is true for a popup's own root too now — the
         // monitor-focus fallback must not spuriously mark a popup/panel
         // root :focus just because the underlying monitor has focus.
-        let interaction = InteractionContext::new(None, None, None, true);
+        let interaction = InteractionContext::new(None, None, None, MonitorFocus::Focused);
         let resolved = ResolvedInteraction::resolve(&empty_root(), SurfaceSpace::Bar, &interaction);
 
         let bar_root = NodePath::root_in(SurfaceSpace::Bar);
@@ -100,6 +102,17 @@ mod tests {
         let panel_root = NodePath::root_in(SurfaceSpace::Panel);
         assert!(
             !compute_pseudo_classes(&panel_root, Some(&resolved)).contains(&PseudoClass::Focused)
+        );
+    }
+
+    #[test]
+    fn test_unfocused_monitor_leaves_the_bar_root_without_focus() {
+        let interaction = InteractionContext::new(None, None, None, MonitorFocus::Unfocused);
+        let resolved = ResolvedInteraction::resolve(&empty_root(), SurfaceSpace::Bar, &interaction);
+
+        let bar_root = NodePath::root_in(SurfaceSpace::Bar);
+        assert!(
+            !compute_pseudo_classes(&bar_root, Some(&resolved)).contains(&PseudoClass::Focused)
         );
     }
 }

@@ -4,6 +4,7 @@ use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::{
     InteractionContext, NodePath, NodeRef, SurfaceSpace, TextContent, VNode,
 };
+use crate::shared::primitives::MonitorFocus;
 
 struct MockResolver;
 impl StyleResolverPort for MockResolver {
@@ -56,7 +57,7 @@ fn test_resolve_styles_interaction_propagation() {
             Vec::new(),
             NodePath::new(SurfaceSpace::Bar, vec![1]),
         )),
-        true,
+        MonitorFocus::Focused,
     );
 
     let styled = root.resolve_styles(&resolver, Some(&interaction), None);

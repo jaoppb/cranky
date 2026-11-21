@@ -2,6 +2,8 @@ mod discover_monitors;
 mod dispatch;
 mod embedded_report;
 mod floating_dedup;
+mod floating_hold;
 mod lifecycle;
+mod monitor_focus;
 mod resume;
 mod tooltip_parent;

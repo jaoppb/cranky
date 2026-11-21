@@ -1,9 +1,11 @@
 //! Pure module-runtime logic: the identity of each module site, pointer handling, and the
 //! per-monitor render pipeline.
+pub mod change;
 pub mod identity;
 pub(super) mod pointer_handler;
 pub mod render_pipeline;
 
+pub(crate) use change::Change;
 pub(crate) use identity::ModuleIdentity;
 pub(in crate::features::module_runtime) use pointer_handler::{PointerAction, PointerHandler};
 #[cfg(test)]
