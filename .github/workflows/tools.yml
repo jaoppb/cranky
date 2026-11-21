@@ -53,7 +53,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The workflow token cannot read a Project, so the rule that every
+          # issue is a card of the board is audited only locally, by a bare
+          # `just issues-check`.
           - recipe: issues-check
+            args: --no-membership
           # GitHub hides the merge settings from a read-only token, and
           # `tools` then assumes its defaults, which are the values
           # tools.toml declares: here that part would pass without checking

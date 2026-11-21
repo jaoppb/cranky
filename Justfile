@@ -124,15 +124,25 @@ record-profile *args:
 analyze-profile *args:
     python3 scripts/analyze_profile.py {{args}}
 
-# Audit the GitHub issues against tools.toml: type, area, milestone, parent and pending label migrations (needs gh authentication)
+# Audit the GitHub issues against tools.toml: type, area, milestone, parent, Project membership and pending label migrations; --no-membership skips the Project (needs gh authentication with the project scope to read it)
 [group('repo')]
-issues-check:
-    tools issues check
+issues-check *args:
+    tools issues check {{args}}
 
 # Check that the GitHub labels, milestones and merge settings match tools.toml, or only the parts named, e.g. --labels (needs gh authentication with push access to see the settings)
 [group('repo')]
 repo-check *args:
     tools repo check {{args}}
+
+# Print the Status moves the Project cards need and the frozen cards, writing nothing; exits 1 when there are any (needs gh authentication with the project scope)
+[group('repo')]
+project-check *args:
+    tools project check {{args}}
+
+# Write the planned Status moves to the Project (needs gh authentication with the project scope)
+[group('repo')]
+project-sync:
+    tools project sync
 
 # Install git hooks with Lefthook
 [group('setup')]
