@@ -80,6 +80,23 @@ fn panel_anchor_deserializes_from_edge_flags_with_missing_edges_off() {
 }
 
 #[test]
+fn panel_anchor_deserializes_every_combination_of_edge_flags() {
+    for top in [false, true] {
+        for bottom in [false, true] {
+            for left in [false, true] {
+                for right in [false, true] {
+                    let json = serde_json::json!({
+                        "top": top, "bottom": bottom, "left": left, "right": right
+                    });
+                    let anchor: PanelAnchor = serde_json::from_value(json).unwrap();
+                    assert_eq!(edges(anchor), (top, bottom, left, right));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn panel_anchor_deserializes_from_an_edge_or_corner_name() {
     let cases = [
         ("top", (true, false, false, false)),

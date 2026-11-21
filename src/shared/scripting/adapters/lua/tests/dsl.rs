@@ -201,6 +201,47 @@ mod tests {
         assert_eq!(panel.content().children().len(), 1);
     }
 
+    /// Every edge a panel's `anchor` names, as a list or as one string, in
+    /// any case, and only those: unknown names anchor nothing.
+    #[test]
+    fn test_lua_panel_anchor_edges() {
+        let lua = Lua::new();
+        register_cranky_api(&lua).expect("DSL registration failed");
+        let cases = [
+            (r#"{ "bottom", "left" }"#, (false, true, true, false)),
+            (
+                r#"{ "TOP", "right", "middle" }"#,
+                (true, false, false, true),
+            ),
+            (
+                r#"{ "top", "bottom", "left", "right" }"#,
+                (true, true, true, true),
+            ),
+            (
+                r#"{ "bottom", "top", "right", "left" }"#,
+                (true, true, true, true),
+            ),
+            (r#""top""#, (true, false, false, false)),
+            (r#""Bottom""#, (false, true, false, false)),
+            (r#""left""#, (false, false, true, false)),
+            (r#""right""#, (false, false, false, true)),
+            (r#""middle""#, (false, false, false, false)),
+        ];
+        for (anchor, expected) in cases {
+            let script = format!(
+                "return ui.text({{ text = \"t\", panel = ui.panel({{ anchor = {anchor}, content = ui.text({{ text = \"p\" }}) }}) }})"
+            );
+            let val = lua.load(script).eval::<mlua::Value>().unwrap();
+            let node = value_to_vnode(&lua, val).unwrap();
+            let edges = node.panel().unwrap().anchor();
+            assert_eq!(
+                (edges.top(), edges.bottom(), edges.left(), edges.right()),
+                expected,
+                "{anchor}"
+            );
+        }
+    }
+
     #[test]
     fn test_lua_vnode_grid() {
         let lua = Lua::new();

@@ -102,4 +102,15 @@ mod tests {
             !compute_pseudo_classes(&panel_root, Some(&resolved)).contains(&PseudoClass::Focused)
         );
     }
+
+    #[test]
+    fn test_unfocused_monitor_leaves_the_bar_root_without_focus() {
+        let interaction = InteractionContext::new(None, None, None, false);
+        let resolved = ResolvedInteraction::resolve(&empty_root(), SurfaceSpace::Bar, &interaction);
+
+        let bar_root = NodePath::root_in(SurfaceSpace::Bar);
+        assert!(
+            !compute_pseudo_classes(&bar_root, Some(&resolved)).contains(&PseudoClass::Focused)
+        );
+    }
 }
