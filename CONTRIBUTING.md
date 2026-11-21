@@ -38,7 +38,7 @@ Open a new issue and pick the form for its type: Feature, Fix, Chore, Docs, Refa
 - **Dependencies:** the issues that must close first, or "None.".
 - **Definition of Done:** checkable outcomes.
 
-A form cannot apply an `area:*` label or set a milestone, so the issue still needs triage after you file it. The maintainer adds one `area:*` label, the release milestone and the parent epic (see "Issues, branches and commits" in `AGENTS.md`). Until then the **Tools** workflow fails its `issues-check` run, and GitHub may email you that the run failed. That is expected, and there is nothing for you to do.
+A form cannot apply an `area:*` label or set a milestone, so the issue still needs triage after you file it. The maintainer adds one `area:*` label, the release milestone and the parent (see "Issues, branches and commits" in `AGENTS.md`). Until then the **Tools** workflow fails its `issues-check` run, and GitHub may email you that the run failed. That is expected, and there is nothing for you to do.
 
 ## Issue lifecycle
 

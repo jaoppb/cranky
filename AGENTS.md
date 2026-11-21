@@ -134,8 +134,8 @@ CSS files in `assets/styles/`, deployed like widgets and resolved per module —
 <!-- labels:end -->
 
 - **Milestone:** an open issue has the release milestone (`vX.Y.Z`) it ships in.
-- **Parent:** an open issue is a sub-issue of an open parent (an epic or another issue), unless it carries the `epic` label itself.
-- **Blockers:** "blocked by" relations are recorded natively and never form a cycle. An issue never sits under, or blocks, an issue of an earlier release.
+- **Parent:** an open issue is a sub-issue of an open parent (an epic or another issue), unless it carries the `epic` label itself. It never sits under an issue of an earlier release.
+- **Blockers:** "blocked by" relations are recorded natively and never form a cycle. An issue never blocks an issue of an earlier release.
 - **Board:** every issue, open or closed, is a card of the Project board.
 - **Branches:** `<type>/<issue>`, the type being the issue's `type:*` label (`docs/24`). A layer of stacked pull requests adds a suffix (`chore/31-shared`). One issue per branch.
 - **Commits:** Conventional Commits with a scope: `feat(popup): ...`, `refactor(wayland): ...`. Reference the issue with `Refs #<n>`; only the pull request body closes it, with `Closes #<n>`. Never close a parent epic from a commit.
