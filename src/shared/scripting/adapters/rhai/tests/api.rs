@@ -98,6 +98,11 @@ mod tests {
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
+            if monitor.id == "DP-2" {
+                assert(monitor.is_focused == false);
+                return ui.text("unfocused");
+            }
+
             // Assert monitor properties
             assert(monitor.id == "DP-1");
             assert(monitor.name == "DP-1");
@@ -126,9 +131,13 @@ mod tests {
             .with_scale(crate::shared::primitives::geometry::Scale::new(1.5))
             .with_focused(true)
             .with_workspaces(Some(1), Some(2));
-        module.cached_monitors = vec![test_mon];
+        let unfocused = ScriptMonitorInfo::from_id(&MonitorId::new("DP-2"));
+        module.cached_monitors = vec![test_mon, unfocused];
 
         let node = module.render(&MonitorId::new("DP-1"));
+        assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Text);
+        // A failed assert renders an empty flex instead of the text.
+        let node = module.render(&MonitorId::new("DP-2"));
         assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Text);
     }
 

@@ -72,3 +72,16 @@ fn test_script_monitor_info_builder() {
     assert_eq!(info.active_workspace_id(), Some(3));
     assert_eq!(info.special_workspace_id(), Some(4));
 }
+
+#[test]
+fn test_script_monitor_info_serializes_focus_as_a_bool() {
+    let id = crate::shared::primitives::MonitorId::new("DP-2");
+    let info = crate::shared::primitives::ScriptMonitorInfo::from_id(&id).with_focused(true);
+    let value = serde_json::to_value(&info).unwrap();
+    assert_eq!(value["is_focused"], serde_json::Value::Bool(true));
+    let back: crate::shared::primitives::ScriptMonitorInfo = serde_json::from_value(value).unwrap();
+    assert_eq!(back, info);
+    let unfocused = crate::shared::primitives::ScriptMonitorInfo::from_id(&id);
+    let value = serde_json::to_value(&unfocused).unwrap();
+    assert_eq!(value["is_focused"], serde_json::Value::Bool(false));
+}

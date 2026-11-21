@@ -78,6 +78,8 @@ fn test_lua_rich_monitor_userdata() {
         .with_workspaces(Some(1), Some(2));
     let mon = LuaMonitor(info);
     lua.globals().set("test_mon", mon).unwrap();
+    let unfocused = LuaMonitor(ScriptMonitorInfo::from_id(&MonitorId::new("DP-2")));
+    lua.globals().set("test_unfocused", unfocused).unwrap();
 
     let script = r#"
         assert(test_mon.id == "DP-1", "id field")
@@ -86,6 +88,7 @@ fn test_lua_rich_monitor_userdata() {
         assert(test_mon.height == 1080, "height field")
         assert(test_mon.scale == 1.5, "scale field")
         assert(test_mon.is_focused == true, "is_focused field")
+        assert(test_unfocused.is_focused == false, "unfocused is_focused field")
         assert(test_mon.active_workspace_id == 1, "active_workspace_id field")
         assert(test_mon.special_workspace_id == 2, "special_workspace_id field")
         assert(tostring(test_mon) == "DP-1", "tostring()")
