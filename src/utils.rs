@@ -1,3 +1,6 @@
+//! Saturating numeric conversions and icon loading into RGBA (SVG rasterised, other formats
+//! decoded and resized).
+
 use resvg::usvg;
 use std::path::Path;
 use tiny_skia::Transform;

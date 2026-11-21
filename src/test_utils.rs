@@ -1,3 +1,7 @@
+//! Pixel assertions and helpers shared by the unit tests.
+
+/// Asserts that the pixel at (`x`, `y`) of a pixmap matches `expected_color` within 0.01 per
+/// channel.
 #[cfg(test)]
 #[macro_export]
 macro_rules! assert_pixel_color {
@@ -21,6 +25,7 @@ macro_rules! assert_pixel_color {
     };
 }
 
+/// Asserts that at least one pixel of a pixmap matches `expected_color` within 0.01 per channel.
 #[cfg(test)]
 #[macro_export]
 macro_rules! assert_pixmap_has_color {

@@ -15,6 +15,7 @@ pub(crate) trait EnvironmentPort: Send + Sync {
     ///
     /// # Errors
     ///
-    /// Returns [`EnvironmentError::MissingVariable`] if a required environment variable is not set.
+    /// Returns [`EnvironmentError::MissingVariable`] if a required environment variable is unset
+    /// or not valid Unicode.
     fn read_environment(&self) -> Result<AppEnvironment, EnvironmentError>;
 }

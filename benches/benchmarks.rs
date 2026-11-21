@@ -1,3 +1,6 @@
+//! Criterion benchmarks of the hot paths: the virtual DOM diff, style resolution, layout,
+//! painting, script calls and the whole render pipeline.
+
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::fmt::Write;
 use std::hint::black_box;

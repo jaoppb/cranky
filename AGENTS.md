@@ -24,10 +24,11 @@ Every recipe runs only inside the flake devShell (`nix develop`, or direnv with 
 | Task | Command |
 | --- | --- |
 | Build / run | `just build`, `just release`, `just run`, `just run-release`, `just clean` |
-| Full gate | `just check` (fmt-check, lint, arch-check, loc-check, test, deps-check, workflows-check) |
+| Full gate | `just check` (fmt-check, lint, doc-check, arch-check, loc-check, test, deps-check, workflows-check) |
 | Tests | `just test` (= `cargo test --workspace`: unit, architecture and integration), `just test-unit` (no running service needed), `just test-integration [name]` |
 | Single test | `cargo test <name>` — e.g. `cargo test test_find_module_clock_rhai_format` |
 | Lints | `just lint` (Clippy, `--workspace --all-targets --all-features -- -D warnings`), `just lint-fix` |
+| Docs | `just doc-check` (`cargo doc` with private items, warnings denied) |
 | Architecture gate | `just arch-check` (= `cargo test --test architecture`) |
 | LOC limit | `just loc-check` (= `scripts/lint-loc.sh`) |
 | Format | `just fmt`, `just fmt-check` |
@@ -49,7 +50,12 @@ Every recipe runs only inside the flake devShell (`nix develop`, or direnv with 
 - **Lint groups at deny** (`Cargo.toml [lints]`): rustc `unused`, `rust_2018_idioms`, `future_incompatible`; clippy `all`, `pedantic`, `nursery`, `cargo`.
 - **Restriction lints at forbid**, so no attribute can lower them: `unwrap_used`, `expect_used`, `unwrap_in_result`, `get_unwrap`, `indexing_slicing`, `string_slice`, `arithmetic_side_effects`, `as_conversions`, `panic`, `panic_in_result_fn`, `todo`, `unimplemented`, `unreachable`, `exit`, `unchecked_time_subtraction`, `dbg_macro`, `print_stdout`, `print_stderr`, `self_named_module_files`, `min_ident_chars`. Use `checked_*`/`saturating_*`, `get()`, `TryFrom`, and `Result` instead. `clippy.toml` relaxes `unwrap`, `expect`, `panic`, indexing, `print` and `dbg` inside tests only.
 - **Identifier length** (`clippy.toml`): `min-ident-chars-threshold = 2` rejects every name of one or two characters except `x`, `y`, `id`, `tx`, `rx`, `dx`, `dy` and `px`, in tests too; name a binding after what it holds (`error`, `index`, `key`/`value`, `width`/`height`, never a padded `err`/`val`). `single-char-binding-names-threshold = 2` lets a scope bind `x` and `y` together and nothing more.
-- **Zero lint exceptions**: no `#[allow]` or `#[expect]` anywhere (`allow_attributes` is forbidden, and `no_source_file_suppresses_a_lint` in `tests/architecture.rs` scans `src/`, `tests/`, `benches/` and `crates/`). Code that cannot meet a rule is redesigned, or the rule is changed in `Cargo.toml` for everyone.
+- **Zero lint exceptions**: no `#[allow]` or `#[expect]` anywhere (`allow_attributes` and `allow_attributes_without_reason` are forbidden, and `no_source_file_suppresses_a_lint` in `tests/architecture.rs` scans `src/`, `tests/`, `benches/` and `crates/`). Code that cannot meet a rule is redesigned, or the rule is changed in `Cargo.toml` for everyone.
+- **Public surface** (`[lints.rust]`, forbid): `unreachable_pub`, `missing_debug_implementations` and `missing_docs`.
+  - Visibility: an item is only as visible as its uses: private, `pub(super)` or `pub(in crate::…)` inside a module nothing outside reaches, and `pub(crate)` only inside a `pub` module chain, because `clippy::redundant_pub_crate` rejects it anywhere else (and rejects `pub(super)` right below a crate root). `pub` is for what another crate uses (`src/main.rs`, `benches/`, `tests/integration`, and `cranky` for the member crates), and for the `pub` module chain that `pub(crate)` items need.
+  - Docs: every exported item has a doc whose first sentence says what it is for or what it guarantees, never its name in other words.
+  - `Debug`: every exported type implements it, derived when every field is `Debug`, otherwise written by hand, printing the fields that carry state and ending with `finish_non_exhaustive()`; ports get no `Debug` supertrait.
+- **Docs build clean**: `[lints.rustdoc]` denies `all`, and `just doc-check` (part of `just check`) runs `cargo doc` with private items and warnings denied, so a broken intra-doc link fails the gate.
 - **No macro that emits an `allow`** for a forbidden lint, because `forbid` turns it into a hard error (`E0453`). That rules out `#[tokio::test]` and `#[tokio::main]` (tests use `crate::test_utils::block_on`), `mockall` (ports get hand-written fakes) and `#[tracing::instrument]` (use an explicit span).
 - **`unsafe_code` is forbidden** in the `cranky` crate. The only unsafe code lives in the member crate `crates/cranky-unsafe` (the shm memory mapping and the `Send` taffy tree), whose lint table is the main one without that rule and with `clippy::non_send_fields_in_send_ty` off; `member_crate_lints_differ_only_where_unsafe_requires` keeps the two in step. `crates/cranky-time` (the local time and the system time zone, in safe Rust with no dependencies) carries the main lint table unchanged, checked by `time_crate_lints_equal_the_main_crate`.
 - **`cargo` group**: a crate that appears twice in `Cargo.lock` must be listed in `allowed-duplicate-crates` (`clippy.toml`) and in the `skip` entries of `deny.toml`, which records why.
@@ -69,9 +75,9 @@ src/shared/    cross-cutting infra: config, dbus, env, events, primitives,
 
 Each feature and shared unit repeats the same shape: `domain/` (pure logic and value types), `ports/` (traits), `adapters/` (concrete impls wrapping a crate — taffy, lightningcss, tiny-skia, zbus, mlua, rhai, wayland-client).
 
-### Startup (`src/main.rs`)
+### Startup (`src/app/bootstrap/`)
 
-Reads env → loads config → builds `SignalHub` → creates four mpsc channels (`DisplayCommand`, `LayoutEvent`, `UiCommand`, `SystemCommand`) → builds `WaylandAdapter` + `ModuleRegistry` → `CrankyApp::new` loads and spawns modules → conditionally starts secondary adapters (DBus/MPRIS/SNI/metrics/Hyprland/time) based on `app.active_signals()` → `app.run(...)`. Adapters only start if some loaded module actually subscribes to their signal.
+`src/main.rs` only calls `cranky::app::run()`, which builds the Tokio runtime and then: reads env → loads config → builds `SignalHub` → creates four mpsc channels (`DisplayCommand`, `LayoutEvent`, `UiCommand`, `SystemCommand`) → builds `WaylandAdapter` + `ModuleRegistry` → `CrankyApp::new` loads and spawns modules → conditionally starts secondary adapters (DBus/MPRIS/SNI/metrics/Hyprland/time) based on `app.active_signals()` → `app.run(...)`. Adapters only start if some loaded module actually subscribes to their signal.
 
 ### Signals (`src/shared/events/signals/`)
 
