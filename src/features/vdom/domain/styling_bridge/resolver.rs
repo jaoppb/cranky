@@ -3,7 +3,7 @@ use super::mapper::map_to_styled_node;
 use super::pseudo::compute_pseudo_classes;
 use crate::features::layout_engine::domain::{StyledNode, StyledPanel, StyledPopup};
 use crate::features::styling::domain::{
-    ClassNameList, ComputedStyle, ElementQuery, InheritedStyle,
+    ClassNameList, ComputedStyle, ElementQuery, Emptiness, InheritedStyle,
 };
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::{InteractionContext, NodePath, SurfaceSpace, VNode, VNodeKind};
@@ -92,7 +92,11 @@ impl VNode {
             &pseudo_classes,
             parent,
         )
-        .with_structural_context(position.index(), position.total(), self.is_empty());
+        .with_structural_context(
+            position.index(),
+            position.total(),
+            Emptiness::from(self.is_empty()),
+        );
 
         let mut style = match self.kind() {
             VNodeKind::Flex { .. } => ComputedStyle::default_for_flex(),
