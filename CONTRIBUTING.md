@@ -75,8 +75,8 @@ A local `just issues-check` also reports an issue missing from the board. CI's r
 
 Maintainers only. A release is a version bump merged like any other change, then a tag:
 
-1. `just bump-version X.Y.Z` writes the version into `Cargo.toml`, `Cargo.lock` and `contrib/arch/PKGBUILD*`. It touches neither git nor GitHub, and refuses a version that is not greater than the current one.
-2. Commit that on a branch, open a pull request, and merge it once the checks pass. The bump touches the release inputs, so the optional **Release check** workflow also runs: it builds the release tarball and the AUR packages the way the release will, `cranky-git` included. `just release-check` does the same locally (it needs docker).
+1. `just bump-version X.Y.Z` writes the version into `Cargo.toml`, `Cargo.lock`, `contrib/arch/PKGBUILD` and `PKGBUILD-bin` (`cranky-git` takes its version from the tags). It touches neither git nor GitHub, and refuses a version that is not greater than the current one.
+2. Commit that on a branch, open a pull request, and merge it once the checks pass. The bump touches the release inputs, so the optional **Release check** workflow also runs: it builds the release tarball and the AUR packages the way the release will, and also `cranky-git`, which the release does not publish. `just release-check` does the same locally (it needs docker).
 3. Push the tag `vX.Y.Z` on the merged commit of `main`.
 
 `release.yml` then checks that the tag is a version, is on `main` and equals the Cargo version. It runs the full CI gate, then builds the binary outside Nix, in the `debian:bookworm` image `scripts/release/common.sh` pins, with the toolchain `rust-toolchain.toml` names and `--locked`. The binary runs on glibc 2.36 or newer and needs `libxkbcommon`. It must start on Arch Linux and on that image before the GitHub release is published with generated notes. Both AUR packages, `cranky` and `cranky-bin`, are then built, installed and started in an Arch Linux container before either is published.

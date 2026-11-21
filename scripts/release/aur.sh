@@ -32,7 +32,7 @@ source scripts/release/common.sh
 
 out="${OUT_DIR}/aur"
 rm -rf "${out}"
-mkdir -p "${out}/sources/cranky" "${out}/sources/cranky-bin" "${out}/sources/cranky-git" "${out}/prepared"
+mkdir -p "${out}/sources/cranky" "${out}/sources/cranky-bin" "${out}/prepared"
 if [[ "${mode}" == local ]]; then
 	version="$(workspace_version)"
 	# HEAD with any uncommitted change to a tracked file, as a commit object
@@ -41,8 +41,11 @@ if [[ "${mode}" == local ]]; then
 	git archive --format=tar.gz --prefix="cranky-${version}/" --output="${out}/sources/cranky/cranky-${version}.tar.gz" "${tree:-HEAD}"
 	cp "$(tarball_path)" "${out}/sources/cranky-bin/cranky-bin-${version}.tar.gz"
 	cp contrib/systemd/cranky.service contrib/systemd/cranky-uwsm.service "${out}/sources/cranky-bin/"
-	# Fetched into, not pushed from, so no hook of this repository runs.
-	git init --quiet --bare "${out}/sources/cranky-git/cranky.git"
+	# Fetched into, not pushed from, so no hook of this repository runs. HEAD
+	# names main whatever init.defaultBranch says: makepkg checks it out. With
+	# uncommitted changes, pkgver() counts the two commits git stash made.
+	mkdir -p "${out}/sources/cranky-git"
+	git init --quiet --bare --initial-branch=main "${out}/sources/cranky-git/cranky.git"
 	git -C "${out}/sources/cranky-git/cranky.git" fetch --quiet --no-tags "${PWD}" \
 		"${tree:-HEAD}:refs/heads/main" 'refs/tags/*:refs/tags/*'
 fi
