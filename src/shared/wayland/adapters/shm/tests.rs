@@ -49,6 +49,10 @@ fn test_double_buffering_memory_slicing_simulation() {
 
     // Verify slot 0 and slot 1 do not overlap or overwrite each other
     let full = shm.bytes_mut();
-    assert!(full[..frame_size].iter().all(|&b| b == 0xAA));
-    assert!(full[frame_size..total_size].iter().all(|&b| b == 0xBB));
+    assert!(full[..frame_size].iter().all(|&byte| byte == 0xAA));
+    assert!(
+        full[frame_size..total_size]
+            .iter()
+            .all(|&byte| byte == 0xBB)
+    );
 }

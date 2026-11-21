@@ -24,9 +24,9 @@ pub(super) const fn is_click_through(kind: &FloatingKind) -> bool {
 pub(super) fn set_empty_input_region(
     compositor: &WlCompositor,
     surface: &WlSurface,
-    qh: &QueueHandle<WaylandState>,
+    queue_handle: &QueueHandle<WaylandState>,
 ) {
-    let region = compositor.create_region(qh, ());
+    let region = compositor.create_region(queue_handle, ());
     surface.set_input_region(Some(&region));
     region.destroy();
 }

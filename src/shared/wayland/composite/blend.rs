@@ -11,38 +11,42 @@ fn offset(x: i64, y: i64, width: i64) -> Option<usize> {
 
 /// Premultiplied source-over of `src` onto `dst` at `origin_px`, clipped to `dst_size`.
 pub(super) fn blend_over(dst: &mut [u8], dst_size: Size, src: &RenderBuffer, origin_px: Position) {
-    let (dw, dh) = (i64::from(dst_size.width()), i64::from(dst_size.height()));
-    let (sw, sh) = (i64::from(src.width()), i64::from(src.height()));
-    let (ox, oy) = (i64::from(origin_px.x()), i64::from(origin_px.y()));
+    let (dst_width, dst_height) = (i64::from(dst_size.width()), i64::from(dst_size.height()));
+    let (src_width, src_height) = (i64::from(src.width()), i64::from(src.height()));
+    let (left, top) = (i64::from(origin_px.x()), i64::from(origin_px.y()));
 
-    let x_start = ox.saturating_neg().max(0);
-    let x_end = sw.min(dw.saturating_sub(ox));
-    let y_start = oy.saturating_neg().max(0);
-    let y_end = sh.min(dh.saturating_sub(oy));
+    let x_start = left.saturating_neg().max(0);
+    let x_end = src_width.min(dst_width.saturating_sub(left));
+    let y_start = top.saturating_neg().max(0);
+    let y_end = src_height.min(dst_height.saturating_sub(top));
 
-    for sy in y_start..y_end {
-        for sx in x_start..x_end {
-            let di = offset(sx.saturating_add(ox), sy.saturating_add(oy), dw);
-            let si = offset(sx, sy, sw);
-            let (Some(di), Some(si)) = (di, si) else {
+    for src_y in y_start..y_end {
+        for src_x in x_start..x_end {
+            let dst_offset = offset(
+                src_x.saturating_add(left),
+                src_y.saturating_add(top),
+                dst_width,
+            );
+            let src_offset = offset(src_x, src_y, src_width);
+            let (Some(dst_offset), Some(src_offset)) = (dst_offset, src_offset) else {
                 continue;
             };
-            let s = src.data().get(si..si.saturating_add(4));
-            let d = dst.get_mut(di..di.saturating_add(4));
-            if let (Some(s), Some(d)) = (s, d) {
-                blend_pixel(d, s);
+            let src_pixel = src.data().get(src_offset..src_offset.saturating_add(4));
+            let dst_pixel = dst.get_mut(dst_offset..dst_offset.saturating_add(4));
+            if let (Some(src_pixel), Some(dst_pixel)) = (src_pixel, dst_pixel) {
+                blend_pixel(dst_pixel, src_pixel);
             }
         }
     }
 }
 
-/// `out = s + d * (255 - s_a) / 255` for all four (premultiplied) channels.
-fn blend_pixel(d: &mut [u8], s: &[u8]) {
-    let inv = 255_u32.saturating_sub(s.get(3).copied().map_or(0, u32::from));
-    for (dc, sc) in d.iter_mut().zip(s) {
-        let scaled = u32::from(*dc).saturating_mul(inv) / 255;
-        let out = u32::from(*sc).saturating_add(scaled).min(255);
-        *dc = u8::try_from(out).unwrap_or(u8::MAX);
+/// `out = src + dst * (255 - src_alpha) / 255` for all four (premultiplied) channels.
+fn blend_pixel(dst: &mut [u8], src: &[u8]) {
+    let inv = 255_u32.saturating_sub(src.get(3).copied().map_or(0, u32::from));
+    for (dst_channel, src_channel) in dst.iter_mut().zip(src) {
+        let scaled = u32::from(*dst_channel).saturating_mul(inv) / 255;
+        let out = u32::from(*src_channel).saturating_add(scaled).min(255);
+        *dst_channel = u8::try_from(out).unwrap_or(u8::MAX);
     }
 }
 
@@ -50,15 +54,15 @@ fn blend_pixel(d: &mut [u8], s: &[u8]) {
 mod tests {
     use super::*;
 
-    fn buf(w: u32, h: u32, px: [u8; 4]) -> RenderBuffer {
-        let n = usize::try_from(w.saturating_mul(h)).unwrap_or(0);
-        RenderBuffer::new(px.repeat(n), Size::new(w, h))
+    fn buf(width: u32, height: u32, px: [u8; 4]) -> RenderBuffer {
+        let count = usize::try_from(width.saturating_mul(height)).unwrap_or(0);
+        RenderBuffer::new(px.repeat(count), Size::new(width, height))
     }
 
     fn px(dst: &[u8], width: usize, x: usize, y: usize) -> [u8; 4] {
-        let i = y.saturating_mul(width).saturating_add(x).saturating_mul(4);
-        dst.get(i..i.saturating_add(4))
-            .and_then(|s| <[u8; 4]>::try_from(s).ok())
+        let index = y.saturating_mul(width).saturating_add(x).saturating_mul(4);
+        dst.get(index..index.saturating_add(4))
+            .and_then(|slice| <[u8; 4]>::try_from(slice).ok())
             .unwrap_or([0; 4])
     }
 
@@ -83,7 +87,7 @@ mod tests {
             &buf(1, 1, [0, 0, 128, 128]),
             Position::new(0, 0),
         );
-        // out = s + d * (255 - 128) / 255 = d*127/255 = 127 (floor) for 255.
+        // out = src + dst * (255 - 128) / 255 = dst*127/255 = 127 (floor) for 255.
         assert_eq!(dst, vec![127, 127, 128 + 127, 128 + 127]);
     }
 

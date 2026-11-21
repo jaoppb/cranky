@@ -60,13 +60,13 @@ impl WaylandState {
     pub(crate) fn create_bar(
         &mut self,
         output: &WlOutput,
-        qh: &QueueHandle<Self>,
+        queue_handle: &QueueHandle<Self>,
     ) -> Result<(), DisplayServerError> {
         let (output_name, output_scale) = {
             let info = self
                 .outputs
                 .iter()
-                .find(|i| &i.output == output)
+                .find(|info| &info.output == output)
                 .ok_or_else(|| DisplayServerError::ConnectionFailed {
                     reason: "Output not found".to_string(),
                 })?;
@@ -76,7 +76,7 @@ impl WaylandState {
             (info.name.clone(), info.scale)
         };
 
-        if self.bars.iter().any(|b| b.output_name == output_name) {
+        if self.bars.iter().any(|bar| bar.output_name == output_name) {
             return Ok(());
         }
 
@@ -109,14 +109,14 @@ impl WaylandState {
                 reason: "SHM not bound".to_string(),
             })?;
 
-        let surface = compositor.create_surface(qh, ());
+        let surface = compositor.create_surface(queue_handle, ());
         surface.set_buffer_scale(output_scale);
         let layer_surface = layer_shell.get_layer_surface(
             &surface,
             Some(output),
             Layer::Top,
             "cranky".to_string(),
-            qh,
+            queue_handle,
             (),
         );
 
@@ -139,10 +139,10 @@ impl WaylandState {
             shm,
             1920,
             bar_height.value(),
-            qh,
+            queue_handle,
             self.app_env.xdg_runtime_dir().as_path(),
         )
-        .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
+        .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
 
         self.bars.push(WaylandBar {
             output_name: output_name.clone(),

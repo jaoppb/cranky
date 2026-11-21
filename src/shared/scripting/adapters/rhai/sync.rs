@@ -85,7 +85,7 @@ impl RhaiStateSynchronizer {
         let mut sys_map = scope.get_value::<rhai::Map>("sys").unwrap_or_default();
         let mut monitors_map = sys_map
             .get("monitors")
-            .and_then(|v| v.clone().try_cast::<rhai::Map>())
+            .and_then(|value| value.clone().try_cast::<rhai::Map>())
             .unwrap_or_default();
         monitors_map.insert("_list".into(), Dynamic::from(monitors_arr));
         sys_map.insert("monitors".into(), Dynamic::from(monitors_map));
@@ -98,8 +98,8 @@ impl RhaiStateSynchronizer {
             scope.set_value("cranky", cranky_map);
         }
 
-        if let Err(e) = engine.call_fn::<()>(scope, ast, "refresh", ()) {
-            tracing::error!("Rhai refresh error: {e}");
+        if let Err(error) = engine.call_fn::<()>(scope, ast, "refresh", ()) {
+            tracing::error!("Rhai refresh error: {error}");
         }
     }
 }

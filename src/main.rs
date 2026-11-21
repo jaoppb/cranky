@@ -105,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?;
     runtime.block_on(async {
-        let env_adapter = cranky::shared::env::adapters::os::OsEnvironmentAdapter;
+        let env_adapter = cranky::shared::env::adapters::system::OsEnvironmentAdapter;
         let app_env = std::sync::Arc::new(env_adapter.read_environment()?);
 
         let _guard = init_tracing(&app_env);

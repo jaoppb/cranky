@@ -87,8 +87,8 @@ fn test_rhai_all_builtins() {
         ),
     ] {
         let res = RhaiModule::new(name.into(), source);
-        if let Err(e) = &res {
-            eprintln!("ERROR for {name}: {e:?}");
+        if let Err(error) = &res {
+            eprintln!("ERROR for {name}: {error:?}");
         }
         assert!(
             res.is_ok(),

@@ -105,7 +105,7 @@ impl AppReadModel {
         let get_size = |id: &ModuleId| {
             self.module_sizes
                 .get(monitor)
-                .and_then(|m| m.get(id))
+                .and_then(|sizes| sizes.get(id))
                 .copied()
                 .unwrap_or(Size::new(0, 0))
         };
@@ -118,8 +118,8 @@ impl AppReadModel {
         let get_module_ids = |key: &str| -> Vec<ModuleId> {
             let mut ids = Vec::new();
             if let Some(DynamicValue::Array(arr)) = root_config.options().get(key) {
-                for v in arr {
-                    if let Some(name_str) = v.as_str() {
+                for value in arr {
+                    if let Some(name_str) = value.as_str() {
                         let mod_name = ModuleName::new(name_str);
                         if let Some(mod_ids) = self.name_to_ids.get(&mod_name) {
                             ids.extend(mod_ids.iter().copied());
@@ -216,7 +216,7 @@ mod tests {
         let mut options = HashMap::new();
         let mut name_to_ids = HashMap::new();
         for (slot, names) in slots {
-            let values = names.iter().map(|n| DynamicValue::from(*n)).collect();
+            let values = names.iter().map(|name| DynamicValue::from(*name)).collect();
             options.insert((*slot).to_string(), DynamicValue::Array(values));
         }
         let declared = slots.iter().flat_map(|(_, names)| names.iter());
@@ -269,29 +269,29 @@ mod tests {
 
     #[test]
     fn center_slot_is_centred_as_one_block_with_gaps_between_modules() {
-        let (a, b) = (Size::new(100, 10), Size::new(60, 20));
-        let read_model = model(&[("center", &["a", "b"])], &[a, b]);
+        let (first, second) = (Size::new(100, 10), Size::new(60, 20));
+        let read_model = model(&[("center", &["a", "b"])], &[first, second]);
 
         // Block width is 100 + 8 + 60 = 168, so it starts at (1000 - 168) / 2.
         assert_eq!(
             placed(&read_model, "DP-1"),
             vec![
-                (ModuleId::new(1), rect(416, 10, a)),
-                (ModuleId::new(2), rect(524, 5, b)),
+                (ModuleId::new(1), rect(416, 10, first)),
+                (ModuleId::new(2), rect(524, 5, second)),
             ]
         );
     }
 
     #[test]
     fn right_slot_is_packed_against_the_right_edge_in_declaration_order() {
-        let (a, b) = (Size::new(100, 30), Size::new(60, 30));
-        let read_model = model(&[("right", &["a", "b"])], &[a, b]);
+        let (first, second) = (Size::new(100, 30), Size::new(60, 30));
+        let read_model = model(&[("right", &["a", "b"])], &[first, second]);
 
         assert_eq!(
             placed(&read_model, "DP-1"),
             vec![
-                (ModuleId::new(1), rect(824, 0, a)),
-                (ModuleId::new(2), rect(932, 0, b)),
+                (ModuleId::new(1), rect(824, 0, first)),
+                (ModuleId::new(2), rect(932, 0, second)),
             ]
         );
     }
@@ -337,7 +337,7 @@ mod tests {
         let root = ModuleId::new(9);
         read_model.root_module = Some(root);
         let computed = rect(300, 4, Size::new(40, 12));
-        let bounds = |r| ChildBounds::new(r, SizeConstraint::none());
+        let bounds = |child_rect| ChildBounds::new(child_rect, SizeConstraint::none());
         read_model.computed_layouts.insert(
             MonitorId::new("DP-1"),
             HashMap::from([

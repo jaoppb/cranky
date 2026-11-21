@@ -66,9 +66,9 @@ mod tests {
     use crate::shared::primitives::Size;
     use crate::shared::primitives::render::RenderBuffer;
 
-    fn buf(w: u32, h: u32) -> RenderBuffer {
-        let n = usize::try_from(w.saturating_mul(h).saturating_mul(4)).unwrap_or(0);
-        RenderBuffer::new(vec![0u8; n], Size::new(w, h))
+    fn buf(width: u32, height: u32) -> RenderBuffer {
+        let count = usize::try_from(width.saturating_mul(height).saturating_mul(4)).unwrap_or(0);
+        RenderBuffer::new(vec![0u8; count], Size::new(width, height))
     }
 
     fn add(layers: &mut CompositeLayers, id: u32, origin: (i32, i32), size: (u32, u32)) {
@@ -81,7 +81,7 @@ mod tests {
     }
 
     fn hit_id(layers: &CompositeLayers, scale: i32, x: i32, y: i32) -> Option<u32> {
-        hit(layers, scale, Position::new(x, y)).map(|h| h.module_id.value())
+        hit(layers, scale, Position::new(x, y)).map(|layer_hit| layer_hit.module_id.value())
     }
 
     #[test]
@@ -106,9 +106,9 @@ mod tests {
     fn hit_local_is_child_relative() {
         let mut layers = CompositeLayers::default();
         add(&mut layers, 1, (10, 20), (10, 10));
-        let h = hit(&layers, 1, Position::new(13, 25)).expect("hit");
-        assert_eq!(h.local, Position::new(3, 5));
-        assert_eq!(h.monitor_id, MonitorId::new("m"));
+        let layer_hit = hit(&layers, 1, Position::new(13, 25)).expect("hit");
+        assert_eq!(layer_hit.local, Position::new(3, 5));
+        assert_eq!(layer_hit.monitor_id, MonitorId::new("m"));
     }
 
     #[test]
@@ -145,37 +145,37 @@ mod tests {
 
     #[test]
     fn crossing_cases() {
-        let (a, b) = (target(1), target(2));
+        let (first, second) = (target(1), target(2));
         let cases: Vec<(Option<&PointerTarget>, Option<&PointerTarget>, Crossing)> = vec![
             (
                 None,
-                Some(&a),
+                Some(&first),
                 Crossing {
                     leave: None,
-                    enter: Some(a.clone()),
+                    enter: Some(first.clone()),
                 },
             ),
             (
-                Some(&a),
-                Some(&a),
+                Some(&first),
+                Some(&first),
                 Crossing {
                     leave: None,
                     enter: None,
                 },
             ),
             (
-                Some(&a),
-                Some(&b),
+                Some(&first),
+                Some(&second),
                 Crossing {
-                    leave: Some(a.clone()),
-                    enter: Some(b.clone()),
+                    leave: Some(first.clone()),
+                    enter: Some(second.clone()),
                 },
             ),
             (
-                Some(&a),
+                Some(&first),
                 None,
                 Crossing {
-                    leave: Some(a.clone()),
+                    leave: Some(first.clone()),
                     enter: None,
                 },
             ),

@@ -1,20 +1,11 @@
 use super::state::WaylandState;
 use super::types::WaylandOutputInfo;
-use crate::shared::wayland::adapters::shm::BufferUserData;
 use wayland_client::protocol::{
-    wl_buffer::{self, WlBuffer},
-    wl_compositor::{self, WlCompositor},
     wl_output::WlOutput,
     wl_region::WlRegion,
     wl_registry::{self, WlRegistry},
-    wl_shm::{self, WlShm},
-    wl_shm_pool::{self, WlShmPool},
-    wl_subcompositor::{self, WlSubcompositor},
-    wl_subsurface::{self, WlSubsurface},
-    wl_surface::{self, WlSurface},
 };
 use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
-use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::{self, ZwlrLayerShellV1};
 
 delegate_noop!(WaylandState: WlRegion);
 
@@ -25,7 +16,7 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
         event: wl_registry::Event,
         _data: &(),
         _conn: &Connection,
-        qh: &QueueHandle<Self>,
+        queue_handle: &QueueHandle<Self>,
     ) {
         match event {
             wl_registry::Event::Global {
@@ -33,17 +24,22 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                 interface,
                 version,
             } => match interface.as_str() {
-                "wl_compositor" => state.compositor = Some(proxy.bind(name, version, qh, ())),
-                "wl_shm" => state.shm = Some(proxy.bind(name, version, qh, ())),
+                "wl_compositor" => {
+                    state.compositor = Some(proxy.bind(name, version, queue_handle, ()));
+                }
+                "wl_shm" => state.shm = Some(proxy.bind(name, version, queue_handle, ())),
                 "zwlr_layer_shell_v1" => {
-                    state.layer_shell = Some(proxy.bind(name, version, qh, ()));
+                    state.layer_shell = Some(proxy.bind(name, version, queue_handle, ()));
                 }
                 "xdg_wm_base" => {
-                    state.xdg_wm_base = Some(proxy.bind(name, u32::min(version, 5), qh, ()));
+                    state.xdg_wm_base =
+                        Some(proxy.bind(name, u32::min(version, 5), queue_handle, ()));
                 }
-                "wl_subcompositor" => state.subcompositor = Some(proxy.bind(name, version, qh, ())),
+                "wl_subcompositor" => {
+                    state.subcompositor = Some(proxy.bind(name, version, queue_handle, ()));
+                }
                 "wl_output" => {
-                    let output: WlOutput = proxy.bind(name, version, qh, ());
+                    let output: WlOutput = proxy.bind(name, version, queue_handle, ());
                     state.outputs.push(WaylandOutputInfo {
                         global_id: name,
                         output,
@@ -51,19 +47,25 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                         scale: 1,
                     });
                 }
-                "wl_seat" => state.seat = Some(proxy.bind(name, version, qh, ())),
+                "wl_seat" => state.seat = Some(proxy.bind(name, version, queue_handle, ())),
                 _ => {}
             },
             wl_registry::Event::GlobalRemove { name } => {
-                if let Some(pos) = state.outputs.iter().position(|o| o.global_id == name) {
+                if let Some(pos) = state
+                    .outputs
+                    .iter()
+                    .position(|output| output.global_id == name)
+                {
                     let info = state.outputs.remove(pos);
-                    if let Some(bar_pos) =
-                        state.bars.iter().position(|b| b.output_name == info.name)
+                    if let Some(bar_pos) = state
+                        .bars
+                        .iter()
+                        .position(|bar| bar.output_name == info.name)
                     {
                         let mut bar = state.bars.remove(bar_pos);
-                        for (_, ms) in bar.module_surfaces.drain() {
-                            ms.subsurface.destroy();
-                            ms.surface.destroy();
+                        for (_, module_surface) in bar.module_surfaces.drain() {
+                            module_surface.subsurface.destroy();
+                            module_surface.surface.destroy();
                         }
                         bar.layer_surface.destroy();
                         bar.surface.destroy();
@@ -90,105 +92,5 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
             }
             _ => {}
         }
-    }
-}
-
-impl Dispatch<WlCompositor, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlCompositor,
-        _: wl_compositor::Event,
-        (): &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<WlShm, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlShm,
-        _: wl_shm::Event,
-        (): &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<ZwlrLayerShellV1, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &ZwlrLayerShellV1,
-        _: zwlr_layer_shell_v1::Event,
-        (): &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<WlSubcompositor, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlSubcompositor,
-        _: wl_subcompositor::Event,
-        (): &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<WlSubsurface, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlSubsurface,
-        _: wl_subsurface::Event,
-        (): &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<WlSurface, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlSurface,
-        _: wl_surface::Event,
-        (): &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<WlBuffer, BufferUserData> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlBuffer,
-        event: wl_buffer::Event,
-        data: &BufferUserData,
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-        if matches!(event, wl_buffer::Event::Release) {
-            data.set_busy(false);
-            tracing::trace!("WlBuffer released by compositor");
-        }
-    }
-}
-
-impl Dispatch<WlShmPool, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &WlShmPool,
-        _: wl_shm_pool::Event,
-        (): &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
     }
 }

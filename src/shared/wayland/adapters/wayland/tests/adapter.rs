@@ -132,8 +132,8 @@ fn test_wayland_adapter_methods() {
                 crate::shared::primitives::geometry::Size::new(1, 1),
             ),
         );
-        let qh = adapter.event_queue.handle();
-        let _ = handle_cmd(&mut adapter.state, &qh, &cmd);
+        let queue_handle = adapter.event_queue.handle();
+        let _ = handle_cmd(&mut adapter.state, &queue_handle, &cmd);
 
         let (tx, _rx) = tokio::sync::mpsc::channel(10);
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(

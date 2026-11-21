@@ -25,11 +25,11 @@ impl DisplayServerPort for WaylandAdapter {
                         // as the inner `Err`.
                         let read = self.socket.try_io(Interest::READABLE, || match r_guard.read() {
                             Ok(_) => Ok(Ok(())),
-                            Err(WaylandError::Io(e)) if e.kind() == std::io::ErrorKind::WouldBlock => Err(e),
-                            Err(e) => Ok(Err(e)),
+                            Err(WaylandError::Io(error)) if error.kind() == std::io::ErrorKind::WouldBlock => Err(error),
+                            Err(error) => Ok(Err(error)),
                         });
-                        if let Ok(Err(e)) = read {
-                            return Err(DisplayServerError::ConnectionFailed { reason: e.to_string() });
+                        if let Ok(Err(error)) = read {
+                            return Err(DisplayServerError::ConnectionFailed { reason: error.to_string() });
                         }
                     }
                 }
@@ -39,9 +39,9 @@ impl DisplayServerPort for WaylandAdapter {
                         let mut map = self.pending_surfaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                         map.drain().map(|(_, cmd)| cmd).collect()
                     };
-                    let qh = self.event_queue.handle();
+                    let queue_handle = self.event_queue.handle();
                     for cmd in cmds {
-                        handle_cmd(&mut self.state, &qh, &cmd)?;
+                        handle_cmd(&mut self.state, &queue_handle, &cmd)?;
                     }
                     return Ok(());
                 }
@@ -61,7 +61,7 @@ impl DisplayServerPort for WaylandAdapter {
                 .state
                 .outputs
                 .iter()
-                .map(|o| o.output.clone())
+                .map(|output| output.output.clone())
                 .collect();
             for output in outputs {
                 let _ = self.state.create_bar(&output, &self.event_queue.handle());
@@ -70,22 +70,28 @@ impl DisplayServerPort for WaylandAdapter {
 
         self.event_queue
             .dispatch_pending(&mut self.state)
-            .map_err(|e| DisplayServerError::ConnectionFailed {
-                reason: e.to_string(),
+            .map_err(|error| DisplayServerError::ConnectionFailed {
+                reason: error.to_string(),
             })?;
 
         let outputs_missing_bars: Vec<_> = self
             .state
             .outputs
             .iter()
-            .filter(|o| !o.name.is_empty())
-            .filter(|o| !self.state.bars.iter().any(|b| b.output_name == o.name))
-            .map(|o| o.output.clone())
+            .filter(|output| !output.name.is_empty())
+            .filter(|output| {
+                !self
+                    .state
+                    .bars
+                    .iter()
+                    .any(|bar| bar.output_name == output.name)
+            })
+            .map(|output| output.output.clone())
             .collect();
 
         for output in outputs_missing_bars {
-            if let Err(e) = self.state.create_bar(&output, &self.event_queue.handle()) {
-                tracing::debug!("Deferred bar creation: {}", e);
+            if let Err(error) = self.state.create_bar(&output, &self.event_queue.handle()) {
+                tracing::debug!("Deferred bar creation: {}", error);
             }
         }
 
@@ -115,10 +121,10 @@ impl DisplayServerPort for WaylandAdapter {
         &mut self,
         floating: crate::features::layout_engine::domain::ShowFloating,
     ) -> Result<(), DisplayServerError> {
-        let qh = self.event_queue.handle();
+        let queue_handle = self.event_queue.handle();
         show_floating(
             &mut self.state,
-            &qh,
+            &queue_handle,
             floating.kind,
             floating.monitor_id,
             floating.anchor_rect,

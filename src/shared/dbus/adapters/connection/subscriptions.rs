@@ -20,10 +20,12 @@ impl ZbusConnectionAdapter<Connected> {
     ) -> Result<PropertyChangedStream, DbusConnectionError> {
         let conn = self.get_conn(bus)?.clone();
 
-        let sender = zbus::names::BusName::try_from(sender.as_str())
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(format!("Invalid sender: {e}")))?;
-        let path = zbus::ObjectPath::try_from(path.as_str())
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(format!("Invalid path: {e}")))?;
+        let sender = zbus::names::BusName::try_from(sender.as_str()).map_err(|error| {
+            DbusConnectionError::SubscriptionFailed(format!("Invalid sender: {error}"))
+        })?;
+        let path = zbus::ObjectPath::try_from(path.as_str()).map_err(|error| {
+            DbusConnectionError::SubscriptionFailed(format!("Invalid path: {error}"))
+        })?;
         let rule = zbus::MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
             .sender(sender)
@@ -31,11 +33,11 @@ impl ZbusConnectionAdapter<Connected> {
             .interface("org.freedesktop.DBus.Properties")
             .member("PropertiesChanged")
             .build()
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
+            .map_err(|error| DbusConnectionError::SubscriptionFailed(error.to_string()))?;
 
         let mut stream = zbus::MessageStream::for_match_rule(rule, &conn, None)
             .await
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
+            .map_err(|error| DbusConnectionError::SubscriptionFailed(error.to_string()))?;
 
         let (tx, rx) = mpsc::unbounded_channel();
 
@@ -49,8 +51,8 @@ impl ZbusConnectionAdapter<Connected> {
                     )>()
                 {
                     let mut map = HashMap::new();
-                    for (k, v) in changed {
-                        map.insert(PropertyName::new(k), parse_value(&v));
+                    for (key, value) in changed {
+                        map.insert(PropertyName::new(key), parse_value(&value));
                     }
                     let props = PropertiesMap::new(map);
                     if tx.send((Interface::new(iface), props)).is_err() {
@@ -78,11 +80,11 @@ impl ZbusConnectionAdapter<Connected> {
             .interface("org.freedesktop.DBus")
             .member("NameOwnerChanged")
             .build()
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
+            .map_err(|error| DbusConnectionError::SubscriptionFailed(error.to_string()))?;
 
         let mut stream = zbus::MessageStream::for_match_rule(rule, &conn, None)
             .await
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
+            .map_err(|error| DbusConnectionError::SubscriptionFailed(error.to_string()))?;
 
         let (tx, rx) = mpsc::unbounded_channel();
 
@@ -139,10 +141,10 @@ impl ZbusConnectionAdapter<Connected> {
 
         let rule = rule_builder
             .build()
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
+            .map_err(|error| DbusConnectionError::SubscriptionFailed(error.to_string()))?;
         let mut stream = zbus::MessageStream::for_match_rule(rule, &conn, None)
             .await
-            .map_err(|e| DbusConnectionError::SubscriptionFailed(e.to_string()))?;
+            .map_err(|error| DbusConnectionError::SubscriptionFailed(error.to_string()))?;
 
         let (tx, rx) = mpsc::unbounded_channel();
 
@@ -150,12 +152,14 @@ impl ZbusConnectionAdapter<Connected> {
             while let Some(msg_result) = stream.next().await {
                 if let Ok(msg) = msg_result {
                     let header = msg.header();
-                    let path = header
-                        .path()
-                        .map_or_else(|| Path::new(""), |p| Path::new(p.as_str()));
-                    let member = header
-                        .member()
-                        .map_or_else(|| Member::new(""), |m| Member::new(m.as_str()));
+                    let path = header.path().map_or_else(
+                        || Path::new(""),
+                        |object_path| Path::new(object_path.as_str()),
+                    );
+                    let member = header.member().map_or_else(
+                        || Member::new(""),
+                        |member_name| Member::new(member_name.as_str()),
+                    );
 
                     if let Ok(body_val) = msg.body().deserialize::<zbus::Variant<'_>>() {
                         let parsed = parse_value(&body_val);

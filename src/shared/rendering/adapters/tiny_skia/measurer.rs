@@ -54,12 +54,12 @@ impl crate::features::layout_engine::domain::TextMeasurer for CosmicTextMeasurer
             physical_height += metrics.line_height;
         }
 
-        let w = PhysicalPx::new(physical_width).apply_inverse_scale(&self.scale);
-        let h = PhysicalPx::new(physical_height).apply_inverse_scale(&self.scale);
+        let width = PhysicalPx::new(physical_width).apply_inverse_scale(&self.scale);
+        let height = PhysicalPx::new(physical_height).apply_inverse_scale(&self.scale);
 
         Size::new(
-            f32_to_u32(w.value().ceil().max(0.0)),
-            f32_to_u32(h.value().ceil().max(0.0)),
+            f32_to_u32(width.value().ceil().max(0.0)),
+            f32_to_u32(height.value().ceil().max(0.0)),
         )
     }
 }

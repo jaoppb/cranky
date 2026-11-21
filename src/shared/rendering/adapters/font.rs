@@ -26,7 +26,7 @@ impl FontValidatorPort for CosmicFontValidatorAdapter {
         self.font_system.db().faces().any(|face| {
             face.families
                 .iter()
-                .any(|(f, _)| f.to_lowercase() == family_lower)
+                .any(|(family_name, _)| family_name.to_lowercase() == family_lower)
         })
     }
 }

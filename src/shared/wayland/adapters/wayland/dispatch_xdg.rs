@@ -37,7 +37,7 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
             if let Some(floating) = state
                 .floating_surfaces
                 .values_mut()
-                .find(|f| &f.xdg_surface == proxy)
+                .find(|floating| &floating.xdg_surface == proxy)
             {
                 // Re-blend rather than attach the back slot as-is: after any
                 // commit it holds the previous frame, after a resize zeros.
@@ -70,8 +70,8 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
                 let matching_kind = state
                     .floating_surfaces
                     .iter()
-                    .find(|(_, f)| &f.xdg_popup == proxy)
-                    .map(|(k, _)| k.clone());
+                    .find(|(_, floating)| &floating.xdg_popup == proxy)
+                    .map(|(kind, _)| kind.clone());
                 if let Some(kind) = matching_kind {
                     super::floating_teardown::teardown_floating(state, &kind, true);
                 }
@@ -148,7 +148,7 @@ mod tests {
             text_h: 1,
             offset: PopupOffset::default(),
         };
-        update_existing_floating(state, &fake.qh, kind, base, &anchor, &placement)
+        update_existing_floating(state, &fake.queue_handle, kind, base, &anchor, &placement)
             .expect("owner frame");
     }
 

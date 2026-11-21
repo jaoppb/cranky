@@ -25,7 +25,7 @@ pub(super) fn copy_surface_data(shm_buffer: &mut ShmBuffer, src_data: &[u8]) {
 
 pub(crate) fn handle_cmd(
     state: &mut WaylandState,
-    qh: &QueueHandle<WaylandState>,
+    queue_handle: &QueueHandle<WaylandState>,
     cmd: &SurfaceCommand,
 ) -> Result<(), DisplayServerError> {
     let Some(shm) = state.shm.clone() else {
@@ -35,7 +35,7 @@ pub(crate) fn handle_cmd(
     let Some(bar_index) = state
         .bars
         .iter()
-        .position(|b| b.output_name == cmd.monitor_id().as_str())
+        .position(|bar| bar.output_name == cmd.monitor_id().as_str())
     else {
         return Ok(());
     };
@@ -51,11 +51,13 @@ pub(crate) fn handle_cmd(
 
     let embed = state.hub.config_rx().borrow().popup().embed();
     match cmd.parent() {
-        None => handle_bar_surface(state, qh, &shm, bar_index, cmd, dims),
+        None => handle_bar_surface(state, queue_handle, &shm, bar_index, cmd, dims),
         Some(SurfaceParent::Floating(kind)) if embed == PopupEmbed::Composite => {
             handle_composite_child(state, bar_index, kind, cmd);
             Ok(())
         }
-        Some(parent) => handle_module_surface(state, qh, &shm, bar_index, parent, cmd, dims),
+        Some(parent) => {
+            handle_module_surface(state, queue_handle, &shm, bar_index, parent, cmd, dims)
+        }
     }
 }

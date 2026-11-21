@@ -61,17 +61,18 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
     }
 
     fn load_from_path(&self, path: &Path) -> Result<Config, ConfigAdapterError> {
-        let content =
-            std::fs::read_to_string(path).map_err(|e| ConfigAdapterError::ConfigParseError {
-                reason: format!("IO error: {e}"),
-            })?;
+        let content = std::fs::read_to_string(path).map_err(|error| {
+            ConfigAdapterError::ConfigParseError {
+                reason: format!("IO error: {error}"),
+            }
+        })?;
         self.load_from_str(&content)
     }
 
     fn load_from_str(&self, content: &str) -> Result<Config, ConfigAdapterError> {
         let dto: ConfigDto =
-            toml::from_str(content).map_err(|e| ConfigAdapterError::ConfigParseError {
-                reason: e.to_string(),
+            toml::from_str(content).map_err(|error| ConfigAdapterError::ConfigParseError {
+                reason: error.to_string(),
             })?;
         Ok(dto.into_domain(self.validator.as_ref()))
     }
@@ -100,18 +101,18 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
                                         let new_config = dto.into_domain(validator.as_ref());
                                         let _ = config_tx.send(new_config);
                                     }
-                                    Err(e) => error!("Failed to parse updated config: {e}"),
+                                    Err(error) => error!("Failed to parse updated config: {error}"),
                                 },
-                                Err(e) => error!("Failed to read updated config file: {e}"),
+                                Err(error) => error!("Failed to read updated config file: {error}"),
                             }
                         }
                     }
                 }
-                Err(e) => error!("Config watcher error: {e:?}"),
+                Err(error) => error!("Config watcher error: {error:?}"),
             }
         })
-        .map_err(|e| ConfigAdapterError::Internal {
-            message: format!("Failed to create watcher: {e}"),
+        .map_err(|error| ConfigAdapterError::Internal {
+            message: format!("Failed to create watcher: {error}"),
         })?;
 
         if let Some(parent) = self.config_path.parent()
@@ -119,8 +120,8 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
         {
             watcher
                 .watch(parent, RecursiveMode::NonRecursive)
-                .map_err(|e| ConfigAdapterError::Internal {
-                    message: format!("Failed to start watching config dir: {e}"),
+                .map_err(|error| ConfigAdapterError::Internal {
+                    message: format!("Failed to start watching config dir: {error}"),
                 })?;
         }
 

@@ -53,19 +53,25 @@ impl CompositeLayers {
             origin,
             buffer,
         };
-        match self.layers.iter_mut().find(|l| l.module_id == module_id) {
+        match self
+            .layers
+            .iter_mut()
+            .find(|existing| existing.module_id == module_id)
+        {
             Some(slot) => *slot = layer,
             None => self.layers.push(layer),
         }
     }
 
     pub fn remove(&mut self, module_id: ModuleId) {
-        self.layers.retain(|l| l.module_id != module_id);
+        self.layers.retain(|layer| layer.module_id != module_id);
     }
 
     #[must_use]
     pub fn get(&self, module_id: ModuleId) -> Option<&ChildLayer> {
-        self.layers.iter().find(|l| l.module_id == module_id)
+        self.layers
+            .iter()
+            .find(|layer| layer.module_id == module_id)
     }
 
     /// Layers from bottom to top.
@@ -98,7 +104,10 @@ mod tests {
     }
 
     fn order(layers: &CompositeLayers) -> Vec<u32> {
-        layers.iter().map(|l| l.module_id().value()).collect()
+        layers
+            .iter()
+            .map(|layer| layer.module_id().value())
+            .collect()
     }
 
     #[test]
@@ -109,7 +118,7 @@ mod tests {
         add(&mut layers, 1, 5);
         assert_eq!(order(&layers), vec![1, 2]);
         assert_eq!(
-            layers.get(ModuleId::new(1)).map(|l| l.origin().x()),
+            layers.get(ModuleId::new(1)).map(|layer| layer.origin().x()),
             Some(5)
         );
     }

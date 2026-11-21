@@ -8,17 +8,17 @@ macro_rules! register_text_elements {
         });
         $(
             $engine.register_fn("text", |_target: rhai::Map, val: $t| -> rhai::Map {
-                let mut m = rhai::Map::new();
-                m.insert("type".into(), Dynamic::from("text"));
-                m.insert("text".into(), Dynamic::from(val.to_string()));
-                m
+                let mut element = rhai::Map::new();
+                element.insert("type".into(), Dynamic::from("text"));
+                element.insert("text".into(), Dynamic::from(val.to_string()));
+                element
             });
             $engine.register_fn("text", |_target: rhai::Map, val: $t, class: String| -> rhai::Map {
-                let mut m = rhai::Map::new();
-                m.insert("type".into(), Dynamic::from("text"));
-                m.insert("text".into(), Dynamic::from(val.to_string()));
-                m.insert("class".into(), Dynamic::from(class));
-                m
+                let mut element = rhai::Map::new();
+                element.insert("type".into(), Dynamic::from("text"));
+                element.insert("text".into(), Dynamic::from(val.to_string()));
+                element.insert("class".into(), Dynamic::from(class));
+                element
             });
         )*
     };
@@ -35,66 +35,66 @@ fn register_rhai_text_and_progress(engine: &mut Engine) {
         },
     );
     engine.register_fn("progress", |_target: rhai::Map, val: f64| -> rhai::Map {
-        let mut m = rhai::Map::new();
-        m.insert("type".into(), Dynamic::from("progress"));
-        m.insert("value".into(), Dynamic::from(val));
-        m
+        let mut element = rhai::Map::new();
+        element.insert("type".into(), Dynamic::from("progress"));
+        element.insert("value".into(), Dynamic::from(val));
+        element
     });
     engine.register_fn(
         "progress",
         |_target: rhai::Map, val: f64, class: String| -> rhai::Map {
-            let mut m = rhai::Map::new();
-            m.insert("type".into(), Dynamic::from("progress"));
-            m.insert("value".into(), Dynamic::from(val));
-            m.insert("class".into(), Dynamic::from(class));
-            m
+            let mut element = rhai::Map::new();
+            element.insert("type".into(), Dynamic::from("progress"));
+            element.insert("value".into(), Dynamic::from(val));
+            element.insert("class".into(), Dynamic::from(class));
+            element
         },
     );
     engine.register_fn(
         "progress",
         |_target: rhai::Map, val: f64, orientation: String, class: String| -> rhai::Map {
-            let mut m = rhai::Map::new();
-            m.insert("type".into(), Dynamic::from("progress"));
-            m.insert("value".into(), Dynamic::from(val));
-            m.insert("orientation".into(), Dynamic::from(orientation));
-            m.insert("class".into(), Dynamic::from(class));
-            m
+            let mut element = rhai::Map::new();
+            element.insert("type".into(), Dynamic::from("progress"));
+            element.insert("value".into(), Dynamic::from(val));
+            element.insert("orientation".into(), Dynamic::from(orientation));
+            element.insert("class".into(), Dynamic::from(class));
+            element
         },
     );
     engine.register_fn("progress", |_target: rhai::Map, val: i64| -> rhai::Map {
-        let mut m = rhai::Map::new();
-        m.insert("type".into(), Dynamic::from("progress"));
-        m.insert(
+        let mut element = rhai::Map::new();
+        element.insert("type".into(), Dynamic::from("progress"));
+        element.insert(
             "value".into(),
             Dynamic::from(i32::try_from(val).map_or(0.0, f64::from)),
         );
-        m
+        element
     });
     engine.register_fn(
         "progress",
         |_target: rhai::Map, val: i64, class: String| -> rhai::Map {
-            let mut m = rhai::Map::new();
-            m.insert("type".into(), Dynamic::from("progress"));
-            m.insert(
+            let mut element = rhai::Map::new();
+            element.insert("type".into(), Dynamic::from("progress"));
+            element.insert(
                 "value".into(),
                 Dynamic::from(i32::try_from(val).map_or(0.0, f64::from)),
             );
-            m.insert("class".into(), Dynamic::from(class));
-            m
+            element.insert("class".into(), Dynamic::from(class));
+            element
         },
     );
     engine.register_fn(
         "progress",
         |_target: rhai::Map, val: i64, orientation: String, class: String| -> rhai::Map {
-            let mut m = rhai::Map::new();
-            m.insert("type".into(), Dynamic::from("progress"));
-            m.insert(
+            let mut element = rhai::Map::new();
+            element.insert("type".into(), Dynamic::from("progress"));
+            element.insert(
                 "value".into(),
                 Dynamic::from(i32::try_from(val).map_or(0.0, f64::from)),
             );
-            m.insert("orientation".into(), Dynamic::from(orientation));
-            m.insert("class".into(), Dynamic::from(class));
-            m
+            element.insert("orientation".into(), Dynamic::from(orientation));
+            element.insert("class".into(), Dynamic::from(class));
+            element
         },
     );
 }
@@ -108,15 +108,15 @@ fn register_rhai_rect_and_image(engine: &mut Engine) {
         },
     );
     engine.register_fn("rect", |_target: rhai::Map, class: String| -> rhai::Map {
-        let mut m = rhai::Map::new();
-        m.insert("type".into(), Dynamic::from("rect"));
-        m.insert("class".into(), Dynamic::from(class));
-        m
+        let mut element = rhai::Map::new();
+        element.insert("type".into(), Dynamic::from("rect"));
+        element.insert("class".into(), Dynamic::from(class));
+        element
     });
     engine.register_fn("rect", |_target: rhai::Map| -> rhai::Map {
-        let mut m = rhai::Map::new();
-        m.insert("type".into(), Dynamic::from("rect"));
-        m
+        let mut element = rhai::Map::new();
+        element.insert("type".into(), Dynamic::from("rect"));
+        element
     });
 
     engine.register_fn(

@@ -23,7 +23,7 @@ pub(crate) fn teardown_floating(state: &mut WaylandState, kind: &FloatingKind, n
     let links: Vec<(FloatingKind, Option<FloatingKind>)> = state
         .floating_surfaces
         .iter()
-        .map(|(k, f)| (k.clone(), f.parent.clone()))
+        .map(|(surface_kind, floating)| (surface_kind.clone(), floating.parent.clone()))
         .collect();
     let mut order = descendants_deepest_first(kind, &links);
     order.push(kind.clone());
@@ -31,9 +31,9 @@ pub(crate) fn teardown_floating(state: &mut WaylandState, kind: &FloatingKind, n
     let Some(last) = order.len().checked_sub(1) else {
         return;
     };
-    for (i, k) in order.iter().enumerate() {
-        state.pending_children.remove(k);
-        let Some(floating) = state.floating_surfaces.remove(k) else {
+    for (index, surface_kind) in order.iter().enumerate() {
+        state.pending_children.remove(surface_kind);
+        let Some(floating) = state.floating_surfaces.remove(surface_kind) else {
             continue;
         };
         leave_dying_surface(state, &floating);
@@ -42,8 +42,8 @@ pub(crate) fn teardown_floating(state: &mut WaylandState, kind: &FloatingKind, n
         for child in floating.module_surfaces.values() {
             state.surface_to_id.remove(&child.surface);
         }
-        if i != last || notify_self {
-            notify_dismissed(state, k);
+        if index != last || notify_self {
+            notify_dismissed(state, surface_kind);
         }
     }
 }
@@ -67,7 +67,7 @@ fn leave_dying_surface(state: &mut WaylandState, floating: &FloatingSurface) {
         || floating
             .module_surfaces
             .values()
-            .any(|m| m.surface == *surface);
+            .any(|child| child.surface == *surface);
     if !on_floating {
         return;
     }
@@ -80,8 +80,8 @@ fn leave_dying_surface(state: &mut WaylandState, floating: &FloatingSurface) {
 
 fn notify_dismissed(state: &WaylandState, kind: &FloatingKind) {
     let (target, event) = match kind {
-        FloatingKind::Popup(t) => (t, SurfaceLifecycleEvent::PopupDismissed),
-        FloatingKind::Panel(t) => (t, SurfaceLifecycleEvent::PanelDismissed),
+        FloatingKind::Popup(target) => (target, SurfaceLifecycleEvent::PopupDismissed),
+        FloatingKind::Panel(target) => (target, SurfaceLifecycleEvent::PanelDismissed),
         FloatingKind::Tooltip => return,
     };
     let _ = state.hub.pointer_tx().send((

@@ -7,34 +7,34 @@ use super::*;
 
 #[test]
 fn test_font_family() {
-    let f = FontFamily::new("Inter".into());
-    assert_eq!(f.as_str(), "Inter");
+    let family = FontFamily::new("Inter".into());
+    assert_eq!(family.as_str(), "Inter");
 }
 
 #[test]
 fn test_font_size() {
-    let s = FontSize::new(12.5);
-    assert!((s.value() - 12.5).abs() < f32::EPSILON);
+    let size = FontSize::new(12.5);
+    assert!((size.value() - 12.5).abs() < f32::EPSILON);
 }
 
 #[test]
 fn test_margin_offset() {
-    let m = MarginOffset::new(15);
-    assert_eq!(m.value(), 15);
+    let offset = MarginOffset::new(15);
+    assert_eq!(offset.value(), 15);
 }
 
 #[test]
 fn test_margin_config() {
-    let m = MarginConfig::new(
+    let margin = MarginConfig::new(
         MarginOffset::new(1),
         MarginOffset::new(2),
         MarginOffset::new(3),
         MarginOffset::new(4),
     );
-    assert_eq!(m.top().value(), 1);
-    assert_eq!(m.bottom().value(), 2);
-    assert_eq!(m.left().value(), 3);
-    assert_eq!(m.right().value(), 4);
+    assert_eq!(margin.top().value(), 1);
+    assert_eq!(margin.bottom().value(), 2);
+    assert_eq!(margin.left().value(), 3);
+    assert_eq!(margin.right().value(), 4);
 }
 
 #[test]
@@ -128,15 +128,15 @@ fn test_module_config_engine() {
 
 #[test]
 fn test_tooltip_config_builder() {
-    let bg = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(
-        10, 20, 30, 255,
-    ));
-    let bc = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(
-        40, 50, 60, 255,
-    ));
-    let tc = crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::new(
-        70, 80, 90, 255,
-    ));
+    let background = crate::shared::primitives::DrawingColor::Solid(
+        crate::shared::primitives::Color::new(10, 20, 30, 255),
+    );
+    let border_color = crate::shared::primitives::DrawingColor::Solid(
+        crate::shared::primitives::Color::new(40, 50, 60, 255),
+    );
+    let text_color = crate::shared::primitives::DrawingColor::Solid(
+        crate::shared::primitives::Color::new(70, 80, 90, 255),
+    );
     let font = Some(FontFamily::new("Roboto".to_string()));
     let size = Some(FontSize::new(14.0));
     let radius = BorderRadius::new(6.0);
@@ -144,18 +144,18 @@ fn test_tooltip_config_builder() {
     let padding = PaddingOffset::new(12);
 
     let config = TooltipConfig::default()
-        .with_background(bg.clone())
-        .with_border_color(bc.clone())
-        .with_text_color(tc.clone())
+        .with_background(background.clone())
+        .with_border_color(border_color.clone())
+        .with_text_color(text_color.clone())
         .with_font(font.clone())
         .with_size(size)
         .with_radius(radius)
         .with_border_width(border_width)
         .with_padding(padding);
 
-    assert_eq!(config.background(), &bg);
-    assert_eq!(config.border_color(), &bc);
-    assert_eq!(config.text_color(), &tc);
+    assert_eq!(config.background(), &background);
+    assert_eq!(config.border_color(), &border_color);
+    assert_eq!(config.text_color(), &text_color);
     assert_eq!(config.font(), font.as_ref());
     assert_eq!(config.size(), size);
     assert_eq!(config.radius(), radius);

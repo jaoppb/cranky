@@ -43,22 +43,24 @@ pub(super) fn resolve_tooltip_anchor(state: &WaylandState) -> Option<TooltipAnch
                 target_monitor_id = MonitorId::new(&bar.output_name);
                 break 'search;
             }
-            if let Some(ms) = bar
+            if let Some(child) = bar
                 .module_surfaces
                 .values()
-                .find(|m| m.surface == parent_surface)
+                .find(|child| child.surface == parent_surface)
             {
                 bar_scale = bar.scale;
                 bar_height = bar.height;
                 parent_role = Some(FloatingParentRole::Layer(bar.layer_surface.clone()));
-                pointer_x += f64::from(ms.x);
+                pointer_x += f64::from(child.x);
                 target_monitor_id = MonitorId::new(&bar.output_name);
                 break 'search;
             }
         }
         for (floating_kind, floating) in &state.floating_surfaces {
             let Some(floating_monitor_id) = (match floating_kind {
-                FloatingKind::Popup(t) | FloatingKind::Panel(t) => Some(t.monitor_id()),
+                FloatingKind::Popup(target) | FloatingKind::Panel(target) => {
+                    Some(target.monitor_id())
+                }
                 FloatingKind::Tooltip => None,
             }) else {
                 continue;
@@ -68,12 +70,12 @@ pub(super) fn resolve_tooltip_anchor(state: &WaylandState) -> Option<TooltipAnch
             // are local to its own surface, so it adds its offset.
             let child_x = if floating.surface == parent_surface && hovers_layer(state, floating) {
                 0
-            } else if let Some(ms) = floating
+            } else if let Some(child) = floating
                 .module_surfaces
                 .values()
-                .find(|m| m.surface == parent_surface)
+                .find(|child| child.surface == parent_surface)
             {
-                ms.x
+                child.x
             } else {
                 continue;
             };

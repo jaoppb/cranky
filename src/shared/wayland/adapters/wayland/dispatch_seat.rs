@@ -14,7 +14,7 @@ impl Dispatch<WlSeat, ()> for WaylandState {
         event: wl_seat::Event,
         (): &(),
         _conn: &Connection,
-        qh: &QueueHandle<Self>,
+        queue_handle: &QueueHandle<Self>,
     ) {
         if let wl_seat::Event::Capabilities { capabilities } = event {
             let caps =
@@ -23,10 +23,12 @@ impl Dispatch<WlSeat, ()> for WaylandState {
             if caps.contains(wayland_client::protocol::wl_seat::Capability::Pointer)
                 && state.pointer.is_none()
             {
-                state.pointer = Some(proxy.get_pointer(qh, ()));
+                state.pointer = Some(proxy.get_pointer(queue_handle, ()));
             }
             let has_keyboard = caps.contains(wl_seat::Capability::Keyboard);
-            state.keyboard.on_capability(proxy, has_keyboard, qh);
+            state
+                .keyboard
+                .on_capability(proxy, has_keyboard, queue_handle);
         }
     }
 }

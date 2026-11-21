@@ -36,7 +36,7 @@ struct NewFloatingInfo {
 
 pub(super) fn create_new_floating(
     state: &mut WaylandState,
-    qh: &QueueHandle<WaylandState>,
+    queue_handle: &QueueHandle<WaylandState>,
     kind: FloatingKind,
     buffer: &RenderBuffer,
     anchor_info: &AnchorInfo,
@@ -53,10 +53,10 @@ pub(super) fn create_new_floating(
         shm,
         placement.size.width(),
         placement.size.height(),
-        qh,
+        queue_handle,
         state.app_env.xdg_runtime_dir().as_path(),
     )
-    .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
+    .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
 
     let xdg_wm_base =
         state
@@ -67,7 +67,7 @@ pub(super) fn create_new_floating(
             })?;
     let positioner = create_positioner(
         xdg_wm_base,
-        qh,
+        queue_handle,
         placement.text_w,
         placement.text_h,
         anchor_info,
@@ -76,7 +76,7 @@ pub(super) fn create_new_floating(
 
     setup_new_floating(
         state,
-        qh,
+        queue_handle,
         kind,
         anchor_info,
         NewFloatingInfo {
@@ -91,7 +91,7 @@ pub(super) fn create_new_floating(
 
 fn setup_new_floating(
     state: &mut WaylandState,
-    qh: &QueueHandle<WaylandState>,
+    queue_handle: &QueueHandle<WaylandState>,
     kind: FloatingKind,
     anchor_info: &AnchorInfo,
     mut info: NewFloatingInfo,
@@ -122,20 +122,20 @@ fn setup_new_floating(
         &layers,
         scale,
     );
-    let surface = compositor.create_surface(qh, ());
+    let surface = compositor.create_surface(queue_handle, ());
     surface.set_buffer_scale(anchor_info.bar_scale);
     if is_click_through(&kind) {
-        set_empty_input_region(compositor, &surface, qh);
+        set_empty_input_region(compositor, &surface, queue_handle);
     }
-    let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, qh, ());
+    let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, queue_handle, ());
     // A popup nested inside another floating surface (decision 7) names its
     // parent directly; a top-level one leaves it unset and relies on
     // `zwlr_layer_surface_v1.get_popup` below instead.
     let parent_xdg_surface = match &anchor_info.parent_role {
-        FloatingParentRole::Popup(p) => Some(p),
+        FloatingParentRole::Popup(popup) => Some(popup),
         FloatingParentRole::Layer(_) => None,
     };
-    let xdg_popup = xdg_surface.get_popup(parent_xdg_surface, &info.positioner, qh, ());
+    let xdg_popup = xdg_surface.get_popup(parent_xdg_surface, &info.positioner, queue_handle, ());
 
     if let FloatingKind::Popup(_) = &kind
         && let (Some(seat), Some(serial)) = (state.seat.as_ref(), state.last_button_serial)

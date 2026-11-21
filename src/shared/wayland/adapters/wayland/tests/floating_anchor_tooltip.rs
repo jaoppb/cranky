@@ -38,31 +38,32 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
     let backend = Backend::connect(client_stream).expect("connect backend");
     let connection = Connection::from_backend(backend);
     let event_queue = connection.new_event_queue::<WaylandState>();
-    let qh = event_queue.handle();
+    let queue_handle = event_queue.handle();
 
     let display = connection.display();
-    let registry = display.get_registry(&qh, ());
-    let compositor: WlCompositor = registry.bind(1, 1, &qh, ());
-    let subcompositor: WlSubcompositor = registry.bind(2, 1, &qh, ());
-    let shm: WlShm = registry.bind(3, 1, &qh, ());
-    let xdg_wm_base: XdgWmBase = registry.bind(4, 1, &qh, ());
+    let registry = display.get_registry(&queue_handle, ());
+    let compositor: WlCompositor = registry.bind(1, 1, &queue_handle, ());
+    let subcompositor: WlSubcompositor = registry.bind(2, 1, &queue_handle, ());
+    let shm: WlShm = registry.bind(3, 1, &queue_handle, ());
+    let xdg_wm_base: XdgWmBase = registry.bind(4, 1, &queue_handle, ());
 
     // The already-open popup's own surface/xdg_surface — what the embedded
     // module's tooltip must nest inside.
-    let popup_surface = compositor.create_surface(&qh, ());
-    let popup_xdg_surface = xdg_wm_base.get_xdg_surface(&popup_surface, &qh, ());
-    let positioner = xdg_wm_base.create_positioner(&qh, ());
-    let popup_xdg_popup = popup_xdg_surface.get_popup(None, &positioner, &qh, ());
+    let popup_surface = compositor.create_surface(&queue_handle, ());
+    let popup_xdg_surface = xdg_wm_base.get_xdg_surface(&popup_surface, &queue_handle, ());
+    let positioner = xdg_wm_base.create_positioner(&queue_handle, ());
+    let popup_xdg_popup = popup_xdg_surface.get_popup(None, &positioner, &queue_handle, ());
     let popup_shm_buffer =
-        ShmBuffer::new(&shm, 2, 2, &qh, Path::new("/tmp")).expect("popup shm buffer");
+        ShmBuffer::new(&shm, 2, 2, &queue_handle, Path::new("/tmp")).expect("popup shm buffer");
 
     // The module embedded inside that popup's own content (decision 7, gap
     // 4): its own subsurface, parented to the popup's surface rather than
     // to a bar's.
-    let module_surface = compositor.create_surface(&qh, ());
-    let module_subsurface = subcompositor.get_subsurface(&module_surface, &popup_surface, &qh, ());
+    let module_surface = compositor.create_surface(&queue_handle, ());
+    let module_subsurface =
+        subcompositor.get_subsurface(&module_surface, &popup_surface, &queue_handle, ());
     let module_shm_buffer =
-        ShmBuffer::new(&shm, 2, 2, &qh, Path::new("/tmp")).expect("module shm buffer");
+        ShmBuffer::new(&shm, 2, 2, &queue_handle, Path::new("/tmp")).expect("module shm buffer");
 
     let mut module_surfaces = HashMap::new();
     module_surfaces.insert(
@@ -155,7 +156,7 @@ fn tooltip_anchor_resolves_for_composite_child() {
     let popup_xdg = state
         .floating_surfaces
         .get(&popup_kind())
-        .map(|f| f.xdg_surface.clone());
+        .map(|floating| floating.xdg_surface.clone());
     assert!(
         matches!(&anchor.parent_role, FloatingParentRole::Popup(x) if Some(x) == popup_xdg.as_ref())
     );

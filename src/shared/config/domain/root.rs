@@ -126,14 +126,14 @@ impl RootConfig {
     pub fn as_unfocused(&self) -> Self {
         let mut base = self.clone();
         if let Some(unfocused) = &self.unfocused {
-            if let Some(h) = unfocused.height() {
-                base.height = h;
+            if let Some(height) = unfocused.height() {
+                base.height = height;
             }
-            if let Some(va) = unfocused.vertical_alignment() {
-                base.vertical_alignment = va;
+            if let Some(vertical_alignment) = unfocused.vertical_alignment() {
+                base.vertical_alignment = vertical_alignment;
             }
-            if let Some(pm) = unfocused.margin() {
-                base.margin = base.margin.with_partial_overrides(pm);
+            if let Some(margin) = unfocused.margin() {
+                base.margin = base.margin.with_partial_overrides(margin);
             }
         }
         base

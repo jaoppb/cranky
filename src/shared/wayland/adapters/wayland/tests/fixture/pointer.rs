@@ -68,7 +68,7 @@ pub fn drain(rx: &mut Receiver<Event>) -> Vec<Event> {
     std::iter::from_fn(|| rx.try_recv().ok()).collect()
 }
 
-pub fn ev(id: u32, monitor: &str, event: PointerEvent) -> Event {
+pub fn routed_event(id: u32, monitor: &str, event: PointerEvent) -> Event {
     (
         ModuleId::new(id),
         MonitorId::new(monitor),
@@ -77,15 +77,15 @@ pub fn ev(id: u32, monitor: &str, event: PointerEvent) -> Event {
 }
 
 pub fn owner(event: PointerEvent) -> Event {
-    ev(OWNER, "DP-1", event)
+    routed_event(OWNER, "DP-1", event)
 }
 
 pub fn child(event: PointerEvent) -> Event {
-    ev(CHILD, "DP-1", event)
+    routed_event(CHILD, "DP-1", event)
 }
 
 pub fn bar(event: PointerEvent) -> Event {
-    ev(BAR_MODULE, "HDMI-A-1", event)
+    routed_event(BAR_MODULE, "HDMI-A-1", event)
 }
 
 pub const fn enter(surface: SurfaceKind) -> PointerEvent {
@@ -130,6 +130,6 @@ pub fn release(surface: SurfaceKind, x: i32, y: i32) -> [PointerEvent; 2] {
 
 /// Press, release and click of the left button at one position.
 pub fn clicks(surface: SurfaceKind, x: i32, y: i32) -> [PointerEvent; 3] {
-    let [up, click] = release(surface, x, y);
-    [press(surface, x, y), up, click]
+    let [released, click] = release(surface, x, y);
+    [press(surface, x, y), released, click]
 }

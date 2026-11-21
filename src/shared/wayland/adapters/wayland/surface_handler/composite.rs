@@ -102,7 +102,12 @@ mod tests {
         floating.configure.mark_configured();
         state.floating_surfaces.insert(kind.clone(), floating);
 
-        handle_cmd(&mut state, &fake.qh, &child_cmd(&kind, Position::new(1, 0))).expect("handled");
+        handle_cmd(
+            &mut state,
+            &fake.queue_handle,
+            &child_cmd(&kind, Position::new(1, 0)),
+        )
+        .expect("handled");
 
         let floating = state.floating_surfaces.get_mut(&kind).expect("floating");
         let mut expected = [5u8, 5, 5, 255].repeat(8);
@@ -150,7 +155,12 @@ mod tests {
         let fake = Fake::new();
         let (mut state, kind) = with_open_popup(&fake, PopupEmbed::Composite);
 
-        handle_cmd(&mut state, &fake.qh, &child_cmd(&kind, Position::new(1, 0))).expect("handled");
+        handle_cmd(
+            &mut state,
+            &fake.queue_handle,
+            &child_cmd(&kind, Position::new(1, 0)),
+        )
+        .expect("handled");
 
         let floating = state.floating_surfaces.get(&kind).expect("floating");
         assert!(floating.layers.get(ModuleId::new(9)).is_some());
@@ -162,7 +172,12 @@ mod tests {
         let fake = Fake::new();
         let (mut state, kind) = with_open_popup(&fake, PopupEmbed::Subsurface);
 
-        handle_cmd(&mut state, &fake.qh, &child_cmd(&kind, Position::new(1, 0))).expect("handled");
+        handle_cmd(
+            &mut state,
+            &fake.queue_handle,
+            &child_cmd(&kind, Position::new(1, 0)),
+        )
+        .expect("handled");
 
         let floating = state.floating_surfaces.get(&kind).expect("floating");
         assert!(floating.layers.is_empty());

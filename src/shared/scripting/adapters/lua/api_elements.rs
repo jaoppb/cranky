@@ -21,16 +21,16 @@ pub(crate) fn create_ui_action_table(lua: &Lua) -> mlua::Result<mlua::Table> {
     action_table.set(
         "exec",
         lua.create_function(|lua, cmd: String| {
-            let t = lua.create_table()?;
-            t.set("Exec", cmd)?;
-            Ok(t)
+            let table = lua.create_table()?;
+            table.set("Exec", cmd)?;
+            Ok(table)
         })?,
     )?;
 
     let call_fn = lua.create_function(|lua, name: String| {
-        let t = lua.create_table()?;
-        t.set("ScriptCall", name)?;
-        Ok(t)
+        let table = lua.create_table()?;
+        table.set("ScriptCall", name)?;
+        Ok(table)
     })?;
 
     set_table_aliases!(
@@ -46,20 +46,20 @@ pub(crate) fn create_ui_action_table(lua: &Lua) -> mlua::Result<mlua::Table> {
         "systray",
         lua.create_function(|lua, (id, action): (mlua::Value, Option<String>)| {
             let id_str = match id {
-                mlua::Value::String(s) => {
-                    s.to_str().map_or_else(|_| String::new(), |b| b.to_string())
-                }
-                mlua::Value::Integer(i) => i.to_string(),
-                mlua::Value::Number(n) => n.to_string(),
+                mlua::Value::String(lua_string) => lua_string
+                    .to_str()
+                    .map_or_else(|_| String::new(), |text| text.to_string()),
+                mlua::Value::Integer(integer) => integer.to_string(),
+                mlua::Value::Number(number) => number.to_string(),
                 _ => String::new(),
             };
             let action_str = action.unwrap_or_else(|| "Primary".to_string());
-            let t = lua.create_table()?;
+            let table = lua.create_table()?;
             let sub = lua.create_table()?;
             sub.set("id", id_str)?;
             sub.set("action", action_str)?;
-            t.set("SystrayAction", sub)?;
-            Ok(t)
+            table.set("SystrayAction", sub)?;
+            Ok(table)
         })?,
     )?;
 
@@ -101,14 +101,14 @@ pub(crate) fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
         let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
         let (class, id, _, _, tooltip, popup, panel, key) = parse_common_props(lua, &table)?;
         let mut node = VNode::new_image(data, pixel_size, class, id, tooltip);
-        if let Some(p) = popup {
-            node = node.with_popup(p);
+        if let Some(popup_spec) = popup {
+            node = node.with_popup(popup_spec);
         }
-        if let Some(p) = panel {
-            node = node.with_panel(p);
+        if let Some(panel_spec) = panel {
+            node = node.with_panel(panel_spec);
         }
-        if let Some(k) = key {
-            node = node.with_key(k);
+        if let Some(node_key) = key {
+            node = node.with_key(node_key);
         }
         Ok(LuaVNode(node))
     })?;

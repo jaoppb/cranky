@@ -144,7 +144,7 @@ mod tests {
         let base = solid(2, 1, BASE);
         update_existing_floating(
             &mut state,
-            &fake.qh,
+            &fake.queue_handle,
             &kind,
             &base,
             &anchor(&fake),
@@ -177,7 +177,7 @@ mod tests {
         let base = solid(2, 1, BASE);
         update_existing_floating(
             &mut state,
-            &fake.qh,
+            &fake.queue_handle,
             &kind,
             &base,
             &anchor(&fake),
@@ -194,8 +194,10 @@ mod tests {
     #[test]
     fn create_new_floating_keeps_pending_children_on_error() {
         let fake = Fake::new();
-        let unbinds: [fn(&mut WaylandState); 2] =
-            [|s| s.xdg_wm_base = None, |s| s.compositor = None];
+        let unbinds: [fn(&mut WaylandState); 2] = [
+            |state| state.xdg_wm_base = None,
+            |state| state.compositor = None,
+        ];
         for unbind in unbinds {
             let mut state = fake.state(PopupEmbed::Composite);
             unbind(&mut state);
@@ -204,7 +206,7 @@ mod tests {
 
             let result = create_new_floating(
                 &mut state,
-                &fake.qh,
+                &fake.queue_handle,
                 kind.clone(),
                 &solid(2, 1, BASE),
                 &anchor(&fake),
@@ -214,7 +216,11 @@ mod tests {
 
             assert!(result.is_err());
             let pending = state.pending_children.get(&kind);
-            assert!(pending.and_then(|l| l.get(ModuleId::new(9))).is_some());
+            assert!(
+                pending
+                    .and_then(|layers| layers.get(ModuleId::new(9)))
+                    .is_some()
+            );
         }
     }
 
@@ -228,7 +234,7 @@ mod tests {
 
         create_new_floating(
             &mut state,
-            &fake.qh,
+            &fake.queue_handle,
             kind.clone(),
             &base,
             &anchor(&fake),
@@ -259,7 +265,7 @@ mod tests {
 
         update_existing_floating(
             &mut state,
-            &fake.qh,
+            &fake.queue_handle,
             &kind,
             &base,
             &anchor(&fake),
@@ -288,7 +294,7 @@ mod tests {
         let base = solid(2, 1, BASE);
         let result = update_existing_floating(
             &mut state,
-            &fake.qh,
+            &fake.queue_handle,
             &kind,
             &base,
             &anchor(&fake),

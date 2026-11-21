@@ -27,11 +27,11 @@ impl ZbusConnectionAdapter<Connected> {
                 &(),
             )
             .await
-            .map_err(|e| DbusConnectionError::MethodCallFailed(e.to_string()))?;
+            .map_err(|error| DbusConnectionError::MethodCallFailed(error.to_string()))?;
         let msg_body = msg.body();
         let body: zbus::Variant<'_> = msg_body
             .deserialize()
-            .map_err(|e| DbusConnectionError::MethodCallFailed(e.to_string()))?;
+            .map_err(|error| DbusConnectionError::MethodCallFailed(error.to_string()))?;
         Ok(parse_value(&body))
     }
 
@@ -52,16 +52,18 @@ impl ZbusConnectionAdapter<Connected> {
                 &(interface.as_str(),),
             )
             .await
-            .map_err(|e| DbusConnectionError::MethodCallFailed(e.to_string()))?;
+            .map_err(|error| DbusConnectionError::MethodCallFailed(error.to_string()))?;
 
         let msg_body = msg.body();
-        let dict: HashMap<String, zbus::Variant<'_>> = msg_body.deserialize().map_err(|e| {
-            DbusConnectionError::MethodCallFailed(format!("Failed to deserialize properties: {e}"))
+        let dict: HashMap<String, zbus::Variant<'_>> = msg_body.deserialize().map_err(|error| {
+            DbusConnectionError::MethodCallFailed(format!(
+                "Failed to deserialize properties: {error}"
+            ))
         })?;
 
         let mut map = HashMap::new();
-        for (k, v) in dict {
-            map.insert(PropertyName::new(k), parse_value(&v));
+        for (key, value) in dict {
+            map.insert(PropertyName::new(key), parse_value(&value));
         }
 
         Ok(PropertiesMap::new(map))
@@ -81,10 +83,10 @@ impl ZbusConnectionAdapter<Connected> {
                 &(),
             )
             .await
-            .map_err(|e| DbusConnectionError::MethodCallFailed(e.to_string()))?;
+            .map_err(|error| DbusConnectionError::MethodCallFailed(error.to_string()))?;
 
-        let names: Vec<String> = msg.body().deserialize().map_err(|e| {
-            DbusConnectionError::MethodCallFailed(format!("Failed to deserialize names: {e}"))
+        let names: Vec<String> = msg.body().deserialize().map_err(|error| {
+            DbusConnectionError::MethodCallFailed(format!("Failed to deserialize names: {error}"))
         })?;
 
         Ok(names.into_iter().map(Destination::new).collect())

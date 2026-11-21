@@ -28,31 +28,31 @@ fn parse_margin(table: &mlua::Table) -> MarginConfig {
     table.get::<mlua::Table>("margin").map_or_else(
         |_| MarginConfig::default(),
         |m_table| {
-            let t = m_table
+            let top = m_table
                 .get::<Option<i32>>("top")
                 .ok()
                 .flatten()
                 .unwrap_or(0);
-            let r = m_table
+            let right = m_table
                 .get::<Option<i32>>("right")
                 .ok()
                 .flatten()
                 .unwrap_or(0);
-            let b = m_table
+            let bottom = m_table
                 .get::<Option<i32>>("bottom")
                 .ok()
                 .flatten()
                 .unwrap_or(0);
-            let l = m_table
+            let left = m_table
                 .get::<Option<i32>>("left")
                 .ok()
                 .flatten()
                 .unwrap_or(0);
             MarginConfig::new(
-                MarginOffset::new(t),
-                MarginOffset::new(b),
-                MarginOffset::new(l),
-                MarginOffset::new(r),
+                MarginOffset::new(top),
+                MarginOffset::new(bottom),
+                MarginOffset::new(left),
+                MarginOffset::new(right),
             )
         },
     )
@@ -66,11 +66,11 @@ pub(crate) fn parse_popup_spec(
         return Ok(None);
     };
     match val {
-        mlua::Value::UserData(ud) => {
-            if let Ok(popup_ud) = ud.borrow::<super::userdata::LuaPopup>() {
+        mlua::Value::UserData(user_data) => {
+            if let Ok(popup_ud) = user_data.borrow::<super::userdata::LuaPopup>() {
                 return Ok(Some(popup_ud.0.clone()));
             }
-            if let Ok(vnode_ud) = ud.borrow::<super::userdata::LuaVNode>() {
+            if let Ok(vnode_ud) = user_data.borrow::<super::userdata::LuaVNode>() {
                 return Ok(Some(PopupSpec::new(Box::new(vnode_ud.0.clone()))));
             }
             Ok(None)
@@ -112,8 +112,8 @@ pub(crate) fn parse_panel_spec(
         return Ok(None);
     };
     match val {
-        mlua::Value::UserData(ud) => {
-            if let Ok(panel_ud) = ud.borrow::<super::userdata::LuaPanel>() {
+        mlua::Value::UserData(user_data) => {
+            if let Ok(panel_ud) = user_data.borrow::<super::userdata::LuaPanel>() {
                 return Ok(Some(panel_ud.0.clone()));
             }
             Ok(None)
@@ -135,8 +135,8 @@ pub(crate) fn parse_panel_spec(
             let mut left = false;
             let mut right = false;
             if let Ok(anchor_table) = table.get::<mlua::Table>("anchor") {
-                for s in anchor_table.sequence_values::<String>().flatten() {
-                    match s.to_lowercase().as_str() {
+                for edge in anchor_table.sequence_values::<String>().flatten() {
+                    match edge.to_lowercase().as_str() {
                         "top" => top = true,
                         "bottom" => bottom = true,
                         "left" => left = true,
@@ -144,8 +144,8 @@ pub(crate) fn parse_panel_spec(
                         _ => {}
                     }
                 }
-            } else if let Ok(s) = table.get::<String>("anchor") {
-                match s.to_lowercase().as_str() {
+            } else if let Ok(anchor) = table.get::<String>("anchor") {
+                match anchor.to_lowercase().as_str() {
                     "top" => top = true,
                     "bottom" => bottom = true,
                     "left" => left = true,

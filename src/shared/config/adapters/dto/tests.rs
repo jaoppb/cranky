@@ -76,7 +76,7 @@ fn test_json_value_to_dynamic_nested() {
     use crate::shared::primitives::DynamicValue;
     use serde_json::json;
 
-    let v = json!({
+    let json_value = json!({
         "null": null,
         "bool": true,
         "num": 42.5,
@@ -87,16 +87,16 @@ fn test_json_value_to_dynamic_nested() {
         }
     });
 
-    let dyn_val = helpers::json_value_to_dynamic(v);
-    if let DynamicValue::Map(m) = dyn_val {
-        assert_eq!(m.get("null"), Some(&DynamicValue::Null));
-        assert_eq!(m.get("bool"), Some(&DynamicValue::Bool(true)));
-        assert_eq!(m.get("num"), Some(&DynamicValue::Number(42.5)));
+    let dyn_val = helpers::json_value_to_dynamic(json_value);
+    if let DynamicValue::Map(map) = dyn_val {
+        assert_eq!(map.get("null"), Some(&DynamicValue::Null));
+        assert_eq!(map.get("bool"), Some(&DynamicValue::Bool(true)));
+        assert_eq!(map.get("num"), Some(&DynamicValue::Number(42.5)));
         assert_eq!(
-            m.get("str"),
+            map.get("str"),
             Some(&DynamicValue::String("hello".to_string()))
         );
-        if let Some(DynamicValue::Array(arr)) = m.get("arr") {
+        if let Some(DynamicValue::Array(arr)) = map.get("arr") {
             assert_eq!(arr.len(), 3);
         } else {
             panic!("expected array");

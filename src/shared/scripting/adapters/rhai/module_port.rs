@@ -79,7 +79,7 @@ impl AnyModulePort for RhaiModule {
         let mon_info = self
             .cached_monitors
             .iter()
-            .find(|m| m.id() == monitor)
+            .find(|monitor_info| monitor_info.id() == monitor)
             .cloned()
             .unwrap_or_else(|| ScriptMonitorInfo::from_id(monitor));
 
@@ -106,8 +106,10 @@ impl AnyModulePort for RhaiModule {
             Ok(result) => {
                 match rhai::serde::from_dynamic::<crate::features::vdom::domain::VNode>(&result) {
                     Ok(node) => node,
-                    Err(e) => {
-                        tracing::error!("Failed to deserialize render output in rhai module: {e}");
+                    Err(error) => {
+                        tracing::error!(
+                            "Failed to deserialize render output in rhai module: {error}"
+                        );
                         crate::features::vdom::domain::VNode::new_flex(
                             vec![],
                             None,
@@ -119,8 +121,8 @@ impl AnyModulePort for RhaiModule {
                     }
                 }
             }
-            Err(e) => {
-                tracing::error!("Module render error in rhai: {e:?}");
+            Err(error) => {
+                tracing::error!("Module render error in rhai: {error:?}");
                 crate::features::vdom::domain::VNode::new_flex(vec![], None, None, None, None, None)
             }
         }
@@ -151,13 +153,13 @@ impl AnyModulePort for RhaiModule {
                 );
                 match first_res {
                     Ok(_) => Ok(()),
-                    Err(e) => {
-                        if let rhai::EvalAltResult::ErrorFunctionNotFound(..) = &*e {
+                    Err(error) => {
+                        if let rhai::EvalAltResult::ErrorFunctionNotFound(..) = &*error {
                             engine
                                 .call_fn::<rhai::Dynamic>(&mut scope, &self.ast, name.as_str(), ())
                                 .map(|_| ())
                         } else {
-                            Err(e)
+                            Err(error)
                         }
                     }
                 }
@@ -174,14 +176,14 @@ impl AnyModulePort for RhaiModule {
 
         match res {
             Ok(()) => Ok(()),
-            Err(e) => {
-                if let rhai::EvalAltResult::ErrorFunctionNotFound(f, ..) = &*e
-                    && f == name.as_str()
+            Err(error) => {
+                if let rhai::EvalAltResult::ErrorFunctionNotFound(function_name, ..) = &*error
+                    && function_name == name.as_str()
                 {
                     return Ok(());
                 }
-                tracing::error!("Function call '{}' failed: {e}", name.as_str());
-                Err(ModuleInitError::ScriptError(e.to_string()))
+                tracing::error!("Function call '{}' failed: {error}", name.as_str());
+                Err(ModuleInitError::ScriptError(error.to_string()))
             }
         }
     }
