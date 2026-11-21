@@ -1,3 +1,5 @@
+//! Numeric conversions with saturation and SVG rasterisation used across the crate.
+
 use resvg::usvg;
 use std::path::Path;
 use tiny_skia::Transform;

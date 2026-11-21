@@ -29,9 +29,9 @@ use tracing_setup::init_tracing;
 /// # Errors
 ///
 /// Returns a [`BootError`] when a boot-fatal step fails: building the
-/// runtime, reading the environment, loading the configuration, connecting to
-/// Wayland or `DBus`, building the application, watching the scripts, or the
-/// application loop.
+/// runtime, reading the environment, loading or watching the configuration,
+/// connecting to Wayland, building the application, watching the scripts, or
+/// the application loop.
 pub fn run() -> Result<(), BootError> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()

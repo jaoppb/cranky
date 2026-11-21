@@ -1,3 +1,6 @@
+//! The application actor: `CrankyApp` owns the module registry and the read model, and routes
+//! display, layout, UI and system commands between the modules and the Wayland adapter.
+
 use crate::app::commands::SystemCommand;
 use crate::features::layout_engine::domain::DisplayCommand;
 use crate::features::module_runtime::ports::LayoutEvent;
@@ -11,12 +14,18 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
+/// Why the application could not start its modules or keep its loop running.
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
+    /// Loading the modules the configuration names failed.
     #[error("Module error: {0}")]
     Module(#[from] crate::features::module_runtime::ports::RegistryLoadError),
+    /// Waiting for or dispatching display server events failed.
     #[error("Internal error: {message}")]
-    Internal { message: String },
+    Internal {
+        /// The display server error, as text.
+        message: String,
+    },
 }
 
 pub use crate::shared::wayland::domain::AppReadModel;

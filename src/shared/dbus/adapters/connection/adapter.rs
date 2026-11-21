@@ -44,7 +44,8 @@ impl ZbusConnectionAdapter<Disconnected> {
     ///
     /// # Errors
     ///
-    /// Returns `DbusConnectionError` if connection to buses fails.
+    /// Never returns an error today: a bus that cannot be reached is logged and left unset, and
+    /// calls on it fail later with `DbusConnectionError::NotInitialized`.
     pub async fn connect(
         mut self,
     ) -> Result<ZbusConnectionAdapter<Connected>, DbusConnectionError> {

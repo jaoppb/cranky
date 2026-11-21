@@ -17,6 +17,7 @@ rust_2018_idioms = { level = "deny", priority = -1 }
 future_incompatible = { level = "deny", priority = -1 }
 unreachable_pub = "forbid"
 missing_debug_implementations = "forbid"
+missing_docs = "forbid"
 
 [lints.rustdoc]
 all = "deny"

@@ -99,8 +99,9 @@ impl RootConfig {
         &self.margin
     }
 
-    /// The remaining `[root]` keys, handed to the bar script as its options when `[modules]` has
-    /// no entry for the root.
+    /// The remaining `[root]` keys: their `left`/`center`/`right` arrays pick the slot modules, and
+    /// the whole table is handed to the bar script as its options when `[modules]` has no entry for
+    /// the root.
     #[must_use]
     pub const fn options(&self) -> &ModuleOptions {
         &self.options
