@@ -32,6 +32,9 @@ build() {
 	# A package build may use a newer Rust than rust-toolchain.toml pins; the
 	# lints Cargo.toml denies must not fail it.
 	export RUSTFLAGS="${RUSTFLAGS:-} --cap-lints warn"
+	# makepkg strips, and splits cranky-debug when makepkg.conf asks for it;
+	# the release profile's own strip would leave that package empty.
+	export CARGO_PROFILE_RELEASE_STRIP=none
 	cargo build --frozen --release --all-features
 }
 

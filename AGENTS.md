@@ -36,7 +36,7 @@ Every recipe runs only inside the flake devShell (`nix develop`, or direnv with 
 | Workflows | `just workflows-check` (actionlint, with shellcheck) |
 | Coverage | `just coverage-check` (fails under 80% lines), `just coverage` (HTML report) |
 | Benchmarks | `just bench` (criterion, `benches/benchmarks.rs`), `just bench-check` (compile only) |
-| Profiling | `just release && just record-profile` then `just analyze-profile` (see the `analyze-profile` skill in `.agents/skills/`) |
+| Profiling | `just record-profile` (builds the `profiling` profile) then `just analyze-profile` (see the `analyze-profile` skill in `.agents/skills/`) |
 | GitHub audit | `just issues-check`, `just repo-check`, `just project-check`, `just project-sync` (see `CONTRIBUTING.md`) |
 | Git hooks | `just setup` (lefthook) |
 | Tool pins | `just flake-update [input…]` (moves `flake.lock`, in a pull request of its own) |

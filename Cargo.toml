@@ -159,5 +159,13 @@ harness = false
 name = "benchmarks"
 harness = false
 
+# What users install, so it ships no debug info and no symbol table (#82).
 [profile.release]
+strip = "symbols"
+
+# `just record-profile` builds this: release code with the debug info samply
+# and scripts/analyze_profile.py need to name inlined frames and their lines.
+[profile.profiling]
+inherits = "release"
 debug = 1
+strip = "none"
