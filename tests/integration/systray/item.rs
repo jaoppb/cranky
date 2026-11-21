@@ -84,6 +84,9 @@ impl Item {
 
     #[zbus(signal)]
     async fn new_status(emitter: &SignalEmitter<'_>, status: &str) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    async fn new_menu(emitter: &SignalEmitter<'_>) -> zbus::Result<()>;
 }
 
 /// The fake item's own connection to the private bus.
@@ -149,6 +152,13 @@ impl ItemService {
             .context("item: interface")
     }
 
+    /// Sets `ItemIsMenu`; done before the item registers, the tray fetches it
+    /// as an item that only offers its menu.
+    pub(crate) async fn mark_as_menu(&self) -> Outcome {
+        self.interface().await?.get_mut().await.is_menu = true;
+        Ok(())
+    }
+
     /// Changes `Title` and announces it with `NewTitle`.
     pub(crate) async fn retitle(&self, title: &str) -> Outcome {
         let interface = self.interface().await?;
@@ -165,6 +175,15 @@ impl ItemService {
         Item::new_status(interface.signal_emitter(), status)
             .await
             .context("item: emit NewStatus")
+    }
+
+    /// Sets `ItemIsMenu` on a registered item and announces it with `NewMenu`.
+    pub(crate) async fn become_menu(&self) -> Outcome {
+        let interface = self.interface().await?;
+        interface.get_mut().await.is_menu = true;
+        Item::new_menu(interface.signal_emitter())
+            .await
+            .context("item: emit NewMenu")
     }
 
     /// The next method the tray called on the item.

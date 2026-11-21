@@ -10,7 +10,7 @@ use cranky::features::systray::domain::SystrayActionName;
 use cranky::shared::config::domain::Config;
 use cranky::shared::events::signals::SignalHub;
 use cranky::shared::primitives::geometry::Position;
-use item::Call;
+use item::{Call, ItemService};
 use serde_json::Value;
 use std::sync::Arc;
 use tray::Tray;
@@ -20,7 +20,11 @@ pub(crate) fn cases() -> Vec<Case> {
         case!(systray::claims_the_watcher_name),
         case!(systray::fetches_a_registered_item),
         case!(systray::follows_title_and_status_signals),
+        case!(systray::follows_the_menu_signal),
         case!(systray::forwards_actions_to_the_item),
+        case!(systray::primary_activates_a_plain_item),
+        case!(systray::primary_opens_the_menu_of_a_menu_item),
+        case!(systray::reports_a_registered_host),
         case!(systray::drops_an_item_that_left_the_bus),
     ]
 }
@@ -74,6 +78,18 @@ async fn follows_title_and_status_signals() -> Outcome {
     .await
 }
 
+/// `NewMenu` refetches `ItemIsMenu`, so an item that turns into a menu-only
+/// item after registering is seen as one.
+async fn follows_the_menu_signal() -> Outcome {
+    let mut tray = Tray::with_item().await?;
+    tray.emit_until(
+        "NewMenu to reach the tray",
+        ItemService::become_menu,
+        |item| item.pointer("/item_is_menu") == Some(&Value::from(true)),
+    )
+    .await
+}
+
 async fn forwards_actions_to_the_item() -> Outcome {
     let mut tray = Tray::with_item().await?;
     tray.trigger(SystrayActionName::Activate, Some(Position::new(3, 4)))
@@ -85,6 +101,35 @@ async fn forwards_actions_to_the_item() -> Outcome {
     tray.trigger(SystrayActionName::ScrollUp, None).await?;
     tray.expect_call(Call::Scroll(-1, "vertical".to_string()))
         .await
+}
+
+async fn primary_activates_a_plain_item() -> Outcome {
+    let mut tray = Tray::with_item().await?;
+    tray.trigger(SystrayActionName::Primary, Some(Position::new(7, 8)))
+        .await?;
+    tray.expect_call(Call::Activate(7, 8)).await
+}
+
+async fn primary_opens_the_menu_of_a_menu_item() -> Outcome {
+    let mut tray = Tray::with_menu_item().await?;
+    ensure_eq(
+        "/item_is_menu",
+        &tray.item()?.pointer("/item_is_menu").cloned(),
+        &Some(Value::from(true)),
+    )?;
+    tray.trigger(SystrayActionName::Primary, Some(Position::new(7, 8)))
+        .await?;
+    tray.expect_call(Call::ContextMenu(7, 8)).await
+}
+
+async fn reports_a_registered_host() -> Outcome {
+    let hub = Arc::new(SignalHub::new(Config::default()));
+    let _adapter = tray::start_adapter(&hub).await?;
+    ensure_eq(
+        "IsStatusNotifierHostRegistered",
+        &tray::host_registered().await?,
+        &true,
+    )
 }
 
 async fn drops_an_item_that_left_the_bus() -> Outcome {

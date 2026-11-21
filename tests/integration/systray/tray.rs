@@ -30,9 +30,19 @@ impl Tray {
     /// Starts the adapter, registers a fake item and waits for the tray to
     /// track it.
     pub(crate) async fn with_item() -> Outcome<Self> {
+        Self::tracking(ItemService::start().await?).await
+    }
+
+    /// The same, with an item that sets `ItemIsMenu`.
+    pub(crate) async fn with_menu_item() -> Outcome<Self> {
+        let item = ItemService::start().await?;
+        item.mark_as_menu().await?;
+        Self::tracking(item).await
+    }
+
+    async fn tracking(item: ItemService) -> Outcome<Self> {
         let hub = Arc::new(SignalHub::new(Config::default()));
         let adapter = start_adapter(&hub).await?;
-        let item = ItemService::start().await?;
         let id = SystrayId::new(item.tray_id()?);
         item.register().await?;
         let mut state = hub.systray_rx();
@@ -132,6 +142,36 @@ async fn tracked(
         .await
         .context("systray state channel")?;
     item_json(&state, id).context("the tracked item vanished")
+}
+
+/// Registers a host with the watcher, as a second tray would, and reads back
+/// whether the watcher reports a registered host.
+pub(crate) async fn host_registered() -> Outcome<bool> {
+    let connection = zbus::Connection::session()
+        .await
+        .context("host connection")?;
+    connection
+        .call_method(
+            Some(WATCHER),
+            "/StatusNotifierWatcher",
+            Some(WATCHER),
+            "RegisterStatusNotifierHost",
+            &("org.kde.StatusNotifierHost-test",),
+        )
+        .await
+        .context("RegisterStatusNotifierHost")?;
+    let properties = zbus::fdo::PropertiesProxy::builder(&connection)
+        .destination(WATCHER)
+        .path("/StatusNotifierWatcher")
+        .build()
+        .await
+        .context("watcher properties proxy")?;
+    let interface = zbus::names::InterfaceName::try_from(WATCHER).context("watcher interface")?;
+    let value = properties
+        .get(interface, "IsStatusNotifierHostRegistered")
+        .await
+        .context("IsStatusNotifierHostRegistered")?;
+    bool::try_from(value).context("IsStatusNotifierHostRegistered as a bool")
 }
 
 /// Starts the adapter once the watcher name is free. The previous case's
