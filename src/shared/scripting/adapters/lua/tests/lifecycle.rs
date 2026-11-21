@@ -31,7 +31,7 @@ fn test_systray_missing_icon_regression() {
             )
             .with_status(SystrayStatus::Active)
             .with_category(crate::features::systray::domain::SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(crate::features::systray::domain::ItemIsMenu::new(false)),
+            .with_item_is_menu(crate::features::systray::domain::ItemIsMenu::Activatable),
         ),
     );
 
@@ -96,7 +96,7 @@ fn test_systray_with_icon_renders_image() {
             .with_status(SystrayStatus::Active)
             .with_icon(icon)
             .with_category(crate::features::systray::domain::SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(crate::features::systray::domain::ItemIsMenu::new(false)),
+            .with_item_is_menu(crate::features::systray::domain::ItemIsMenu::Activatable),
         ),
     );
 

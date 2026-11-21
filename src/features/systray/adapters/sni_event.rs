@@ -85,7 +85,7 @@ impl SniEvent {
                     item = item.with_menu_path(Some(ObjectPath::new(menu_path.as_str())));
                 }
                 if let Ok(item_is_menu_val) = proxy.item_is_menu().await {
-                    item = item.with_item_is_menu(ItemIsMenu::new(item_is_menu_val));
+                    item = item.with_item_is_menu(ItemIsMenu::from(item_is_menu_val));
                 }
                 tracing::trace!("SniEvent::Menu: updated menu");
                 item

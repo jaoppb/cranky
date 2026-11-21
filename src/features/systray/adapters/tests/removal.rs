@@ -24,7 +24,7 @@ fn test_remove_by_destination_removes_matching_items() {
             )
             .with_status(SystrayStatus::Active)
             .with_category(SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(ItemIsMenu::new(false)),
+            .with_item_is_menu(ItemIsMenu::Activatable),
         ));
         let item2 = SystrayItem::new(CreateSystrayItemCommand::new(
             SystrayItemParams::new(
@@ -35,7 +35,7 @@ fn test_remove_by_destination_removes_matching_items() {
             )
             .with_status(SystrayStatus::Active)
             .with_category(SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(ItemIsMenu::new(false)),
+            .with_item_is_menu(ItemIsMenu::Activatable),
         ));
         let item3 = SystrayItem::new(CreateSystrayItemCommand::new(
             SystrayItemParams::new(
@@ -46,7 +46,7 @@ fn test_remove_by_destination_removes_matching_items() {
             )
             .with_status(SystrayStatus::Active)
             .with_category(SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(ItemIsMenu::new(false)),
+            .with_item_is_menu(ItemIsMenu::Activatable),
         ));
 
         map.insert(SystrayId::new("app1"), item1);
@@ -86,7 +86,7 @@ fn test_remove_by_destination_no_match_returns_false() {
             )
             .with_status(SystrayStatus::Active)
             .with_category(SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(ItemIsMenu::new(false)),
+            .with_item_is_menu(ItemIsMenu::Activatable),
         ));
         map.insert(SystrayId::new("app1"), item);
 

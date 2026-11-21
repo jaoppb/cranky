@@ -32,7 +32,7 @@ fn test_systray_item() {
         .with_icon(icon.clone())
         .with_menu_path(Some(ObjectPath::new("/menu")))
         .with_category(SystrayCategory::ApplicationStatus)
-        .with_item_is_menu(ItemIsMenu::new(true)),
+        .with_item_is_menu(ItemIsMenu::MenuOnly),
     )
     .with_item_id(Some(ItemId::new("telegram")))
     .with_window_id(Some(WindowId::new(1234)))
@@ -49,7 +49,7 @@ fn test_systray_item() {
     assert_eq!(cmd.item_id(), Some(&ItemId::new("telegram")));
     assert_eq!(cmd.category(), &SystrayCategory::ApplicationStatus);
     assert_eq!(cmd.window_id(), Some(WindowId::new(1234)));
-    assert_eq!(cmd.item_is_menu(), ItemIsMenu::new(true));
+    assert_eq!(cmd.item_is_menu(), ItemIsMenu::MenuOnly);
     assert_eq!(cmd.attention_icon(), att_icon.as_ref());
     assert_eq!(cmd.overlay_icon(), ovr_icon.as_ref());
     assert_eq!(cmd.tooltip(), Some(&tip));
@@ -62,7 +62,7 @@ fn test_systray_item() {
     assert_eq!(item.window_id(), Some(WindowId::new(1234)));
     assert_eq!(item.category(), &SystrayCategory::ApplicationStatus);
     assert_eq!(item.icon(), icon.as_ref());
-    assert_eq!(item.item_is_menu(), ItemIsMenu::new(true));
+    assert_eq!(item.item_is_menu(), ItemIsMenu::MenuOnly);
     assert_eq!(item.attention_icon(), att_icon.as_ref());
     assert_eq!(item.overlay_icon(), ovr_icon.as_ref());
     assert_eq!(item.tooltip(), Some(&tip));
@@ -96,7 +96,7 @@ fn test_systray_state_serde() {
             SystrayIcon::new(Some(IconName::new("test_icon")), None).unwrap(),
         ))
         .with_category(SystrayCategory::Communications)
-        .with_item_is_menu(ItemIsMenu::new(true)),
+        .with_item_is_menu(ItemIsMenu::MenuOnly),
     )
     .with_item_id(Some(ItemId::new("test_item_id")))
     .with_window_id(Some(WindowId::new(101)))
