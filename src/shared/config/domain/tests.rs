@@ -56,7 +56,7 @@ fn test_modules_config() {
         ModuleName::new("time"),
         ModuleConfig::new(
             ModuleName::new("time"),
-            true,
+            crate::shared::config::domain::Enablement::Enabled,
             EngineSelection::Auto,
             ModuleOptions::default(),
         ),
@@ -108,7 +108,7 @@ fn test_module_config_engine() {
     let explicit = EngineSelection::Explicit(EngineId::new("rhai"));
     let cfg = ModuleConfig::new(
         "clock".into(),
-        true,
+        crate::shared::config::domain::Enablement::Enabled,
         explicit.clone(),
         ModuleOptions::default(),
     );

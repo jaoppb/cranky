@@ -298,7 +298,7 @@ mod tests {
             .init(
                 &crate::shared::config::domain::ModuleConfig::new(
                     ModuleName::new("metrics"),
-                    true,
+                    crate::shared::config::domain::Enablement::Enabled,
                     selection.clone(),
                     crate::shared::primitives::ModuleOptions::default(),
                 ),
@@ -362,7 +362,7 @@ mod tests {
             .init(
                 &crate::shared::config::domain::ModuleConfig::new(
                     ModuleName::new("clock"),
-                    true,
+                    crate::shared::config::domain::Enablement::Enabled,
                     selection.clone(),
                     options,
                 ),
@@ -427,7 +427,7 @@ mod tests {
                 .init(
                     &crate::shared::config::domain::ModuleConfig::new(
                         ModuleName::new("calendar"),
-                        true,
+                        crate::shared::config::domain::Enablement::Enabled,
                         selection.clone(),
                         crate::shared::primitives::ModuleOptions::default(),
                     ),
@@ -511,7 +511,7 @@ mod tests {
                 .init(
                     &crate::shared::config::domain::ModuleConfig::new(
                         ModuleName::new("clock"),
-                        true,
+                        crate::shared::config::domain::Enablement::Enabled,
                         selection.clone(),
                         crate::shared::primitives::ModuleOptions::default(),
                     ),
@@ -611,7 +611,7 @@ mod tests {
                 .init(
                     &crate::shared::config::domain::ModuleConfig::new(
                         ModuleName::new("clock"),
-                        true,
+                        crate::shared::config::domain::Enablement::Enabled,
                         selection.clone(),
                         crate::shared::primitives::ModuleOptions::default(),
                     ),
@@ -788,7 +788,7 @@ mod tests {
             cal.init(
                 &crate::shared::config::domain::ModuleConfig::new(
                     ModuleName::new("calendar"),
-                    true,
+                    crate::shared::config::domain::Enablement::Enabled,
                     selection.clone(),
                     crate::shared::primitives::ModuleOptions::default(),
                 ),

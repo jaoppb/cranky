@@ -74,7 +74,7 @@ fn test_lua_rich_monitor_userdata() {
         .with_name("DP-1".to_string())
         .with_size(Size::new(1920, 1080))
         .with_scale(Scale::new(1.5))
-        .with_focused(true)
+        .with_focused(crate::shared::primitives::MonitorFocus::Focused)
         .with_workspaces(Some(1), Some(2));
     let mon = LuaMonitor(info);
     lua.globals().set("test_mon", mon).unwrap();

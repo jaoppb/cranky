@@ -61,7 +61,7 @@ fn test_script_monitor_info_builder() {
         .with_name("DisplayPort-2".to_string())
         .with_size(Size::new(2560, 1440))
         .with_scale(crate::shared::primitives::Scale::new(2.0))
-        .with_focused(true)
+        .with_focused(crate::shared::primitives::MonitorFocus::Focused)
         .with_workspaces(Some(3), Some(4));
 
     assert_eq!(info.id(), &id);
@@ -76,7 +76,8 @@ fn test_script_monitor_info_builder() {
 #[test]
 fn test_script_monitor_info_serializes_focus_as_a_bool() {
     let id = crate::shared::primitives::MonitorId::new("DP-2");
-    let info = crate::shared::primitives::ScriptMonitorInfo::from_id(&id).with_focused(true);
+    let info = crate::shared::primitives::ScriptMonitorInfo::from_id(&id)
+        .with_focused(crate::shared::primitives::MonitorFocus::Focused);
     let value = serde_json::to_value(&info).unwrap();
     assert_eq!(value["is_focused"], serde_json::Value::Bool(true));
     let back: crate::shared::primitives::ScriptMonitorInfo = serde_json::from_value(value).unwrap();
