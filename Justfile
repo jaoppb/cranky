@@ -124,17 +124,17 @@ record-profile *args:
 analyze-profile *args:
     python3 scripts/analyze_profile.py {{args}}
 
-# Audit the GitHub issues against tools.toml: type, area, milestone, parent, Project membership and pending label migrations; --no-membership skips the Project (needs gh authentication with the read:project scope to read it)
+# Audit the GitHub issues against tools.toml: type, area, milestone, parent, Project membership and pending label migrations; --no-membership turns off the membership rule only, the board is still read (needs gh authentication, with the read:project scope while the board is private)
 [group('repo')]
 issues-check *args:
     tools issues check {{args}}
 
-# Check that the GitHub labels, milestones, merge settings and Project title match tools.toml, or only the parts named, e.g. --labels (needs gh authentication with push access to see the settings and the read:project scope for the title)
+# Check that the GitHub labels, milestones, merge settings and Project title match tools.toml, or only the parts named, e.g. --labels (needs gh authentication with push access to see the settings and, while the board is private, the read:project scope for the title)
 [group('repo')]
 repo-check *args:
     tools repo check {{args}}
 
-# Print the Status moves the Project cards need and the frozen cards, writing nothing; exits 1 when there are any (needs gh authentication with the read:project scope)
+# Print the Status moves the Project cards need and the frozen cards, writing nothing; exits 1 when there are any (needs gh authentication, with the read:project scope while the board is private)
 [group('repo')]
 project-check *args:
     tools project check {{args}}
