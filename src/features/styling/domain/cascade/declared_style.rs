@@ -310,12 +310,7 @@ mod tests {
         let inherited = InheritedStyle::default().descend(&parent, Arc::new(HashMap::new()));
 
         let computed = collapse(style, &inherited);
-        assert_eq!(
-            computed
-                .font_size()
-                .map(crate::shared::config::domain::types::FontSize::value),
-            Some(30.0)
-        );
+        assert_eq!(computed.font_size().map(FontSize::value), Some(30.0));
     }
 
     #[test]
@@ -334,12 +329,7 @@ mod tests {
 
         let computed = collapse(style, &inherited);
         // Root base is DEFAULT_FONT_SIZE (14.0), not the parent's 20.0.
-        assert_eq!(
-            computed
-                .font_size()
-                .map(crate::shared::config::domain::types::FontSize::value),
-            Some(28.0)
-        );
+        assert_eq!(computed.font_size().map(FontSize::value), Some(28.0));
     }
 
     #[test]

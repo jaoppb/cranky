@@ -4,6 +4,7 @@ use crate::features::styling::adapters::lightningcss::{
 };
 use crate::features::styling::domain::{ClassName, ElementQuery, InheritedStyle, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
+use crate::shared::config::domain::BorderRadius;
 use crate::shared::primitives::color::{Color, DrawingColor};
 
 #[test]
@@ -89,9 +90,7 @@ fn test_structural_pseudo_classes() {
         &LightningPropertyReparser,
     );
     assert_eq!(
-        style_only
-            .border_radius()
-            .map(crate::shared::config::domain::types::BorderRadius::value),
+        style_only.border_radius().map(BorderRadius::value),
         Some(8.0)
     );
 

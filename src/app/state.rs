@@ -19,7 +19,7 @@ pub enum AppError {
     Internal { message: String },
 }
 
-pub use crate::shared::wayland::domain::{AppReadModel, ModuleLayout};
+pub use crate::shared::wayland::domain::AppReadModel;
 
 pub(super) struct CrankyApp<
     R: crate::features::module_runtime::ports::ModuleRegistryPort<F, LS, DS, US, Snd> + 'static,

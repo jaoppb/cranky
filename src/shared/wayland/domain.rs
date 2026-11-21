@@ -10,21 +10,19 @@ use crate::shared::primitives::{
 };
 use std::collections::HashMap;
 
+#[cfg(test)]
 pub struct ModuleLayout {
-    #[cfg(test)]
     id: ModuleId,
-    #[cfg(test)]
     bounds: Rect,
 }
 
+#[cfg(test)]
 impl ModuleLayout {
-    #[cfg(test)]
     #[must_use]
     pub(crate) const fn id(&self) -> ModuleId {
         self.id
     }
 
-    #[cfg(test)]
     #[must_use]
     pub(crate) const fn bounds(&self) -> &Rect {
         &self.bounds

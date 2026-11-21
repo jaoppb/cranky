@@ -130,11 +130,6 @@ mod tests {
 
         lengths.apply(&mut computed, FontSize::new(14.0), FontSize::new(14.0));
 
-        assert_eq!(
-            computed
-                .border_size()
-                .map(crate::shared::config::domain::types::BorderSize::value),
-            Some(3.0)
-        );
+        assert_eq!(computed.border_size().map(BorderSize::value), Some(3.0));
     }
 }

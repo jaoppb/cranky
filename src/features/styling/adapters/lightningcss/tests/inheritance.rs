@@ -4,6 +4,7 @@ use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{CssLength, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
 use crate::features::vdom::domain::{TextContent, VNode};
+use crate::shared::config::domain::FontSize;
 use crate::shared::primitives::color::DrawingColor;
 
 #[test]
@@ -110,12 +111,7 @@ fn test_em_resolves_through_vdom_tree_not_hardcoded_16px() {
     let StyledNode::Text { style, .. } = &children[0] else {
         panic!("expected a Text child");
     };
-    assert_eq!(
-        style
-            .font_size()
-            .map(crate::shared::config::domain::types::FontSize::value),
-        Some(30.0)
-    );
+    assert_eq!(style.font_size().map(FontSize::value), Some(30.0));
     assert_eq!(style.width(), Some(CssLength::Pixels(60.0)));
 }
 

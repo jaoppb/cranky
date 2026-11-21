@@ -17,12 +17,12 @@ impl ProgressValue {
         Ok(Self(value))
     }
 
-    #[cfg(test)]
     /// Creates a new `ProgressValue` from a percentage value (0.0 to 100.0).
     ///
     /// # Errors
     ///
     /// Returns `StylingError::InvalidProgressValue` if `pct` is NaN or not in 0.0..=100.0.
+    #[cfg(test)]
     pub(crate) fn from_percentage(pct: f32) -> Result<Self, StylingError> {
         Self::new(pct / 100.0)
     }
@@ -50,8 +50,6 @@ pub enum Orientation {
     Horizontal,
     Vertical,
 }
-
-impl Orientation {}
 
 #[cfg(test)]
 mod tests {

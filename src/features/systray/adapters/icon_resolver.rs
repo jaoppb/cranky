@@ -46,7 +46,7 @@ pub(super) fn resolve_pixmap_data(
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct InMemorySystrayIconCache(Mutex<HashMap<IconCacheKey, Option<IconImage>>>);
+pub(crate) struct InMemorySystrayIconCache(Mutex<HashMap<IconCacheKey, CachedIcon>>);
 
 impl InMemorySystrayIconCache {
     #[must_use]
@@ -57,15 +57,12 @@ impl InMemorySystrayIconCache {
 
 impl SystrayIconCachePort for InMemorySystrayIconCache {
     fn get(&self, key: &IconCacheKey) -> Option<CachedIcon> {
-        self.0
-            .lock()
-            .ok()
-            .and_then(|cache| cache.get(key).cloned().map(CachedIcon::from))
+        self.0.lock().ok().and_then(|cache| cache.get(key).cloned())
     }
 
-    fn insert(&self, key: IconCacheKey, image: Option<IconImage>) {
+    fn insert(&self, key: IconCacheKey, icon: CachedIcon) {
         if let Ok(mut cache) = self.0.lock() {
-            cache.insert(key, image);
+            cache.insert(key, icon);
         }
     }
 }
@@ -110,7 +107,8 @@ pub(super) async fn resolve_icon(
     // 1. Check icon name cache for disk/theme icons
     let disk_icon = if let Some(ref key) = cache_key {
         if let Some(cached) = ICON_CACHE.get(key) {
-            // Cached result: either Some(icon_image) or None (cached negative lookup)
+            // Cached result: `CachedIcon::Image`, or `CachedIcon::Unresolved` for a
+            // lookup that already failed and is not retried.
             cached.into_image()
         } else {
             // Cache miss: resolve disk/theme lookup asynchronously on blocking thread
@@ -159,7 +157,7 @@ pub(super) async fn resolve_icon(
             .await
             .unwrap_or(None);
 
-            ICON_CACHE.insert(key.clone(), loaded_disk_icon.clone());
+            ICON_CACHE.insert(key.clone(), CachedIcon::from(loaded_disk_icon.clone()));
             loaded_disk_icon
         }
     } else {

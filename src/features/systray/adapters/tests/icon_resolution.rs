@@ -18,7 +18,7 @@ fn test_in_memory_systray_icon_cache() {
         vec![1, 2, 3, 4],
         crate::shared::primitives::geometry::Size::new(1, 1),
     );
-    cache.insert(key.clone(), Some(icon_img.clone()));
+    cache.insert(key.clone(), CachedIcon::Image(icon_img.clone()));
 
     assert_eq!(cache.get(&key), Some(CachedIcon::Image(icon_img)));
 }

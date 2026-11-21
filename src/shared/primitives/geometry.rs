@@ -155,13 +155,11 @@ pub(crate) struct BarWidth(u32);
 
 #[cfg(test)]
 impl BarWidth {
-    #[cfg(test)]
     #[must_use]
     pub(crate) const fn new(value: u32) -> Self {
         Self(value)
     }
 
-    #[cfg(test)]
     #[must_use]
     pub(crate) const fn value(self) -> u32 {
         self.0

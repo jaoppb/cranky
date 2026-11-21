@@ -49,9 +49,5 @@ impl From<Option<crate::features::systray::domain::IconImage>> for CachedIcon {
 
 pub(crate) trait SystrayIconCachePort: Send + Sync {
     fn get(&self, key: &crate::features::systray::domain::IconCacheKey) -> Option<CachedIcon>;
-    fn insert(
-        &self,
-        key: crate::features::systray::domain::IconCacheKey,
-        image: Option<crate::features::systray::domain::IconImage>,
-    );
+    fn insert(&self, key: crate::features::systray::domain::IconCacheKey, icon: CachedIcon);
 }

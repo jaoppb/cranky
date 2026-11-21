@@ -89,5 +89,3 @@ pub(crate) struct MprisState {
     pub(crate) active_player: Option<PlayerName>,
     pub(crate) players: std::collections::HashMap<String, PlayerState>, // Using String key because serde deserialize requires it for keys
 }
-
-impl MprisState {}

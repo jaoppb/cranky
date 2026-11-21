@@ -67,7 +67,6 @@ pub mod test_support {
     pub(crate) struct ChannelUiSender {
         pub(crate) tx: std::sync::mpsc::Sender<UiCommand>,
     }
-    impl ChannelUiSender {}
     impl UiCommandSender for ChannelUiSender {
         fn send_ui_command(&self, cmd: UiCommand) {
             let _ = self.tx.send(cmd);

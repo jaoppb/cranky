@@ -34,13 +34,13 @@ struct ModuleSiteInfo {
 
 impl ModuleSiteInfo {
     #[must_use]
-    pub(crate) const fn parent(&self) -> Option<ModuleId> {
+    const fn parent(&self) -> Option<ModuleId> {
         self.parent
     }
 
     #[cfg(test)]
     #[must_use]
-    pub(crate) const fn surface(&self) -> crate::shared::primitives::LayoutSurface {
+    const fn surface(&self) -> crate::shared::primitives::LayoutSurface {
         self.surface
     }
 }
