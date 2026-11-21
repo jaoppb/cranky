@@ -40,7 +40,7 @@ pub enum RegistryLoadError {
         /// The module it was asked for.
         module_name: crate::shared::primitives::ModuleName,
     },
-    /// Deploying the built-in scripts to the shared modules directory failed with an I/O error.
+    /// Creating the shared modules directory for the built-in scripts failed with an I/O error.
     #[error("Internal registry error: {0}")]
     Internal(String),
 }

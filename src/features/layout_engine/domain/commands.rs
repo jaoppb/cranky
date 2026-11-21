@@ -30,8 +30,8 @@ pub struct ShowFloating {
 /// Request from a module or the Wayland adapter to the app loop, which owns the display server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DisplayCommand {
-    /// Re-render every module; the Wayland adapter sends it after a bar surface is resized or an
-    /// output is removed.
+    /// Re-render every module; the Wayland adapter sends it after each non-zero bar configure
+    /// (including resizes) and when an output is removed.
     RequestRender,
     /// The module has already laid out and painted this floating surface's
     /// content — Wayland's job is placing and blitting a buffer, never

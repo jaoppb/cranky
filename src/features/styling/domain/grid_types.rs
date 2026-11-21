@@ -84,7 +84,7 @@ pub enum PseudoClass {
     /// `:nth-child(An+B)`, counting siblings from 1 at the start.
     NthChild {
         /// The `A` coefficient: the step between matching positions; 0 matches only position `B`,
-        /// a negative step matches `B` and the positions before it.
+        /// a negative step matches `B` and every |A|th position before it.
         step_size: i32,
         /// The `B` term: the 1-based position the pattern starts from; may be zero or negative.
         offset: i32,
@@ -92,7 +92,7 @@ pub enum PseudoClass {
     /// `:nth-last-child(An+B)`, counting siblings from 1 at the end.
     NthLastChild {
         /// The `A` coefficient: the step between matching positions; 0 matches only position `B`,
-        /// a negative step matches `B` and the positions before it.
+        /// a negative step matches `B` and every |A|th position before it.
         step_size: i32,
         /// The `B` term: the 1-based position the pattern starts from; may be zero or negative.
         offset: i32,
