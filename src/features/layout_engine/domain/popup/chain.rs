@@ -58,7 +58,10 @@ pub fn descendants_deepest_first(
         depth = depth.saturating_add(1);
         let mut next = Vec::new();
         for (kind, parent) in links {
-            if parent.as_ref().is_some_and(|p| frontier.contains(p)) {
+            if parent
+                .as_ref()
+                .is_some_and(|parent_kind| frontier.contains(parent_kind))
+            {
                 by_depth.push((depth, kind.clone()));
                 next.push(kind.clone());
             }

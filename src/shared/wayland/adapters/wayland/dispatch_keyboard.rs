@@ -21,7 +21,11 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
         _qh: &QueueHandle<Self>,
     ) {
         match event {
-            wl_keyboard::Event::Keymap { fd, size, .. } => state.keyboard.load_keymap(fd, size),
+            wl_keyboard::Event::Keymap {
+                fd: descriptor,
+                size,
+                ..
+            } => state.keyboard.load_keymap(descriptor, size),
             wl_keyboard::Event::Enter { surface, .. } => state.keyboard.set_focus(surface),
             wl_keyboard::Event::Leave { surface, .. } => state.keyboard.forget_focus(&surface),
             wl_keyboard::Event::Key {
@@ -100,7 +104,7 @@ mod tests {
 
     fn open(state: &WaylandState) -> Vec<FloatingKind> {
         let mut kinds: Vec<_> = state.floating_surfaces.keys().cloned().collect();
-        kinds.sort_by_key(|k| format!("{k:?}"));
+        kinds.sort_by_key(|kind| format!("{kind:?}"));
         kinds
     }
 

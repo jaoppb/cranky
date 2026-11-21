@@ -17,7 +17,7 @@ impl Dispatch<WlOutput, ()> for WaylandState {
         _qh: &QueueHandle<Self>,
     ) {
         let mut scale_updated_output = None;
-        if let Some(info) = state.outputs.iter_mut().find(|i| &i.output == proxy) {
+        if let Some(info) = state.outputs.iter_mut().find(|info| &info.output == proxy) {
             match event {
                 wl_output::Event::Name { name } => {
                     info.name = name;
@@ -35,7 +35,7 @@ impl Dispatch<WlOutput, ()> for WaylandState {
             }
         }
         if let Some((name, factor)) = scale_updated_output {
-            if let Some(bar) = state.bars.iter_mut().find(|b| b.output_name == name) {
+            if let Some(bar) = state.bars.iter_mut().find(|bar| bar.output_name == name) {
                 bar.scale = factor;
                 bar.surface.set_buffer_scale(factor);
             }
@@ -57,7 +57,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
         event: zwlr_layer_surface_v1::Event,
         (): &(),
         _conn: &Connection,
-        qh: &QueueHandle<Self>,
+        queue_handle: &QueueHandle<Self>,
     ) {
         if let zwlr_layer_surface_v1::Event::Configure {
             serial,
@@ -66,7 +66,11 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
         } = event
         {
             proxy.ack_configure(serial);
-            if let Some(bar) = state.bars.iter_mut().find(|b| &b.layer_surface == proxy) {
+            if let Some(bar) = state
+                .bars
+                .iter_mut()
+                .find(|bar| &bar.layer_surface == proxy)
+            {
                 bar.configured = true;
                 if width > 0 && height > 0 {
                     let old_width = bar.width;
@@ -83,7 +87,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
                                 shm,
                                 width,
                                 height,
-                                qh,
+                                queue_handle,
                                 state.app_env.xdg_runtime_dir().as_path(),
                             )
                         {

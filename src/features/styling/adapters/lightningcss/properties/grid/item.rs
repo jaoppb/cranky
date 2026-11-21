@@ -10,7 +10,9 @@ pub fn apply_grid_item_properties(style: &mut ComputedStyle, prop: &Property<'_>
     };
     let (name, val) = full
         .split_once(':')
-        .map_or(("", full.as_str()), |(k, v)| (k.trim(), v.trim()));
+        .map_or(("", full.as_str()), |(property, value)| {
+            (property.trim(), value.trim())
+        });
 
     match name {
         "grid-column" => {

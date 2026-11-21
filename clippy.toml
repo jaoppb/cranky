@@ -4,6 +4,14 @@ allow-panic-in-tests = true
 allow-indexing-slicing-in-tests = true
 allow-print-in-tests = true
 allow-dbg-in-tests = true
+# Identifier length (`clippy::min_ident_chars`, forbidden in `Cargo.toml`): a
+# name of one or two characters is rejected unless listed here, and the list
+# replaces clippy's default one. A scope may bind at most two single-character
+# names, so `x` and `y` can appear together; cosmo's 1 would reject every
+# coordinate pair a renderer has.
+min-ident-chars-threshold = 2
+allowed-idents-below-min-chars = ["x", "y", "id", "tx", "rx", "dx", "dy", "px"]
+single-char-binding-names-threshold = 2
 # Older versions that only a dependency can drop, for `clippy::multiple_crate_versions`.
 # The list names the same crates as the `skip` entries of the `[bans]` section in
 # `deny.toml`, which records the dependency that still requires each one; keep both

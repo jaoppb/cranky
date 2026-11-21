@@ -24,8 +24,8 @@ enum ExclusiveZoneHelper {
 impl From<ExclusiveZoneHelper> for ExclusiveZone {
     fn from(helper: ExclusiveZoneHelper) -> Self {
         match helper {
-            ExclusiveZoneHelper::Number(v) => Self::new(v),
-            ExclusiveZoneHelper::Named(s) => match s.to_lowercase().as_str() {
+            ExclusiveZoneHelper::Number(value) => Self::new(value),
+            ExclusiveZoneHelper::Named(name) => match name.to_lowercase().as_str() {
                 "auto" => Self::auto(),
                 _ => Self::none(),
             },

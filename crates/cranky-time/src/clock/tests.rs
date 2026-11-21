@@ -7,7 +7,7 @@ const UTC: &str = "2026-11-18T11:06:40+00:00";
 
 /// The text and source of the local time in November 2026.
 fn read(clock: &mut Clock, environment: &Environment) -> (String, Source) {
-    let time = clock.at(instant(NOVEMBER_2026), environment);
+    let time = clock.at_instant(instant(NOVEMBER_2026), environment);
     (time.to_string(), time.source())
 }
 
@@ -15,7 +15,7 @@ fn read(clock: &mut Clock, environment: &Environment) -> (String, Source) {
 fn the_local_time_file_is_used_when_tz_is_unset() {
     let scratch = Scratch::new();
     scratch.link_zone("America/Sao_Paulo");
-    let time = Clock::new().at(
+    let time = Clock::new().at_instant(
         instant(NOVEMBER_2026),
         &environment(None, &scratch.localtime()),
     );
@@ -30,7 +30,7 @@ fn tz_wins_over_the_local_time_file() {
     let scratch = Scratch::new();
     scratch.link_zone("America/Sao_Paulo");
     let environment = environment(Some("Asia/Kolkata"), &scratch.localtime());
-    let time = Clock::new().at(instant(NOVEMBER_2026), &environment);
+    let time = Clock::new().at_instant(instant(NOVEMBER_2026), &environment);
     assert_eq!(time.to_string(), KOLKATA);
     assert_eq!(time.source(), Source::TzVariable);
     assert_eq!(time.zone_name(), Some("Asia/Kolkata"));
@@ -47,7 +47,7 @@ fn a_retargeted_link_is_seen_on_the_next_call() {
         (SAO_PAULO.to_string(), Source::Localtime)
     );
     scratch.link_zone("Asia/Kolkata");
-    let time = clock.at(instant(NOVEMBER_2026), &environment);
+    let time = clock.at_instant(instant(NOVEMBER_2026), &environment);
     assert_eq!(time.to_string(), KOLKATA);
     assert_eq!(time.zone_name(), Some("Asia/Kolkata"));
 }
@@ -96,7 +96,7 @@ fn a_missing_file_keeps_the_previous_zone_and_its_name() {
     assert_eq!(read(&mut clock, &environment).1, Source::Localtime);
 
     std::fs::remove_file(scratch.localtime()).unwrap();
-    let time = clock.at(instant(NOVEMBER_2026), &environment);
+    let time = clock.at_instant(instant(NOVEMBER_2026), &environment);
     assert_eq!(time.to_string(), SAO_PAULO);
     assert_eq!(time.source(), Source::Previous);
     assert_eq!(time.zone_name(), Some("America/Sao_Paulo"));
@@ -105,7 +105,7 @@ fn a_missing_file_keeps_the_previous_zone_and_its_name() {
 #[test]
 fn a_file_that_was_never_readable_means_utc() {
     let scratch = Scratch::new();
-    let time = Clock::new().at(
+    let time = Clock::new().at_instant(
         instant(NOVEMBER_2026),
         &environment(None, &scratch.localtime()),
     );
@@ -119,7 +119,7 @@ fn an_unusable_tz_falls_back_to_the_local_time_file() {
     let scratch = Scratch::new();
     scratch.link_zone("America/Sao_Paulo");
     let environment = environment(Some("Nope/Bogus"), &scratch.localtime());
-    let time = Clock::new().at(instant(NOVEMBER_2026), &environment);
+    let time = Clock::new().at_instant(instant(NOVEMBER_2026), &environment);
     assert_eq!(time.to_string(), SAO_PAULO);
     assert_eq!(time.source(), Source::LocaltimeAfterInvalidTz);
     assert_eq!(time.zone_name(), Some("America/Sao_Paulo"));

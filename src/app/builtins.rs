@@ -8,7 +8,7 @@ pub enum BuiltinError {
     #[error("HOME environment variable not set: {0}")]
     Env(String),
     #[error("IO error: {0}")]
-    Io(String),
+    InputOutput(String),
     #[error("Unsupported engine '{engine}' for module '{module_name}' (expected 'rhai' or 'lua')")]
     UnsupportedEngine {
         engine: String,
@@ -75,14 +75,14 @@ impl BuiltinModules {
     ///
     /// # Errors
     ///
-    /// Returns [`BuiltinError::Io`] if creating directories or reading/writing files fails.
+    /// Returns [`BuiltinError::InputOutput`] if creating directories or reading/writing files fails.
     pub fn ensure_builtins(
         app_env: &crate::shared::env::domain::AppEnvironment,
     ) -> Result<PathBuf, BuiltinError> {
         let home = app_env.home().as_path();
         let dir = home.join(".local/share/cranky/modules");
 
-        fs::create_dir_all(&dir).map_err(|e| BuiltinError::Io(e.to_string()))?;
+        fs::create_dir_all(&dir).map_err(|error| BuiltinError::InputOutput(error.to_string()))?;
 
         for (filename, content) in Self::BUILTINS {
             let path = dir.join(filename);
@@ -107,7 +107,7 @@ impl BuiltinModules {
     ///
     /// Returns [`BuiltinError::UnsupportedEngine`] if the explicit engine is unknown,
     /// [`BuiltinError::ModuleNotFound`] if no script matching the name and engine could be found or loaded,
-    /// or [`BuiltinError::Io`] on filesystem error.
+    /// or [`BuiltinError::InputOutput`] on filesystem error.
     pub fn find_module(
         name: &crate::shared::primitives::ModuleName,
         selection: &crate::shared::config::domain::EngineSelection,
@@ -130,7 +130,7 @@ impl BuiltinModules {
                     let matching: Vec<_> = engines
                         .iter()
                         .map(AsRef::as_ref)
-                        .filter(|e| &e.id() == id)
+                        .filter(|engine| &engine.id() == id)
                         .collect();
                     if matching.is_empty() {
                         return Err(BuiltinError::UnsupportedEngine {
@@ -167,7 +167,7 @@ impl BuiltinModules {
     ///
     /// # Errors
     ///
-    /// Returns [`BuiltinError::Io`] if creating the file watcher fails.
+    /// Returns [`BuiltinError::InputOutput`] if creating the file watcher fails.
     pub fn watch_scripts(
         command_tx: std::sync::Arc<dyn crate::app::commands::SystemCommandSender>,
         app_env: &crate::shared::env::domain::AppEnvironment,
@@ -183,7 +183,7 @@ impl BuiltinModules {
                 && event.kind.is_modify()
             {
                 for path in event.paths {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    if let Some(stem) = path.file_stem().and_then(|file_stem| file_stem.to_str()) {
                         tracing::debug!("Script modified: {path:?}");
                         command_tx.send_system_command(
                             crate::app::commands::SystemCommand::ReloadModule(
@@ -194,7 +194,7 @@ impl BuiltinModules {
                 }
             }
         })
-        .map_err(|e| BuiltinError::Io(format!("Failed to create watcher: {e}")))?;
+        .map_err(|error| BuiltinError::InputOutput(format!("Failed to create watcher: {error}")))?;
 
         if user_dir.exists() {
             let _ = watcher.watch(&user_dir, RecursiveMode::NonRecursive);
@@ -650,7 +650,7 @@ mod tests {
             "HOME environment variable not set: var"
         );
         assert_eq!(
-            BuiltinError::Io("error".into()).to_string(),
+            BuiltinError::InputOutput("error".into()).to_string(),
             "IO error: error"
         );
         assert_eq!(
@@ -688,8 +688,8 @@ mod tests {
 
         struct Glyphs;
         impl TextMeasurer for Glyphs {
-            fn measure(&mut self, t: &str, _: Option<&FontFamily>, _: Option<FontSize>) -> Size {
-                Size::new(u32::try_from(t.chars().count()).unwrap_or(0) * 7, 16)
+            fn measure(&mut self, text: &str, _: Option<&FontFamily>, _: Option<FontSize>) -> Size {
+                Size::new(u32::try_from(text.chars().count()).unwrap_or(0) * 7, 16)
             }
         }
 
@@ -699,9 +699,9 @@ mod tests {
             ("calendar", include_str!("../../assets/styles/calendar.css")),
         ]
         .into_iter()
-        .map(|(n, css)| {
+        .map(|(sheet_name, css)| {
             parser
-                .parse_stylesheet(StyleSheetName::new(n).unwrap(), css)
+                .parse_stylesheet(StyleSheetName::new(sheet_name).unwrap(), css)
                 .unwrap()
         })
         .collect();
@@ -761,17 +761,20 @@ mod tests {
                 panic!("{engine_name}: day grid")
             };
             // 7 equal columns spanning the padded root (280 - 2*12 - 2*1 border).
-            let xs: Vec<i32> = days.iter().take(7).map(|d| d.rect().x()).collect();
-            let step = xs[1] - xs[0];
+            let column_positions: Vec<i32> =
+                days.iter().take(7).map(|day| day.rect().x()).collect();
+            let step = column_positions[1] - column_positions[0];
             assert!(
                 step > 30,
-                "{engine_name}: columns should spread, got {xs:?}"
+                "{engine_name}: columns should spread, got {column_positions:?}"
             );
             assert!(
-                xs.windows(2).all(|w| (w[1] - w[0] - step).abs() <= 1),
-                "{engine_name}: even columns {xs:?}"
+                column_positions
+                    .windows(2)
+                    .all(|pair| (pair[1] - pair[0] - step).abs() <= 1),
+                "{engine_name}: even columns {column_positions:?}"
             );
-            laid_out.push((tree.rect().height(), xs));
+            laid_out.push((tree.rect().height(), column_positions));
         }
         assert_eq!(
             laid_out[0], laid_out[1],

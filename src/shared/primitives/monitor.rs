@@ -48,10 +48,10 @@ impl ScriptMonitorInfo {
 
     #[must_use]
     pub fn from_id(id: &MonitorId) -> Self {
-        let s = id.as_str().to_string();
+        let name = id.as_str().to_string();
         Self {
             id: id.clone(),
-            name: s,
+            name,
             size: Size::new(0, 0),
             scale: geometry::Scale::new(1.0),
             is_focused: false,

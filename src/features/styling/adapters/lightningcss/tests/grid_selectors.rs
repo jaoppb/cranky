@@ -49,15 +49,18 @@ fn test_grid_properties_parsing() {
     assert_eq!(style_grid.display(), Some(DisplayMode::Grid));
     assert_eq!(
         style_grid.grid_template_columns(),
-        Some(&[GridTrack::Repeat(3, vec![GridTrack::Fr(1.0)])][..])
+        Some(&[GridTrack::Repeat(3, vec![GridTrack::Fraction(1.0)])][..])
     );
     assert_eq!(
         style_grid.grid_template_rows(),
         Some(
             &[
-                GridTrack::Px(50.0),
+                GridTrack::Pixels(50.0),
                 GridTrack::Auto,
-                GridTrack::MinMax(Box::new(GridTrack::Px(20.0)), Box::new(GridTrack::Fr(1.0))),
+                GridTrack::MinMax(
+                    Box::new(GridTrack::Pixels(20.0)),
+                    Box::new(GridTrack::Fraction(1.0))
+                ),
             ][..]
         )
     );

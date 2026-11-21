@@ -35,8 +35,8 @@ pub(crate) fn create_sys_monitors_table(lua: &Lua) -> mlua::Result<mlua::Table> 
         lua.create_function(|lua, ()| {
             let globals = lua.globals();
             let raw_monitors = globals.get::<Option<mlua::Table>>("_raw_monitors")?;
-            if let Some(t) = raw_monitors {
-                return Ok(t);
+            if let Some(monitors) = raw_monitors {
+                return Ok(monitors);
             }
             lua.create_table()
         })?,
@@ -62,15 +62,15 @@ pub(crate) fn create_sys_monitors_table(lua: &Lua) -> mlua::Result<mlua::Table> 
         lua.create_function(|lua, id: String| {
             let globals = lua.globals();
             let raw_monitors = globals.get::<Option<mlua::Table>>("_raw_monitors")?;
-            let Some(t) = raw_monitors else {
+            let Some(monitors) = raw_monitors else {
                 return Ok(None);
             };
-            for pair in t.sequence_values::<mlua::Value>() {
-                if let Ok(mlua::Value::UserData(ud)) = pair
-                    && let Ok(mon) = ud.borrow::<LuaMonitor>()
+            for pair in monitors.sequence_values::<mlua::Value>() {
+                if let Ok(mlua::Value::UserData(user_data)) = pair
+                    && let Ok(mon) = user_data.borrow::<LuaMonitor>()
                     && mon.0.id().as_str() == id.as_str()
                 {
-                    return Ok(Some(mlua::Value::UserData(ud)));
+                    return Ok(Some(mlua::Value::UserData(user_data)));
                 }
             }
             Ok(None)
@@ -100,7 +100,7 @@ pub(crate) fn create_sys_table(lua: &Lua) -> mlua::Result<mlua::Table> {
         lua.create_function(|_, ()| {
             let name = std::fs::read_to_string("/etc/hostname").map_or_else(
                 |_| std::env::var("HOSTNAME").unwrap_or_else(|_| "localhost".to_string()),
-                |s| s.trim().to_string(),
+                |contents| contents.trim().to_string(),
             );
             Ok(name)
         })?,

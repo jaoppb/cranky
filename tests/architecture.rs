@@ -8,11 +8,12 @@ const ALLOWLIST: &[&str] = &[];
 
 /// Opening braces minus closing braces on `line`.
 fn brace_delta(line: &str) -> i32 {
-    line.chars().fold(0, |depth: i32, c| match c {
-        '{' => depth.saturating_add(1),
-        '}' => depth.saturating_sub(1),
-        _ => depth,
-    })
+    line.chars()
+        .fold(0, |depth: i32, character| match character {
+            '{' => depth.saturating_add(1),
+            '}' => depth.saturating_sub(1),
+            _ => depth,
+        })
 }
 
 fn count_prod_lines(path: &std::path::Path) -> usize {
@@ -52,7 +53,7 @@ fn collect_rs_files(dir: &std::path::Path, files: &mut Vec<std::path::PathBuf>) 
         let path = entry.path();
         if path.is_dir() {
             collect_rs_files(&path, files);
-        } else if path.extension().and_then(|s| s.to_str()) == Some("rs") {
+        } else if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
             files.push(path);
         }
     }

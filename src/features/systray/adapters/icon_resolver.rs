@@ -72,8 +72,8 @@ pub async fn resolve_icon(
     icon_theme_path: Option<String>,
     icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>>,
 ) -> Option<IconImage> {
-    let clean_icon_name = icon_name.and_then(|s| {
-        let trimmed = s.trim();
+    let clean_icon_name = icon_name.and_then(|name| {
+        let trimmed = name.trim();
         if trimmed.is_empty() {
             None
         } else {
@@ -81,8 +81,8 @@ pub async fn resolve_icon(
         }
     });
 
-    let clean_theme_path = icon_theme_path.and_then(|s| {
-        let trimmed = s.trim();
+    let clean_theme_path = icon_theme_path.and_then(|path| {
+        let trimmed = path.trim();
         if trimmed.is_empty() {
             None
         } else {
@@ -95,7 +95,7 @@ pub async fn resolve_icon(
             IconName::new(name.clone()),
             clean_theme_path
                 .as_ref()
-                .map(|tp| IconThemePath::new(tp.clone())),
+                .map(|theme_path| IconThemePath::new(theme_path.clone())),
         )
     });
 
@@ -130,21 +130,21 @@ pub async fn resolve_icon(
                 }
 
                 if found_path.is_none() {
-                    let p = std::path::Path::new(name);
-                    if p.is_absolute() && p.exists() {
-                        found_path = Some(p.to_path_buf());
+                    let name_path = std::path::Path::new(name);
+                    if name_path.is_absolute() && name_path.exists() {
+                        found_path = Some(name_path.to_path_buf());
                     } else {
                         found_path = lookup(name).find();
                     }
                 }
 
                 if let Some(icon_path) = found_path
-                    && let Some((w, h, bytes)) =
+                    && let Some((width, height, bytes)) =
                         crate::utils::load_icon_rgba(&icon_path, 24, max_scale)
                 {
                     Some(IconImage::new(
                         bytes,
-                        crate::shared::primitives::geometry::Size::new(w, h),
+                        crate::shared::primitives::geometry::Size::new(width, height),
                     ))
                 } else {
                     None

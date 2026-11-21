@@ -29,7 +29,7 @@ impl DbusSubscriptionManager {
     pub async fn subscribe(&mut self, sub: DBusSubscription) -> Result<(), DbusConnectionError> {
         let is_properties_changed = sub
             .member()
-            .is_some_and(|m| m.as_str() == "PropertiesChanged");
+            .is_some_and(|member| member.as_str() == "PropertiesChanged");
 
         let tx = self.dbus_tx.clone();
 
@@ -47,10 +47,10 @@ impl DbusSubscriptionManager {
                         "Received DBus PropertiesChanged on {path_str:?} for interface {iface_str:?}"
                     );
                     let mut properties = tx.borrow().properties().clone();
-                    for (k, v) in &changed_props {
-                        let k_str = k.as_str();
+                    for (key, value) in &changed_props {
+                        let k_str = key.as_str();
                         let prop_key = format!("{iface_str}.{k_str}");
-                        properties.insert(prop_key, v.clone());
+                        properties.insert(prop_key, value.clone());
                     }
                     let _ = tx.send(DBusState::new(properties));
                 }

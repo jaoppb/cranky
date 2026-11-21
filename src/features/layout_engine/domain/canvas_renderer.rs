@@ -11,20 +11,24 @@ fn draw_bg_and_border(
     style: &ComputedStyle,
     bg_override: Option<&DrawingColor>,
 ) {
-    let rx = f32::from(i16::try_from(rect.x()).unwrap_or(0));
-    let ry = f32::from(i16::try_from(rect.y()).unwrap_or(0));
-    let rw = f32::from(u16::try_from(rect.width()).unwrap_or(0));
-    let rh = f32::from(u16::try_from(rect.height()).unwrap_or(0));
-    let radius = LogicalPx::new(style.border_radius().map_or(0.0, |r| r.value()));
+    let left = f32::from(i16::try_from(rect.x()).unwrap_or(0));
+    let top = f32::from(i16::try_from(rect.y()).unwrap_or(0));
+    let width = f32::from(u16::try_from(rect.width()).unwrap_or(0));
+    let height = f32::from(u16::try_from(rect.height()).unwrap_or(0));
+    let radius = LogicalPx::new(
+        style
+            .border_radius()
+            .map_or(0.0, |border_radius| border_radius.value()),
+    );
 
-    let bg = bg_override.or_else(|| style.background());
-    if let Some(c) = bg {
+    let background = bg_override.or_else(|| style.background());
+    if let Some(color) = background {
         canvas.draw_rect(
-            LogicalPx::new(rx),
-            LogicalPx::new(ry),
-            LogicalPx::new(rw),
-            LogicalPx::new(rh),
-            c.clone(),
+            LogicalPx::new(left),
+            LogicalPx::new(top),
+            LogicalPx::new(width),
+            LogicalPx::new(height),
+            color.clone(),
             radius,
         );
     }
@@ -52,38 +56,38 @@ fn render_progress(
         return;
     };
 
-    let r = LogicalPx::new(style.border_radius().map_or(0.0, |rad| rad.value()));
+    let radius = LogicalPx::new(style.border_radius().map_or(0.0, |rad| rad.value()));
     let clamped = progress_val.clamp(0.0, 1.0);
-    let rx = f32::from(i16::try_from(rect.x()).unwrap_or(0));
-    let ry = f32::from(i16::try_from(rect.y()).unwrap_or(0));
-    let rw = f32::from(u16::try_from(rect.width()).unwrap_or(0));
-    let rh = f32::from(u16::try_from(rect.height()).unwrap_or(0));
+    let left = f32::from(i16::try_from(rect.x()).unwrap_or(0));
+    let top = f32::from(i16::try_from(rect.y()).unwrap_or(0));
+    let width = f32::from(u16::try_from(rect.width()).unwrap_or(0));
+    let height = f32::from(u16::try_from(rect.height()).unwrap_or(0));
 
     match orientation {
         Orientation::Horizontal => {
-            let fill_w = (rw * clamped).round();
+            let fill_w = (width * clamped).round();
             if fill_w > 0.0 {
                 canvas.draw_rect(
-                    LogicalPx::new(rx),
-                    LogicalPx::new(ry),
+                    LogicalPx::new(left),
+                    LogicalPx::new(top),
                     LogicalPx::new(fill_w),
-                    LogicalPx::new(rh),
+                    LogicalPx::new(height),
                     fill.clone(),
-                    r,
+                    radius,
                 );
             }
         }
         Orientation::Vertical => {
-            let fill_h = (rh * clamped).round();
-            let fill_y = ry + (rh - fill_h);
+            let fill_h = (height * clamped).round();
+            let fill_y = top + (height - fill_h);
             if fill_h > 0.0 {
                 canvas.draw_rect(
-                    LogicalPx::new(rx),
+                    LogicalPx::new(left),
                     LogicalPx::new(fill_y),
-                    LogicalPx::new(rw),
+                    LogicalPx::new(width),
                     LogicalPx::new(fill_h),
                     fill.clone(),
-                    r,
+                    radius,
                 );
             }
         }

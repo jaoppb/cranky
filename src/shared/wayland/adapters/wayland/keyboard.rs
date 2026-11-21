@@ -28,12 +28,16 @@ pub struct KeyboardInput {
 impl KeyboardInput {
     /// Follows the seat's keyboard capability: binds a `wl_keyboard` when it
     /// appears, releases it and forgets everything about it when it goes.
-    pub(crate) fn on_capability<D>(&mut self, seat: &WlSeat, present: bool, qh: &QueueHandle<D>)
-    where
+    pub(crate) fn on_capability<D>(
+        &mut self,
+        seat: &WlSeat,
+        present: bool,
+        queue_handle: &QueueHandle<D>,
+    ) where
         D: Dispatch<WlKeyboard, ()> + 'static,
     {
         if present && self.device.is_none() {
-            self.device = Some(seat.get_keyboard(qh, ()));
+            self.device = Some(seat.get_keyboard(queue_handle, ()));
         } else if !present && let Some(device) = self.device.take() {
             if device.version() >= 3 {
                 device.release();
@@ -59,10 +63,11 @@ impl KeyboardInput {
         }
     }
 
-    /// Replaces the keymap with the text read from `fd`; on any failure no
+    /// Replaces the keymap with the text read from `descriptor`; on any failure no
     /// key is recognised until the next keymap.
-    pub(crate) fn load_keymap(&mut self, fd: OwnedFd, size: u32) {
-        self.escape_codes = read_keymap(fd, size).map_or_default(|keymap| escape_codes(&keymap));
+    pub(crate) fn load_keymap(&mut self, descriptor: OwnedFd, size: u32) {
+        self.escape_codes =
+            read_keymap(descriptor, size).map_or_default(|keymap| escape_codes(&keymap));
     }
 
     #[cfg(test)]
@@ -79,9 +84,9 @@ impl KeyboardInput {
     }
 }
 
-fn read_keymap(fd: OwnedFd, size: u32) -> Option<xkb::Keymap> {
+fn read_keymap(descriptor: OwnedFd, size: u32) -> Option<xkb::Keymap> {
     let mut bytes = Vec::new();
-    std::fs::File::from(fd)
+    std::fs::File::from(descriptor)
         .take(u64::from(size))
         .read_to_end(&mut bytes)
         .ok()?;
@@ -127,8 +132,9 @@ mod tests {
     /// A read-only fd over `bytes`, backed by an already-unlinked temp file.
     fn fd_with(bytes: &[u8]) -> OwnedFd {
         static NEXT: AtomicU32 = AtomicU32::new(0);
-        let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!("cranky-keymap-{}-{n}", std::process::id()));
+        let sequence = NEXT.fetch_add(1, Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("cranky-keymap-{}-{sequence}", std::process::id()));
         std::fs::write(&path, bytes).unwrap();
         let file = std::fs::File::open(&path).unwrap();
         std::fs::remove_file(&path).unwrap();
@@ -158,9 +164,9 @@ mod tests {
     }
 
     fn input_with(options: &str) -> KeyboardInput {
-        let (fd, size) = keymap_fd(options);
+        let (descriptor, size) = keymap_fd(options);
         let mut input = KeyboardInput::default();
-        input.load_keymap(fd, size);
+        input.load_keymap(descriptor, size);
         input
     }
 

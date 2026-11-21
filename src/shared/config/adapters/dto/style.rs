@@ -54,14 +54,23 @@ impl TooltipConfigDto {
     #[must_use]
     pub fn into_domain(self) -> domain::TooltipConfig {
         let mut config = domain::TooltipConfig::default();
-        if let Some(bg) = self.background.and_then(|c| DrawingColor::parse(&c).ok()) {
-            config = config.with_background(bg);
+        if let Some(background) = self
+            .background
+            .and_then(|color| DrawingColor::parse(&color).ok())
+        {
+            config = config.with_background(background);
         }
-        if let Some(bc) = self.border_color.and_then(|c| DrawingColor::parse(&c).ok()) {
-            config = config.with_border_color(bc);
+        if let Some(border_color) = self
+            .border_color
+            .and_then(|color| DrawingColor::parse(&color).ok())
+        {
+            config = config.with_border_color(border_color);
         }
-        if let Some(tc) = self.text_color.and_then(|c| DrawingColor::parse(&c).ok()) {
-            config = config.with_text_color(tc);
+        if let Some(text_color) = self
+            .text_color
+            .and_then(|color| DrawingColor::parse(&color).ok())
+        {
+            config = config.with_text_color(text_color);
         }
         if let Some(font) = self.font {
             config = config.with_font(Some(FontFamily::new(font)));

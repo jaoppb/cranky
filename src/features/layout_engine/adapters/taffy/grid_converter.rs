@@ -6,7 +6,7 @@ use taffy::style_helpers::{
 #[must_use]
 pub fn grid_track_to_min_track(track: &GridTrack) -> taffy::style::MinTrackSizingFunction {
     match track {
-        GridTrack::Px(px) => length(*px),
+        GridTrack::Pixels(px) => length(*px),
         GridTrack::Percent(pct) => percent(*pct / 100.0),
         GridTrack::MinContent => min_content(),
         GridTrack::MaxContent => max_content(),
@@ -17,9 +17,9 @@ pub fn grid_track_to_min_track(track: &GridTrack) -> taffy::style::MinTrackSizin
 #[must_use]
 pub fn grid_track_to_max_track(track: &GridTrack) -> taffy::style::MaxTrackSizingFunction {
     match track {
-        GridTrack::Px(px) => length(*px),
+        GridTrack::Pixels(px) => length(*px),
         GridTrack::Percent(pct) => percent(*pct / 100.0),
-        GridTrack::Fr(fr_val) => fr(*fr_val),
+        GridTrack::Fraction(fr_val) => fr(*fr_val),
         GridTrack::MinContent => min_content(),
         GridTrack::MaxContent => max_content(),
         _ => auto(),
@@ -62,8 +62,8 @@ pub fn grid_track_to_template_component(
 pub fn grid_placement_to_taffy(placement: GridPlacement) -> taffy::style::GridPlacement<String> {
     match placement {
         GridPlacement::Auto => taffy::style::GridPlacement::Auto,
-        GridPlacement::Line(l) => line(l),
-        GridPlacement::Span(s) => span(s),
+        GridPlacement::Line(index) => line(index),
+        GridPlacement::Span(count) => span(count),
     }
 }
 
@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn fixed_and_content_tracks_use_the_same_size_for_min_and_max() {
         assert_eq!(
-            grid_track_to_track_sizing_function(&GridTrack::Px(40.0)),
+            grid_track_to_track_sizing_function(&GridTrack::Pixels(40.0)),
             minmax(length(40.0_f32), length(40.0_f32))
         );
         assert_eq!(
@@ -125,14 +125,17 @@ mod tests {
         // A flexible minimum is not valid in CSS grid: `1fr` means
         // `minmax(auto, 1fr)`.
         assert_eq!(
-            grid_track_to_track_sizing_function(&GridTrack::Fr(2.0)),
+            grid_track_to_track_sizing_function(&GridTrack::Fraction(2.0)),
             minmax(auto(), fr(2.0_f32))
         );
     }
 
     #[test]
     fn minmax_tracks_take_min_and_max_from_their_own_sides() {
-        let track = GridTrack::MinMax(Box::new(GridTrack::Px(10.0)), Box::new(GridTrack::Fr(1.0)));
+        let track = GridTrack::MinMax(
+            Box::new(GridTrack::Pixels(10.0)),
+            Box::new(GridTrack::Fraction(1.0)),
+        );
         assert_eq!(
             grid_track_to_track_sizing_function(&track),
             minmax(length(10.0_f32), fr(1.0_f32))
@@ -141,7 +144,7 @@ mod tests {
 
     #[test]
     fn repeat_tracks_become_a_repeat_component_with_the_same_count() {
-        let track = GridTrack::Repeat(3, vec![GridTrack::Px(10.0), GridTrack::Fr(1.0)]);
+        let track = GridTrack::Repeat(3, vec![GridTrack::Pixels(10.0), GridTrack::Fraction(1.0)]);
         let expected: GridTemplateComponent<String> = repeat(
             3,
             vec![
@@ -155,7 +158,7 @@ mod tests {
     #[test]
     fn non_repeat_tracks_become_a_single_component() {
         assert_eq!(
-            grid_track_to_template_component(&GridTrack::Px(5.0)),
+            grid_track_to_template_component(&GridTrack::Pixels(5.0)),
             GridTemplateComponent::Single(minmax(length(5.0_f32), length(5.0_f32)))
         );
     }

@@ -27,7 +27,7 @@ pub(super) fn commit_surface(
 
 pub(super) fn update_existing_floating(
     state: &mut WaylandState,
-    qh: &QueueHandle<WaylandState>,
+    queue_handle: &QueueHandle<WaylandState>,
     kind: &FloatingKind,
     buffer: &RenderBuffer,
     anchor_info: &AnchorInfo,
@@ -54,10 +54,10 @@ pub(super) fn update_existing_floating(
         shm,
         placement.size.width(),
         placement.size.height(),
-        qh,
+        queue_handle,
         state.app_env.xdg_runtime_dir().as_path(),
     )
-    .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
+    .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
 
     let xdg_wm_base =
         state
@@ -68,7 +68,7 @@ pub(super) fn update_existing_floating(
             })?;
     let positioner = create_positioner(
         xdg_wm_base,
-        qh,
+        queue_handle,
         placement.text_w,
         placement.text_h,
         anchor_info,

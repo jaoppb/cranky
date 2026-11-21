@@ -4,8 +4,8 @@ use crate::features::mpris::domain::{
 use crate::shared::dbus::domain::{DBusValue, PropertiesMap, PropertyName};
 
 pub(crate) fn update_state_from_props(state: &mut PlayerState, props: &PropertiesMap) {
-    if let Some(DBusValue::String(s)) = props.get(&PropertyName::new("PlaybackStatus")) {
-        state.set_status(match s.as_str() {
+    if let Some(DBusValue::String(status)) = props.get(&PropertyName::new("PlaybackStatus")) {
+        state.set_status(match status.as_str() {
             "Playing" => PlaybackStatus::Playing,
             "Paused" => PlaybackStatus::Paused,
             "Stopped" => PlaybackStatus::Stopped,
@@ -14,11 +14,11 @@ pub(crate) fn update_state_from_props(state: &mut PlayerState, props: &Propertie
     }
 
     if let Some(DBusValue::Dict(meta)) = props.get(&PropertyName::new("Metadata")) {
-        if let Some(DBusValue::String(t)) = meta.get("xesam:title") {
-            state.set_track_name(Some(TrackName::new(t)));
+        if let Some(DBusValue::String(title)) = meta.get("xesam:title") {
+            state.set_track_name(Some(TrackName::new(title)));
         }
-        if let Some(DBusValue::Array(a)) = meta.get("xesam:artist")
-            && let Some(DBusValue::String(artist)) = a.first()
+        if let Some(DBusValue::Array(artists)) = meta.get("xesam:artist")
+            && let Some(DBusValue::String(artist)) = artists.first()
         {
             state.set_artist(Some(TrackArtist::new(artist)));
         }

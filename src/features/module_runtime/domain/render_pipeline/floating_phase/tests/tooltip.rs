@@ -14,7 +14,7 @@ use std::collections::HashMap;
 fn root(surface: SurfaceSpace, tip: Option<&str>, children: Vec<RenderNode>) -> RenderNode {
     Spec {
         tooltip: tip.map(tooltip_content),
-        ..Spec::at(surface, &[])
+        ..Spec::at_path(surface, &[])
     }
     .flex(children)
 }
@@ -24,7 +24,7 @@ fn child(index: usize, key: Option<&'static str>, tip: Option<&str>) -> RenderNo
     Spec {
         key,
         tooltip: tip.map(tooltip_content),
-        ..Spec::at(SurfaceSpace::Bar, &[index])
+        ..Spec::at_path(SurfaceSpace::Bar, &[index])
     }
     .leaf()
 }

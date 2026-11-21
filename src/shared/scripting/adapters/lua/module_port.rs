@@ -27,13 +27,19 @@ impl AnyModulePort for LuaModule {
             lua.load(&self.source)
                 .set_name(&self.name)
                 .exec()
-                .map_err(|e| {
-                    ModuleInitError::ScriptError(format!("Lua load error in {}: {e}", self.name))
+                .map_err(|error| {
+                    ModuleInitError::ScriptError(format!(
+                        "Lua load error in {}: {error}",
+                        self.name
+                    ))
                 })?;
 
             if let Ok(init_fn) = globals.get::<mlua::Function>("init") {
-                init_fn.call::<()>(()).map_err(|e| {
-                    ModuleInitError::ScriptError(format!("Lua init error in {}: {e}", self.name))
+                init_fn.call::<()>(()).map_err(|error| {
+                    ModuleInitError::ScriptError(format!(
+                        "Lua init error in {}: {error}",
+                        self.name
+                    ))
                 })?;
             }
 
@@ -62,7 +68,7 @@ impl AnyModulePort for LuaModule {
     }
 
     fn refresh(&mut self, hub: &SignalHub, changed: &[SignalKind]) {
-        let t0 = std::time::Instant::now();
+        let start = std::time::Instant::now();
         tracing::debug!(?changed, "Refreshing LuaModulePort");
         let lua = self
             .lua
@@ -72,19 +78,19 @@ impl AnyModulePort for LuaModule {
             Ok(()) => {
                 tracing::debug!(
                     ?changed,
-                    duration_ms = t0.elapsed().as_millis(),
-                    duration_micros = t0.elapsed().as_micros(),
+                    duration_ms = start.elapsed().as_millis(),
+                    duration_micros = start.elapsed().as_micros(),
                     "LuaModulePort refresh completed successfully"
                 );
             }
-            Err(e) => {
-                tracing::error!(?changed, err = ?e, "LuaModulePort refresh failed");
+            Err(error) => {
+                tracing::error!(?changed, err = ?error, "LuaModulePort refresh failed");
             }
         }
     }
 
     fn render(&self, monitor: &MonitorId) -> crate::features::vdom::domain::VNode {
-        let t0 = std::time::Instant::now();
+        let start = std::time::Instant::now();
         let render_result = {
             let lua = self
                 .lua
@@ -97,8 +103,8 @@ impl AnyModulePort for LuaModule {
                 if let Ok(Some(raw_monitors)) = globals.get::<Option<mlua::Table>>("_raw_monitors")
                 {
                     for pair in raw_monitors.sequence_values::<mlua::Value>() {
-                        if let Ok(mlua::Value::UserData(ud)) = pair
-                            && let Ok(mon) = ud.borrow::<LuaMonitor>()
+                        if let Ok(mlua::Value::UserData(user_data)) = pair
+                            && let Ok(mon) = user_data.borrow::<LuaMonitor>()
                             && mon.0.id() == monitor
                         {
                             mon_info = Some(mon.0.clone());
@@ -123,25 +129,25 @@ impl AnyModulePort for LuaModule {
                 tracing::debug!(
                     module = %self.name,
                     monitor = %monitor,
-                    duration_ms = t0.elapsed().as_millis(),
-                    duration_micros = t0.elapsed().as_micros(),
+                    duration_ms = start.elapsed().as_millis(),
+                    duration_micros = start.elapsed().as_micros(),
                     "Lua render completed successfully"
                 );
                 return node;
             }
-            Ok(Ok(Err(e))) => {
+            Ok(Ok(Err(error))) => {
                 tracing::error!(
                     module = %self.name,
                     monitor = %monitor,
-                    err = ?e,
+                    err = ?error,
                     "Failed to convert Lua return value to VNode"
                 );
             }
-            Ok(Err(e)) => {
+            Ok(Err(error)) => {
                 tracing::error!(
                     module = %self.name,
                     monitor = %monitor,
-                    err = ?e,
+                    err = ?error,
                     "Lua render_fn execution failed"
                 );
             }
@@ -172,8 +178,8 @@ impl AnyModulePort for LuaModule {
             call_res
         };
 
-        res.unwrap_or(Ok(())).map_err(|e| {
-            ModuleInitError::ScriptError(format!("Failed to call function '{name}': {e}"))
+        res.unwrap_or(Ok(())).map_err(|error| {
+            ModuleInitError::ScriptError(format!("Failed to call function '{name}': {error}"))
         })
     }
 }

@@ -20,8 +20,8 @@ impl<'de> Deserialize<'de> for DrawingColor {
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Self::parse(&s).map_err(serde::de::Error::custom)
+        let text = String::deserialize(deserializer)?;
+        Self::parse(&text).map_err(serde::de::Error::custom)
     }
 }
 
@@ -45,15 +45,15 @@ impl DrawingColor {
         let mut colors = Vec::new();
         let mut angle = 0.0;
 
-        for (i, token) in tokens.iter().enumerate() {
-            if let Some(c) = parse_single_color(token) {
-                colors.push(c);
-            } else if i == tokens.len().saturating_sub(1) && tokens.len() > 1 {
+        for (index, token) in tokens.iter().enumerate() {
+            if let Some(color) = parse_single_color(token) {
+                colors.push(color);
+            } else if index == tokens.len().saturating_sub(1) && tokens.len() > 1 {
                 let angle_str = token.strip_suffix("deg").unwrap_or(token);
-                let Ok(a) = angle_str.parse::<f32>() else {
+                let Ok(parsed_angle) = angle_str.parse::<f32>() else {
                     return Err(ColorError::InvalidAngle(token.clone()));
                 };
-                angle = a;
+                angle = parsed_angle;
             } else {
                 return Err(ColorError::InvalidFormat(token.clone()));
             }

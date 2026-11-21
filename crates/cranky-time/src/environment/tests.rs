@@ -4,9 +4,12 @@ use super::*;
 use crate::test_support::{Scratch, database, environment, zone_path};
 
 /// The offset in November 2026 of the zone `TZ` selects, and its name.
-fn from_tz(tz: &str) -> Option<(i64, Option<String>)> {
-    let located = environment(Some(tz), &PathBuf::from("/nonexistent")).zone_from_tz()?;
-    Some((located.zone.at(1_795_000_000).kind.offset, located.name))
+fn from_tz(timezone: &str) -> Option<(i64, Option<String>)> {
+    let located = environment(Some(timezone), &PathBuf::from("/nonexistent")).zone_from_tz()?;
+    Some((
+        located.zone.at_instant(1_795_000_000).kind.offset,
+        located.name,
+    ))
 }
 
 #[test]
@@ -46,7 +49,7 @@ fn a_database_name_wins_over_a_rule_of_the_same_text() {
     let located = Environment::new(Some("EST5EDT"), "/nonexistent", vec![scratch.path("")])
         .zone_from_tz()
         .unwrap();
-    assert_eq!(located.zone.at(1_795_000_000).kind.offset, 19_800);
+    assert_eq!(located.zone.at_instant(1_795_000_000).kind.offset, 19_800);
     assert_eq!(located.name.as_deref(), Some("EST5EDT"));
     // Without the file the same text is read as a rule, and has no name.
     assert_eq!(from_tz("EST5EDT"), Some((-18_000, None)));
@@ -81,8 +84,8 @@ fn tz_may_not_name_a_pipe() {
 /// no kind refers to: still a valid file, only longer.
 fn padded_zone(padding: usize) -> Vec<u8> {
     let mut bytes = crate::test_support::zone_bytes("Australia/Sydney");
-    let count = |at: usize| {
-        usize::try_from(u32::from_be_bytes(bytes[at..][..4].try_into().unwrap())).unwrap()
+    let count = |offset: usize| {
+        usize::try_from(u32::from_be_bytes(bytes[offset..][..4].try_into().unwrap())).unwrap()
     };
     let (transitions, kinds, names) = (count(32), count(36), count(40));
     let names_end = [
@@ -129,8 +132,8 @@ fn an_empty_tz_is_utc() {
 
 #[test]
 fn anything_else_in_tz_selects_nothing() {
-    for tz in ["Nope/Bogus", "Asia", "Asia/", "/", "x"] {
-        assert_eq!(from_tz(tz), None, "{tz:?}");
+    for timezone in ["Nope/Bogus", "Asia", "Asia/", "/", "x"] {
+        assert_eq!(from_tz(timezone), None, "{timezone:?}");
     }
     assert_eq!(
         environment(None, &PathBuf::from("/nonexistent")).zone_from_tz(),
@@ -143,8 +146,13 @@ fn a_name_cannot_leave_the_database() {
     let scratch = Scratch::new();
     std::fs::create_dir(scratch.path("zoneinfo")).unwrap();
     std::fs::copy(zone_path("Asia/Kolkata"), scratch.path("outside")).unwrap();
-    let environment =
-        |tz| Environment::new(Some(tz), "/nonexistent", vec![scratch.path("zoneinfo")]);
+    let environment = |timezone| {
+        Environment::new(
+            Some(timezone),
+            "/nonexistent",
+            vec![scratch.path("zoneinfo")],
+        )
+    };
     assert!(scratch.path("zoneinfo/../outside").exists());
     assert_eq!(environment("../outside").zone_from_tz(), None);
     assert_eq!(environment("./../outside").zone_from_tz(), None);
@@ -157,7 +165,7 @@ fn databases_are_searched_in_order() {
         let located = Environment::new(Some("Europe/Lisbon"), "/nonexistent", databases)
             .zone_from_tz()
             .unwrap();
-        located.zone.at(1_795_000_000).kind.offset
+        located.zone.at_instant(1_795_000_000).kind.offset
     };
     assert_eq!(offset(vec![scratch.path("missing"), database()]), 0);
 
@@ -175,7 +183,7 @@ fn the_local_time_file_names_its_zone_when_it_links_into_a_database() {
         .zone_from_localtime()
         .unwrap();
     assert_eq!(located.name.as_deref(), Some("America/Sao_Paulo"));
-    assert_eq!(located.zone.at(1_795_000_000).kind.offset, -10_800);
+    assert_eq!(located.zone.at_instant(1_795_000_000).kind.offset, -10_800);
 }
 
 #[test]
@@ -186,7 +194,7 @@ fn a_copied_local_time_file_has_no_name() {
         .zone_from_localtime()
         .unwrap();
     assert_eq!(located.name, None);
-    assert_eq!(located.zone.at(1_795_000_000).kind.offset, -10_800);
+    assert_eq!(located.zone.at_instant(1_795_000_000).kind.offset, -10_800);
 }
 
 #[test]
@@ -198,7 +206,7 @@ fn a_link_outside_a_database_has_no_name() {
         .zone_from_localtime()
         .unwrap();
     assert_eq!(located.name, None);
-    assert_eq!(located.zone.at(1_795_000_000).kind.offset, 19_800);
+    assert_eq!(located.zone.at_instant(1_795_000_000).kind.offset, 19_800);
 }
 
 /// The zone found through a local time file linking to `target`, after `file`
@@ -212,7 +220,7 @@ fn through_link(scratch: &Scratch, file: &str, target: &str) -> Located {
     let located = environment(None, &scratch.localtime())
         .zone_from_localtime()
         .unwrap();
-    assert_eq!(located.zone.at(1_795_000_000).kind.offset, 19_800);
+    assert_eq!(located.zone.at_instant(1_795_000_000).kind.offset, 19_800);
     located
 }
 
@@ -286,7 +294,7 @@ fn a_file_without_end_is_given_up_on() {
 #[test]
 fn the_system_environment_reads_the_usual_places() {
     let plain = Environment::from_variables(None, None);
-    assert_eq!(plain.tz(), None);
+    assert_eq!(plain.timezone(), None);
     assert_eq!(plain.localtime, PathBuf::from("/etc/localtime"));
     assert_eq!(
         plain.databases,
@@ -300,7 +308,7 @@ fn the_system_environment_reads_the_usual_places() {
 #[test]
 fn tzdir_is_searched_before_the_usual_databases() {
     let set = Environment::from_variables(Some("Asia/Kolkata".into()), Some("/custom".into()));
-    assert_eq!(set.tz(), Some("Asia/Kolkata"));
+    assert_eq!(set.timezone(), Some("Asia/Kolkata"));
     assert_eq!(
         set.databases,
         [

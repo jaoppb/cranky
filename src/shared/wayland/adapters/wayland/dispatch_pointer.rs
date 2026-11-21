@@ -97,7 +97,7 @@ fn is_composite_child(state: &WaylandState, target: &PointerTarget) -> bool {
     let own = state
         .pointer_surface
         .as_ref()
-        .and_then(|s| state.surface_to_id.get(s));
+        .and_then(|surface| state.surface_to_id.get(surface));
     own != Some(target)
 }
 
@@ -241,8 +241,10 @@ mod tests {
     fn dispatch_pointer_route_scales_layers_by_target_monitor_bar() {
         let fake = Fake::new();
         let (state, surface) = popup(&fake, 2);
-        let route_id =
-            |x, y| route(&state, &surface, Position::new(x, y)).map(|(t, p)| (t.0.value(), p));
+        let route_id = |x, y| {
+            route(&state, &surface, Position::new(x, y))
+                .map(|(target, position)| (target.0.value(), position))
+        };
         assert_eq!(route_id(13, 5), Some((CHILD, Position::new(3, 3))));
         assert_eq!(route_id(15, 7), Some((OWNER, Position::new(15, 7))));
     }

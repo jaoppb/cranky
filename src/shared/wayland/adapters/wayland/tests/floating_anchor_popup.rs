@@ -27,8 +27,14 @@ fn nested_popup_anchor_uses_composite_child_origin() {
     let target = PopupTarget::new(ModuleId::new(CHILD), MonitorId::new("DP-1"));
     let (kind, parent) = (FloatingKind::Popup(target), popup_kind());
     let bounds = |rect| {
-        resolve_anchor(&state, &kind, None, rect, Some(&parent))
-            .map(|a| (a.anchor_x, a.anchor_y, a.anchor_w, a.anchor_h))
+        resolve_anchor(&state, &kind, None, rect, Some(&parent)).map(|anchor| {
+            (
+                anchor.anchor_x,
+                anchor.anchor_y,
+                anchor.anchor_w,
+                anchor.anchor_h,
+            )
+        })
     };
     let rect = Rect::new(Position::new(2, 3), Size::new(5, 6));
     assert_eq!(bounds(Some(rect)), Some((32, 13, 5, 6)));

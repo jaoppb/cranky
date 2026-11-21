@@ -8,13 +8,13 @@ use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 
 pub(crate) fn create_positioner(
     xdg_wm_base: &XdgWmBase,
-    qh: &QueueHandle<WaylandState>,
+    queue_handle: &QueueHandle<WaylandState>,
     text_w: i32,
     text_h: i32,
     anchor_info: &AnchorInfo,
     offset: crate::shared::primitives::PopupOffset,
 ) -> XdgPositioner {
-    let positioner = xdg_wm_base.create_positioner(qh, ());
+    let positioner = xdg_wm_base.create_positioner(queue_handle, ());
     positioner.set_size(text_w.max(1), text_h.max(1));
     positioner.set_anchor_rect(
         anchor_info.anchor_x,

@@ -26,14 +26,14 @@ pub(crate) fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
         let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
             parse_common_props(lua, &table)?;
         let mut node = VNode::new_flex(children_vec, class, id, on_click, on_hover, tooltip);
-        if let Some(p) = popup {
-            node = node.with_popup(p);
+        if let Some(popup_spec) = popup {
+            node = node.with_popup(popup_spec);
         }
-        if let Some(p) = panel {
-            node = node.with_panel(p);
+        if let Some(panel_spec) = panel {
+            node = node.with_panel(panel_spec);
         }
-        if let Some(k) = key {
-            node = node.with_key(k);
+        if let Some(node_key) = key {
+            node = node.with_key(node_key);
         }
         return Ok(node);
     }
@@ -66,14 +66,14 @@ pub(crate) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
         let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
             parse_common_props(lua, &table)?;
         let mut node = VNode::new_grid(children_vec, class, id, on_click, on_hover, tooltip);
-        if let Some(p) = popup {
-            node = node.with_popup(p);
+        if let Some(popup_spec) = popup {
+            node = node.with_popup(popup_spec);
         }
-        if let Some(p) = panel {
-            node = node.with_panel(p);
+        if let Some(panel_spec) = panel {
+            node = node.with_panel(panel_spec);
         }
-        if let Some(k) = key {
-            node = node.with_key(k);
+        if let Some(node_key) = key {
+            node = node.with_key(node_key);
         }
         return Ok(node);
     }
@@ -91,22 +91,22 @@ pub(crate) fn parse_rect_node(lua: &Lua, val: Option<mlua::Value>) -> mlua::Resu
             let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
                 parse_common_props(lua, &table)?;
             let mut node = VNode::new_rect(class, id, on_click, on_hover, tooltip);
-            if let Some(p) = popup {
-                node = node.with_popup(p);
+            if let Some(popup_spec) = popup {
+                node = node.with_popup(popup_spec);
             }
-            if let Some(p) = panel {
-                node = node.with_panel(p);
+            if let Some(panel_spec) = panel {
+                node = node.with_panel(panel_spec);
             }
-            if let Some(k) = key {
-                node = node.with_key(k);
+            if let Some(node_key) = key {
+                node = node.with_key(node_key);
             }
             Ok(node)
         }
-        Some(mlua::Value::String(s)) => {
-            let class = s
+        Some(mlua::Value::String(lua_string)) => {
+            let class = lua_string
                 .to_str()
                 .ok()
-                .and_then(|c| ClassNameList::parse(c.as_ref()).ok());
+                .and_then(|text| ClassNameList::parse(text.as_ref()).ok());
             Ok(VNode::new_rect(class, None, None, None, None))
         }
         _ => Ok(VNode::new_rect(None, None, None, None, None)),
@@ -127,19 +127,21 @@ pub(crate) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
                 options,
             );
             let mut node = VNode::new_module(params, class, id, on_click, on_hover, tooltip);
-            if let Some(p) = popup {
-                node = node.with_popup(p);
+            if let Some(popup_spec) = popup {
+                node = node.with_popup(popup_spec);
             }
-            if let Some(p) = panel {
-                node = node.with_panel(p);
+            if let Some(panel_spec) = panel {
+                node = node.with_panel(panel_spec);
             }
-            if let Some(k) = key {
-                node = node.with_key(k);
+            if let Some(node_key) = key {
+                node = node.with_key(node_key);
             }
             Ok(node)
         }
-        mlua::Value::String(s) => {
-            let name_str = s.to_str().map_or_else(|_| String::new(), |b| b.to_string());
+        mlua::Value::String(lua_string) => {
+            let name_str = lua_string
+                .to_str()
+                .map_or_else(|_| String::new(), |text| text.to_string());
             let params = crate::features::vdom::domain::ModuleParams::new(
                 ModuleName::new(name_str),
                 None,

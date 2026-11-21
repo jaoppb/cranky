@@ -54,8 +54,8 @@ fn test_systray_action_name() {
         SystrayActionName::Other("Custom".into())
     );
     assert_eq!(SystrayActionName::Primary.as_str(), "Primary");
-    let s: String = SystrayActionName::ContextMenu.into();
-    assert_eq!(s, "ContextMenu");
+    let name: String = SystrayActionName::ContextMenu.into();
+    assert_eq!(name, "ContextMenu");
 }
 
 #[test]

@@ -43,7 +43,7 @@ pub enum DisplayServerError {
     ConnectionFailed { reason: String },
 
     #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
+    InputOutput(#[from] std::io::Error),
     #[error("Internal error: {0}")]
     Internal(String),
 }

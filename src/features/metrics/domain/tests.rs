@@ -69,15 +69,15 @@ fn test_metrics_types() {
 
 #[test]
 fn test_disk_metric() {
-    let dm = DiskMetric::new(
+    let disk_metric = DiskMetric::new(
         DiskName::new("nvme0n1"),
         MountPoint::new("/"),
         MemoryBytes::new(100),
         MemoryBytes::new(20),
         MemoryBytes::new(80),
     );
-    assert_eq!(dm.name().as_str(), "nvme0n1");
-    assert_eq!(dm.mount_point().as_str(), "/");
+    assert_eq!(disk_metric.name().as_str(), "nvme0n1");
+    assert_eq!(disk_metric.mount_point().as_str(), "/");
 }
 
 #[test]

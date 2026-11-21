@@ -13,7 +13,7 @@ fn fully_keyed<'a>(keys: impl Iterator<Item = Option<&'a str>>) -> bool {
     let mut seen = HashSet::new();
     for key in keys {
         match key {
-            Some(k) if seen.insert(k) => {}
+            Some(name) if seen.insert(name) => {}
             _ => return false,
         }
     }
@@ -28,8 +28,8 @@ fn diff_children_positional<'a>(
     measurer: &mut dyn TextMeasurer,
 ) -> ChildrenPatch<'a> {
     let mut patches = Vec::with_capacity(new_children.len());
-    for (i, new_child) in new_children.iter().enumerate() {
-        if let Some(old_child) = old_children.get(i) {
+    for (index, new_child) in new_children.iter().enumerate() {
+        if let Some(old_child) = old_children.get(index) {
             patches.push(super::diff(old_child, new_child, measurer));
         } else {
             patches.push(Patch::Create {
@@ -41,7 +41,7 @@ fn diff_children_positional<'a>(
     let removed = old_children
         .iter()
         .skip(new_children.len())
-        .map(|c| c.root_node)
+        .map(|old_child| old_child.root_node)
         .collect();
 
     ChildrenPatch { patches, removed }
@@ -88,12 +88,13 @@ fn diff_children_keyed<'a>(
 
     let removed = old_children
         .iter()
-        .filter(|c| {
-            c.layout
+        .filter(|old_child| {
+            old_child
+                .layout
                 .node_key()
                 .is_none_or(|key| !matched_keys.contains(key.as_str()))
         })
-        .map(|c| c.root_node)
+        .map(|old_child| old_child.root_node)
         .collect();
 
     ChildrenPatch { patches, removed }
@@ -114,18 +115,22 @@ pub(super) fn diff_container<'a>(
     };
 
     let old_children = old_state.children.as_slice();
-    let any_keyed = old_children.iter().any(|c| c.layout.node_key().is_some())
-        || new_children.iter().any(|c| c.node_key().is_some());
+    let any_keyed = old_children
+        .iter()
+        .any(|old_child| old_child.layout.node_key().is_some())
+        || new_children
+            .iter()
+            .any(|new_child| new_child.node_key().is_some());
     let keyed = any_keyed
         && fully_keyed(
             old_children
                 .iter()
-                .map(|c| c.layout.node_key().map(NodeKey::as_str)),
+                .map(|old_child| old_child.layout.node_key().map(NodeKey::as_str)),
         )
         && fully_keyed(
             new_children
                 .iter()
-                .map(|c| c.node_key().map(NodeKey::as_str)),
+                .map(|new_child| new_child.node_key().map(NodeKey::as_str)),
         );
 
     if any_keyed && !keyed {

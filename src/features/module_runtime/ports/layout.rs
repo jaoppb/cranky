@@ -39,16 +39,16 @@ where
 
 impl LayoutEventSender for tokio::sync::mpsc::Sender<LayoutEvent> {
     fn send_layout_event(&self, event: LayoutEvent) {
-        if let Err(e) = self.try_send(event) {
-            tracing::error!(?e, "failed to send layout event via tokio channel");
+        if let Err(error) = self.try_send(event) {
+            tracing::error!(?error, "failed to send layout event via tokio channel");
         }
     }
 }
 
 impl LayoutEventSender for std::sync::mpsc::Sender<LayoutEvent> {
     fn send_layout_event(&self, event: LayoutEvent) {
-        if let Err(e) = self.send(event) {
-            tracing::error!(?e, "failed to send layout event via std channel");
+        if let Err(error) = self.send(event) {
+            tracing::error!(?error, "failed to send layout event via std channel");
         }
     }
 }

@@ -5,8 +5,10 @@ pub(crate) fn get_hostname() -> String {
     std::env::var("HOSTNAME")
         .or_else(|_| std::env::var("HOST"))
         .unwrap_or_else(|_| {
-            std::fs::read_to_string("/etc/hostname")
-                .map_or_else(|_| "unknown".to_string(), |s| s.trim().to_string())
+            std::fs::read_to_string("/etc/hostname").map_or_else(
+                |_| "unknown".to_string(),
+                |contents| contents.trim().to_string(),
+            )
         })
 }
 
@@ -35,12 +37,16 @@ pub(crate) fn monitor_info_to_rhai_map(info: &ScriptMonitorInfo) -> rhai::Map {
     map.insert(
         "active_workspace_id".into(),
         info.active_workspace_id()
-            .map_or(Dynamic::UNIT, |w| Dynamic::from(i64::from(w))),
+            .map_or(Dynamic::UNIT, |workspace_id| {
+                Dynamic::from(i64::from(workspace_id))
+            }),
     );
     map.insert(
         "special_workspace_id".into(),
         info.special_workspace_id()
-            .map_or(Dynamic::UNIT, |w| Dynamic::from(i64::from(w))),
+            .map_or(Dynamic::UNIT, |workspace_id| {
+                Dynamic::from(i64::from(workspace_id))
+            }),
     );
     map
 }

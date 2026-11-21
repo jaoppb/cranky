@@ -108,7 +108,13 @@ impl FloatingSurface {
     pub(super) fn child_placement(&self, module_id: ModuleId) -> Option<ChildPlacement> {
         self.layers
             .get(module_id)
-            .map(|l| ChildPlacement::new(l.origin().x(), l.origin().y(), *l.buffer().size()))
+            .map(|layer| {
+                ChildPlacement::new(
+                    layer.origin().x(),
+                    layer.origin().y(),
+                    *layer.buffer().size(),
+                )
+            })
             .or_else(|| {
                 self.module_surfaces
                     .get(&module_id)

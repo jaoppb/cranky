@@ -17,7 +17,7 @@ impl DynamicValue {
     #[must_use]
     pub fn as_str(&self) -> Option<&str> {
         match self {
-            Self::String(s) => Some(s),
+            Self::String(text) => Some(text),
             _ => None,
         }
     }
@@ -25,7 +25,7 @@ impl DynamicValue {
     #[must_use]
     pub const fn as_bool(&self) -> Option<bool> {
         match self {
-            Self::Bool(b) => Some(*b),
+            Self::Bool(flag) => Some(*flag),
             _ => None,
         }
     }
@@ -33,7 +33,7 @@ impl DynamicValue {
     #[must_use]
     pub const fn as_f64(&self) -> Option<f64> {
         match self {
-            Self::Number(n) => Some(*n),
+            Self::Number(number) => Some(*number),
             _ => None,
         }
     }
@@ -41,7 +41,7 @@ impl DynamicValue {
     #[must_use]
     pub fn as_i64(&self) -> Option<i64> {
         match self {
-            Self::Number(n) => Some(crate::utils::f64_to_i64(*n)),
+            Self::Number(number) => Some(crate::utils::f64_to_i64(*number)),
             _ => None,
         }
     }
@@ -57,39 +57,39 @@ impl DynamicValue {
     #[must_use]
     pub const fn as_map(&self) -> Option<&HashMap<String, Self>> {
         match self {
-            Self::Map(m) => Some(m),
+            Self::Map(map) => Some(map),
             _ => None,
         }
     }
 }
 
 impl From<String> for DynamicValue {
-    fn from(s: String) -> Self {
-        Self::String(s)
+    fn from(text: String) -> Self {
+        Self::String(text)
     }
 }
 
 impl From<&str> for DynamicValue {
-    fn from(s: &str) -> Self {
-        Self::String(s.to_string())
+    fn from(text: &str) -> Self {
+        Self::String(text.to_string())
     }
 }
 
 impl From<bool> for DynamicValue {
-    fn from(b: bool) -> Self {
-        Self::Bool(b)
+    fn from(flag: bool) -> Self {
+        Self::Bool(flag)
     }
 }
 
 impl From<f64> for DynamicValue {
-    fn from(n: f64) -> Self {
-        Self::Number(n)
+    fn from(number: f64) -> Self {
+        Self::Number(number)
     }
 }
 
 impl From<i64> for DynamicValue {
-    fn from(n: i64) -> Self {
-        Self::Number(crate::utils::i64_to_f64(n))
+    fn from(number: i64) -> Self {
+        Self::Number(crate::utils::i64_to_f64(number))
     }
 }
 

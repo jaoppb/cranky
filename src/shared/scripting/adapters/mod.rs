@@ -17,8 +17,8 @@ impl ScriptEnginePort for RhaiEngineAdapter {
     }
 
     fn load_module(&self, name: &str, source: &str) -> Result<Box<dyn AnyModulePort>, ModuleError> {
-        let m = rhai::RhaiModule::new(name.to_string(), source)?;
-        Ok(Box::new(m))
+        let module = rhai::RhaiModule::new(name.to_string(), source)?;
+        Ok(Box::new(module))
     }
 }
 
@@ -34,7 +34,7 @@ impl ScriptEnginePort for LuaEngineAdapter {
     }
 
     fn load_module(&self, name: &str, source: &str) -> Result<Box<dyn AnyModulePort>, ModuleError> {
-        let m = lua::LuaModule::new(name.to_string(), source.to_string());
-        Ok(Box::new(m))
+        let module = lua::LuaModule::new(name.to_string(), source.to_string());
+        Ok(Box::new(module))
     }
 }

@@ -20,8 +20,8 @@ impl PointerHandler {
         if old_active == target_ref {
             false
         } else {
-            if let Some(r) = target_ref {
-                self.active.insert(monitor_id.clone(), r);
+            if let Some(node_ref) = target_ref {
+                self.active.insert(monitor_id.clone(), node_ref);
             } else {
                 self.active.remove(monitor_id);
             }
@@ -41,8 +41,8 @@ impl PointerHandler {
         let target_ref = capture_node_ref(&hit);
         let old_focus = self.focused.get(monitor_id).cloned();
         if old_focus != target_ref {
-            if let Some(r) = target_ref {
-                self.focused.insert(monitor_id.clone(), r);
+            if let Some(node_ref) = target_ref {
+                self.focused.insert(monitor_id.clone(), node_ref);
             } else {
                 self.focused.remove(monitor_id);
             }
@@ -62,7 +62,7 @@ impl PointerHandler {
         let hit_cmd = hit
             .iter()
             .rev()
-            .find_map(|n| n.on_click().and_then(|h| h.get(&button)));
+            .find_map(|node| node.on_click().and_then(|handlers| handlers.get(&button)));
 
         let mut actions = Vec::new();
         if let Some(cmd) = hit_cmd {

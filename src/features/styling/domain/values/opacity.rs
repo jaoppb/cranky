@@ -28,8 +28,8 @@ impl<'de> Deserialize<'de> for Opacity {
     where
         D: serde::Deserializer<'de>,
     {
-        let v = f32::deserialize(deserializer)?;
-        Self::new(v).map_err(serde::de::Error::custom)
+        let opacity = f32::deserialize(deserializer)?;
+        Self::new(opacity).map_err(serde::de::Error::custom)
     }
 }
 

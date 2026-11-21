@@ -20,13 +20,13 @@ impl ResolvedInteraction {
         Self {
             hovered: ctx
                 .hovered()
-                .and_then(|r| resolve_target_path(root, surface, r)),
+                .and_then(|node_ref| resolve_target_path(root, surface, node_ref)),
             active: ctx
                 .active()
-                .and_then(|r| resolve_target_path(root, surface, r)),
+                .and_then(|node_ref| resolve_target_path(root, surface, node_ref)),
             focused: ctx
                 .focused()
-                .and_then(|r| resolve_target_path(root, surface, r)),
+                .and_then(|node_ref| resolve_target_path(root, surface, node_ref)),
             is_monitor_focused: ctx.is_monitor_focused(),
         }
     }
@@ -39,13 +39,17 @@ impl ResolvedInteraction {
     /// Whether `path` is the hovered node, or an ancestor of it.
     #[must_use]
     pub fn is_hovered_or_ancestor(&self, path: &NodePath) -> bool {
-        self.hovered.as_ref().is_some_and(|t| t.starts_with(path))
+        self.hovered
+            .as_ref()
+            .is_some_and(|hovered_path| hovered_path.starts_with(path))
     }
 
     /// Whether `path` is the active node, or an ancestor of it.
     #[must_use]
     pub fn is_active_or_ancestor(&self, path: &NodePath) -> bool {
-        self.active.as_ref().is_some_and(|t| t.starts_with(path))
+        self.active
+            .as_ref()
+            .is_some_and(|active_path| active_path.starts_with(path))
     }
 
     /// Whether `path` is exactly the focused node (focus never bubbles).

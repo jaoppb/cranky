@@ -189,7 +189,7 @@ impl ModuleRegistry {
 
         let mut module =
             builtins::BuiltinModules::find_module(config.name(), config.engine(), &self.app_env)
-                .map_err(|e| match e {
+                .map_err(|error| match error {
                     BuiltinError::ModuleNotFound { module_name, .. } => {
                         RegistryLoadError::ModuleNotFound(module_name)
                     }
@@ -200,14 +200,16 @@ impl ModuleRegistry {
                         engine,
                         module_name,
                     },
-                    BuiltinError::Env(e) | BuiltinError::Io(e) => RegistryLoadError::Internal(e),
+                    BuiltinError::Env(message) | BuiltinError::InputOutput(message) => {
+                        RegistryLoadError::Internal(message)
+                    }
                 })?;
 
         module
             .init(config, full_config)
-            .map_err(|e| RegistryLoadError::ModuleInit {
+            .map_err(|error| RegistryLoadError::ModuleInit {
                 module_name: config.name().clone(),
-                source: e,
+                source: error,
             })?;
 
         for sub in module.dbus_subscriptions() {
@@ -345,7 +347,9 @@ impl ModuleRegistry {
     ) -> crate::features::module_runtime::application::ModuleContext<LS, DS, US> {
         let site = self.sites.get(&id);
         let parent_id = site.and_then(ModuleSiteInfo::parent);
-        let surface = site.map_or(crate::shared::primitives::LayoutSurface::Bar, |s| s.surface);
+        let surface = site.map_or(crate::shared::primitives::LayoutSurface::Bar, |site_info| {
+            site_info.surface
+        });
 
         crate::features::module_runtime::application::ModuleContext::new(
             id,
@@ -593,7 +597,7 @@ impl<
             };
             let mut module =
                 builtins::BuiltinModules::find_module(cfg.name(), cfg.engine(), &self.app_env)
-                    .map_err(|e| match e {
+                    .map_err(|error| match error {
                         BuiltinError::ModuleNotFound { module_name, .. } => {
                             RegistryLoadError::ModuleNotFound(module_name)
                         }
@@ -604,16 +608,16 @@ impl<
                             engine,
                             module_name,
                         },
-                        BuiltinError::Env(e) | BuiltinError::Io(e) => {
-                            RegistryLoadError::Internal(e)
+                        BuiltinError::Env(message) | BuiltinError::InputOutput(message) => {
+                            RegistryLoadError::Internal(message)
                         }
                     })?;
 
             module
                 .init(cfg, config)
-                .map_err(|e| RegistryLoadError::ModuleInit {
+                .map_err(|error| RegistryLoadError::ModuleInit {
                     module_name: cfg.name().clone(),
-                    source: e,
+                    source: error,
                 })?;
 
             for style_name in module.styles() {
@@ -665,8 +669,8 @@ impl<
         dbus: &mut crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
     ) {
         for sub in &self.dbus_subscriptions {
-            if let Err(e) = dbus.subscribe(sub.clone()).await {
-                tracing::error!("Failed to subscribe to DBus: {e}");
+            if let Err(error) = dbus.subscribe(sub.clone()).await {
+                tracing::error!("Failed to subscribe to DBus: {error}");
             }
         }
     }

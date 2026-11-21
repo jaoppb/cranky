@@ -109,7 +109,7 @@ pub(super) fn resolve(
     root_font_size: FontSize,
 ) -> Option<crate::features::styling::domain::CssLength> {
     match cascade {
-        Cascade::Value(v) => Some(v.resolve(font_size, root_font_size)),
+        Cascade::Value(declared) => Some(declared.resolve(font_size, root_font_size)),
         Cascade::NotDeclared | Cascade::Inherit | Cascade::Initial => None,
     }
 }
@@ -120,7 +120,7 @@ pub(super) fn resolve_scalar(
     root_font_size: FontSize,
 ) -> Option<f32> {
     match cascade {
-        Cascade::Value(v) => Some(v.resolve_scalar(font_size, root_font_size)),
+        Cascade::Value(declared) => Some(declared.resolve_scalar(font_size, root_font_size)),
         Cascade::NotDeclared | Cascade::Inherit | Cascade::Initial => None,
     }
 }
@@ -132,20 +132,20 @@ mod tests {
     #[test]
     fn test_merge_prefers_declared_over_not_declared() {
         let mut base = DeclaredLengths::default();
-        base.set_width(DeclaredLength::Px(10.0));
+        base.set_width(DeclaredLength::Pixels(10.0));
         let mut later = DeclaredLengths::default();
-        later.set_height(DeclaredLength::Px(20.0));
+        later.set_height(DeclaredLength::Pixels(20.0));
 
         base.merge_with(&later);
 
-        let fs = FontSize::new(14.0);
+        let font_size = FontSize::new(14.0);
         assert_eq!(
-            resolve(base.width, fs, fs),
-            Some(crate::features::styling::domain::CssLength::Px(10.0))
+            resolve(base.width, font_size, font_size),
+            Some(crate::features::styling::domain::CssLength::Pixels(10.0))
         );
         assert_eq!(
-            resolve(base.height, fs, fs),
-            Some(crate::features::styling::domain::CssLength::Px(20.0))
+            resolve(base.height, font_size, font_size),
+            Some(crate::features::styling::domain::CssLength::Pixels(20.0))
         );
     }
 }

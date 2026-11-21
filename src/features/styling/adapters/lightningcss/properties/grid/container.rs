@@ -11,7 +11,9 @@ pub fn apply_display_and_gap_properties(style: &mut ComputedStyle, prop: &Proper
     };
     let (name, val) = full
         .split_once(':')
-        .map_or(("", full.as_str()), |(k, v)| (k.trim(), v.trim()));
+        .map_or(("", full.as_str()), |(property, value)| {
+            (property.trim(), value.trim())
+        });
 
     if name == "display" {
         let mode = match val {
@@ -20,8 +22,8 @@ pub fn apply_display_and_gap_properties(style: &mut ComputedStyle, prop: &Proper
             "none" => Some(DisplayMode::None),
             _ => None,
         };
-        if let Some(m) = mode {
-            style.set_display(m);
+        if let Some(display) = mode {
+            style.set_display(display);
             return true;
         }
     } else if name == "column-gap" {
@@ -42,7 +44,9 @@ pub fn apply_grid_container_properties(style: &mut ComputedStyle, prop: &Propert
     };
     let (name, val) = full
         .split_once(':')
-        .map_or(("", full.as_str()), |(k, v)| (k.trim(), v.trim()));
+        .map_or(("", full.as_str()), |(property, value)| {
+            (property.trim(), value.trim())
+        });
 
     match name {
         "grid-template-columns" => {
@@ -86,7 +90,7 @@ pub fn apply_grid_container_properties(style: &mut ComputedStyle, prop: &Propert
             true
         }
         "align-content" => {
-            let jc = if val.contains("space-between") {
+            let content_alignment = if val.contains("space-between") {
                 JustifyContent::SpaceBetween
             } else if val.contains("space-around") {
                 JustifyContent::SpaceAround
@@ -99,7 +103,7 @@ pub fn apply_grid_container_properties(style: &mut ComputedStyle, prop: &Propert
             } else {
                 JustifyContent::Start
             };
-            style.set_align_content(jc);
+            style.set_align_content(content_alignment);
             true
         }
         _ => false,

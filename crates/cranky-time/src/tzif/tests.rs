@@ -3,7 +3,7 @@ use crate::test_support::zone_bytes;
 
 /// The offset and abbreviation a checked-in zone has at an instant.
 fn seen(name: &str, instant: i64) -> (i64, String) {
-    let kind = parse(&zone_bytes(name)).unwrap().at(instant).kind;
+    let kind = parse(&zone_bytes(name)).unwrap().at_instant(instant).kind;
     (kind.offset, kind.abbreviation)
 }
 
@@ -109,9 +109,9 @@ fn offsets_need_not_be_whole_hours() {
 fn a_leap_second_file_counts_its_leap_seconds() {
     let zone = parse(&zone_bytes("right/Europe/Lisbon")).unwrap();
     // The 27th leap second, at the end of 2016.
-    let before = zone.at(1_483_228_825);
-    let inserted = zone.at(1_483_228_826);
-    let after = zone.at(1_483_228_827);
+    let before = zone.at_instant(1_483_228_825);
+    let inserted = zone.at_instant(1_483_228_826);
+    let after = zone.at_instant(1_483_228_827);
     assert_eq!(
         (before.unix_seconds, before.leap_second),
         (1_483_228_799, false)
@@ -125,9 +125,9 @@ fn a_leap_second_file_counts_its_leap_seconds() {
         (1_483_228_800, false)
     );
     // Transitions are stored on the same scale as the instants asked about.
-    assert_eq!(zone.at(1_774_746_026).kind.abbreviation, "WET");
-    assert_eq!(zone.at(1_774_746_027).kind.abbreviation, "WEST");
-    assert_eq!(zone.at(1_795_000_000).unix_seconds, 1_794_999_973);
+    assert_eq!(zone.at_instant(1_774_746_026).kind.abbreviation, "WET");
+    assert_eq!(zone.at_instant(1_774_746_027).kind.abbreviation, "WEST");
+    assert_eq!(zone.at_instant(1_795_000_000).unix_seconds, 1_794_999_973);
 }
 
 #[test]
@@ -155,11 +155,11 @@ fn file_part(
     names: &[u8],
     leaps: &[(i64, i32)],
 ) -> Vec<u8> {
-    let instant = |at: i64| {
+    let instant = |seconds: i64| {
         if wide {
-            at.to_be_bytes().to_vec()
+            seconds.to_be_bytes().to_vec()
         } else {
-            i32::try_from(at).unwrap().to_be_bytes().to_vec()
+            i32::try_from(seconds).unwrap().to_be_bytes().to_vec()
         }
     };
     let mut bytes = b"TZif".to_vec();
@@ -175,8 +175,8 @@ fn file_part(
     ] {
         bytes.extend(count(size));
     }
-    for &(at, _) in transitions {
-        bytes.extend(instant(at));
+    for &(start, _) in transitions {
+        bytes.extend(instant(start));
     }
     bytes.extend(transitions.iter().map(|&(_, kind)| kind));
     for &(offset, name) in kinds {
@@ -184,8 +184,8 @@ fn file_part(
         bytes.extend([0, name]);
     }
     bytes.extend(names);
-    for &(at, total) in leaps {
-        bytes.extend(instant(at));
+    for &(start, total) in leaps {
+        bytes.extend(instant(start));
         bytes.extend(total.to_be_bytes());
     }
     bytes
@@ -216,7 +216,7 @@ fn version_two(footer: &[u8]) -> Vec<u8> {
 fn a_version_one_file_is_read_from_its_only_block() {
     let zone = parse(&version_one(&[(1000, 1), (2000, 0)], KINDS, NAMES)).unwrap();
     let seen = |instant| {
-        let kind = zone.at(instant).kind;
+        let kind = zone.at_instant(instant).kind;
         (kind.offset, kind.abbreviation)
     };
     assert_eq!(seen(999), (-3600, "OLD".to_string()));
@@ -228,10 +228,10 @@ fn a_version_one_file_is_read_from_its_only_block() {
 #[test]
 fn version_one_instants_are_signed() {
     let zone = parse(&version_one(&[(-1000, 1), (1000, 0)], KINDS, NAMES)).unwrap();
-    assert_eq!(zone.at(-1001).kind.abbreviation, "OLD");
-    assert_eq!(zone.at(-1000).kind.abbreviation, "NEW");
-    assert_eq!(zone.at(999).kind.abbreviation, "NEW");
-    assert_eq!(zone.at(1000).kind.abbreviation, "OLD");
+    assert_eq!(zone.at_instant(-1001).kind.abbreviation, "OLD");
+    assert_eq!(zone.at_instant(-1000).kind.abbreviation, "NEW");
+    assert_eq!(zone.at_instant(999).kind.abbreviation, "NEW");
+    assert_eq!(zone.at_instant(1000).kind.abbreviation, "OLD");
 }
 
 #[test]
@@ -276,24 +276,24 @@ fn an_offset_stays_within_twenty_six_hours() {
 #[test]
 fn a_later_version_is_read_from_its_second_block() {
     let zone = parse(&version_two(b"\n\n")).unwrap();
-    assert_eq!(zone.at(999).kind.abbreviation, "OLD");
-    assert_eq!(zone.at(1000).kind.abbreviation, "NEW");
-    assert_eq!(zone.at(i64::MAX).kind.abbreviation, "NEW");
-    assert_eq!(zone.at(2000).unix_seconds, 1999);
-    assert!(zone.at(2000).leap_second);
+    assert_eq!(zone.at_instant(999).kind.abbreviation, "OLD");
+    assert_eq!(zone.at_instant(1000).kind.abbreviation, "NEW");
+    assert_eq!(zone.at_instant(i64::MAX).kind.abbreviation, "NEW");
+    assert_eq!(zone.at_instant(2000).unix_seconds, 1999);
+    assert!(zone.at_instant(2000).leap_second);
 }
 
 #[test]
 fn the_footer_rule_applies_after_the_last_transition() {
     let zone = parse(&version_two(b"\n<+05>-5\n")).unwrap();
-    assert_eq!(zone.at(999).kind.abbreviation, "OLD");
-    assert_eq!(zone.at(1000).kind.offset, 18_000);
+    assert_eq!(zone.at_instant(999).kind.abbreviation, "OLD");
+    assert_eq!(zone.at_instant(1000).kind.offset, 18_000);
 }
 
 #[test]
 fn an_unreadable_footer_rule_is_left_out() {
     let zone = parse(&version_two(b"\nnot a rule\n")).unwrap();
-    assert_eq!(zone.at(i64::MAX).kind.abbreviation, "NEW");
+    assert_eq!(zone.at_instant(i64::MAX).kind.abbreviation, "NEW");
 }
 
 #[test]

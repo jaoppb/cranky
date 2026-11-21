@@ -14,8 +14,8 @@ pub fn register_cranky_api(lua: &Lua) -> mlua::Result<()> {
 
     ui_table.set("element", element_table.clone())?;
     ui_table.set("action", action_table)?;
-    for (k, v) in element_table.pairs::<String, mlua::Function>().flatten() {
-        ui_table.set(k, v)?;
+    for (key, value) in element_table.pairs::<String, mlua::Function>().flatten() {
+        ui_table.set(key, value)?;
     }
 
     let signals_table = lua.create_table()?;

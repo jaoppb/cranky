@@ -108,8 +108,8 @@ enum PanelAnchorHelper {
     Single(String),
 }
 
-fn parse_anchor_str(s: &str) -> u8 {
-    match s.to_lowercase().as_str() {
+fn parse_anchor_str(name: &str) -> u8 {
+    match name.to_lowercase().as_str() {
         "top" => TOP_FLAG,
         "bottom" => BOTTOM_FLAG,
         "left" => LEFT_FLAG,
@@ -138,7 +138,7 @@ impl From<PanelAnchorHelper> for PanelAnchor {
                 list.iter()
                     .fold(0, |acc, item| acc | parse_anchor_str(item)),
             ),
-            PanelAnchorHelper::Single(s) => Self::from_flags(parse_anchor_str(&s)),
+            PanelAnchorHelper::Single(name) => Self::from_flags(parse_anchor_str(&name)),
         }
     }
 }

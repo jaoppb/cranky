@@ -188,7 +188,7 @@ fn test_time_signal_is_whole_second_rfc_3339_with_a_numeric_offset() {
         .unwrap();
     let west = cranky_time::Environment::new(Some("<-03>3"), "/nonexistent", Vec::new());
     hub.time_tx()
-        .send(cranky_time::Clock::new().at(instant, &west))
+        .send(cranky_time::Clock::new().at_instant(instant, &west))
         .unwrap();
     module.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
 

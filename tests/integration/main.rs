@@ -23,7 +23,10 @@ const CHILD_CASE: &str = "CRANKY_INTEGRATION_CASE";
 
 fn main() -> ExitCode {
     let outcome = std::env::var(CHILD_CASE).map_or_else(
-        |_| args::Selection::parse(std::env::args().skip(1)).and_then(|s| cases::run_selected(&s)),
+        |_| {
+            args::Selection::parse(std::env::args().skip(1))
+                .and_then(|selection| cases::run_selected(&selection))
+        },
         |name| cases::run_one(&name),
     );
     match outcome {

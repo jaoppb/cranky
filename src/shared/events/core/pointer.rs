@@ -51,8 +51,9 @@ impl PointerButton {
             "extra" => Some(Self::Extra),
             "forward" => Some(Self::Forward),
             "back" => Some(Self::Back),
-            s => s.parse::<u32>().ok().map(Self::from_raw).or_else(|| {
-                s.strip_prefix("0x")
+            other => other.parse::<u32>().ok().map(Self::from_raw).or_else(|| {
+                other
+                    .strip_prefix("0x")
                     .and_then(|hex| u32::from_str_radix(hex, 16).ok())
                     .map(Self::from_raw)
             }),

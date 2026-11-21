@@ -67,8 +67,8 @@ pub enum ChildPatchOp {
     },
     Move {
         node_id: NodeId,
-        from: usize,
-        to: usize,
+        source: usize,
+        target: usize,
     },
     Update {
         node_id: NodeId,

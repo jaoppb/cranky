@@ -22,8 +22,8 @@ pub fn compile_nth_data(
         NthType::Child => {
             if nth_data.is_function() {
                 step.pseudo_classes.push(PseudoClass::NthChild {
-                    a: nth_data.a,
-                    b: nth_data.b,
+                    step_size: nth_data.a,
+                    offset: nth_data.b,
                 });
             } else {
                 step.pseudo_classes.push(PseudoClass::FirstChild);
@@ -32,8 +32,8 @@ pub fn compile_nth_data(
         NthType::LastChild => {
             if nth_data.is_function() {
                 step.pseudo_classes.push(PseudoClass::NthLastChild {
-                    a: nth_data.a,
-                    b: nth_data.b,
+                    step_size: nth_data.a,
+                    offset: nth_data.b,
                 });
             } else {
                 step.pseudo_classes.push(PseudoClass::LastChild);

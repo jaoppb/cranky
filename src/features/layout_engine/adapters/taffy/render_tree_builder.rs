@@ -14,7 +14,7 @@ fn build_children(
 ) -> Result<Vec<RenderNode>, LayoutError> {
     let child_ids = taffy
         .children(node_id)
-        .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+        .map_err(|error| LayoutError::EngineError(error.to_string()))?;
     let mut render_children = Vec::new();
     for (child, &child_id) in children.iter().zip(child_ids.iter()) {
         render_children.push(build_render_tree(taffy, child_id, child, pos)?);
@@ -30,7 +30,7 @@ pub(super) fn build_render_tree(
 ) -> Result<RenderNode, LayoutError> {
     let layout = taffy
         .layout(node_id)
-        .map_err(|e| LayoutError::EngineError(e.to_string()))?;
+        .map_err(|error| LayoutError::EngineError(error.to_string()))?;
 
     let abs_x = offset.x().saturating_add(f32_to_i32(layout.location.x));
     let abs_y = offset.y().saturating_add(f32_to_i32(layout.location.y));

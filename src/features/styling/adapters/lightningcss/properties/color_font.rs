@@ -14,23 +14,23 @@ use lightningcss::values::color::CssColor as LightningCssColor;
 pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
         Property::BackgroundColor(color) => {
-            if let Some(c) = convert_color(color) {
-                style.set_background(DrawingColor::Solid(c));
+            if let Some(background_color) = convert_color(color) {
+                style.set_background(DrawingColor::Solid(background_color));
             }
             true
         }
         Property::Color(color) => {
-            if let Some(c) = convert_color(color) {
-                style.set_color(DrawingColor::Solid(c));
+            if let Some(text_color) = convert_color(color) {
+                style.set_color(DrawingColor::Solid(text_color));
             }
             true
         }
         Property::AccentColor(color) => {
-            let s = color
+            let css_text = color
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Ok(c) = DrawingColor::parse(s.trim()) {
-                style.set_accent_color(c);
+            if let Ok(accent_color) = DrawingColor::parse(css_text.trim()) {
+                style.set_accent_color(accent_color);
             }
             true
         }
@@ -45,8 +45,8 @@ pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property<'_>) -> b
             true
         }
         Property::TextAlign(align) => {
-            if let Some(a) = convert_text_align(*align) {
-                style.set_text_align(a);
+            if let Some(text_align) = convert_text_align(*align) {
+                style.set_text_align(text_align);
             }
             true
         }
@@ -55,24 +55,24 @@ pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property<'_>) -> b
             true
         }
         Property::Background(bgs) => {
-            let s = bgs
+            let css_text = bgs
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Ok(c) = DrawingColor::parse(s.trim()) {
-                style.set_background(c);
+            if let Ok(background) = DrawingColor::parse(css_text.trim()) {
+                style.set_background(background);
             } else if let Some(first) = bgs.first()
-                && let Some(c) = convert_color(&first.color)
+                && let Some(background_color) = convert_color(&first.color)
             {
-                style.set_background(DrawingColor::Solid(c));
+                style.set_background(DrawingColor::Solid(background_color));
             }
             true
         }
-        Property::Opacity(op) => {
-            let s = op
+        Property::Opacity(opacity) => {
+            let css_text = opacity
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Ok(v) = s.parse::<f32>()
-                && let Ok(val) = Opacity::new(v)
+            if let Ok(amount) = css_text.parse::<f32>()
+                && let Ok(val) = Opacity::new(amount)
             {
                 style.set_opacity(val);
             }
@@ -95,9 +95,10 @@ const fn convert_text_align(align: LightningTextAlign) -> Option<TextAlign> {
 
 pub fn apply_font_size(style: &mut ComputedStyle, size: &LightningFontSize) {
     match size {
-        LightningFontSize::Length(l) => {
+        LightningFontSize::Length(length) => {
             let px = super::box_model::parse_length_str(
-                &l.to_css_string(PrinterOptions::default())
+                &length
+                    .to_css_string(PrinterOptions::default())
                     .unwrap_or_default(),
             );
             style.set_font_size(FontSize::new(px));
@@ -151,7 +152,7 @@ fn css_wide_keyword(prop: &Property<'_>) -> Option<CssWideKeyword> {
     let full = prop.to_css_string(false, PrinterOptions::default()).ok()?;
     let value = full
         .split_once(':')
-        .map_or(full.as_str(), |(_, v)| v)
+        .map_or(full.as_str(), |(_, raw_value)| raw_value)
         .trim();
     if value.eq_ignore_ascii_case("inherit") || value.eq_ignore_ascii_case("unset") {
         Some(CssWideKeyword::Inherit)
@@ -168,8 +169,8 @@ pub fn convert_color(color: &LightningCssColor) -> Option<Color> {
         Some(Color::new(rgba.red, rgba.green, rgba.blue, rgba.alpha))
     } else {
         let raw = color.to_css_string(PrinterOptions::default()).ok()?;
-        if let Ok(DrawingColor::Solid(c)) = DrawingColor::parse(&raw) {
-            Some(c)
+        if let Ok(DrawingColor::Solid(solid_color)) = DrawingColor::parse(&raw) {
+            Some(solid_color)
         } else {
             None
         }

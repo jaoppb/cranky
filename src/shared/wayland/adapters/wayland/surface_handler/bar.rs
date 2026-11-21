@@ -11,7 +11,7 @@ use wayland_client::protocol::wl_shm::WlShm;
 /// subsurface, no parent (`SurfaceCommand::parent() == None`).
 pub(super) fn handle_bar_surface(
     state: &mut WaylandState,
-    qh: &QueueHandle<WaylandState>,
+    queue_handle: &QueueHandle<WaylandState>,
     shm: &WlShm,
     bar_index: usize,
     cmd: &SurfaceCommand,
@@ -27,10 +27,10 @@ pub(super) fn handle_bar_surface(
             shm,
             width,
             height,
-            qh,
+            queue_handle,
             state.app_env.xdg_runtime_dir().as_path(),
         )
-        .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
+        .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
     }
 
     copy_surface_data(&mut bar.shm_buffer, cmd.buffer().data());

@@ -60,8 +60,8 @@ impl<
                             EventLoopEvent::Signals(Vec::new())
                         }
                     }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!(module = %ctx_id, lagged = n, "ModuleActor input_rx lagged, skipped messages");
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(count)) => {
+                        tracing::warn!(module = %ctx_id, lagged = count, "ModuleActor input_rx lagged, skipped messages");
                         EventLoopEvent::Signals(Vec::new())
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {

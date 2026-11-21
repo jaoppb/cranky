@@ -34,7 +34,7 @@ impl SniPort for SniAdapter {
     async fn start(&mut self) -> Result<(), SniPortError> {
         let conn = Connection::session()
             .await
-            .map_err(|e| SniPortError::StartFailed(e.to_string()))?;
+            .map_err(|error| SniPortError::StartFailed(error.to_string()))?;
 
         let items_clone = self.items.clone();
         let hub_clone = self.hub.clone();
@@ -56,7 +56,7 @@ impl SniPort for SniAdapter {
                     let is_unowned = args
                         .new_owner()
                         .as_ref()
-                        .is_none_or(|n| n.as_str().is_empty());
+                        .is_none_or(|owner| owner.as_str().is_empty());
                     if is_unowned {
                         Watcher::remove_by_destination(&items_clone, &hub_clone, args.name()).await;
                     }
@@ -78,7 +78,7 @@ impl SniPort for SniAdapter {
                     .object_server()
                     .at::<&str, Watcher>("/StatusNotifierWatcher", watcher)
                     .await
-                    .map_err(|e: zbus::Error| SniPortError::StartFailed(e.to_string()))?;
+                    .map_err(|error: zbus::Error| SniPortError::StartFailed(error.to_string()))?;
             }
             Err(_) => {
                 info!(
@@ -132,14 +132,14 @@ impl SniAdapter {
                 "org.kde.StatusNotifierItem",
             )
             .await
-            .map_err(|e: zbus::Error| {
+            .map_err(|error: zbus::Error| {
                 error!(
-                    "trigger_action: Failed to create D-Bus proxy for {}: {e}",
+                    "trigger_action: Failed to create D-Bus proxy for {}: {error}",
                     id.as_str()
                 );
                 SniPortError::ActionFailed {
                     id: id.as_str().to_string(),
-                    error: e.to_string(),
+                    error: error.to_string(),
                 }
             })?;
 

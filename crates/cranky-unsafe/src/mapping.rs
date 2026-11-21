@@ -49,8 +49,8 @@ fn create_unlinked_file(len: usize, dir: &Path) -> Result<File> {
 
     // Immediately unlink the file so it's only accessible via the FD
     let _ = std::fs::remove_file(&path);
-    let len =
-        u64::try_from(len).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    let len = u64::try_from(len)
+        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidInput, error))?;
     file.set_len(len)?;
     Ok(file)
 }

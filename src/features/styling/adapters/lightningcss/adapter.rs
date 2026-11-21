@@ -58,9 +58,9 @@ impl CssParserPort for LightningCssAdapter {
         css_source: &str,
     ) -> Result<Box<dyn ParsedStyleSheetPort>, StylingError> {
         tracing::debug!(stylesheet = %name.as_str(), len = css_source.len(), "Parsing CSS stylesheet");
-        let stylesheet = StyleSheet::parse(css_source, ParserOptions::default()).map_err(|e| {
-            tracing::error!(stylesheet = %name.as_str(), error = ?e, "Failed to parse CSS stylesheet");
-            StylingError::ParserError(e.to_string())
+        let stylesheet = StyleSheet::parse(css_source, ParserOptions::default()).map_err(|error| {
+            tracing::error!(stylesheet = %name.as_str(), error = ?error, "Failed to parse CSS stylesheet");
+            StylingError::ParserError(error.to_string())
         })?;
 
         let mut rule_entries = Vec::new();

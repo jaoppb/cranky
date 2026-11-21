@@ -15,14 +15,14 @@ impl SystrayId {
 }
 
 impl From<&str> for SystrayId {
-    fn from(s: &str) -> Self {
-        Self::new(s)
+    fn from(id: &str) -> Self {
+        Self::new(id)
     }
 }
 
 impl From<String> for SystrayId {
-    fn from(s: String) -> Self {
-        Self::new(s)
+    fn from(id: String) -> Self {
+        Self::new(id)
     }
 }
 

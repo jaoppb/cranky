@@ -94,9 +94,9 @@ fn test_canvas_draw_border() {
         );
     }
 
-    let p0 = pixmap.pixel(0, 0).unwrap();
-    assert_eq!(p0.green(), 255);
-    assert_eq!(p0.alpha(), 255);
+    let corner_pixel = pixmap.pixel(0, 0).unwrap();
+    assert_eq!(corner_pixel.green(), 255);
+    assert_eq!(corner_pixel.alpha(), 255);
 
     let p_inside = pixmap.pixel(10, 10).unwrap();
     assert_eq!(p_inside.alpha(), 0);

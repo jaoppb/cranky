@@ -25,21 +25,21 @@ pub(crate) struct FloatingPayload<'a> {
 /// life on first show.
 pub(crate) fn show_floating(
     state: &mut WaylandState,
-    qh: &QueueHandle<WaylandState>,
+    queue_handle: &QueueHandle<WaylandState>,
     kind: FloatingKind,
     monitor_id: Option<MonitorId>,
     anchor_rect: Option<Rect>,
     payload: &FloatingPayload<'_>,
     parent: Option<FloatingKind>,
 ) -> Result<(), DisplayServerError> {
-    let parent_of = |k: &FloatingKind| -> Option<FloatingKind> {
-        if *k == kind {
+    let parent_of = |child_kind: &FloatingKind| -> Option<FloatingKind> {
+        if *child_kind == kind {
             parent.clone()
         } else {
             state
                 .floating_surfaces
-                .get(k)
-                .and_then(|f| f.parent.clone())
+                .get(child_kind)
+                .and_then(|floating| floating.parent.clone())
         }
     };
     let Ok(ancestor_kinds) = ancestors(&kind, parent_of) else {
@@ -71,11 +71,18 @@ pub(crate) fn show_floating(
     };
 
     if state.floating_surfaces.contains_key(&kind) {
-        update_existing_floating(state, qh, &kind, payload.buffer, &anchor_info, &placement)
+        update_existing_floating(
+            state,
+            queue_handle,
+            &kind,
+            payload.buffer,
+            &anchor_info,
+            &placement,
+        )
     } else {
         create_new_floating(
             state,
-            qh,
+            queue_handle,
             kind,
             payload.buffer,
             &anchor_info,

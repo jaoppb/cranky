@@ -12,43 +12,43 @@ pub(crate) fn setup_config_tables(
     let globals = lua.globals();
     let root_config = full_config.root();
 
-    let config_table = if let Some(t) = globals
+    let config_table = if let Some(table) = globals
         .get::<Option<mlua::Table>>("config")
-        .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?
+        .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?
     {
-        t
+        table
     } else {
-        let t = lua
+        let table = lua
             .create_table()
-            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+            .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?;
         globals
-            .set("config", t.clone())
-            .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
-        t
+            .set("config", table.clone())
+            .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?;
+        table
     };
 
     let root_config_table = lua
         .create_table()
-        .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+        .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?;
     root_config_table
         .set("name", root_config.name().as_str())
-        .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+        .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?;
     root_config_table
         .set("height", root_config.height().value())
-        .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+        .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?;
     config_table
         .set("root", root_config_table)
-        .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+        .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?;
 
-    let options_lua = lua.to_value(config.options()).map_err(|e| {
-        ModuleInitError::ConfigError(format!("Failed to convert config to Lua: {e}"))
+    let options_lua = lua.to_value(config.options()).map_err(|error| {
+        ModuleInitError::ConfigError(format!("Failed to convert config to Lua: {error}"))
     })?;
     config_table
         .set("module", options_lua.clone())
-        .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+        .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?;
     config_table
         .set("options", options_lua)
-        .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+        .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?;
 
     Ok(())
 }
@@ -68,20 +68,20 @@ pub(crate) fn evaluate_metadata(
 
     if let Ok(meta_fn) = globals.get::<Function>("metadata")
         && let Ok(result) = meta_fn.call::<mlua::Value>(())
-        && let mlua::Value::Table(t) = result
+        && let mlua::Value::Table(metadata_table) = result
     {
-        if let Ok(subs_val) = t.get::<mlua::Value>("subscriptions")
+        if let Ok(subs_val) = metadata_table.get::<mlua::Value>("subscriptions")
             && let mlua::Value::Table(subs_table) = subs_val
         {
             parse_subscriptions_table(&subs_table, &mut subs, &mut dbus_subs);
         }
 
-        if let Ok(styles_val) = t.get::<mlua::Value>("styles")
+        if let Ok(styles_val) = metadata_table.get::<mlua::Value>("styles")
             && let mlua::Value::Table(styles_table) = styles_val
         {
             for (_, val) in styles_table.pairs::<mlua::Value, mlua::Value>().flatten() {
-                if let mlua::Value::String(s) = val
-                    && let Ok(s_str) = s.to_str()
+                if let mlua::Value::String(lua_string) = val
+                    && let Ok(s_str) = lua_string.to_str()
                     && let Ok(sheet) =
                         crate::features::styling::domain::StyleSheetName::new(s_str.as_ref())
                 {
@@ -91,9 +91,9 @@ pub(crate) fn evaluate_metadata(
         }
     } else if let Ok(subs_fn) = globals.get::<Function>("subscriptions")
         && let Ok(result) = subs_fn.call::<mlua::Value>(())
-        && let mlua::Value::Table(t) = result
+        && let mlua::Value::Table(subscriptions_table) = result
     {
-        parse_subscriptions_table(&t, &mut subs, &mut dbus_subs);
+        parse_subscriptions_table(&subscriptions_table, &mut subs, &mut dbus_subs);
     }
 
     if styles.is_empty()
@@ -107,13 +107,13 @@ pub(crate) fn evaluate_metadata(
 }
 
 pub(crate) fn parse_subscriptions_table(
-    t: &mlua::Table,
+    table: &mlua::Table,
     subs: &mut Vec<SignalKind>,
     dbus_subs: &mut Vec<DBusSubscription>,
 ) {
-    for (_, val) in t.pairs::<mlua::Value, mlua::Value>().flatten() {
-        if let mlua::Value::String(s) = &val {
-            if let Ok(s_str) = s.to_str() {
+    for (_, val) in table.pairs::<mlua::Value, mlua::Value>().flatten() {
+        if let mlua::Value::String(lua_string) = &val {
+            if let Ok(s_str) = lua_string.to_str() {
                 match s_str.as_ref() {
                     "time" => subs.push(SignalKind::Time),
                     "hyprland" => subs.push(SignalKind::Hyprland),

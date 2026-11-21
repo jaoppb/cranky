@@ -17,9 +17,9 @@ pub fn composite_into(
     layers: &CompositeLayers,
     scale: i32,
 ) {
-    let n = dst.len().min(base.len());
-    if let (Some(d), Some(b)) = (dst.get_mut(..n), base.get(..n)) {
-        d.copy_from_slice(b);
+    let count = dst.len().min(base.len());
+    if let (Some(dst_bytes), Some(base_bytes)) = (dst.get_mut(..count), base.get(..count)) {
+        dst_bytes.copy_from_slice(base_bytes);
     }
     for layer in layers.iter() {
         let origin = Position::new(
@@ -42,9 +42,9 @@ mod tests {
         layers
     }
 
-    fn opaque(w: u32, h: u32, px: [u8; 4]) -> RenderBuffer {
-        let n = usize::try_from(w.saturating_mul(h)).unwrap_or(0);
-        RenderBuffer::new(px.repeat(n), Size::new(w, h))
+    fn opaque(width: u32, height: u32, px: [u8; 4]) -> RenderBuffer {
+        let count = usize::try_from(width.saturating_mul(height)).unwrap_or(0);
+        RenderBuffer::new(px.repeat(count), Size::new(width, height))
     }
 
     #[test]

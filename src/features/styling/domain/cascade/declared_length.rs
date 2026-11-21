@@ -10,21 +10,21 @@ use crate::shared::config::domain::FontSize;
 /// today never actually produces `Percent`/`Auto`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DeclaredLength {
-    Px(f32),
+    Pixels(f32),
     Percent(f32),
-    Em(f32),
+    Ems(f32),
     Rem(f32),
     Auto,
     /// A `calc()` expression, folded into a linear combination of its four
     /// possible term kinds while walking lightningcss's typed calc tree
     /// (adapter-side, since only that tree — not this codebase's own
     /// string-based unit parsing — represents `calc()` at all). `em`/`rem`
-    /// still need a font-size to resolve, exactly like the plain `Em`/`Rem`
+    /// still need a font-size to resolve, exactly like the plain `Ems`/`Rem`
     /// variants, so this stays unresolved until `resolve`.
     Calc {
         percent: f32,
         px: f32,
-        em: f32,
+        ems: f32,
         rem: f32,
     },
 }
@@ -36,8 +36,8 @@ impl DeclaredLength {
     /// against a fixed assumption. Order matters: `rem` must be checked
     /// before `em`, since `"2rem"` also ends in `"em"`.
     #[must_use]
-    pub fn parse(s: &str) -> Option<Self> {
-        let trimmed = s.trim();
+    pub fn parse(text: &str) -> Option<Self> {
+        let trimmed = text.trim();
         if trimmed.eq_ignore_ascii_case("auto") {
             return Some(Self::Auto);
         }
@@ -48,12 +48,12 @@ impl DeclaredLength {
             return num.trim().parse::<f32>().ok().map(Self::Rem);
         }
         if let Some(num) = trimmed.strip_suffix("em") {
-            return num.trim().parse::<f32>().ok().map(Self::Em);
+            return num.trim().parse::<f32>().ok().map(Self::Ems);
         }
         if let Some(num) = trimmed.strip_suffix("px") {
-            return num.trim().parse::<f32>().ok().map(Self::Px);
+            return num.trim().parse::<f32>().ok().map(Self::Pixels);
         }
-        trimmed.parse::<f32>().ok().map(Self::Px)
+        trimmed.parse::<f32>().ok().map(Self::Pixels)
     }
 
     /// Resolves `em`/`rem` into concrete pixels, using `font_size` — the
@@ -63,25 +63,25 @@ impl DeclaredLength {
     #[must_use]
     pub fn resolve(self, font_size: FontSize, root_font_size: FontSize) -> CssLength {
         match self {
-            Self::Px(v) => CssLength::Px(v),
-            Self::Percent(v) => CssLength::Percent(v),
-            Self::Em(v) => CssLength::Px(v * font_size.value()),
-            Self::Rem(v) => CssLength::Px(v * root_font_size.value()),
+            Self::Pixels(pixels) => CssLength::Pixels(pixels),
+            Self::Percent(percentage) => CssLength::Percent(percentage),
+            Self::Ems(ems) => CssLength::Pixels(ems * font_size.value()),
+            Self::Rem(root_ems) => CssLength::Pixels(root_ems * root_font_size.value()),
             Self::Auto => CssLength::Auto,
             Self::Calc {
                 percent,
                 px,
-                em,
+                ems,
                 rem,
             } => {
                 let px_total =
-                    rem.mul_add(root_font_size.value(), em.mul_add(font_size.value(), px));
+                    rem.mul_add(root_font_size.value(), ems.mul_add(font_size.value(), px));
                 // No percent term: the whole expression is already a single
                 // concrete pixel value, so it never needs the layout
                 // engine's second pass — the same "absolute calc() is free"
                 // property that made em/rem itself free of layout changes.
                 if percent == 0.0 {
-                    CssLength::Px(px_total)
+                    CssLength::Pixels(px_total)
                 } else {
                     CssLength::Calc {
                         percent,
@@ -102,7 +102,7 @@ impl DeclaredLength {
     #[must_use]
     pub fn resolve_scalar(self, font_size: FontSize, root_font_size: FontSize) -> f32 {
         match self.resolve(font_size, root_font_size) {
-            CssLength::Px(v) | CssLength::Percent(v) => v,
+            CssLength::Pixels(value) | CssLength::Percent(value) => value,
             CssLength::Auto => 0.0,
             CssLength::Calc { px, .. } => px,
         }
@@ -121,7 +121,7 @@ mod tests {
         );
         assert_eq!(
             DeclaredLength::parse("1.5em"),
-            Some(DeclaredLength::Em(1.5))
+            Some(DeclaredLength::Ems(1.5))
         );
     }
 
@@ -132,8 +132,14 @@ mod tests {
             Some(DeclaredLength::Percent(50.0))
         );
         assert_eq!(DeclaredLength::parse("auto"), Some(DeclaredLength::Auto));
-        assert_eq!(DeclaredLength::parse("8px"), Some(DeclaredLength::Px(8.0)));
-        assert_eq!(DeclaredLength::parse("8"), Some(DeclaredLength::Px(8.0)));
+        assert_eq!(
+            DeclaredLength::parse("8px"),
+            Some(DeclaredLength::Pixels(8.0))
+        );
+        assert_eq!(
+            DeclaredLength::parse("8"),
+            Some(DeclaredLength::Pixels(8.0))
+        );
     }
 
     #[test]
@@ -141,12 +147,12 @@ mod tests {
         let font_size = FontSize::new(20.0);
         let root = FontSize::new(10.0);
         assert_eq!(
-            DeclaredLength::Em(2.0).resolve(font_size, root),
-            CssLength::Px(40.0)
+            DeclaredLength::Ems(2.0).resolve(font_size, root),
+            CssLength::Pixels(40.0)
         );
         assert_eq!(
             DeclaredLength::Rem(2.0).resolve(font_size, root),
-            CssLength::Px(20.0)
+            CssLength::Pixels(20.0)
         );
     }
 
@@ -157,12 +163,12 @@ mod tests {
         let calc = DeclaredLength::Calc {
             percent: 0.0,
             px: 8.0,
-            em: 0.0,
+            ems: 0.0,
             rem: 1.0,
         };
         // 8px + 1rem(10px) = 18px, and no percent term means no layout-time
-        // resolution is needed — same shape as a plain Px value.
-        assert_eq!(calc.resolve(font_size, root), CssLength::Px(18.0));
+        // resolution is needed — same shape as a plain Pixels value.
+        assert_eq!(calc.resolve(font_size, root), CssLength::Pixels(18.0));
     }
 
     #[test]
@@ -172,7 +178,7 @@ mod tests {
         let calc = DeclaredLength::Calc {
             percent: 100.0,
             px: -16.0,
-            em: 0.0,
+            ems: 0.0,
             rem: 1.0,
         };
         // calc(100% - 1rem - 16px) -> percent stays 100, px folds to -6.

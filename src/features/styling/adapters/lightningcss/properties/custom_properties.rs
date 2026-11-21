@@ -26,7 +26,7 @@ pub fn detect_custom_property_declarations(props: &[Property<'_>]) -> HashMap<St
         };
         let value = full
             .split_once(':')
-            .map_or(full.as_str(), |(_, v)| v)
+            .map_or(full.as_str(), |(_, raw_value)| raw_value)
             .trim()
             .to_string();
         declared.insert(
@@ -65,7 +65,7 @@ pub fn detect_pending_var_properties(props: &[Property<'_>]) -> HashMap<String, 
         }
         let value = full
             .split_once(':')
-            .map_or(full.as_str(), |(_, v)| v)
+            .map_or(full.as_str(), |(_, raw_value)| raw_value)
             .trim()
             .to_string();
         pending.insert(unparsed.property_id.name().to_string(), value);

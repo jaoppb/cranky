@@ -10,7 +10,7 @@ use lightningcss::values::length::LengthPercentageOrAuto;
 
 /// The declared `font-size`, if it used `em`/`rem`.
 ///
-/// A `Px`/`%`/absolute keyword result means `color_font::apply_font_size`
+/// A `Pixels`/`%`/absolute keyword result means `color_font::apply_font_size`
 /// already got it right, so there's nothing for the caller to correct.
 /// Kept separate from `detect_relative_lengths` below: font-size resolves
 /// against the *parent's* size, not the element's own, so `DeclaredStyle`
@@ -18,12 +18,12 @@ use lightningcss::values::length::LengthPercentageOrAuto;
 #[must_use]
 pub fn detect_relative_font_size(props: &[Property<'_>]) -> Option<DeclaredLength> {
     for prop in props {
-        if let Property::FontSize(LightningFontSize::Length(l)) = prop {
-            let s = l
+        if let Property::FontSize(LightningFontSize::Length(length)) = prop {
+            let css_text = length
                 .to_css_string(PrinterOptions::default())
                 .unwrap_or_default();
-            if let Some(len @ (DeclaredLength::Em(_) | DeclaredLength::Rem(_))) =
-                DeclaredLength::parse(&s)
+            if let Some(len @ (DeclaredLength::Ems(_) | DeclaredLength::Rem(_))) =
+                DeclaredLength::parse(&css_text)
             {
                 return Some(len);
             }
@@ -56,16 +56,16 @@ pub fn detect_relative_lengths(props: &[Property<'_>]) -> DeclaredLengths {
 }
 
 /// The declared length, if `value`'s serialized form used `em`/`rem` — a
-/// `Px`/`Percent`/`Auto` result means the ordinary pipeline already got it
+/// `Pixels`/`Percent`/`Auto` result means the ordinary pipeline already got it
 /// right, so there's nothing for this pass to do.
 pub(super) fn relative(value: &impl ToCss) -> Option<DeclaredLength> {
-    let s = value.to_css_string(PrinterOptions::default()).ok()?;
-    match DeclaredLength::parse(&s)? {
-        len @ (DeclaredLength::Em(_) | DeclaredLength::Rem(_)) => Some(len),
+    let css_text = value.to_css_string(PrinterOptions::default()).ok()?;
+    match DeclaredLength::parse(&css_text)? {
+        len @ (DeclaredLength::Ems(_) | DeclaredLength::Rem(_)) => Some(len),
         // `DeclaredLength::parse` (string-based) never actually produces
         // `Calc` — only `calc.rs`'s typed tree walk does — but the match
         // still has to be exhaustive.
-        DeclaredLength::Px(_)
+        DeclaredLength::Pixels(_)
         | DeclaredLength::Percent(_)
         | DeclaredLength::Auto
         | DeclaredLength::Calc { .. } => None,
@@ -74,12 +74,12 @@ pub(super) fn relative(value: &impl ToCss) -> Option<DeclaredLength> {
 
 fn apply_sizing(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
     match prop {
-        Property::Width(v) => set_size(lengths, v, DeclaredLengths::set_width),
-        Property::Height(v) => set_size(lengths, v, DeclaredLengths::set_height),
-        Property::MinWidth(v) => set_size(lengths, v, DeclaredLengths::set_min_width),
-        Property::MinHeight(v) => set_size(lengths, v, DeclaredLengths::set_min_height),
-        Property::MaxWidth(v) => set_max_size(lengths, v, DeclaredLengths::set_max_width),
-        Property::MaxHeight(v) => set_max_size(lengths, v, DeclaredLengths::set_max_height),
+        Property::Width(size) => set_size(lengths, size, DeclaredLengths::set_width),
+        Property::Height(size) => set_size(lengths, size, DeclaredLengths::set_height),
+        Property::MinWidth(size) => set_size(lengths, size, DeclaredLengths::set_min_width),
+        Property::MinHeight(size) => set_size(lengths, size, DeclaredLengths::set_min_height),
+        Property::MaxWidth(size) => set_max_size(lengths, size, DeclaredLengths::set_max_width),
+        Property::MaxHeight(size) => set_max_size(lengths, size, DeclaredLengths::set_max_height),
         _ => {}
     }
 }
@@ -113,13 +113,13 @@ fn set_max_size(
 fn apply_border(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
     match prop {
         Property::BorderRadius(radius, _) => {
-            relative(&radius.top_left.0).inspect(|&v| lengths.set_border_radius(v))
+            relative(&radius.top_left.0).inspect(|&declared| lengths.set_border_radius(declared))
         }
         Property::BorderWidth(width) => {
-            relative(&width.top).inspect(|&v| lengths.set_border_size(v))
+            relative(&width.top).inspect(|&declared| lengths.set_border_size(declared))
         }
         Property::Border(border) => {
-            relative(&border.width).inspect(|&v| lengths.set_border_size(v))
+            relative(&border.width).inspect(|&declared| lengths.set_border_size(declared))
         }
         _ => None,
     };
@@ -127,14 +127,14 @@ fn apply_border(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
 
 fn apply_flex(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
     match prop {
-        Property::FlexBasis(v, _) => set_flex_basis(lengths, v),
+        Property::FlexBasis(basis, _) => set_flex_basis(lengths, basis),
         Property::Flex(flex, _) => set_flex_basis(lengths, &flex.basis),
         Property::Gap(gap) => {
-            if let Some(v) = relative(&gap.row) {
-                lengths.set_gap(v);
-                lengths.set_row_gap(v);
+            if let Some(declared) = relative(&gap.row) {
+                lengths.set_gap(declared);
+                lengths.set_row_gap(declared);
             }
-            relative(&gap.column).inspect(|&v| lengths.set_column_gap(v));
+            relative(&gap.column).inspect(|&declared| lengths.set_column_gap(declared));
         }
         _ => {}
     }
@@ -155,8 +155,10 @@ fn apply_gap_longhand(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
     };
     let (name, val) = full
         .split_once(':')
-        .map_or(("", full.as_str()), |(k, v)| (k.trim(), v.trim()));
-    let Some(declared @ (DeclaredLength::Em(_) | DeclaredLength::Rem(_))) =
+        .map_or(("", full.as_str()), |(property, value)| {
+            (property.trim(), value.trim())
+        });
+    let Some(declared @ (DeclaredLength::Ems(_) | DeclaredLength::Rem(_))) =
         DeclaredLength::parse(val)
     else {
         return;
@@ -194,7 +196,7 @@ mod tests {
         let mut computed = ComputedStyle::default();
         lengths.apply(&mut computed, FontSize::new(10.0), FontSize::new(14.0));
 
-        assert_eq!(computed.width(), Some(CssLength::Px(20.0)));
+        assert_eq!(computed.width(), Some(CssLength::Pixels(20.0)));
         // height was px, not relative: nothing pending, untouched here.
         assert_eq!(computed.height(), None);
     }

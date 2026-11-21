@@ -90,7 +90,7 @@ fn flex_item_longhands_set_grow_shrink_and_basis() {
     let style = declared("flex-grow: 2; flex-shrink: 3; flex-basis: 40px;");
     assert_eq!(style.flex_grow(), Some(FlexGrow::new(2.0).unwrap()));
     assert_eq!(style.flex_shrink(), Some(FlexShrink::new(3.0).unwrap()));
-    assert_eq!(style.flex_basis(), Some(CssLength::Px(40.0)));
+    assert_eq!(style.flex_basis(), Some(CssLength::Pixels(40.0)));
 }
 
 #[test]

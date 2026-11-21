@@ -1,6 +1,6 @@
 use super::children::diff_children_with;
 use super::kind_differ::diff_node_kinds;
-use crate::features::vdom::domain::{DiffResult, NodeId, Patch, VNode, VNodeKind};
+use crate::features::vdom::domain::{DiffResult, Patch, VNode, VNodeKind};
 use crate::features::vdom::ports::VdomDiffPort;
 
 #[derive(Debug, Default, Clone)]
@@ -12,7 +12,7 @@ impl DefaultVdomDiffAdapter {
         Self
     }
 
-    fn diff_nodes(&self, old_node: &VNode, new_node: &VNode) -> Patch {
+    pub(super) fn diff_nodes(&self, old_node: &VNode, new_node: &VNode) -> Patch {
         if old_node.tag() != new_node.tag() {
             return Patch::Replace {
                 old_node_id: old_node.node_id(),
@@ -42,7 +42,7 @@ impl DefaultVdomDiffAdapter {
                         old_node.node_id(),
                         old_node.children(),
                         new_node.children(),
-                        |a, b| self.diff_nodes(a, b),
+                        |old_child, new_child| self.diff_nodes(old_child, new_child),
                     )
                 } else {
                     Patch::Replace {
@@ -73,97 +73,6 @@ impl DefaultVdomDiffAdapter {
             }
         } else {
             kind_patch
-        }
-    }
-
-    fn diff_popup(&self, old_node: &VNode, new_node: &VNode) -> Option<Box<Patch>> {
-        let popup_props_changed = old_node.popup().map(|p| (p.anchor_direction(), p.offset()))
-            != new_node.popup().map(|p| (p.anchor_direction(), p.offset()));
-        let popup_content_patch = self.diff_optional_subnode(
-            old_node
-                .popup()
-                .map(crate::features::vdom::domain::PopupSpec::content),
-            new_node
-                .popup()
-                .map(crate::features::vdom::domain::PopupSpec::content),
-        );
-        if popup_props_changed {
-            popup_content_patch.or_else(|| {
-                new_node.popup().map(|p| {
-                    Box::new(Patch::Replace {
-                        old_node_id: NodeId::new(),
-                        new_node: Box::new(p.content().clone()),
-                    })
-                })
-            })
-        } else {
-            popup_content_patch
-        }
-    }
-
-    fn diff_panel(&self, old_node: &VNode, new_node: &VNode) -> Option<Box<Patch>> {
-        let panel_props_changed = old_node.panel().map(|p| {
-            (
-                p.layer(),
-                p.anchor(),
-                *p.margin(),
-                p.exclusive_zone(),
-                p.keyboard(),
-            )
-        }) != new_node.panel().map(|p| {
-            (
-                p.layer(),
-                p.anchor(),
-                *p.margin(),
-                p.exclusive_zone(),
-                p.keyboard(),
-            )
-        });
-        let panel_content_patch = self.diff_optional_subnode(
-            old_node
-                .panel()
-                .map(crate::features::vdom::domain::PanelSpec::content),
-            new_node
-                .panel()
-                .map(crate::features::vdom::domain::PanelSpec::content),
-        );
-        if panel_props_changed {
-            panel_content_patch.or_else(|| {
-                new_node.panel().map(|p| {
-                    Box::new(Patch::Replace {
-                        old_node_id: NodeId::new(),
-                        new_node: Box::new(p.content().clone()),
-                    })
-                })
-            })
-        } else {
-            panel_content_patch
-        }
-    }
-
-    fn diff_optional_subnode(
-        &self,
-        old_sub: Option<&VNode>,
-        new_sub: Option<&VNode>,
-    ) -> Option<Box<Patch>> {
-        match (old_sub, new_sub) {
-            (None, None) => None,
-            (Some(old), Some(new)) => {
-                let p = self.diff_nodes(old, new);
-                if p.is_no_change() {
-                    None
-                } else {
-                    Some(Box::new(p))
-                }
-            }
-            (None, Some(new)) => Some(Box::new(Patch::Replace {
-                old_node_id: NodeId::new(),
-                new_node: Box::new(new.clone()),
-            })),
-            (Some(old), None) => Some(Box::new(Patch::Replace {
-                old_node_id: old.node_id(),
-                new_node: Box::new(VNode::new_rect(None, None, None, None, None)),
-            })),
         }
     }
 }
@@ -217,8 +126,14 @@ mod tests {
         let res = adapter.diff(None, &new_node);
         assert!(!res.is_unchanged());
         match res.patch() {
-            Patch::Replace { new_node: n, .. } => {
-                assert_eq!(n.tag(), crate::features::vdom::domain::NodeTag::Text);
+            Patch::Replace {
+                new_node: replacement,
+                ..
+            } => {
+                assert_eq!(
+                    replacement.tag(),
+                    crate::features::vdom::domain::NodeTag::Text
+                );
             }
             _ => panic!("Expected Replace patch"),
         }
@@ -306,8 +221,8 @@ mod tests {
     #[test]
     fn test_diff_keyed_children_reordering() {
         let adapter = DefaultVdomDiffAdapter::new();
-        let k1 = NodeKey::new("k1").unwrap();
-        let k2 = NodeKey::new("k2").unwrap();
+        let first_key = NodeKey::new("k1").unwrap();
+        let second_key = NodeKey::new("k2").unwrap();
 
         let child1 = VNode::new_text(
             TextContent::new("1".to_string()),
@@ -317,7 +232,7 @@ mod tests {
             None,
             None,
         )
-        .with_key(k1);
+        .with_key(first_key);
         let child2 = VNode::new_text(
             TextContent::new("2".to_string()),
             None,
@@ -326,7 +241,7 @@ mod tests {
             None,
             None,
         )
-        .with_key(k2);
+        .with_key(second_key);
 
         let old_tree = VNode::new_flex(
             vec![child1.clone(), child2.clone()],
@@ -345,7 +260,7 @@ mod tests {
                 assert!(
                     child_patches
                         .iter()
-                        .any(|p| matches!(p, ChildPatchOp::Move { .. }))
+                        .any(|child_patch| matches!(child_patch, ChildPatchOp::Move { .. }))
                 );
             }
             _ => panic!("Expected UpdateChildren patch with Move"),
@@ -398,7 +313,7 @@ mod tests {
                 assert!(
                     child_patches
                         .iter()
-                        .all(|p| matches!(p, ChildPatchOp::Update { .. })),
+                        .all(|child_patch| matches!(child_patch, ChildPatchOp::Update { .. })),
                     "expected positional Updates, not a keyed Move: {child_patches:?}"
                 );
             }
@@ -452,7 +367,7 @@ mod tests {
                 assert!(
                     child_patches
                         .iter()
-                        .all(|p| matches!(p, ChildPatchOp::Update { .. })),
+                        .all(|child_patch| matches!(child_patch, ChildPatchOp::Update { .. })),
                     "expected positional Updates, not a keyed Move: {child_patches:?}"
                 );
             }
@@ -518,7 +433,7 @@ mod tests {
         use crate::shared::primitives::{DynamicValue, ModuleOptions};
 
         let adapter = DefaultVdomDiffAdapter::new();
-        let m1 = VNode::new_module(
+        let plain_module = VNode::new_module(
             ModuleParams::new(
                 crate::shared::primitives::ModuleName::new("clock"),
                 None,
@@ -532,7 +447,7 @@ mod tests {
         );
         let mut opts_map = HashMap::new();
         opts_map.insert("format".to_string(), DynamicValue::from("%H:%M"));
-        let m2 = VNode::new_module(
+        let formatted_module = VNode::new_module(
             ModuleParams::new(
                 crate::shared::primitives::ModuleName::new("clock"),
                 None,
@@ -545,10 +460,10 @@ mod tests {
             None,
         );
 
-        let unchanged = adapter.diff(Some(&m1), &m1);
+        let unchanged = adapter.diff(Some(&plain_module), &plain_module);
         assert!(unchanged.is_unchanged());
 
-        let changed = adapter.diff(Some(&m1), &m2);
+        let changed = adapter.diff(Some(&plain_module), &formatted_module);
         assert!(!changed.is_unchanged());
         assert!(matches!(changed.patch(), Patch::UpdateModule { .. }));
     }

@@ -137,7 +137,7 @@ fn ink_span(align: TextAlign) -> (u32, u32) {
         TextAlignment::new(align, 200),
     );
     let inked: Vec<u32> = (0..200u32)
-        .filter(|&x| (0..40u32).any(|y| pixmap.pixel(x, y).is_some_and(|p| p.alpha() > 0)))
+        .filter(|&x| (0..40u32).any(|y| pixmap.pixel(x, y).is_some_and(|pixel| pixel.alpha() > 0)))
         .collect();
     (*inked.first().unwrap(), *inked.last().unwrap())
 }
@@ -181,6 +181,6 @@ fn test_draw_text_wider_than_box_starts_at_origin() {
         TextAlignment::new(TextAlign::Center, 10),
     );
     let first_ink = (0..200u32)
-        .find(|&x| (0..40u32).any(|y| pixmap.pixel(x, y).is_some_and(|p| p.alpha() > 0)));
+        .find(|&x| (0..40u32).any(|y| pixmap.pixel(x, y).is_some_and(|pixel| pixel.alpha() > 0)));
     assert!(first_ink.is_some_and(|x| x < 10));
 }

@@ -29,28 +29,29 @@ impl Fake {
         self.server.set_nonblocking(true).expect("nonblocking");
         let mut bytes = Vec::new();
         let mut chunk = [0u8; 4096];
-        while let Ok(n) = (&self.server).read(&mut chunk) {
-            if n == 0 {
+        while let Ok(count) = (&self.server).read(&mut chunk) {
+            if count == 0 {
                 break;
             }
-            bytes.extend_from_slice(&chunk[..n]);
+            bytes.extend_from_slice(&chunk[..count]);
         }
-        let word = |at: usize| {
+        let word = |offset: usize| {
             bytes
-                .get(at..at.checked_add(4)?)
-                .and_then(|w| <[u8; 4]>::try_from(w).ok())
+                .get(offset..offset.checked_add(4)?)
+                .and_then(|slice| <[u8; 4]>::try_from(slice).ok())
                 .map(u32::from_ne_bytes)
         };
         let mut out = Vec::new();
-        let mut at = 0usize;
-        while let (Some(object), Some(head)) = (word(at), at.checked_add(4).and_then(word)) {
+        let mut offset = 0usize;
+        while let (Some(object), Some(head)) = (word(offset), offset.checked_add(4).and_then(word))
+        {
             let size = usize::try_from(head >> 16).expect("size");
             out.push(Request {
                 object,
                 opcode: u16::try_from(head & 0xffff).expect("opcode"),
-                arg: at.checked_add(8).and_then(word).unwrap_or(0),
+                arg: offset.checked_add(8).and_then(word).unwrap_or(0),
             });
-            at = at.saturating_add(size.max(8));
+            offset = offset.saturating_add(size.max(8));
         }
         out
     }

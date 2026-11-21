@@ -59,14 +59,14 @@ impl ModuleName {
 }
 
 impl From<String> for ModuleName {
-    fn from(s: String) -> Self {
-        Self(s)
+    fn from(name: String) -> Self {
+        Self(name)
     }
 }
 
 impl From<&str> for ModuleName {
-    fn from(s: &str) -> Self {
-        Self(s.to_string())
+    fn from(name: &str) -> Self {
+        Self(name.to_string())
     }
 }
 
@@ -111,14 +111,14 @@ impl fmt::Display for ModuleInstanceId {
 }
 
 impl From<String> for ModuleInstanceId {
-    fn from(s: String) -> Self {
-        Self(s)
+    fn from(identifier: String) -> Self {
+        Self(identifier)
     }
 }
 
 impl From<&str> for ModuleInstanceId {
-    fn from(s: &str) -> Self {
-        Self(s.to_string())
+    fn from(identifier: &str) -> Self {
+        Self(identifier.to_string())
     }
 }
 

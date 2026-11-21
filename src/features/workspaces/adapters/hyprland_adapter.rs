@@ -57,33 +57,33 @@ impl HyprlandAdapter {
         let ws_json =
             self.provider
                 .query_workspaces()
-                .map_err(|e| WindowManagerError::IpcError {
-                    reason: format!("Failed to get workspaces: {e}"),
+                .map_err(|error| WindowManagerError::IpcError {
+                    reason: format!("Failed to get workspaces: {error}"),
                 })?;
         let mon_json =
             self.provider
                 .query_monitors()
-                .map_err(|e| WindowManagerError::IpcError {
-                    reason: format!("Failed to get monitors: {e}"),
+                .map_err(|error| WindowManagerError::IpcError {
+                    reason: format!("Failed to get monitors: {error}"),
                 })?;
 
         let workspaces: std::collections::BTreeMap<_, _> =
             serde_json::from_str::<Vec<HyprWorkspaceDto>>(&ws_json)
-                .map_err(|e| WindowManagerError::IpcError {
-                    reason: e.to_string(),
+                .map_err(|error| WindowManagerError::IpcError {
+                    reason: error.to_string(),
                 })?
                 .into_iter()
                 .map(|dto| {
-                    let ws = dto.into_domain();
-                    (ws.id().clone(), ws)
+                    let workspace = dto.into_domain();
+                    (workspace.id().clone(), workspace)
                 })
                 .collect();
 
         let mut focused_monitor = None;
         let monitors: std::collections::BTreeMap<_, _> =
             serde_json::from_str::<Vec<HyprMonitorDto>>(&mon_json)
-                .map_err(|e| WindowManagerError::IpcError {
-                    reason: e.to_string(),
+                .map_err(|error| WindowManagerError::IpcError {
+                    reason: error.to_string(),
                 })?
                 .into_iter()
                 .map(|dto| {

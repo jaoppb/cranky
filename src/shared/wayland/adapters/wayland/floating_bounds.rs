@@ -23,8 +23,8 @@ impl ChildPlacement {
 pub(super) struct ModuleAnchorBounds {
     pub(super) x: i32,
     pub(super) y: i32,
-    pub(super) w: i32,
-    pub(super) h: i32,
+    pub(super) width: i32,
+    pub(super) height: i32,
 }
 
 /// `precise` requests the exact rect (used by panels, and by any popup
@@ -39,57 +39,57 @@ pub(super) fn compute_module_bounds(
     precise: bool,
 ) -> ModuleAnchorBounds {
     match (placement, anchor_rect) {
-        (Some(ms), Some(r)) => {
+        (Some(child), Some(rect)) => {
             let y = if precise {
-                ms.y.saturating_add(r.y())
+                child.y.saturating_add(rect.y())
             } else {
                 0
             };
-            let h = if precise {
-                to_i32(r.height())
+            let height = if precise {
+                to_i32(rect.height())
             } else {
                 default_h
             };
             ModuleAnchorBounds {
-                x: ms.x.saturating_add(r.x()),
+                x: child.x.saturating_add(rect.x()),
                 y,
-                w: to_i32(r.width()),
-                h,
+                width: to_i32(rect.width()),
+                height,
             }
         }
-        (Some(ms), None) => {
-            let y = if precise { ms.y } else { 0 };
-            let h = if precise {
-                to_i32(ms.size.height())
+        (Some(child), None) => {
+            let y = if precise { child.y } else { 0 };
+            let height = if precise {
+                to_i32(child.size.height())
             } else {
                 default_h
             };
             ModuleAnchorBounds {
-                x: ms.x,
+                x: child.x,
                 y,
-                w: to_i32(ms.size.width()),
-                h,
+                width: to_i32(child.size.width()),
+                height,
             }
         }
-        (None, Some(r)) => {
-            let y = if precise { r.y() } else { 0 };
-            let h = if precise {
-                to_i32(r.height())
+        (None, Some(rect)) => {
+            let y = if precise { rect.y() } else { 0 };
+            let height = if precise {
+                to_i32(rect.height())
             } else {
                 default_h
             };
             ModuleAnchorBounds {
-                x: r.x(),
+                x: rect.x(),
                 y,
-                w: to_i32(r.width()),
-                h,
+                width: to_i32(rect.width()),
+                height,
             }
         }
         (None, None) => ModuleAnchorBounds {
             x: 0,
             y: 0,
-            w: 1,
-            h: default_h,
+            width: 1,
+            height: default_h,
         },
     }
 }
@@ -103,17 +103,26 @@ mod tests {
     fn precise_bounds_offset_anchor_rect_by_child_origin() {
         let placement = ChildPlacement::new(30, 10, Size::new(4, 4));
         let rect = Rect::new(Position::new(2, 3), Size::new(5, 6));
-        let b = compute_module_bounds(Some(placement), Some(rect), 24, true);
-        assert_eq!((b.x, b.y, b.w, b.h), (32, 13, 5, 6));
-        let b = compute_module_bounds(Some(placement), None, 24, true);
-        assert_eq!((b.x, b.y, b.w, b.h), (30, 10, 4, 4));
+        let bounds = compute_module_bounds(Some(placement), Some(rect), 24, true);
+        assert_eq!(
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+            (32, 13, 5, 6)
+        );
+        let bounds = compute_module_bounds(Some(placement), None, 24, true);
+        assert_eq!(
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+            (30, 10, 4, 4)
+        );
     }
 
     #[test]
     fn bar_bounds_span_bar_height_from_top() {
         let placement = ChildPlacement::new(30, 10, Size::new(4, 4));
-        let b = compute_module_bounds(Some(placement), None, 24, false);
-        assert_eq!((b.x, b.y, b.w, b.h), (30, 0, 4, 24));
+        let bounds = compute_module_bounds(Some(placement), None, 24, false);
+        assert_eq!(
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+            (30, 0, 4, 24)
+        );
     }
 
     #[test]

@@ -48,19 +48,19 @@ impl MarginConfig {
     #[must_use]
     pub const fn with_partial_overrides(&self, partial: &PartialMarginConfig) -> Self {
         let top = match partial.top() {
-            Some(t) => t,
+            Some(offset) => offset,
             None => self.top,
         };
         let bottom = match partial.bottom() {
-            Some(b) => b,
+            Some(offset) => offset,
             None => self.bottom,
         };
         let left = match partial.left() {
-            Some(l) => l,
+            Some(offset) => offset,
             None => self.left,
         };
         let right = match partial.right() {
-            Some(r) => r,
+            Some(offset) => offset,
             None => self.right,
         };
         Self {

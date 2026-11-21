@@ -4,9 +4,9 @@ macro_rules! register_script_call_aliases {
     ($engine:expr, $($name:literal),*) => {
         $(
             $engine.register_fn($name, |_target: rhai::Map, func_name: String| -> rhai::Map {
-                let mut m = rhai::Map::new();
-                m.insert("ScriptCall".into(), Dynamic::from(func_name));
-                m
+                let mut action_map = rhai::Map::new();
+                action_map.insert("ScriptCall".into(), Dynamic::from(func_name));
+                action_map
             });
         )*
     };
@@ -16,13 +16,13 @@ pub(crate) fn register_rhai_ui_actions(engine: &mut Engine) {
     engine.register_fn("exec", |target: rhai::Map, cmd: String| -> Dynamic {
         let is_action = target
             .get("_ns")
-            .and_then(|v| v.clone().try_cast::<String>())
+            .and_then(|value| value.clone().try_cast::<String>())
             .as_deref()
             == Some("ui.action");
         if is_action {
-            let mut m = rhai::Map::new();
-            m.insert("Exec".into(), Dynamic::from(cmd));
-            return Dynamic::from(m);
+            let mut action_map = rhai::Map::new();
+            action_map.insert("Exec".into(), Dynamic::from(cmd));
+            return Dynamic::from(action_map);
         }
         let _ = std::process::Command::new("sh").arg("-c").arg(&cmd).spawn();
         Dynamic::UNIT
@@ -36,9 +36,9 @@ pub(crate) fn register_rhai_ui_actions(engine: &mut Engine) {
             let mut inner = rhai::Map::new();
             inner.insert("id".into(), Dynamic::from(id));
             inner.insert("action".into(), Dynamic::from(action));
-            let mut m = rhai::Map::new();
-            m.insert("SystrayAction".into(), Dynamic::from(inner));
-            m
+            let mut action_map = rhai::Map::new();
+            action_map.insert("SystrayAction".into(), Dynamic::from(inner));
+            action_map
         },
     );
 
@@ -46,9 +46,9 @@ pub(crate) fn register_rhai_ui_actions(engine: &mut Engine) {
         let mut inner = rhai::Map::new();
         inner.insert("id".into(), Dynamic::from(id));
         inner.insert("action".into(), Dynamic::from("Primary".to_string()));
-        let mut m = rhai::Map::new();
-        m.insert("SystrayAction".into(), Dynamic::from(inner));
-        m
+        let mut action_map = rhai::Map::new();
+        action_map.insert("SystrayAction".into(), Dynamic::from(inner));
+        action_map
     });
 
     engine.register_fn(
@@ -57,9 +57,9 @@ pub(crate) fn register_rhai_ui_actions(engine: &mut Engine) {
             let mut inner = rhai::Map::new();
             inner.insert("id".into(), Dynamic::from(id.to_string()));
             inner.insert("action".into(), Dynamic::from(action));
-            let mut m = rhai::Map::new();
-            m.insert("SystrayAction".into(), Dynamic::from(inner));
-            m
+            let mut action_map = rhai::Map::new();
+            action_map.insert("SystrayAction".into(), Dynamic::from(inner));
+            action_map
         },
     );
 
@@ -67,8 +67,8 @@ pub(crate) fn register_rhai_ui_actions(engine: &mut Engine) {
         let mut inner = rhai::Map::new();
         inner.insert("id".into(), Dynamic::from(id.to_string()));
         inner.insert("action".into(), Dynamic::from("Primary".to_string()));
-        let mut m = rhai::Map::new();
-        m.insert("SystrayAction".into(), Dynamic::from(inner));
-        m
+        let mut action_map = rhai::Map::new();
+        action_map.insert("SystrayAction".into(), Dynamic::from(inner));
+        action_map
     });
 }

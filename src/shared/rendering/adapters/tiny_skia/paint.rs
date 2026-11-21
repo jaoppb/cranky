@@ -5,7 +5,7 @@ use tiny_skia::{
 };
 
 pub(crate) fn to_skia_color(color: DomainColor) -> SkiaColor {
-    SkiaColor::from_rgba8(color.b(), color.g(), color.r(), color.a())
+    SkiaColor::from_rgba8(color.blue(), color.green(), color.red(), color.alpha())
 }
 
 pub(crate) fn get_paint(color: &DrawingColor, rect: Rect) -> Paint<'static> {
@@ -15,19 +15,19 @@ pub(crate) fn get_paint(color: &DrawingColor, rect: Rect) -> Paint<'static> {
     };
 
     match color {
-        DrawingColor::Solid(c) => {
-            paint.set_color(to_skia_color(*c));
+        DrawingColor::Solid(solid_color) => {
+            paint.set_color(to_skia_color(*solid_color));
         }
         DrawingColor::Gradient(colors, angle) => {
             let count = colors.len().saturating_sub(1).max(1);
             let stops: Vec<GradientStop> = colors
                 .iter()
                 .enumerate()
-                .map(|(i, &c)| {
-                    let i_f = f32::from(u16::try_from(i).unwrap_or(u16::MAX));
+                .map(|(index, &stop_color)| {
+                    let i_f = f32::from(u16::try_from(index).unwrap_or(u16::MAX));
                     let count_f = f32::from(u16::try_from(count).unwrap_or(1));
                     let pos = i_f / count_f;
-                    GradientStop::new(pos, to_skia_color(c))
+                    GradientStop::new(pos, to_skia_color(stop_color))
                 })
                 .collect();
 
@@ -48,8 +48,8 @@ pub(crate) fn get_paint(color: &DrawingColor, rect: Rect) -> Paint<'static> {
                 LinearGradient::new(start, end, stops, SpreadMode::Pad, Transform::identity())
             {
                 paint.shader = shader;
-            } else if let Some(&c) = colors.first() {
-                paint.set_color(to_skia_color(c));
+            } else if let Some(&first_color) = colors.first() {
+                paint.set_color(to_skia_color(first_color));
             }
         }
     }

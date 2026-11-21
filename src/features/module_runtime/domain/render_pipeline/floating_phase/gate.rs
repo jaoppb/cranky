@@ -16,9 +16,12 @@ pub(super) const MAX_HOLD_ROUNDS: u8 = 4;
 fn is_unsettled(node: &RenderNode, sizes: Option<&ChildSizesMap>) -> bool {
     node.collect_module_layouts().iter().any(|layout| {
         let host_width = layout.bounds().width();
-        let report = sizes
-            .and_then(|s| s.report_by_name_or_key(layout.key().name(), layout.key().instance_id()));
-        report.is_none_or(|r| host_width > 0 && r.settled_width() != Some(host_width))
+        let report = sizes.and_then(|child_sizes| {
+            child_sizes.report_by_name_or_key(layout.key().name(), layout.key().instance_id())
+        });
+        report.is_none_or(|size_report| {
+            host_width > 0 && size_report.settled_width() != Some(host_width)
+        })
     })
 }
 
@@ -37,9 +40,13 @@ pub(in super::super) fn apply_gate(
 ) -> FloatingLayouts {
     let popup = floating
         .popup()
-        .is_some_and(|p| is_unsettled(p.node(), sizes));
-    let panel = floating.panel().is_some_and(|n| is_unsettled(n, sizes));
-    let tooltip = floating.tooltip().is_some_and(|n| is_unsettled(n, sizes));
+        .is_some_and(|popup_layout| is_unsettled(popup_layout.node(), sizes));
+    let panel = floating
+        .panel()
+        .is_some_and(|panel_node| is_unsettled(panel_node, sizes));
+    let tooltip = floating
+        .tooltip()
+        .is_some_and(|tooltip_node| is_unsettled(tooltip_node, sizes));
     if !(popup || panel || tooltip) {
         rounds.remove(monitor_id);
         return floating;

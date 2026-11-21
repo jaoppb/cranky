@@ -42,13 +42,13 @@ impl ZbusConnectionAdapter<Disconnected> {
         debug!("Connecting to DBus Session Bus...");
         match Connection::session().await {
             Ok(conn) => self.session_conn = Some(conn),
-            Err(e) => error!("Failed to connect to Session Bus: {e}"),
+            Err(error) => error!("Failed to connect to Session Bus: {error}"),
         }
 
         debug!("Connecting to DBus System Bus...");
         match Connection::system().await {
             Ok(conn) => self.system_conn = Some(conn),
-            Err(e) => error!("Failed to connect to System Bus: {e}"),
+            Err(error) => error!("Failed to connect to System Bus: {error}"),
         }
 
         Ok(ZbusConnectionAdapter {

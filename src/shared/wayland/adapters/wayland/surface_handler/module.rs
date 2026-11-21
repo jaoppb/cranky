@@ -73,7 +73,7 @@ fn module_surfaces_mut<'a>(
 /// per-monitor property, not a per-surface one.
 pub(super) fn handle_module_surface(
     state: &mut WaylandState,
-    qh: &QueueHandle<WaylandState>,
+    queue_handle: &QueueHandle<WaylandState>,
     shm: &WlShm,
     bar_index: usize,
     parent: &SurfaceParent,
@@ -107,21 +107,23 @@ pub(super) fn handle_module_surface(
 
     let mut new_surface_to_register = None;
     if let Some(module_surfaces) = module_surfaces_mut(state, bar_index, parent)
-        && let std::collections::hash_map::Entry::Vacant(e) = module_surfaces.entry(cmd.module_id())
+        && let std::collections::hash_map::Entry::Vacant(entry) =
+            module_surfaces.entry(cmd.module_id())
     {
-        let surface = compositor.create_surface(qh, ());
+        let surface = compositor.create_surface(queue_handle, ());
         surface.set_buffer_scale(bar_scale);
-        let subsurface = subcompositor.get_subsurface(&surface, &parent_surface, qh, ());
+        let subsurface = subcompositor.get_subsurface(&surface, &parent_surface, queue_handle, ());
         subsurface.set_desync();
         if matches!(parent, SurfaceParent::Floating(kind) if is_click_through(kind)) {
-            set_empty_input_region(&compositor, &surface, qh);
+            set_empty_input_region(&compositor, &surface, queue_handle);
         }
 
-        let shm_buffer = ShmBuffer::new(shm, width, height, qh, xdg_runtime_dir.as_path())
-            .map_err(|err| DisplayServerError::Internal(err.to_string()))?;
+        let shm_buffer =
+            ShmBuffer::new(shm, width, height, queue_handle, xdg_runtime_dir.as_path())
+                .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
 
         new_surface_to_register = Some(surface.clone());
-        e.insert(ModuleSurface {
+        entry.insert(ModuleSurface {
             surface,
             subsurface,
             shm_buffer,
@@ -139,35 +141,38 @@ pub(super) fn handle_module_surface(
             .insert(surface, (cmd.module_id(), cmd.monitor_id().clone(), kind));
     }
 
-    let Some(ms) = module_surfaces_mut(state, bar_index, parent)
+    let Some(module_surface) = module_surfaces_mut(state, bar_index, parent)
         .and_then(|surfaces| surfaces.get_mut(&cmd.module_id()))
     else {
         return Ok(());
     };
 
-    if ms.size != *cmd.buffer().size() {
-        ms.shm_buffer = ShmBuffer::new(shm, width, height, qh, xdg_runtime_dir.as_path())
-            .map_err(|e| DisplayServerError::Internal(e.to_string()))?;
-        ms.size = *cmd.buffer().size();
+    if module_surface.size != *cmd.buffer().size() {
+        module_surface.shm_buffer =
+            ShmBuffer::new(shm, width, height, queue_handle, xdg_runtime_dir.as_path())
+                .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
+        module_surface.size = *cmd.buffer().size();
     }
 
-    if ms.x != cmd.position().x() || ms.y != cmd.position().y() {
-        ms.subsurface
+    if module_surface.x != cmd.position().x() || module_surface.y != cmd.position().y() {
+        module_surface
+            .subsurface
             .set_position(cmd.position().x(), cmd.position().y());
-        ms.x = cmd.position().x();
-        ms.y = cmd.position().y();
+        module_surface.x = cmd.position().x();
+        module_surface.y = cmd.position().y();
     }
 
-    copy_surface_data(&mut ms.shm_buffer, cmd.buffer().data());
+    copy_surface_data(&mut module_surface.shm_buffer, cmd.buffer().data());
 
-    ms.surface.set_buffer_scale(bar_scale);
-    ms.surface
-        .attach(Some(ms.shm_buffer.current_buffer()), 0, 0);
-    ms.surface.damage_buffer(0, 0, w_i32, h_i32);
-    ms.surface.commit();
+    module_surface.surface.set_buffer_scale(bar_scale);
+    module_surface
+        .surface
+        .attach(Some(module_surface.shm_buffer.current_buffer()), 0, 0);
+    module_surface.surface.damage_buffer(0, 0, w_i32, h_i32);
+    module_surface.surface.commit();
     parent_surface.commit();
-    ms.shm_buffer.swap_buffers();
-    let ms_surface = ms.surface.clone();
+    module_surface.shm_buffer.swap_buffers();
+    let ms_surface = module_surface.surface.clone();
 
     if let Some(kind) = surface_kind {
         state.surface_to_id.insert(

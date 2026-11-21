@@ -31,9 +31,13 @@ pub fn f32_to_i32(val: f32) -> i32 {
         return 0;
     }
     let is_neg = val.is_sign_negative();
-    let u = f32_to_u32(val.abs());
-    let i = i32::try_from(u).unwrap_or(i32::MAX);
-    if is_neg { i.saturating_neg() } else { i }
+    let magnitude = f32_to_u32(val.abs());
+    let signed = i32::try_from(magnitude).unwrap_or(i32::MAX);
+    if is_neg {
+        signed.saturating_neg()
+    } else {
+        signed
+    }
 }
 
 #[must_use]
@@ -65,18 +69,22 @@ pub fn f64_to_i64(val: f64) -> i64 {
         return 0;
     }
     let is_neg = val.is_sign_negative();
-    let u = f64_to_u64(val.abs());
-    let i = i64::try_from(u).unwrap_or(i64::MAX);
-    if is_neg { i.saturating_neg() } else { i }
+    let magnitude = f64_to_u64(val.abs());
+    let signed = i64::try_from(magnitude).unwrap_or(i64::MAX);
+    if is_neg {
+        signed.saturating_neg()
+    } else {
+        signed
+    }
 }
 
 #[must_use]
 pub fn i64_to_f64(val: i64) -> f64 {
     i32::try_from(val).map_or_else(
         |_| {
-            let hi = i32::try_from(val >> 32).unwrap_or(0);
-            let lo = u32::try_from(val & 0xFFFF_FFFF).unwrap_or(0);
-            f64::mul_add(f64::from(hi), 4_294_967_296.0_f64, f64::from(lo))
+            let high = i32::try_from(val >> 32).unwrap_or(0);
+            let low = u32::try_from(val & 0xFFFF_FFFF).unwrap_or(0);
+            f64::mul_add(f64::from(high), 4_294_967_296.0_f64, f64::from(low))
         },
         f64::from,
     )
@@ -131,16 +139,16 @@ pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u
 
     if path
         .extension()
-        .and_then(|s| s.to_str())
-        .is_some_and(|s| s.eq_ignore_ascii_case("svg"))
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
     {
         let svg_data = std::fs::read(path).ok()?;
         let tree = usvg::Tree::from_data(&svg_data, &usvg::Options::default()).ok()?;
         let tree_size = tree.size();
         let target_f32 = f32::from(u16::try_from(target).unwrap_or(u16::MAX));
-        let sx = target_f32 / tree_size.width();
-        let sy = target_f32 / tree_size.height();
-        let fit_scale = sx.min(sy).max(0.001);
+        let horizontal_scale = target_f32 / tree_size.width();
+        let vertical_scale = target_f32 / tree_size.height();
+        let fit_scale = horizontal_scale.min(vertical_scale).max(0.001);
         let render_w = tree_size.width() * fit_scale;
         let render_h = tree_size.height() * fit_scale;
         let dx = (target_f32 - render_w) / 2.0;
@@ -154,13 +162,19 @@ pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u
         let target_usize = usize::try_from(target).unwrap_or_default();
         let cap = target_usize.saturating_mul(target_usize).saturating_mul(4);
         let mut colors = Vec::with_capacity(cap);
-        for &[pr, pg, pb, a] in pixmap.data().as_chunks::<4>().0 {
-            let (r, g, b) = if a == 0 {
+        for &[
+            premultiplied_red,
+            premultiplied_green,
+            premultiplied_blue,
+            alpha,
+        ] in pixmap.data().as_chunks::<4>().0
+        {
+            let (red, green, blue) = if alpha == 0 {
                 (0, 0, 0)
             } else {
-                let unpremul = |c: u8| -> u8 {
-                    let c_u16 = u16::from(c);
-                    let a_u16 = u16::from(a);
+                let unpremul = |channel: u8| -> u8 {
+                    let c_u16 = u16::from(channel);
+                    let a_u16 = u16::from(alpha);
                     let val = c_u16
                         .saturating_mul(255)
                         .saturating_add(a_u16 / 2)
@@ -168,12 +182,16 @@ pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u
                         .unwrap_or(0);
                     u8::try_from(val.min(255)).unwrap_or(255)
                 };
-                (unpremul(pr), unpremul(pg), unpremul(pb))
+                (
+                    unpremul(premultiplied_red),
+                    unpremul(premultiplied_green),
+                    unpremul(premultiplied_blue),
+                )
             };
-            colors.push(r);
-            colors.push(g);
-            colors.push(b);
-            colors.push(a);
+            colors.push(red);
+            colors.push(green);
+            colors.push(blue);
+            colors.push(alpha);
         }
 
         Some((target, target, colors))
@@ -187,11 +205,11 @@ pub fn load_icon_rgba(path: &Path, icon_size: u16, scale: f32) -> Option<(u32, u
         let cap = width_usize.saturating_mul(height_usize).saturating_mul(4);
         let mut colors = Vec::with_capacity(cap);
         for pixel in resized.pixels() {
-            let [r, g, b, a] = pixel.0;
-            colors.push(r);
-            colors.push(g);
-            colors.push(b);
-            colors.push(a);
+            let [red, green, blue, alpha] = pixel.0;
+            colors.push(red);
+            colors.push(green);
+            colors.push(blue);
+            colors.push(alpha);
         }
 
         Some((resized.width(), resized.height(), colors))
@@ -229,9 +247,9 @@ mod tests {
 
         let rasterized = load_icon_rgba(&path, 16, 1.0);
         assert!(rasterized.is_some());
-        let (w, h, data) = rasterized.unwrap();
-        assert_eq!(w, 16);
-        assert_eq!(h, 16);
+        let (width, height, data) = rasterized.unwrap();
+        assert_eq!(width, 16);
+        assert_eq!(height, 16);
         assert_eq!(data.len(), 16 * 16 * 4);
     }
 
@@ -252,9 +270,9 @@ mod tests {
 
         let loaded = load_icon_rgba(&path, 16, 2.0);
         assert!(loaded.is_some());
-        let (w, h, data) = loaded.unwrap();
-        assert_eq!(w, 32);
-        assert_eq!(h, 32);
+        let (width, height, data) = loaded.unwrap();
+        assert_eq!(width, 32);
+        assert_eq!(height, 32);
         assert_eq!(data.len(), 32 * 32 * 4);
     }
 

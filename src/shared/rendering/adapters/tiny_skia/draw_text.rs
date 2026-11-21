@@ -81,21 +81,23 @@ impl TinySkiaCosmicCanvas<'_> {
                             for (pixel, &mask_alpha) in
                                 glyph_pixmap.pixels_mut().iter_mut().zip(image.data.iter())
                             {
-                                let scale_channel = |c: u8| -> u8 {
-                                    let val = u32::from(c)
+                                let scale_channel = |channel: u8| -> u8 {
+                                    let val = u32::from(channel)
                                         .saturating_mul(u32::from(mask_alpha))
                                         .checked_div(255)
                                         .unwrap_or(0);
                                     u8::try_from(val).unwrap_or(0)
                                 };
-                                let a = scale_channel(pixel.alpha());
-                                let r = scale_channel(pixel.red());
-                                let g = scale_channel(pixel.green());
-                                let b = scale_channel(pixel.blue());
-                                if let Some(c) =
-                                    tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, a)
+                                let alpha = scale_channel(pixel.alpha());
+                                let red = scale_channel(pixel.red());
+                                let green = scale_channel(pixel.green());
+                                let blue = scale_channel(pixel.blue());
+                                if let Some(premultiplied) =
+                                    tiny_skia::PremultipliedColorU8::from_rgba(
+                                        red, green, blue, alpha,
+                                    )
                                 {
-                                    *pixel = c;
+                                    *pixel = premultiplied;
                                 } else {
                                     *pixel = tiny_skia::PremultipliedColorU8::TRANSPARENT;
                                 }
@@ -137,23 +139,23 @@ impl TinySkiaCosmicCanvas<'_> {
         let x = LogicalPx::new(pos_x);
         let y = LogicalPx::new(pos_y);
         let mut bgra_premul = Vec::with_capacity(image_data.len());
-        for &[r, g, b, a] in image_data.as_chunks::<4>().0 {
-            let premul = |c: u8| -> u8 {
-                let val = u32::from(c)
-                    .saturating_mul(u32::from(a))
+        for &[red, green, blue, alpha] in image_data.as_chunks::<4>().0 {
+            let premul = |channel: u8| -> u8 {
+                let val = u32::from(channel)
+                    .saturating_mul(u32::from(alpha))
                     .checked_div(255)
                     .unwrap_or(0);
                 u8::try_from(val).unwrap_or(0)
             };
 
-            let r_p = premul(r);
-            let g_p = premul(g);
-            let b_p = premul(b);
+            let r_p = premul(red);
+            let g_p = premul(green);
+            let b_p = premul(blue);
 
             bgra_premul.push(b_p);
             bgra_premul.push(g_p);
             bgra_premul.push(r_p);
-            bgra_premul.push(a);
+            bgra_premul.push(alpha);
         }
 
         if let Some(image_pixmap) = tiny_skia::PixmapRef::from_bytes(&bgra_premul, width, height) {

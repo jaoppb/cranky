@@ -1,6 +1,7 @@
 pub mod adapter;
 pub mod command;
 pub mod dispatch_keyboard;
+pub mod dispatch_objects;
 pub mod dispatch_output;
 pub mod dispatch_pointer;
 pub mod dispatch_pointer_button;

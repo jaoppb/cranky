@@ -74,9 +74,9 @@ impl Tray {
         .await?
     }
 
-    pub async fn trigger(&self, action: SystrayActionName, at: Option<Position>) -> Outcome {
+    pub async fn trigger(&self, action: SystrayActionName, position: Option<Position>) -> Outcome {
         self.adapter
-            .trigger_action(&self.id, &action, at)
+            .trigger_action(&self.id, &action, position)
             .await
             .context("trigger_action")
     }

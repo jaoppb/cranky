@@ -73,7 +73,9 @@ impl DeclaredStyle {
         let accent_color = cascade_from(keywords.accent_color, computed.accent_color().cloned());
         let font_family = cascade_from(
             keywords.font_family,
-            computed.font_family().map(|f| Arc::from(f.as_str())),
+            computed
+                .font_family()
+                .map(|family| Arc::from(family.as_str())),
         );
         // The ordinary (non-relative) property pipeline already resolved
         // font-size — assuming a fixed base if it happened to be em/rem.
@@ -82,7 +84,7 @@ impl DeclaredStyle {
         let font_size_value = font_size_declared.or_else(|| {
             computed
                 .font_size()
-                .map(|fs| DeclaredLength::Px(fs.value()))
+                .map(|font_size| DeclaredLength::Pixels(font_size.value()))
         });
         let font_size = cascade_from(keywords.font_size, font_size_value);
         let text_align = cascade_from(keywords.text_align, computed.text_align());
@@ -279,9 +281,9 @@ mod tests {
     fn test_merge_with_prefers_last_declared_over_not_declared() {
         let mut base = declared(
             {
-                let mut c = ComputedStyle::default();
-                c.set_color(color("#000000"));
-                c
+                let mut style = ComputedStyle::default();
+                style.set_color(color("#000000"));
+                style
             },
             InheritableKeywords::default(),
         );
@@ -298,7 +300,7 @@ mod tests {
         let style = DeclaredStyle::from_parts(
             ComputedStyle::default(),
             InheritableKeywords::default(),
-            Some(DeclaredLength::Em(1.5)),
+            Some(DeclaredLength::Ems(1.5)),
             DeclaredLengths::default(),
             HashMap::new(),
             HashMap::new(),
@@ -308,7 +310,10 @@ mod tests {
         let inherited = InheritedStyle::default().descend(&parent, Arc::new(HashMap::new()));
 
         let computed = collapse(style, &inherited);
-        assert_eq!(computed.font_size().map(|fs| fs.value()), Some(30.0));
+        assert_eq!(
+            computed.font_size().map(|font_size| font_size.value()),
+            Some(30.0)
+        );
     }
 
     #[test]
@@ -327,7 +332,10 @@ mod tests {
 
         let computed = collapse(style, &inherited);
         // Root base is DEFAULT_FONT_SIZE (14.0), not the parent's 20.0.
-        assert_eq!(computed.font_size().map(|fs| fs.value()), Some(28.0));
+        assert_eq!(
+            computed.font_size().map(|font_size| font_size.value()),
+            Some(28.0)
+        );
     }
 
     #[test]
@@ -335,7 +343,7 @@ mod tests {
         let mut own = ComputedStyle::default();
         own.set_font_size(FontSize::new(10.0));
         let mut lengths = DeclaredLengths::default();
-        lengths.set_width(DeclaredLength::Em(2.0));
+        lengths.set_width(DeclaredLength::Ems(2.0));
         let style = DeclaredStyle::from_parts(
             own,
             InheritableKeywords::default(),
@@ -348,7 +356,7 @@ mod tests {
         let computed = collapse(style, &InheritedStyle::default());
         assert_eq!(
             computed.width(),
-            Some(crate::features::styling::domain::CssLength::Px(20.0))
+            Some(crate::features::styling::domain::CssLength::Pixels(20.0))
         );
     }
 

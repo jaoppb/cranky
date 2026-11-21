@@ -40,15 +40,15 @@ pub(crate) fn handle_conflicts(
     let active_targets: Vec<PopupTarget> = state
         .floating_surfaces
         .keys()
-        .filter_map(|k| match k {
-            FloatingKind::Popup(t) => Some(t.clone()),
+        .filter_map(|kind| match kind {
+            FloatingKind::Popup(popup_target) => Some(popup_target.clone()),
             _ => None,
         })
         .collect();
     let ancestor_targets: Vec<PopupTarget> = ancestor_kinds
         .iter()
-        .filter_map(|k| match k {
-            FloatingKind::Popup(t) => Some(t.clone()),
+        .filter_map(|kind| match kind {
+            FloatingKind::Popup(popup_target) => Some(popup_target.clone()),
             _ => None,
         })
         .collect();
@@ -96,10 +96,9 @@ pub(crate) fn resolve_anchor(
                     parent_role = parent.map_or_else(
                         || Some(FloatingParentRole::Layer(bar.layer_surface.clone())),
                         |parent_kind| {
-                            state
-                                .floating_surfaces
-                                .get(parent_kind)
-                                .map(|f| FloatingParentRole::Popup(f.xdg_surface.clone()))
+                            state.floating_surfaces.get(parent_kind).map(|floating| {
+                                FloatingParentRole::Popup(floating.xdg_surface.clone())
+                            })
                         },
                     );
                     let placement = parent.map_or_else(
@@ -112,15 +111,15 @@ pub(crate) fn resolve_anchor(
                             state
                                 .floating_surfaces
                                 .get(parent_kind)
-                                .and_then(|f| f.child_placement(module_id))
+                                .and_then(|floating| floating.child_placement(module_id))
                         },
                     );
                     let bounds =
                         compute_module_bounds(placement, anchor_rect, to_i32(bar.height), precise);
                     anchor_x = bounds.x;
                     anchor_y = bounds.y;
-                    anchor_w = bounds.w;
-                    anchor_h = bounds.h;
+                    anchor_w = bounds.width;
+                    anchor_h = bounds.height;
                     break;
                 }
             }

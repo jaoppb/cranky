@@ -22,10 +22,10 @@ pub(crate) fn setup_config_maps(
     );
 
     let options_json = serde_json::to_string(config.options())
-        .map_err(|e| ModuleInitError::ConfigError(e.to_string()))?;
+        .map_err(|error| ModuleInitError::ConfigError(error.to_string()))?;
     let options_rhai: rhai::Map = engine
         .parse_json(&options_json, true)
-        .map_err(|e| ModuleInitError::ScriptError(e.to_string()))?;
+        .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?;
 
     let mut config_map = scope.get_value::<rhai::Map>("config").unwrap_or_default();
     config_map.insert("module".into(), Dynamic::from(options_rhai.clone()));
@@ -47,7 +47,7 @@ pub(crate) fn parse_dbus_subscription(
 ) -> Option<crate::shared::dbus::domain::DBusSubscription> {
     let is_dbus = map
         .get("type")
-        .and_then(|v| v.clone().try_cast::<String>())
+        .and_then(|value| value.clone().try_cast::<String>())
         .as_deref()
         == Some("dbus");
     if !is_dbus {
@@ -56,7 +56,7 @@ pub(crate) fn parse_dbus_subscription(
 
     let bus = match map
         .get("bus")
-        .and_then(|v| v.clone().try_cast::<String>())
+        .and_then(|value| value.clone().try_cast::<String>())
         .as_deref()
     {
         Some("system") => crate::shared::dbus::domain::BusType::System,
@@ -66,16 +66,16 @@ pub(crate) fn parse_dbus_subscription(
     Some(crate::shared::dbus::domain::DBusSubscription::new(
         bus,
         map.get("destination")
-            .and_then(|v| v.clone().try_cast::<String>())
+            .and_then(|value| value.clone().try_cast::<String>())
             .map(crate::shared::dbus::domain::Destination::new),
         map.get("path")
-            .and_then(|v| v.clone().try_cast::<String>())
+            .and_then(|value| value.clone().try_cast::<String>())
             .map(crate::shared::dbus::domain::Path::new),
         map.get("interface")
-            .and_then(|v| v.clone().try_cast::<String>())
+            .and_then(|value| value.clone().try_cast::<String>())
             .map(crate::shared::dbus::domain::Interface::new),
         map.get("member")
-            .and_then(|v| v.clone().try_cast::<String>())
+            .and_then(|value| value.clone().try_cast::<String>())
             .map(crate::shared::dbus::domain::Member::new),
     ))
 }
@@ -86,8 +86,8 @@ pub(crate) fn parse_subscriptions_array(
     dbus_subs: &mut Vec<crate::shared::dbus::domain::DBusSubscription>,
 ) {
     for sub in subs {
-        if let Some(s) = sub.clone().try_cast::<String>() {
-            match s.as_str() {
+        if let Some(signal_name) = sub.clone().try_cast::<String>() {
+            match signal_name.as_str() {
                 "time" => result.push(SignalKind::Time),
                 "hyprland" => result.push(SignalKind::Hyprland),
                 "systray" => result.push(SignalKind::Systray),
@@ -121,16 +121,16 @@ pub(crate) fn evaluate_metadata(
     if let Ok(meta) = engine.call_fn::<rhai::Map>(scope, ast, "metadata", ()) {
         if let Some(subs_arr) = meta
             .get("subscriptions")
-            .and_then(|v| v.clone().try_cast::<rhai::Array>())
+            .and_then(|value| value.clone().try_cast::<rhai::Array>())
         {
             parse_subscriptions_array(&subs_arr, &mut subs, &mut dbus_subs);
         }
         if let Some(styles_arr) = meta
             .get("styles")
-            .and_then(|v| v.clone().try_cast::<rhai::Array>())
+            .and_then(|value| value.clone().try_cast::<rhai::Array>())
         {
-            for s in styles_arr {
-                if let Some(str_val) = s.try_cast::<String>()
+            for style in styles_arr {
+                if let Some(str_val) = style.try_cast::<String>()
                     && let Ok(sheet) =
                         crate::features::styling::domain::StyleSheetName::new(str_val)
                 {

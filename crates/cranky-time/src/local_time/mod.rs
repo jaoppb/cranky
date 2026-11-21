@@ -55,7 +55,7 @@ impl LocalTime {
         Self::in_zone(unix_seconds, 0, &Located::unnamed(Zone::utc()), Source::Utc)
     }
 
-    pub(crate) fn at(now: SystemTime, located: &Located, source: Source) -> Self {
+    pub(crate) fn at_instant(now: SystemTime, located: &Located, source: Source) -> Self {
         // A clock set before 1970 is read as 1970.
         let since_epoch = now.duration_since(UNIX_EPOCH).unwrap_or_default();
         let seconds = i64::try_from(since_epoch.as_secs()).unwrap_or(i64::MAX);
@@ -63,7 +63,9 @@ impl LocalTime {
     }
 
     fn in_zone(instant: i64, subsec_millis: u32, located: &Located, source: Source) -> Self {
-        let moment = located.zone.at(instant.clamp(FIRST_SECOND, LAST_SECOND));
+        let moment = located
+            .zone
+            .at_instant(instant.clamp(FIRST_SECOND, LAST_SECOND));
         let local = moment
             .unix_seconds
             .saturating_add(moment.kind.offset)

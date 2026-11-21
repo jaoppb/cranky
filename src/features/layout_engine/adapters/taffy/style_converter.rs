@@ -20,8 +20,8 @@ impl From<FlexDirection> for TaffyFlexDirection {
 }
 
 impl From<JustifyContent> for TaffyJustifyContent {
-    fn from(jc: JustifyContent) -> Self {
-        match jc {
+    fn from(justify: JustifyContent) -> Self {
+        match justify {
             JustifyContent::Start => Self::FLEX_START,
             JustifyContent::End => Self::FLEX_END,
             JustifyContent::Center => Self::CENTER,
@@ -33,8 +33,8 @@ impl From<JustifyContent> for TaffyJustifyContent {
 }
 
 impl From<AlignItems> for TaffyAlignItems {
-    fn from(ai: AlignItems) -> Self {
-        match ai {
+    fn from(align: AlignItems) -> Self {
+        match align {
             AlignItems::Start => Self::FLEX_START,
             AlignItems::End => Self::FLEX_END,
             AlignItems::Center => Self::CENTER,
@@ -44,8 +44,8 @@ impl From<AlignItems> for TaffyAlignItems {
 }
 
 impl From<PositionType> for taffy::style::Position {
-    fn from(pt: PositionType) -> Self {
-        match pt {
+    fn from(position: PositionType) -> Self {
+        match position {
             PositionType::Relative => Self::Relative,
             PositionType::Absolute => Self::Absolute,
         }
@@ -86,10 +86,10 @@ impl From<&Gap> for TaffySize<LengthPercentage> {
 }
 
 impl From<CssLength> for Dimension {
-    fn from(l: CssLength) -> Self {
-        match l {
-            CssLength::Px(v) => Self::length(v),
-            CssLength::Percent(v) => Self::percent(v / 100.0),
+    fn from(length: CssLength) -> Self {
+        match length {
+            CssLength::Pixels(pixels) => Self::length(pixels),
+            CssLength::Percent(percent) => Self::percent(percent / 100.0),
             CssLength::Auto => Self::auto(),
             // First-pass placeholder: taffy has no native calc() hook this
             // crate can use without unsafe code (see mod.rs), so a `Calc`

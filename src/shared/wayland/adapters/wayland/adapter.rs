@@ -36,18 +36,19 @@ impl WaylandAdapter {
         app_env: Arc<AppEnvironment>,
     ) -> Result<(Self, WaylandSurfaceManager), DisplayServerError> {
         let connection =
-            Connection::connect_to_env().map_err(|e| DisplayServerError::ConnectionFailed {
-                reason: e.to_string(),
+            Connection::connect_to_env().map_err(|error| DisplayServerError::ConnectionFailed {
+                reason: error.to_string(),
             })?;
         let event_queue = connection.new_event_queue();
-        let qh = event_queue.handle();
+        let queue_handle = event_queue.handle();
 
-        connection.display().get_registry(&qh, ());
+        connection.display().get_registry(&queue_handle, ());
 
-        let socket =
-            readiness_socket(&connection).map_err(|e| DisplayServerError::ConnectionFailed {
-                reason: e.to_string(),
-            })?;
+        let socket = readiness_socket(&connection).map_err(|error| {
+            DisplayServerError::ConnectionFailed {
+                reason: error.to_string(),
+            }
+        })?;
 
         let config_rx = hub.config_rx();
         let state = WaylandState {

@@ -121,8 +121,8 @@ impl SysinfoAdapter {
         {
             let mut count: u16 = 0;
             for component in components.iter() {
-                if let Some(t) = component.temperature() {
-                    temp += t;
+                if let Some(temperature) = component.temperature() {
+                    temp += temperature;
                     count = count.saturating_add(1);
                 }
             }

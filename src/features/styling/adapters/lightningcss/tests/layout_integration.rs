@@ -104,8 +104,8 @@ fn test_width_height_parsing_and_layout() {
     );
 
     let styled_img = img_node.resolve_styles(&resolver, None, None);
-    assert_eq!(styled_img.style().width(), Some(CssLength::Px(20.0)));
-    assert_eq!(styled_img.style().height(), Some(CssLength::Px(20.0)));
+    assert_eq!(styled_img.style().width(), Some(CssLength::Pixels(20.0)));
+    assert_eq!(styled_img.style().height(), Some(CssLength::Pixels(20.0)));
 
     let mut engine = TaffyLayoutAdapter::new();
     let render_node = engine

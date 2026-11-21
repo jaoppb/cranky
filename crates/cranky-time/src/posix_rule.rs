@@ -74,7 +74,7 @@ impl Rule {
                 let end = daylight.end.instant(year, daylight.kind.offset);
                 [(start, true), (end, false)]
             })
-            .filter(|&(at, _)| at <= unix_seconds)
+            .filter(|&(change, _)| change <= unix_seconds)
             .max();
         match latest {
             Some((_, true)) => &daylight.kind,

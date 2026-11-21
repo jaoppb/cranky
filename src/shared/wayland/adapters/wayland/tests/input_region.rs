@@ -42,7 +42,7 @@ fn open(fake: &Fake, state: &mut WaylandState, kind: &FloatingKind) -> u32 {
     };
     create_new_floating(
         state,
-        &fake.qh,
+        &fake.queue_handle,
         kind.clone(),
         &solid(10, 10, [1; 4]),
         &anchor,
@@ -56,32 +56,32 @@ fn open(fake: &Fake, state: &mut WaylandState, kind: &FloatingKind) -> u32 {
 fn region_for(requests: &[Request], surface: u32) -> Option<u32> {
     requests
         .iter()
-        .find(|r| r.object == surface && r.opcode == SET_INPUT_REGION)
-        .map(|r| r.arg)
+        .find(|request| request.object == surface && request.opcode == SET_INPUT_REGION)
+        .map(|request| request.arg)
 }
 
 fn assert_empty_region_set_then_destroyed(requests: &[Request], surface: u32) {
     let region = region_for(requests, surface).expect("tooltip surface got an input region");
     assert_ne!(region, 0, "a null region would restore the full input area");
-    let at = |opcode, object| {
+    let position_of = |opcode, object| {
         requests
             .iter()
-            .position(|r| r.opcode == opcode && r.object == object)
+            .position(|request| request.opcode == opcode && request.object == object)
     };
     assert!(
         requests
             .iter()
-            .any(|r| r.opcode == CREATE_REGION && r.arg == region),
+            .any(|request| request.opcode == CREATE_REGION && request.arg == region),
         "region {region} was never created"
     );
     assert!(
         !requests
             .iter()
-            .any(|r| r.object == region && r.opcode == REGION_ADD),
+            .any(|request| request.object == region && request.opcode == REGION_ADD),
         "a region with rectangles is not empty"
     );
-    let set = at(SET_INPUT_REGION, surface).expect("set");
-    let destroy = at(REGION_DESTROY, region).expect("region destroyed");
+    let set = position_of(SET_INPUT_REGION, surface).expect("set");
+    let destroy = position_of(REGION_DESTROY, region).expect("region destroyed");
     assert!(set < destroy, "region destroyed before it was applied");
 }
 
@@ -112,7 +112,7 @@ fn embed_under(fake: &Fake, state: &mut WaylandState, parent: &FloatingKind) -> 
         Position::new(0, 0),
         solid(4, 4, [1; 4]),
     );
-    handle_cmd(state, &fake.qh, &cmd).expect("embed child");
+    handle_cmd(state, &fake.queue_handle, &cmd).expect("embed child");
     let children = &state.floating_surfaces[parent].module_surfaces;
     id(&children[&ModuleId::new(2)].surface)
 }

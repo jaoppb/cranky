@@ -22,20 +22,22 @@ pub(crate) fn parse_text_node(
                 on_hover,
                 tooltip,
             );
-            if let Some(p) = popup {
-                node = node.with_popup(p);
+            if let Some(popup_spec) = popup {
+                node = node.with_popup(popup_spec);
             }
-            if let Some(p) = panel {
-                node = node.with_panel(p);
+            if let Some(panel_spec) = panel {
+                node = node.with_panel(panel_spec);
             }
-            if let Some(k) = key {
-                node = node.with_key(k);
+            if let Some(node_key) = key {
+                node = node.with_key(node_key);
             }
             Ok(node)
         }
-        mlua::Value::String(s) => {
-            let text_str = s.to_str().map_or_else(|_| String::new(), |b| b.to_string());
-            let class = class_opt.and_then(|c| ClassNameList::parse(c).ok());
+        mlua::Value::String(lua_string) => {
+            let text_str = lua_string
+                .to_str()
+                .map_or_else(|_| String::new(), |text| text.to_string());
+            let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
             Ok(VNode::new_text(
                 TextContent::new(text_str),
                 class,
@@ -45,10 +47,10 @@ pub(crate) fn parse_text_node(
                 None,
             ))
         }
-        mlua::Value::Integer(i) => {
-            let class = class_opt.and_then(|c| ClassNameList::parse(c).ok());
+        mlua::Value::Integer(integer) => {
+            let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
             Ok(VNode::new_text(
-                TextContent::new(i.to_string()),
+                TextContent::new(integer.to_string()),
                 class,
                 None,
                 None,
@@ -56,10 +58,10 @@ pub(crate) fn parse_text_node(
                 None,
             ))
         }
-        mlua::Value::Number(n) => {
-            let class = class_opt.and_then(|c| ClassNameList::parse(c).ok());
+        mlua::Value::Number(number) => {
+            let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
             Ok(VNode::new_text(
-                TextContent::new(n.to_string()),
+                TextContent::new(number.to_string()),
                 class,
                 None,
                 None,
@@ -105,19 +107,19 @@ pub(crate) fn parse_progress_node(
                 on_hover,
                 tooltip,
             );
-            if let Some(p) = popup {
-                node = node.with_popup(p);
+            if let Some(popup_spec) = popup {
+                node = node.with_popup(popup_spec);
             }
-            if let Some(p) = panel {
-                node = node.with_panel(p);
+            if let Some(panel_spec) = panel {
+                node = node.with_panel(panel_spec);
             }
-            if let Some(k) = key {
-                node = node.with_key(k);
+            if let Some(node_key) = key {
+                node = node.with_key(node_key);
             }
             Ok(node)
         }
-        mlua::Value::Number(n) => {
-            let val_f32 = f64_to_f32(n);
+        mlua::Value::Number(number) => {
+            let val_f32 = f64_to_f32(number);
             let orientation = match orientation_opt
                 .unwrap_or("horizontal")
                 .to_lowercase()
@@ -126,7 +128,7 @@ pub(crate) fn parse_progress_node(
                 "vertical" => Orientation::Vertical,
                 _ => Orientation::Horizontal,
             };
-            let class = class_opt.and_then(|c| ClassNameList::parse(c).ok());
+            let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
             Ok(VNode::new_progress(
                 ProgressValue::new(val_f32).unwrap_or_default(),
                 orientation,
@@ -137,8 +139,8 @@ pub(crate) fn parse_progress_node(
                 None,
             ))
         }
-        mlua::Value::Integer(i) => {
-            let val_f32 = f64_to_f32(i32::try_from(i).map_or(0.0, f64::from));
+        mlua::Value::Integer(integer) => {
+            let val_f32 = f64_to_f32(i32::try_from(integer).map_or(0.0, f64::from));
             let orientation = match orientation_opt
                 .unwrap_or("horizontal")
                 .to_lowercase()
@@ -147,7 +149,7 @@ pub(crate) fn parse_progress_node(
                 "vertical" => Orientation::Vertical,
                 _ => Orientation::Horizontal,
             };
-            let class = class_opt.and_then(|c| ClassNameList::parse(c).ok());
+            let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
             Ok(VNode::new_progress(
                 ProgressValue::new(val_f32).unwrap_or_default(),
                 orientation,

@@ -40,39 +40,39 @@ impl MarginConfigDto {
                 horizontal,
                 vertical,
             } => {
-                let t = match top {
-                    Some(v) => v,
+                let top_offset = match top {
+                    Some(value) => value,
                     None => match vertical {
-                        Some(v) => v,
+                        Some(value) => value,
                         None => 0,
                     },
                 };
-                let b = match bottom {
-                    Some(v) => v,
+                let bottom_offset = match bottom {
+                    Some(value) => value,
                     None => match vertical {
-                        Some(v) => v,
+                        Some(value) => value,
                         None => 0,
                     },
                 };
-                let l = match left {
-                    Some(v) => v,
+                let left_offset = match left {
+                    Some(value) => value,
                     None => match horizontal {
-                        Some(v) => v,
+                        Some(value) => value,
                         None => 0,
                     },
                 };
-                let r = match right {
-                    Some(v) => v,
+                let right_offset = match right {
+                    Some(value) => value,
                     None => match horizontal {
-                        Some(v) => v,
+                        Some(value) => value,
                         None => 0,
                     },
                 };
                 domain::MarginConfig::new(
-                    MarginOffset::new(t),
-                    MarginOffset::new(b),
-                    MarginOffset::new(l),
-                    MarginOffset::new(r),
+                    MarginOffset::new(top_offset),
+                    MarginOffset::new(bottom_offset),
+                    MarginOffset::new(left_offset),
+                    MarginOffset::new(right_offset),
                 )
             }
         }
@@ -124,35 +124,40 @@ impl PartialMarginConfigDto {
                 horizontal,
                 vertical,
             } => {
-                let t = match top {
-                    Some(v) => Some(MarginOffset::new(v)),
+                let top_offset = match top {
+                    Some(value) => Some(MarginOffset::new(value)),
                     None => match vertical {
-                        Some(v) => Some(MarginOffset::new(v)),
+                        Some(value) => Some(MarginOffset::new(value)),
                         None => None,
                     },
                 };
-                let b = match bottom {
-                    Some(v) => Some(MarginOffset::new(v)),
+                let bottom_offset = match bottom {
+                    Some(value) => Some(MarginOffset::new(value)),
                     None => match vertical {
-                        Some(v) => Some(MarginOffset::new(v)),
+                        Some(value) => Some(MarginOffset::new(value)),
                         None => None,
                     },
                 };
-                let l = match left {
-                    Some(v) => Some(MarginOffset::new(v)),
+                let left_offset = match left {
+                    Some(value) => Some(MarginOffset::new(value)),
                     None => match horizontal {
-                        Some(v) => Some(MarginOffset::new(v)),
+                        Some(value) => Some(MarginOffset::new(value)),
                         None => None,
                     },
                 };
-                let r = match right {
-                    Some(v) => Some(MarginOffset::new(v)),
+                let right_offset = match right {
+                    Some(value) => Some(MarginOffset::new(value)),
                     None => match horizontal {
-                        Some(v) => Some(MarginOffset::new(v)),
+                        Some(value) => Some(MarginOffset::new(value)),
                         None => None,
                     },
                 };
-                domain::PartialMarginConfig::new(t, b, l, r)
+                domain::PartialMarginConfig::new(
+                    top_offset,
+                    bottom_offset,
+                    left_offset,
+                    right_offset,
+                )
             }
         }
     }

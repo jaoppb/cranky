@@ -118,18 +118,18 @@ impl std::fmt::Display for StateInconsistency {
 pub fn find_state_inconsistencies(state: &HyprlandState) -> Vec<StateInconsistency> {
     let mut inconsistencies = Vec::new();
 
-    for (ws_id, ws) in state.workspaces() {
-        match ws.monitor() {
+    for (ws_id, workspace) in state.workspaces() {
+        match workspace.monitor() {
             None => {
                 inconsistencies.push(StateInconsistency::WorkspaceMissingMonitor {
                     workspace_id: ws_id.clone(),
-                    workspace_name: ws.name().clone(),
+                    workspace_name: workspace.name().clone(),
                 });
             }
             Some(monitor_name) if !state.monitors().contains_key(monitor_name) => {
                 inconsistencies.push(StateInconsistency::WorkspaceMonitorNotFound {
                     workspace_id: ws_id.clone(),
-                    workspace_name: ws.name().clone(),
+                    workspace_name: workspace.name().clone(),
                     monitor_name: monitor_name.clone(),
                 });
             }
@@ -138,12 +138,12 @@ pub fn find_state_inconsistencies(state: &HyprlandState) -> Vec<StateInconsisten
     }
 
     for (mon_name, mon) in state.monitors() {
-        if let Some(ws) = state.workspaces().get(mon.active_workspace_id()) {
-            if ws.monitor() != Some(mon.name()) {
+        if let Some(workspace) = state.workspaces().get(mon.active_workspace_id()) {
+            if workspace.monitor() != Some(mon.name()) {
                 inconsistencies.push(StateInconsistency::MonitorActiveWorkspaceMismatch {
                     monitor_name: mon_name.clone(),
                     workspace_id: mon.active_workspace_id().clone(),
-                    workspace_monitor: ws.monitor().cloned(),
+                    workspace_monitor: workspace.monitor().cloned(),
                 });
             }
         } else {
@@ -154,12 +154,12 @@ pub fn find_state_inconsistencies(state: &HyprlandState) -> Vec<StateInconsisten
         }
 
         if let Some(sp_id) = mon.special_workspace_id() {
-            if let Some(ws) = state.workspaces().get(sp_id) {
-                if ws.monitor() != Some(mon.name()) {
+            if let Some(special_workspace) = state.workspaces().get(sp_id) {
+                if special_workspace.monitor() != Some(mon.name()) {
                     inconsistencies.push(StateInconsistency::MonitorSpecialWorkspaceMismatch {
                         monitor_name: mon_name.clone(),
                         special_workspace_id: sp_id.clone(),
-                        workspace_monitor: ws.monitor().cloned(),
+                        workspace_monitor: special_workspace.monitor().cloned(),
                     });
                 }
             } else {

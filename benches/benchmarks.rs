@@ -39,7 +39,7 @@ fn create_test_vnode_tree(depth: usize, branching: usize, prefix: &str) -> VNode
     if depth == 0 {
         let node_key = NodeKey::new(format!("{prefix}_leaf")).ok();
         let class_name = ClassName::new("item-label").ok();
-        let classes = class_name.map(|c| ClassNameList::new(vec![c]));
+        let classes = class_name.map(|class| ClassNameList::new(vec![class]));
         let mut node = VNode::new_text(
             TextContent::new(format!("Text {prefix}")),
             classes,
@@ -54,8 +54,8 @@ fn create_test_vnode_tree(depth: usize, branching: usize, prefix: &str) -> VNode
         node
     } else {
         let mut children = Vec::with_capacity(branching);
-        for i in 0..branching {
-            let child_prefix = format!("{prefix}_{depth}_{i}");
+        for index in 0..branching {
+            let child_prefix = format!("{prefix}_{depth}_{index}");
             children.push(create_test_vnode_tree(
                 depth.saturating_sub(1),
                 branching,
@@ -64,7 +64,7 @@ fn create_test_vnode_tree(depth: usize, branching: usize, prefix: &str) -> VNode
         }
         let node_key = NodeKey::new(format!("{prefix}_flex")).ok();
         let class_name = ClassName::new("container-box").ok();
-        let classes = class_name.map(|c| ClassNameList::new(vec![c]));
+        let classes = class_name.map(|class| ClassNameList::new(vec![class]));
         let mut node = VNode::new_flex(children, classes, None, None, None, None);
         if let Some(key) = node_key {
             node = node.with_key(key);
@@ -169,8 +169,8 @@ impl AnyModulePort for BenchMockModule {
 // 1. VDOM Benchmarks
 // ----------------------------------------------------------------------------
 
-fn bench_vdom(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vdom");
+fn bench_vdom(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("vdom");
     let differ = DefaultVdomDiffAdapter::new();
 
     // Small tree: depth 1, branching 4 (~5 nodes)
@@ -185,29 +185,29 @@ fn bench_vdom(c: &mut Criterion) {
     let large_tree_a = create_test_vnode_tree(4, 3, "large");
     let large_tree_b = create_test_vnode_tree(4, 3, "large_mutated");
 
-    group.bench_function("diff_small_identical", |b| {
-        b.iter(|| {
+    group.bench_function("diff_small_identical", |bencher| {
+        bencher.iter(|| {
             let res = differ.diff(black_box(Some(&small_tree_a)), black_box(&small_tree_a));
             black_box(res);
         });
     });
 
-    group.bench_function("diff_small_mutated", |b| {
-        b.iter(|| {
+    group.bench_function("diff_small_mutated", |bencher| {
+        bencher.iter(|| {
             let res = differ.diff(black_box(Some(&small_tree_a)), black_box(&small_tree_b));
             black_box(res);
         });
     });
 
-    group.bench_function("diff_medium_mutated", |b| {
-        b.iter(|| {
+    group.bench_function("diff_medium_mutated", |bencher| {
+        bencher.iter(|| {
             let res = differ.diff(black_box(Some(&medium_tree_a)), black_box(&medium_tree_b));
             black_box(res);
         });
     });
 
-    group.bench_function("diff_large_mutated", |b| {
-        b.iter(|| {
+    group.bench_function("diff_large_mutated", |bencher| {
+        bencher.iter(|| {
             let res = differ.diff(black_box(Some(&large_tree_a)), black_box(&large_tree_b));
             black_box(res);
         });
@@ -220,8 +220,8 @@ fn bench_vdom(c: &mut Criterion) {
 // 2. Styling Benchmarks
 // ----------------------------------------------------------------------------
 
-fn bench_styling(c: &mut Criterion) {
-    let mut group = c.benchmark_group("styling");
+fn bench_styling(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("styling");
     let parser = LightningCssAdapter::new();
 
     let sample_css = r"
@@ -266,8 +266,8 @@ fn bench_styling(c: &mut Criterion) {
         return;
     };
 
-    group.bench_function("parse_css_stylesheet", |b| {
-        b.iter(|| {
+    group.bench_function("parse_css_stylesheet", |bencher| {
+        bencher.iter(|| {
             let parsed =
                 parser.parse_stylesheet(black_box(sheet_name.clone()), black_box(sample_css));
             let _ = black_box(parsed);
@@ -291,8 +291,8 @@ fn bench_styling(c: &mut Criterion) {
     let classes_simple = [class_label];
     let query_simple = ElementQuery::new("text", None, &classes_simple, &[], None);
 
-    group.bench_function("resolve_style_simple_match", |b| {
-        b.iter(|| {
+    group.bench_function("resolve_style_simple_match", |bencher| {
+        bencher.iter(|| {
             let style = parsed_sheet.resolve_style(
                 black_box(&query_simple),
                 black_box(&InheritedStyle::default()),
@@ -302,8 +302,8 @@ fn bench_styling(c: &mut Criterion) {
         });
     });
 
-    group.bench_function("resolve_style_pseudo_class_match", |b| {
-        b.iter(|| {
+    group.bench_function("resolve_style_pseudo_class_match", |bencher| {
+        bencher.iter(|| {
             let style = parsed_sheet.resolve_style(
                 black_box(&query_hover),
                 black_box(&InheritedStyle::default()),
@@ -321,15 +321,15 @@ fn bench_styling(c: &mut Criterion) {
 /// `bench_styling`'s benchmarks above have too few rules (6) to show a
 /// difference between an indexed lookup and a full linear scan; this one is
 /// sized so the win is actually visible in the numbers.
-fn bench_styling_rule_buckets(c: &mut Criterion) {
-    let mut group = c.benchmark_group("styling");
+fn bench_styling_rule_buckets(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("styling");
     let parser = LightningCssAdapter::new();
 
     let mut many_rules_css = String::new();
-    for i in 0..80 {
+    for index in 0..80 {
         let _ = writeln!(
             many_rules_css,
-            ".class-{i} {{ color: #ffffff; background-color: #1a1b26; padding: 4px; }}"
+            ".class-{index} {{ color: #ffffff; background-color: #1a1b26; padding: 4px; }}"
         );
     }
     many_rules_css
@@ -348,8 +348,8 @@ fn bench_styling_rule_buckets(c: &mut Criterion) {
     let classes_hot = [class_hot];
     let query_many_rules = ElementQuery::new("text", None, &classes_hot, &[], None);
 
-    group.bench_function("resolve_style_many_rules_one_match", |b| {
-        b.iter(|| {
+    group.bench_function("resolve_style_many_rules_one_match", |bencher| {
+        bencher.iter(|| {
             let style = many_rules_sheet.resolve_style(
                 black_box(&query_many_rules),
                 black_box(&InheritedStyle::default()),
@@ -366,17 +366,17 @@ fn bench_styling_rule_buckets(c: &mut Criterion) {
 // 3. Layout Engine Benchmarks
 // ----------------------------------------------------------------------------
 
-fn bench_layout(c: &mut Criterion) {
-    let mut group = c.benchmark_group("layout");
+fn bench_layout(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("layout");
     let mut canvas_factory = TinySkiaCanvasFactory::new();
 
     let tree_small = create_styled_node_tree(1, 4);
     let tree_medium = create_styled_node_tree(3, 3);
     let tree_large = create_styled_node_tree(4, 3);
 
-    group.bench_function("taffy_layout_small_tree", |b| {
+    group.bench_function("taffy_layout_small_tree", |bencher| {
         let mut layout_engine = TaffyLayoutAdapter::default();
-        b.iter(|| {
+        bencher.iter(|| {
             let mut measurer = canvas_factory.create_text_measurer(
                 Scale::new(1.0),
                 FontFamily::new(String::new()),
@@ -391,9 +391,9 @@ fn bench_layout(c: &mut Criterion) {
         });
     });
 
-    group.bench_function("taffy_layout_medium_tree", |b| {
+    group.bench_function("taffy_layout_medium_tree", |bencher| {
         let mut layout_engine = TaffyLayoutAdapter::default();
-        b.iter(|| {
+        bencher.iter(|| {
             let mut measurer = canvas_factory.create_text_measurer(
                 Scale::new(1.0),
                 FontFamily::new(String::new()),
@@ -408,9 +408,9 @@ fn bench_layout(c: &mut Criterion) {
         });
     });
 
-    group.bench_function("taffy_layout_large_tree", |b| {
+    group.bench_function("taffy_layout_large_tree", |bencher| {
         let mut layout_engine = TaffyLayoutAdapter::default();
-        b.iter(|| {
+        bencher.iter(|| {
             let mut measurer = canvas_factory.create_text_measurer(
                 Scale::new(1.0),
                 FontFamily::new(String::new()),
@@ -432,8 +432,8 @@ fn bench_layout(c: &mut Criterion) {
 // 4. Rendering Subsystem Benchmarks
 // ----------------------------------------------------------------------------
 
-fn bench_rendering(c: &mut Criterion) {
-    let mut group = c.benchmark_group("rendering");
+fn bench_rendering(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("rendering");
     let mut canvas_factory = TinySkiaCanvasFactory::new();
     let size = Size::new(800, 40);
     let mut buffer = vec![0_u8; 800_usize.saturating_mul(40).saturating_mul(4)];
@@ -442,8 +442,8 @@ fn bench_rendering(c: &mut Criterion) {
     let border_color = DrawingColor::Solid(Color::new(137, 180, 250, 255));
     let text_color = DrawingColor::Solid(Color::new(205, 214, 244, 255));
 
-    group.bench_function("tinyskia_draw_rect_and_border", |b| {
-        b.iter(|| {
+    group.bench_function("tinyskia_draw_rect_and_border", |bencher| {
+        bencher.iter(|| {
             let mut canvas = canvas_factory.create_canvas(
                 black_box(&mut buffer),
                 black_box(size),
@@ -471,8 +471,8 @@ fn bench_rendering(c: &mut Criterion) {
         });
     });
 
-    group.bench_function("tinyskia_draw_text", |b| {
-        b.iter(|| {
+    group.bench_function("tinyskia_draw_text", |bencher| {
+        bencher.iter(|| {
             let mut canvas = canvas_factory.create_canvas(
                 black_box(&mut buffer),
                 black_box(size),
@@ -499,8 +499,8 @@ fn bench_rendering(c: &mut Criterion) {
 // 5. Scripting Subsystem Benchmarks
 // ----------------------------------------------------------------------------
 
-fn bench_scripting(c: &mut Criterion) {
-    let mut group = c.benchmark_group("scripting");
+fn bench_scripting(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("scripting");
     let monitor_id = MonitorId::new("DP-1");
 
     let lua_source = r#"
@@ -553,15 +553,15 @@ fn bench_scripting(c: &mut Criterion) {
     };
     let _ = rhai_mod.init(&module_config, &config);
 
-    group.bench_function("lua_module_render", |b| {
-        b.iter(|| {
+    group.bench_function("lua_module_render", |bencher| {
+        bencher.iter(|| {
             let node = lua_mod.render(black_box(&monitor_id));
             black_box(node);
         });
     });
 
-    group.bench_function("rhai_module_render", |b| {
-        b.iter(|| {
+    group.bench_function("rhai_module_render", |bencher| {
+        bencher.iter(|| {
             let node = rhai_mod.render(black_box(&monitor_id));
             black_box(node);
         });
@@ -574,8 +574,8 @@ fn bench_scripting(c: &mut Criterion) {
 // 6. Full Render Pipeline Benchmark
 // ----------------------------------------------------------------------------
 
-fn bench_pipeline(c: &mut Criterion) {
-    let mut group = c.benchmark_group("pipeline");
+fn bench_pipeline(criterion: &mut Criterion) {
+    let mut group = criterion.benchmark_group("pipeline");
     let monitor_id = MonitorId::new("DP-1");
 
     let vnode = create_test_vnode_tree(2, 3, "pipe");
@@ -591,13 +591,13 @@ fn bench_pipeline(c: &mut Criterion) {
 
     let mut canvas_factory = TinySkiaCanvasFactory::new();
 
-    group.bench_function("full_render_pipeline_iteration", |b| {
+    group.bench_function("full_render_pipeline_iteration", |bencher| {
         let mut layout_engine = TaffyLayoutAdapter::default();
         let mut popup_layout_engine = TaffyLayoutAdapter::default();
         let mut panel_layout_engine = TaffyLayoutAdapter::default();
         let mut tooltip_layout_engine = TaffyLayoutAdapter::default();
         let child_errors = std::collections::HashMap::new();
-        b.iter(|| {
+        bencher.iter(|| {
             let mut pipeline = RenderPipeline::new();
 
             let diff_opt = pipeline.diff(&monitor_id, &module, &vdom_diff, None, None, None);

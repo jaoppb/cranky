@@ -109,8 +109,8 @@ pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
 
         let render_node = match render_node_res {
             Ok(node) => node,
-            Err(e) => {
-                tracing::error!(monitor = %monitor_id, err = ?e, "Module layout calculation failed");
+            Err(error) => {
+                tracing::error!(monitor = %monitor_id, err = ?error, "Module layout calculation failed");
                 return None;
             }
         };

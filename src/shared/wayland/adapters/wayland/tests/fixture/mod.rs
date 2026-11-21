@@ -35,7 +35,7 @@ pub struct Fake {
     server: UnixStream,
     connection: Connection,
     _queue: EventQueue<WaylandState>,
-    pub qh: QueueHandle<WaylandState>,
+    pub queue_handle: QueueHandle<WaylandState>,
     compositor: WlCompositor,
     subcompositor: WlSubcompositor,
     shm: WlShm,
@@ -48,19 +48,19 @@ impl Fake {
         let (client, server) = UnixStream::pair().expect("socket pair");
         let connection = Connection::from_backend(Backend::connect(client).expect("backend"));
         let queue = connection.new_event_queue::<WaylandState>();
-        let qh = queue.handle();
-        let registry = connection.display().get_registry(&qh, ());
+        let queue_handle = queue.handle();
+        let registry = connection.display().get_registry(&queue_handle, ());
         // Versions high enough for set_buffer_scale/damage_buffer/reposition.
-        let compositor = registry.bind(1, 4, &qh, ());
-        let subcompositor = registry.bind(2, 1, &qh, ());
-        let shm = registry.bind(3, 1, &qh, ());
-        let xdg_wm_base = registry.bind(4, 3, &qh, ());
-        let layer_shell = registry.bind(5, 1, &qh, ());
+        let compositor = registry.bind(1, 4, &queue_handle, ());
+        let subcompositor = registry.bind(2, 1, &queue_handle, ());
+        let shm = registry.bind(3, 1, &queue_handle, ());
+        let xdg_wm_base = registry.bind(4, 3, &queue_handle, ());
+        let layer_shell = registry.bind(5, 1, &queue_handle, ());
         Self {
             server,
             connection,
             _queue: queue,
-            qh,
+            queue_handle,
             compositor,
             subcompositor,
             shm,
@@ -74,7 +74,7 @@ impl Fake {
             &self.shm,
             size.width(),
             size.height(),
-            &self.qh,
+            &self.queue_handle,
             Path::new("/tmp"),
         )
         .expect("shm buffer")
@@ -82,21 +82,24 @@ impl Fake {
 
     /// A bare `wl_surface`, standing in for a bar module's subsurface.
     pub fn surface(&self) -> WlSurface {
-        self.compositor.create_surface(&self.qh, ())
+        self.compositor.create_surface(&self.queue_handle, ())
     }
 
     pub fn xdg_surface(&self) -> XdgSurface {
-        let surface = self.compositor.create_surface(&self.qh, ());
-        self.xdg_wm_base.get_xdg_surface(&surface, &self.qh, ())
+        let surface = self.compositor.create_surface(&self.queue_handle, ());
+        self.xdg_wm_base
+            .get_xdg_surface(&surface, &self.queue_handle, ())
     }
 
     /// A shown, not yet configured floating surface of `size` whose owner
     /// frame is `base`.
     pub fn floating(&self, size: Size, base: RenderBuffer) -> FloatingSurface {
-        let surface = self.compositor.create_surface(&self.qh, ());
-        let xdg_surface = self.xdg_wm_base.get_xdg_surface(&surface, &self.qh, ());
-        let positioner = self.xdg_wm_base.create_positioner(&self.qh, ());
-        let xdg_popup = xdg_surface.get_popup(None, &positioner, &self.qh, ());
+        let surface = self.compositor.create_surface(&self.queue_handle, ());
+        let xdg_surface = self
+            .xdg_wm_base
+            .get_xdg_surface(&surface, &self.queue_handle, ());
+        let positioner = self.xdg_wm_base.create_positioner(&self.queue_handle, ());
+        let xdg_popup = xdg_surface.get_popup(None, &positioner, &self.queue_handle, ());
         FloatingSurface {
             surface,
             xdg_surface,
@@ -127,19 +130,19 @@ impl Fake {
             XdgSurfaceEvent::Configure { serial: 1 },
             &(),
             &self.connection,
-            &self.qh,
+            &self.queue_handle,
         );
     }
 
     /// A bar on output `name` with buffer scale `scale`.
     pub fn bar(&self, name: &str, scale: i32) -> WaylandBar {
-        let surface = self.compositor.create_surface(&self.qh, ());
+        let surface = self.compositor.create_surface(&self.queue_handle, ());
         let layer_surface = self.layer_shell.get_layer_surface(
             &surface,
             None,
             Layer::Top,
             "cranky".to_string(),
-            &self.qh,
+            &self.queue_handle,
             (),
         );
         WaylandBar {
@@ -162,10 +165,10 @@ pub fn popup_kind() -> FloatingKind {
     FloatingKind::Popup(PopupTarget::new(ModuleId::new(1), MonitorId::new("DP-1")))
 }
 
-/// A `w`×`h` buffer filled with one premultiplied ARGB pixel.
-pub fn solid(w: u32, h: u32, px: [u8; 4]) -> RenderBuffer {
-    let n = usize::try_from(w.saturating_mul(h)).unwrap_or(0);
-    RenderBuffer::new(px.repeat(n), Size::new(w, h))
+/// A `width`×`height` buffer filled with one premultiplied ARGB pixel.
+pub fn solid(width: u32, height: u32, px: [u8; 4]) -> RenderBuffer {
+    let count = usize::try_from(width.saturating_mul(height)).unwrap_or(0);
+    RenderBuffer::new(px.repeat(count), Size::new(width, height))
 }
 
 /// Bytes of the slot `commit_surface` just attached (it swaps afterwards).

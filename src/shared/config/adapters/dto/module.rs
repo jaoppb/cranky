@@ -39,8 +39,8 @@ impl ModulesConfigDto {
                     engine,
                     options,
                 } => {
-                    let selection = engine.map_or(domain::EngineSelection::Auto, |e| {
-                        domain::EngineSelection::Explicit(domain::EngineId::new(e))
+                    let selection = engine.map_or(domain::EngineSelection::Auto, |engine_name| {
+                        domain::EngineSelection::Explicit(domain::EngineId::new(engine_name))
                     });
                     domain::ModuleConfig::new(
                         mod_name.clone(),

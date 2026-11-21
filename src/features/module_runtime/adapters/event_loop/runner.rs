@@ -152,12 +152,12 @@ impl<
                 }
                 EventLoopEvent::Interaction(monitor_id, interaction) => {
                     let changed = match interaction {
-                        crate::shared::events::core::InteractionEvent::Pointer(ev) => {
-                            self.handle_pointer_event(&monitor_id, &ev)
+                        crate::shared::events::core::InteractionEvent::Pointer(pointer_event) => {
+                            self.handle_pointer_event(&monitor_id, &pointer_event)
                         }
-                        crate::shared::events::core::InteractionEvent::Lifecycle(ev) => {
-                            self.handle_lifecycle_event(&monitor_id, ev)
-                        }
+                        crate::shared::events::core::InteractionEvent::Lifecycle(
+                            lifecycle_event,
+                        ) => self.handle_lifecycle_event(&monitor_id, lifecycle_event),
                     };
                     if changed {
                         should_render = true;

@@ -11,8 +11,8 @@ use crate::shared::primitives::TextAlign;
 use crate::shared::primitives::color::DrawingColor;
 
 impl ComputedStyle {
-    pub fn set_background(&mut self, bg: DrawingColor) {
-        self.background = Some(bg);
+    pub fn set_background(&mut self, background: DrawingColor) {
+        self.background = Some(background);
     }
     pub const fn set_text_align(&mut self, align: TextAlign) {
         self.text_align = Some(align);

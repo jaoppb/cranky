@@ -50,20 +50,21 @@ impl PopupExclusivity {
     ) -> Vec<PopupTarget> {
         let candidates = active_popups
             .iter()
-            .filter(|p| *p != target && !ancestors.contains(p));
+            .filter(|popup| *popup != target && !ancestors.contains(popup));
         match behavior {
             crate::shared::config::domain::PopupBehavior::PerModuleAndMonitor => candidates
-                .filter(|p| {
-                    p.module_id() == target.module_id() && p.monitor_id() == target.monitor_id()
+                .filter(|popup| {
+                    popup.module_id() == target.module_id()
+                        && popup.monitor_id() == target.monitor_id()
                 })
                 .cloned()
                 .collect(),
             crate::shared::config::domain::PopupBehavior::PerModule => candidates
-                .filter(|p| p.module_id() == target.module_id())
+                .filter(|popup| popup.module_id() == target.module_id())
                 .cloned()
                 .collect(),
             crate::shared::config::domain::PopupBehavior::PerMonitor => candidates
-                .filter(|p| p.monitor_id() == target.monitor_id())
+                .filter(|popup| popup.monitor_id() == target.monitor_id())
                 .cloned()
                 .collect(),
             crate::shared::config::domain::PopupBehavior::Global => candidates.cloned().collect(),

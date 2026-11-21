@@ -11,7 +11,7 @@ pub fn paint_pipeline<F: CanvasFactory>(
     scale: Scale,
     canvas_factory: &mut F,
 ) -> Option<(RenderBuffer, Position)> {
-    let bounds = current_bounds.filter(|b| b.width() > 0 && b.height() > 0)?;
+    let bounds = current_bounds.filter(|rect| rect.width() > 0 && rect.height() > 0)?;
 
     let default_font_family = FontFamily::new(String::new());
     let default_font_size = FontSize::new(14.0);

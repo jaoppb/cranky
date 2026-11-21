@@ -52,16 +52,16 @@ where
 
 impl DisplayCommandSender for tokio::sync::mpsc::Sender<DisplayCommand> {
     fn send_display_command(&self, cmd: DisplayCommand) {
-        if let Err(e) = self.try_send(cmd) {
-            tracing::error!(?e, "failed to send display command via tokio channel");
+        if let Err(error) = self.try_send(cmd) {
+            tracing::error!(?error, "failed to send display command via tokio channel");
         }
     }
 }
 
 impl DisplayCommandSender for std::sync::mpsc::Sender<DisplayCommand> {
     fn send_display_command(&self, cmd: DisplayCommand) {
-        if let Err(e) = self.send(cmd) {
-            tracing::error!(?e, "failed to send display command via std channel");
+        if let Err(error) = self.send(cmd) {
+            tracing::error!(?error, "failed to send display command via std channel");
         }
     }
 }

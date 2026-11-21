@@ -27,7 +27,7 @@ impl LayoutEnginePort for RecordingEngine {
     ) -> Result<RenderNode, LayoutError> {
         let laid_out = Spec {
             tooltip: node.tooltip().cloned(),
-            ..Spec::at(node.path().surface(), &[])
+            ..Spec::at_path(node.path().surface(), &[])
         }
         .leaf();
         self.laid_out.push(node);
@@ -65,7 +65,7 @@ struct Spec {
 }
 
 impl Spec {
-    fn at(surface: SurfaceSpace, indices: &[usize]) -> Self {
+    fn at_path(surface: SurfaceSpace, indices: &[usize]) -> Self {
         Self {
             path: NodePath::new(surface, indices.to_vec()),
             key: None,
@@ -79,7 +79,7 @@ impl Spec {
     fn leaf(self) -> RenderNode {
         RenderNode::Rect {
             path: self.path,
-            node_key: self.key.map(|k| NodeKey::new(k).unwrap()),
+            node_key: self.key.map(|name| NodeKey::new(name).unwrap()),
             rect: self.rect,
             style: ComputedStyle::default(),
             on_click: None,
@@ -93,7 +93,7 @@ impl Spec {
     fn flex(self, children: Vec<RenderNode>) -> RenderNode {
         RenderNode::Flex {
             path: self.path,
-            node_key: self.key.map(|k| NodeKey::new(k).unwrap()),
+            node_key: self.key.map(|name| NodeKey::new(name).unwrap()),
             rect: self.rect,
             children,
             style: ComputedStyle::default(),

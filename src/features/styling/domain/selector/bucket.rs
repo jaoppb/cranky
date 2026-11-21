@@ -38,7 +38,7 @@ impl RuleIndex {
             return;
         };
         match bucket_key(subject) {
-            BucketKey::Id(id) => self.by_id.entry(id).or_default().push(rule_index),
+            BucketKey::Identifier(id) => self.by_id.entry(id).or_default().push(rule_index),
             BucketKey::Class(class) => self.by_class.entry(class).or_default().push(rule_index),
             BucketKey::Tag(tag) => self.by_tag.entry(tag).or_default().push(rule_index),
             BucketKey::Universal => self.universal.push(rule_index),
@@ -80,7 +80,7 @@ impl RuleIndex {
 }
 
 enum BucketKey {
-    Id(String),
+    Identifier(String),
     Class(String),
     Tag(String),
     Universal,
@@ -89,7 +89,7 @@ enum BucketKey {
 /// The single most-selective feature on a subject step to index by.
 fn bucket_key(step: &SelectorStep) -> BucketKey {
     if let Some(id) = &step.id {
-        return BucketKey::Id(id.clone());
+        return BucketKey::Identifier(id.clone());
     }
     if let Some(class) = step.classes.first() {
         return BucketKey::Class(class.clone());

@@ -66,7 +66,7 @@ async fn init_secondary_adapters(
     let conn_adapter = cranky::shared::dbus::adapters::connection::ZbusConnectionAdapter::new()
         .connect()
         .await
-        .map_err(|e| format!("DBus connection required: {e}"))?;
+        .map_err(|error| format!("DBus connection required: {error}"))?;
     let conn: Arc<dyn cranky::shared::dbus::ports::DbusConnectionPort> = Arc::new(conn_adapter);
 
     let dbus_manager =
@@ -92,8 +92,8 @@ async fn init_secondary_adapters(
     let mut sni_adapter = SniAdapter::new(hub.clone());
     if active_signals.contains(&SignalKind::Systray) {
         supervisor.mark_started(SignalKind::Systray);
-        if let Err(e) = sni_adapter.start().await {
-            error!("Failed to start SNI Watcher: {e:?}");
+        if let Err(error) = sni_adapter.start().await {
+            error!("Failed to start SNI Watcher: {error:?}");
         }
     }
 
@@ -105,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .enable_all()
         .build()?;
     runtime.block_on(async {
-        let env_adapter = cranky::shared::env::adapters::os::OsEnvironmentAdapter;
+        let env_adapter = cranky::shared::env::adapters::system::OsEnvironmentAdapter;
         let app_env = std::sync::Arc::new(env_adapter.read_environment()?);
 
         let _guard = init_tracing(&app_env);
@@ -167,17 +167,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let style_loader =
             cranky::features::styling::adapters::fs_loader::FsStyleLoader::new(app_env.clone());
-        if let Err(e) = style_loader.ensure_builtin_styles() {
-            error!("Failed to deploy builtin styles: {e}");
+        if let Err(error) = style_loader.ensure_builtin_styles() {
+            error!("Failed to deploy builtin styles: {error}");
         }
 
         let style_system_tx = system_tx.clone();
         let _style_watcher = match style_loader.watch_styles(Arc::new(move |sheet| {
             let _ = style_system_tx.try_send(SystemCommand::ReloadStyle(sheet));
         })) {
-            Ok(w) => Some(w),
-            Err(e) => {
-                error!("Failed to watch style directories: {e}");
+            Ok(watcher) => Some(watcher),
+            Err(error) => {
+                error!("Failed to watch style directories: {error}");
                 None
             }
         };

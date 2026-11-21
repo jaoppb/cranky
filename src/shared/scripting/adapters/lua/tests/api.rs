@@ -52,14 +52,17 @@ fn test_lua_ui_actions() {
         return { a1 = a1, a2 = a2, a3 = a3 }
     "#;
     let table = lua.load(script).eval::<mlua::Table>().unwrap();
-    let a1: mlua::Table = table.get("a1").unwrap();
-    assert_eq!(a1.get::<String>("Exec").unwrap(), "echo 123");
+    let exec_action: mlua::Table = table.get("a1").unwrap();
+    assert_eq!(exec_action.get::<String>("Exec").unwrap(), "echo 123");
 
-    let a2: mlua::Table = table.get("a2").unwrap();
-    assert_eq!(a2.get::<String>("ScriptCall").unwrap(), "toggle_popup");
+    let call_action: mlua::Table = table.get("a2").unwrap();
+    assert_eq!(
+        call_action.get::<String>("ScriptCall").unwrap(),
+        "toggle_popup"
+    );
 
-    let a3: mlua::Table = table.get("a3").unwrap();
-    let sub: mlua::Table = a3.get("SystrayAction").unwrap();
+    let systray_action: mlua::Table = table.get("a3").unwrap();
+    let sub: mlua::Table = systray_action.get("SystrayAction").unwrap();
     assert_eq!(sub.get::<u32>("id").unwrap(), 5);
     assert_eq!(sub.get::<String>("action").unwrap(), "Primary");
 }

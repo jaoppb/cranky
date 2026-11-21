@@ -89,14 +89,14 @@ fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
         _ => return lua.from_value::<VNode>(mlua::Value::Table(table)),
     };
 
-    if let Some(p) = popup {
-        node = node.with_popup(p);
+    if let Some(popup_spec) = popup {
+        node = node.with_popup(popup_spec);
     }
-    if let Some(p) = panel {
-        node = node.with_panel(p);
+    if let Some(panel_spec) = panel {
+        node = node.with_panel(panel_spec);
     }
-    if let Some(k) = key {
-        node = node.with_key(k);
+    if let Some(node_key) = key {
+        node = node.with_key(node_key);
     }
     Ok(node)
 }
@@ -108,8 +108,8 @@ fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
 /// Returns `mlua::Error` if value conversion fails.
 pub fn value_to_vnode(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
     match val {
-        mlua::Value::UserData(ud) => {
-            if let Ok(lua_vnode) = ud.borrow::<LuaVNode>() {
+        mlua::Value::UserData(user_data) => {
+            if let Ok(lua_vnode) = user_data.borrow::<LuaVNode>() {
                 return Ok(lua_vnode.0.clone());
             }
             Err(mlua::Error::FromLuaConversionError {

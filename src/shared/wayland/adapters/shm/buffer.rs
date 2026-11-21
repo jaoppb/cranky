@@ -25,7 +25,7 @@ impl ShmBuffer {
         shm_proxy: &WlShm,
         width: u32,
         height: u32,
-        qh: &QueueHandle<S>,
+        queue_handle: &QueueHandle<S>,
         xdg_runtime_dir: &std::path::Path,
     ) -> Result<Self>
     where
@@ -41,7 +41,7 @@ impl ShmBuffer {
         let pool = shm_proxy.create_pool(
             file.as_fd(),
             i32::try_from(total_size).unwrap_or(i32::MAX),
-            qh,
+            queue_handle,
             (),
         );
 
@@ -57,7 +57,7 @@ impl ShmBuffer {
             height_i32,
             stride_i32,
             wayland_client::protocol::wl_shm::Format::Argb8888,
-            qh,
+            queue_handle,
             user_data_0,
         );
 
@@ -69,7 +69,7 @@ impl ShmBuffer {
             height_i32,
             stride_i32,
             wayland_client::protocol::wl_shm::Format::Argb8888,
-            qh,
+            queue_handle,
             user_data_1,
         );
 

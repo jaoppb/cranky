@@ -20,7 +20,7 @@ impl<
         &mut self,
         layout_engines: &mut HashMap<MonitorId, E>,
     ) {
-        let t0 = std::time::Instant::now();
+        let started = std::time::Instant::now();
         let layouts: HashMap<MonitorId, ChildBounds> = self.ctx.rxs_mut().0.borrow().clone();
         let monitors = self.discover_monitors(&layouts);
 
@@ -51,8 +51,9 @@ impl<
 
         for monitor_id in monitors {
             let current = layouts.get(&monitor_id).copied();
-            let current_bounds = current.map(|c| c.rect());
-            let current_constraint = current.map_or(SizeConstraint::none(), |c| c.constraint());
+            let current_bounds = current.map(|bounds| bounds.rect());
+            let current_constraint =
+                current.map_or(SizeConstraint::none(), |bounds| bounds.constraint());
             let module_sizes_guard = self.ctx.hub().module_sizes_rx().borrow().clone();
             let current_child_sizes = module_sizes_guard.get(&monitor_id);
 
@@ -62,7 +63,7 @@ impl<
                 .hyprland_rx()
                 .borrow()
                 .focused_monitor()
-                .is_some_and(|m| m.as_str() == monitor_id.as_str());
+                .is_some_and(|focused| focused.as_str() == monitor_id.as_str());
             let interaction_context = Some(
                 self.pointer_handler
                     .interaction_context(&monitor_id, is_monitor_focused),
@@ -116,8 +117,8 @@ impl<
 
         tracing::debug!(
             module = %self.ctx.id(),
-            duration_ms = t0.elapsed().as_millis(),
-            duration_micros = t0.elapsed().as_micros(),
+            duration_ms = started.elapsed().as_millis(),
+            duration_micros = started.elapsed().as_micros(),
             "Module UI updated"
         );
     }

@@ -40,16 +40,16 @@ where
 
 impl UiCommandSender for tokio::sync::mpsc::Sender<UiCommand> {
     fn send_ui_command(&self, cmd: UiCommand) {
-        if let Err(e) = self.try_send(cmd) {
-            tracing::error!(?e, "failed to send ui command via tokio channel");
+        if let Err(error) = self.try_send(cmd) {
+            tracing::error!(?error, "failed to send ui command via tokio channel");
         }
     }
 }
 
 impl UiCommandSender for std::sync::mpsc::Sender<UiCommand> {
     fn send_ui_command(&self, cmd: UiCommand) {
-        if let Err(e) = self.send(cmd) {
-            tracing::error!(?e, "failed to send ui command via std channel");
+        if let Err(error) = self.send(cmd) {
+            tracing::error!(?error, "failed to send ui command via std channel");
         }
     }
 }
@@ -111,9 +111,9 @@ impl<'de> Deserialize<'de> for ClickHandlers {
             ClickHandlersHelper::Single(action) => Ok(Self::from_single(action)),
             ClickHandlersHelper::Map(map) => {
                 let mut handlers = HashMap::new();
-                for (k, v) in map {
-                    if let Some(btn) = PointerButton::from_name(&k) {
-                        handlers.insert(btn, v);
+                for (name, action) in map {
+                    if let Some(btn) = PointerButton::from_name(&name) {
+                        handlers.insert(btn, action);
                     }
                 }
                 Ok(Self { handlers })

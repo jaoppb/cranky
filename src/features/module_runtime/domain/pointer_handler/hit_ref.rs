@@ -49,7 +49,7 @@ mod tests {
     fn node(path: &[usize], key: Option<&str>, x: i32, children: Vec<RenderNode>) -> RenderNode {
         RenderNode::Flex {
             path: NodePath::new(SurfaceSpace::Bar, path.to_vec()),
-            node_key: key.map(|k| NodeKey::new(k).unwrap()),
+            node_key: key.map(|name| NodeKey::new(name).unwrap()),
             rect: Rect::new(Position::new(x, 0), Size::new(100, 10)),
             children,
             style: ComputedStyle::default(),

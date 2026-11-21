@@ -189,8 +189,8 @@ mod tests {
         let mut measurer = MockMeasurer;
 
         let mut style = ComputedStyle::default();
-        style.set_width(crate::features::styling::domain::CssLength::Px(120.0));
-        style.set_height(crate::features::styling::domain::CssLength::Px(30.0));
+        style.set_width(crate::features::styling::domain::CssLength::Pixels(120.0));
+        style.set_height(crate::features::styling::domain::CssLength::Pixels(30.0));
 
         let node = StyledNode::Module {
             path: NodePath::root_in(SurfaceSpace::Bar),
@@ -315,7 +315,8 @@ mod tests {
         };
 
         let mut grid_style = ComputedStyle::default_for_grid();
-        grid_style.set_grid_template_columns(vec![GridTrack::Px(50.0), GridTrack::Px(100.0)]);
+        grid_style
+            .set_grid_template_columns(vec![GridTrack::Pixels(50.0), GridTrack::Pixels(100.0)]);
         grid_style.set_column_gap(crate::features::layout_engine::domain::Gap::new(10.0));
 
         let grid = StyledNode::Grid {
@@ -359,7 +360,7 @@ mod tests {
             percent: 50.0,
             px: -20.0,
         });
-        child_style.set_height(crate::features::styling::domain::CssLength::Px(10.0));
+        child_style.set_height(crate::features::styling::domain::CssLength::Pixels(10.0));
         let child = StyledNode::Rect {
             path: NodePath::new(SurfaceSpace::Bar, vec![0]),
             node_key: None,
@@ -372,8 +373,8 @@ mod tests {
         };
 
         let mut root_style = ComputedStyle::default();
-        root_style.set_width(crate::features::styling::domain::CssLength::Px(200.0));
-        root_style.set_height(crate::features::styling::domain::CssLength::Px(10.0));
+        root_style.set_width(crate::features::styling::domain::CssLength::Pixels(200.0));
+        root_style.set_height(crate::features::styling::domain::CssLength::Pixels(10.0));
         let root = StyledNode::Flex {
             path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
@@ -487,7 +488,7 @@ mod tests {
                 children: texts
                     .into_iter()
                     .enumerate()
-                    .map(|(i, t)| text_child(i, t))
+                    .map(|(index, content)| text_child(index, content))
                     .collect(),
                 style: ComputedStyle::default(),
                 on_click: None,
@@ -584,14 +585,20 @@ mod tests {
         assert_eq!(second_children.len(), 2);
         // Positions come from the new list's order, matched by key rather
         // than by the old index each survivor used to occupy.
-        let RenderNode::Text { text: t0, .. } = &second_children[0] else {
+        let RenderNode::Text {
+            text: first_text, ..
+        } = &second_children[0]
+        else {
             panic!("Expected RenderNode::Text");
         };
-        let RenderNode::Text { text: t1, .. } = &second_children[1] else {
+        let RenderNode::Text {
+            text: second_text, ..
+        } = &second_children[1]
+        else {
             panic!("Expected RenderNode::Text");
         };
-        assert_eq!(t0.as_str(), "a-content");
-        assert_eq!(t1.as_str(), "c-content");
+        assert_eq!(first_text.as_str(), "a-content");
+        assert_eq!(second_text.as_str(), "c-content");
     }
 
     /// A container reordering its keyed children (no insertions or
@@ -626,8 +633,8 @@ mod tests {
         assert_eq!(children.len(), 3);
         let texts: Vec<&str> = children
             .iter()
-            .map(|c| {
-                let RenderNode::Text { text, .. } = c else {
+            .map(|child| {
+                let RenderNode::Text { text, .. } = child else {
                     panic!("Expected RenderNode::Text");
                 };
                 text.as_str()
@@ -681,7 +688,7 @@ mod tests {
     fn test_dropping_a_constraint_unpins_the_cached_root() {
         let grid = || {
             let mut style = ComputedStyle::default_for_grid();
-            style.set_grid_template_columns(vec![GridTrack::Fr(1.0)]);
+            style.set_grid_template_columns(vec![GridTrack::Fraction(1.0)]);
             StyledNode::Grid {
                 path: NodePath::root_in(SurfaceSpace::Bar),
                 node_key: None,
@@ -758,8 +765,8 @@ mod tests {
         // Issue #9: `repeat(7, 1fr)` collapsed to content-sized columns
         // because the child was never given a definite width. Pinned to
         // 280, seven `1fr` tracks must split it evenly (40px each).
-        let cell = |i: usize| StyledNode::Text {
-            path: NodePath::new(SurfaceSpace::Bar, vec![i]),
+        let cell = |index: usize| StyledNode::Text {
+            path: NodePath::new(SurfaceSpace::Bar, vec![index]),
             node_key: None,
             text: TextContent::new("1".to_string()),
             style: ComputedStyle::default(),
@@ -770,7 +777,7 @@ mod tests {
             panel: None,
         };
         let mut grid_style = ComputedStyle::default_for_grid();
-        grid_style.set_grid_template_columns(vec![GridTrack::Fr(1.0); 7]);
+        grid_style.set_grid_template_columns(vec![GridTrack::Fraction(1.0); 7]);
         let grid = StyledNode::Grid {
             path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
@@ -798,11 +805,11 @@ mod tests {
         let RenderNode::Grid { children, .. } = tree else {
             panic!("Expected RenderNode::Grid");
         };
-        let xs: Vec<u32> = children
+        let column_offsets: Vec<u32> = children
             .iter()
-            .map(|c| u32::try_from(c.rect().x()).unwrap())
+            .map(|child| u32::try_from(child.rect().x()).unwrap())
             .collect();
-        assert_eq!(xs, vec![0, 40, 80, 120, 160, 200, 240]);
+        assert_eq!(column_offsets, vec![0, 40, 80, 120, 160, 200, 240]);
     }
 
     #[test]
@@ -820,7 +827,7 @@ mod tests {
             }
         }
         let mut style = ComputedStyle::default();
-        style.set_min_width(crate::features::styling::domain::CssLength::Px(280.0));
+        style.set_min_width(crate::features::styling::domain::CssLength::Pixels(280.0));
         let node = StyledNode::Module {
             path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,

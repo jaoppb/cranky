@@ -11,23 +11,22 @@ impl ElementId {
     ///
     /// Returns `StylingError::InvalidElementId` if id is empty or contains invalid characters.
     pub fn new(id: impl Into<String>) -> Result<Self, StylingError> {
-        let s = id.into();
-        if s.is_empty() {
-            return Err(StylingError::InvalidElementId(s));
+        let element_id = id.into();
+        if element_id.is_empty() {
+            return Err(StylingError::InvalidElementId(element_id));
         }
-        let Some(first) = s.chars().next() else {
-            return Err(StylingError::InvalidElementId(s));
+        let Some(first) = element_id.chars().next() else {
+            return Err(StylingError::InvalidElementId(element_id));
         };
         if !first.is_ascii_alphabetic() && first != '_' {
-            return Err(StylingError::InvalidElementId(s));
+            return Err(StylingError::InvalidElementId(element_id));
         }
-        if !s
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-        {
-            return Err(StylingError::InvalidElementId(s));
+        if !element_id.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '_' || character == '-'
+        }) {
+            return Err(StylingError::InvalidElementId(element_id));
         }
-        Ok(Self(s))
+        Ok(Self(element_id))
     }
 
     #[must_use]
@@ -47,8 +46,8 @@ impl<'de> Deserialize<'de> for ElementId {
     where
         D: serde::Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Self::new(s).map_err(serde::de::Error::custom)
+        let element_id = String::deserialize(deserializer)?;
+        Self::new(element_id).map_err(serde::de::Error::custom)
     }
 }
 

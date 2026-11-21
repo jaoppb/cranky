@@ -93,8 +93,8 @@ pub(super) fn apply_patch(
         } => {
             let node_id = old_state.root_node;
 
-            if let Some(s) = *style {
-                builder.set_style(node_id, s)?;
+            if let Some(new_style) = *style {
+                builder.set_style(node_id, new_style)?;
             }
 
             // `Some(_)` is an authoritative child list, even when empty;
@@ -103,8 +103,8 @@ pub(super) fn apply_patch(
             let mut new_state_children = Vec::new();
             if let Some(ChildrenPatch { patches, removed }) = children {
                 let mut new_child_ids = Vec::with_capacity(patches.len());
-                for cp in patches {
-                    let child_state = apply_patch(builder, cp, measurer)?;
+                for child_patch in patches {
+                    let child_state = apply_patch(builder, child_patch, measurer)?;
                     new_child_ids.push(child_state.root_node);
                     new_state_children.push(child_state);
                 }

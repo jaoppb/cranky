@@ -27,15 +27,17 @@ impl RhaiModule {
 
         register_rhai_cranky_api(&mut engine);
 
-        let ast = engine.compile(source).map_err(|e| ModuleError::Internal {
-            message: format!("Failed to compile Rhai script {name}: {e}"),
-        })?;
+        let ast = engine
+            .compile(source)
+            .map_err(|error| ModuleError::Internal {
+                message: format!("Failed to compile Rhai script {name}: {error}"),
+            })?;
 
         let mut scope = create_initial_scope();
 
-        if let Err(e) = engine.run_ast_with_scope(&mut scope, &ast) {
+        if let Err(error) = engine.run_ast_with_scope(&mut scope, &ast) {
             return Err(ModuleError::Internal {
-                message: format!("Failed to initialize Rhai script scope {name}: {e}"),
+                message: format!("Failed to initialize Rhai script scope {name}: {error}"),
             });
         }
 
