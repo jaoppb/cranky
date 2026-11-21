@@ -15,18 +15,23 @@ on:
 permissions:
   contents: read
 
-# One publish at a time, in push order.
+# One publish at a time: a newer run waits for the running one, and replaces
+# any run still waiting.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:
   prepare:
+    # The aur-git environment deploys from main only.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
         with:
+          # The latest recipe, even when an older run is re-run.
+          ref: main
           persist-credentials: false
 
       - name: Build, install and start cranky-git
@@ -44,6 +49,7 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     environment: aur-git
+    timeout-minutes: 15
     steps:
       - name: Download prepared package
         uses: actions/download-artifact@v8

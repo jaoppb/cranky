@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The parts of scripts/release/aur.sh that run inside archlinux:base-devel,
 # with the repository read-only at /workspace and the local sources, empty in
-# release and git modes, read-only at /sources. makepkg refuses to run as root, so it
-# runs as an unprivileged user with no sudo.
+# release and git modes, read-only at /sources. makepkg refuses to run as
+# root, so it runs as an unprivileged user with no sudo.
 #
 #   prepare  copies each PKGBUILD of the mode (cranky and cranky-bin in
 #            release mode, cranky-git alone in git mode, all three in local
@@ -18,7 +18,8 @@ set -euo pipefail
 
 phase=$1
 
-# git: makepkg clones cranky-git's source to fill in its checksums, too.
+# git: makepkg clones cranky-git's source to fill in its checksums, and in
+# git mode to resolve its pkgver.
 pacman -Syu --noconfirm --needed git pacman-contrib sudo >/dev/null
 useradd --create-home builder
 work=/home/builder/work
@@ -59,6 +60,16 @@ prepare() {
 			# Clone the source and run pkgver() alone, which writes the version
 			# it resolves into the PKGBUILD; nothing is built.
 			sudo -u builder makepkg --nobuild --noprepare --nodeps --noconfirm
+			# makepkg writes that version into the PKGBUILD as text, which the
+			# AUR and every user source: only a describe of a version tag passes.
+			if ! grep --quiet --extended-regexp --line-regexp \
+				'pkgver=[0-9]+(\.[0-9]+)*\.r[0-9]+\.g[0-9a-f]{7,}' PKGBUILD; then
+				echo "error: pkgver() resolved to an unexpected version" >&2
+				exit 1
+			fi
+			# The build container clones main again; if main moved in
+			# between, the published pkgver names an older commit, which only
+			# the AUR page shows: makepkg resolves it again for every user.
 		fi
 		sudo -u builder updpkgsums
 		sudo -u builder makepkg --printsrcinfo | sudo -u builder tee .SRCINFO >/dev/null
