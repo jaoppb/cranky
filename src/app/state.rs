@@ -83,7 +83,7 @@ impl<F, LS, DS, US> StateServices<F, LS, DS, US> {
 pub struct StateChannels {
     display: mpsc::Receiver<DisplayCommand>,
     layout: mpsc::Receiver<LayoutEvent>,
-    ui: mpsc::Receiver<UiCommand>,
+    interface: mpsc::Receiver<UiCommand>,
     system: mpsc::Receiver<SystemCommand>,
 }
 
@@ -92,13 +92,13 @@ impl StateChannels {
     pub const fn new(
         display: mpsc::Receiver<DisplayCommand>,
         layout: mpsc::Receiver<LayoutEvent>,
-        ui: mpsc::Receiver<UiCommand>,
+        interface: mpsc::Receiver<UiCommand>,
         system: mpsc::Receiver<SystemCommand>,
     ) -> Self {
         Self {
             display,
             layout,
-            ui,
+            interface,
             system,
         }
     }
@@ -157,7 +157,7 @@ impl<
             read_model,
             display_rx: channels.display,
             layout_rx: channels.layout,
-            ui_rx: channels.ui,
+            ui_rx: channels.interface,
             system_rx: channels.system,
             layout_senders,
             surface_manager: services.surface_manager,
@@ -209,8 +209,8 @@ impl<
                         parent = ?floating.parent,
                         "Received DisplayCommand::ShowFloatingSurface, calling display.show_floating_surface"
                     );
-                    if let Err(e) = display.show_floating_surface(floating) {
-                        tracing::error!(err = ?e, "display.show_floating_surface failed");
+                    if let Err(error) = display.show_floating_surface(floating) {
+                        tracing::error!(err = ?error, "display.show_floating_surface failed");
                     } else {
                         tracing::debug!("display.show_floating_surface succeeded");
                     }
@@ -220,8 +220,8 @@ impl<
                         ?kind,
                         "Received DisplayCommand::HideFloatingSurface, calling display.hide_floating_surface"
                     );
-                    if let Err(e) = display.hide_floating_surface(&kind) {
-                        tracing::error!(err = ?e, "display.hide_floating_surface failed");
+                    if let Err(error) = display.hide_floating_surface(&kind) {
+                        tracing::error!(err = ?error, "display.hide_floating_surface failed");
                     } else {
                         tracing::debug!("display.hide_floating_surface succeeded");
                     }
@@ -403,9 +403,9 @@ impl<
                     }
                 }
             }
-            Err(e) => {
-                tracing::warn!(module = %key, parent = %parent, err = %e, "Lazy module spawn failed");
-                self.record_module_error(site, e.to_string());
+            Err(error) => {
+                tracing::warn!(module = %key, parent = %parent, err = %error, "Lazy module spawn failed");
+                self.record_module_error(site, error.to_string());
             }
         }
     }
@@ -505,8 +505,8 @@ impl<
                     );
                     match sni.trigger_action(&id, &action, pos).await {
                         Ok(()) => tracing::debug!(?id, ?action, "SNI trigger_action succeeded"),
-                        Err(e) => {
-                            tracing::error!(?id, ?action, err = ?e, "SNI trigger_action failed");
+                        Err(error) => {
+                            tracing::error!(?id, ?action, err = ?error, "SNI trigger_action failed");
                         }
                     }
                 }
@@ -558,7 +558,7 @@ impl<
                         }
                         any_reloaded = true;
                     }
-                    Err(e) => tracing::error!("Failed to reload module {mod_name}: {e}"),
+                    Err(error) => tracing::error!("Failed to reload module {mod_name}: {error}"),
                 }
             }
             any_reloaded
@@ -594,7 +594,7 @@ impl<
                             }
                             needs_render = true;
                         }
-                        Err(e) => tracing::error!("Failed to reload module {name}: {e}"),
+                        Err(error) => tracing::error!("Failed to reload module {name}: {error}"),
                     }
                 }
                 SystemCommand::ReloadStyle(sheet_name) => {
@@ -620,8 +620,8 @@ impl<
         self.read_model.module_sizes.clear();
 
         self.registry.clear();
-        if let Err(e) = self.registry.load(&self.read_model.config) {
-            tracing::error!("Failed to reload registry on config change: {e}");
+        if let Err(error) = self.registry.load(&self.read_model.config) {
+            tracing::error!("Failed to reload registry on config change: {error}");
         } else {
             self.read_model.root_module = self.registry.root_module();
             self.read_model.module_ids = self.registry.module_ids().to_vec();
@@ -650,7 +650,7 @@ impl<
     ) {
         let new_focused = state
             .focused_monitor()
-            .map_or_default(|n| n.as_str().to_string());
+            .map_or_default(|monitor| monitor.as_str().to_string());
 
         if new_focused != *current_focused_monitor {
             *current_focused_monitor = new_focused;
@@ -717,8 +717,8 @@ impl<
 
             tokio::select! {
                 res = display.wait_for_events() => {
-                    res.map_err(|e| AppError::Internal { message: e.to_string() })?;
-                    display.dispatch_pending().map_err(|e| AppError::Internal { message: e.to_string() })?;
+                    res.map_err(|error| AppError::Internal { message: error.to_string() })?;
+                    display.dispatch_pending().map_err(|error| AppError::Internal { message: error.to_string() })?;
                 }
                 Some(display_cmd) = self.display_rx.recv() => {
                     self.handle_display_commands(display_cmd, &mut display);
@@ -1018,24 +1018,24 @@ mod tests {
             root_module: None,
             module_ids: vec![crate::shared::primitives::ModuleId::new(1)],
             module_names: {
-                let mut m = HashMap::new();
-                m.insert(
+                let mut names = HashMap::new();
+                names.insert(
                     crate::shared::primitives::ModuleId::new(1),
                     crate::shared::primitives::ModuleName::new("clock"),
                 );
-                m
+                names
             },
             name_to_ids,
             module_keys: HashMap::new(),
             module_sizes: {
-                let mut m = HashMap::new();
-                let mut s = HashMap::new();
-                s.insert(
+                let mut sizes_by_monitor = HashMap::new();
+                let mut monitor_sizes = HashMap::new();
+                monitor_sizes.insert(
                     crate::shared::primitives::ModuleId::new(1),
                     crate::shared::primitives::geometry::Size::new(50, 10),
                 );
-                m.insert(MonitorId::new("DP-1"), s);
-                m
+                sizes_by_monitor.insert(MonitorId::new("DP-1"), monitor_sizes);
+                sizes_by_monitor
             },
             computed_layouts: HashMap::new(),
         };
@@ -1157,14 +1157,23 @@ mod tests {
         let gap = 8;
         let padding_h = 8;
 
-        let l1 = layouts.iter().find(|l| l.id() == ModuleId::new(1)).unwrap();
-        assert_eq!(l1.bounds().x(), padding_h);
+        let first_layout = layouts
+            .iter()
+            .find(|layout| layout.id() == ModuleId::new(1))
+            .unwrap();
+        assert_eq!(first_layout.bounds().x(), padding_h);
 
-        let l2 = layouts.iter().find(|l| l.id() == ModuleId::new(2)).unwrap();
-        assert_eq!(l2.bounds().x(), padding_h + 100 + gap);
+        let second_layout = layouts
+            .iter()
+            .find(|layout| layout.id() == ModuleId::new(2))
+            .unwrap();
+        assert_eq!(second_layout.bounds().x(), padding_h + 100 + gap);
 
-        let l3 = layouts.iter().find(|l| l.id() == ModuleId::new(3)).unwrap();
-        assert_eq!(l3.bounds().x(), 1920 - padding_h - 80);
+        let third_layout = layouts
+            .iter()
+            .find(|layout| layout.id() == ModuleId::new(3))
+            .unwrap();
+        assert_eq!(third_layout.bounds().x(), 1920 - padding_h - 80);
     }
 
     #[test]
@@ -1470,8 +1479,13 @@ mod tests {
             let child = ModuleId::new(2);
 
             let mut fake_registry = FakeRegistry::default();
-            fake_registry.resolve_site =
-                Box::new(move |p, _| if p == Some(parent) { Some(child) } else { None });
+            fake_registry.resolve_site = Box::new(move |requested_parent, _| {
+                if requested_parent == Some(parent) {
+                    Some(child)
+                } else {
+                    None
+                }
+            });
             fake_registry.parent_of =
                 Box::new(move |id| if id == child { Some(parent) } else { None });
 
@@ -1517,7 +1531,7 @@ mod tests {
                 app.read_model
                     .computed_layouts
                     .get(&monitor)
-                    .is_some_and(|m| m.contains_key(&child))
+                    .is_some_and(|monitor_layouts| monitor_layouts.contains_key(&child))
             );
             assert!(child_layout_rx.borrow().contains_key(&monitor));
 
@@ -1528,7 +1542,7 @@ mod tests {
                 !app.read_model
                     .computed_layouts
                     .get(&monitor)
-                    .is_some_and(|m| m.contains_key(&child)),
+                    .is_some_and(|monitor_layouts| monitor_layouts.contains_key(&child)),
                 "the stale entry must be cleared once the site closes"
             );
             assert!(

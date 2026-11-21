@@ -2,9 +2,9 @@
 #[macro_export]
 macro_rules! assert_pixel_color {
     ($pixmap:expr, $x:expr, $y:expr, $expected_color:expr) => {
-        let (r, g, b, a) = $crate::test_utils::get_pixel_color(&mut $pixmap, $x, $y);
+        let (red, green, blue, alpha) = $crate::test_utils::get_pixel_color(&mut $pixmap, $x, $y);
         let expected = $expected_color;
-        let actual = tiny_skia::Color::from_rgba8(r, g, b, a);
+        let actual = tiny_skia::Color::from_rgba8(red, green, blue, alpha);
 
         let diff_r = (actual.red() - expected.red()).abs();
         let diff_g = (actual.green() - expected.green()).abs();
@@ -29,8 +29,8 @@ macro_rules! assert_pixmap_has_color {
         let expected = $expected_color;
         let data = $pixmap.data_mut();
         for chunk in data.chunks_exact(4) {
-            if let &[r, g, b, a] = chunk {
-                let actual = tiny_skia::Color::from_rgba8(r, g, b, a);
+            if let &[red, green, blue, alpha] = chunk {
+                let actual = tiny_skia::Color::from_rgba8(red, green, blue, alpha);
                 let diff_r = (actual.red() - expected.red()).abs();
                 let diff_g = (actual.green() - expected.green()).abs();
                 let diff_b = (actual.blue() - expected.blue()).abs();
@@ -86,9 +86,11 @@ impl TestHome {
     #[must_use]
     pub fn new(label: &str) -> Self {
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dir =
-            std::env::temp_dir().join(format!("cranky-test-{label}-{}-{n}", std::process::id()));
+        let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "cranky-test-{label}-{}-{sequence}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("failed to create test HOME");
 
@@ -165,11 +167,11 @@ mod tests {
         let mut pixmap = PixmapMut::from_bytes(&mut pixmap_data, 10, 10).unwrap();
         pixmap.fill(Color::from_rgba8(255, 128, 64, 255));
 
-        let (r, g, b, a) = get_pixel_color(&mut pixmap, 5, 5);
-        assert_eq!(r, 255);
-        assert_eq!(g, 128);
-        assert_eq!(b, 64);
-        assert_eq!(a, 255);
+        let (red, green, blue, alpha) = get_pixel_color(&mut pixmap, 5, 5);
+        assert_eq!(red, 255);
+        assert_eq!(green, 128);
+        assert_eq!(blue, 64);
+        assert_eq!(alpha, 255);
     }
 
     #[test]

@@ -57,7 +57,9 @@ async fn connects_on_both_bus_addresses() -> Outcome {
             .await
             .context("list names right after connecting")?;
         ensure(
-            names.iter().any(|n| n.as_str() == "org.freedesktop.DBus"),
+            names
+                .iter()
+                .any(|bus_name| bus_name.as_str() == "org.freedesktop.DBus"),
             || format!("{bus:?} bus did not list the bus driver"),
         )?;
     }

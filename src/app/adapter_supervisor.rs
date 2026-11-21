@@ -64,8 +64,8 @@ impl AdapterSupervisor {
                     self.dbus_conn.clone(),
                     &self.hub,
                 );
-                if let Err(e) = adapter.start_watching().await {
-                    tracing::error!("Failed to start MPRIS watcher on demand: {e}");
+                if let Err(error) = adapter.start_watching().await {
+                    tracing::error!("Failed to start MPRIS watcher on demand: {error}");
                 }
             }
             SignalKind::Metrics => {
