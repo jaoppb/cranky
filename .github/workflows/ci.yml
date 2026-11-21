@@ -114,9 +114,4 @@ jobs:
         run: nix build --print-build-logs
 
       - name: Start the binary
-        run: |
-          XDG_RUNTIME_DIR="$(mktemp -d)"
-          export XDG_RUNTIME_DIR
-          output="$(timeout 30 ./result/bin/cranky 2>&1 || true)"
-          echo "${output}"
-          grep --quiet "Starting Cranky" <<< "${output}"
+        run: scripts/release/start.sh ./result/bin/cranky

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Start a cranky binary with no compositor: it must log its first line, which
 # proves the loader, glibc and its libraries resolve, and then fail to
-# connect. The `nix` job of ci.yml runs the same check on the flake package.
+# connect. The `nix` job of ci.yml runs it on the flake package, and the
+# release scripts on the release binary and the installed AUR packages.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then

@@ -42,6 +42,8 @@ docker run --rm \
 				sh -s -- -y --quiet --no-modify-path --default-toolchain none --profile minimal
 		fi
 		export PATH="${CARGO_HOME}/bin:${PATH}"
+		# The toolchain rust-toolchain.toml names, with its components.
+		rustup toolchain install
 		rustc --version
 		cargo build --release --locked
 	'

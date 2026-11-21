@@ -24,5 +24,5 @@ run_in() {
 		bash -euo pipefail -c "${install} >/dev/null && /scripts/start.sh /release/cranky"
 }
 
-run_in archlinux:latest "pacman -Sy --noconfirm libxkbcommon"
+run_in archlinux:latest "pacman -Syu --noconfirm --needed libxkbcommon"
 run_in "$(build_image)" "apt-get update -qq && apt-get install -y -qq --no-install-recommends libxkbcommon0"

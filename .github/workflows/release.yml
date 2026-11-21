@@ -57,10 +57,13 @@ jobs:
   release:
     needs: ci
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Build the release tarball
         run: scripts/release/build.sh
@@ -79,8 +82,11 @@ jobs:
   prepare-aur:
     needs: release
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Build, install and start the AUR packages
         run: scripts/release/aur.sh release
@@ -90,6 +96,7 @@ jobs:
         with:
           name: aur-cranky
           path: target/release-artifact/aur/pkg-src/
+          include-hidden-files: true
           retention-days: 1
 
       - name: Upload cranky-bin AUR package
@@ -97,6 +104,7 @@ jobs:
         with:
           name: aur-cranky-bin
           path: target/release-artifact/aur/pkg-bin/
+          include-hidden-files: true
           retention-days: 1
 
   publish-aur:
