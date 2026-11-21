@@ -27,7 +27,7 @@ fn refresh() {
         state.ram_total = m.memory_total;
         state.net_tx = m.network_tx;
         state.net_rx = m.network_rx;
-        state.temp = m.temperature;
+        state.temp = if "temperature" in m { m.temperature } else { () };
         state.disks = m.disks;
         state.config = m.config;
     }
@@ -106,8 +106,8 @@ fn get_widgets(s, cfg) {
 
     if "temperature" in s.config && is_enabled("temperature", s.config.temperature, cfg) {
         let unit = if s.config.temperature == "celsius" { "°C" } else { "°F" };
-        let rounded_temp = (s.temp * 10.0).to_int().to_float() / 10.0;
-        let text_val = rounded_temp.to_string() + unit;
+        let value = if s.temp == () { "--" } else { ((s.temp * 10.0).to_int().to_float() / 10.0).to_string() };
+        let text_val = value + unit;
         widgets.push(#{ type: "text", label: "TMP", text: text_val });
     }
 

@@ -111,7 +111,8 @@ local function get_widgets()
 
 	if state.config.temperature and is_enabled("temperature", state.config.temperature) then
 		local unit = state.config.temperature == "celsius" and "°C" or "°F"
-		table.insert(widgets, { type = "text", label = "TMP", text = string.format("%.1f%s", state.temp, unit) })
+		local value = state.temp and string.format("%.1f", state.temp) or "--"
+		table.insert(widgets, { type = "text", label = "TMP", text = value .. unit })
 	end
 
 	return widgets

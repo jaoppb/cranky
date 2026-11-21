@@ -1,6 +1,6 @@
 //! The `sysinfo`-backed sampler that gathers a `MetricsState` every update interval and
 //! sends it on the hub's metrics channel.
-use crate::features::metrics::domain::{DiskMetric, MetricsConfig, MetricsState};
+use crate::features::metrics::domain::{DiskMetric, MetricsConfig, MetricsState, Temperature};
 use crate::shared::events::signals::SignalHub;
 use std::sync::Arc;
 use sysinfo::{Components, Disks, Networks, System};
@@ -116,28 +116,9 @@ impl SysinfoAdapter {
         }
 
         // Temperature
-        let mut temp = 0.0;
-        if config.temperature().is_some()
-            && config.temperature()
-                != Some(&crate::features::metrics::domain::TemperatureMode::Disabled)
-        {
-            let mut count: u16 = 0;
-            for component in components.iter() {
-                if let Some(temperature) = component.temperature() {
-                    temp += temperature;
-                    count = count.saturating_add(1);
-                }
-            }
-            if count > 0 {
-                temp /= f32::from(count);
-            }
-
-            if config.temperature()
-                == Some(&crate::features::metrics::domain::TemperatureMode::Fahrenheit)
-            {
-                temp = (temp * 9.0 / 5.0) + 32.0;
-            }
-        }
+        let temperature = config.temperature().and_then(|mode| {
+            Temperature::from_readings(components.iter().map(sysinfo::Component::temperature), mode)
+        });
 
         MetricsState::new(crate::features::metrics::domain::CreateMetricsCommand::new(
             cpu_usage,
@@ -153,7 +134,7 @@ impl SysinfoAdapter {
                 crate::features::metrics::domain::NetworkSpeed::new(network_tx),
                 crate::features::metrics::domain::NetworkSpeed::new(network_rx),
             ),
-            crate::features::metrics::domain::Temperature::new(temp),
+            temperature,
             config.clone(),
         ))
     }
@@ -218,31 +199,7 @@ mod tests {
         assert_eq!(state.network_tx().value(), 0);
         assert_eq!(state.network_rx().value(), 0);
         assert_eq!(state.disks(), []);
-        assert!(state.temperature().value().abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_sysinfo_adapter_gather_metrics_fahrenheit() {
-        let mut sys = System::new();
-        let mut networks = Networks::new_with_refreshed_list();
-        let mut disks = Disks::new_with_refreshed_list();
-        let mut components = Components::new_with_refreshed_list();
-
-        let config: MetricsConfig = serde_json::from_value(serde_json::json!({
-            "temperature": "fahrenheit",
-            "update_interval_ms": 100
-        }))
-        .unwrap();
-
-        let state = SysinfoAdapter::gather_metrics(
-            &mut sys,
-            &mut networks,
-            &mut disks,
-            &mut components,
-            &config,
-        );
-        // It might be 32.0 if no components, or > 32.0 if components exist
-        assert!(state.temperature().value() >= 32.0 || state.temperature().value() == 0.0);
+        assert_eq!(state.temperature(), None);
     }
 
     #[test]

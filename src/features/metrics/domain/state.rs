@@ -15,7 +15,10 @@ pub(crate) struct MetricsState {
     pub(crate) disks: Vec<DiskMetric>,
     pub(crate) network_tx: NetworkSpeed,
     pub(crate) network_rx: NetworkSpeed,
-    pub(crate) temperature: Temperature,
+    /// The average sensor temperature, absent when nothing could be read or temperature is
+    /// off; scripts then see no `temperature` key rather than a fake 0 °C.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) temperature: Option<Temperature>,
     pub(crate) config: MetricsConfig,
 }
 
@@ -87,7 +90,7 @@ impl MetricsState {
 
     #[cfg(test)]
     #[must_use]
-    pub(crate) const fn temperature(&self) -> &Temperature {
-        &self.temperature
+    pub(crate) const fn temperature(&self) -> Option<&Temperature> {
+        self.temperature.as_ref()
     }
 }
