@@ -4,18 +4,20 @@
 # release mode, read-only at /sources. makepkg refuses to run as root, so it
 # runs as an unprivileged user with no sudo.
 #
-#   prepare  copies each PKGBUILD, points it at the local sources in local
-#            mode, fills in its checksums and writes its .SRCINFO, and leaves
-#            the two files in /prepared/<package>. It builds nothing.
+#   prepare  copies each PKGBUILD (cranky-git's in local mode only), points it
+#            at the local sources in local mode, fills in its checksums and
+#            writes its .SRCINFO, and leaves the two files in
+#            /prepared/<package>. It builds nothing.
 #   build    reads /prepared, read-only here like every other mount. As root,
-#            it installs the dependencies both .SRCINFO files name; then it
+#            it installs the dependencies every .SRCINFO there names; then it
 #            builds each package, installs it, starts the installed binary
 #            and removes it.
 set -euo pipefail
 
 phase=$1
 
-pacman -Syu --noconfirm --needed pacman-contrib sudo >/dev/null
+# git: makepkg clones cranky-git's source to fill in its checksums, too.
+pacman -Syu --noconfirm --needed git pacman-contrib sudo >/dev/null
 useradd --create-home builder
 work=/home/builder/work
 mkdir -p "${work}"
@@ -42,6 +44,11 @@ prepare() {
 				line+=" \"${file##*/}\""
 			fi
 		done
+		# A git package clones the bare repository by its absolute path, which
+		# stage() gives it in the build container too.
+		if [[ -d "${dir}/cranky.git" ]]; then
+			line+=" \"${name}::git+file://${dir}/cranky.git\""
+		fi
 		printf '\n%s )\n' "${line}" >>"${dir}/PKGBUILD"
 	fi
 	(
@@ -61,14 +68,16 @@ dependencies_of() {
 }
 
 # Build a package, install it, start the installed binary, then remove it:
-# the two packages conflict.
+# the packages conflict.
 install_and_start() {
 	local name=$1
 	stage "${name}" "/prepared/${name}/PKGBUILD"
 	(
 		cd "${work}/${name}"
 		sudo -u builder makepkg --noconfirm
-		pacman -U --noconfirm ./*.pkg.tar.zst
+		# Not the -debug package makepkg may split off: those of cranky and
+		# cranky-git hold the same file.
+		pacman -U --noconfirm "./${name}"-[0-9]*.pkg.tar.zst
 	)
 	sudo -u builder /workspace/scripts/release/start.sh /usr/bin/cranky
 	pacman -R --noconfirm "${name}"
@@ -78,18 +87,30 @@ case "${phase}" in
 prepare)
 	prepare cranky PKGBUILD
 	prepare cranky-bin PKGBUILD-bin
+	if [[ "${MODE}" == local ]]; then
+		prepare cranky-git PKGBUILD-git
+	fi
 	;;
 build)
-	# Read from the read-only mount before any build runs.
+	# The packages the prepare phase left, read from the read-only mount
+	# before any build runs.
+	packages=()
+	for name in cranky cranky-bin cranky-git; do
+		if [[ -d "/prepared/${name}" ]]; then
+			packages+=("${name}")
+		fi
+	done
 	mapfile -t deps < <(
-		dependencies_of /prepared/cranky/.SRCINFO
-		dependencies_of /prepared/cranky-bin/.SRCINFO
+		for name in "${packages[@]}"; do
+			dependencies_of "/prepared/${name}/.SRCINFO"
+		done
 	)
 	if ((${#deps[@]} > 0)); then
 		pacman -S --needed --noconfirm -- "${deps[@]}"
 	fi
-	install_and_start cranky
-	install_and_start cranky-bin
+	for name in "${packages[@]}"; do
+		install_and_start "${name}"
+	done
 	;;
 *)
 	echo "usage: $0 prepare|build" >&2

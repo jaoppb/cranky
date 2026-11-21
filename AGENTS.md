@@ -40,7 +40,7 @@ Every recipe runs only inside the flake devShell (`nix develop`, or direnv with 
 | GitHub audit | `just issues-check`, `just repo-check`, `just project-check`, `just project-sync` (see `CONTRIBUTING.md`) |
 | Git hooks | `just setup` (lefthook) |
 | Tool pins | `just flake-update [input…]` (moves `flake.lock`, in a pull request of its own) |
-| Release | `just bump-version X.Y.Z` (see "Releasing" in `CONTRIBUTING.md`); `just release-check` builds the release tarball and both AUR packages as `release.yml` does (needs docker) |
+| Release | `just bump-version X.Y.Z` (see "Releasing" in `CONTRIBUTING.md`); `just release-check` builds the release tarball and the three AUR packages as `release-check.yml` does (needs docker) |
 
 `lefthook.yml` calls the recipes: `lint-fix` + `lint`, `arch-check`, and `loc-check` pre-commit; `check` pre-push.
 
