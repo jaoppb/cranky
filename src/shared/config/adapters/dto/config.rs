@@ -1,3 +1,4 @@
+//! Top-level serde shape of `config.toml` and its conversion into the domain `Config`.
 use serde::Deserialize;
 
 use crate::shared::config::domain;

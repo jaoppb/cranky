@@ -1,3 +1,4 @@
+//! One `wl_buffer` of a shared-memory pool, with the busy flag its release event clears.
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 

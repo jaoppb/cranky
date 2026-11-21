@@ -1,3 +1,5 @@
+//! Window-manager events (workspaces, monitors, windows) and their identifier types.
+
 use crate::features::workspaces::domain::{MonitorName, WorkspaceId, WorkspaceName};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

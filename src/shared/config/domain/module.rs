@@ -1,9 +1,12 @@
+//! Entries of the `[modules]` table: whether each module is enabled, its scripting engine and its
+//! options.
 use std::collections::HashMap;
 
 use crate::shared::primitives::{ModuleName, ModuleOptions};
 
 use super::types::EngineSelection;
 
+/// Configuration of every module named in `[modules]`, looked up by module name.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ModulesConfig {
     modules: HashMap<ModuleName, ModuleConfig>,
@@ -26,6 +29,8 @@ impl ModulesConfig {
     }
 }
 
+/// One `[modules.<name>]` entry: whether the module loads, which engine runs it and the options its
+/// script sees.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleConfig {
     name: ModuleName,
@@ -35,6 +40,7 @@ pub struct ModuleConfig {
 }
 
 impl ModuleConfig {
+    /// Builds an entry from already-parsed parts; the config DTOs are its usual caller.
     #[must_use]
     pub const fn new(
         name: ModuleName,

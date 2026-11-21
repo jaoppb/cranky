@@ -1,3 +1,4 @@
+//! Copies the signals the hub reports as changed into a Lua state's `signals` global.
 use super::userdata::LuaMonitor;
 use crate::shared::events::signals::{SignalHub, SignalKind};
 use mlua::{Function, Lua, LuaSerdeExt};

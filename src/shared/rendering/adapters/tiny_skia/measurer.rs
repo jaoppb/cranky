@@ -1,3 +1,5 @@
+//! Text measurement with cosmic-text, so layout sizes text with the same fonts the canvas draws it
+//! with.
 use super::paint::get_family;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{LogicalPx, PhysicalPx, Scale, Size};

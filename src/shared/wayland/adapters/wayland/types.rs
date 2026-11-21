@@ -1,3 +1,4 @@
+//! The surfaces the Wayland state keeps per output: bars, module subsurfaces and floating popups.
 use super::floating_bounds::ChildPlacement;
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::ModuleId;

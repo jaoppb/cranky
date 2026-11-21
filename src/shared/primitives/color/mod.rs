@@ -1,3 +1,4 @@
+//! Colors and the paints (solid or gradient) parsed from style and config strings.
 mod color_struct;
 mod drawing_color;
 pub mod error;

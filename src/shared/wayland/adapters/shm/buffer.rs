@@ -1,3 +1,5 @@
+//! A two-slot shared-memory buffer, so one slot can be drawn while the compositor still reads the
+//! other.
 use super::slot::{BufferSlot, BufferUserData};
 use cranky_unsafe::SharedMapping;
 use std::io::Result;

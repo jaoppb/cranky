@@ -1,9 +1,13 @@
+//! Value types the config domain is built from: fonts, borders, offsets, alignment, rendering
+//! mode and scripting engine selection.
 use serde::Deserialize;
 
+/// Font family name handed to the text measurer and the canvas when shaping text.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct FontFamily(String);
 
 impl FontFamily {
+    /// Wraps a family name as written; it is not checked against the installed fonts here.
     #[must_use]
     pub const fn new(family: String) -> Self {
         Self(family)
@@ -15,10 +19,12 @@ impl FontFamily {
     }
 }
 
+/// Font size handed to the text measurer and the canvas when shaping text.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct FontSize(f32);
 
 impl FontSize {
+    /// Wraps a size as given; no range check is applied.
     #[must_use]
     pub const fn new(size: f32) -> Self {
         Self(size)
@@ -85,11 +91,16 @@ impl PaddingOffset {
     }
 }
 
+/// Vertical placement requested for the bar's content by `vertical_alignment` (`top`, `center` or
+/// `bottom`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum VerticalAlignment {
+    /// Aligned to the top edge.
     Top,
+    /// Centred vertically; the default.
     #[default]
     Center,
+    /// Aligned to the bottom edge.
     Bottom,
 }
 
@@ -117,6 +128,7 @@ impl RenderingMode {
     }
 }
 
+/// Name of a scripting engine as written in a module's `engine` key, such as `lua` or `rhai`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct EngineId(String);
 
@@ -159,14 +171,18 @@ impl std::fmt::Display for FileExtension {
     }
 }
 
+/// Which scripting engine runs a module's script.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum EngineSelection {
+    /// No `engine` key: try Lua first, then Rhai.
     #[default]
     Auto,
+    /// The `engine` key pins this engine; no other is tried.
     Explicit(EngineId),
 }
 
 impl EngineSelection {
+    /// True when no engine was pinned, so Lua and then Rhai are tried.
     #[cfg(test)]
     #[must_use]
     pub const fn is_auto(&self) -> bool {

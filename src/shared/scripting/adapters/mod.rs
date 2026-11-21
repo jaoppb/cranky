@@ -1,3 +1,4 @@
+//! The Lua and Rhai engines, each loading a script source into an `AnyModulePort`.
 use crate::shared::config::domain::{EngineId, FileExtension};
 pub mod lua;
 pub mod rhai;

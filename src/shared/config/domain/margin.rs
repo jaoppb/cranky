@@ -1,5 +1,9 @@
+//! Margins of the bar's layer surface, and the partial overrides the unfocused state applies on
+//! top.
 use super::types::MarginOffset;
 
+/// Gap between the bar and each screen edge, applied as the layer surface's margins.
+/// The top and bottom margins are added to the bar height to form its exclusive zone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct MarginConfig {

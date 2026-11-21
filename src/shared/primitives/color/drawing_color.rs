@@ -3,9 +3,12 @@ use super::error::ColorError;
 use super::parser::{parse_single_color, tokenize};
 use serde::{Deserialize, Deserializer};
 
+/// A paint for fills, borders and text: one color, or a linear gradient.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DrawingColor {
+    /// A single uniform color.
     Solid(Color),
+    /// A linear gradient through two or more evenly spread colors, at an angle in degrees.
     Gradient(Vec<Color>, f32),
 }
 

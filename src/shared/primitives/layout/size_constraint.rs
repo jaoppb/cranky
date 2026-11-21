@@ -15,6 +15,8 @@ pub struct SizeConstraint {
 }
 
 impl SizeConstraint {
+    /// No definite size on either axis, so the module measures both intrinsically; used until a
+    /// parent has placed it.
     #[must_use]
     pub const fn none() -> Self {
         Self {

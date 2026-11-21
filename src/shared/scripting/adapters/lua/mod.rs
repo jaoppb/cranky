@@ -1,3 +1,5 @@
+//! The Lua engine, on mlua: runs a module script and its `init`, `metadata`, `refresh` and `render`
+//! functions.
 pub mod api;
 mod api_elements;
 mod api_sys;

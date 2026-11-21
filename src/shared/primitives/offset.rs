@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+/// Shift of a popup from its anchor, in pixels; deserialises from `{ dx, dy }`, `{ x, y }`, a pair
+/// or a list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(from = "PopupOffsetHelper")]
 pub struct PopupOffset {

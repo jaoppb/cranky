@@ -1,3 +1,4 @@
+//! Which render tree, the bar's or a floating one, a child module was collected from.
 /// Which tree a `ChildModuleLayout` was collected from — the bar's own
 /// render tree, or one of the three floating kinds.
 ///

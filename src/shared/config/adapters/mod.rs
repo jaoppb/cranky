@@ -1,15 +1,26 @@
+//! Loads `~/.config/cranky/config.toml` (or the bundled default when it is missing) and
+//! watches its directory, pushing every edit that parses into the signal hub.
 pub mod dto;
 
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
 use thiserror::Error;
 
+/// Why the configuration could not be loaded or watched.
 #[derive(Error, Debug)]
 pub enum ConfigAdapterError {
+    /// The file could not be read or is not valid TOML for the config schema.
     #[error("Failed to parse configuration: {reason}")]
-    ConfigParseError { reason: String },
+    ConfigParseError {
+        /// The read or parse error, as text.
+        reason: String,
+    },
+    /// The file watcher could not be created or attached to the config directory.
     #[error("Internal error: {message}")]
-    Internal { message: String },
+    Internal {
+        /// The watcher error, as text.
+        message: String,
+    },
 }
 
 use crate::shared::config::adapters::dto::ConfigDto;

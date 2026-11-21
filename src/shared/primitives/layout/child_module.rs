@@ -1,3 +1,5 @@
+//! Layout descriptors for child modules embedded in a container, and the size reports
+//! children send back to their embedder.
 use super::super::geometry::{Rect, Size};
 use super::super::ids::{ModuleInstanceId, ModuleName};
 use super::super::options::ModuleOptions;

@@ -1,3 +1,5 @@
+//! The `SignalHub` and the map types it broadcasts.
+
 use std::collections::HashMap;
 
 use cranky_time::{Clock, LocalTime};
@@ -24,6 +26,7 @@ pub(crate) type MonitorScalesMap = HashMap<MonitorId, Scale>;
 /// an entry) wakes the render loop exactly like a size change does.
 pub(crate) type ModuleErrorsMap = HashMap<ModuleSite, String>;
 
+/// Holds one `watch` channel per state source plus the pointer broadcast; adapters write to the senders, and module actors wake on the receivers of the signals they subscribe to.
 #[derive(Debug)]
 pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
@@ -49,6 +52,7 @@ pub struct SignalHub {
 }
 
 impl SignalHub {
+    /// Builds the hub with `initial_config`, the current local time and empty state for every other source.
     #[must_use]
     pub fn new(initial_config: Config) -> Self {
         let config = watch::channel(initial_config);
@@ -97,6 +101,7 @@ impl SignalHub {
         self.monitor_scales.0.clone()
     }
 
+    /// A receiver for the scale of every monitor Wayland has announced; its keys are the monitors surfaces can be created on.
     #[must_use]
     pub fn monitor_scales_rx(&self) -> watch::Receiver<MonitorScalesMap> {
         self.monitor_scales.1.clone()
@@ -167,6 +172,7 @@ impl SignalHub {
         self.systray.0.clone()
     }
 
+    /// A receiver for the tray items, which the scripting engines read into `signals.systray`.
     #[must_use]
     pub fn systray_rx(&self) -> watch::Receiver<SystrayState> {
         self.systray.1.clone()

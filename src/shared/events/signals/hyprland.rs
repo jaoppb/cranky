@@ -1,3 +1,5 @@
+//! Hyprland workspace, monitor and focus state, updated by applying window-manager events.
+
 use std::collections::BTreeMap;
 
 use crate::features::workspaces::domain::{

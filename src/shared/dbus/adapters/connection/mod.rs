@@ -1,3 +1,6 @@
+//! The zbus implementation of `DbusConnectionPort`, with conversion of zbus variants into
+//! `DBusValue`.
+
 mod adapter;
 mod methods;
 mod parser;

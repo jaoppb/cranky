@@ -1,6 +1,9 @@
+//! The painted pixel buffer a render pipeline hands to the surface manager.
 use crate::shared::primitives::binary::BinaryData;
 use crate::shared::primitives::geometry::Size;
 
+/// Pixels painted for one module on one monitor, sized in physical pixels, ready to copy into a shm
+/// buffer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderBuffer {
     data: BinaryData,
@@ -8,6 +11,7 @@ pub struct RenderBuffer {
 }
 
 impl RenderBuffer {
+    /// Pairs painted bytes with their size; the byte length is not checked against it.
     #[must_use]
     pub fn new(data: impl Into<BinaryData>, size: Size) -> Self {
         Self {

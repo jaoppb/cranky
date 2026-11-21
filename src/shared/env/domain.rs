@@ -1,8 +1,11 @@
+//! The environment variables Cranky depends on, each wrapped in its own type.
 use std::path::PathBuf;
 
+/// The user's `$HOME`, root of the `~/.config/cranky` and `~/.local/share/cranky` paths.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HomeDir(PathBuf);
 impl HomeDir {
+    /// Wraps the path as read; it is not checked to exist.
     #[must_use]
     pub const fn new(path: PathBuf) -> Self {
         Self(path)
@@ -14,9 +17,11 @@ impl HomeDir {
     }
 }
 
+/// `$XDG_CACHE_HOME`, or `~/.cache` when unset; the log files are written under it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XdgCacheHome(PathBuf);
 impl XdgCacheHome {
+    /// Wraps the path as resolved; it is not checked to exist.
     #[must_use]
     pub const fn new(path: PathBuf) -> Self {
         Self(path)
@@ -28,9 +33,11 @@ impl XdgCacheHome {
     }
 }
 
+/// `$XDG_RUNTIME_DIR`, where the Hyprland IPC sockets live.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct XdgRuntimeDir(PathBuf);
 impl XdgRuntimeDir {
+    /// Wraps the path as read; it is not checked to exist.
     #[must_use]
     pub const fn new(path: PathBuf) -> Self {
         Self(path)
@@ -42,9 +49,11 @@ impl XdgRuntimeDir {
     }
 }
 
+/// Tracing filter directive from `$RUST_LOG`, `cranky=info` when unset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RustLog(String);
 impl RustLog {
+    /// Wraps the directive as read; tracing setup parses it.
     #[must_use]
     pub const fn new(log: String) -> Self {
         Self(log)
@@ -56,6 +65,7 @@ impl RustLog {
     }
 }
 
+/// `$HYPRLAND_INSTANCE_SIGNATURE`, naming the directory of the running Hyprland's IPC sockets.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HyprlandInstanceSignature(String);
 impl HyprlandInstanceSignature {
@@ -70,6 +80,7 @@ impl HyprlandInstanceSignature {
     }
 }
 
+/// Everything the app reads from the process environment, captured once at startup.
 #[derive(Debug)]
 pub struct AppEnvironment {
     home: HomeDir,
@@ -80,6 +91,7 @@ pub struct AppEnvironment {
 }
 
 impl AppEnvironment {
+    /// Bundles already-read values; the Hyprland signature is `None` outside a Hyprland session.
     #[must_use]
     pub const fn new(
         home: HomeDir,

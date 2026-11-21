@@ -19,6 +19,9 @@ unreachable_pub = "forbid"
 missing_debug_implementations = "forbid"
 unsafe_code = "forbid"
 
+[lints.rustdoc]
+all = "deny"
+
 # The root `Cargo.toml` table, unchanged. `tests/architecture.rs` checks the
 # two are equal.
 [lints.clippy]

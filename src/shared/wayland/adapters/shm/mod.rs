@@ -1,3 +1,4 @@
+//! Double-buffered `wl_shm` pixel buffers that bar, module and popup surfaces attach.
 pub mod buffer;
 pub mod slot;
 #[cfg(test)]

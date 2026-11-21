@@ -1,3 +1,5 @@
+//! Registers what a Rhai module script can call, such as the `ui` elements and actions, `sys`,
+//! `exec` and `assert`.
 use super::dsl_actions::register_rhai_ui_actions;
 use super::dsl_elements::register_rhai_ui_elements;
 use super::dsl_sys::register_rhai_sys;

@@ -6,6 +6,10 @@ use crate::shared::wayland::ports::{SurfaceManagerPort, SurfaceParent};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+/// The cloneable handle render pipelines submit buffers through.
+///
+/// It keeps only the latest buffer per module and monitor, and wakes the Wayland loop after each
+/// submission.
 #[derive(Clone)]
 pub struct WaylandSurfaceManager {
     pub(crate) pending_surfaces: Arc<Mutex<HashMap<(ModuleId, MonitorId), SurfaceCommand>>>,

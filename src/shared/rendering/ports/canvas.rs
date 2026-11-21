@@ -1,10 +1,16 @@
+//! The drawing surface a render pipeline paints into, and the factory that makes one for each
+//! buffer.
 use crate::shared::primitives::color::DrawingColor;
 
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::TextAlignment;
 use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
 
+/// Makes the canvas and text measurer a render pipeline needs, from shared font state so text
+/// measures as it draws.
 pub trait CanvasFactory: Send + Sync + Clone {
+    /// A canvas that paints into `data`, an RGBA buffer of `size` physical pixels, at `scale` with
+    /// the given default font.
     #[must_use]
     fn create_canvas<'a>(
         &'a mut self,
@@ -15,6 +21,8 @@ pub trait CanvasFactory: Send + Sync + Clone {
         font_size: FontSize,
     ) -> impl Canvas + 'a;
 
+    /// A measurer that sizes text with the fonts, scale and defaults a canvas from this factory
+    /// draws it with.
     #[must_use]
     fn create_text_measurer(
         &mut self,
@@ -24,6 +32,7 @@ pub trait CanvasFactory: Send + Sync + Clone {
     ) -> impl crate::features::layout_engine::domain::TextMeasurer + '_;
 }
 
+/// The drawing operations the paint step issues for each laid-out node, given in logical pixels.
 pub trait Canvas: Send + Sync {
     /// Draw a filled rectangle with optional radius
     fn draw_rect(

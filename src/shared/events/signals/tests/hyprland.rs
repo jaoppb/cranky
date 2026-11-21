@@ -1,3 +1,5 @@
+//! Tests for `HyprlandState` event application and serialisation.
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;

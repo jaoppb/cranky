@@ -1,3 +1,4 @@
+//! The ports the app and the render pipelines drive the display server through, and its error.
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};
@@ -8,6 +9,7 @@ pub(crate) use crate::shared::wayland::surface_parent::SurfaceParent;
 use async_trait::async_trait;
 use std::sync::Arc;
 
+/// Where a render pipeline hands its finished buffers, to be shown on the module's surface.
 pub trait SurfaceManagerPort: Send + Sync {
     /// Submit a rendered buffer for a specific module on a specific monitor.
     fn submit_buffer(
@@ -39,17 +41,26 @@ pub(crate) type DynSurfaceManager = Arc<dyn SurfaceManagerPort>;
 
 use thiserror::Error;
 
+/// Failure in the display server connection or in drawing its surfaces.
 #[derive(Error, Debug)]
 pub enum DisplayServerError {
+    /// Connecting to the compositor named by the environment failed.
     #[error("Display server connection failed: {reason}")]
-    ConnectionFailed { reason: String },
+    ConnectionFailed {
+        /// The connection error, as text.
+        reason: String,
+    },
 
+    /// An I/O operation failed, such as creating a shared-memory buffer.
     #[error("I/O error: {0}")]
     InputOutput(#[from] std::io::Error),
+    /// Any other failure, such as a missing bar or a rejected request; the message says which.
     #[error("Internal error: {0}")]
     Internal(String),
 }
 
+/// What the app's event loop drives the display server through: waiting for and dispatching events,
+/// flushing, rendering, and showing or hiding floating surfaces.
 #[async_trait]
 pub trait DisplayServerPort: Send + Sync {
     /// # Errors

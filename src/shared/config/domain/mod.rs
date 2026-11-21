@@ -1,3 +1,4 @@
+//! Configuration types the rest of the bar reads, independent of the TOML they were parsed from.
 pub mod config;
 pub mod margin;
 pub mod module;

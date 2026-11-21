@@ -1,3 +1,4 @@
+//! Root settings that `[root.unfocused]` overrides on monitors Hyprland does not report as focused.
 use crate::shared::primitives::geometry::BarHeight;
 
 use super::margin::PartialMarginConfig;

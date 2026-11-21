@@ -33,7 +33,7 @@ jobs:
           - name: fmt
             recipe: fmt-check
           - name: lint
-            recipe: lint
+            recipe: lint doc-check
             compiles: true
           - name: arch
             recipe: arch-check

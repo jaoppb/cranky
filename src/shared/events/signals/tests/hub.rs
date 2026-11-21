@@ -1,3 +1,5 @@
+//! Tests for channel propagation and signal streams in `SignalHub`.
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;

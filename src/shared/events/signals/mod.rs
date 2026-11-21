@@ -1,3 +1,5 @@
+//! The signal hub, the signal kinds modules subscribe to, and the state they carry.
+
 pub mod hub;
 pub mod hyprland;
 pub mod kind;

@@ -1,3 +1,4 @@
+//! Turns the tables a Lua `render()` returns into a `VNode` tree.
 use super::parser_props::{
     parse_common_props, parse_image_data_and_size, parse_module_options, parse_text_content,
 };

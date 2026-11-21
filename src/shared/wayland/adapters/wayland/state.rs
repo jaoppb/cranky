@@ -1,3 +1,4 @@
+//! The Wayland dispatch state: bound globals, outputs, bars, input devices and floating surfaces.
 use super::dispatch_pointer_button::PointerGrab;
 use super::keyboard::KeyboardInput;
 use super::types::{FloatingSurface, WaylandBar, WaylandOutputInfo};

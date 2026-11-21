@@ -1,3 +1,4 @@
+//! A JSON-like value for module options and script data that does not depend on `serde_json`.
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

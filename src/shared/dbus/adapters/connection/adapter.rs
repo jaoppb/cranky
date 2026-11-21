@@ -6,11 +6,16 @@ use zbus::Connection;
 use crate::shared::dbus::domain::BusType;
 use crate::shared::dbus::ports::DbusConnectionError;
 
+/// Typestate marker: the adapter has attempted both bus connections and can serve requests.
 #[derive(Debug)]
 pub struct Connected;
+/// Typestate marker: the adapter holds no connection yet; only `connect` is available.
 #[derive(Debug)]
 pub struct Disconnected;
 
+/// zbus-backed implementation of `DbusConnectionPort`, holding one optional connection per bus.
+///
+/// A bus that fails to connect stays `None`, and requests on it fail with `NotInitialized`.
 #[derive(Debug)]
 pub struct ZbusConnectionAdapter<State = Disconnected> {
     pub(crate) session_conn: Option<Connection>,
@@ -25,6 +30,7 @@ impl Default for ZbusConnectionAdapter<Disconnected> {
 }
 
 impl ZbusConnectionAdapter<Disconnected> {
+    /// Builds an adapter with no open connection; call `connect` to reach the buses.
     #[must_use]
     pub const fn new() -> Self {
         Self {
