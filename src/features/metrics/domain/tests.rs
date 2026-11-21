@@ -1,5 +1,5 @@
 use super::command::{CreateMetricsCommand, MemoryMetrics, NetworkMetrics};
-use super::config::{CpuMode, MetricsConfig};
+use super::config::{CpuMode, MetricsConfig, TemperatureMode};
 use super::state::MetricsState;
 use super::types::{
     CpuUsage, DiskMetric, DiskName, MemoryBytes, MountPoint, NetworkSpeed, Temperature,
@@ -103,7 +103,7 @@ fn test_metrics_state_new() {
         mem.clone(),
         vec![],
         net.clone(),
-        Temperature::new(40.0),
+        Some(Temperature::new(40.0)),
         MetricsConfig::default(),
     );
     assert_eq!(cmd.cpu_usage(), &CpuUsage::new(10.0));
@@ -115,4 +115,81 @@ fn test_metrics_state_new() {
     let state = MetricsState::new(cmd);
     assert_eq!(state.cpu_usage, CpuUsage::new(10.0));
     assert_eq!(state.memory_used, MemoryBytes::new(100));
+}
+
+fn degrees(readings: &[Option<f32>], mode: &TemperatureMode) -> Option<f32> {
+    Temperature::from_readings(readings.iter().copied(), mode)
+        .map(|temperature| temperature.value())
+}
+
+#[test]
+fn test_from_readings_averages_celsius() {
+    let average = degrees(&[Some(40.0), Some(60.0)], &TemperatureMode::Celsius).unwrap();
+    assert!((average - 50.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_from_readings_converts_to_fahrenheit() {
+    let boiling = degrees(&[Some(100.0)], &TemperatureMode::Fahrenheit).unwrap();
+    assert!((boiling - 212.0).abs() < f32::EPSILON);
+    let freezing = degrees(&[Some(0.0)], &TemperatureMode::Fahrenheit).unwrap();
+    assert!((freezing - 32.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_from_readings_keeps_negative_readings() {
+    let celsius = degrees(&[Some(-10.0)], &TemperatureMode::Celsius).unwrap();
+    assert!((celsius + 10.0).abs() < f32::EPSILON);
+    let fahrenheit = degrees(&[Some(-10.0)], &TemperatureMode::Fahrenheit).unwrap();
+    assert!((fahrenheit - 14.0).abs() < f32::EPSILON);
+    let mixed = degrees(&[Some(-20.0), Some(40.0)], &TemperatureMode::Celsius).unwrap();
+    assert!((mixed - 10.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_from_readings_skips_missing_and_non_finite_readings() {
+    let readings = [
+        None,
+        Some(f32::NAN),
+        Some(f32::INFINITY),
+        Some(f32::NEG_INFINITY),
+        Some(30.0),
+    ];
+    let celsius = degrees(&readings, &TemperatureMode::Celsius).unwrap();
+    assert!((celsius - 30.0).abs() < f32::EPSILON);
+    let fahrenheit = degrees(&readings, &TemperatureMode::Fahrenheit).unwrap();
+    assert!((fahrenheit - 86.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_from_readings_is_absent_without_a_valid_reading() {
+    for mode in [TemperatureMode::Celsius, TemperatureMode::Fahrenheit] {
+        assert_eq!(degrees(&[], &mode), None);
+        assert_eq!(degrees(&[None, None], &mode), None);
+        assert_eq!(
+            degrees(
+                &[Some(f32::NAN), Some(f32::INFINITY), Some(f32::NEG_INFINITY)],
+                &mode
+            ),
+            None
+        );
+    }
+}
+
+#[test]
+fn test_from_readings_is_absent_when_disabled() {
+    assert_eq!(degrees(&[Some(40.0)], &TemperatureMode::Disabled), None);
+}
+
+#[test]
+fn test_absent_temperature_is_omitted_from_the_snapshot() {
+    let absent = serde_json::to_value(MetricsState::default()).unwrap();
+    assert!(absent.get("temperature").is_none());
+
+    let present = MetricsState {
+        temperature: Some(Temperature::new(45.0)),
+        ..MetricsState::default()
+    };
+    let present = serde_json::to_value(present).unwrap();
+    assert_eq!(present.get("temperature"), Some(&serde_json::json!(45.0)));
 }

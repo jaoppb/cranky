@@ -68,7 +68,7 @@ A local `just issues-check` also reports an issue missing from the board. CI's r
 1. Branch from `main` with the name `AGENTS.md` gives (`<type>/<issue>`).
 2. Commit following `AGENTS.md`, and make sure `just check` passes.
 3. Open the pull request against `main`. The template asks for `Closes #<n>`, what changed, notes for the reviewer, and the test plan. Dependent changes can go out as a stack of pull requests, each based on the one below it.
-4. The 11 required checks must be green. The `test` job can fail once on the runner without a code cause (#62); re-run the failed job once before investigating.
+4. The 11 required checks must be green. The `test` job can fail once on the runner without a code cause; re-run the failed job once before investigating.
 5. The maintainer merges, with a merge commit.
 
 ## Releasing

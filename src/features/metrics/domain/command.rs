@@ -76,7 +76,7 @@ pub(crate) struct CreateMetricsCommand {
     memory: MemoryMetrics,
     disks: Vec<DiskMetric>,
     network: NetworkMetrics,
-    temperature: Temperature,
+    temperature: Option<Temperature>,
     config: MetricsConfig,
 }
 
@@ -88,7 +88,7 @@ impl CreateMetricsCommand {
         memory: MemoryMetrics,
         disks: Vec<DiskMetric>,
         network: NetworkMetrics,
-        temperature: Temperature,
+        temperature: Option<Temperature>,
         config: MetricsConfig,
     ) -> Self {
         Self {
@@ -111,7 +111,7 @@ impl CreateMetricsCommand {
         MemoryMetrics,
         Vec<DiskMetric>,
         NetworkMetrics,
-        Temperature,
+        Option<Temperature>,
         MetricsConfig,
     ) {
         (

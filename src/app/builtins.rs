@@ -259,7 +259,7 @@ mod tests {
                     crate::features::metrics::domain::NetworkSpeed::new(0),
                     crate::features::metrics::domain::NetworkSpeed::new(0),
                 ),
-                crate::features::metrics::domain::Temperature::new(45.0),
+                Some(crate::features::metrics::domain::Temperature::new(45.0)),
                 crate::features::metrics::domain::MetricsConfig::default(),
             ),
         );
@@ -272,6 +272,77 @@ mod tests {
             metrics_node.tag(),
             crate::features::vdom::domain::NodeTag::Flex
         );
+    }
+
+    fn collect_texts(node: &crate::features::vdom::domain::VNode, texts: &mut Vec<String>) {
+        if let crate::features::vdom::domain::VNodeKind::Text { text } = node.kind() {
+            texts.push(text.as_str().to_string());
+        }
+        for child in node.children() {
+            collect_texts(child, texts);
+        }
+    }
+
+    /// Renders the built-in metrics widget of `engine` with temperature on in Celsius and
+    /// `temperature` as the sampled value, and returns every text it shows.
+    fn render_metrics_texts(
+        engine: &str,
+        temperature: Option<crate::features::metrics::domain::Temperature>,
+    ) -> Vec<String> {
+        use crate::shared::primitives::ModuleName;
+        let env = get_test_env();
+        let selection = EngineSelection::Explicit(EngineId::new(engine));
+        let mut metrics_mod =
+            BuiltinModules::find_module(&ModuleName::new("metrics"), &selection, &env).unwrap();
+        metrics_mod
+            .init(
+                &crate::shared::config::domain::ModuleConfig::new(
+                    ModuleName::new("metrics"),
+                    true,
+                    selection.clone(),
+                    crate::shared::primitives::ModuleOptions::default(),
+                ),
+                &crate::shared::config::domain::Config::default(),
+            )
+            .unwrap();
+        let hub = crate::shared::events::signals::SignalHub::new(
+            crate::shared::config::domain::Config::default(),
+        );
+        let config: crate::features::metrics::domain::MetricsConfig =
+            serde_json::from_value(serde_json::json!({ "temperature": "celsius" })).unwrap();
+        let metrics_state = crate::features::metrics::domain::MetricsState {
+            temperature,
+            config,
+            ..crate::features::metrics::domain::MetricsState::default()
+        };
+        hub.metrics_tx().send(metrics_state).unwrap();
+        metrics_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Metrics]);
+
+        let node = metrics_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+        let mut texts = Vec::new();
+        collect_texts(&node, &mut texts);
+        texts
+    }
+
+    #[test]
+    fn test_metrics_widget_shows_the_temperature_lua_and_rhai() {
+        for engine in ["lua", "rhai"] {
+            let texts = render_metrics_texts(
+                engine,
+                Some(crate::features::metrics::domain::Temperature::new(45.0)),
+            );
+            assert!(texts.contains(&"TMP".to_string()), "{engine}: {texts:?}");
+            assert!(texts.contains(&"45.0°C".to_string()), "{engine}: {texts:?}");
+        }
+    }
+
+    #[test]
+    fn test_metrics_widget_shows_dashes_without_a_temperature_lua_and_rhai() {
+        for engine in ["lua", "rhai"] {
+            let texts = render_metrics_texts(engine, None);
+            assert!(texts.contains(&"TMP".to_string()), "{engine}: {texts:?}");
+            assert!(texts.contains(&"--°C".to_string()), "{engine}: {texts:?}");
+        }
     }
 
     #[test]
