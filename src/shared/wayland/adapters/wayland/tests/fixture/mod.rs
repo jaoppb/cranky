@@ -2,7 +2,9 @@
 //! bound over a socket pair nobody reads from, so requests are just queued.
 
 pub(in crate::shared::wayland::adapters::wayland) mod pointer;
+mod seat;
 mod state;
+mod subsurface;
 pub mod wire;
 
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};

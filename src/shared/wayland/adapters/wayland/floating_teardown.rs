@@ -209,6 +209,50 @@ mod tests {
         assert_eq!(state.pointer_target, before);
     }
 
+    /// The owner closed its own popup: it gets no notice, but a nested
+    /// popup's owner still does.
+    #[test]
+    fn teardown_without_notify_self_notifies_only_descendants() {
+        let fake = Fake::new();
+        let (mut state, _) = popup(&fake, 1);
+        let nested = FloatingKind::Popup(PopupTarget::new(
+            ModuleId::new(CHILD),
+            MonitorId::new("DP-1"),
+        ));
+        let mut floating = fake.floating(Size::new(1, 1), solid(1, 1, [0; 4]));
+        floating.parent = Some(popup_kind());
+        state.floating_surfaces.insert(nested, floating);
+        let mut rx = state.hub.pointer_rx();
+        teardown_floating(&mut state, &popup_kind(), false);
+        let event = InteractionEvent::Lifecycle(SurfaceLifecycleEvent::PopupDismissed);
+        let expected = vec![(ModuleId::new(CHILD), MonitorId::new("DP-1"), event)];
+        assert_eq!(drain(&mut rx), expected);
+        assert!(state.floating_surfaces.is_empty());
+    }
+
+    #[test]
+    fn teardown_unregisters_child_subsurfaces() {
+        let fake = Fake::new();
+        let (mut state, surface) = popup(&fake, 1);
+        let module_surface = fake.module_surface(&surface);
+        let child_surface = module_surface.surface.clone();
+        let route = (
+            ModuleId::new(CHILD),
+            MonitorId::new("DP-1"),
+            SurfaceKind::Popup,
+        );
+        state.surface_to_id.insert(child_surface.clone(), route);
+        state
+            .floating_surfaces
+            .get_mut(&popup_kind())
+            .expect("popup")
+            .module_surfaces
+            .insert(ModuleId::new(CHILD), module_surface);
+        teardown_floating(&mut state, &popup_kind(), true);
+        assert!(!state.surface_to_id.contains_key(&child_surface));
+        assert!(!state.surface_to_id.contains_key(&surface));
+    }
+
     #[test]
     fn teardown_and_hide_discard_pending_children() {
         let fake = Fake::new();

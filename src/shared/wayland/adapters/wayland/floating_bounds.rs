@@ -126,6 +126,43 @@ mod tests {
     }
 
     #[test]
+    fn bar_bounds_with_anchor_rect_keep_rect_x_and_span_bar_height() {
+        let placement = ChildPlacement::new(30, 10, Size::new(4, 4));
+        let rect = Rect::new(Position::new(2, 3), Size::new(5, 6));
+        let bounds = compute_module_bounds(Some(placement), Some(rect), 24, false);
+        assert_eq!(
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+            (32, 0, 5, 24)
+        );
+    }
+
+    #[test]
+    fn bounds_without_placement_use_the_anchor_rect_alone() {
+        let rect = Rect::new(Position::new(2, 3), Size::new(5, 6));
+        let bounds = compute_module_bounds(None, Some(rect), 24, true);
+        assert_eq!(
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+            (2, 3, 5, 6)
+        );
+        let bounds = compute_module_bounds(None, Some(rect), 24, false);
+        assert_eq!(
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+            (2, 0, 5, 24)
+        );
+    }
+
+    #[test]
+    fn bounds_without_placement_or_rect_fall_back_to_a_thin_bar_column() {
+        for precise in [true, false] {
+            let bounds = compute_module_bounds(None, None, 24, precise);
+            assert_eq!(
+                (bounds.x, bounds.y, bounds.width, bounds.height),
+                (0, 0, 1, 24)
+            );
+        }
+    }
+
+    #[test]
     fn to_i32_overflow_falls_back_to_i32_max() {
         let overflowing = u32::MAX;
         assert_eq!(to_i32(overflowing), i32::MAX);
