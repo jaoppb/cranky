@@ -33,10 +33,7 @@ fn test_panel_spec_builder_and_accessors() {
         None,
         None,
     ));
-    let anchor = PanelAnchor::new(
-        VerticalAnchor::from_edges(true, false),
-        HorizontalAnchor::from_edges(false, true),
-    );
+    let anchor = PanelAnchor::new(VerticalAnchor::Top, HorizontalAnchor::Right);
     let spec = PanelSpec::new(content.clone())
         .with_layer(PanelLayer::Overlay)
         .with_anchor(anchor)
@@ -57,17 +54,25 @@ fn edges(anchor: PanelAnchor) -> (bool, bool, bool, bool) {
 #[test]
 fn panel_anchor_combines_vertical_and_horizontal_edges() {
     let cases = [
-        ((false, false), (false, false)),
-        ((true, false), (false, true)),
-        ((false, true), (true, false)),
-        ((true, true), (true, true)),
+        (
+            (VerticalAnchor::None, HorizontalAnchor::None),
+            (false, false, false, false),
+        ),
+        (
+            (VerticalAnchor::Top, HorizontalAnchor::Right),
+            (true, false, false, true),
+        ),
+        (
+            (VerticalAnchor::Bottom, HorizontalAnchor::Left),
+            (false, true, true, false),
+        ),
+        (
+            (VerticalAnchor::Both, HorizontalAnchor::Both),
+            (true, true, true, true),
+        ),
     ];
-    for ((top, bottom), (left, right)) in cases {
-        let anchor = PanelAnchor::new(
-            VerticalAnchor::from_edges(top, bottom),
-            HorizontalAnchor::from_edges(left, right),
-        );
-        assert_eq!(edges(anchor), (top, bottom, left, right));
+    for ((vertical, horizontal), expected) in cases {
+        assert_eq!(edges(PanelAnchor::new(vertical, horizontal)), expected);
     }
     assert_eq!(edges(PanelAnchor::none()), (false, false, false, false));
     assert_eq!(edges(PanelAnchor::all()), (true, true, true, true));
@@ -131,10 +136,7 @@ fn panel_anchor_deserializes_from_a_list_as_the_union_of_its_edges() {
 
 #[test]
 fn panel_anchor_serializes_as_the_flags_form_it_can_read_back() {
-    let anchor = PanelAnchor::new(
-        VerticalAnchor::from_edges(false, true),
-        HorizontalAnchor::from_edges(true, false),
-    );
+    let anchor = PanelAnchor::new(VerticalAnchor::Bottom, HorizontalAnchor::Left);
     let json = serde_json::to_value(anchor).unwrap();
     assert_eq!(
         json,
