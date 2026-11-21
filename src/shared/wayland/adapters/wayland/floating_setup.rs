@@ -132,7 +132,7 @@ fn setup_new_floating(
     // parent directly; a top-level one leaves it unset and relies on
     // `zwlr_layer_surface_v1.get_popup` below instead.
     let parent_xdg_surface = match &anchor_info.parent_role {
-        FloatingParentRole::Popup(popup) => Some(popup),
+        FloatingParentRole::Popup(parent_surface) => Some(parent_surface),
         FloatingParentRole::Layer(_) => None,
     };
     let xdg_popup = xdg_surface.get_popup(parent_xdg_surface, &info.positioner, queue_handle, ());

@@ -120,7 +120,7 @@ pub(super) fn handle_module_surface(
 
         let shm_buffer =
             ShmBuffer::new(shm, width, height, queue_handle, xdg_runtime_dir.as_path())
-                .map_err(|err| DisplayServerError::Internal(err.to_string()))?;
+                .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
 
         new_surface_to_register = Some(surface.clone());
         entry.insert(ModuleSurface {

@@ -61,7 +61,7 @@ impl DisplayServerPort for WaylandAdapter {
                 .state
                 .outputs
                 .iter()
-                .map(|output| output.output.clone())
+                .map(|info| info.output.clone())
                 .collect();
             for output in outputs {
                 let _ = self.state.create_bar(&output, &self.event_queue.handle());
@@ -78,15 +78,15 @@ impl DisplayServerPort for WaylandAdapter {
             .state
             .outputs
             .iter()
-            .filter(|output| !output.name.is_empty())
-            .filter(|output| {
+            .filter(|info| !info.name.is_empty())
+            .filter(|info| {
                 !self
                     .state
                     .bars
                     .iter()
-                    .any(|bar| bar.output_name == output.name)
+                    .any(|bar| bar.output_name == info.name)
             })
-            .map(|output| output.output.clone())
+            .map(|info| info.output.clone())
             .collect();
 
         for output in outputs_missing_bars {

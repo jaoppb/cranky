@@ -17,11 +17,7 @@ impl Dispatch<WlOutput, ()> for WaylandState {
         _qh: &QueueHandle<Self>,
     ) {
         let mut scale_updated_output = None;
-        if let Some(info) = state
-            .outputs
-            .iter_mut()
-            .find(|output| &output.output == proxy)
-        {
+        if let Some(info) = state.outputs.iter_mut().find(|info| &info.output == proxy) {
             match event {
                 wl_output::Event::Name { name } => {
                     info.name = name;

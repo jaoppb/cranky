@@ -51,11 +51,7 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                 _ => {}
             },
             wl_registry::Event::GlobalRemove { name } => {
-                if let Some(pos) = state
-                    .outputs
-                    .iter()
-                    .position(|output| output.global_id == name)
-                {
+                if let Some(pos) = state.outputs.iter().position(|info| info.global_id == name) {
                     let info = state.outputs.remove(pos);
                     if let Some(bar_pos) = state
                         .bars
