@@ -24,10 +24,15 @@ sha256sums=('SKIP')
 pkgver() {
 	cd "${srcdir}/${pkgname}"
 	local version
-	version="$(git describe --long --tags --abbrev=7 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g')"
+	# Only release tags (vX.Y.Z) count: a stray or prerelease tag is skipped.
+	version="$(git describe --long --tags --abbrev=7 --match 'v[0-9]*' --exclude '*-*' |
+		sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g')"
 	# makepkg writes the version into this file and sources it again, so a tag
 	# that is not a plain version must stop the build here.
-	[[ "${version}" =~ ^[0-9]+(\.[0-9]+)*\.r[0-9]+\.g[0-9a-f]{7,}$ ]] || return 1
+	if [[ ! "${version}" =~ ^[0-9]+(\.[0-9]+)*\.r[0-9]+\.g[0-9a-f]{7,}$ ]]; then
+		printf 'error: git describe gave no plain version: %s\n' "${version}" >&2
+		return 1
+	fi
 	printf '%s\n' "${version}"
 }
 
