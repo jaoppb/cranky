@@ -1,5 +1,6 @@
 use super::*;
 use crate::test_support::zone_bytes;
+use crate::zone::LeapSecond;
 
 /// The offset and abbreviation a checked-in zone has at an instant.
 fn seen(name: &str, instant: i64) -> (i64, String) {
@@ -114,15 +115,15 @@ fn a_leap_second_file_counts_its_leap_seconds() {
     let after = zone.at_instant(1_483_228_827);
     assert_eq!(
         (before.unix_seconds, before.leap_second),
-        (1_483_228_799, false)
+        (1_483_228_799, LeapSecond::Ordinary)
     );
     assert_eq!(
         (inserted.unix_seconds, inserted.leap_second),
-        (1_483_228_799, true)
+        (1_483_228_799, LeapSecond::Inserted)
     );
     assert_eq!(
         (after.unix_seconds, after.leap_second),
-        (1_483_228_800, false)
+        (1_483_228_800, LeapSecond::Ordinary)
     );
     // Transitions are stored on the same scale as the instants asked about.
     assert_eq!(zone.at_instant(1_774_746_026).kind.abbreviation, "WET");
@@ -280,7 +281,7 @@ fn a_later_version_is_read_from_its_second_block() {
     assert_eq!(zone.at_instant(1000).kind.abbreviation, "NEW");
     assert_eq!(zone.at_instant(i64::MAX).kind.abbreviation, "NEW");
     assert_eq!(zone.at_instant(2000).unix_seconds, 1999);
-    assert!(zone.at_instant(2000).leap_second);
+    assert_eq!(zone.at_instant(2000).leap_second, LeapSecond::Inserted);
 }
 
 #[test]

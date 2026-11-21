@@ -80,7 +80,7 @@ impl LocalTime {
             minute: second_of_day.rem_euclid(3600).div_euclid(60),
             second: second_of_day
                 .rem_euclid(60)
-                .saturating_add(i64::from(moment.leap_second)),
+                .saturating_add(moment.leap_second.extra_seconds()),
             subsec_millis,
             offset_seconds: moment.kind.offset,
             abbreviation: moment.kind.abbreviation,

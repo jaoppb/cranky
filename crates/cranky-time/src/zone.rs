@@ -62,8 +62,28 @@ pub(crate) struct Moment {
     pub kind: Kind,
     /// The instant with the leap seconds taken out.
     pub unix_seconds: i64,
-    /// The instant is an inserted leap second, shown as second 60.
-    pub leap_second: bool,
+    pub leap_second: LeapSecond,
+}
+
+/// Whether an instant is an inserted leap second, which the clock shows as
+/// second 60 instead of repeating second 59.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LeapSecond {
+    /// The instant is an inserted leap second.
+    Inserted,
+    /// Any other instant.
+    Ordinary,
+}
+
+impl LeapSecond {
+    /// The seconds to show past the second of the minute: one for an
+    /// inserted leap second, so it reads 60.
+    pub(crate) const fn extra_seconds(self) -> i64 {
+        match self {
+            Self::Inserted => 1,
+            Self::Ordinary => 0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -117,7 +137,7 @@ impl Zone {
     }
 
     pub(crate) fn at_instant(&self, instant: i64) -> Moment {
-        let (correction, leap_second) = self.leap_correction(instant);
+        let (correction, inserted) = self.leap_correction(instant);
         let unix_seconds = instant.saturating_sub(correction);
         let passed = self
             .transitions
@@ -137,7 +157,11 @@ impl Zone {
             // Every transition names a kind that exists, so one is always found.
             kind: kind.cloned().unwrap_or_else(Kind::utc),
             unix_seconds,
-            leap_second,
+            leap_second: if inserted {
+                LeapSecond::Inserted
+            } else {
+                LeapSecond::Ordinary
+            },
         }
     }
 
@@ -238,7 +262,7 @@ mod tests {
         let moment = Zone::utc().at_instant(1_795_000_000);
         assert_eq!(moment.kind, kind(0, "UTC"));
         assert_eq!(moment.unix_seconds, 1_795_000_000);
-        assert!(!moment.leap_second);
+        assert_eq!(moment.leap_second, LeapSecond::Ordinary);
     }
 
     #[test]
@@ -258,11 +282,15 @@ mod tests {
             let moment = zone.at_instant(instant);
             (moment.unix_seconds, moment.leap_second)
         };
-        assert_eq!(seen(99), (99, false));
-        assert_eq!(seen(100), (99, true), "the inserted second repeats 99");
-        assert_eq!(seen(101), (100, false));
-        assert_eq!(seen(200), (198, true));
-        assert_eq!(seen(201), (199, false));
+        assert_eq!(seen(99), (99, LeapSecond::Ordinary));
+        assert_eq!(
+            seen(100),
+            (99, LeapSecond::Inserted),
+            "the inserted second repeats 99"
+        );
+        assert_eq!(seen(101), (100, LeapSecond::Ordinary));
+        assert_eq!(seen(200), (198, LeapSecond::Inserted));
+        assert_eq!(seen(201), (199, LeapSecond::Ordinary));
     }
 
     #[test]
@@ -280,6 +308,6 @@ mod tests {
         ];
         let zone = Zone::new(vec![kind(0, "X")], Vec::new(), leaps, None).unwrap();
         assert_eq!(zone.at_instant(200).unix_seconds, 199);
-        assert!(!zone.at_instant(200).leap_second);
+        assert_eq!(zone.at_instant(200).leap_second, LeapSecond::Ordinary);
     }
 }
