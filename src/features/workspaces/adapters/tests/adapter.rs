@@ -105,6 +105,31 @@ fn test_hyprland_adapter_get_state_valid() {
     });
 }
 
+/// Of several monitors, the one Hyprland marks focused is the focused one,
+/// whatever its place in the reply.
+#[test]
+fn test_hyprland_adapter_get_state_picks_the_focused_monitor() {
+    use crate::features::workspaces::domain::MonitorName;
+
+    let provider = Arc::new(FakeHyprland::new(
+        "[]",
+        r#"[{"name": "DP-1", "activeWorkspace": {"id": 1}, "specialWorkspace": {"id": 0}, "focused": false},
+            {"name": "HDMI-A-1", "activeWorkspace": {"id": 2}, "specialWorkspace": {"id": -98}, "focused": true},
+            {"name": "eDP-1", "activeWorkspace": {"id": 3}, "specialWorkspace": {"id": 0}, "focused": false}]"#,
+    ));
+    let (_, monitors, focused) = HyprlandAdapter::with_provider(provider)
+        .get_state()
+        .unwrap();
+
+    assert_eq!(monitors.len(), 3);
+    assert_eq!(focused, Some(MonitorName::new("HDMI-A-1")));
+    let hdmi = &monitors[&MonitorName::new("HDMI-A-1")];
+    assert_eq!(
+        hdmi.special_workspace_id(),
+        Some(&crate::features::workspaces::domain::WorkspaceId::new(-98))
+    );
+}
+
 #[test]
 fn test_hyprland_adapter_run() {
     crate::test_utils::block_on(async {

@@ -306,6 +306,38 @@ mod tests {
         assert!(state.monitors().is_empty());
     }
 
+    /// A batch whose first line is ignored still changes state and forces a
+    /// resync when a later line is a monitor added.
+    #[test]
+    fn test_drain_batch_takes_the_outcome_of_a_later_line() {
+        let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
+        let mut line_buf = "invalid>>data\n".to_string();
+        let mut reader = Cursor::new(b"monitoraddedv2>>1,HDMI-A-1,x\n".to_vec());
+        let mut batch_events = Vec::new();
+
+        let (state_changed, force_resync) =
+            drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+
+        assert!(state_changed);
+        assert!(force_resync);
+    }
+
+    /// An applied first line does not mask the forced resync a later
+    /// monitor added asks for.
+    #[test]
+    fn test_drain_batch_forces_resync_for_a_later_monitor_added() {
+        let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
+        let mut line_buf = "workspacev2>>1,a\n".to_string();
+        let mut reader = Cursor::new(b"monitoraddedv2>>1,HDMI-A-1,x\n".to_vec());
+        let mut batch_events = Vec::new();
+
+        let (state_changed, force_resync) =
+            drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+
+        assert!(state_changed);
+        assert!(force_resync);
+    }
+
     fn inconsistent_state() -> HyprlandState {
         let mut workspaces = BTreeMap::new();
         workspaces.insert(
@@ -429,6 +461,72 @@ mod tests {
 
         assert!(state.monitors().contains_key(&MonitorName::new("HDMI-A-1")));
         assert!(!state.monitors().contains_key(&MonitorName::new("DP-1")));
+    }
+
+    /// Runs one event stream to its end with `lines` already written, and
+    /// returns how often the window manager was queried and the state the
+    /// hub was left with.
+    fn stream(lines: &[u8], reported: WindowManagerState) -> (usize, HyprlandState) {
+        use std::io::Write;
+
+        let (mut sender, receiver) = std::os::unix::net::UnixStream::pair().unwrap();
+        sender.write_all(lines).unwrap();
+        drop(sender);
+        let fake = FakeWindowManager::new(Some(reported));
+        let (hypr_tx, hypr_rx) =
+            tokio::sync::watch::channel(HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None));
+        process_event_stream(receiver, &fake, &hypr_tx);
+        let state = hypr_rx.borrow().clone();
+        (fake.queries(), state)
+    }
+
+    fn one_monitor(name: &str) -> WindowManagerState {
+        let mut monitors = BTreeMap::new();
+        monitors.insert(
+            MonitorName::new(name),
+            Monitor::new(MonitorName::new(name), WorkspaceId::new(1), None),
+        );
+        (BTreeMap::new(), monitors, None)
+    }
+
+    /// One monitor whose active workspace exists and sits on it, so the state has no
+    /// inconsistency and only a forced resync refetches it.
+    fn consistent_monitor(name: &str) -> WindowManagerState {
+        let (mut workspaces, monitors, active) = one_monitor(name);
+        workspaces.insert(
+            WorkspaceId::new(1),
+            crate::features::workspaces::domain::Workspace::new(
+                WorkspaceId::new(1),
+                WorkspaceName::new("1"),
+                Some(MonitorName::new(name)),
+            ),
+        );
+        (workspaces, monitors, active)
+    }
+
+    #[test]
+    fn test_process_event_stream_resyncs_after_a_monitor_added() {
+        let (queries, state) = stream(
+            b"monitoraddedv2>>1,HDMI-A-1,x\n",
+            consistent_monitor("HDMI-A-1"),
+        );
+        // The initial fetch, then the forced resync.
+        assert_eq!(queries, 2);
+        assert!(state.monitors().contains_key(&MonitorName::new("HDMI-A-1")));
+    }
+
+    #[test]
+    fn test_process_event_stream_applies_a_consistent_event_without_resync() {
+        let (queries, state) = stream(b"monitorremovedv2>>1,DP-1,x\n", one_monitor("DP-1"));
+        assert_eq!(queries, 1);
+        assert!(state.monitors().is_empty());
+    }
+
+    #[test]
+    fn test_process_event_stream_ignores_an_unparseable_line() {
+        let (queries, state) = stream(b"invalid>>data\n", one_monitor("DP-1"));
+        assert_eq!(queries, 1);
+        assert!(state.monitors().contains_key(&MonitorName::new("DP-1")));
     }
 
     #[test]
