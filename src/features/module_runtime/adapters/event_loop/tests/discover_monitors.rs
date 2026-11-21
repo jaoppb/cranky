@@ -1,3 +1,6 @@
+use crate::features::module_runtime::adapters::event_loop::dispatch::{
+    Embedding, discover_monitors,
+};
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
@@ -114,8 +117,6 @@ fn test_discover_monitors_ignores_module_sizes_cache() {
 /// site on it) are independent, and only the first is Wayland's to answer.
 #[test]
 fn test_discover_monitors_suspends_seen_monitor_with_no_live_layout() {
-    use crate::features::module_runtime::adapters::event_loop::dispatch::discover_monitors;
-
     let hub = SignalHub::new(Config::default());
     let mut scales = hub.monitor_scales_rx().borrow().clone();
     scales.insert(MonitorId::new("DP-1"), Scale::new(1.0));
@@ -125,7 +126,7 @@ fn test_discover_monitors_suspends_seen_monitor_with_no_live_layout() {
     let mut seen = std::collections::HashSet::new();
     seen.insert(MonitorId::new("DP-1"));
 
-    let discovered = discover_monitors(&hub, &layouts, &seen, true);
+    let discovered = discover_monitors(&hub, &layouts, &seen, Embedding::Embedded);
     assert!(!discovered.contains(&MonitorId::new("DP-1")));
 }
 
@@ -134,8 +135,6 @@ fn test_discover_monitors_suspends_seen_monitor_with_no_live_layout() {
 /// has assigned it a layout rect.
 #[test]
 fn test_discover_monitors_bootstraps_unseen_monitor_with_no_live_layout() {
-    use crate::features::module_runtime::adapters::event_loop::dispatch::discover_monitors;
-
     let hub = SignalHub::new(Config::default());
     let mut scales = hub.monitor_scales_rx().borrow().clone();
     scales.insert(MonitorId::new("DP-1"), Scale::new(1.0));
@@ -144,7 +143,7 @@ fn test_discover_monitors_bootstraps_unseen_monitor_with_no_live_layout() {
     let layouts: HashMap<MonitorId, crate::shared::primitives::ChildBounds> = HashMap::new();
     let seen = std::collections::HashSet::new();
 
-    let discovered = discover_monitors(&hub, &layouts, &seen, true);
+    let discovered = discover_monitors(&hub, &layouts, &seen, Embedding::Embedded);
     assert!(discovered.contains(&MonitorId::new("DP-1")));
 }
 
@@ -153,8 +152,6 @@ fn test_discover_monitors_bootstraps_unseen_monitor_with_no_live_layout() {
 /// names, where an embedded actor stays suspended.
 #[test]
 fn test_discover_monitors_top_level_covers_every_wayland_monitor() {
-    use crate::features::module_runtime::adapters::event_loop::dispatch::discover_monitors;
-
     let hub = SignalHub::new(Config::default());
     let mut scales = hub.monitor_scales_rx().borrow().clone();
     scales.insert(MonitorId::new("DP-1"), Scale::new(1.0));
@@ -165,7 +162,7 @@ fn test_discover_monitors_top_level_covers_every_wayland_monitor() {
     let mut seen = std::collections::HashSet::new();
     seen.insert(MonitorId::new("DP-1"));
 
-    let mut discovered = discover_monitors(&hub, &layouts, &seen, false);
+    let mut discovered = discover_monitors(&hub, &layouts, &seen, Embedding::TopLevel);
     discovered.sort_by(|left, right| left.as_str().cmp(right.as_str()));
     assert_eq!(
         discovered,
@@ -177,8 +174,6 @@ fn test_discover_monitors_top_level_covers_every_wayland_monitor() {
 /// layout there, and ignores a layout for a monitor Wayland does not know.
 #[test]
 fn test_discover_monitors_embedded_keeps_seen_monitor_with_a_live_layout() {
-    use crate::features::module_runtime::adapters::event_loop::dispatch::discover_monitors;
-
     let hub = SignalHub::new(Config::default());
     let mut scales = hub.monitor_scales_rx().borrow().clone();
     scales.insert(MonitorId::new("DP-1"), Scale::new(1.0));
@@ -191,6 +186,6 @@ fn test_discover_monitors_embedded_keeps_seen_monitor_with_a_live_layout() {
     seen.insert(MonitorId::new("DP-1"));
     seen.insert(MonitorId::new("GHOST-1"));
 
-    let discovered = discover_monitors(&hub, &layouts, &seen, true);
+    let discovered = discover_monitors(&hub, &layouts, &seen, Embedding::Embedded);
     assert_eq!(discovered, vec![MonitorId::new("DP-1")]);
 }

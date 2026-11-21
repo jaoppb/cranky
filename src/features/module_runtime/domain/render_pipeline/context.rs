@@ -1,6 +1,7 @@
 //! The inputs of one pipeline run: the layout context the event loop hands in, and the diff
 //! result the diff phase passes to the layout phase.
 use crate::features::layout_engine::ports::LayoutEnginePort;
+use crate::features::module_runtime::domain::Change;
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::{InteractionContext, VNode};
 use crate::shared::primitives::geometry::{Rect, Scale};
@@ -69,24 +70,24 @@ impl<F: CanvasFactory, E: LayoutEnginePort> std::fmt::Debug for LayoutContext<'_
 #[derive(Debug, Clone, PartialEq)]
 pub struct PipelineDiff {
     new_vdom: VNode,
-    vdom_dirty: bool,
-    bounds_changed: bool,
-    child_sizes_changed: bool,
+    vdom: Change,
+    bounds: Change,
+    child_sizes: Change,
 }
 
 impl PipelineDiff {
     #[must_use]
     pub(crate) const fn new(
         new_vdom: VNode,
-        vdom_dirty: bool,
-        bounds_changed: bool,
-        child_sizes_changed: bool,
+        vdom: Change,
+        bounds: Change,
+        child_sizes: Change,
     ) -> Self {
         Self {
             new_vdom,
-            vdom_dirty,
-            bounds_changed,
-            child_sizes_changed,
+            vdom,
+            bounds,
+            child_sizes,
         }
     }
 
@@ -97,16 +98,16 @@ impl PipelineDiff {
 
     #[must_use]
     pub(crate) const fn vdom_dirty(&self) -> bool {
-        self.vdom_dirty
+        self.vdom.is_changed()
     }
 
     #[must_use]
     pub(crate) const fn bounds_changed(&self) -> bool {
-        self.bounds_changed
+        self.bounds.is_changed()
     }
 
     #[must_use]
     pub(crate) const fn child_sizes_changed(&self) -> bool {
-        self.child_sizes_changed
+        self.child_sizes.is_changed()
     }
 }

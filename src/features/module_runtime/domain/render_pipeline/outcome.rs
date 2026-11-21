@@ -1,6 +1,6 @@
 //! What one pipeline run produces: the laid-out tree, the painted buffer, child layouts, floating
 //! layouts and any size change.
-use super::floating_phase::{FloatingLayouts, PopupRenderLayout};
+use super::floating_phase::{FloatingHold, FloatingLayouts, PopupRenderLayout};
 use crate::features::layout_engine::domain::RenderNode;
 use crate::shared::primitives::ChildModuleLayout;
 use crate::shared::primitives::geometry::{Position, Size};
@@ -88,18 +88,18 @@ impl RenderOutcome {
     }
 
     #[must_use]
-    pub(crate) const fn popup_held(&self) -> bool {
-        self.floating.popup_held()
+    pub(crate) const fn popup_hold(&self) -> FloatingHold {
+        self.floating.popup_hold()
     }
 
     #[must_use]
-    pub(crate) const fn panel_held(&self) -> bool {
-        self.floating.panel_held()
+    pub(crate) const fn panel_hold(&self) -> FloatingHold {
+        self.floating.panel_hold()
     }
 
     #[must_use]
-    pub(crate) const fn tooltip_held(&self) -> bool {
-        self.floating.tooltip_held()
+    pub(crate) const fn tooltip_hold(&self) -> FloatingHold {
+        self.floating.tooltip_hold()
     }
 
     #[must_use]
