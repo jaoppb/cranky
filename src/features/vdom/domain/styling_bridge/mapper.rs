@@ -4,7 +4,7 @@ use crate::features::vdom::domain::{NodePath, VNode, VNodeKind};
 use crate::shared::primitives::ModuleKey;
 
 #[must_use]
-pub fn map_to_styled_node(
+pub(super) fn map_to_styled_node(
     vnode: &VNode,
     path: &NodePath,
     style: ComputedStyle,

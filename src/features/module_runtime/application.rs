@@ -6,16 +6,16 @@ use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::{
-    ChildBounds, LayoutSurface, ModuleId, ModuleInstanceId, MonitorId,
-};
+#[cfg(test)]
+use crate::shared::primitives::ModuleInstanceId;
+use crate::shared::primitives::{ChildBounds, LayoutSurface, ModuleId, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::watch;
 
-pub struct ModuleContext<
+pub(crate) struct ModuleContext<
     LS: LayoutEventSender + 'static,
     DS: DisplayCommandSender + 'static,
     US: UiCommandSender + 'static,
@@ -36,7 +36,7 @@ impl<
     US: UiCommandSender + 'static,
 > ModuleContext<LS, DS, US>
 {
-    pub fn new(
+    pub(crate) fn new(
         id: ModuleId,
         hub: Arc<SignalHub>,
         surface_manager: DynSurfaceManager,
@@ -59,74 +59,71 @@ impl<
     }
 
     #[must_use]
-    pub fn with_parent(mut self, parent_id: Option<ModuleId>) -> Self {
+    pub(crate) fn with_parent(mut self, parent_id: Option<ModuleId>) -> Self {
         self.identity = self.identity.with_parent(parent_id);
         self
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn with_instance_id(mut self, instance_id: Option<ModuleInstanceId>) -> Self {
+    pub(crate) fn with_instance_id(mut self, instance_id: Option<ModuleInstanceId>) -> Self {
         self.identity = self.identity.with_instance_id(instance_id);
         self
     }
 
     #[must_use]
-    pub fn with_surface(mut self, surface: LayoutSurface) -> Self {
+    pub(crate) fn with_surface(mut self, surface: LayoutSurface) -> Self {
         self.identity = self.identity.with_surface(surface);
         self
     }
 
     #[must_use]
-    pub const fn identity(&self) -> &ModuleIdentity {
-        &self.identity
-    }
-
-    #[must_use]
-    pub const fn id(&self) -> ModuleId {
+    pub(crate) const fn id(&self) -> ModuleId {
         self.identity.id()
     }
 
     #[must_use]
-    pub const fn parent_id(&self) -> Option<ModuleId> {
+    pub(crate) const fn parent_id(&self) -> Option<ModuleId> {
         self.identity.parent_id()
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn instance_id(&self) -> Option<&ModuleInstanceId> {
+    pub(crate) const fn instance_id(&self) -> Option<&ModuleInstanceId> {
         self.identity.instance_id()
     }
 
     #[must_use]
-    pub const fn surface(&self) -> LayoutSurface {
+    pub(crate) const fn surface(&self) -> LayoutSurface {
         self.identity.surface()
     }
 
     #[must_use]
-    pub const fn hub(&self) -> &Arc<SignalHub> {
+    pub(crate) const fn hub(&self) -> &Arc<SignalHub> {
         &self.hub
     }
 
     #[must_use]
-    pub const fn surface_manager(&self) -> &DynSurfaceManager {
+    pub(crate) const fn surface_manager(&self) -> &DynSurfaceManager {
         &self.surface_manager
     }
 
     #[must_use]
-    pub fn layout_sender(&self) -> &LS {
+    pub(crate) fn layout_sender(&self) -> &LS {
         self.layout_sender.as_ref()
     }
 
     #[must_use]
-    pub fn display_sender(&self) -> &DS {
+    pub(crate) fn display_sender(&self) -> &DS {
         self.display_sender.as_ref()
     }
 
     #[must_use]
-    pub fn ui_sender(&self) -> &US {
+    pub(crate) fn ui_sender(&self) -> &US {
         self.ui_sender.as_ref()
     }
 
-    pub const fn rxs_mut(
+    pub(crate) const fn rxs_mut(
         &mut self,
     ) -> (
         &mut watch::Receiver<HashMap<MonitorId, ChildBounds>>,
@@ -136,7 +133,7 @@ impl<
     }
 }
 
-pub struct ModuleActor<
+pub(crate) struct ModuleActor<
     F: CanvasFactory + 'static,
     LS: LayoutEventSender + 'static,
     DS: DisplayCommandSender + 'static,
@@ -157,7 +154,7 @@ impl<
 > ModuleActor<F, LS, DS, US>
 {
     #[must_use]
-    pub fn new(
+    pub(crate) fn new(
         port: Box<dyn AnyModulePort>,
         ctx: ModuleContext<LS, DS, US>,
         canvas_factory: F,
@@ -177,7 +174,7 @@ impl<
     /// `JoinHandle` instead of discarding it, so a caller that mints this
     /// actor outside the normal config-driven lifecycle (a lazy spawn, see
     /// `ModuleRegistry::spawn_module_lazy`) can track and later abort it.
-    pub fn spawn(self) -> tokio::task::JoinHandle<()> {
+    pub(crate) fn spawn(self) -> tokio::task::JoinHandle<()> {
         let event_loop = EventLoop::new(
             self.port,
             self.ctx,
@@ -213,12 +210,12 @@ mod tests {
     use crate::shared::primitives::geometry::{Position, Rect, Size};
 
     struct TestFixture {
-        pub hub: Arc<SignalHub>,
-        pub layout_rx: std::sync::mpsc::Receiver<LayoutEvent>,
+        pub(crate) hub: Arc<SignalHub>,
+        pub(crate) layout_rx: std::sync::mpsc::Receiver<LayoutEvent>,
         _display_rx: std::sync::mpsc::Receiver<DisplayCommand>,
         _ui_rx: std::sync::mpsc::Receiver<UiCommand>,
-        pub layout_tx: watch::Sender<HashMap<MonitorId, ChildBounds>>,
-        pub event_loop: EventLoop<
+        pub(crate) layout_tx: watch::Sender<HashMap<MonitorId, ChildBounds>>,
+        pub(crate) event_loop: EventLoop<
             MockCanvasFactory,
             ChannelLayoutSender,
             ChannelDisplaySender,
@@ -416,7 +413,7 @@ mod tests {
                     assert_eq!(size.width(), 10);
                     assert_eq!(size.height(), 10);
                 }
-                _ => panic!("Unexpected event"),
+                LayoutEvent::ContainerLayoutsCalculated { .. } => panic!("Unexpected event"),
             }
 
             let mut layouts = HashMap::new();
@@ -592,7 +589,7 @@ mod tests {
                     assert_eq!(module_id, id);
                     assert_eq!(size.width(), 10);
                 }
-                _ => panic!("Unexpected event"),
+                LayoutEvent::ContainerLayoutsCalculated { .. } => panic!("Unexpected event"),
             }
         });
     }

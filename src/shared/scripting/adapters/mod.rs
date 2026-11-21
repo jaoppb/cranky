@@ -5,7 +5,7 @@ pub mod rhai;
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::shared::scripting::ports::{ModuleError, ScriptEnginePort};
 
-pub struct RhaiEngineAdapter;
+pub(crate) struct RhaiEngineAdapter;
 
 impl ScriptEnginePort for RhaiEngineAdapter {
     fn id(&self) -> EngineId {
@@ -22,7 +22,7 @@ impl ScriptEnginePort for RhaiEngineAdapter {
     }
 }
 
-pub struct LuaEngineAdapter;
+pub(crate) struct LuaEngineAdapter;
 
 impl ScriptEnginePort for LuaEngineAdapter {
     fn id(&self) -> EngineId {

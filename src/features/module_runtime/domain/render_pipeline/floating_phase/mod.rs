@@ -1,15 +1,15 @@
-mod content;
+pub mod content;
 mod gate;
 mod panel;
-mod popup;
+pub mod popup;
 #[cfg(test)]
 mod tests;
 mod tooltip;
 
-pub use content::{FloatingCache, FloatingPass};
+pub(crate) use content::{FloatingCache, FloatingPass};
 pub(super) use gate::apply_gate;
 use panel::layout_panel;
-pub use popup::PopupRenderLayout;
+pub(crate) use popup::PopupRenderLayout;
 use popup::layout_popup;
 
 use crate::features::layout_engine::domain::RenderNode;
@@ -24,20 +24,20 @@ use tooltip::{HoverTrees, layout_tooltip};
 /// Borrowed together so `layout_floating` can hand each kind its own cache
 /// without borrowing `RenderPipeline` three separate times — see
 /// `RenderPipeline::floating_content_caches_mut`.
-pub struct FloatingContentCaches<'a> {
-    pub popup: &'a mut FloatingCache,
-    pub panel: &'a mut FloatingCache,
-    pub tooltip: &'a mut FloatingCache,
+pub(crate) struct FloatingContentCaches<'a> {
+    pub(crate) popup: &'a mut FloatingCache,
+    pub(crate) panel: &'a mut FloatingCache,
+    pub(crate) tooltip: &'a mut FloatingCache,
 }
 
 /// One layout engine per floating kind.
 ///
 /// Sharing one would diff one kind's tree against another's cached layout
 /// state whenever more than one is open at once.
-pub struct FloatingEngines<'a, E: LayoutEnginePort> {
-    pub popup: &'a mut E,
-    pub panel: &'a mut E,
-    pub tooltip: &'a mut E,
+pub(crate) struct FloatingEngines<'a, E: LayoutEnginePort> {
+    pub(crate) popup: &'a mut E,
+    pub(crate) panel: &'a mut E,
+    pub(crate) tooltip: &'a mut E,
 }
 
 /// The layout results for whatever floating content is currently open on a monitor.
@@ -56,7 +56,7 @@ pub struct FloatingLayouts {
 
 impl FloatingLayouts {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         popup: Option<PopupRenderLayout>,
         panel: Option<RenderNode>,
         tooltip: Option<RenderNode>,
@@ -76,32 +76,32 @@ impl FloatingLayouts {
     }
 
     #[must_use]
-    pub const fn popup_held(&self) -> bool {
+    pub(crate) const fn popup_held(&self) -> bool {
         self.held[0]
     }
 
     #[must_use]
-    pub const fn panel_held(&self) -> bool {
+    pub(crate) const fn panel_held(&self) -> bool {
         self.held[1]
     }
 
     #[must_use]
-    pub const fn tooltip_held(&self) -> bool {
+    pub(crate) const fn tooltip_held(&self) -> bool {
         self.held[2]
     }
 
     #[must_use]
-    pub const fn popup(&self) -> Option<&PopupRenderLayout> {
+    pub(crate) const fn popup(&self) -> Option<&PopupRenderLayout> {
         self.popup.as_ref()
     }
 
     #[must_use]
-    pub const fn panel(&self) -> Option<&RenderNode> {
+    pub(crate) const fn panel(&self) -> Option<&RenderNode> {
         self.panel.as_ref()
     }
 
     #[must_use]
-    pub const fn tooltip(&self) -> Option<&RenderNode> {
+    pub(crate) const fn tooltip(&self) -> Option<&RenderNode> {
         self.tooltip.as_ref()
     }
 }
@@ -109,7 +109,7 @@ impl FloatingLayouts {
 /// Computes the floating layouts for whatever popup/panel/tooltip is
 /// currently active, extending `child_layouts` with any module nodes found
 /// inside them.
-pub fn layout_floating<F: CanvasFactory, E: LayoutEnginePort>(
+pub(crate) fn layout_floating<F: CanvasFactory, E: LayoutEnginePort>(
     render_node: &RenderNode,
     interaction: Option<&InteractionContext>,
     caches: FloatingContentCaches<'_>,

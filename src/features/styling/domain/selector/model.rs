@@ -6,7 +6,7 @@ use super::super::grid_types::PseudoClass;
 /// Mirrors the CSS combinator grammar; kept as a domain type so the domain
 /// selector model has no dependency on any parsing crate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Combinator {
+pub(crate) enum Combinator {
     /// ` ` — any ancestor.
     Descendant,
     /// `>` — direct parent.
@@ -18,23 +18,23 @@ pub enum Combinator {
 }
 
 #[derive(Debug, Clone)]
-pub struct RuleEntry {
-    pub selectors: Vec<CompiledSelector>,
-    pub style: DeclaredStyle,
-    pub importance: Importance,
+pub(crate) struct RuleEntry {
+    pub(crate) selectors: Vec<CompiledSelector>,
+    pub(crate) style: DeclaredStyle,
+    pub(crate) importance: Importance,
 }
 
 #[derive(Debug, Clone)]
-pub struct CompiledSelector {
-    pub steps: Vec<SelectorStep>,
+pub(crate) struct CompiledSelector {
+    pub(crate) steps: Vec<SelectorStep>,
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct SelectorStep {
-    pub tag: Option<String>,
-    pub id: Option<String>,
-    pub classes: Vec<String>,
-    pub pseudo_classes: Vec<PseudoClass>,
-    pub negations: Vec<CompiledSelector>,
-    pub combinator: Option<Combinator>,
+pub(crate) struct SelectorStep {
+    pub(crate) tag: Option<String>,
+    pub(crate) id: Option<String>,
+    pub(crate) classes: Vec<String>,
+    pub(crate) pseudo_classes: Vec<PseudoClass>,
+    pub(crate) negations: Vec<CompiledSelector>,
+    pub(crate) combinator: Option<Combinator>,
 }

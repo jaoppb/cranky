@@ -24,17 +24,17 @@ impl SizeConstraint {
     }
 
     #[must_use]
-    pub const fn new(width: Option<u32>, height: Option<u32>) -> Self {
+    pub(crate) const fn new(width: Option<u32>, height: Option<u32>) -> Self {
         Self { width, height }
     }
 
     #[must_use]
-    pub const fn width(&self) -> Option<u32> {
+    pub(crate) const fn width(&self) -> Option<u32> {
         self.width
     }
 
     #[must_use]
-    pub const fn height(&self) -> Option<u32> {
+    pub(crate) const fn height(&self) -> Option<u32> {
         self.height
     }
 }
@@ -49,17 +49,17 @@ pub struct ChildBounds {
 
 impl ChildBounds {
     #[must_use]
-    pub const fn new(rect: Rect, constraint: SizeConstraint) -> Self {
+    pub(crate) const fn new(rect: Rect, constraint: SizeConstraint) -> Self {
         Self { rect, constraint }
     }
 
     #[must_use]
-    pub const fn rect(&self) -> Rect {
+    pub(crate) const fn rect(&self) -> Rect {
         self.rect
     }
 
     #[must_use]
-    pub const fn constraint(&self) -> SizeConstraint {
+    pub(crate) const fn constraint(&self) -> SizeConstraint {
         self.constraint
     }
 }

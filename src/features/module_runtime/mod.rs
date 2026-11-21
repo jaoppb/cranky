@@ -19,17 +19,17 @@ pub mod test_support {
     use crate::shared::primitives::{FunctionName, ModuleId, MonitorId};
     use crate::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
 
-    pub struct MockLayoutSender;
+    pub(crate) struct MockLayoutSender;
     impl LayoutEventSender for MockLayoutSender {
         fn send_layout_event(&self, _event: LayoutEvent) {}
     }
 
-    pub struct ChannelLayoutSender {
-        pub tx: std::sync::mpsc::Sender<LayoutEvent>,
+    pub(crate) struct ChannelLayoutSender {
+        pub(crate) tx: std::sync::mpsc::Sender<LayoutEvent>,
     }
     impl ChannelLayoutSender {
         #[must_use]
-        pub const fn new(tx: std::sync::mpsc::Sender<LayoutEvent>) -> Self {
+        pub(crate) const fn new(tx: std::sync::mpsc::Sender<LayoutEvent>) -> Self {
             Self { tx }
         }
     }
@@ -39,17 +39,17 @@ pub mod test_support {
         }
     }
 
-    pub struct MockDisplaySender;
+    pub(crate) struct MockDisplaySender;
     impl DisplayCommandSender for MockDisplaySender {
         fn send_display_command(&self, _cmd: DisplayCommand) {}
     }
 
-    pub struct ChannelDisplaySender {
-        pub tx: std::sync::mpsc::Sender<DisplayCommand>,
+    pub(crate) struct ChannelDisplaySender {
+        pub(crate) tx: std::sync::mpsc::Sender<DisplayCommand>,
     }
     impl ChannelDisplaySender {
         #[must_use]
-        pub const fn new(tx: std::sync::mpsc::Sender<DisplayCommand>) -> Self {
+        pub(crate) const fn new(tx: std::sync::mpsc::Sender<DisplayCommand>) -> Self {
             Self { tx }
         }
     }
@@ -59,19 +59,13 @@ pub mod test_support {
         }
     }
 
-    pub struct MockUiSender;
+    pub(crate) struct MockUiSender;
     impl UiCommandSender for MockUiSender {
         fn send_ui_command(&self, _cmd: UiCommand) {}
     }
 
-    pub struct ChannelUiSender {
-        pub tx: std::sync::mpsc::Sender<UiCommand>,
-    }
-    impl ChannelUiSender {
-        #[must_use]
-        pub const fn new(tx: std::sync::mpsc::Sender<UiCommand>) -> Self {
-            Self { tx }
-        }
+    pub(crate) struct ChannelUiSender {
+        pub(crate) tx: std::sync::mpsc::Sender<UiCommand>,
     }
     impl UiCommandSender for ChannelUiSender {
         fn send_ui_command(&self, cmd: UiCommand) {
@@ -79,7 +73,7 @@ pub mod test_support {
         }
     }
 
-    pub struct MockSurfaceManager;
+    pub(crate) struct MockSurfaceManager;
 
     impl crate::shared::wayland::ports::SurfaceManagerPort for MockSurfaceManager {
         fn submit_buffer(
@@ -93,7 +87,7 @@ pub mod test_support {
     }
 
     #[derive(Debug, Default, Clone)]
-    pub struct MockCanvasFactory;
+    pub(crate) struct MockCanvasFactory;
 
     impl CanvasFactory for MockCanvasFactory {
         fn create_canvas(
@@ -117,7 +111,7 @@ pub mod test_support {
         }
     }
 
-    pub struct MockCanvas;
+    pub(crate) struct MockCanvas;
 
     impl Canvas for MockCanvas {
         fn draw_rect(
@@ -162,7 +156,7 @@ pub mod test_support {
         }
     }
 
-    pub struct MockMeasurer;
+    pub(crate) struct MockMeasurer;
 
     impl TextMeasurer for MockMeasurer {
         fn measure(
@@ -175,14 +169,14 @@ pub mod test_support {
         }
     }
 
-    pub struct TestModulePort {
-        pub node: VNode,
-        pub subs: Vec<SignalKind>,
+    pub(crate) struct TestModulePort {
+        pub(crate) node: VNode,
+        pub(crate) subs: Vec<SignalKind>,
     }
 
     impl TestModulePort {
         #[must_use]
-        pub const fn new(node: VNode) -> Self {
+        pub(crate) const fn new(node: VNode) -> Self {
             Self {
                 node,
                 subs: Vec::new(),
@@ -190,7 +184,7 @@ pub mod test_support {
         }
 
         #[must_use]
-        pub const fn with_subs(node: VNode, subs: Vec<SignalKind>) -> Self {
+        pub(crate) const fn with_subs(node: VNode, subs: Vec<SignalKind>) -> Self {
             Self { node, subs }
         }
     }
@@ -228,7 +222,7 @@ pub mod test_support {
     }
 
     #[derive(Debug, Default, Clone)]
-    pub struct MockVdomDiff;
+    pub(crate) struct MockVdomDiff;
 
     impl crate::features::vdom::ports::VdomDiffPort for MockVdomDiff {
         fn diff<'a>(
@@ -250,7 +244,7 @@ pub mod test_support {
     }
 
     #[derive(Debug, Default, Clone)]
-    pub struct MockStyleResolver;
+    pub(crate) struct MockStyleResolver;
 
     impl crate::features::styling::ports::StyleResolverPort for MockStyleResolver {
         fn resolve_style(
@@ -269,7 +263,7 @@ pub mod test_support {
     }
 
     #[derive(Debug, Default, Clone)]
-    pub struct MockLayoutEngine;
+    pub(crate) struct MockLayoutEngine;
 
     impl crate::features::layout_engine::ports::LayoutEnginePort for MockLayoutEngine {
         fn calculate_layout_with_constraints(

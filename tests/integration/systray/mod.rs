@@ -1,8 +1,8 @@
 //! The `StatusNotifier` adapters (`src/features/systray/adapters/`) against the
 //! private bus: watcher, fetcher, proxy signals, actions and cleanup.
 
-mod item;
-mod tray;
+pub mod item;
+pub mod tray;
 
 use crate::cases::{Case, case};
 use crate::support::{Outcome, ensure_eq};
@@ -15,7 +15,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tray::Tray;
 
-pub fn cases() -> Vec<Case> {
+pub(crate) fn cases() -> Vec<Case> {
     vec![
         case!(systray::claims_the_watcher_name),
         case!(systray::fetches_a_registered_item),

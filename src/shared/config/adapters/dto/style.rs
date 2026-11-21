@@ -9,7 +9,7 @@ use super::helpers::default_timebased_duration_ms;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "mode", rename_all = "lowercase")]
-pub enum RenderingModeDto {
+pub(super) enum RenderingModeDto {
     Immediate {
         #[serde(default)]
         fps_limit: Option<u32>,
@@ -30,7 +30,7 @@ impl Default for RenderingModeDto {
 
 impl RenderingModeDto {
     #[must_use]
-    pub const fn into_domain(self) -> domain::RenderingMode {
+    pub(crate) const fn into_domain(self) -> domain::RenderingMode {
         match self {
             Self::Immediate { fps_limit } => domain::RenderingMode::new_immediate(fps_limit),
             Self::Timebased { duration_ms } => domain::RenderingMode::new_timebased(duration_ms),
@@ -39,7 +39,7 @@ impl RenderingModeDto {
 }
 
 #[derive(Debug, Deserialize, Default)]
-pub struct TooltipConfigDto {
+pub(super) struct TooltipConfigDto {
     background: Option<String>,
     border_color: Option<String>,
     text_color: Option<String>,
@@ -52,7 +52,7 @@ pub struct TooltipConfigDto {
 
 impl TooltipConfigDto {
     #[must_use]
-    pub fn into_domain(self) -> domain::TooltipConfig {
+    pub(crate) fn into_domain(self) -> domain::TooltipConfig {
         let mut config = domain::TooltipConfig::default();
         if let Some(background) = self
             .background
@@ -92,7 +92,7 @@ impl TooltipConfigDto {
 }
 
 #[derive(Debug, Deserialize, Default)]
-pub struct PopupConfigDto {
+pub(super) struct PopupConfigDto {
     #[serde(default)]
     behavior: PopupBehaviorDto,
     #[serde(default)]
@@ -103,7 +103,7 @@ pub struct PopupConfigDto {
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum PopupEmbedDto {
+enum PopupEmbedDto {
     #[default]
     Composite,
     Subsurface,
@@ -111,7 +111,7 @@ pub enum PopupEmbedDto {
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum PopupBehaviorDto {
+enum PopupBehaviorDto {
     PerMonitor,
     PerModule,
     PerModuleAndMonitor,
@@ -121,7 +121,7 @@ pub enum PopupBehaviorDto {
 
 impl PopupConfigDto {
     #[must_use]
-    pub const fn into_domain(self) -> domain::PopupConfig {
+    pub(crate) const fn into_domain(self) -> domain::PopupConfig {
         let offset = match self.offset {
             Some(off) => off,
             None => crate::shared::primitives::PopupOffset::new(0, 8),
@@ -136,7 +136,7 @@ impl PopupConfigDto {
 
 impl PopupEmbedDto {
     #[must_use]
-    pub const fn into_domain(self) -> domain::PopupEmbed {
+    pub(crate) const fn into_domain(self) -> domain::PopupEmbed {
         match self {
             Self::Composite => domain::PopupEmbed::Composite,
             Self::Subsurface => domain::PopupEmbed::Subsurface,
@@ -146,7 +146,7 @@ impl PopupEmbedDto {
 
 impl PopupBehaviorDto {
     #[must_use]
-    pub const fn into_domain(self) -> domain::PopupBehavior {
+    pub(crate) const fn into_domain(self) -> domain::PopupBehavior {
         match self {
             Self::PerMonitor => domain::PopupBehavior::PerMonitor,
             Self::PerModule => domain::PopupBehavior::PerModule,

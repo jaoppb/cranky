@@ -2,7 +2,7 @@ use super::super::errors::StylingError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum CssLength {
+pub(crate) enum CssLength {
     #[serde(rename = "Px")]
     Pixels(f32),
     Percent(f32),
@@ -25,7 +25,7 @@ impl CssLength {
     /// # Errors
     ///
     /// Returns `StylingError::InvalidLength` if `pixels` is NaN or negative.
-    pub fn px(pixels: f32) -> Result<Self, StylingError> {
+    pub(crate) fn px(pixels: f32) -> Result<Self, StylingError> {
         if pixels.is_nan() || pixels < 0.0 {
             return Err(StylingError::InvalidLength(format!(
                 "Length cannot be negative or NaN, got {pixels}"
@@ -39,25 +39,12 @@ impl CssLength {
     /// # Errors
     ///
     /// Returns `StylingError::InvalidLength` if `percentage` is NaN or negative.
-    pub fn percent(percentage: f32) -> Result<Self, StylingError> {
+    pub(crate) fn percent(percentage: f32) -> Result<Self, StylingError> {
         if percentage.is_nan() || percentage < 0.0 {
             return Err(StylingError::InvalidLength(format!(
                 "Percentage cannot be negative or NaN, got {percentage}"
             )));
         }
         Ok(Self::Percent(percentage))
-    }
-
-    #[must_use]
-    pub const fn value(&self) -> Option<f32> {
-        match self {
-            Self::Pixels(value) | Self::Percent(value) => Some(*value),
-            Self::Auto | Self::Calc { .. } => None,
-        }
-    }
-
-    #[must_use]
-    pub const fn is_auto(&self) -> bool {
-        matches!(self, Self::Auto)
     }
 }

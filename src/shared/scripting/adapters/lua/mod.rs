@@ -1,24 +1,24 @@
 pub mod api;
-pub mod api_elements;
-pub mod api_sys;
-pub mod dsl_container;
-pub mod dsl_leaf;
-pub mod metadata;
+mod api_elements;
+mod api_sys;
+mod dsl_container;
+mod dsl_leaf;
+mod metadata;
 pub mod module;
 pub mod module_impl;
-pub mod module_port;
-pub mod parser_floating;
-pub mod parser_props;
+mod module_port;
+mod parser_floating;
+mod parser_props;
 pub mod sync;
 #[cfg(test)]
 mod tests;
 pub mod userdata;
 pub mod vnode_parser;
 
-pub use api::{register_cranky_api, register_vdom_dsl};
+#[cfg(test)]
+pub(crate) use api::register_cranky_api;
 pub use module::LuaModule;
 #[cfg(test)]
-pub use module::LuaScriptLoader;
-pub use sync::LuaStateSynchronizer;
-pub use userdata::{LuaMonitor, LuaVNode};
-pub use vnode_parser::value_to_vnode;
+pub(crate) use userdata::LuaMonitor;
+#[cfg(test)]
+pub(crate) use vnode_parser::value_to_vnode;

@@ -6,7 +6,7 @@ use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{BinaryData, ModuleInstanceId, ModuleName, ModuleOptions};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Patch {
+pub(crate) enum Patch {
     NoChange,
     Replace {
         old_node_id: NodeId,
@@ -50,13 +50,13 @@ pub enum Patch {
 
 impl Patch {
     #[must_use]
-    pub const fn is_no_change(&self) -> bool {
+    pub(crate) const fn is_no_change(&self) -> bool {
         matches!(self, Self::NoChange)
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ChildPatchOp {
+pub(crate) enum ChildPatchOp {
     Insert {
         index: usize,
         node: Box<VNode>,
@@ -83,24 +83,26 @@ pub struct DiffResult {
 
 impl DiffResult {
     #[must_use]
-    pub const fn new(patch: Patch) -> Self {
+    pub(crate) const fn new(patch: Patch) -> Self {
         Self { patch }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn unchanged() -> Self {
+    pub(crate) const fn unchanged() -> Self {
         Self {
             patch: Patch::NoChange,
         }
     }
 
     #[must_use]
-    pub const fn is_unchanged(&self) -> bool {
+    pub(crate) const fn is_unchanged(&self) -> bool {
         self.patch.is_no_change()
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn patch(&self) -> &Patch {
+    pub(crate) const fn patch(&self) -> &Patch {
         &self.patch
     }
 }

@@ -16,7 +16,7 @@ use std::collections::HashMap;
 /// content: a failed module can sit anywhere in the tree, including inside
 /// a popup's own content, which is the case this feature exists for.
 #[must_use]
-pub fn substitute_failed_modules<S: std::hash::BuildHasher>(
+pub(crate) fn substitute_failed_modules<S: std::hash::BuildHasher>(
     vnode: &VNode,
     errors: &HashMap<ModuleKey, String, S>,
 ) -> VNode {

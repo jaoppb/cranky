@@ -1,13 +1,11 @@
-mod anchor;
-mod panel;
+pub mod anchor;
+pub mod panel;
 mod popup;
-mod spec;
 #[cfg(test)]
 mod tests;
-mod types;
+pub mod types;
 
-pub use anchor::{HorizontalAnchor, PanelAnchor, VerticalAnchor};
-pub use panel::PanelSpec;
+pub(crate) use anchor::{HorizontalAnchor, PanelAnchor, VerticalAnchor};
+pub(crate) use panel::PanelSpec;
 pub use popup::{AnchorDirection, PopupOffset, PopupSpec};
-pub use spec::FloatingSpec;
-pub use types::{ExclusiveZone, KeyboardInteractivity, PanelLayer};
+pub(crate) use types::{ExclusiveZone, KeyboardInteractivity, PanelLayer};

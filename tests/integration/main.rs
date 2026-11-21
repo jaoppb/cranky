@@ -7,13 +7,13 @@
 //! a child refuses to run anywhere else. The developer's session bus and
 //! compositor are never contacted.
 
-mod args;
-mod cases;
-mod dbus;
-mod sandbox;
-mod support;
-mod systray;
-mod wayland;
+pub mod args;
+pub mod cases;
+pub mod dbus;
+pub mod sandbox;
+pub mod support;
+pub mod systray;
+pub mod wayland;
 
 use std::process::ExitCode;
 

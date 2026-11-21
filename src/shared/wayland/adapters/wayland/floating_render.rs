@@ -6,7 +6,7 @@ use wayland_protocols::xdg::shell::client::xdg_positioner::{
 };
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 
-pub(crate) fn create_positioner(
+pub(super) fn create_positioner(
     xdg_wm_base: &XdgWmBase,
     queue_handle: &QueueHandle<WaylandState>,
     text_w: i32,

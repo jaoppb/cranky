@@ -40,6 +40,7 @@ publish.workspace = true
 unused = { level = "deny", priority = -1 }
 rust_2018_idioms = { level = "deny", priority = -1 }
 future_incompatible = { level = "deny", priority = -1 }
+unreachable_pub = "forbid"
 unsafe_code = "forbid"
 
 # Groups are denied; every single lint below is forbidden, so no attribute in

@@ -20,12 +20,12 @@ use std::sync::Arc;
 /// `initial` only exist as syntax at that layer — and consumed by
 /// `DeclaredStyle::from_parts`.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct InheritableKeywords {
-    pub color: Option<CssWideKeyword>,
-    pub accent_color: Option<CssWideKeyword>,
-    pub font_family: Option<CssWideKeyword>,
-    pub font_size: Option<CssWideKeyword>,
-    pub text_align: Option<CssWideKeyword>,
+pub(crate) struct InheritableKeywords {
+    pub(crate) color: Option<CssWideKeyword>,
+    pub(crate) accent_color: Option<CssWideKeyword>,
+    pub(crate) font_family: Option<CssWideKeyword>,
+    pub(crate) font_size: Option<CssWideKeyword>,
+    pub(crate) text_align: Option<CssWideKeyword>,
 }
 
 /// One rule's declarations before inheritance, `em`/`rem`, and `var()` are
@@ -41,7 +41,7 @@ pub struct InheritableKeywords {
 /// before they mean anything, so neither can collapse into `rest` at parse
 /// time either.
 #[derive(Debug, Clone, Default)]
-pub struct DeclaredStyle {
+pub(crate) struct DeclaredStyle {
     rest: ComputedStyle,
     color: Cascade<DrawingColor>,
     accent_color: Cascade<DrawingColor>,
@@ -61,7 +61,7 @@ impl DeclaredStyle {
     /// did, this rule's own `--name` declarations, and any of its
     /// properties whose value referenced `var(...)`.
     #[must_use]
-    pub fn from_parts(
+    pub(crate) fn from_parts(
         computed: ComputedStyle,
         keywords: InheritableKeywords,
         font_size_declared: Option<DeclaredLength>,
@@ -101,7 +101,7 @@ impl DeclaredStyle {
         }
     }
 
-    pub fn merge_with(&mut self, other: &Self) {
+    pub(crate) fn merge_with(&mut self, other: &Self) {
         self.rest.merge_with(&other.rest);
         if !matches!(other.color, Cascade::NotDeclared) {
             self.color = other.color.clone();
@@ -135,7 +135,7 @@ impl DeclaredStyle {
     /// re-running `DeclaredLengths` resolution against a second, later
     /// value is out of scope here).
     #[must_use]
-    pub fn collapse(
+    pub(crate) fn collapse(
         self,
         inherited: &InheritedStyle,
         reparser: &dyn PropertyReparser,
@@ -310,10 +310,7 @@ mod tests {
         let inherited = InheritedStyle::default().descend(&parent, Arc::new(HashMap::new()));
 
         let computed = collapse(style, &inherited);
-        assert_eq!(
-            computed.font_size().map(|font_size| font_size.value()),
-            Some(30.0)
-        );
+        assert_eq!(computed.font_size().map(FontSize::value), Some(30.0));
     }
 
     #[test]
@@ -332,10 +329,7 @@ mod tests {
 
         let computed = collapse(style, &inherited);
         // Root base is DEFAULT_FONT_SIZE (14.0), not the parent's 20.0.
-        assert_eq!(
-            computed.font_size().map(|font_size| font_size.value()),
-            Some(28.0)
-        );
+        assert_eq!(computed.font_size().map(FontSize::value), Some(28.0));
     }
 
     #[test]

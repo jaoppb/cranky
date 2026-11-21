@@ -1,49 +1,52 @@
-use crate::shared::config::domain::{Config, RootConfig};
+use crate::shared::config::domain::Config;
+#[cfg(test)]
+use crate::shared::config::domain::RootConfig;
+#[cfg(test)]
+use crate::shared::primitives::DynamicValue;
+#[cfg(test)]
+use crate::shared::primitives::geometry::{BarWidth, Position, Rect};
 use crate::shared::primitives::{
-    ChildBounds, DynamicValue, ModuleId, ModuleKey, ModuleName, MonitorId,
-    geometry::{BarWidth, Position, Rect, Size},
+    ChildBounds, ModuleId, ModuleKey, ModuleName, MonitorId, geometry::Size,
 };
 use std::collections::HashMap;
 
+#[cfg(test)]
 pub struct ModuleLayout {
     id: ModuleId,
     bounds: Rect,
 }
 
+#[cfg(test)]
 impl ModuleLayout {
     #[must_use]
-    pub const fn new(id: ModuleId, bounds: Rect) -> Self {
-        Self { id, bounds }
-    }
-
-    #[must_use]
-    pub const fn id(&self) -> ModuleId {
+    pub(crate) const fn id(&self) -> ModuleId {
         self.id
     }
 
     #[must_use]
-    pub const fn bounds(&self) -> &Rect {
+    pub(crate) const fn bounds(&self) -> &Rect {
         &self.bounds
     }
 }
 
 pub struct AppReadModel {
-    pub config: Config,
-    pub root_module: Option<ModuleId>,
-    pub module_ids: Vec<ModuleId>,
-    pub module_names: HashMap<ModuleId, ModuleName>,
-    pub name_to_ids: HashMap<ModuleName, Vec<ModuleId>>,
+    pub(crate) config: Config,
+    pub(crate) root_module: Option<ModuleId>,
+    pub(crate) module_ids: Vec<ModuleId>,
+    pub(crate) module_names: HashMap<ModuleId, ModuleName>,
+    pub(crate) name_to_ids: HashMap<ModuleName, Vec<ModuleId>>,
     /// This module's full `(name, instance_id)` identity, mirroring
     /// `ModuleRegistry::module_keys` — needed wherever a lookup must
     /// distinguish two same-named embedding sites.
-    pub module_keys: HashMap<ModuleId, ModuleKey>,
-    pub module_sizes: HashMap<MonitorId, HashMap<ModuleId, Size>>,
-    pub computed_layouts: HashMap<MonitorId, HashMap<ModuleId, ChildBounds>>,
+    pub(crate) module_keys: HashMap<ModuleId, ModuleKey>,
+    pub(crate) module_sizes: HashMap<MonitorId, HashMap<ModuleId, Size>>,
+    pub(crate) computed_layouts: HashMap<MonitorId, HashMap<ModuleId, ChildBounds>>,
 }
 
 impl AppReadModel {
+    #[cfg(test)]
     #[must_use]
-    pub fn new(
+    pub(crate) fn new(
         config: Config,
         root_module: Option<ModuleId>,
         module_ids: Vec<ModuleId>,
@@ -63,17 +66,18 @@ impl AppReadModel {
     }
 
     #[must_use]
-    pub const fn config(&self) -> &Config {
+    pub(crate) const fn config(&self) -> &Config {
         &self.config
     }
 
     #[must_use]
-    pub const fn root_module(&self) -> Option<ModuleId> {
+    pub(crate) const fn root_module(&self) -> Option<ModuleId> {
         self.root_module
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn calculate_layout(
+    pub(crate) fn calculate_layout(
         &self,
         monitor: &MonitorId,
         bar_width: BarWidth,

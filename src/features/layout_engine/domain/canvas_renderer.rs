@@ -1,6 +1,7 @@
 use super::render_node::RenderNode;
 use super::text_placement::{text_alignment, text_origin};
 use crate::features::styling::domain::{ComputedStyle, Orientation};
+use crate::shared::config::domain::BorderRadius;
 use crate::shared::primitives::color::DrawingColor;
 use crate::shared::primitives::geometry::{LogicalPx, Position, Rect, Size};
 use crate::shared::rendering::ports::canvas::Canvas;
@@ -15,11 +16,7 @@ fn draw_bg_and_border(
     let top = f32::from(i16::try_from(rect.y()).unwrap_or(0));
     let width = f32::from(u16::try_from(rect.width()).unwrap_or(0));
     let height = f32::from(u16::try_from(rect.height()).unwrap_or(0));
-    let radius = LogicalPx::new(
-        style
-            .border_radius()
-            .map_or(0.0, |border_radius| border_radius.value()),
-    );
+    let radius = LogicalPx::new(style.border_radius().map_or(0.0, BorderRadius::value));
 
     let background = bg_override.or_else(|| style.background());
     if let Some(color) = background {
@@ -56,7 +53,7 @@ fn render_progress(
         return;
     };
 
-    let radius = LogicalPx::new(style.border_radius().map_or(0.0, |rad| rad.value()));
+    let radius = LogicalPx::new(style.border_radius().map_or(0.0, BorderRadius::value));
     let clamped = progress_val.clamp(0.0, 1.0);
     let left = f32::from(i16::try_from(rect.x()).unwrap_or(0));
     let top = f32::from(i16::try_from(rect.y()).unwrap_or(0));
@@ -117,7 +114,7 @@ fn render_text(
 }
 
 impl RenderNode {
-    pub fn render_to_canvas(&self, canvas: &mut dyn Canvas) {
+    pub(crate) fn render_to_canvas(&self, canvas: &mut dyn Canvas) {
         match self {
             Self::Flex {
                 rect,

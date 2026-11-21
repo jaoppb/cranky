@@ -1,7 +1,7 @@
 use crate::shared::primitives::ScriptMonitorInfo;
 use rhai::{Dynamic, Scope};
 
-pub(crate) fn get_hostname() -> String {
+pub(super) fn get_hostname() -> String {
     std::env::var("HOSTNAME")
         .or_else(|_| std::env::var("HOST"))
         .unwrap_or_else(|_| {
@@ -12,7 +12,7 @@ pub(crate) fn get_hostname() -> String {
         })
 }
 
-pub(crate) fn monitor_info_to_rhai_map(info: &ScriptMonitorInfo) -> rhai::Map {
+pub(super) fn monitor_info_to_rhai_map(info: &ScriptMonitorInfo) -> rhai::Map {
     let mut map = rhai::Map::new();
     let name_str = if info.name().is_empty() {
         info.id().as_str().to_string()
@@ -51,7 +51,7 @@ pub(crate) fn monitor_info_to_rhai_map(info: &ScriptMonitorInfo) -> rhai::Map {
     map
 }
 
-pub(crate) fn create_initial_scope() -> Scope<'static> {
+pub(super) fn create_initial_scope() -> Scope<'static> {
     let mut scope = Scope::new();
 
     // ui

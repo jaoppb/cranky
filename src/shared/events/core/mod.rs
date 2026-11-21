@@ -1,10 +1,10 @@
-mod pointer;
+pub mod pointer;
 #[cfg(test)]
 mod tests;
-mod window;
+pub mod window;
 
-pub use pointer::{
+pub(crate) use pointer::{
     InteractionEvent, PointerButton, PointerEvent, PointerReceiver, PointerSender, PointerSerial,
     ScrollAxis, ScrollDelta, SurfaceKind, SurfaceLifecycleEvent,
 };
-pub use window::{WindowAddress, WindowManagerEvent, WindowTitle};
+pub(crate) use window::{WindowAddress, WindowManagerEvent, WindowTitle};

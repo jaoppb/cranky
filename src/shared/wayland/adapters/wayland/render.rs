@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use tracing::{debug, info_span};
 use wayland_client::Connection;
 
-pub(crate) fn render_outputs<Snd: LayoutSender>(
+pub(super) fn render_outputs<Snd: LayoutSender>(
     state: &mut WaylandState,
     connection: &Connection,
     read_model: &AppReadModel,

@@ -52,20 +52,4 @@ impl RhaiModule {
             cached_monitors: Vec::new(),
         })
     }
-
-    #[cfg(test)]
-    #[must_use]
-    pub fn built_in(name: &str) -> Option<Self> {
-        let source = match name {
-            "clock" => Some(include_str!("../../../../../assets/widgets/clock.rhai")),
-            "calendar" => Some(include_str!("../../../../../assets/widgets/calendar.rhai")),
-            "workspace" => Some(include_str!("../../../../../assets/widgets/workspace.rhai")),
-            "systray" => Some(include_str!("../../../../../assets/widgets/systray.rhai")),
-            "metrics" => Some(include_str!("../../../../../assets/widgets/metrics.rhai")),
-            "mpris" => Some(include_str!("../../../../../assets/widgets/mpris.rhai")),
-            "bar" => Some(include_str!("../../../../../assets/widgets/bar.rhai")),
-            _ => None,
-        }?;
-        Self::new(name.to_string(), source).ok()
-    }
 }

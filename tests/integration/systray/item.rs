@@ -6,13 +6,13 @@ use crate::support::{Context, Outcome};
 use tokio::sync::mpsc;
 use zbus::object_server::{InterfaceRef, SignalEmitter};
 
-pub const PATH: &str = "/StatusNotifierItem";
+pub(crate) const PATH: &str = "/StatusNotifierItem";
 
 type Pixmaps = Vec<(i32, i32, Vec<u8>)>;
 
 /// A method the tray called on the item, with its arguments.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Call {
+pub(crate) enum Call {
     Activate(i32, i32),
     ContextMenu(i32, i32),
     Scroll(i32, String),
@@ -87,13 +87,13 @@ impl Item {
 }
 
 /// The fake item's own connection to the private bus.
-pub struct ItemService {
+pub(crate) struct ItemService {
     connection: zbus::Connection,
     calls: mpsc::UnboundedReceiver<Call>,
 }
 
 impl ItemService {
-    pub async fn start() -> Outcome<Self> {
+    pub(crate) async fn start() -> Outcome<Self> {
         let (sender, calls) = mpsc::unbounded_channel();
         let item = Item {
             title: "Fake Title".to_string(),
@@ -118,7 +118,7 @@ impl ItemService {
     }
 
     /// The id the tray gives an item that registers by object path.
-    pub fn tray_id(&self) -> Outcome<String> {
+    pub(crate) fn tray_id(&self) -> Outcome<String> {
         let name = self
             .connection
             .unique_name()
@@ -127,7 +127,7 @@ impl ItemService {
     }
 
     /// Registers with the watcher by object path, as real items do.
-    pub async fn register(&self) -> Outcome {
+    pub(crate) async fn register(&self) -> Outcome {
         self.connection
             .call_method(
                 Some("org.kde.StatusNotifierWatcher"),
@@ -150,7 +150,7 @@ impl ItemService {
     }
 
     /// Changes `Title` and announces it with `NewTitle`.
-    pub async fn retitle(&self, title: &str) -> Outcome {
+    pub(crate) async fn retitle(&self, title: &str) -> Outcome {
         let interface = self.interface().await?;
         interface.get_mut().await.title = title.to_string();
         Item::new_title(interface.signal_emitter())
@@ -159,7 +159,7 @@ impl ItemService {
     }
 
     /// Changes `Status` and announces it with `NewStatus`.
-    pub async fn restatus(&self, status: &str) -> Outcome {
+    pub(crate) async fn restatus(&self, status: &str) -> Outcome {
         let interface = self.interface().await?;
         interface.get_mut().await.status = status.to_string();
         Item::new_status(interface.signal_emitter(), status)
@@ -168,12 +168,12 @@ impl ItemService {
     }
 
     /// The next method the tray called on the item.
-    pub async fn next_call(&mut self) -> Option<Call> {
+    pub(crate) async fn next_call(&mut self) -> Option<Call> {
         self.calls.recv().await
     }
 
     /// Leaves the bus, as an application that quit.
-    pub async fn disconnect(self) -> Outcome {
+    pub(crate) async fn disconnect(self) -> Outcome {
         self.connection.close().await.context("item: disconnect")
     }
 }

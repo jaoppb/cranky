@@ -1,6 +1,6 @@
 use super::color_struct::Color;
 
-pub fn tokenize(input: &str) -> Vec<String> {
+pub(super) fn tokenize(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current_token = String::new();
     let mut in_parens: u32 = 0;
@@ -27,7 +27,7 @@ pub fn tokenize(input: &str) -> Vec<String> {
     tokens
 }
 
-pub fn parse_single_color(input: &str) -> Option<Color> {
+pub(super) fn parse_single_color(input: &str) -> Option<Color> {
     parse_css_rgba(input)
         .or_else(|| parse_css_rgb(input))
         .or_else(|| parse_rgba_hex(input))

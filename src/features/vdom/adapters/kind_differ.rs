@@ -1,7 +1,7 @@
 use crate::features::vdom::domain::{NodeId, Patch, VNodeKind};
 
 #[must_use]
-pub fn diff_node_kinds(
+pub(crate) fn diff_node_kinds(
     node_id: NodeId,
     old_kind: &VNodeKind,
     new_kind: &VNodeKind,

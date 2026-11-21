@@ -3,22 +3,22 @@ use crate::shared::primitives::ScriptMonitorInfo;
 use mlua::{UserData, UserDataFields, UserDataMethods};
 
 #[derive(Clone)]
-pub struct LuaVNode(pub VNode);
+pub(crate) struct LuaVNode(pub VNode);
 
 impl UserData for LuaVNode {}
 
 #[derive(Clone)]
-pub struct LuaPopup(pub PopupSpec);
+pub(super) struct LuaPopup(pub PopupSpec);
 
 impl UserData for LuaPopup {}
 
 #[derive(Clone)]
-pub struct LuaPanel(pub PanelSpec);
+pub(super) struct LuaPanel(pub PanelSpec);
 
 impl UserData for LuaPanel {}
 
 #[derive(Clone)]
-pub struct LuaMonitor(pub ScriptMonitorInfo);
+pub(crate) struct LuaMonitor(pub ScriptMonitorInfo);
 
 impl UserData for LuaMonitor {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {

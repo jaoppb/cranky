@@ -1,7 +1,7 @@
 //! A compositor-less `WaylandState` for unit tests: protocol objects are
 //! bound over a socket pair nobody reads from, so requests are just queued.
 
-pub mod pointer;
+pub(in crate::shared::wayland::adapters::wayland) mod pointer;
 mod state;
 pub mod wire;
 
@@ -31,11 +31,11 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::{
     Layer, ZwlrLayerShellV1,
 };
 
-pub struct Fake {
+pub(in crate::shared::wayland::adapters::wayland) struct Fake {
     server: UnixStream,
     connection: Connection,
     _queue: EventQueue<WaylandState>,
-    pub queue_handle: QueueHandle<WaylandState>,
+    pub(crate) queue_handle: QueueHandle<WaylandState>,
     compositor: WlCompositor,
     subcompositor: WlSubcompositor,
     shm: WlShm,
@@ -44,7 +44,7 @@ pub struct Fake {
 }
 
 impl Fake {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let (client, server) = UnixStream::pair().expect("socket pair");
         let connection = Connection::from_backend(Backend::connect(client).expect("backend"));
         let queue = connection.new_event_queue::<WaylandState>();
@@ -69,7 +69,7 @@ impl Fake {
         }
     }
 
-    pub fn shm_buffer(&self, size: Size) -> ShmBuffer {
+    pub(crate) fn shm_buffer(&self, size: Size) -> ShmBuffer {
         ShmBuffer::new(
             &self.shm,
             size.width(),
@@ -81,11 +81,11 @@ impl Fake {
     }
 
     /// A bare `wl_surface`, standing in for a bar module's subsurface.
-    pub fn surface(&self) -> WlSurface {
+    pub(crate) fn surface(&self) -> WlSurface {
         self.compositor.create_surface(&self.queue_handle, ())
     }
 
-    pub fn xdg_surface(&self) -> XdgSurface {
+    pub(crate) fn xdg_surface(&self) -> XdgSurface {
         let surface = self.compositor.create_surface(&self.queue_handle, ());
         self.xdg_wm_base
             .get_xdg_surface(&surface, &self.queue_handle, ())
@@ -93,7 +93,7 @@ impl Fake {
 
     /// A shown, not yet configured floating surface of `size` whose owner
     /// frame is `base`.
-    pub fn floating(&self, size: Size, base: RenderBuffer) -> FloatingSurface {
+    pub(crate) fn floating(&self, size: Size, base: RenderBuffer) -> FloatingSurface {
         let surface = self.compositor.create_surface(&self.queue_handle, ());
         let xdg_surface = self
             .xdg_wm_base
@@ -118,7 +118,7 @@ impl Fake {
 
     /// Delivers the first `xdg_surface.configure` for `kind` through the real
     /// dispatch handler.
-    pub fn configure(&self, state: &mut WaylandState, kind: &FloatingKind) {
+    pub(crate) fn configure(&self, state: &mut WaylandState, kind: &FloatingKind) {
         let xdg_surface = state
             .floating_surfaces
             .get(kind)
@@ -135,7 +135,7 @@ impl Fake {
     }
 
     /// A bar on output `name` with buffer scale `scale`.
-    pub fn bar(&self, name: &str, scale: i32) -> WaylandBar {
+    pub(crate) fn bar(&self, name: &str, scale: i32) -> WaylandBar {
         let surface = self.compositor.create_surface(&self.queue_handle, ());
         let layer_surface = self.layer_shell.get_layer_surface(
             &surface,
@@ -161,18 +161,24 @@ impl Fake {
     }
 }
 
-pub fn popup_kind() -> FloatingKind {
+pub(in crate::shared::wayland::adapters::wayland) fn popup_kind() -> FloatingKind {
     FloatingKind::Popup(PopupTarget::new(ModuleId::new(1), MonitorId::new("DP-1")))
 }
 
 /// A `width`×`height` buffer filled with one premultiplied ARGB pixel.
-pub fn solid(width: u32, height: u32, px: [u8; 4]) -> RenderBuffer {
+pub(in crate::shared::wayland::adapters::wayland) fn solid(
+    width: u32,
+    height: u32,
+    px: [u8; 4],
+) -> RenderBuffer {
     let count = usize::try_from(width.saturating_mul(height)).unwrap_or(0);
     RenderBuffer::new(px.repeat(count), Size::new(width, height))
 }
 
 /// Bytes of the slot `commit_surface` just attached (it swaps afterwards).
-pub fn committed_bytes(shm: &mut ShmBuffer) -> Vec<u8> {
+pub(in crate::shared::wayland::adapters::wayland) fn committed_bytes(
+    shm: &mut ShmBuffer,
+) -> Vec<u8> {
     shm.swap_buffers();
     let bytes = shm.mmap_mut().to_vec();
     shm.swap_buffers();

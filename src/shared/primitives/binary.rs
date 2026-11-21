@@ -10,27 +10,30 @@ pub struct BinaryData(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl BinaryData {
     #[must_use]
-    pub fn new(data: impl Into<Vec<u8>>) -> Self {
+    pub(crate) fn new(data: impl Into<Vec<u8>>) -> Self {
         Self(data.into())
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn into_vec(self) -> Vec<u8> {
+    pub(crate) fn into_vec(self) -> Vec<u8> {
         self.0
     }
 
     #[must_use]
-    pub fn as_slice(&self) -> &[u8] {
+    pub(crate) fn as_slice(&self) -> &[u8] {
         &self.0
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn len(&self) -> usize {
+    pub(crate) const fn len(&self) -> usize {
         self.0.len()
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub(crate) const fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 }

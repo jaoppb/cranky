@@ -11,10 +11,7 @@ pub mod pipeline;
 mod tests;
 
 pub use context::*;
-pub use diff_phase::*;
 pub use floating_phase::*;
-pub use layout_phase::*;
-pub use measurer::*;
 pub use outcome::*;
-pub use paint_phase::*;
+pub(crate) use paint_phase::*;
 pub use pipeline::*;

@@ -3,14 +3,14 @@ use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{ChildSizesMap, ModuleKey};
 
-pub struct ModuleSizeMeasurer<'a, M: TextMeasurer> {
+pub(crate) struct ModuleSizeMeasurer<'a, M: TextMeasurer> {
     inner: M,
     child_sizes: Option<&'a ChildSizesMap>,
 }
 
 impl<'a, M: TextMeasurer> ModuleSizeMeasurer<'a, M> {
     #[must_use]
-    pub const fn new(inner: M, child_sizes: Option<&'a ChildSizesMap>) -> Self {
+    pub(crate) const fn new(inner: M, child_sizes: Option<&'a ChildSizesMap>) -> Self {
         Self { inner, child_sizes }
     }
 }

@@ -1,11 +1,14 @@
 use crate::features::systray::domain::{IconCacheKey, IconImage, IconName, IconThemePath};
-use crate::features::systray::ports::SystrayIconCachePort;
+use crate::features::systray::ports::{CachedIcon, SystrayIconCachePort};
 use freedesktop_icons::lookup;
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 #[must_use]
-pub fn resolve_pixmap_data(pixmaps: &[(i32, i32, Vec<u8>)], max_scale: f32) -> Option<IconImage> {
+pub(super) fn resolve_pixmap_data(
+    pixmaps: &[(i32, i32, Vec<u8>)],
+    max_scale: f32,
+) -> Option<IconImage> {
     if pixmaps.is_empty() {
         return None;
     }
@@ -43,31 +46,31 @@ pub fn resolve_pixmap_data(pixmaps: &[(i32, i32, Vec<u8>)], max_scale: f32) -> O
 }
 
 #[derive(Debug, Default)]
-pub struct InMemorySystrayIconCache(Mutex<HashMap<IconCacheKey, Option<IconImage>>>);
+pub(crate) struct InMemorySystrayIconCache(Mutex<HashMap<IconCacheKey, CachedIcon>>);
 
 impl InMemorySystrayIconCache {
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Mutex::new(HashMap::new()))
     }
 }
 
 impl SystrayIconCachePort for InMemorySystrayIconCache {
-    fn get(&self, key: &IconCacheKey) -> Option<Option<IconImage>> {
+    fn get(&self, key: &IconCacheKey) -> Option<CachedIcon> {
         self.0.lock().ok().and_then(|cache| cache.get(key).cloned())
     }
 
-    fn insert(&self, key: IconCacheKey, image: Option<IconImage>) {
+    fn insert(&self, key: IconCacheKey, icon: CachedIcon) {
         if let Ok(mut cache) = self.0.lock() {
-            cache.insert(key, image);
+            cache.insert(key, icon);
         }
     }
 }
 
-pub static ICON_CACHE: LazyLock<InMemorySystrayIconCache> =
+pub(super) static ICON_CACHE: LazyLock<InMemorySystrayIconCache> =
     LazyLock::new(InMemorySystrayIconCache::new);
 
-pub async fn resolve_icon(
+pub(super) async fn resolve_icon(
     icon_name: Option<String>,
     icon_theme_path: Option<String>,
     icon_pixmap: Option<Vec<(i32, i32, Vec<u8>)>>,
@@ -104,8 +107,9 @@ pub async fn resolve_icon(
     // 1. Check icon name cache for disk/theme icons
     let disk_icon = if let Some(ref key) = cache_key {
         if let Some(cached) = ICON_CACHE.get(key) {
-            // Cached result: either Some(icon_image) or None (cached negative lookup)
-            cached
+            // Cached result: `CachedIcon::Image`, or `CachedIcon::Unresolved` for a
+            // lookup that already failed and is not retried.
+            cached.into_image()
         } else {
             // Cache miss: resolve disk/theme lookup asynchronously on blocking thread
             let name_clone = clean_icon_name.clone();
@@ -153,7 +157,7 @@ pub async fn resolve_icon(
             .await
             .unwrap_or(None);
 
-            ICON_CACHE.insert(key.clone(), loaded_disk_icon.clone());
+            ICON_CACHE.insert(key.clone(), CachedIcon::from(loaded_disk_icon.clone()));
             loaded_disk_icon
         }
     } else {

@@ -6,18 +6,18 @@ use crate::shared::wayland::ports::DynSurfaceManager;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct ModuleRuntimeDependencies<
+pub(crate) struct ModuleRuntimeDependencies<
     Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
     LS: LayoutEventSender + 'static,
     DS: DisplayCommandSender + 'static,
     US: UiCommandSender + 'static,
 > {
-    pub hub: Arc<SignalHub>,
-    pub surface_manager: DynSurfaceManager,
-    pub layout_sender: Arc<LS>,
-    pub display_sender: Arc<DS>,
-    pub ui_sender: Arc<US>,
-    pub canvas_factory: Fact,
+    pub(crate) hub: Arc<SignalHub>,
+    pub(crate) surface_manager: DynSurfaceManager,
+    pub(crate) layout_sender: Arc<LS>,
+    pub(crate) display_sender: Arc<DS>,
+    pub(crate) ui_sender: Arc<US>,
+    pub(crate) canvas_factory: Fact,
 }
 
 impl<
@@ -28,7 +28,7 @@ impl<
 > ModuleRuntimeDependencies<Fact, LS, DS, US>
 {
     #[must_use]
-    pub fn new(
+    pub(crate) fn new(
         hub: Arc<SignalHub>,
         surface_manager: DynSurfaceManager,
         layout_sender: Arc<LS>,

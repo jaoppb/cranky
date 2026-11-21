@@ -17,22 +17,22 @@ impl RenderBuffer {
     }
 
     #[must_use]
-    pub const fn size(&self) -> &Size {
+    pub(crate) const fn size(&self) -> &Size {
         &self.size
     }
 
     #[must_use]
-    pub fn data(&self) -> &[u8] {
+    pub(crate) fn data(&self) -> &[u8] {
         self.data.as_slice()
     }
 
     #[must_use]
-    pub const fn width(&self) -> u32 {
+    pub(crate) const fn width(&self) -> u32 {
         self.size.width()
     }
 
     #[must_use]
-    pub const fn height(&self) -> u32 {
+    pub(crate) const fn height(&self) -> u32 {
         self.size.height()
     }
 }

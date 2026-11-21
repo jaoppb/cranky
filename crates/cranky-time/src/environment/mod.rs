@@ -30,7 +30,7 @@ pub struct Environment {
 
 /// A zone, and its name in the zone database when that is known.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Located {
+pub(crate) struct Located {
     pub zone: Zone,
     pub name: Option<String>,
 }

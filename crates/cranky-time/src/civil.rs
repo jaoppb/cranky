@@ -4,21 +4,21 @@
 //! and `civil_from_days`. Every operation saturates; callers keep their input
 //! within the years 1 to 9999, far from the limits.
 
-pub const SECONDS_PER_DAY: i64 = 86_400;
+pub(crate) const SECONDS_PER_DAY: i64 = 86_400;
 
 const DAYS_PER_ERA: i64 = 146_097;
 /// Days from 0000-03-01 to 1970-01-01.
 const EPOCH_SHIFT: i64 = 719_468;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Date {
+pub(crate) struct Date {
     pub year: i64,
     pub month: i64,
     pub day: i64,
 }
 
 /// The day number of a calendar date.
-pub const fn days_from_date(year: i64, month: i64, day: i64) -> i64 {
+pub(crate) const fn days_from_date(year: i64, month: i64, day: i64) -> i64 {
     let year = if month <= 2 {
         year.saturating_sub(1)
     } else {
@@ -48,7 +48,7 @@ pub const fn days_from_date(year: i64, month: i64, day: i64) -> i64 {
 }
 
 /// The calendar date of a day number.
-pub const fn date_from_days(days: i64) -> Date {
+pub(crate) const fn date_from_days(days: i64) -> Date {
     let shifted = days.saturating_add(EPOCH_SHIFT);
     let era = shifted.div_euclid(DAYS_PER_ERA);
     let day_of_era = shifted.rem_euclid(DAYS_PER_ERA);
@@ -93,17 +93,17 @@ pub const fn date_from_days(days: i64) -> Date {
 }
 
 /// The day of the week of a day number, 0 for Sunday.
-pub const fn weekday(days: i64) -> i64 {
+pub(crate) const fn weekday(days: i64) -> i64 {
     // 1970-01-01 was a Thursday.
     days.saturating_add(4).rem_euclid(7)
 }
 
-pub const fn is_leap_year(year: i64) -> bool {
+pub(crate) const fn is_leap_year(year: i64) -> bool {
     (year.rem_euclid(4) == 0 && year.rem_euclid(100) != 0) || year.rem_euclid(400) == 0
 }
 
 /// The number of days in a month of a year.
-pub const fn days_in_month(year: i64, month: i64) -> i64 {
+pub(crate) const fn days_in_month(year: i64, month: i64) -> i64 {
     let (next_year, next_month) = if month >= 12 {
         (year.saturating_add(1), 1)
     } else {

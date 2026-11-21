@@ -9,7 +9,7 @@ use crate::shared::config::domain::FontSize;
 /// unit set, even properties (gap, padding, border) whose extraction path
 /// today never actually produces `Percent`/`Auto`.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum DeclaredLength {
+pub(crate) enum DeclaredLength {
     Pixels(f32),
     Percent(f32),
     Ems(f32),
@@ -36,7 +36,7 @@ impl DeclaredLength {
     /// against a fixed assumption. Order matters: `rem` must be checked
     /// before `em`, since `"2rem"` also ends in `"em"`.
     #[must_use]
-    pub fn parse(text: &str) -> Option<Self> {
+    pub(crate) fn parse(text: &str) -> Option<Self> {
         let trimmed = text.trim();
         if trimmed.eq_ignore_ascii_case("auto") {
             return Some(Self::Auto);
@@ -61,7 +61,7 @@ impl DeclaredLength {
     /// `font-size` itself, where CSS defines `em` as relative to the
     /// *parent's*) — and `root_font_size` for `rem`.
     #[must_use]
-    pub fn resolve(self, font_size: FontSize, root_font_size: FontSize) -> CssLength {
+    pub(crate) fn resolve(self, font_size: FontSize, root_font_size: FontSize) -> CssLength {
         match self {
             Self::Pixels(pixels) => CssLength::Pixels(pixels),
             Self::Percent(percentage) => CssLength::Percent(percentage),
@@ -100,7 +100,7 @@ impl DeclaredLength {
     /// no containing-block basis to resolve it against, so only the
     /// absolute part survives.
     #[must_use]
-    pub fn resolve_scalar(self, font_size: FontSize, root_font_size: FontSize) -> f32 {
+    pub(crate) fn resolve_scalar(self, font_size: FontSize, root_font_size: FontSize) -> f32 {
         match self.resolve(font_size, root_font_size) {
             CssLength::Pixels(value) | CssLength::Percent(value) => value,
             CssLength::Auto => 0.0,

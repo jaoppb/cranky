@@ -22,22 +22,22 @@ impl Color {
     }
 
     #[must_use]
-    pub const fn red(&self) -> u8 {
+    pub(crate) const fn red(self) -> u8 {
         self.red
     }
 
     #[must_use]
-    pub const fn green(&self) -> u8 {
+    pub(crate) const fn green(self) -> u8 {
         self.green
     }
 
     #[must_use]
-    pub const fn blue(&self) -> u8 {
+    pub(crate) const fn blue(self) -> u8 {
         self.blue
     }
 
     #[must_use]
-    pub const fn alpha(&self) -> u8 {
+    pub(crate) const fn alpha(self) -> u8 {
         self.alpha
     }
 }

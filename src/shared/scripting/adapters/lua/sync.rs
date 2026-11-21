@@ -2,13 +2,13 @@ use super::userdata::LuaMonitor;
 use crate::shared::events::signals::{SignalHub, SignalKind};
 use mlua::{Function, Lua, LuaSerdeExt};
 
-pub struct LuaStateSynchronizer;
+pub(crate) struct LuaStateSynchronizer;
 
 impl LuaStateSynchronizer {
     /// # Errors
     ///
     /// Returns `mlua::Error` if setting globals fails.
-    pub fn sync(lua: &Lua, hub: &SignalHub, changed: &[SignalKind]) -> mlua::Result<()> {
+    pub(crate) fn sync(lua: &Lua, hub: &SignalHub, changed: &[SignalKind]) -> mlua::Result<()> {
         let globals = lua.globals();
         let signals_table = if let Some(table) = globals.get::<Option<mlua::Table>>("signals")? {
             table

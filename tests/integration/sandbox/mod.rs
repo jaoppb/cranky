@@ -1,8 +1,8 @@
 //! The private `dbus-daemon` and headless `sway` the cases run against, and
 //! the re-execution of this binary inside them.
 
-mod bus;
-mod sway;
+pub mod bus;
+pub mod sway;
 
 use crate::CHILD_CASE;
 use crate::support::{Context, Outcome, ensure};
@@ -28,14 +28,14 @@ const SESSION_VARIABLES: [&str; 5] = [
 /// The private bus and compositor, and the directory their sockets live in.
 /// Dropping it kills both servers, then removes the directory: fields drop
 /// in the order they are declared.
-pub struct Sandbox {
+pub(crate) struct Sandbox {
     sway: Sway,
     bus: Bus,
     dir: RuntimeDir,
 }
 
 impl Sandbox {
-    pub async fn start() -> Outcome<Self> {
+    pub(crate) async fn start() -> Outcome<Self> {
         for program in ["dbus-daemon", "sway", "swaymsg", "grim"] {
             require(program)?;
         }
@@ -46,7 +46,7 @@ impl Sandbox {
     }
 
     /// Kills both servers and waits for them, which dropping alone does not.
-    pub async fn stop(mut self) {
+    pub(crate) async fn stop(mut self) {
         self.sway.stop().await;
         self.bus.stop().await;
     }
@@ -54,7 +54,7 @@ impl Sandbox {
     /// Runs this binary again as the case `name`. The child keeps the
     /// parent's environment (so `cargo llvm-cov` still collects its profile)
     /// except for everything that names a session.
-    pub async fn run_case(&self, name: &str) -> Outcome {
+    pub(crate) async fn run_case(&self, name: &str) -> Outcome {
         let binary = std::env::current_exe().context("locate this test binary")?;
         let output = without_session(Command::new(binary))
             .env(CHILD_CASE, name)
@@ -89,7 +89,7 @@ fn without_session(mut command: Command) -> Command {
 /// Child side: refuses to run a case anywhere but inside a sandbox, whatever
 /// the environment says, so a stray [`CHILD_CASE`] cannot point the adapters
 /// at the developer's own buses or compositor.
-pub fn ensure_inside() -> Outcome {
+pub(crate) fn ensure_inside() -> Outcome {
     let variable = |name: &str| std::env::var(name).unwrap_or_default();
     let dir = variable("XDG_RUNTIME_DIR");
     let session_bus = variable("DBUS_SESSION_BUS_ADDRESS");

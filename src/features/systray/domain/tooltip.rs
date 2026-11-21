@@ -3,36 +3,36 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
-pub struct SystrayTooltipTitle(String);
+pub(crate) struct SystrayTooltipTitle(String);
 
 impl SystrayTooltipTitle {
-    pub fn new(title: impl Into<String>) -> Self {
+    pub(crate) fn new(title: impl Into<String>) -> Self {
         Self(title.into())
     }
     #[cfg(test)]
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
-pub struct SystrayTooltipDescription(String);
+pub(crate) struct SystrayTooltipDescription(String);
 
 impl SystrayTooltipDescription {
-    pub fn new(desc: impl Into<String>) -> Self {
+    pub(crate) fn new(desc: impl Into<String>) -> Self {
         Self(desc.into())
     }
     #[cfg(test)]
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SystrayTooltip {
+pub(crate) struct SystrayTooltip {
     icon: Option<SystrayIcon>,
     title: SystrayTooltipTitle,
     description: SystrayTooltipDescription,
@@ -40,7 +40,7 @@ pub struct SystrayTooltip {
 
 impl SystrayTooltip {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         icon: Option<SystrayIcon>,
         title: SystrayTooltipTitle,
         description: SystrayTooltipDescription,
@@ -54,19 +54,19 @@ impl SystrayTooltip {
 
     #[cfg(test)]
     #[must_use]
-    pub const fn icon(&self) -> Option<&SystrayIcon> {
+    pub(crate) const fn icon(&self) -> Option<&SystrayIcon> {
         self.icon.as_ref()
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn title(&self) -> &SystrayTooltipTitle {
+    pub(crate) const fn title(&self) -> &SystrayTooltipTitle {
         &self.title
     }
 
     #[cfg(test)]
     #[must_use]
-    pub const fn description(&self) -> &SystrayTooltipDescription {
+    pub(crate) const fn description(&self) -> &SystrayTooltipDescription {
         &self.description
     }
 }

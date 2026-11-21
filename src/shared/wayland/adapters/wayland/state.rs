@@ -24,7 +24,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::{
     zwlr_layer_surface_v1::Anchor,
 };
 
-pub struct WaylandState {
+pub(crate) struct WaylandState {
     pub(crate) hub: Arc<SignalHub>,
     pub(crate) compositor: Option<WlCompositor>,
     pub(crate) subcompositor: Option<WlSubcompositor>,

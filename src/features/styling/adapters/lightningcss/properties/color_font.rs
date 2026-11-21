@@ -11,7 +11,7 @@ use lightningcss::stylesheet::PrinterOptions;
 use lightningcss::traits::ToCss;
 use lightningcss::values::color::CssColor as LightningCssColor;
 
-pub fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
+pub(crate) fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
         Property::BackgroundColor(color) => {
             if let Some(background_color) = convert_color(color) {
@@ -93,7 +93,7 @@ const fn convert_text_align(align: LightningTextAlign) -> Option<TextAlign> {
     }
 }
 
-pub fn apply_font_size(style: &mut ComputedStyle, size: &LightningFontSize) {
+pub(crate) fn apply_font_size(style: &mut ComputedStyle, size: &LightningFontSize) {
     match size {
         LightningFontSize::Length(length) => {
             let px = super::box_model::parse_length_str(
@@ -127,7 +127,7 @@ pub fn apply_font_size(style: &mut ComputedStyle, size: &LightningFontSize) {
 /// falls back to `Property::Unparsed` (lightningcss's catch-all for exactly
 /// this case), which is where these keywords actually live.
 #[must_use]
-pub fn detect_inheritable_keywords(props: &[Property<'_>]) -> InheritableKeywords {
+pub(crate) fn detect_inheritable_keywords(props: &[Property<'_>]) -> InheritableKeywords {
     let mut found = InheritableKeywords::default();
     for prop in props {
         let Property::Unparsed(unparsed) = prop else {
@@ -164,7 +164,7 @@ fn css_wide_keyword(prop: &Property<'_>) -> Option<CssWideKeyword> {
 }
 
 #[must_use]
-pub fn convert_color(color: &LightningCssColor) -> Option<Color> {
+pub(crate) fn convert_color(color: &LightningCssColor) -> Option<Color> {
     if let LightningCssColor::RGBA(rgba) = color {
         Some(Color::new(rgba.red, rgba.green, rgba.blue, rgba.alpha))
     } else {

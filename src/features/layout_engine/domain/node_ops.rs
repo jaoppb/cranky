@@ -16,7 +16,7 @@ const fn layout_surface_of(surface: SurfaceSpace) -> LayoutSurface {
 
 impl RenderNode {
     #[must_use]
-    pub fn collect_module_layouts(&self) -> Vec<ChildModuleLayout> {
+    pub(crate) fn collect_module_layouts(&self) -> Vec<ChildModuleLayout> {
         let mut layouts = Vec::new();
         self.collect_module_layouts_recursive(&mut layouts);
         layouts
@@ -61,7 +61,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub fn hit_test(&self, pos: Position) -> Vec<&Self> {
+    pub(crate) fn hit_test(&self, pos: Position) -> Vec<&Self> {
         let mut path = Vec::new();
         self.hit_test_internal(pos, &mut path);
         path
@@ -84,7 +84,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub fn find_popup_with_anchor(&self) -> Option<AnchoredPopup<'_>> {
+    pub(crate) fn find_popup_with_anchor(&self) -> Option<AnchoredPopup<'_>> {
         if let Some(popup) = self.popup() {
             return Some(AnchoredPopup::new(self.rect(), popup));
         }
@@ -99,7 +99,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub fn find_panel(&self) -> Option<ActivePanel<'_>> {
+    pub(crate) fn find_panel(&self) -> Option<ActivePanel<'_>> {
         if let Some(panel) = self.panel() {
             return Some(ActivePanel::new(panel));
         }
@@ -121,7 +121,7 @@ impl RenderNode {
     /// `path`'s indices are used to descend; its surface is the caller's
     /// responsibility — this must already be the tree that surface names.
     #[must_use]
-    pub fn find_tooltip_along(&self, path: &NodePath) -> Option<&StyledNode> {
+    pub(crate) fn find_tooltip_along(&self, path: &NodePath) -> Option<&StyledNode> {
         let mut current = self;
         let mut found = current.tooltip();
         for &index in path.as_slice() {

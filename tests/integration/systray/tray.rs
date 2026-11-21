@@ -19,7 +19,7 @@ const WATCHER: &str = "org.kde.StatusNotifierWatcher";
 /// How often a signal is emitted again while the tray has not reacted.
 const RE_EMIT: Duration = Duration::from_millis(50);
 
-pub struct Tray {
+pub(crate) struct Tray {
     adapter: SniAdapter,
     state: watch::Receiver<SystrayState>,
     item: ItemService,
@@ -29,7 +29,7 @@ pub struct Tray {
 impl Tray {
     /// Starts the adapter, registers a fake item and waits for the tray to
     /// track it.
-    pub async fn with_item() -> Outcome<Self> {
+    pub(crate) async fn with_item() -> Outcome<Self> {
         let hub = Arc::new(SignalHub::new(Config::default()));
         let adapter = start_adapter(&hub).await?;
         let item = ItemService::start().await?;
@@ -46,14 +46,14 @@ impl Tray {
     }
 
     /// The tracked item as the scripts see it now.
-    pub fn item(&self) -> Outcome<Value> {
+    pub(crate) fn item(&self) -> Outcome<Value> {
         item_json(&self.state.borrow(), &self.id).context("the tray no longer tracks the item")
     }
 
     /// Emits a signal again and again until the tracked item satisfies
     /// `accept`. The tray publishes an item before it has subscribed to the
     /// item's signals (#42), so the first emissions can be lost.
-    pub async fn emit_until<'a, F>(
+    pub(crate) async fn emit_until<'a, F>(
         &'a mut self,
         what: &str,
         emit: impl Fn(&'a ItemService) -> F + Send + Sync,
@@ -74,7 +74,11 @@ impl Tray {
         .await?
     }
 
-    pub async fn trigger(&self, action: SystrayActionName, position: Option<Position>) -> Outcome {
+    pub(crate) async fn trigger(
+        &self,
+        action: SystrayActionName,
+        position: Option<Position>,
+    ) -> Outcome {
         self.adapter
             .trigger_action(&self.id, &action, position)
             .await
@@ -82,7 +86,7 @@ impl Tray {
     }
 
     /// The next method the tray called on the item must be `expected`.
-    pub async fn expect_call(&mut self, expected: Call) -> Outcome {
+    pub(crate) async fn expect_call(&mut self, expected: Call) -> Outcome {
         let call = within("the item to be called", self.item.next_call())
             .await?
             .context("the item call channel closed")?;
@@ -91,7 +95,7 @@ impl Tray {
 
     /// Takes the item off the bus, as an application that quit, and waits
     /// until the tray no longer tracks it.
-    pub async fn until_item_left(self) -> Outcome {
+    pub(crate) async fn until_item_left(self) -> Outcome {
         let Self {
             adapter: _adapter,
             mut state,
@@ -133,7 +137,7 @@ async fn tracked(
 /// Starts the adapter once the watcher name is free. The previous case's
 /// process has exited, but the daemon learns that on its own schedule, and
 /// an adapter that finds the name taken silently runs without a watcher.
-pub async fn start_adapter(hub: &Arc<SignalHub>) -> Outcome<SniAdapter> {
+pub(crate) async fn start_adapter(hub: &Arc<SignalHub>) -> Outcome<SniAdapter> {
     let connection = zbus::Connection::session()
         .await
         .context("observer connection")?;

@@ -5,11 +5,11 @@ use crate::shared::env::ports::{EnvironmentError, EnvironmentPort};
 use std::env;
 use std::path::PathBuf;
 
-pub struct OsEnvironmentAdapter;
+pub(crate) struct OsEnvironmentAdapter;
 
 impl OsEnvironmentAdapter {
     #[must_use]
-    pub const fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Self
     }
 }

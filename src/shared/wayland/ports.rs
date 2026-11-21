@@ -1,8 +1,10 @@
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};
-pub use crate::shared::wayland::domain::{AppReadModel, ModuleLayout};
-pub use crate::shared::wayland::surface_parent::SurfaceParent;
+pub use crate::shared::wayland::domain::AppReadModel;
+#[cfg(test)]
+pub use crate::shared::wayland::domain::ModuleLayout;
+pub(crate) use crate::shared::wayland::surface_parent::SurfaceParent;
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -33,7 +35,7 @@ pub trait SurfaceManagerPort: Send + Sync {
     }
 }
 
-pub type DynSurfaceManager = Arc<dyn SurfaceManagerPort>;
+pub(crate) type DynSurfaceManager = Arc<dyn SurfaceManagerPort>;
 
 use thiserror::Error;
 

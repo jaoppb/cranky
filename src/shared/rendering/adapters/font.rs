@@ -1,13 +1,13 @@
 use crate::shared::rendering::ports::font::FontValidatorPort;
 use cosmic_text::FontSystem;
 
-pub struct CosmicFontValidatorAdapter {
+pub(crate) struct CosmicFontValidatorAdapter {
     font_system: FontSystem,
 }
 
 impl CosmicFontValidatorAdapter {
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             font_system: FontSystem::new(),
         }

@@ -13,13 +13,15 @@ use box_model::{
     apply_sizing_properties,
 };
 use color_font::apply_color_and_font;
-pub use color_font::detect_inheritable_keywords;
-pub use custom_properties::{detect_custom_property_declarations, detect_pending_var_properties};
+pub(crate) use color_font::detect_inheritable_keywords;
+pub(crate) use custom_properties::{
+    detect_custom_property_declarations, detect_pending_var_properties,
+};
 use flex::{apply_flex_container_properties, apply_flex_item_properties};
 use grid::{
     apply_display_and_gap_properties, apply_grid_container_properties, apply_grid_item_properties,
 };
-pub use relative_lengths::{detect_relative_font_size, detect_relative_lengths};
+pub(crate) use relative_lengths::{detect_relative_font_size, detect_relative_lengths};
 
 use crate::features::styling::domain::ComputedStyle;
 use lightningcss::properties::Property;
@@ -28,7 +30,7 @@ use lightningcss::properties::Property;
 /// its `!important` ones — callers keep the two separate so importance can
 /// be tracked per matched rule in the cascade).
 #[must_use]
-pub fn parse_property_list(props: &[Property<'_>]) -> ComputedStyle {
+pub(crate) fn parse_property_list(props: &[Property<'_>]) -> ComputedStyle {
     let mut style = ComputedStyle::default();
 
     for prop in props {

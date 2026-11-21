@@ -136,7 +136,7 @@ mod tests {
             ];
 
             for kind in kinds {
-                let mut stream = hub.signal_to_stream(&kind);
+                let mut stream = hub.signal_to_stream(kind);
                 let initial = stream.next().await;
                 assert_eq!(initial, Some(kind));
             }

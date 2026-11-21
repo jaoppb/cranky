@@ -17,14 +17,14 @@ const READY: &str = "cranky-ready";
 /// tests passed on two other runners. The cause was not measured.
 const STARTUP: Duration = Duration::from_secs(30);
 
-pub struct Sway {
+pub(crate) struct Sway {
     process: Child,
     wayland_display: String,
     ipc_socket: String,
 }
 
 impl Sway {
-    pub async fn start(dir: &Path, bus_address: &str) -> Outcome<Self> {
+    pub(crate) async fn start(dir: &Path, bus_address: &str) -> Outcome<Self> {
         let config = dir.join("sway.conf");
         let log = std::fs::File::create(dir.join("sway.log")).context("create the sway log")?;
         std::fs::write(
@@ -72,15 +72,15 @@ impl Sway {
         })
     }
 
-    pub fn wayland_display(&self) -> &str {
+    pub(crate) fn wayland_display(&self) -> &str {
         &self.wayland_display
     }
 
-    pub fn ipc_socket(&self) -> &str {
+    pub(crate) fn ipc_socket(&self) -> &str {
         &self.ipc_socket
     }
 
-    pub async fn stop(&mut self) {
+    pub(crate) async fn stop(&mut self) {
         let _ = self.process.kill().await;
     }
 }

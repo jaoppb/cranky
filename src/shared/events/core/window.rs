@@ -1,35 +1,37 @@
 use crate::features::workspaces::domain::{MonitorName, WorkspaceId, WorkspaceName};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct WindowAddress(String);
+pub(crate) struct WindowAddress(String);
 impl WindowAddress {
     #[must_use]
-    pub fn new(addr: impl Into<String>) -> Self {
+    pub(crate) fn new(addr: impl Into<String>) -> Self {
         Self(addr.into())
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct WindowTitle(String);
+pub(crate) struct WindowTitle(String);
 impl WindowTitle {
     #[must_use]
-    pub fn new(title: impl Into<String>) -> Self {
+    pub(crate) fn new(title: impl Into<String>) -> Self {
         Self(title.into())
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum WindowManagerEvent {
+pub(crate) enum WindowManagerEvent {
     WorkspaceActivated {
         id: WorkspaceId,
         name: WorkspaceName,

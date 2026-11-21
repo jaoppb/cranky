@@ -1,8 +1,8 @@
 use crate::shared::primitives::geometry::Size;
-use crate::shared::primitives::{ChildBounds, ChildModuleLayout, ModuleId, ModuleKey, MonitorId};
+use crate::shared::primitives::{ChildBounds, ChildModuleLayout, ModuleId, MonitorId};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum LayoutEvent {
+pub(crate) enum LayoutEvent {
     ModuleSizeChanged {
         monitor_id: MonitorId,
         module_id: ModuleId,
@@ -11,12 +11,6 @@ pub enum LayoutEvent {
         /// Width the module was laid out at once its embedder pinned one.
         settled_width: Option<u32>,
     },
-    ChildModuleSizeChanged {
-        parent_id: ModuleId,
-        child_key: ModuleKey,
-        monitor_id: MonitorId,
-        size: Size,
-    },
     ContainerLayoutsCalculated {
         parent_id: ModuleId,
         monitor_id: MonitorId,
@@ -24,7 +18,7 @@ pub enum LayoutEvent {
     },
 }
 
-pub trait LayoutEventSender: Send + Sync {
+pub(crate) trait LayoutEventSender: Send + Sync {
     fn send_layout_event(&self, event: LayoutEvent);
 }
 

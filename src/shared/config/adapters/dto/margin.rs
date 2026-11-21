@@ -4,7 +4,7 @@ use crate::shared::config::domain::{self, MarginOffset};
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub enum MarginConfigDto {
+pub(super) enum MarginConfigDto {
     All(i32),
     Fields {
         top: Option<i32>,
@@ -24,7 +24,7 @@ impl Default for MarginConfigDto {
 
 impl MarginConfigDto {
     #[must_use]
-    pub const fn into_domain(self) -> domain::MarginConfig {
+    pub(crate) const fn into_domain(self) -> domain::MarginConfig {
         match self {
             Self::All(val) => domain::MarginConfig::new(
                 MarginOffset::new(val),
@@ -81,7 +81,7 @@ impl MarginConfigDto {
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub enum PartialMarginConfigDto {
+pub(super) enum PartialMarginConfigDto {
     All(i32),
     Fields {
         top: Option<i32>,
@@ -108,7 +108,7 @@ impl Default for PartialMarginConfigDto {
 
 impl PartialMarginConfigDto {
     #[must_use]
-    pub const fn into_domain(self) -> domain::PartialMarginConfig {
+    pub(crate) const fn into_domain(self) -> domain::PartialMarginConfig {
         match self {
             Self::All(val) => domain::PartialMarginConfig::new(
                 Some(MarginOffset::new(val)),

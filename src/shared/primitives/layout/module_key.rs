@@ -11,12 +11,13 @@ pub struct ModuleKey {
 
 impl ModuleKey {
     #[must_use]
-    pub const fn new(name: ModuleName, instance_id: Option<ModuleInstanceId>) -> Self {
+    pub(crate) const fn new(name: ModuleName, instance_id: Option<ModuleInstanceId>) -> Self {
         Self { name, instance_id }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn from_name(name: impl Into<ModuleName>) -> Self {
+    pub(crate) fn from_name(name: impl Into<ModuleName>) -> Self {
         Self {
             name: name.into(),
             instance_id: None,
@@ -24,12 +25,12 @@ impl ModuleKey {
     }
 
     #[must_use]
-    pub const fn name(&self) -> &ModuleName {
+    pub(crate) const fn name(&self) -> &ModuleName {
         &self.name
     }
 
     #[must_use]
-    pub const fn instance_id(&self) -> Option<&ModuleInstanceId> {
+    pub(crate) const fn instance_id(&self) -> Option<&ModuleInstanceId> {
         self.instance_id.as_ref()
     }
 }

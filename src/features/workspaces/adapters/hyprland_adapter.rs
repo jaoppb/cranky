@@ -1,22 +1,24 @@
 use super::dto::{HyprMonitorDto, HyprWorkspaceDto};
-use super::event_parser::parse_event;
 use super::hyprland_provider::{HyprlandProvider, RealHyprlandProvider};
+#[cfg(test)]
 use super::inconsistency::{StateInconsistency, find_state_inconsistencies};
 use super::signal_loop::run_event_loop;
 use crate::features::workspaces::ports::{
     WindowManagerError, WindowManagerPort, WindowManagerState,
 };
-use crate::shared::events::signals::{HyprlandState, SignalHub};
+#[cfg(test)]
+use crate::shared::events::signals::HyprlandState;
+use crate::shared::events::signals::SignalHub;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct HyprlandAdapter {
+pub(crate) struct HyprlandAdapter {
     provider: Arc<dyn HyprlandProvider>,
 }
 
 impl HyprlandAdapter {
     #[must_use]
-    pub fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
+    pub(crate) fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
         Self {
             provider: Arc::new(RealHyprlandProvider::new(app_env)),
         }
@@ -24,22 +26,18 @@ impl HyprlandAdapter {
 
     #[cfg(test)]
     #[must_use]
-    pub fn with_provider(provider: Arc<dyn HyprlandProvider>) -> Self {
+    pub(crate) fn with_provider(provider: Arc<dyn HyprlandProvider>) -> Self {
         Self { provider }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn parse_event(raw_line: &str) -> Option<crate::shared::events::core::WindowManagerEvent> {
-        parse_event(raw_line)
-    }
-
-    #[must_use]
-    pub fn find_state_inconsistencies(state: &HyprlandState) -> Vec<StateInconsistency> {
+    pub(crate) fn find_state_inconsistencies(state: &HyprlandState) -> Vec<StateInconsistency> {
         find_state_inconsistencies(state)
     }
 
     /// Runs a background loop that listens to Hyprland event socket and pushes updates to the `SignalHub`.
-    pub async fn run(self, hub: Arc<SignalHub>) {
+    pub(crate) async fn run(self, hub: Arc<SignalHub>) {
         run_event_loop(self.clone(), self.provider.clone(), hub).await;
     }
 }

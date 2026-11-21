@@ -2,7 +2,7 @@ use super::super::errors::StylingError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-pub struct FlexGrow(f32);
+pub(crate) struct FlexGrow(f32);
 
 impl FlexGrow {
     /// Creates a new `FlexGrow` value >= 0.0.
@@ -10,7 +10,7 @@ impl FlexGrow {
     /// # Errors
     ///
     /// Returns `StylingError::InvalidFlexValue` if `value` is NaN or negative.
-    pub fn new(value: f32) -> Result<Self, StylingError> {
+    pub(crate) fn new(value: f32) -> Result<Self, StylingError> {
         if value.is_nan() || value < 0.0 {
             return Err(StylingError::InvalidFlexValue(format!(
                 "flex-grow cannot be negative or NaN, got {value}"
@@ -20,7 +20,7 @@ impl FlexGrow {
     }
 
     #[must_use]
-    pub const fn value(&self) -> f32 {
+    pub(crate) const fn value(self) -> f32 {
         self.0
     }
 }
@@ -36,7 +36,7 @@ impl<'de> Deserialize<'de> for FlexGrow {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-pub struct FlexShrink(f32);
+pub(crate) struct FlexShrink(f32);
 
 impl FlexShrink {
     /// Creates a new `FlexShrink` value >= 0.0.
@@ -44,7 +44,7 @@ impl FlexShrink {
     /// # Errors
     ///
     /// Returns `StylingError::InvalidFlexValue` if `value` is NaN or negative.
-    pub fn new(value: f32) -> Result<Self, StylingError> {
+    pub(crate) fn new(value: f32) -> Result<Self, StylingError> {
         if value.is_nan() || value < 0.0 {
             return Err(StylingError::InvalidFlexValue(format!(
                 "flex-shrink cannot be negative or NaN, got {value}"
@@ -54,7 +54,7 @@ impl FlexShrink {
     }
 
     #[must_use]
-    pub const fn value(&self) -> f32 {
+    pub(crate) const fn value(self) -> f32 {
         self.0
     }
 }

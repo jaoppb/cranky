@@ -5,7 +5,10 @@ use crate::features::styling::domain::{ComputedStyle, DisplayMode, GridAutoFlow}
 use lightningcss::properties::Property;
 use lightningcss::stylesheet::PrinterOptions;
 
-pub fn apply_display_and_gap_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
+pub(crate) fn apply_display_and_gap_properties(
+    style: &mut ComputedStyle,
+    prop: &Property<'_>,
+) -> bool {
     let Ok(full) = prop.to_css_string(false, PrinterOptions::default()) else {
         return false;
     };
@@ -38,7 +41,10 @@ pub fn apply_display_and_gap_properties(style: &mut ComputedStyle, prop: &Proper
     false
 }
 
-pub fn apply_grid_container_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
+pub(crate) fn apply_grid_container_properties(
+    style: &mut ComputedStyle,
+    prop: &Property<'_>,
+) -> bool {
     let Ok(full) = prop.to_css_string(false, PrinterOptions::default()) else {
         return false;
     };

@@ -14,7 +14,7 @@ use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-pub struct EventLoop<
+pub(in crate::features::module_runtime) struct EventLoop<
     F: CanvasFactory + 'static,
     LS: LayoutEventSender + 'static,
     DS: DisplayCommandSender + 'static,
@@ -52,7 +52,7 @@ impl<
 > EventLoop<F, LS, DS, US>
 {
     #[must_use]
-    pub fn new(
+    pub(crate) fn new(
         port: Box<dyn AnyModulePort>,
         ctx: ModuleContext<LS, DS, US>,
         pointer_handler: PointerHandler,
@@ -76,17 +76,15 @@ impl<
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn render_pipeline(&self) -> &RenderPipeline {
+    pub(crate) const fn render_pipeline(&self) -> &RenderPipeline {
         &self.render_pipeline
     }
 
-    pub const fn render_pipeline_mut(&mut self) -> &mut RenderPipeline {
-        &mut self.render_pipeline
-    }
-
+    #[cfg(test)]
     #[must_use]
-    pub fn into_actor(
+    pub(crate) fn into_actor(
         self,
     ) -> crate::features::module_runtime::application::ModuleActor<F, LS, DS, US> {
         crate::features::module_runtime::application::ModuleActor::new(
@@ -98,7 +96,7 @@ impl<
         )
     }
 
-    pub fn discover_monitors<V>(&self, layouts: &HashMap<MonitorId, V>) -> Vec<MonitorId> {
+    pub(crate) fn discover_monitors<V>(&self, layouts: &HashMap<MonitorId, V>) -> Vec<MonitorId> {
         let seen: std::collections::HashSet<MonitorId> = self
             .render_pipeline
             .render_trees()
@@ -113,7 +111,7 @@ impl<
         )
     }
 
-    pub async fn run(mut self) {
+    pub(crate) async fn run(mut self) {
         let subs = self.port.subscriptions().to_vec();
         let mut events_stream = self.ctx.hub().subscribe_streams(&subs);
         let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();

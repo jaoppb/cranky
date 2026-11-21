@@ -2,12 +2,11 @@ mod dispatch;
 pub mod events;
 mod floating_dispatch;
 mod outcome_dispatch;
-pub mod pointer;
-pub mod poll;
-pub mod renderer;
-pub mod runner;
+mod pointer;
+mod poll;
+mod renderer;
+mod runner;
 #[cfg(test)]
 mod tests;
 
-pub use events::*;
-pub use runner::*;
+pub(in crate::features::module_runtime) use runner::*;

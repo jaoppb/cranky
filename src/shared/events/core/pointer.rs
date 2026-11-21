@@ -1,7 +1,7 @@
 use crate::shared::primitives::geometry::Position;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub enum PointerButton {
+pub(crate) enum PointerButton {
     Left,
     Middle,
     Right,
@@ -14,7 +14,7 @@ pub enum PointerButton {
 
 impl PointerButton {
     #[must_use]
-    pub const fn from_raw(button: u32) -> Self {
+    pub(crate) const fn from_raw(button: u32) -> Self {
         match button {
             0x110 => Self::Left,
             0x111 => Self::Right,
@@ -27,8 +27,9 @@ impl PointerButton {
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn to_raw(self) -> u32 {
+    pub(crate) const fn to_raw(self) -> u32 {
         match self {
             Self::Left => 0x110,
             Self::Right => 0x111,
@@ -42,7 +43,7 @@ impl PointerButton {
     }
 
     #[must_use]
-    pub fn from_name(name: &str) -> Option<Self> {
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
         match name.to_ascii_lowercase().as_str() {
             "left" => Some(Self::Left),
             "right" => Some(Self::Right),
@@ -62,22 +63,23 @@ impl PointerButton {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ScrollAxis {
+pub(crate) enum ScrollAxis {
     Horizontal,
     Vertical,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
-pub struct ScrollDelta(f64);
+pub(crate) struct ScrollDelta(f64);
 
 impl ScrollDelta {
     #[must_use]
-    pub const fn new(value: f64) -> Self {
+    pub(crate) const fn new(value: f64) -> Self {
         Self(value)
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn value(&self) -> f64 {
+    pub(crate) const fn value(self) -> f64 {
         self.0
     }
 }
@@ -85,7 +87,7 @@ impl ScrollDelta {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
 )]
-pub enum SurfaceKind {
+pub(crate) enum SurfaceKind {
     #[default]
     Bar,
     Popup,
@@ -93,7 +95,7 @@ pub enum SurfaceKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum PointerEvent {
+pub(crate) enum PointerEvent {
     PointerEnter {
         surface: SurfaceKind,
     },
@@ -128,7 +130,7 @@ pub enum PointerEvent {
 
 impl PointerEvent {
     #[must_use]
-    pub const fn surface(&self) -> SurfaceKind {
+    pub(crate) const fn surface(&self) -> SurfaceKind {
         match self {
             Self::PointerEnter { surface }
             | Self::PointerLeave { surface }
@@ -142,23 +144,23 @@ impl PointerEvent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum SurfaceLifecycleEvent {
+pub(crate) enum SurfaceLifecycleEvent {
     PopupDismissed,
     PanelDismissed,
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum InteractionEvent {
+pub(crate) enum InteractionEvent {
     Pointer(PointerEvent),
     Lifecycle(SurfaceLifecycleEvent),
 }
 
-pub type PointerSender = tokio::sync::broadcast::Sender<(
+pub(crate) type PointerSender = tokio::sync::broadcast::Sender<(
     crate::shared::primitives::ModuleId,
     crate::shared::primitives::MonitorId,
     InteractionEvent,
 )>;
-pub type PointerReceiver = tokio::sync::broadcast::Receiver<(
+pub(crate) type PointerReceiver = tokio::sync::broadcast::Receiver<(
     crate::shared::primitives::ModuleId,
     crate::shared::primitives::MonitorId,
     InteractionEvent,
@@ -167,16 +169,16 @@ pub type PointerReceiver = tokio::sync::broadcast::Receiver<(
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
-pub struct PointerSerial(u32);
+pub(crate) struct PointerSerial(u32);
 
 impl PointerSerial {
     #[must_use]
-    pub const fn new(serial: u32) -> Self {
+    pub(crate) const fn new(serial: u32) -> Self {
         Self(serial)
     }
 
     #[must_use]
-    pub const fn value(&self) -> u32 {
+    pub(crate) const fn value(self) -> u32 {
         self.0
     }
 }

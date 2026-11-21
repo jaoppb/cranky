@@ -7,7 +7,7 @@ use crate::features::vdom::domain::{
 /// longer exists in that tree), so each is resolved once per tree rather
 /// than once per node visited while walking it.
 #[derive(Debug)]
-pub struct ResolvedInteraction {
+pub(crate) struct ResolvedInteraction {
     hovered: Option<NodePath>,
     active: Option<NodePath>,
     focused: Option<NodePath>,
@@ -16,7 +16,7 @@ pub struct ResolvedInteraction {
 
 impl ResolvedInteraction {
     #[must_use]
-    pub fn resolve(root: &VNode, surface: SurfaceSpace, ctx: &InteractionContext) -> Self {
+    pub(crate) fn resolve(root: &VNode, surface: SurfaceSpace, ctx: &InteractionContext) -> Self {
         Self {
             hovered: ctx
                 .hovered()
@@ -32,13 +32,13 @@ impl ResolvedInteraction {
     }
 
     #[must_use]
-    pub const fn is_monitor_focused(&self) -> bool {
+    pub(crate) const fn is_monitor_focused(&self) -> bool {
         self.is_monitor_focused
     }
 
     /// Whether `path` is the hovered node, or an ancestor of it.
     #[must_use]
-    pub fn is_hovered_or_ancestor(&self, path: &NodePath) -> bool {
+    pub(crate) fn is_hovered_or_ancestor(&self, path: &NodePath) -> bool {
         self.hovered
             .as_ref()
             .is_some_and(|hovered_path| hovered_path.starts_with(path))
@@ -46,7 +46,7 @@ impl ResolvedInteraction {
 
     /// Whether `path` is the active node, or an ancestor of it.
     #[must_use]
-    pub fn is_active_or_ancestor(&self, path: &NodePath) -> bool {
+    pub(crate) fn is_active_or_ancestor(&self, path: &NodePath) -> bool {
         self.active
             .as_ref()
             .is_some_and(|active_path| active_path.starts_with(path))
@@ -54,7 +54,7 @@ impl ResolvedInteraction {
 
     /// Whether `path` is exactly the focused node (focus never bubbles).
     #[must_use]
-    pub fn is_focused(&self, path: &NodePath) -> bool {
+    pub(crate) fn is_focused(&self, path: &NodePath) -> bool {
         self.focused.as_ref() == Some(path)
     }
 }

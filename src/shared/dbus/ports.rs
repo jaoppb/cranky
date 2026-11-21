@@ -92,7 +92,7 @@ pub trait DbusConnectionPort: Send + Sync {
 
 /// A bus with no connection: every request fails with `NotInitialized`.
 #[cfg(test)]
-pub struct DisconnectedBus;
+pub(crate) struct DisconnectedBus;
 
 #[cfg(test)]
 #[async_trait]

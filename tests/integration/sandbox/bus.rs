@@ -7,13 +7,13 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 
-pub struct Bus {
+pub(crate) struct Bus {
     process: Child,
     address: String,
 }
 
 impl Bus {
-    pub async fn start(dir: &Path) -> Outcome<Self> {
+    pub(crate) async fn start(dir: &Path) -> Outcome<Self> {
         let config = dir.join("bus.conf");
         std::fs::write(&config, config_for(dir)).context("write the dbus-daemon config")?;
         let mut process = Command::new("dbus-daemon")
@@ -38,11 +38,11 @@ impl Bus {
         Ok(Self { process, address })
     }
 
-    pub fn address(&self) -> &str {
+    pub(crate) fn address(&self) -> &str {
         &self.address
     }
 
-    pub async fn stop(&mut self) {
+    pub(crate) async fn stop(&mut self) {
         let _ = self.process.kill().await;
     }
 }

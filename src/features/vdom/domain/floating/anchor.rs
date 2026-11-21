@@ -7,7 +7,7 @@ const RIGHT_FLAG: u8 = 1 << 3;
 
 /// Vertical edge anchor for floating panels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum VerticalAnchor {
+pub(crate) enum VerticalAnchor {
     #[default]
     None,
     Top,
@@ -17,7 +17,7 @@ pub enum VerticalAnchor {
 
 impl VerticalAnchor {
     #[must_use]
-    pub const fn from_edges(top: bool, bottom: bool) -> Self {
+    pub(crate) const fn from_edges(top: bool, bottom: bool) -> Self {
         match (top, bottom) {
             (true, true) => Self::Both,
             (true, false) => Self::Top,
@@ -27,7 +27,7 @@ impl VerticalAnchor {
     }
 
     #[must_use]
-    pub const fn to_flags(self) -> u8 {
+    pub(crate) const fn to_flags(self) -> u8 {
         match self {
             Self::None => 0,
             Self::Top => TOP_FLAG,
@@ -39,7 +39,7 @@ impl VerticalAnchor {
 
 /// Horizontal edge anchor for floating panels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum HorizontalAnchor {
+pub(crate) enum HorizontalAnchor {
     #[default]
     None,
     Left,
@@ -49,7 +49,7 @@ pub enum HorizontalAnchor {
 
 impl HorizontalAnchor {
     #[must_use]
-    pub const fn from_edges(left: bool, right: bool) -> Self {
+    pub(crate) const fn from_edges(left: bool, right: bool) -> Self {
         match (left, right) {
             (true, true) => Self::Both,
             (true, false) => Self::Left,
@@ -59,7 +59,7 @@ impl HorizontalAnchor {
     }
 
     #[must_use]
-    pub const fn to_flags(self) -> u8 {
+    pub(crate) const fn to_flags(self) -> u8 {
         match self {
             Self::None => 0,
             Self::Left => LEFT_FLAG,
@@ -72,7 +72,7 @@ impl HorizontalAnchor {
 /// Wayland Layer-Shell anchor configuration for floating panels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 #[serde(from = "PanelAnchorHelper")]
-pub struct PanelAnchor {
+pub(crate) struct PanelAnchor {
     flags: u8,
 }
 
@@ -145,47 +145,48 @@ impl From<PanelAnchorHelper> for PanelAnchor {
 
 impl PanelAnchor {
     #[must_use]
-    pub const fn from_flags(flags: u8) -> Self {
+    pub(crate) const fn from_flags(flags: u8) -> Self {
         Self { flags }
     }
 
     /// Creates a new `PanelAnchor` with explicit edge flags.
     #[must_use]
-    pub const fn new(vertical: VerticalAnchor, horizontal: HorizontalAnchor) -> Self {
+    pub(crate) const fn new(vertical: VerticalAnchor, horizontal: HorizontalAnchor) -> Self {
         Self {
             flags: vertical.to_flags() | horizontal.to_flags(),
         }
     }
 
     #[must_use]
-    pub const fn none() -> Self {
+    pub(crate) const fn none() -> Self {
         Self { flags: 0 }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn all() -> Self {
+    pub(crate) const fn all() -> Self {
         Self {
             flags: TOP_FLAG | BOTTOM_FLAG | LEFT_FLAG | RIGHT_FLAG,
         }
     }
 
     #[must_use]
-    pub const fn top(&self) -> bool {
+    pub(crate) const fn top(self) -> bool {
         (self.flags & TOP_FLAG) != 0
     }
 
     #[must_use]
-    pub const fn bottom(&self) -> bool {
+    pub(crate) const fn bottom(self) -> bool {
         (self.flags & BOTTOM_FLAG) != 0
     }
 
     #[must_use]
-    pub const fn left(&self) -> bool {
+    pub(crate) const fn left(self) -> bool {
         (self.flags & LEFT_FLAG) != 0
     }
 
     #[must_use]
-    pub const fn right(&self) -> bool {
+    pub(crate) const fn right(self) -> bool {
         (self.flags & RIGHT_FLAG) != 0
     }
 }

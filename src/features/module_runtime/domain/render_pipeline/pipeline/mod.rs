@@ -31,59 +31,63 @@ impl RenderPipeline {
     }
 
     #[must_use]
-    pub const fn sizes(&self) -> &HashMap<MonitorId, Size> {
+    pub(crate) const fn sizes(&self) -> &HashMap<MonitorId, Size> {
         &self.sizes
     }
 
-    pub const fn sizes_mut(&mut self) -> &mut HashMap<MonitorId, Size> {
+    pub(crate) const fn sizes_mut(&mut self) -> &mut HashMap<MonitorId, Size> {
         &mut self.sizes
     }
 
     #[must_use]
-    pub const fn rendered_bounds(&self) -> &HashMap<MonitorId, Rect> {
+    pub(crate) const fn rendered_bounds(&self) -> &HashMap<MonitorId, Rect> {
         &self.rendered_bounds
     }
 
     #[must_use]
-    pub const fn render_trees(&self) -> &HashMap<MonitorId, RenderNode> {
+    pub(crate) const fn render_trees(&self) -> &HashMap<MonitorId, RenderNode> {
         &self.render_trees
     }
 
-    pub const fn render_trees_mut(&mut self) -> &mut HashMap<MonitorId, RenderNode> {
+    pub(crate) const fn render_trees_mut(&mut self) -> &mut HashMap<MonitorId, RenderNode> {
         &mut self.render_trees
     }
 
     #[must_use]
-    pub const fn vdom_trees(&self) -> &HashMap<MonitorId, VNode> {
+    pub(crate) const fn vdom_trees(&self) -> &HashMap<MonitorId, VNode> {
         &self.vdom_trees
     }
 
-    pub const fn vdom_trees_mut(&mut self) -> &mut HashMap<MonitorId, VNode> {
+    pub(crate) const fn vdom_trees_mut(&mut self) -> &mut HashMap<MonitorId, VNode> {
         &mut self.vdom_trees
     }
 
     #[must_use]
-    pub const fn last_child_sizes(&self) -> &HashMap<MonitorId, Option<ChildSizesMap>> {
+    pub(crate) const fn last_child_sizes(&self) -> &HashMap<MonitorId, Option<ChildSizesMap>> {
         &self.last_child_sizes
     }
 
-    pub const fn last_child_sizes_mut(&mut self) -> &mut HashMap<MonitorId, Option<ChildSizesMap>> {
+    pub(crate) const fn last_child_sizes_mut(
+        &mut self,
+    ) -> &mut HashMap<MonitorId, Option<ChildSizesMap>> {
         &mut self.last_child_sizes
     }
 
     #[must_use]
-    pub const fn last_interactions(&self) -> &HashMap<MonitorId, Option<InteractionContext>> {
+    pub(crate) const fn last_interactions(
+        &self,
+    ) -> &HashMap<MonitorId, Option<InteractionContext>> {
         &self.last_interactions
     }
 
-    pub const fn last_interactions_mut(
+    pub(crate) const fn last_interactions_mut(
         &mut self,
     ) -> &mut HashMap<MonitorId, Option<InteractionContext>> {
         &mut self.last_interactions
     }
 
     /// Disjoint mutable borrows of all three floating-content caches at once.
-    pub const fn floating_content_caches_mut(&mut self) -> FloatingContentCaches<'_> {
+    pub(crate) const fn floating_content_caches_mut(&mut self) -> FloatingContentCaches<'_> {
         FloatingContentCaches {
             popup: &mut self.popup_content_cache,
             panel: &mut self.panel_content_cache,
@@ -94,7 +98,7 @@ impl RenderPipeline {
     /// Drops every per-monitor entry for a monitor not in `live` — nothing
     /// else here ever removes an entry, so a disconnected monitor would
     /// otherwise keep its render state alive forever.
-    pub fn retain_monitors(&mut self, live: &HashSet<MonitorId>) {
+    pub(crate) fn retain_monitors(&mut self, live: &HashSet<MonitorId>) {
         self.sizes.retain(|id, _| live.contains(id));
         self.embed.retain_monitors(live);
         self.rendered_bounds.retain(|id, _| live.contains(id));

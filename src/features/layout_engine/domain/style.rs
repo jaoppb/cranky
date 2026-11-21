@@ -32,7 +32,7 @@ pub enum AlignItems {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum PositionType {
+pub(crate) enum PositionType {
     #[default]
     Relative,
     Absolute,
@@ -40,17 +40,17 @@ pub enum PositionType {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(transparent)]
-pub struct Gap {
+pub(crate) struct Gap {
     value: f64,
 }
 
 impl Gap {
     #[must_use]
-    pub const fn new(value: f64) -> Self {
+    pub(crate) const fn new(value: f64) -> Self {
         Self { value }
     }
     #[must_use]
-    pub const fn value(&self) -> f64 {
+    pub(crate) const fn value(&self) -> f64 {
         self.value
     }
 }
@@ -79,25 +79,26 @@ impl BoxMargin {
     }
 
     #[must_use]
-    pub const fn top(&self) -> f64 {
+    pub(crate) const fn top(&self) -> f64 {
         self.top
     }
     #[must_use]
-    pub const fn bottom(&self) -> f64 {
+    pub(crate) const fn bottom(&self) -> f64 {
         self.bottom
     }
     #[must_use]
-    pub const fn left(&self) -> f64 {
+    pub(crate) const fn left(&self) -> f64 {
         self.left
     }
     #[must_use]
-    pub const fn right(&self) -> f64 {
+    pub(crate) const fn right(&self) -> f64 {
         self.right
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Deserialize, Default)]
-pub struct FlexStyle {
+pub(crate) struct FlexStyle {
     #[serde(default)]
     direction: FlexDirection,
     #[serde(default)]
@@ -114,38 +115,34 @@ pub struct FlexStyle {
     position: PositionType,
 }
 
+#[cfg(test)]
 impl FlexStyle {
     #[must_use]
-    pub const fn with_padding(mut self, padding: BoxMargin) -> Self {
-        self.padding = padding;
-        self
-    }
-    #[must_use]
-    pub const fn direction(&self) -> FlexDirection {
+    pub(crate) const fn direction(&self) -> FlexDirection {
         self.direction
     }
     #[must_use]
-    pub const fn justify(&self) -> JustifyContent {
+    pub(crate) const fn justify(&self) -> JustifyContent {
         self.justify
     }
     #[must_use]
-    pub const fn align_items(&self) -> AlignItems {
+    pub(crate) const fn align_items(&self) -> AlignItems {
         self.align_items
     }
     #[must_use]
-    pub const fn padding(&self) -> &BoxMargin {
+    pub(crate) const fn padding(&self) -> &BoxMargin {
         &self.padding
     }
     #[must_use]
-    pub const fn margin(&self) -> &BoxMargin {
+    pub(crate) const fn margin(&self) -> &BoxMargin {
         &self.margin
     }
     #[must_use]
-    pub const fn gap(&self) -> Option<&Gap> {
+    pub(crate) const fn gap(&self) -> Option<&Gap> {
         self.gap.as_ref()
     }
     #[must_use]
-    pub const fn position(&self) -> PositionType {
+    pub(crate) const fn position(&self) -> PositionType {
         self.position
     }
 }

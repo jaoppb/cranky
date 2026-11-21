@@ -7,24 +7,24 @@ use wayland_client::Proxy;
 
 /// `wl_compositor.create_region` / `wl_surface.set_input_region` /
 /// `wl_region.{destroy,add}`.
-pub const CREATE_REGION: u16 = 1;
-pub const SET_INPUT_REGION: u16 = 5;
-pub const REGION_DESTROY: u16 = 0;
-pub const REGION_ADD: u16 = 1;
+pub(in crate::shared::wayland::adapters::wayland::tests) const CREATE_REGION: u16 = 1;
+pub(in crate::shared::wayland::adapters::wayland::tests) const SET_INPUT_REGION: u16 = 5;
+pub(in crate::shared::wayland::adapters::wayland::tests) const REGION_DESTROY: u16 = 0;
+pub(in crate::shared::wayland::adapters::wayland::tests) const REGION_ADD: u16 = 1;
 
 /// One decoded request: the object it was sent to, its opcode and the
 /// first argument (the new id for a constructor, the region id for
 /// `set_input_region`; `0` when there are no arguments).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Request {
-    pub object: u32,
-    pub opcode: u16,
-    pub arg: u32,
+pub(crate) struct Request {
+    pub(crate) object: u32,
+    pub(crate) opcode: u16,
+    pub(crate) arg: u32,
 }
 
 impl Fake {
     /// Every request flushed since the last call, in send order.
-    pub fn requests(&self) -> Vec<Request> {
+    pub(crate) fn requests(&self) -> Vec<Request> {
         self.connection.flush().expect("flush");
         self.server.set_nonblocking(true).expect("nonblocking");
         let mut bytes = Vec::new();
@@ -58,6 +58,6 @@ impl Fake {
 }
 
 /// The wire id of a protocol object.
-pub fn id(proxy: &impl Proxy) -> u32 {
+pub(in crate::shared::wayland::adapters::wayland::tests) fn id(proxy: &impl Proxy) -> u32 {
     proxy.id().protocol_id()
 }

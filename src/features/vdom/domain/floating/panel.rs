@@ -5,7 +5,7 @@ use crate::shared::config::domain::MarginConfig;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct PanelSpec {
+pub(crate) struct PanelSpec {
     content: Box<VNode>,
     #[serde(default)]
     layer: PanelLayer,
@@ -21,7 +21,7 @@ pub struct PanelSpec {
 
 impl PanelSpec {
     #[must_use]
-    pub fn new(content: Box<VNode>) -> Self {
+    pub(crate) fn new(content: Box<VNode>) -> Self {
         Self {
             content,
             layer: PanelLayer::Top,
@@ -33,62 +33,62 @@ impl PanelSpec {
     }
 
     #[must_use]
-    pub const fn with_layer(mut self, layer: PanelLayer) -> Self {
+    pub(crate) const fn with_layer(mut self, layer: PanelLayer) -> Self {
         self.layer = layer;
         self
     }
 
     #[must_use]
-    pub const fn with_anchor(mut self, anchor: PanelAnchor) -> Self {
+    pub(crate) const fn with_anchor(mut self, anchor: PanelAnchor) -> Self {
         self.anchor = anchor;
         self
     }
 
     #[must_use]
-    pub const fn with_margin(mut self, margin: MarginConfig) -> Self {
+    pub(crate) const fn with_margin(mut self, margin: MarginConfig) -> Self {
         self.margin = margin;
         self
     }
 
     #[must_use]
-    pub const fn with_exclusive_zone(mut self, exclusive_zone: ExclusiveZone) -> Self {
+    pub(crate) const fn with_exclusive_zone(mut self, exclusive_zone: ExclusiveZone) -> Self {
         self.exclusive_zone = exclusive_zone;
         self
     }
 
     #[must_use]
-    pub const fn with_keyboard(mut self, keyboard: KeyboardInteractivity) -> Self {
+    pub(crate) const fn with_keyboard(mut self, keyboard: KeyboardInteractivity) -> Self {
         self.keyboard = keyboard;
         self
     }
 
     #[must_use]
-    pub fn content(&self) -> &VNode {
+    pub(crate) fn content(&self) -> &VNode {
         &self.content
     }
 
     #[must_use]
-    pub const fn layer(&self) -> PanelLayer {
+    pub(crate) const fn layer(&self) -> PanelLayer {
         self.layer
     }
 
     #[must_use]
-    pub const fn anchor(&self) -> PanelAnchor {
+    pub(crate) const fn anchor(&self) -> PanelAnchor {
         self.anchor
     }
 
     #[must_use]
-    pub const fn margin(&self) -> &MarginConfig {
+    pub(crate) const fn margin(&self) -> &MarginConfig {
         &self.margin
     }
 
     #[must_use]
-    pub const fn exclusive_zone(&self) -> ExclusiveZone {
+    pub(crate) const fn exclusive_zone(&self) -> ExclusiveZone {
         self.exclusive_zone
     }
 
     #[must_use]
-    pub const fn keyboard(&self) -> KeyboardInteractivity {
+    pub(crate) const fn keyboard(&self) -> KeyboardInteractivity {
         self.keyboard
     }
 }

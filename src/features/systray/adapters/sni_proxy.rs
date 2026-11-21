@@ -1,5 +1,5 @@
 #[zbus::proxy(interface = "org.kde.StatusNotifierItem", assume_defaults = true)]
-pub trait StatusNotifierItem {
+pub(super) trait StatusNotifierItem {
     #[zbus(property(emits_changed_signal = "false"))]
     fn title(&self) -> zbus::Result<String>;
     #[zbus(property(emits_changed_signal = "false"))]

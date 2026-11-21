@@ -41,7 +41,7 @@ fn report_size<E: LayoutEnginePort>(
     Some(SizeChange::new(old_size, size).with_settled_width(settled_width))
 }
 
-pub fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
+pub(crate) fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
     pipeline: &mut RenderPipeline,
     monitor_id: &MonitorId,
     diff: PipelineDiff,

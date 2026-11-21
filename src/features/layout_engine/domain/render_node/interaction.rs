@@ -7,7 +7,7 @@ impl RenderNode {
     /// This node's children, or an empty slice for a leaf variant. Used to
     /// walk an anchor chain (see `NodeRef`) back into a concrete `NodePath`.
     #[must_use]
-    pub fn children(&self) -> &[Self] {
+    pub(crate) fn children(&self) -> &[Self] {
         match self {
             Self::Flex { children, .. } | Self::Grid { children, .. } => children,
             _ => &[],
@@ -15,7 +15,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub const fn on_click(&self) -> Option<&ClickHandlers> {
+    pub(crate) const fn on_click(&self) -> Option<&ClickHandlers> {
         match self {
             Self::Text { on_click, .. }
             | Self::Flex { on_click, .. }
@@ -28,7 +28,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub const fn on_hover(&self) -> Option<&UiAction> {
+    pub(crate) const fn on_hover(&self) -> Option<&UiAction> {
         match self {
             Self::Text { on_hover, .. }
             | Self::Flex { on_hover, .. }
@@ -41,7 +41,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub fn tooltip(&self) -> Option<&StyledNode> {
+    pub(crate) fn tooltip(&self) -> Option<&StyledNode> {
         match self {
             Self::Flex { tooltip, .. }
             | Self::Grid { tooltip, .. }
@@ -54,7 +54,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub const fn popup(&self) -> Option<&StyledPopup> {
+    pub(crate) const fn popup(&self) -> Option<&StyledPopup> {
         match self {
             Self::Flex { popup, .. }
             | Self::Grid { popup, .. }
@@ -67,7 +67,7 @@ impl RenderNode {
     }
 
     #[must_use]
-    pub const fn panel(&self) -> Option<&StyledPanel> {
+    pub(crate) const fn panel(&self) -> Option<&StyledPanel> {
         match self {
             Self::Flex { panel, .. }
             | Self::Grid { panel, .. }

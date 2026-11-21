@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 impl Fake {
     /// A `WaylandState` with every global bound and `popup.embed = embed`.
-    pub fn state(&self, embed: PopupEmbed) -> WaylandState {
+    pub(crate) fn state(&self, embed: PopupEmbed) -> WaylandState {
         let popup = PopupConfig::default();
         let config = Config::new(
             RootConfig::default(),

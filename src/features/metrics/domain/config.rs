@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
-pub enum CpuMode {
+pub(crate) enum CpuMode {
     #[serde(rename = "percentage_0_100")]
     #[default]
     Percentage0to100,
@@ -12,7 +12,7 @@ pub enum CpuMode {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum MemoryMode {
+pub(crate) enum MemoryMode {
     #[serde(rename = "absolute")]
     Absolute,
     #[serde(rename = "percentual")]
@@ -23,7 +23,7 @@ pub enum MemoryMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum NetworkMode {
+pub(crate) enum NetworkMode {
     #[serde(rename = "tx_rx")]
     TxRx,
     #[serde(rename = "disabled")]
@@ -31,7 +31,7 @@ pub enum NetworkMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum TemperatureMode {
+pub(crate) enum TemperatureMode {
     #[serde(rename = "celsius")]
     Celsius,
     #[serde(rename = "fahrenheit")]
@@ -41,7 +41,7 @@ pub enum TemperatureMode {
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum DiskMode {
+pub(crate) enum DiskMode {
     #[serde(rename = "absolute")]
     Absolute,
     #[serde(rename = "percentual")]
@@ -52,16 +52,11 @@ pub enum DiskMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct UpdateInterval(u64);
+pub(crate) struct UpdateInterval(u64);
 
 impl UpdateInterval {
     #[must_use]
-    pub const fn new(val: u64) -> Self {
-        Self(val)
-    }
-
-    #[must_use]
-    pub const fn value(&self) -> u64 {
+    pub(crate) const fn value(&self) -> u64 {
         self.0
     }
 }
@@ -101,31 +96,23 @@ impl Default for MetricsConfig {
 
 impl MetricsConfig {
     #[must_use]
-    pub const fn cpu(&self) -> &CpuMode {
+    pub(crate) const fn cpu(&self) -> &CpuMode {
         &self.cpu
     }
     #[must_use]
-    pub const fn memory(&self) -> &MemoryMode {
-        &self.memory
-    }
-    #[must_use]
-    pub const fn swap(&self) -> &MemoryMode {
-        &self.swap
-    }
-    #[must_use]
-    pub const fn network(&self) -> Option<&NetworkMode> {
+    pub(crate) const fn network(&self) -> Option<&NetworkMode> {
         self.network.as_ref()
     }
     #[must_use]
-    pub const fn temperature(&self) -> Option<&TemperatureMode> {
+    pub(crate) const fn temperature(&self) -> Option<&TemperatureMode> {
         self.temperature.as_ref()
     }
     #[must_use]
-    pub const fn disk(&self) -> Option<&DiskMode> {
+    pub(crate) const fn disk(&self) -> Option<&DiskMode> {
         self.disk.as_ref()
     }
     #[must_use]
-    pub const fn update_interval_ms(&self) -> &UpdateInterval {
+    pub(crate) const fn update_interval_ms(&self) -> &UpdateInterval {
         &self.update_interval_ms
     }
 }

@@ -4,7 +4,7 @@ use crate::shared::dbus::domain::{BusType, DBusSubscription};
 use crate::shared::events::signals::SignalKind;
 use mlua::{Function, Lua, LuaSerdeExt};
 
-pub(crate) fn setup_config_tables(
+pub(super) fn setup_config_tables(
     lua: &Lua,
     config: &ModuleConfig,
     full_config: &crate::shared::config::domain::Config,
@@ -53,7 +53,7 @@ pub(crate) fn setup_config_tables(
     Ok(())
 }
 
-pub(crate) fn evaluate_metadata(
+pub(super) fn evaluate_metadata(
     lua: &Lua,
     module_name: &str,
 ) -> (
@@ -106,7 +106,7 @@ pub(crate) fn evaluate_metadata(
     (subs, dbus_subs, styles)
 }
 
-pub(crate) fn parse_subscriptions_table(
+fn parse_subscriptions_table(
     table: &mlua::Table,
     subs: &mut Vec<SignalKind>,
     dbus_subs: &mut Vec<DBusSubscription>,

@@ -1,14 +1,14 @@
 pub mod config;
-pub mod helpers;
-pub mod margin;
-pub mod module;
-pub mod root;
-pub mod style;
+mod helpers;
+mod margin;
+mod module;
+mod root;
+mod style;
 #[cfg(test)]
-pub mod tests;
+mod tests;
 
-pub use config::*;
-pub use margin::*;
-pub use module::*;
-pub use root::*;
-pub use style::*;
+pub(crate) use config::*;
+#[cfg(test)]
+use margin::*;
+#[cfg(test)]
+use style::*;

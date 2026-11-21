@@ -69,13 +69,13 @@ mod tests {
 
         let click1 = node.children()[0].on_click().unwrap();
         assert_eq!(
-            click1.get(&PointerButton::Left),
+            click1.get(PointerButton::Left),
             Some(&UiAction::Exec("echo test".into()))
         );
 
         let click2 = node.children()[1].on_click().unwrap();
         assert_eq!(
-            click2.get(&PointerButton::Left),
+            click2.get(PointerButton::Left),
             Some(&UiAction::ScriptCall(
                 crate::shared::primitives::FunctionName::new("toggle_popup")
             ))
@@ -83,7 +83,7 @@ mod tests {
 
         let click3 = node.children()[2].on_click().unwrap();
         assert_eq!(
-            click3.get(&PointerButton::Left),
+            click3.get(PointerButton::Left),
             Some(&UiAction::SystrayAction {
                 id: crate::features::systray::domain::SystrayId::new("42"),
                 action: crate::features::systray::domain::SystrayActionName::parse_str("Activate"),

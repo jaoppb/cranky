@@ -3,18 +3,18 @@ use crate::shared::events::signals::SignalHub;
 use std::sync::Arc;
 use sysinfo::{Components, Disks, Networks, System};
 
-pub struct SysinfoAdapter {
+pub(crate) struct SysinfoAdapter {
     config: MetricsConfig,
     hub: Arc<SignalHub>,
 }
 
 impl SysinfoAdapter {
     #[must_use]
-    pub const fn new(config: MetricsConfig, hub: Arc<SignalHub>) -> Self {
+    pub(crate) const fn new(config: MetricsConfig, hub: Arc<SignalHub>) -> Self {
         Self { config, hub }
     }
 
-    pub fn start(&self) {
+    pub(crate) fn start(&self) {
         let config = self.config.clone();
         let hub = self.hub.clone();
 
@@ -47,7 +47,7 @@ impl SysinfoAdapter {
     }
 
     #[must_use]
-    pub fn gather_metrics(
+    pub(crate) fn gather_metrics(
         sys: &mut System,
         networks: &mut Networks,
         disks: &mut Disks,

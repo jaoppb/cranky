@@ -39,7 +39,7 @@ impl<'de> serde::Deserialize<'de> for SystrayState {
 
 impl SystrayState {
     #[must_use]
-    pub const fn new(items: std::collections::BTreeMap<SystrayId, SystrayItem>) -> Self {
+    pub(crate) const fn new(items: std::collections::BTreeMap<SystrayId, SystrayItem>) -> Self {
         Self { items }
     }
 

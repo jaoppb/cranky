@@ -21,7 +21,7 @@ pub struct PropertiesMap(HashMap<PropertyName, DBusValue>);
 
 impl PropertiesMap {
     #[must_use]
-    pub const fn new(inner: HashMap<PropertyName, DBusValue>) -> Self {
+    pub(crate) const fn new(inner: HashMap<PropertyName, DBusValue>) -> Self {
         Self(inner)
     }
 
@@ -31,7 +31,7 @@ impl PropertiesMap {
     }
 
     #[must_use]
-    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, PropertyName, DBusValue> {
+    pub(crate) fn iter(&self) -> std::collections::hash_map::Iter<'_, PropertyName, DBusValue> {
         self.0.iter()
     }
 }
@@ -46,18 +46,18 @@ impl<'a> IntoIterator for &'a PropertiesMap {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct DBusState {
+pub(crate) struct DBusState {
     properties: HashMap<String, DBusValue>,
 }
 
 impl DBusState {
     #[must_use]
-    pub const fn new(properties: HashMap<String, DBusValue>) -> Self {
+    pub(crate) const fn new(properties: HashMap<String, DBusValue>) -> Self {
         Self { properties }
     }
 
     #[must_use]
-    pub const fn properties(&self) -> &HashMap<String, DBusValue> {
+    pub(crate) const fn properties(&self) -> &HashMap<String, DBusValue> {
         &self.properties
     }
 }

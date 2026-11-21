@@ -1,7 +1,7 @@
-pub mod adapter;
-pub mod methods;
-pub mod parser;
-pub mod subscriptions;
+mod adapter;
+mod methods;
+mod parser;
+mod subscriptions;
 
 pub use adapter::{Connected, Disconnected, ZbusConnectionAdapter};
 

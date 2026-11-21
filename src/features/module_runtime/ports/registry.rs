@@ -13,30 +13,30 @@ use async_trait::async_trait;
 ///
 /// What `spawn_module` hands back instead of a bare `(ModuleId, Snd)` tuple,
 /// whose two positions carry no names of their own at the call site.
-pub struct SpawnedModule<Snd: LayoutSender> {
+pub(crate) struct SpawnedModule<Snd: LayoutSender> {
     id: ModuleId,
     sender: Snd,
 }
 
 impl<Snd: LayoutSender> SpawnedModule<Snd> {
     #[must_use]
-    pub const fn new(id: ModuleId, sender: Snd) -> Self {
+    pub(crate) const fn new(id: ModuleId, sender: Snd) -> Self {
         Self { id, sender }
     }
 
     #[must_use]
-    pub const fn id(&self) -> ModuleId {
+    pub(crate) const fn id(&self) -> ModuleId {
         self.id
     }
 
     #[must_use]
-    pub fn into_sender(self) -> Snd {
+    pub(crate) fn into_sender(self) -> Snd {
         self.sender
     }
 }
 
 #[async_trait]
-pub trait ModuleRegistryPort<
+pub(crate) trait ModuleRegistryPort<
     Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
     LS: LayoutEventSender + 'static,
     DS: DisplayCommandSender + 'static,

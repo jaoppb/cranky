@@ -5,19 +5,23 @@ use crate::shared::events::core::SurfaceKind;
 use crate::shared::primitives::{ModuleId, MonitorId, Position};
 
 /// A pointer destination: the module, its monitor and the kind of surface.
-pub type PointerTarget = (ModuleId, MonitorId, SurfaceKind);
+pub(in crate::shared::wayland) type PointerTarget = (ModuleId, MonitorId, SurfaceKind);
 
 /// The child layer under the pointer, with the position relative to that layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Hit {
-    pub module_id: ModuleId,
-    pub monitor_id: MonitorId,
-    pub local: Position,
+pub(in crate::shared::wayland) struct Hit {
+    pub(crate) module_id: ModuleId,
+    pub(crate) monitor_id: MonitorId,
+    pub(crate) local: Position,
 }
 
 /// Returns the topmost layer containing the logical position `pos`.
 #[must_use]
-pub fn hit(layers: &CompositeLayers, scale: i32, pos: Position) -> Option<Hit> {
+pub(in crate::shared::wayland) fn hit(
+    layers: &CompositeLayers,
+    scale: i32,
+    pos: Position,
+) -> Option<Hit> {
     let divisor = u32::try_from(scale).unwrap_or(1).max(1);
     layers
         .iter()
@@ -41,13 +45,16 @@ pub fn hit(layers: &CompositeLayers, scale: i32, pos: Position) -> Option<Hit> {
 
 /// The enter/leave pair produced by moving the pointer between targets.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Crossing {
-    pub leave: Option<PointerTarget>,
-    pub enter: Option<PointerTarget>,
+pub(in crate::shared::wayland) struct Crossing {
+    pub(crate) leave: Option<PointerTarget>,
+    pub(crate) enter: Option<PointerTarget>,
 }
 
 #[must_use]
-pub fn crossing(prev: Option<&PointerTarget>, next: Option<&PointerTarget>) -> Crossing {
+pub(in crate::shared::wayland) fn crossing(
+    prev: Option<&PointerTarget>,
+    next: Option<&PointerTarget>,
+) -> Crossing {
     if prev == next {
         return Crossing {
             leave: None,

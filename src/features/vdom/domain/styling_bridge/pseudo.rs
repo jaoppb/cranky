@@ -3,7 +3,7 @@ use crate::features::styling::domain::PseudoClass;
 use crate::features::vdom::domain::{NodePath, SurfaceSpace};
 
 #[must_use]
-pub fn compute_pseudo_classes(
+pub(crate) fn compute_pseudo_classes(
     path: &NodePath,
     resolved: Option<&ResolvedInteraction>,
 ) -> Vec<PseudoClass> {

@@ -13,7 +13,7 @@ impl SignalHub {
     /// ids, rather than being silently absent from the list `render()` is
     /// being called for.
     #[must_use]
-    pub fn get_monitor_infos(&self) -> Vec<ScriptMonitorInfo> {
+    pub(crate) fn get_monitor_infos(&self) -> Vec<ScriptMonitorInfo> {
         let hypr = self.hyprland_rx();
         let hypr_guard = hypr.borrow();
         let scales = self.monitor_scales_rx();

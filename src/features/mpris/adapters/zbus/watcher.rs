@@ -9,14 +9,14 @@ use crate::shared::events::signals::SignalHub;
 
 use super::player::add_player;
 
-pub struct ZbusMprisAdapter {
+pub(crate) struct ZbusMprisAdapter {
     conn: Arc<dyn DbusConnectionPort>,
     mpris_tx: watch::Sender<MprisState>,
 }
 
 impl ZbusMprisAdapter {
     #[must_use]
-    pub fn new(conn: Arc<dyn DbusConnectionPort>, hub: &SignalHub) -> Self {
+    pub(crate) fn new(conn: Arc<dyn DbusConnectionPort>, hub: &SignalHub) -> Self {
         Self {
             conn,
             mpris_tx: hub.mpris_tx(),
@@ -28,7 +28,7 @@ impl ZbusMprisAdapter {
     /// # Errors
     ///
     /// Returns [`DbusConnectionError`] if subscribing or querying D-Bus fails.
-    pub async fn start_watching(&self) -> Result<(), DbusConnectionError> {
+    pub(crate) async fn start_watching(&self) -> Result<(), DbusConnectionError> {
         tracing::debug!("Starting MPRIS watcher...");
         self.load_initial_players().await?;
         self.watch_name_changes().await?;

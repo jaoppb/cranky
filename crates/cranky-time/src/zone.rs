@@ -7,13 +7,13 @@ const MAX_NAME_LENGTH: usize = 32;
 
 /// Whether bytes may be an abbreviation, or one part of a zone name: short,
 /// and printable, since scripts and logs will show them.
-pub fn is_name(bytes: &[u8]) -> bool {
+pub(crate) fn is_name(bytes: &[u8]) -> bool {
     (1..=MAX_NAME_LENGTH).contains(&bytes.len()) && bytes.iter().all(u8::is_ascii_graphic)
 }
 
 /// One kind of local time a zone observes, such as its standard time.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Kind {
+pub(crate) struct Kind {
     /// Seconds east of UTC.
     pub offset: i64,
     pub abbreviation: String,
@@ -21,7 +21,7 @@ pub struct Kind {
 
 impl Kind {
     /// `None` when the abbreviation is not a short, printable name.
-    pub fn new(offset: i64, abbreviation: &[u8]) -> Option<Self> {
+    pub(crate) fn new(offset: i64, abbreviation: &[u8]) -> Option<Self> {
         if !is_name(abbreviation) {
             return None;
         }
@@ -43,7 +43,7 @@ impl Kind {
 
 /// The instant from which a zone observes one of its kinds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Transition {
+pub(crate) struct Transition {
     pub instant: i64,
     /// An index into the kinds of the zone.
     pub kind: usize,
@@ -51,14 +51,14 @@ pub struct Transition {
 
 /// A leap second: from `instant`, the clock counts `total` seconds more than UTC.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Leap {
+pub(crate) struct Leap {
     pub instant: i64,
     pub total: i64,
 }
 
 /// What a zone says about one instant.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Moment {
+pub(crate) struct Moment {
     pub kind: Kind,
     /// The instant with the leap seconds taken out.
     pub unix_seconds: i64,
@@ -67,7 +67,7 @@ pub struct Moment {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Zone {
+pub(crate) struct Zone {
     /// Never empty; the first one applies before the first transition.
     kinds: Vec<Kind>,
     /// In ascending order.
@@ -79,7 +79,7 @@ pub struct Zone {
 
 impl Zone {
     /// `None` when there is no kind, or a transition names a missing one.
-    pub fn new(
+    pub(crate) fn new(
         kinds: Vec<Kind>,
         transitions: Vec<Transition>,
         leaps: Vec<Leap>,
@@ -97,7 +97,7 @@ impl Zone {
         })
     }
 
-    pub fn utc() -> Self {
+    pub(crate) fn utc() -> Self {
         Self {
             kinds: vec![Kind::utc()],
             transitions: Vec::new(),
@@ -107,7 +107,7 @@ impl Zone {
     }
 
     /// A zone that follows one rule at every instant.
-    pub fn from_rule(rule: Rule) -> Self {
+    pub(crate) fn from_rule(rule: Rule) -> Self {
         Self {
             kinds: vec![rule.standard().clone()],
             transitions: Vec::new(),
@@ -116,7 +116,7 @@ impl Zone {
         }
     }
 
-    pub fn at_instant(&self, instant: i64) -> Moment {
+    pub(crate) fn at_instant(&self, instant: i64) -> Moment {
         let (correction, leap_second) = self.leap_correction(instant);
         let unix_seconds = instant.saturating_sub(correction);
         let passed = self

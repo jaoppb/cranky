@@ -18,7 +18,7 @@ const IGNORED: [&str; 6] = [
 
 /// Which cases the command line asks for.
 #[derive(Default)]
-pub struct Selection {
+pub(crate) struct Selection {
     filters: Vec<String>,
     skips: Vec<String>,
     exact: bool,
@@ -29,7 +29,7 @@ pub struct Selection {
 impl Selection {
     /// Reads the arguments after the program name. An argument this binary
     /// does not know fails the run: guessing could skip cases silently.
-    pub fn parse(mut args: impl Iterator<Item = String>) -> Outcome<Self> {
+    pub(crate) fn parse(mut args: impl Iterator<Item = String>) -> Outcome<Self> {
         let mut selection = Self::default();
         while let Some(arg) = args.next() {
             let flag = arg.split('=').next().unwrap_or_default();
@@ -50,12 +50,12 @@ impl Selection {
     }
 
     /// Whether `--list` asked for the case names instead of a run.
-    pub const fn list(&self) -> bool {
+    pub(crate) const fn list(&self) -> bool {
         self.list
     }
 
     /// Whether the case called `name` is asked for. No case is ever ignored, so `--ignored` asks for none of them.
-    pub fn accepts(&self, name: &str) -> bool {
+    pub(crate) fn accepts(&self, name: &str) -> bool {
         if self.only_ignored {
             return false;
         }

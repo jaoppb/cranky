@@ -1,7 +1,7 @@
 //! The connection adapter (`src/shared/dbus/adapters/connection/`) against
 //! the private bus, which stands in for both the session and the system bus.
 
-mod probe;
+pub mod probe;
 
 use crate::cases::{Case, case};
 use crate::support::{Context, Outcome, ensure, ensure_eq, within};
@@ -15,7 +15,7 @@ use probe::ProbeService;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
-pub fn cases() -> Vec<Case> {
+pub(crate) fn cases() -> Vec<Case> {
     vec![
         case!(dbus::connects_on_both_bus_addresses),
         case!(dbus::lists_an_owned_name),

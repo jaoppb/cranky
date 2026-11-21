@@ -4,7 +4,7 @@ use super::dsl_sys::register_rhai_sys;
 use rhai::{Dynamic, Engine};
 
 /// Registers the `cranky`, `ui`, `signals`, `config`, and `sys` APIs in a Rhai `Engine`.
-pub fn register_rhai_cranky_api(engine: &mut Engine) {
+pub(crate) fn register_rhai_cranky_api(engine: &mut Engine) {
     register_rhai_ui_elements(engine);
     register_rhai_ui_actions(engine);
     register_rhai_sys(engine);

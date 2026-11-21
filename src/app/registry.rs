@@ -1,7 +1,8 @@
 use crate::shared::config::domain::ModuleConfig;
 
 use crate::features::module_runtime::ports::{AnyModulePort, ModuleRegistryPort};
-pub use crate::shared::scripting::ports::ModuleError;
+#[cfg(test)]
+use crate::shared::scripting::ports::ModuleError;
 
 use crate::shared::primitives::{DynamicValue, ModuleId, ModuleOptions};
 use std::collections::HashMap;
@@ -25,7 +26,7 @@ use std::collections::HashSet;
 /// spawned site's `LayoutSurface` — so a reload of an embedded module (see
 /// `reload_module`) silently reset it back to `LayoutSurface::Bar`.
 #[derive(Debug, Clone)]
-pub struct ModuleSiteInfo {
+struct ModuleSiteInfo {
     key: crate::shared::primitives::ModuleKey,
     parent: Option<ModuleId>,
     surface: crate::shared::primitives::LayoutSurface,
@@ -33,22 +34,18 @@ pub struct ModuleSiteInfo {
 
 impl ModuleSiteInfo {
     #[must_use]
-    pub const fn key(&self) -> &crate::shared::primitives::ModuleKey {
-        &self.key
-    }
-
-    #[must_use]
-    pub const fn parent(&self) -> Option<ModuleId> {
+    const fn parent(&self) -> Option<ModuleId> {
         self.parent
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn surface(&self) -> crate::shared::primitives::LayoutSurface {
+    const fn surface(&self) -> crate::shared::primitives::LayoutSurface {
         self.surface
     }
 }
 
-pub struct ModuleRegistry {
+pub(super) struct ModuleRegistry {
     modules: HashMap<ModuleId, Box<dyn AnyModulePort>>,
     module_configs: HashMap<ModuleId, ModuleConfig>,
     root_module: Option<ModuleId>,
@@ -84,7 +81,7 @@ pub struct ModuleRegistry {
 
 impl ModuleRegistry {
     #[must_use]
-    pub fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
+    pub(crate) fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
         let loader = FsStyleLoader::new(app_env.clone());
         let _ = loader.ensure_builtin_styles();
 
@@ -105,7 +102,7 @@ impl ModuleRegistry {
         }
     }
 
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         // Every lazily spawned actor is orphaned the instant the registry
         // it belongs to is cleared — nothing else will ever abort it, and
         // `next_module_id` resetting below means its old id can be handed
@@ -129,7 +126,7 @@ impl ModuleRegistry {
     }
 
     #[must_use]
-    pub fn modules_using_style(
+    pub(crate) fn modules_using_style(
         &self,
         sheet: &StyleSheetName,
     ) -> Vec<crate::shared::primitives::ModuleName> {
@@ -139,7 +136,7 @@ impl ModuleRegistry {
     }
 
     #[must_use]
-    pub fn create_style_resolver_for_module(
+    pub(crate) fn create_style_resolver_for_module(
         &self,
         styles: &[StyleSheetName],
     ) -> std::sync::Arc<dyn StyleResolverPort> {
@@ -365,7 +362,7 @@ impl ModuleRegistry {
     }
 }
 
-pub struct WatchLayoutSender {
+pub(super) struct WatchLayoutSender {
     tx: tokio::sync::watch::Sender<
         std::collections::HashMap<
             crate::shared::primitives::MonitorId,
@@ -377,7 +374,7 @@ pub struct WatchLayoutSender {
 #[cfg(test)]
 impl WatchLayoutSender {
     #[must_use]
-    pub fn new(
+    pub(crate) fn new(
         tx: tokio::sync::watch::Sender<
             std::collections::HashMap<
                 crate::shared::primitives::MonitorId,

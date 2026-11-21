@@ -4,14 +4,14 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum HyprError {
+pub(crate) enum HyprError {
     #[error("Hyprland instance signature not found. Is Hyprland running?")]
     NoInstance,
     #[error("IO error: {0}")]
     InputOutput(#[from] std::io::Error),
 }
 
-pub trait HyprlandProvider: Send + Sync {
+pub(crate) trait HyprlandProvider: Send + Sync {
     /// Queries the monitors from Hyprland.
     ///
     /// # Errors
@@ -34,13 +34,15 @@ pub trait HyprlandProvider: Send + Sync {
     fn listen_events(&self) -> Result<UnixStream, HyprError>;
 }
 
-pub struct RealHyprlandProvider {
+pub(super) struct RealHyprlandProvider {
     app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
 }
 
 impl RealHyprlandProvider {
     #[must_use]
-    pub const fn new(app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>) -> Self {
+    pub(crate) const fn new(
+        app_env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
+    ) -> Self {
         Self { app_env }
     }
 }

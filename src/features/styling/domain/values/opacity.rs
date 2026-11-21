@@ -2,7 +2,7 @@ use super::super::errors::StylingError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-pub struct Opacity(f32);
+pub(crate) struct Opacity(f32);
 
 impl Opacity {
     /// Creates a new `Opacity` between 0.0 and 1.0.
@@ -10,15 +10,16 @@ impl Opacity {
     /// # Errors
     ///
     /// Returns `StylingError::InvalidOpacity` if `value` is NaN or not in 0.0..=1.0.
-    pub fn new(value: f32) -> Result<Self, StylingError> {
+    pub(crate) fn new(value: f32) -> Result<Self, StylingError> {
         if value.is_nan() || !(0.0..=1.0).contains(&value) {
             return Err(StylingError::InvalidOpacity(format!("{value}")));
         }
         Ok(Self(value))
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn value(&self) -> f32 {
+    pub(crate) const fn value(self) -> f32 {
         self.0
     }
 }

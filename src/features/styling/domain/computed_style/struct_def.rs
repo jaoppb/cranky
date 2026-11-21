@@ -53,7 +53,7 @@ pub struct ComputedStyle {
 
 impl ComputedStyle {
     #[must_use]
-    pub fn default_for_flex() -> Self {
+    pub(crate) fn default_for_flex() -> Self {
         Self {
             display: Some(DisplayMode::Flex),
             flex_direction: Some(FlexDirection::Row),
@@ -63,7 +63,7 @@ impl ComputedStyle {
     }
 
     #[must_use]
-    pub fn default_for_grid() -> Self {
+    pub(crate) fn default_for_grid() -> Self {
         Self {
             display: Some(DisplayMode::Grid),
             grid_auto_flow: Some(GridAutoFlow::Row),
@@ -71,7 +71,7 @@ impl ComputedStyle {
         }
     }
 
-    pub fn merge_with(&mut self, other: &Self) {
+    pub(crate) fn merge_with(&mut self, other: &Self) {
         macro_rules! merge_fields {
             ($($field:ident),* $(,)?) => {
                 $(

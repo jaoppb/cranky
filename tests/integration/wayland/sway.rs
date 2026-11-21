@@ -5,7 +5,7 @@ use serde_json::Value;
 use tokio::process::Command;
 
 /// One pixel of a screenshot, as red, green, blue.
-pub type Rgb = [u8; 3];
+pub(crate) type Rgb = [u8; 3];
 
 async fn output_of(program: &str, args: &[&str]) -> Outcome<Vec<u8>> {
     let output = Command::new(program)
@@ -25,7 +25,7 @@ async fn output_of(program: &str, args: &[&str]) -> Outcome<Vec<u8>> {
 }
 
 /// The top edge of the first workspace: how much room layer surfaces took.
-pub async fn workspace_top() -> Outcome<i64> {
+pub(crate) async fn workspace_top() -> Outcome<i64> {
     let reply = output_of("swaymsg", &["-t", "get_workspaces", "-r"]).await?;
     let workspaces: Value = serde_json::from_slice(&reply).context("swaymsg JSON")?;
     workspaces
@@ -37,7 +37,7 @@ pub async fn workspace_top() -> Outcome<i64> {
 }
 
 /// Sets the scale of `output`, which sway announces to every client.
-pub async fn set_scale(output: &str, scale: u8) -> Outcome {
+pub(crate) async fn set_scale(output: &str, scale: u8) -> Outcome {
     let scale = scale.to_string();
     output_of("swaymsg", &["output", output, "scale", &scale])
         .await
@@ -45,13 +45,13 @@ pub async fn set_scale(output: &str, scale: u8) -> Outcome {
 }
 
 /// A screenshot of the whole output, taken through sway by `grim`.
-pub struct Screenshot {
+pub(crate) struct Screenshot {
     width: usize,
     pixels: Vec<u8>,
 }
 
 impl Screenshot {
-    pub async fn take() -> Outcome<Self> {
+    pub(crate) async fn take() -> Outcome<Self> {
         let ppm = output_of("grim", &["-t", "ppm", "-"]).await?;
         Self::parse(&ppm).context("grim did not print a binary PPM")
     }
@@ -75,7 +75,7 @@ impl Screenshot {
 
     /// Whether the bar, `bar_height` pixels tall, is `colour` from edge to
     /// edge and the output below it is not.
-    pub fn shows_bar(&self, colour: Rgb, bar_height: usize) -> Outcome<bool> {
+    pub(crate) fn shows_bar(&self, colour: Rgb, bar_height: usize) -> Outcome<bool> {
         let last_row = bar_height.saturating_sub(1);
         let last_column = self.width.saturating_sub(1);
         let corners = [

@@ -24,7 +24,7 @@ pub struct ChildModuleLayout {
 
 impl ChildModuleLayout {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         key: ModuleKey,
         bounds: Rect,
         constraint: SizeConstraint,
@@ -41,27 +41,27 @@ impl ChildModuleLayout {
     }
 
     #[must_use]
-    pub const fn key(&self) -> &ModuleKey {
+    pub(crate) const fn key(&self) -> &ModuleKey {
         &self.key
     }
 
     #[must_use]
-    pub const fn bounds(&self) -> &Rect {
+    pub(crate) const fn bounds(&self) -> &Rect {
         &self.bounds
     }
 
     #[must_use]
-    pub const fn constraint(&self) -> SizeConstraint {
+    pub(crate) const fn constraint(&self) -> SizeConstraint {
         self.constraint
     }
 
     #[must_use]
-    pub const fn options(&self) -> &ModuleOptions {
+    pub(crate) const fn options(&self) -> &ModuleOptions {
         &self.options
     }
 
     #[must_use]
-    pub const fn surface(&self) -> LayoutSurface {
+    pub(crate) const fn surface(&self) -> LayoutSurface {
         self.surface
     }
 }
@@ -73,14 +73,14 @@ impl ChildModuleLayout {
 /// out at once a parent pinned one. The parent measures with `size` and gates a floating surface on
 /// `settled_width`, so the child's pixels are never shown at a stale width.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ChildReport {
+pub(crate) struct ChildReport {
     size: Size,
     settled_width: Option<u32>,
 }
 
 impl ChildReport {
     #[must_use]
-    pub const fn new(size: Size, settled_width: Option<u32>) -> Self {
+    pub(crate) const fn new(size: Size, settled_width: Option<u32>) -> Self {
         Self {
             size,
             settled_width,
@@ -88,12 +88,12 @@ impl ChildReport {
     }
 
     #[must_use]
-    pub const fn size(&self) -> &Size {
+    pub(crate) const fn size(&self) -> &Size {
         &self.size
     }
 
     #[must_use]
-    pub const fn settled_width(&self) -> Option<u32> {
+    pub(crate) const fn settled_width(&self) -> Option<u32> {
         self.settled_width
     }
 }
@@ -103,26 +103,29 @@ impl ChildReport {
 pub struct ChildSizesMap(HashMap<ModuleKey, ChildReport>);
 
 impl ChildSizesMap {
+    #[cfg(test)]
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(HashMap::new())
     }
 
-    pub fn insert(&mut self, key: ModuleKey, size: Size) {
+    #[cfg(test)]
+    pub(crate) fn insert(&mut self, key: ModuleKey, size: Size) {
         self.insert_report(key, ChildReport::new(size, None));
     }
 
-    pub fn insert_report(&mut self, key: ModuleKey, report: ChildReport) {
+    pub(crate) fn insert_report(&mut self, key: ModuleKey, report: ChildReport) {
         self.0.insert(key, report);
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn get(&self, key: &ModuleKey) -> Option<&Size> {
+    pub(crate) fn get(&self, key: &ModuleKey) -> Option<&Size> {
         self.0.get(key).map(ChildReport::size)
     }
 
     #[must_use]
-    pub fn get_by_name_or_key(
+    pub(crate) fn get_by_name_or_key(
         &self,
         name: &ModuleName,
         instance_id: Option<&ModuleInstanceId>,
@@ -132,7 +135,7 @@ impl ChildSizesMap {
     }
 
     #[must_use]
-    pub fn report_by_name_or_key(
+    pub(crate) fn report_by_name_or_key(
         &self,
         name: &ModuleName,
         instance_id: Option<&ModuleInstanceId>,

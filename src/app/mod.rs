@@ -1,8 +1,8 @@
-pub mod adapter_supervisor;
+mod adapter_supervisor;
 mod bootstrap;
-pub mod builtins;
-pub mod commands;
-pub mod registry;
+mod builtins;
+mod commands;
+mod registry;
 pub mod state;
 mod time_adapter;
 

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum DisplayMode {
+pub(crate) enum DisplayMode {
     Flex,
     Grid,
     None,
@@ -9,7 +9,7 @@ pub enum DisplayMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
-pub enum GridAutoFlow {
+pub(crate) enum GridAutoFlow {
     #[default]
     Row,
     Column,
@@ -18,7 +18,7 @@ pub enum GridAutoFlow {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum GridTrack {
+pub(crate) enum GridTrack {
     #[serde(rename = "Px")]
     Pixels(f32),
     Percent(f32),
@@ -32,7 +32,7 @@ pub enum GridTrack {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
-pub enum GridPlacement {
+pub(crate) enum GridPlacement {
     #[default]
     Auto,
     Line(i16),
@@ -40,24 +40,24 @@ pub enum GridPlacement {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
-pub struct GridLinePlacement {
+pub(crate) struct GridLinePlacement {
     start: GridPlacement,
     end: GridPlacement,
 }
 
 impl GridLinePlacement {
     #[must_use]
-    pub const fn new(start: GridPlacement, end: GridPlacement) -> Self {
+    pub(crate) const fn new(start: GridPlacement, end: GridPlacement) -> Self {
         Self { start, end }
     }
 
     #[must_use]
-    pub const fn start(&self) -> GridPlacement {
+    pub(crate) const fn start(self) -> GridPlacement {
         self.start
     }
 
     #[must_use]
-    pub const fn end(&self) -> GridPlacement {
+    pub(crate) const fn end(self) -> GridPlacement {
         self.end
     }
 }

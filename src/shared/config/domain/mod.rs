@@ -11,7 +11,7 @@ pub mod types;
 pub use config::*;
 pub use margin::*;
 pub use module::*;
-pub use partial_root::*;
+pub(crate) use partial_root::*;
 pub use root::*;
 pub use style::*;
 pub use types::*;

@@ -3,5 +3,5 @@ pub mod slot;
 #[cfg(test)]
 mod tests;
 
-pub use buffer::ShmBuffer;
-pub use slot::{BufferSlot, BufferUserData};
+pub(super) use buffer::ShmBuffer;
+pub(super) use slot::BufferUserData;

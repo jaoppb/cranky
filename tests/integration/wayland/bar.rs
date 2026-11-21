@@ -17,12 +17,12 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 
 /// The only output of the headless sway.
-pub const OUTPUT: &str = "HEADLESS-1";
+pub(crate) const OUTPUT: &str = "HEADLESS-1";
 
 /// Width of that output in pixels.
 const OUTPUT_WIDTH: u32 = 1280;
 
-pub struct Bar {
+pub(crate) struct Bar {
     adapter: WaylandAdapter,
     manager: WaylandSurfaceManager,
     hub: Arc<SignalHub>,
@@ -32,7 +32,7 @@ pub struct Bar {
 
 impl Bar {
     /// Connects through the environment, exactly as `main` does.
-    pub fn connect() -> Outcome<Self> {
+    pub(crate) fn connect() -> Outcome<Self> {
         let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR")
             .map(PathBuf::from)
             .context("XDG_RUNTIME_DIR is not set")?;
@@ -57,7 +57,7 @@ impl Bar {
     }
 
     /// Height the bar asks for, from the default configuration.
-    pub fn height() -> u32 {
+    pub(crate) fn height() -> u32 {
         Config::default().root().height().value()
     }
 
@@ -66,12 +66,12 @@ impl Bar {
     }
 
     /// How many times the adapter asked for a render (once per configure).
-    pub const fn renders_requested(&self) -> usize {
+    pub(crate) const fn renders_requested(&self) -> usize {
         self.renders_requested
     }
 
     /// The scale the adapter published for the output, once it knows it.
-    pub fn scale(&self) -> Option<Scale> {
+    pub(crate) fn scale(&self) -> Option<Scale> {
         self.hub
             .monitor_scales_rx()
             .borrow()
@@ -98,7 +98,7 @@ impl Bar {
     }
 
     /// Runs the loop until `done` holds, or fails at the deadline.
-    pub async fn drive_until(
+    pub(crate) async fn drive_until(
         &mut self,
         what: &str,
         done: impl Fn(&Self) -> bool + Send + Sync,
@@ -113,7 +113,7 @@ impl Bar {
     }
 
     /// Runs the loop until sway has configured the bar's layer surface.
-    pub async fn until_configured(&mut self) -> Outcome {
+    pub(crate) async fn until_configured(&mut self) -> Outcome {
         self.drive_until("the layer surface to be configured", |bar| {
             bar.renders_requested > 0
         })
@@ -122,7 +122,7 @@ impl Bar {
 
     /// Submits a bar-sized buffer of one colour, as the root module would.
     /// Only the notify channel tells the loop about it: no socket traffic.
-    pub fn paint(&self, colour: Rgb) -> Outcome {
+    pub(crate) fn paint(&self, colour: Rgb) -> Outcome {
         let [red, green, blue] = colour;
         let size = Size::new(OUTPUT_WIDTH, Self::height());
         let pixels = size
@@ -144,7 +144,7 @@ impl Bar {
     /// Runs the loop until a screenshot shows `colour` across the bar and
     /// not below it. A screenshot is a round trip through sway, not a sleep,
     /// and the loop keeps turning while each one is taken.
-    pub async fn until_on_screen(&mut self, colour: Rgb) -> Outcome {
+    pub(crate) async fn until_on_screen(&mut self, colour: Rgb) -> Outcome {
         within("the bar colour to be on screen", async {
             loop {
                 let shot = std::pin::pin!(Screenshot::take());

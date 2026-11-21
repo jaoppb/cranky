@@ -89,7 +89,7 @@ fn test_dispatch_render_outcome_emits_layout_events() {
                 assert_eq!(module_id, id);
                 assert_eq!(size, Size::new(50, 20));
             }
-            _ => panic!("Unexpected event"),
+            LayoutEvent::ContainerLayoutsCalculated { .. } => panic!("Unexpected event"),
         }
     });
 }

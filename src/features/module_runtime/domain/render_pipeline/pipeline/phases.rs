@@ -55,7 +55,7 @@ impl RenderPipeline {
         layout_pipeline(self, monitor_id, diff, ctx)
     }
 
-    pub fn paint<F: CanvasFactory>(
+    pub(crate) fn paint<F: CanvasFactory>(
         &mut self,
         monitor_id: &MonitorId,
         render_node: &RenderNode,
@@ -70,7 +70,7 @@ impl RenderPipeline {
         res
     }
 
-    pub fn process_monitor<F: CanvasFactory, E: LayoutEnginePort>(
+    pub(crate) fn process_monitor<F: CanvasFactory, E: LayoutEnginePort>(
         &mut self,
         monitor_id: &MonitorId,
         port: &dyn AnyModulePort,

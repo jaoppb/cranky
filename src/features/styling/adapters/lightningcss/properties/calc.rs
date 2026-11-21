@@ -30,7 +30,7 @@ impl Accum {
 /// The `DeclaredLength::Calc` for `size`, if it's a `calc()` expression —
 /// `None` means the ordinary (non-calc) detection/parsing path handles it.
 #[must_use]
-pub fn calc_from_size(size: &Size) -> Option<DeclaredLength> {
+pub(crate) fn calc_from_size(size: &Size) -> Option<DeclaredLength> {
     let Size::LengthPercentage(length_percentage) = size else {
         return None;
     };
@@ -41,7 +41,7 @@ pub fn calc_from_size(size: &Size) -> Option<DeclaredLength> {
 /// (lightningcss models `none` as its own keyword there, rather than
 /// reusing `Size`'s `auto`).
 #[must_use]
-pub fn calc_from_max_size(size: &MaxSize) -> Option<DeclaredLength> {
+pub(crate) fn calc_from_max_size(size: &MaxSize) -> Option<DeclaredLength> {
     let MaxSize::LengthPercentage(length_percentage) = size else {
         return None;
     };
@@ -50,7 +50,7 @@ pub fn calc_from_max_size(size: &MaxSize) -> Option<DeclaredLength> {
 
 /// As `calc_from_size`, for `flex-basis`'s `LengthPercentageOrAuto`.
 #[must_use]
-pub fn calc_from_length_percentage_or_auto(
+pub(crate) fn calc_from_length_percentage_or_auto(
     value: &LengthPercentageOrAuto,
 ) -> Option<DeclaredLength> {
     let LengthPercentageOrAuto::LengthPercentage(length_percentage) = value else {

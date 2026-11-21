@@ -3,21 +3,23 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct NodeId(Uuid);
+pub(crate) struct NodeId(Uuid);
 
 impl NodeId {
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Uuid::new_v4())
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn from_uuid(uuid: Uuid) -> Self {
+    pub(crate) const fn from_uuid(uuid: Uuid) -> Self {
         Self(uuid)
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn uuid(&self) -> &Uuid {
+    pub(crate) const fn uuid(&self) -> &Uuid {
         &self.0
     }
 }

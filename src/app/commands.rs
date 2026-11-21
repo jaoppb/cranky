@@ -2,12 +2,12 @@ use crate::features::styling::domain::StyleSheetName;
 use crate::shared::primitives::ModuleName;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SystemCommand {
+pub(super) enum SystemCommand {
     ReloadModule(ModuleName),
     ReloadStyle(StyleSheetName),
 }
 
-pub trait SystemCommandSender: Send + Sync {
+pub(super) trait SystemCommandSender: Send + Sync {
     fn send_system_command(&self, cmd: SystemCommand);
 }
 
@@ -20,13 +20,13 @@ where
     }
 }
 
-pub struct ChannelSystemSender {
-    pub tx: tokio::sync::mpsc::Sender<SystemCommand>,
+pub(super) struct ChannelSystemSender {
+    pub(crate) tx: tokio::sync::mpsc::Sender<SystemCommand>,
 }
 
 impl ChannelSystemSender {
     #[must_use]
-    pub const fn new(tx: tokio::sync::mpsc::Sender<SystemCommand>) -> Self {
+    pub(crate) const fn new(tx: tokio::sync::mpsc::Sender<SystemCommand>) -> Self {
         Self { tx }
     }
 }

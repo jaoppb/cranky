@@ -4,7 +4,7 @@ use std::collections::HashMap;
 /// Pure domain dynamic value representation without `serde_json` dependency
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum DynamicValue {
+pub(crate) enum DynamicValue {
     Null,
     Bool(bool),
     Number(f64),
@@ -15,49 +15,45 @@ pub enum DynamicValue {
 
 impl DynamicValue {
     #[must_use]
-    pub fn as_str(&self) -> Option<&str> {
+    pub(crate) fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(text) => Some(text),
             _ => None,
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn as_bool(&self) -> Option<bool> {
+    pub(crate) const fn as_bool(&self) -> Option<bool> {
         match self {
             Self::Bool(flag) => Some(*flag),
             _ => None,
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub const fn as_f64(&self) -> Option<f64> {
+    pub(crate) const fn as_f64(&self) -> Option<f64> {
         match self {
             Self::Number(number) => Some(*number),
             _ => None,
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn as_i64(&self) -> Option<i64> {
+    pub(crate) fn as_i64(&self) -> Option<i64> {
         match self {
             Self::Number(number) => Some(crate::utils::f64_to_i64(*number)),
             _ => None,
         }
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn as_array(&self) -> Option<&[Self]> {
+    pub(crate) fn as_array(&self) -> Option<&[Self]> {
         match self {
             Self::Array(arr) => Some(arr),
-            _ => None,
-        }
-    }
-
-    #[must_use]
-    pub const fn as_map(&self) -> Option<&HashMap<String, Self>> {
-        match self {
-            Self::Map(map) => Some(map),
             _ => None,
         }
     }

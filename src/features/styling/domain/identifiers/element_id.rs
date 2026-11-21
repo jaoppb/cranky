@@ -10,7 +10,7 @@ impl ElementId {
     /// # Errors
     ///
     /// Returns `StylingError::InvalidElementId` if id is empty or contains invalid characters.
-    pub fn new(id: impl Into<String>) -> Result<Self, StylingError> {
+    pub(crate) fn new(id: impl Into<String>) -> Result<Self, StylingError> {
         let element_id = id.into();
         if element_id.is_empty() {
             return Err(StylingError::InvalidElementId(element_id));
@@ -30,7 +30,7 @@ impl ElementId {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }

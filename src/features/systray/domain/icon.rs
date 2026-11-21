@@ -4,61 +4,50 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-pub struct IconName(String);
+pub(crate) struct IconName(String);
 
 impl IconName {
-    pub fn new(name: impl Into<String>) -> Self {
+    pub(crate) fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
+    #[cfg(test)]
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
-pub struct IconThemePath(String);
+pub(crate) struct IconThemePath(String);
 
 impl IconThemePath {
-    pub fn new(path: impl Into<String>) -> Self {
+    pub(crate) fn new(path: impl Into<String>) -> Self {
         Self(path.into())
-    }
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct IconCacheKey {
+pub(crate) struct IconCacheKey {
     name: IconName,
     theme_path: Option<IconThemePath>,
 }
 
 impl IconCacheKey {
     #[must_use]
-    pub const fn new(name: IconName, theme_path: Option<IconThemePath>) -> Self {
+    pub(crate) const fn new(name: IconName, theme_path: Option<IconThemePath>) -> Self {
         Self { name, theme_path }
-    }
-    #[must_use]
-    pub const fn name(&self) -> &IconName {
-        &self.name
-    }
-    #[must_use]
-    pub const fn theme_path(&self) -> Option<&IconThemePath> {
-        self.theme_path.as_ref()
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct IconImage {
+pub(crate) struct IconImage {
     data: BinaryData,
     size: Size,
 }
 
 impl IconImage {
-    pub fn new(data: impl Into<BinaryData>, size: Size) -> Self {
+    pub(crate) fn new(data: impl Into<BinaryData>, size: Size) -> Self {
         Self {
             data: data.into(),
             size,
@@ -66,19 +55,19 @@ impl IconImage {
     }
     #[cfg(test)]
     #[must_use]
-    pub fn data(&self) -> &[u8] {
+    pub(crate) fn data(&self) -> &[u8] {
         &self.data
     }
     #[cfg(test)]
     #[must_use]
-    pub const fn size(&self) -> &Size {
+    pub(crate) const fn size(&self) -> &Size {
         &self.size
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
-pub enum SystrayIcon {
+pub(crate) enum SystrayIcon {
     Both { name: IconName, image: IconImage },
     NameOnly { name: IconName },
     ImageOnly { image: IconImage },
@@ -86,7 +75,7 @@ pub enum SystrayIcon {
 
 impl SystrayIcon {
     #[must_use]
-    pub fn new(name: Option<IconName>, image: Option<IconImage>) -> Option<Self> {
+    pub(crate) fn new(name: Option<IconName>, image: Option<IconImage>) -> Option<Self> {
         match (name, image) {
             (Some(name), Some(image)) => Some(Self::Both { name, image }),
             (Some(name), None) => Some(Self::NameOnly { name }),
@@ -97,7 +86,7 @@ impl SystrayIcon {
 
     #[cfg(test)]
     #[must_use]
-    pub const fn name(&self) -> Option<&IconName> {
+    pub(crate) const fn name(&self) -> Option<&IconName> {
         match self {
             Self::Both { name, .. } | Self::NameOnly { name } => Some(name),
             Self::ImageOnly { .. } => None,
@@ -106,7 +95,7 @@ impl SystrayIcon {
 
     #[cfg(test)]
     #[must_use]
-    pub const fn image(&self) -> Option<&IconImage> {
+    pub(crate) const fn image(&self) -> Option<&IconImage> {
         match self {
             Self::Both { image, .. } | Self::ImageOnly { image } => Some(image),
             Self::NameOnly { .. } => None,

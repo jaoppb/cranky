@@ -12,7 +12,7 @@ fn fully_keyed(children: &[VNode]) -> bool {
 }
 
 #[must_use]
-pub fn diff_children_with<F>(
+pub(crate) fn diff_children_with<F>(
     parent_id: NodeId,
     old_children: &[VNode],
     new_children: &[VNode],

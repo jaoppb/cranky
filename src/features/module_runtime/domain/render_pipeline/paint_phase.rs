@@ -5,7 +5,7 @@ use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::utils::{f32_to_u32, f64_to_f32};
 
-pub fn paint_pipeline<F: CanvasFactory>(
+pub(crate) fn paint_pipeline<F: CanvasFactory>(
     render_node: &RenderNode,
     current_bounds: Option<Rect>,
     scale: Scale,

@@ -1,7 +1,7 @@
 use crate::features::styling::domain::GridTrack;
 
 #[must_use]
-pub fn parse_single_track(text: &str) -> Option<GridTrack> {
+pub(crate) fn parse_single_track(text: &str) -> Option<GridTrack> {
     let text = text.trim();
     if text.is_empty() {
         return None;
@@ -59,7 +59,7 @@ pub fn parse_single_track(text: &str) -> Option<GridTrack> {
 }
 
 #[must_use]
-pub fn parse_track_list(text: &str) -> Vec<GridTrack> {
+pub(crate) fn parse_track_list(text: &str) -> Vec<GridTrack> {
     let mut tracks = Vec::new();
     let mut tokens = Vec::new();
     let mut current_token = String::new();

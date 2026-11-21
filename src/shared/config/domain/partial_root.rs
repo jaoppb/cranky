@@ -4,13 +4,13 @@ use super::margin::PartialMarginConfig;
 use super::types::VerticalAlignment;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct PartialRootConfig {
+pub(crate) struct PartialRootConfig {
     height: Option<BarHeight>,
     vertical_alignment: Option<VerticalAlignment>,
     margin: Option<PartialMarginConfig>,
 }
 
-pub struct CreatePartialRootConfigCommand {
+pub(crate) struct CreatePartialRootConfigCommand {
     height: Option<BarHeight>,
     vertical_alignment: Option<VerticalAlignment>,
     margin: Option<PartialMarginConfig>,
@@ -18,7 +18,7 @@ pub struct CreatePartialRootConfigCommand {
 
 impl CreatePartialRootConfigCommand {
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         height: Option<BarHeight>,
         vertical_alignment: Option<VerticalAlignment>,
         margin: Option<PartialMarginConfig>,
@@ -29,24 +29,11 @@ impl CreatePartialRootConfigCommand {
             margin,
         }
     }
-
-    #[must_use]
-    pub const fn height(&self) -> Option<BarHeight> {
-        self.height
-    }
-    #[must_use]
-    pub const fn vertical_alignment(&self) -> Option<VerticalAlignment> {
-        self.vertical_alignment
-    }
-    #[must_use]
-    pub const fn margin(&self) -> Option<&PartialMarginConfig> {
-        self.margin.as_ref()
-    }
 }
 
 impl PartialRootConfig {
     #[must_use]
-    pub const fn new(cmd: CreatePartialRootConfigCommand) -> Self {
+    pub(crate) const fn new(cmd: CreatePartialRootConfigCommand) -> Self {
         Self {
             height: cmd.height,
             vertical_alignment: cmd.vertical_alignment,
@@ -55,15 +42,15 @@ impl PartialRootConfig {
     }
 
     #[must_use]
-    pub const fn height(&self) -> Option<BarHeight> {
+    pub(crate) const fn height(&self) -> Option<BarHeight> {
         self.height
     }
     #[must_use]
-    pub const fn vertical_alignment(&self) -> Option<VerticalAlignment> {
+    pub(crate) const fn vertical_alignment(&self) -> Option<VerticalAlignment> {
         self.vertical_alignment
     }
     #[must_use]
-    pub const fn margin(&self) -> Option<&PartialMarginConfig> {
+    pub(crate) const fn margin(&self) -> Option<&PartialMarginConfig> {
         self.margin.as_ref()
     }
 }

@@ -16,7 +16,7 @@ impl Watcher {
     /// # Errors
     ///
     /// Returns a [`zbus::Error`] if creating the proxy or establishing D-Bus tracking fails.
-    pub async fn track_item(
+    pub(crate) async fn track_item(
         conn: Connection,
         items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
         hub: Arc<SignalHub>,
@@ -58,7 +58,7 @@ impl Watcher {
         Ok(())
     }
 
-    pub async fn remove_by_destination(
+    pub(crate) async fn remove_by_destination(
         items: &Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
         hub: &Arc<SignalHub>,
         destination: &str,
@@ -93,7 +93,7 @@ impl Watcher {
         removed
     }
 
-    pub async fn publish_state(
+    pub(crate) async fn publish_state(
         items: &Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
         hub: &Arc<SignalHub>,
     ) {

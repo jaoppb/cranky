@@ -6,7 +6,7 @@ use crate::shared::rendering::ports::canvas::Canvas;
 use cosmic_text::{FontSystem, SwashCache};
 use tiny_skia::PixmapMut;
 
-pub struct TinySkiaCosmicCanvas<'a> {
+pub(crate) struct TinySkiaCosmicCanvas<'a> {
     pub(crate) pixmap: Option<PixmapMut<'a>>,
     pub(crate) font_system: &'a mut FontSystem,
     pub(crate) swash_cache: &'a mut SwashCache,
@@ -16,8 +16,9 @@ pub struct TinySkiaCosmicCanvas<'a> {
 }
 
 impl<'a> TinySkiaCosmicCanvas<'a> {
+    #[cfg(test)]
     #[must_use]
-    pub const fn new(
+    pub(crate) const fn new(
         pixmap: PixmapMut<'a>,
         font_system: &'a mut FontSystem,
         swash_cache: &'a mut SwashCache,
@@ -36,7 +37,7 @@ impl<'a> TinySkiaCosmicCanvas<'a> {
     }
 
     #[must_use]
-    pub const fn from_optional_pixmap(
+    pub(crate) const fn from_optional_pixmap(
         pixmap: Option<PixmapMut<'a>>,
         font_system: &'a mut FontSystem,
         swash_cache: &'a mut SwashCache,

@@ -7,7 +7,7 @@
 /// child's `LayoutSurface` decides which physical Wayland surface its own
 /// subsurface is parented to (`shared::wayland::SurfaceParent`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum LayoutSurface {
+pub(crate) enum LayoutSurface {
     #[default]
     Bar,
     Popup,

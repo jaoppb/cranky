@@ -10,13 +10,13 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-pub struct CompositeStyleResolver {
+pub(crate) struct CompositeStyleResolver {
     stylesheets: Vec<Box<dyn ParsedStyleSheetPort>>,
 }
 
 impl CompositeStyleResolver {
     #[must_use]
-    pub fn new(stylesheets: Vec<Box<dyn ParsedStyleSheetPort>>) -> Self {
+    pub(crate) fn new(stylesheets: Vec<Box<dyn ParsedStyleSheetPort>>) -> Self {
         Self { stylesheets }
     }
 }
@@ -52,12 +52,12 @@ impl StyleResolverPort for CompositeStyleResolver {
     }
 }
 
-pub struct FsStyleLoader {
+pub(crate) struct FsStyleLoader {
     app_env: Arc<AppEnvironment>,
 }
 
 impl FsStyleLoader {
-    pub const BUILTIN_STYLES: &[(&'static str, &'static str)] = &[
+    pub(crate) const BUILTIN_STYLES: &[(&'static str, &'static str)] = &[
         ("base", include_str!("../../../../assets/styles/base.css")),
         ("bar", include_str!("../../../../assets/styles/bar.css")),
         ("clock", include_str!("../../../../assets/styles/clock.css")),
@@ -81,12 +81,12 @@ impl FsStyleLoader {
     ];
 
     #[must_use]
-    pub const fn new(app_env: Arc<AppEnvironment>) -> Self {
+    pub(crate) const fn new(app_env: Arc<AppEnvironment>) -> Self {
         Self { app_env }
     }
 
     #[must_use]
-    pub fn builtin_content(name: &str) -> Option<&'static str> {
+    pub(crate) fn builtin_content(name: &str) -> Option<&'static str> {
         Self::BUILTIN_STYLES
             .iter()
             .find(|(style_name, _)| *style_name == name)

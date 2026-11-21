@@ -1,16 +1,16 @@
 use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Hash)]
-pub struct WorkspaceId(i32);
+pub(crate) struct WorkspaceId(i32);
 
 impl WorkspaceId {
     #[must_use]
-    pub const fn new(id: i32) -> Self {
+    pub(crate) const fn new(id: i32) -> Self {
         Self(id)
     }
 
     #[must_use]
-    pub const fn value(&self) -> i32 {
+    pub(crate) const fn value(&self) -> i32 {
         self.0
     }
 }
@@ -22,16 +22,16 @@ impl std::fmt::Display for WorkspaceId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Hash)]
-pub struct MonitorName(String);
+pub(crate) struct MonitorName(String);
 
 impl MonitorName {
     #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
+    pub(crate) fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -43,16 +43,17 @@ impl std::fmt::Display for MonitorName {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Hash)]
-pub struct WorkspaceName(String);
+pub(crate) struct WorkspaceName(String);
 
 impl WorkspaceName {
     #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
+    pub(crate) fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
 }

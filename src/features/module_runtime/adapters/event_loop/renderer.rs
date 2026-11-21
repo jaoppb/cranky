@@ -16,7 +16,7 @@ impl<
     US: UiCommandSender + 'static,
 > EventLoop<F, LS, DS, US>
 {
-    pub fn render_all_monitors<E: LayoutEnginePort + Default>(
+    pub(crate) fn render_all_monitors<E: LayoutEnginePort + Default>(
         &mut self,
         layout_engines: &mut HashMap<MonitorId, E>,
     ) {

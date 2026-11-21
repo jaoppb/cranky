@@ -15,7 +15,7 @@ use crate::shared::config::domain::FontSize;
 /// in `declared_lengths_apply.rs`, kept separate to stay under the 200 LOC
 /// production file limit.
 #[derive(Debug, Clone, Default)]
-pub struct DeclaredLengths {
+pub(crate) struct DeclaredLengths {
     pub(super) width: Cascade<DeclaredLength>,
     pub(super) height: Cascade<DeclaredLength>,
     pub(super) min_width: Cascade<DeclaredLength>,
@@ -40,7 +40,7 @@ pub struct DeclaredLengths {
 
 macro_rules! setter {
     ($name:ident, $setter:ident) => {
-        pub const fn $setter(&mut self, value: DeclaredLength) {
+        pub(crate) const fn $setter(&mut self, value: DeclaredLength) {
             self.$name = Cascade::Value(value);
         }
     };
@@ -68,7 +68,7 @@ impl DeclaredLengths {
     setter!(margin_bottom, set_margin_bottom);
     setter!(margin_left, set_margin_left);
 
-    pub fn merge_with(&mut self, other: &Self) {
+    pub(crate) fn merge_with(&mut self, other: &Self) {
         macro_rules! merge_fields {
             ($($field:ident),* $(,)?) => {
                 $(

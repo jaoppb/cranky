@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
-pub enum ColorError {
+pub(crate) enum ColorError {
     #[error("Empty color string")]
     Empty,
     #[error("No colors found in input '{0}'")]

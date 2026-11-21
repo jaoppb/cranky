@@ -3,7 +3,7 @@ use crate::shared::primitives::MonitorId;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Default)]
-pub struct PointerHandler {
+pub(in crate::features::module_runtime) struct PointerHandler {
     pub(crate) hovered: HashMap<MonitorId, NodeRef>,
     pub(crate) active: HashMap<MonitorId, NodeRef>,
     pub(crate) focused: HashMap<MonitorId, NodeRef>,
@@ -11,27 +11,30 @@ pub struct PointerHandler {
 
 impl PointerHandler {
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn hovered_node(&self, monitor_id: &MonitorId) -> Option<&NodeRef> {
+    pub(crate) fn hovered_node(&self, monitor_id: &MonitorId) -> Option<&NodeRef> {
         self.hovered.get(monitor_id)
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn active_node(&self, monitor_id: &MonitorId) -> Option<&NodeRef> {
+    pub(crate) fn active_node(&self, monitor_id: &MonitorId) -> Option<&NodeRef> {
         self.active.get(monitor_id)
     }
 
+    #[cfg(test)]
     #[must_use]
-    pub fn focused_node(&self, monitor_id: &MonitorId) -> Option<&NodeRef> {
+    pub(crate) fn focused_node(&self, monitor_id: &MonitorId) -> Option<&NodeRef> {
         self.focused.get(monitor_id)
     }
 
     #[must_use]
-    pub fn interaction_context(
+    pub(crate) fn interaction_context(
         &self,
         monitor_id: &MonitorId,
         is_monitor_focused: bool,
@@ -48,7 +51,7 @@ impl PointerHandler {
     /// in one call rather than three parallel `.retain()`s — a removed
     /// monitor's stale interaction state must not resurrect if its id is
     /// reused by a later hotplug.
-    pub fn retain_monitors(&mut self, live: &HashSet<MonitorId>) {
+    pub(crate) fn retain_monitors(&mut self, live: &HashSet<MonitorId>) {
         self.hovered.retain(|id, _| live.contains(id));
         self.active.retain(|id, _| live.contains(id));
         self.focused.retain(|id, _| live.contains(id));

@@ -8,7 +8,7 @@ use super::hub::SignalHub;
 use super::kind::SignalKind;
 
 impl SignalHub {
-    pub fn signal_to_stream(&self, kind: &SignalKind) -> BoxStream<'static, SignalKind> {
+    pub(crate) fn signal_to_stream(&self, kind: SignalKind) -> BoxStream<'static, SignalKind> {
         match kind {
             SignalKind::Time => WatchStream::new(self.time_rx())
                 .map(|_| SignalKind::Time)
@@ -31,7 +31,7 @@ impl SignalHub {
         }
     }
 
-    pub fn subscribe_streams(
+    pub(crate) fn subscribe_streams(
         &self,
         subs: &[SignalKind],
     ) -> SelectAll<BoxStream<'static, SignalKind>> {
@@ -40,7 +40,7 @@ impl SignalHub {
 
         for kind in subs {
             if seen.insert(kind) {
-                events_stream.push(self.signal_to_stream(kind));
+                events_stream.push(self.signal_to_stream(*kind));
             }
         }
 

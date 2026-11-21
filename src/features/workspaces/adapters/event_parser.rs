@@ -2,7 +2,7 @@ use crate::features::workspaces::domain::{MonitorName, WorkspaceId, WorkspaceNam
 use crate::shared::events::core::{WindowAddress, WindowManagerEvent, WindowTitle};
 
 #[must_use]
-pub fn parse_event(raw_line: &str) -> Option<WindowManagerEvent> {
+pub(super) fn parse_event(raw_line: &str) -> Option<WindowManagerEvent> {
     let (event_type, payload) = raw_line.trim().split_once(">>")?;
 
     match event_type {

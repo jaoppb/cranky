@@ -5,7 +5,7 @@ use taffy::style::Style;
 use taffy::tree::NodeId;
 
 #[derive(Clone)]
-pub struct LayoutState {
+pub(super) struct LayoutState {
     pub(super) root_node: NodeId,
     pub(super) layout: StyledNode,
     pub(super) children: Vec<Self>,
@@ -23,12 +23,12 @@ pub struct LayoutState {
 /// `super::diff::children`) so `apply_patch` never has to guess which old
 /// children survived; guessing via "index >= new length" is exactly what
 /// let dead `NodeId`s slip back into `LayoutState` before.
-pub struct ChildrenPatch<'a> {
-    pub patches: Vec<Patch<'a>>,
-    pub removed: Vec<NodeId>,
+pub(super) struct ChildrenPatch<'a> {
+    pub(crate) patches: Vec<Patch<'a>>,
+    pub(crate) removed: Vec<NodeId>,
 }
 
-pub enum Patch<'a> {
+pub(super) enum Patch<'a> {
     Keep(&'a LayoutState),
     Update {
         old_state: &'a LayoutState,

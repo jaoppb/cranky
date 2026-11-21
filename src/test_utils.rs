@@ -58,7 +58,7 @@ macro_rules! assert_pixmap_has_color {
 /// # Panics
 ///
 /// Panics if the runtime cannot be built.
-pub fn block_on<F: Future>(future: F) -> F::Output {
+pub(crate) fn block_on<F: Future>(future: F) -> F::Output {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -73,7 +73,7 @@ pub fn block_on<F: Future>(future: F) -> F::Output {
 /// parallel tests — and other checkouts running their own suites — never
 /// share files, and the user's real `HOME` is never touched. Removed on drop.
 #[cfg(test)]
-pub struct TestHome {
+pub(crate) struct TestHome {
     dir: std::path::PathBuf,
     env: std::sync::Arc<crate::shared::env::domain::AppEnvironment>,
 }
@@ -84,7 +84,7 @@ impl TestHome {
     ///
     /// Panics if the temporary directory can't be created.
     #[must_use]
-    pub fn new(label: &str) -> Self {
+    pub(crate) fn new(label: &str) -> Self {
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let sequence = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!(
@@ -105,7 +105,7 @@ impl TestHome {
     }
 
     #[must_use]
-    pub fn env(&self) -> std::sync::Arc<crate::shared::env::domain::AppEnvironment> {
+    pub(crate) fn env(&self) -> std::sync::Arc<crate::shared::env::domain::AppEnvironment> {
         self.env.clone()
     }
 }
@@ -133,7 +133,11 @@ impl Drop for TestHome {
 ///
 /// Panics if pixel coordinates are out of bounds.
 #[must_use]
-pub fn get_pixel_color(pixmap: &mut tiny_skia::PixmapMut<'_>, x: u32, y: u32) -> (u8, u8, u8, u8) {
+pub(crate) fn get_pixel_color(
+    pixmap: &mut tiny_skia::PixmapMut<'_>,
+    x: u32,
+    y: u32,
+) -> (u8, u8, u8, u8) {
     let width = pixmap.width();
     let height = pixmap.height();
     assert!(

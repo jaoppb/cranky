@@ -17,7 +17,7 @@ impl<
     US: UiCommandSender + 'static,
 > EventLoop<F, LS, DS, US>
 {
-    pub fn dispatch_render_outcome(
+    pub(crate) fn dispatch_render_outcome(
         &mut self,
         monitor_id: &MonitorId,
         outcome: &RenderOutcome,

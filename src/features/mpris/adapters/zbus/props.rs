@@ -3,7 +3,7 @@ use crate::features::mpris::domain::{
 };
 use crate::shared::dbus::domain::{DBusValue, PropertiesMap, PropertyName};
 
-pub(crate) fn update_state_from_props(state: &mut PlayerState, props: &PropertiesMap) {
+pub(super) fn update_state_from_props(state: &mut PlayerState, props: &PropertiesMap) {
     if let Some(DBusValue::String(status)) = props.get(&PropertyName::new("PlaybackStatus")) {
         state.set_status(match status.as_str() {
             "Playing" => PlaybackStatus::Playing,

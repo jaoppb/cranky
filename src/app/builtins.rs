@@ -21,7 +21,7 @@ pub enum BuiltinError {
     },
 }
 
-pub struct BuiltinModules;
+pub(super) struct BuiltinModules;
 
 impl BuiltinModules {
     const BUILTINS: &[(&'static str, &'static str)] = &[
@@ -76,7 +76,7 @@ impl BuiltinModules {
     /// # Errors
     ///
     /// Returns [`BuiltinError::InputOutput`] if creating directories or reading/writing files fails.
-    pub fn ensure_builtins(
+    pub(crate) fn ensure_builtins(
         app_env: &crate::shared::env::domain::AppEnvironment,
     ) -> Result<PathBuf, BuiltinError> {
         let home = app_env.home().as_path();
@@ -108,7 +108,7 @@ impl BuiltinModules {
     /// Returns [`BuiltinError::UnsupportedEngine`] if the explicit engine is unknown,
     /// [`BuiltinError::ModuleNotFound`] if no script matching the name and engine could be found or loaded,
     /// or [`BuiltinError::InputOutput`] on filesystem error.
-    pub fn find_module(
+    pub(crate) fn find_module(
         name: &crate::shared::primitives::ModuleName,
         selection: &crate::shared::config::domain::EngineSelection,
         app_env: &crate::shared::env::domain::AppEnvironment,
@@ -168,7 +168,7 @@ impl BuiltinModules {
     /// # Errors
     ///
     /// Returns [`BuiltinError::InputOutput`] if creating the file watcher fails.
-    pub fn watch_scripts(
+    pub(crate) fn watch_scripts(
         command_tx: std::sync::Arc<dyn crate::app::commands::SystemCommandSender>,
         app_env: &crate::shared::env::domain::AppEnvironment,
     ) -> Result<Box<dyn notify::Watcher>, BuiltinError> {

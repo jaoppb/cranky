@@ -64,14 +64,14 @@ async fn invoke_scroll(proxy: &Proxy<'_>, delta: i32, orientation: &str) {
     }
 }
 
-pub async fn invoke_action(
+pub(super) async fn invoke_action(
     proxy: &Proxy<'_>,
     item: &SystrayItem,
     action: &SystrayActionName,
     pos: Option<Position>,
 ) {
-    let pos_x = pos.map_or(0, |position| position.x());
-    let pos_y = pos.map_or(0, |position| position.y());
+    let pos_x = pos.map_or(0, crate::shared::primitives::geometry::Position::x);
+    let pos_y = pos.map_or(0, crate::shared::primitives::geometry::Position::y);
 
     match action.as_str() {
         "Primary" => invoke_primary(proxy, item.item_is_menu().value(), pos_x, pos_y).await,

@@ -4,7 +4,7 @@ use taffy::style_helpers::{
 };
 
 #[must_use]
-pub fn grid_track_to_min_track(track: &GridTrack) -> taffy::style::MinTrackSizingFunction {
+fn grid_track_to_min_track(track: &GridTrack) -> taffy::style::MinTrackSizingFunction {
     match track {
         GridTrack::Pixels(px) => length(*px),
         GridTrack::Percent(pct) => percent(*pct / 100.0),
@@ -15,7 +15,7 @@ pub fn grid_track_to_min_track(track: &GridTrack) -> taffy::style::MinTrackSizin
 }
 
 #[must_use]
-pub fn grid_track_to_max_track(track: &GridTrack) -> taffy::style::MaxTrackSizingFunction {
+fn grid_track_to_max_track(track: &GridTrack) -> taffy::style::MaxTrackSizingFunction {
     match track {
         GridTrack::Pixels(px) => length(*px),
         GridTrack::Percent(pct) => percent(*pct / 100.0),
@@ -27,7 +27,9 @@ pub fn grid_track_to_max_track(track: &GridTrack) -> taffy::style::MaxTrackSizin
 }
 
 #[must_use]
-pub fn grid_track_to_track_sizing_function(track: &GridTrack) -> taffy::style::TrackSizingFunction {
+pub(super) fn grid_track_to_track_sizing_function(
+    track: &GridTrack,
+) -> taffy::style::TrackSizingFunction {
     match track {
         GridTrack::MinMax(min_t, max_t) => minmax(
             grid_track_to_min_track(min_t),
@@ -41,7 +43,7 @@ pub fn grid_track_to_track_sizing_function(track: &GridTrack) -> taffy::style::T
 }
 
 #[must_use]
-pub fn grid_track_to_template_component(
+pub(super) fn grid_track_to_template_component(
     track: &GridTrack,
 ) -> taffy::style::GridTemplateComponent<String> {
     match track {
@@ -59,7 +61,7 @@ pub fn grid_track_to_template_component(
 }
 
 #[must_use]
-pub fn grid_placement_to_taffy(placement: GridPlacement) -> taffy::style::GridPlacement<String> {
+fn grid_placement_to_taffy(placement: GridPlacement) -> taffy::style::GridPlacement<String> {
     match placement {
         GridPlacement::Auto => taffy::style::GridPlacement::Auto,
         GridPlacement::Line(index) => line(index),
@@ -68,7 +70,7 @@ pub fn grid_placement_to_taffy(placement: GridPlacement) -> taffy::style::GridPl
 }
 
 #[must_use]
-pub fn grid_line_placement_to_taffy(
+pub(super) fn grid_line_placement_to_taffy(
     line_placement: GridLinePlacement,
 ) -> taffy::geometry::Line<taffy::style::GridPlacement<String>> {
     taffy::geometry::Line {
@@ -78,7 +80,7 @@ pub fn grid_line_placement_to_taffy(
 }
 
 #[must_use]
-pub const fn grid_auto_flow_to_taffy(flow: GridAutoFlow) -> taffy::style::GridAutoFlow {
+pub(super) const fn grid_auto_flow_to_taffy(flow: GridAutoFlow) -> taffy::style::GridAutoFlow {
     match flow {
         GridAutoFlow::Row => taffy::style::GridAutoFlow::Row,
         GridAutoFlow::Column => taffy::style::GridAutoFlow::Column,

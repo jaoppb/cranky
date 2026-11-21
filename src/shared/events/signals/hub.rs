@@ -14,15 +14,15 @@ use crate::shared::primitives::{ChildSizesMap, ModuleSite, MonitorId};
 
 use super::hyprland::HyprlandState;
 
-pub type ModuleSizesMap = HashMap<MonitorId, ChildSizesMap>;
-pub type MonitorScalesMap = HashMap<MonitorId, Scale>;
+pub(crate) type ModuleSizesMap = HashMap<MonitorId, ChildSizesMap>;
+pub(crate) type MonitorScalesMap = HashMap<MonitorId, Scale>;
 /// Terminal lazy-spawn failures, keyed by embedding site — module-not-found,
 /// `init()` failure, or a cycle.
 ///
 /// Broadcast the same way `module_sizes` is: every module actor reads the
 /// whole map and filters to its own children, so a fix (hot reload clearing
 /// an entry) wakes the render loop exactly like a size change does.
-pub type ModuleErrorsMap = HashMap<ModuleSite, String>;
+pub(crate) type ModuleErrorsMap = HashMap<ModuleSite, String>;
 
 pub struct SignalHub {
     config: (watch::Sender<Config>, watch::Receiver<Config>),
@@ -82,17 +82,17 @@ impl SignalHub {
     }
 
     #[must_use]
-    pub fn module_errors_tx(&self) -> watch::Sender<ModuleErrorsMap> {
+    pub(crate) fn module_errors_tx(&self) -> watch::Sender<ModuleErrorsMap> {
         self.module_errors.0.clone()
     }
 
     #[must_use]
-    pub fn module_errors_rx(&self) -> watch::Receiver<ModuleErrorsMap> {
+    pub(crate) fn module_errors_rx(&self) -> watch::Receiver<ModuleErrorsMap> {
         self.module_errors.1.clone()
     }
 
     #[must_use]
-    pub fn monitor_scales_tx(&self) -> watch::Sender<MonitorScalesMap> {
+    pub(crate) fn monitor_scales_tx(&self) -> watch::Sender<MonitorScalesMap> {
         self.monitor_scales.0.clone()
     }
 
@@ -102,67 +102,67 @@ impl SignalHub {
     }
 
     #[must_use]
-    pub fn module_sizes_tx(&self) -> watch::Sender<ModuleSizesMap> {
+    pub(crate) fn module_sizes_tx(&self) -> watch::Sender<ModuleSizesMap> {
         self.module_sizes.0.clone()
     }
 
     #[must_use]
-    pub fn module_sizes_rx(&self) -> watch::Receiver<ModuleSizesMap> {
+    pub(crate) fn module_sizes_rx(&self) -> watch::Receiver<ModuleSizesMap> {
         self.module_sizes.1.clone()
     }
 
     #[must_use]
-    pub fn mpris_tx(&self) -> watch::Sender<MprisState> {
+    pub(crate) fn mpris_tx(&self) -> watch::Sender<MprisState> {
         self.mpris.0.clone()
     }
 
     #[must_use]
-    pub fn mpris_rx(&self) -> watch::Receiver<MprisState> {
+    pub(crate) fn mpris_rx(&self) -> watch::Receiver<MprisState> {
         self.mpris.1.clone()
     }
 
     #[must_use]
-    pub fn config_tx(&self) -> watch::Sender<Config> {
+    pub(crate) fn config_tx(&self) -> watch::Sender<Config> {
         self.config.0.clone()
     }
 
     #[must_use]
-    pub fn config_rx(&self) -> watch::Receiver<Config> {
+    pub(crate) fn config_rx(&self) -> watch::Receiver<Config> {
         self.config.1.clone()
     }
 
     #[must_use]
-    pub fn hyprland_tx(&self) -> watch::Sender<HyprlandState> {
+    pub(crate) fn hyprland_tx(&self) -> watch::Sender<HyprlandState> {
         self.hyprland.0.clone()
     }
 
     #[must_use]
-    pub fn hyprland_rx(&self) -> watch::Receiver<HyprlandState> {
+    pub(crate) fn hyprland_rx(&self) -> watch::Receiver<HyprlandState> {
         self.hyprland.1.clone()
     }
 
     #[must_use]
-    pub fn time_tx(&self) -> watch::Sender<LocalTime> {
+    pub(crate) fn time_tx(&self) -> watch::Sender<LocalTime> {
         self.time.0.clone()
     }
 
     #[must_use]
-    pub fn time_rx(&self) -> watch::Receiver<LocalTime> {
+    pub(crate) fn time_rx(&self) -> watch::Receiver<LocalTime> {
         self.time.1.clone()
     }
 
     #[must_use]
-    pub fn dbus_tx(&self) -> watch::Sender<DBusState> {
+    pub(crate) fn dbus_tx(&self) -> watch::Sender<DBusState> {
         self.dbus.0.clone()
     }
 
     #[must_use]
-    pub fn dbus_rx(&self) -> watch::Receiver<DBusState> {
+    pub(crate) fn dbus_rx(&self) -> watch::Receiver<DBusState> {
         self.dbus.1.clone()
     }
 
     #[must_use]
-    pub fn systray_tx(&self) -> watch::Sender<SystrayState> {
+    pub(crate) fn systray_tx(&self) -> watch::Sender<SystrayState> {
         self.systray.0.clone()
     }
 
@@ -172,22 +172,22 @@ impl SignalHub {
     }
 
     #[must_use]
-    pub fn metrics_tx(&self) -> watch::Sender<MetricsState> {
+    pub(crate) fn metrics_tx(&self) -> watch::Sender<MetricsState> {
         self.metrics.0.clone()
     }
 
     #[must_use]
-    pub fn metrics_rx(&self) -> watch::Receiver<MetricsState> {
+    pub(crate) fn metrics_rx(&self) -> watch::Receiver<MetricsState> {
         self.metrics.1.clone()
     }
 
     #[must_use]
-    pub const fn pointer_tx(&self) -> &PointerSender {
+    pub(crate) const fn pointer_tx(&self) -> &PointerSender {
         &self.pointer.0
     }
 
     #[must_use]
-    pub fn pointer_rx(&self) -> PointerReceiver {
+    pub(crate) fn pointer_rx(&self) -> PointerReceiver {
         self.pointer.0.subscribe()
     }
 }

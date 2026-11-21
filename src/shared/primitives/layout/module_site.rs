@@ -8,24 +8,24 @@ use super::module_key::ModuleKey;
 /// — and, once minted, two different `ModuleId`s — even though their
 /// `ModuleKey` is identical.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ModuleSite {
+pub(crate) struct ModuleSite {
     parent: Option<ModuleId>,
     key: ModuleKey,
 }
 
 impl ModuleSite {
     #[must_use]
-    pub const fn new(parent: Option<ModuleId>, key: ModuleKey) -> Self {
+    pub(crate) const fn new(parent: Option<ModuleId>, key: ModuleKey) -> Self {
         Self { parent, key }
     }
 
     #[must_use]
-    pub const fn parent(&self) -> Option<ModuleId> {
+    pub(crate) const fn parent(&self) -> Option<ModuleId> {
         self.parent
     }
 
     #[must_use]
-    pub const fn key(&self) -> &ModuleKey {
+    pub(crate) const fn key(&self) -> &ModuleKey {
         &self.key
     }
 }

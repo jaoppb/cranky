@@ -1,7 +1,7 @@
 use super::runner::EventLoop;
 use crate::features::layout_engine::domain::DisplayCommandSender;
-use crate::features::module_runtime::domain::PointerAction;
 use crate::features::module_runtime::domain::pointer_handler::PointerOutcome;
+use crate::features::module_runtime::domain::{PointerAction, PointerHandler};
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::events::core::PointerEvent;
@@ -15,7 +15,11 @@ impl<
     US: UiCommandSender + 'static,
 > EventLoop<F, LS, DS, US>
 {
-    pub fn handle_pointer_event(&mut self, monitor_id: &MonitorId, event: &PointerEvent) -> bool {
+    pub(crate) fn handle_pointer_event(
+        &mut self,
+        monitor_id: &MonitorId,
+        event: &PointerEvent,
+    ) -> bool {
         let ctx_id = self.ctx.id();
         tracing::debug!(
             module = %ctx_id,
@@ -53,7 +57,7 @@ impl<
         }
     }
 
-    pub fn handle_lifecycle_event(
+    pub(crate) fn handle_lifecycle_event(
         &mut self,
         monitor_id: &MonitorId,
         event: crate::shared::events::core::SurfaceLifecycleEvent,
@@ -73,7 +77,7 @@ impl<
                 self.panel_render_trees.remove(monitor_id);
             }
         }
-        let outcome = self.pointer_handler.handle_dismissal(event, monitor_id);
+        let outcome = PointerHandler::handle_dismissal(event, monitor_id);
         self.execute_outcome(&outcome)
     }
 
@@ -101,9 +105,6 @@ impl<
                 }
                 PointerAction::SendUi(cmd) => {
                     self.ctx.ui_sender().send_ui_command(cmd.clone());
-                }
-                PointerAction::SendDisplay(cmd) => {
-                    self.ctx.display_sender().send_display_command(cmd.clone());
                 }
             }
         }

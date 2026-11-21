@@ -3,12 +3,12 @@ use taffy::TaffyTree;
 use taffy::style::Style;
 use taffy::tree::NodeId;
 
-pub struct TaffyTreeBuilder<'a> {
+pub(super) struct TaffyTreeBuilder<'a> {
     taffy: &'a mut TaffyTree,
 }
 
 impl<'a> TaffyTreeBuilder<'a> {
-    pub const fn new(taffy: &'a mut TaffyTree) -> Self {
+    pub(crate) const fn new(taffy: &'a mut TaffyTree) -> Self {
         Self { taffy }
     }
 

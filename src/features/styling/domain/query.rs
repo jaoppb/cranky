@@ -35,7 +35,7 @@ impl<'a> ElementQuery<'a> {
     }
 
     #[must_use]
-    pub const fn with_structural_context(
+    pub(crate) const fn with_structural_context(
         mut self,
         child_index: usize,
         total_children: usize,
@@ -48,42 +48,42 @@ impl<'a> ElementQuery<'a> {
     }
 
     #[must_use]
-    pub const fn tag(&self) -> &'a str {
+    pub(crate) const fn tag(&self) -> &'a str {
         self.tag
     }
 
     #[must_use]
-    pub const fn id(&self) -> Option<&'a ElementId> {
+    pub(crate) const fn id(&self) -> Option<&'a ElementId> {
         self.id
     }
 
     #[must_use]
-    pub const fn classes(&self) -> &'a [ClassName] {
+    pub(crate) const fn classes(&self) -> &'a [ClassName] {
         self.classes
     }
 
     #[must_use]
-    pub const fn pseudo_classes(&self) -> &'a [PseudoClass] {
+    pub(crate) const fn pseudo_classes(&self) -> &'a [PseudoClass] {
         self.pseudo_classes
     }
 
     #[must_use]
-    pub const fn child_index(&self) -> usize {
+    pub(crate) const fn child_index(&self) -> usize {
         self.child_index
     }
 
     #[must_use]
-    pub const fn total_children(&self) -> usize {
+    pub(crate) const fn total_children(&self) -> usize {
         self.total_children
     }
 
     #[must_use]
-    pub const fn is_empty(&self) -> bool {
+    pub(crate) const fn is_empty(&self) -> bool {
         self.is_empty
     }
 
     #[must_use]
-    pub const fn parent(&self) -> Option<&'a Self> {
+    pub(crate) const fn parent(&self) -> Option<&'a Self> {
         self.parent
     }
 }

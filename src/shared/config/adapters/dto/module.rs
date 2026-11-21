@@ -8,14 +8,14 @@ use crate::shared::primitives::ModuleName;
 use super::helpers::{default_true, json_map_to_options};
 
 #[derive(Debug, Deserialize, Default)]
-pub struct ModulesConfigDto {
+pub(super) struct ModulesConfigDto {
     #[serde(flatten)]
     modules: HashMap<String, ModuleEntryDto>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
-pub enum ModuleEntryDto {
+enum ModuleEntryDto {
     Detailed {
         #[serde(default = "default_true")]
         enable: bool,
@@ -29,7 +29,7 @@ pub enum ModuleEntryDto {
 
 impl ModulesConfigDto {
     #[must_use]
-    pub fn into_domain(self) -> domain::ModulesConfig {
+    pub(crate) fn into_domain(self) -> domain::ModulesConfig {
         let mut map = HashMap::new();
         for (name_str, entry) in self.modules {
             let mod_name = ModuleName::new(name_str);

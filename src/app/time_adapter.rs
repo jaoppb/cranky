@@ -37,7 +37,7 @@ fn until_next_second(subsec_millis: u32) -> Duration {
 
 /// Sends the local time to the hub at the start of every second, and warns
 /// each time the time zone starts coming from a fallback.
-pub async fn run(hub: Arc<SignalHub>) {
+pub(super) async fn run(hub: Arc<SignalHub>) {
     let mut clock = Clock::new();
     let mut now = clock.now();
     let mut source = None;

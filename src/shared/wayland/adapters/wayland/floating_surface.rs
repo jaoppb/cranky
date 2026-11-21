@@ -12,7 +12,7 @@ use wayland_client::QueueHandle;
 
 /// An already laid-out and painted floating surface, as the module produced
 /// it — nothing left for Wayland to compute, only to place and blit.
-pub(crate) struct FloatingPayload<'a> {
+pub(super) struct FloatingPayload<'a> {
     pub(crate) buffer: &'a RenderBuffer,
     pub(crate) logical_size: Size,
     pub(crate) offset: Option<PopupOffset>,
@@ -23,7 +23,7 @@ pub(crate) struct FloatingPayload<'a> {
 /// content, before this is ever called. `parent` is the floating surface
 /// this one nests inside (decision 7), if any, fixed for `kind`'s whole
 /// life on first show.
-pub(crate) fn show_floating(
+pub(super) fn show_floating(
     state: &mut WaylandState,
     queue_handle: &QueueHandle<WaylandState>,
     kind: FloatingKind,
@@ -92,7 +92,7 @@ pub(crate) fn show_floating(
     }
 }
 
-pub(crate) fn hide_floating(state: &mut WaylandState, kind: &FloatingKind) {
+pub(super) fn hide_floating(state: &mut WaylandState, kind: &FloatingKind) {
     // The module closed its own popup/panel — it already knows, so its own
     // owner gets no dismissal notice; any nested descendant still does
     // (decision 7), the same as every other teardown path.

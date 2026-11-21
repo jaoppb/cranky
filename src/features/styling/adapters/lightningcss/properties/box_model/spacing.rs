@@ -3,7 +3,7 @@ use crate::features::layout_engine::domain::BoxMargin;
 use crate::features::styling::domain::ComputedStyle;
 use lightningcss::properties::Property;
 
-pub fn apply_padding_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
+pub(crate) fn apply_padding_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
         Property::Padding(padding) => {
             let top = length_to_f64(&padding.top);
@@ -61,7 +61,7 @@ pub fn apply_padding_properties(style: &mut ComputedStyle, prop: &Property<'_>) 
     }
 }
 
-pub fn apply_margin_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
+pub(crate) fn apply_margin_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
         Property::Margin(margin) => {
             let top = length_to_f64(&margin.top);

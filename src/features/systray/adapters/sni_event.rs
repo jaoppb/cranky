@@ -6,7 +6,7 @@ use crate::features::systray::domain::{
 };
 
 #[derive(Debug)]
-pub enum SniEvent {
+pub(super) enum SniEvent {
     Title,
     Status(String),
     Icon,
@@ -18,7 +18,7 @@ pub enum SniEvent {
 }
 
 impl SniEvent {
-    pub async fn apply(
+    pub(crate) async fn apply(
         self,
         item: SystrayItem,
         proxy: &StatusNotifierItemProxy<'_>,
