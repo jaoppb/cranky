@@ -1,0 +1,58 @@
+name: Tools docs
+
+# The repo-check of tools.yml, for the files `tools repo check` compares with
+# tools.toml: the labels blocks of the docs [github.labels].docs lists, and the
+# issue forms [github.issue_templates] lists; a doc added to that list is added
+# to the paths below too. GitHub filters paths per workflow, not per job, so
+# these paths live here rather than in tools.yml: a pull request that only
+# edits AGENTS.md must not run issues-check and go red because of an issue
+# someone else filed. repo-check still reads the labels and milestones on
+# GitHub, so drift made there can turn such a pull request red too.
+on:
+  pull_request:
+    paths: &docs
+      - AGENTS.md
+      - CONTRIBUTING.md
+      - .github/ISSUE_TEMPLATE/**
+      - .github/workflows/tools-docs.yml
+  push:
+    branches: [main]
+    paths: *docs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Inside the flake devShell like the jobs of tools.yml, with the same `tools`
+  # and the same arguments as its repo-check (see the matrix there for why the
+  # merge settings and the Project title are left out).
+  repo-check:
+    name: repo-check
+    # tools.toml names this repository: a fork would audit it, not itself.
+    if: github.repository == 'jaoppb/cranky'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Nix
+        uses: nixbuild/nix-quick-install-action@v35
+
+      # Read-only: the cache is the devShell's store, saved by ci.yml on `main`.
+      - name: Restore the Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock', 'rust-toolchain.toml') }}
+          save: false
+
+      - name: Run just repo-check --labels --milestones
+        run: nix develop -c just repo-check --labels --milestones
+        env:
+          GH_TOKEN: ${{ github.token }}
