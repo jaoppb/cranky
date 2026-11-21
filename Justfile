@@ -33,9 +33,9 @@ run:
 run-release:
     cargo run --release
 
-# Run the full gate a pull request must pass: formatting, Clippy, architecture, LOC limits, tests, dependencies and workflows
+# Run the full gate a pull request must pass: formatting, Clippy, documentation, architecture, LOC limits, tests, dependencies and workflows
 [group('quality')]
-check: fmt-check lint arch-check loc-check test deps-check workflows-check
+check: fmt-check lint doc-check arch-check loc-check test deps-check workflows-check
 
 # Format all code with rustfmt
 [group('quality')]
@@ -51,6 +51,11 @@ fmt-check:
 [group('quality')]
 lint:
     cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+# Build the documentation with rustdoc, private items included, denying warnings such as broken intra-doc links
+[group('quality')]
+doc-check:
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
 
 # Apply Clippy's automatic fixes, including to dirty and staged files
 [group('quality')]

@@ -1,3 +1,5 @@
+//! The monitor list handed to scripts, built from Wayland's monitors and Hyprland's workspace data.
+
 use crate::features::workspaces::domain::MonitorName;
 use crate::shared::primitives::ScriptMonitorInfo;
 use crate::shared::primitives::geometry::Size;

@@ -1,3 +1,5 @@
+//! Turns script `DBus` subscriptions into streams that update the hub's `DBus` state.
+
 use std::sync::Arc;
 use tokio::sync::watch;
 use tokio_stream::StreamExt;

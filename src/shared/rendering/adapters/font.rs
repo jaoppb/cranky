@@ -1,3 +1,4 @@
+//! Font family validation against the fonts cosmic-text finds on the system.
 use crate::shared::rendering::ports::font::FontValidatorPort;
 use cosmic_text::FontSystem;
 

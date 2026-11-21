@@ -1,3 +1,5 @@
+//! Lua userdata wrappers that carry `VNode`s, popups, panels and monitor info across the Lua
+//! boundary.
 use crate::features::vdom::domain::{PanelSpec, PopupSpec, VNode};
 use crate::shared::primitives::ScriptMonitorInfo;
 use mlua::{UserData, UserDataFields, UserDataMethods};

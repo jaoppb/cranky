@@ -14,6 +14,10 @@ use std::sync::{Arc, Mutex};
 use tokio::net::UnixStream;
 use wayland_client::{Connection, EventQueue};
 
+/// Owns the Wayland connection and event queue, and serves as the app's display server.
+///
+/// It attaches the buffers its `WaylandSurfaceManager` queues whenever that handle wakes it through
+/// `notify_rx`.
 pub struct WaylandAdapter {
     pub(crate) connection: Connection,
     pub(crate) event_queue: EventQueue<WaylandState>,

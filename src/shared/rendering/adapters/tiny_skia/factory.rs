@@ -6,6 +6,10 @@ use crate::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
 use cosmic_text::{FontSystem, SwashCache};
 use tiny_skia::PixmapMut;
 
+/// Makes the canvases and text measurers a render pipeline paints with, all sharing its one font
+/// system and glyph cache.
+///
+/// A clone loads its own font system and cache rather than sharing them.
 #[derive(Debug)]
 pub struct TinySkiaCanvasFactory {
     font_system: FontSystem,
@@ -25,6 +29,7 @@ impl Clone for TinySkiaCanvasFactory {
 }
 
 impl TinySkiaCanvasFactory {
+    /// Loads the system fonts into a new font system, with an empty glyph cache.
     #[must_use]
     pub fn new() -> Self {
         Self {

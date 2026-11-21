@@ -10,6 +10,7 @@ use crate::shared::primitives::{
 };
 use std::collections::HashMap;
 
+/// A module's id with its laid-out bounds; only tests build it.
 #[cfg(test)]
 #[derive(Debug)]
 pub struct ModuleLayout {
@@ -30,6 +31,8 @@ impl ModuleLayout {
     }
 }
 
+/// The snapshot of app state the display server renders from: the config, the modules and their
+/// names, and each monitor's module sizes and layouts.
 #[derive(Debug)]
 pub struct AppReadModel {
     pub(crate) config: Config,

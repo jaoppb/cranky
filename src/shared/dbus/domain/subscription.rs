@@ -1,3 +1,5 @@
+//! Subscription requests and the stream types the connection port returns.
+
 use std::pin::Pin;
 
 use futures::Stream;
@@ -6,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use super::types::{BusType, Destination, Interface, Member, Path};
 use super::values::{DBusValue, PropertiesMap};
 
+/// A script's request to watch `DBus` signals, parsed from its `metadata()`; each `None` field
+/// matches any value.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DBusSubscription {
     bus: BusType,
@@ -16,6 +20,8 @@ pub struct DBusSubscription {
 }
 
 impl DBusSubscription {
+    /// Builds a subscription; a `PropertiesChanged` member with a destination and path is watched
+    /// as property updates, anything else as a raw signal match rule.
     #[must_use]
     pub const fn new(
         bus: BusType,
@@ -63,6 +69,7 @@ pub(crate) type PropertyChangedStream =
 /// A stream of bus name ownership changes.
 pub type NameChangedStream = Pin<Box<dyn Stream<Item = NameOwnerChanged> + Send + Sync>>;
 
+/// One `NameOwnerChanged` signal: a bus name gained, lost or switched owner.
 #[derive(Debug, Clone)]
 pub struct NameOwnerChanged {
     name: Destination,
@@ -83,14 +90,17 @@ impl NameOwnerChanged {
             new_owner,
         }
     }
+    /// The bus name whose ownership changed.
     #[must_use]
     pub const fn name(&self) -> &Destination {
         &self.name
     }
+    /// True when the name just appeared on the bus (no previous owner, a new one).
     #[must_use]
     pub const fn is_new(&self) -> bool {
         self.old_owner.is_none() && self.new_owner.is_some()
     }
+    /// True when the name just left the bus (a previous owner, no new one).
     #[must_use]
     pub const fn is_gone(&self) -> bool {
         self.old_owner.is_some() && self.new_owner.is_none()

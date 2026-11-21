@@ -1,3 +1,5 @@
+//! A rendered buffer queued for a module's surface on one monitor, waiting for the Wayland loop to
+//! attach it.
 use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};

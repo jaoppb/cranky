@@ -1,3 +1,5 @@
+//! `DBus` value types, free of any zbus dependency.
+
 pub mod subscription;
 pub mod types;
 pub mod values;

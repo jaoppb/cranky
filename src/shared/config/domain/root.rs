@@ -1,3 +1,4 @@
+//! Settings of the root module, the bar itself: its script, height, alignment, margins and options.
 use crate::shared::primitives::geometry::BarHeight;
 use crate::shared::primitives::{ModuleName, ModuleOptions};
 
@@ -5,6 +6,9 @@ use super::margin::MarginConfig;
 use super::partial_root::PartialRootConfig;
 use super::types::VerticalAlignment;
 
+/// Settings of the root module, the bar itself, from the `[root]` table.
+/// `[root.unfocused]` overrides height and margin on unfocused monitors (its alignment is parsed
+/// but unused).
 #[derive(Debug, Clone, PartialEq)]
 pub struct RootConfig {
     name: ModuleName,
@@ -76,22 +80,27 @@ impl RootConfig {
         &self.name
     }
 
+    /// Height the bar's layer surface is sized to, in logical pixels.
     #[must_use]
     pub const fn height(&self) -> BarHeight {
         self.height
     }
 
+    /// Vertical alignment set by `vertical_alignment` in `[root]`.
     #[cfg(test)]
     #[must_use]
     pub const fn vertical_alignment(&self) -> VerticalAlignment {
         self.vertical_alignment
     }
 
+    /// Margins applied to the bar's layer surface.
     #[must_use]
     pub const fn margin(&self) -> &MarginConfig {
         &self.margin
     }
 
+    /// The remaining `[root]` keys, handed to the bar script as its options when `[modules]` has
+    /// no entry for the root.
     #[must_use]
     pub const fn options(&self) -> &ModuleOptions {
         &self.options

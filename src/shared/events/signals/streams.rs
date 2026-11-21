@@ -1,3 +1,5 @@
+//! Turns signal kinds into streams a module actor can await.
+
 use std::collections::HashSet;
 
 use futures_util::StreamExt;

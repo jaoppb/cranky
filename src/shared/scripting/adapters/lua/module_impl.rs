@@ -1,3 +1,4 @@
+//! The Lua module type and, in tests, a loader for the built-in Lua widgets.
 use super::api::register_vdom_dsl;
 use crate::shared::dbus::domain::DBusSubscription;
 use crate::shared::events::signals::SignalKind;
@@ -30,6 +31,10 @@ impl LuaScriptLoader {
     }
 }
 
+/// A module backed by one Lua state, running a script source as an `AnyModulePort`.
+///
+/// The source runs at `init`, not at construction; the subscriptions and styles its `metadata()`
+/// returns are cached then.
 #[derive(Debug)]
 pub struct LuaModule {
     pub(crate) lua: Mutex<Lua>,
@@ -41,6 +46,8 @@ pub struct LuaModule {
 }
 
 impl LuaModule {
+    /// Prepares a Lua state with the module API for `source` without running it, so script errors
+    /// surface from `init`.
     #[must_use]
     pub fn new(name: String, source: String) -> Self {
         let lua = Lua::new();

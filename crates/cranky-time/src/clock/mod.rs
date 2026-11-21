@@ -23,6 +23,8 @@ pub struct Clock {
 }
 
 impl Clock {
+    /// A clock that remembers no zone yet: until it has read one, a zone it cannot read falls back
+    /// to the local time file, and to UTC when neither can be read.
     #[must_use]
     pub const fn new() -> Self {
         Self {

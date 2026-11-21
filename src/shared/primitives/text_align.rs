@@ -4,9 +4,12 @@
 /// `end` are deliberately unsupported (no wrapping, no RTL).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TextAlign {
+    /// Flush with the content box's left edge; the default.
     #[default]
     Left,
+    /// Centred in the free space.
     Center,
+    /// Flush with the content box's right edge.
     Right,
 }
 

@@ -1,3 +1,4 @@
+//! The canvas that paints into a borrowed pixel buffer with tiny-skia and cosmic-text.
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::TextAlignment;
 use crate::shared::primitives::color::DrawingColor;

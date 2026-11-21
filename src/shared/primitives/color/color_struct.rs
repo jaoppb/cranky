@@ -1,3 +1,4 @@
+/// An 8-bit-per-channel RGBA color, serialised with the keys `r`, `g`, `b` and `a`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Color {
     #[serde(rename = "r")]
@@ -11,6 +12,7 @@ pub struct Color {
 }
 
 impl Color {
+    /// Builds a color from straight (not premultiplied) channels; alpha 255 is opaque.
     #[must_use]
     pub const fn new(red: u8, green: u8, blue: u8, alpha: u8) -> Self {
         Self {

@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  # One job per kind of error, each running one `just` recipe inside the flake
+  # One job per kind of error, each running `just` recipes inside the flake
   # devShell, so a red pull request names what failed and CI uses the tools a
   # local `nix develop` does, at the versions flake.lock pins. The job names
   # are the required status checks on `main`: renaming one means updating the
@@ -33,7 +33,7 @@ jobs:
           - name: fmt
             recipe: fmt-check
           - name: lint
-            recipe: lint
+            recipe: lint doc-check
             compiles: true
           - name: arch
             recipe: arch-check

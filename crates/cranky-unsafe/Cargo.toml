@@ -18,6 +18,9 @@ future_incompatible = { level = "deny", priority = -1 }
 unreachable_pub = "forbid"
 missing_debug_implementations = "forbid"
 
+[lints.rustdoc]
+all = "deny"
+
 # The root `Cargo.toml` table with two differences, both of which are why this
 # crate exists: `unsafe_code` is not forbidden, and the lint that questions an
 # `unsafe impl Send` is off. `tests/architecture.rs` checks nothing else differs.

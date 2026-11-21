@@ -1,21 +1,34 @@
+//! `DBus` values as scripts see them, and the property state published on the signal hub.
+
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
 use super::types::PropertyName;
 
+/// A `DBus` variant converted into the few shapes scripts can consume; serialises untagged, as the
+/// bare value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DBusValue {
+    /// An `s` (string) value; object paths and signatures are not converted and become `Null`.
     String(String),
+    /// An `n`, `q`, `i`, `u`, `x` or `t` integer widened to `i64` (a `u64` above `i64::MAX`
+    /// saturates); bytes become `Null`.
     Int(i64),
+    /// A `d` (IEEE 754 double) value, unchanged.
     Float(f64),
+    /// A `b` value, unchanged.
     Bool(bool),
+    /// An array, element by element.
     Array(Vec<Self>),
+    /// A dictionary with string keys; entries with a non-string key are dropped.
     Dict(HashMap<String, Self>),
+    /// A value the conversion does not support: bytes, object paths, signatures, structs and fds.
     Null,
 }
 
+/// The properties of one interface, from `GetAll` or one `PropertiesChanged` signal.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PropertiesMap(HashMap<PropertyName, DBusValue>);
 
@@ -25,6 +38,7 @@ impl PropertiesMap {
         Self(inner)
     }
 
+    /// The value of one property, or `None` when the interface did not report it.
     #[must_use]
     pub fn get(&self, name: &PropertyName) -> Option<&DBusValue> {
         self.0.get(name)

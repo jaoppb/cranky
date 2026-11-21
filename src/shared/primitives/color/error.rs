@@ -1,3 +1,4 @@
+//! Errors from parsing a color or gradient string.
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]

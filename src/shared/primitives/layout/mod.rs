@@ -1,3 +1,5 @@
+//! Vocabulary the layout engine, the registry and the Wayland adapter share for embedding
+//! child modules and sizing them.
 pub mod child_module;
 mod module_key;
 pub mod module_site;

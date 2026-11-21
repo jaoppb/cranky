@@ -1,3 +1,4 @@
+//! Identity of one embedding site of a module: its key as invoked by a given parent.
 use super::super::ids::ModuleId;
 use super::module_key::ModuleKey;
 

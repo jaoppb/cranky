@@ -1,3 +1,6 @@
+//! Pointer input, surface lifecycle and interaction events, and the broadcast channel that carries
+//! them.
+
 use crate::shared::primitives::geometry::Position;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

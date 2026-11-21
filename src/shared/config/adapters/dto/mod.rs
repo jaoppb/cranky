@@ -1,3 +1,4 @@
+//! Serde DTOs mirroring `config.toml`, each converting into its domain config type.
 pub mod config;
 mod helpers;
 mod margin;

@@ -1,3 +1,5 @@
+//! Input and window-manager event types shared across features.
+
 pub mod pointer;
 #[cfg(test)]
 mod tests;

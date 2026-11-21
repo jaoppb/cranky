@@ -1,3 +1,4 @@
+//! Unit tests for the config domain types.
 use std::collections::HashMap;
 
 use crate::shared::primitives::ModuleName;

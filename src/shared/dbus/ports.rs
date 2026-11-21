@@ -1,3 +1,5 @@
+//! The port every `DBus` consumer talks to, and its error type.
+
 use crate::shared::dbus::domain::{
     BusType, DBusSubscription, DBusValue, Destination, Interface, Member, NameChangedStream, Path,
     PropertiesMap, PropertyChangedStream, SignalStream,
@@ -5,14 +7,20 @@ use crate::shared::dbus::domain::{
 use async_trait::async_trait;
 use thiserror::Error;
 
+/// Failures of `DbusConnectionPort` operations.
 #[derive(Error, Debug)]
 pub enum DbusConnectionError {
+    /// The bus could not be connected at startup, so it has no connection to use.
     #[error("Connection not initialized for bus: {0:?}")]
     NotInitialized(BusType),
+    /// The remote method call, or decoding its reply, failed.
     #[error("Method call failed: {0}")]
     MethodCallFailed(String),
+    /// Building the match rule or opening the signal stream failed.
     #[error("Subscription failed: {0}")]
     SubscriptionFailed(String),
+    /// Reserved for property reads; not produced today, `GetAll` failures surface as
+    /// `MethodCallFailed`.
     #[error("Property read failed: {0}")]
     PropertyReadFailed(String),
 }

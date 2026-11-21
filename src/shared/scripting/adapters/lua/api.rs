@@ -1,3 +1,5 @@
+//! The globals a Lua module script sees: `ui`, `signals`, `config` and `sys`, and the `cranky`
+//! table holding them.
 use super::api_elements::{create_ui_action_table, create_ui_element_table};
 use super::api_sys::create_sys_table;
 use mlua::Lua;

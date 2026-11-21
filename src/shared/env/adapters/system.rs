@@ -1,3 +1,6 @@
+//! Reads `HOME`, `XDG_CACHE_HOME`, `XDG_RUNTIME_DIR`, `RUST_LOG` and
+//! `HYPRLAND_INSTANCE_SIGNATURE` from the process environment, with fallbacks for the optional
+//! ones.
 use crate::shared::env::domain::{
     AppEnvironment, HomeDir, HyprlandInstanceSignature, RustLog, XdgCacheHome, XdgRuntimeDir,
 };

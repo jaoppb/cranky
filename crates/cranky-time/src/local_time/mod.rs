@@ -89,6 +89,7 @@ impl LocalTime {
         }
     }
 
+    /// 1 to 9999: local times are clamped to that range so the year always has four digits.
     #[must_use]
     pub const fn year(&self) -> i64 {
         self.year
@@ -106,11 +107,13 @@ impl LocalTime {
         self.day
     }
 
+    /// 0 to 23.
     #[must_use]
     pub const fn hour(&self) -> i64 {
         self.hour
     }
 
+    /// 0 to 59.
     #[must_use]
     pub const fn minute(&self) -> i64 {
         self.minute
@@ -148,6 +151,7 @@ impl LocalTime {
         self.zone_name.as_deref()
     }
 
+    /// Where the zone was read from, or which fallback gave it.
     #[must_use]
     pub const fn source(&self) -> Source {
         self.source

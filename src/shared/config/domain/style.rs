@@ -1,3 +1,4 @@
+//! Settings of the `[popup]` and `[tooltip]` tables.
 use crate::shared::primitives::PopupOffset;
 use crate::shared::primitives::color::{Color, DrawingColor};
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,8 @@ pub(crate) enum PopupEmbed {
     Subsurface,
 }
 
+/// How popups are grouped across monitors and modules, where they are offset from their
+/// anchor, and whether embedded modules are composited or get their own subsurface.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PopupConfig {
     behavior: PopupBehavior,
@@ -70,6 +73,8 @@ impl PopupConfig {
     }
 }
 
+/// Colors, font, border and padding parsed from the `[tooltip]` table.
+/// Only tests read these fields back so far.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TooltipConfig {
     background: DrawingColor,

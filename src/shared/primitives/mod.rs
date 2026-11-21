@@ -1,3 +1,5 @@
+//! Value types shared by every layer: geometry, ids, colors, monitors, layout results and render
+//! buffers.
 mod binary;
 pub mod color;
 pub mod dynamic;
