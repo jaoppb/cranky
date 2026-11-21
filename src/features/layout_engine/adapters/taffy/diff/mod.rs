@@ -1,4 +1,6 @@
 mod children;
+#[cfg(test)]
+mod tests;
 
 use super::reconciler::{LayoutState, Patch};
 use super::style_builder::node_to_style;
