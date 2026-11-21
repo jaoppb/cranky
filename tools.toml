@@ -58,6 +58,6 @@ documentation = "type:docs"
 [github.milestones]
 unmanaged = "error"
 items = [
-    { title = "v0.14.0", description = "Project infrastructure baseline and Hyprland 0.57 compatibility", state = "open" },
-    { title = "v0.15.0", description = "Compositor compatibility and follow-up fixes", state = "open" },
+    { title = "v0.15.0", description = "Project infrastructure baseline and Hyprland 0.57 compatibility", state = "open" },
+    { title = "v0.16.0", description = "Compositor compatibility and follow-up fixes", state = "open" },
 ]
