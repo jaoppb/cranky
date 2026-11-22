@@ -58,12 +58,8 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
         if request.hold == FloatingHold::Held {
             return;
         }
-        let kind = request.kind;
         let Some(node) = request.node else {
-            if trees.remove(self.monitor_id).is_some() {
-                self.display_sender
-                    .send_display_command(DisplayCommand::HideFloatingSurface { kind });
-            }
+            self.hide(trees, request.kind);
             return;
         };
 
@@ -77,7 +73,20 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
         if unchanged {
             return;
         }
+        self.show(node, request);
+    }
 
+    /// Forgets what this monitor showed for `kind`, and hides its surface if anything was shown.
+    fn hide(&self, trees: &mut FloatingTrees, kind: FloatingKind) {
+        if trees.remove(self.monitor_id).is_some() {
+            self.display_sender
+                .send_display_command(DisplayCommand::HideFloatingSurface { kind });
+        }
+    }
+
+    /// Paints `node`, the request's content, at this monitor's scale and shows it at the
+    /// request's anchor and offset, nested under `self.parent`; nothing when it cannot be painted.
+    fn show(&mut self, node: &RenderNode, request: FloatingRequest<'_>) {
         let logical_size = *node.rect().size();
         let Some((buffer, _)) = paint_pipeline(
             node,
@@ -88,9 +97,9 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
         };
         self.display_sender
             .send_display_command(DisplayCommand::ShowFloatingSurface(ShowFloating {
-                kind,
+                kind: request.kind,
                 monitor_id: Some(self.monitor_id.clone()),
-                anchor_rect,
+                anchor_rect: request.anchor_rect,
                 buffer,
                 logical_size,
                 offset: request.offset,

@@ -6,10 +6,12 @@ use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline, RenderServices};
 use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender};
 use crate::features::vdom::domain::UiCommandSender;
+use crate::shared::events::signals::SignalKind;
 use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::Rect;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
+use std::ops::ControlFlow;
 
 pub(in crate::features::module_runtime) struct EventLoop<
     F: CanvasFactory + 'static,
@@ -114,47 +116,47 @@ impl<
             let event = self
                 .poll_next_event(&mut events_stream, &mut module_sizes_rx)
                 .await;
-            let mut should_render = false;
-
-            match event {
-                EventLoopEvent::Shutdown => break,
-                EventLoopEvent::Signals(sigs) => {
-                    if !sigs.is_empty() {
-                        self.port.refresh(self.ctx.hub(), &sigs);
-                        should_render = true;
-                    }
-                }
-                EventLoopEvent::ModuleSizesChanged => {
-                    let current_sizes = self.ctx.hub().module_sizes_rx().borrow().clone();
-                    for (mon_id, last_sizes) in self.render_pipeline.last_child_sizes() {
-                        if last_sizes.as_ref() != current_sizes.get(mon_id) {
-                            should_render = true;
-                            break;
-                        }
-                    }
-                }
-                EventLoopEvent::LayoutChanged => {
-                    self.port.refresh(self.ctx.hub(), &subs);
-                    should_render = true;
-                }
-                EventLoopEvent::Interaction(monitor_id, interaction) => {
-                    let changed = match interaction {
-                        crate::shared::events::core::InteractionEvent::Pointer(pointer_event) => {
-                            self.handle_pointer_event(&monitor_id, &pointer_event)
-                        }
-                        crate::shared::events::core::InteractionEvent::Lifecycle(
-                            lifecycle_event,
-                        ) => self.handle_lifecycle_event(&monitor_id, lifecycle_event),
-                    };
-                    if changed {
-                        should_render = true;
-                    }
-                }
-            }
-
-            if should_render {
-                self.render_all_monitors(&mut layout_engines);
+            match self.apply_event(event, &subs) {
+                ControlFlow::Break(()) => break,
+                ControlFlow::Continue(true) => self.render_all_monitors(&mut layout_engines),
+                ControlFlow::Continue(false) => {}
             }
         }
+    }
+
+    /// Applies one polled event to the module: breaks on shutdown, and otherwise continues with
+    /// whether the module must be rendered again.
+    fn apply_event(&mut self, event: EventLoopEvent, subs: &[SignalKind]) -> ControlFlow<(), bool> {
+        let should_render = match event {
+            EventLoopEvent::Shutdown => return ControlFlow::Break(()),
+            EventLoopEvent::Signals(sigs) => self.refresh_for(&sigs),
+            EventLoopEvent::ModuleSizesChanged => self.child_sizes_changed(),
+            EventLoopEvent::LayoutChanged => {
+                self.port.refresh(self.ctx.hub(), subs);
+                true
+            }
+            EventLoopEvent::Interaction(monitor_id, interaction) => {
+                self.handle_interaction(&monitor_id, interaction)
+            }
+        };
+        ControlFlow::Continue(should_render)
+    }
+
+    /// Refreshes the script for `sigs`, if there are any, and tells whether it did.
+    fn refresh_for(&mut self, sigs: &[SignalKind]) -> bool {
+        if sigs.is_empty() {
+            return false;
+        }
+        self.port.refresh(self.ctx.hub(), sigs);
+        true
+    }
+
+    /// Whether the child sizes on the hub differ, on any monitor, from those its last render used.
+    fn child_sizes_changed(&self) -> bool {
+        let current_sizes = self.ctx.hub().module_sizes_rx().borrow().clone();
+        self.render_pipeline
+            .last_child_sizes()
+            .iter()
+            .any(|(mon_id, last_sizes)| last_sizes.as_ref() != current_sizes.get(mon_id))
     }
 }

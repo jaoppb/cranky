@@ -2,10 +2,12 @@ use super::runner::EventLoop;
 use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::module_runtime::domain::pointer_handler::{PointerOutcome, PointerTarget};
 use crate::features::module_runtime::domain::{PointerAction, PointerHandler};
-use crate::features::module_runtime::ports::LayoutEventSender;
+use crate::features::module_runtime::ports::{LayoutEventSender, ModuleInitError};
 use crate::features::vdom::domain::UiCommandSender;
-use crate::shared::events::core::PointerEvent;
-use crate::shared::primitives::MonitorId;
+use crate::shared::events::core::{
+    InteractionEvent, PointerEvent, SurfaceKind, SurfaceLifecycleEvent,
+};
+use crate::shared::primitives::{FunctionName, ModuleId, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
 impl<
@@ -15,6 +17,23 @@ impl<
     US: UiCommandSender + 'static,
 > EventLoop<F, LS, DS, US>
 {
+    /// Handles one interaction on `monitor_id` and tells whether the module must be rendered
+    /// again.
+    pub(crate) fn handle_interaction(
+        &mut self,
+        monitor_id: &MonitorId,
+        interaction: InteractionEvent,
+    ) -> bool {
+        match interaction {
+            InteractionEvent::Pointer(pointer_event) => {
+                self.handle_pointer_event(monitor_id, &pointer_event)
+            }
+            InteractionEvent::Lifecycle(lifecycle_event) => {
+                self.handle_lifecycle_event(monitor_id, lifecycle_event)
+            }
+        }
+    }
+
     pub(crate) fn handle_pointer_event(
         &mut self,
         monitor_id: &MonitorId,
@@ -28,80 +47,63 @@ impl<
             "Received pointer event in module actor"
         );
 
-        let target_tree = match event.surface() {
-            crate::shared::events::core::SurfaceKind::Bar => {
-                self.render_pipeline.render_trees().get(monitor_id)
-            }
-            crate::shared::events::core::SurfaceKind::Popup => self
+        let Some(outcome) = self.hit_test(monitor_id, event) else {
+            log_no_render_tree(ctx_id, monitor_id);
+            return false;
+        };
+        self.execute_outcome(&outcome)
+    }
+
+    /// Handles `event` against the tree of the surface it happened on, on `monitor_id`; `None`
+    /// when that surface has no tree there.
+    fn hit_test(&mut self, monitor_id: &MonitorId, event: &PointerEvent) -> Option<PointerOutcome> {
+        let render_tree = match event.surface() {
+            SurfaceKind::Bar => self.render_pipeline.render_trees().get(monitor_id),
+            SurfaceKind::Popup => self
                 .popup_render_trees
                 .get(monitor_id)
                 .map(|(_, node)| node),
-            crate::shared::events::core::SurfaceKind::Panel => self
+            SurfaceKind::Panel => self
                 .panel_render_trees
                 .get(monitor_id)
                 .map(|(_, node)| node),
-        };
-
-        if let Some(render_tree) = target_tree {
-            let outcome = self
-                .pointer_handler
-                .handle_event(event, PointerTarget::new(monitor_id, render_tree));
-            self.execute_outcome(&outcome)
-        } else {
-            tracing::warn!(
-                module = %ctx_id,
-                monitor = %monitor_id,
-                "Received pointer event but no render tree found for monitor"
-            );
-            false
-        }
+        }?;
+        let target = PointerTarget::new(monitor_id, render_tree);
+        Some(self.pointer_handler.handle_event(event, target))
     }
 
     pub(crate) fn handle_lifecycle_event(
         &mut self,
         monitor_id: &MonitorId,
-        event: crate::shared::events::core::SurfaceLifecycleEvent,
+        event: SurfaceLifecycleEvent,
     ) -> bool {
-        let ctx_id = self.ctx.id();
         tracing::debug!(
-            module = %ctx_id,
+            module = %self.ctx.id(),
             monitor = %monitor_id,
             ?event,
             "Received surface lifecycle event in module actor"
         );
-        match event {
-            crate::shared::events::core::SurfaceLifecycleEvent::PopupDismissed => {
-                self.popup_render_trees.remove(monitor_id);
-            }
-            crate::shared::events::core::SurfaceLifecycleEvent::PanelDismissed => {
-                self.panel_render_trees.remove(monitor_id);
-            }
-        }
+        self.forget_dismissed_tree(monitor_id, event);
         let outcome = PointerHandler::handle_dismissal(event, monitor_id);
         self.execute_outcome(&outcome)
     }
 
+    /// Forgets the tree of the floating surface `event` dismissed on `monitor_id`.
+    fn forget_dismissed_tree(&mut self, monitor_id: &MonitorId, event: SurfaceLifecycleEvent) {
+        match event {
+            SurfaceLifecycleEvent::PopupDismissed => self.popup_render_trees.remove(monitor_id),
+            SurfaceLifecycleEvent::PanelDismissed => self.panel_render_trees.remove(monitor_id),
+        };
+    }
+
+    /// Runs `outcome`'s actions in order, refreshes the script once if any call ran, and tells
+    /// whether the module must be rendered again.
     fn execute_outcome(&mut self, outcome: &PointerOutcome) -> bool {
-        let ctx_id = self.ctx.id();
         let mut changed = false;
         for action in outcome.actions() {
             match action {
                 PointerAction::CallFunction(func_name, mon_id) => {
-                    let res = if let Some(monitor) = mon_id {
-                        self.port
-                            .call_function_with_args(func_name, &[monitor.as_str()])
-                    } else {
-                        self.port.call_function(func_name)
-                    };
-                    if let Err(error) = res {
-                        tracing::error!(
-                            module = %ctx_id,
-                            func = %func_name,
-                            "ScriptCall failed: {error}"
-                        );
-                    } else {
-                        changed = true;
-                    }
+                    changed |= self.call_script_function(func_name, mon_id.as_ref());
                 }
                 PointerAction::SendUi(cmd) => {
                     self.ctx.ui_sender().send_ui_command(cmd.clone());
@@ -114,6 +116,45 @@ impl<
         }
         changed || outcome.has_state_changed()
     }
+
+    /// Calls the script function `func_name`, with the monitor as its argument when there is one;
+    /// true when it ran, false when it failed, which is logged.
+    fn call_script_function(
+        &mut self,
+        func_name: &FunctionName,
+        mon_id: Option<&MonitorId>,
+    ) -> bool {
+        let res = if let Some(monitor) = mon_id {
+            self.port
+                .call_function_with_args(func_name, &[monitor.as_str()])
+        } else {
+            self.port.call_function(func_name)
+        };
+        let Err(error) = res else {
+            return true;
+        };
+        log_script_call_failed(self.ctx.id(), func_name, &error);
+        false
+    }
+}
+
+/// Logs a pointer event module `ctx_id` received on `monitor_id` for a surface it has no tree
+/// for.
+fn log_no_render_tree(ctx_id: ModuleId, monitor_id: &MonitorId) {
+    tracing::warn!(
+        module = %ctx_id,
+        monitor = %monitor_id,
+        "Received pointer event but no render tree found for monitor"
+    );
+}
+
+/// Logs a script call `func_name` of module `ctx_id` that failed with `error`.
+fn log_script_call_failed(ctx_id: ModuleId, func_name: &FunctionName, error: &ModuleInitError) {
+    tracing::error!(
+        module = %ctx_id,
+        func = %func_name,
+        "ScriptCall failed: {error}"
+    );
 }
 
 #[cfg(test)]
