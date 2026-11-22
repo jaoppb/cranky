@@ -97,15 +97,11 @@ mod tests {
     use crate::shared::config::domain::{FontFamily, FontSize};
     use crate::shared::primitives::geometry::{Position, Size};
     use crate::shared::primitives::{ModuleName, ModuleOptions};
+    use crate::shared::rendering::ports::text::TextFont;
 
     struct MockMeasurer;
     impl TextMeasurer for MockMeasurer {
-        fn measure(
-            &mut self,
-            text: &str,
-            _font: Option<&FontFamily>,
-            _size: Option<FontSize>,
-        ) -> Size {
+        fn measure(&mut self, text: &str, _font: TextFont<'_>) -> Size {
             let len = u32::try_from(text.len()).unwrap_or(0);
             Size::new(len.saturating_mul(10), 20)
         }
@@ -831,7 +827,7 @@ mod tests {
         // as 240) and persists — it is a real constraint, not a hint.
         struct CalendarMeasurer;
         impl TextMeasurer for CalendarMeasurer {
-            fn measure(&mut self, _: &str, _: Option<&FontFamily>, _: Option<FontSize>) -> Size {
+            fn measure(&mut self, _: &str, _font: TextFont<'_>) -> Size {
                 Size::new(0, 0)
             }
             fn measure_module(&self, _: &crate::shared::primitives::ModuleKey) -> Option<Size> {
@@ -866,15 +862,10 @@ mod tests {
     /// character of text wide, and the font size tall.
     struct FontMeasurer;
     impl TextMeasurer for FontMeasurer {
-        fn measure(
-            &mut self,
-            text: &str,
-            font: Option<&FontFamily>,
-            size: Option<FontSize>,
-        ) -> Size {
-            let family = font.map_or(0, |family| family.as_str().len());
+        fn measure(&mut self, text: &str, font: TextFont<'_>) -> Size {
+            let family = font.family().map_or(0, |family| family.as_str().len());
             let width = family.saturating_mul(10).saturating_add(text.len());
-            let height = size.map_or(0.0, FontSize::value);
+            let height = font.size().map_or(0.0, FontSize::value);
             Size::new(
                 u32::try_from(width).unwrap(),
                 crate::utils::f32_to_u32(height),

@@ -5,8 +5,8 @@ use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{ClassNameList, CssLength, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
 use crate::features::vdom::domain::VNode;
-use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Position, Size};
+use crate::shared::rendering::ports::text::TextFont;
 
 #[test]
 fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
@@ -16,7 +16,7 @@ fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
     // child reporting its own 240 default.
     struct CalendarMeasurer;
     impl TextMeasurer for CalendarMeasurer {
-        fn measure(&mut self, _t: &str, _f: Option<&FontFamily>, _s: Option<FontSize>) -> Size {
+        fn measure(&mut self, _t: &str, _font: TextFont<'_>) -> Size {
             Size::new(0, 0)
         }
         fn measure_module(&self, _key: &crate::shared::primitives::ModuleKey) -> Option<Size> {

@@ -6,11 +6,11 @@ use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{ClassNameList, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
 use crate::features::vdom::domain::{TextContent, VNode};
-use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{TextAlign, TextAlignment};
 use crate::shared::rendering::ports::canvas::{CanvasCall, RecordingCanvas};
+use crate::shared::rendering::ports::text::TextFont;
 
 fn resolver(css: &str) -> CompositeStyleResolver {
     let sheet = LightningCssAdapter::new()
@@ -99,7 +99,7 @@ fn test_text_align_inherit_keyword_pulls_parent_value() {
 
 struct EightPerChar;
 impl TextMeasurer for EightPerChar {
-    fn measure(&mut self, text: &str, _f: Option<&FontFamily>, _s: Option<FontSize>) -> Size {
+    fn measure(&mut self, text: &str, _font: TextFont<'_>) -> Size {
         Size::new(u32::try_from(text.len()).unwrap_or(0).saturating_mul(8), 16)
     }
 }

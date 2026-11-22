@@ -28,7 +28,7 @@ fn test_canvas_measure_text() {
         ),
     );
 
-    let size = measurer.measure("test", None, None);
+    let size = measurer.measure("test", TextFont::default());
     assert!(size.width() > 0);
     assert!(size.height() > 0);
 }

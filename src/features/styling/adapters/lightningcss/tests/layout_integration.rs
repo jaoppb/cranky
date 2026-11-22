@@ -9,13 +9,13 @@ use crate::features::styling::domain::{
 };
 use crate::features::styling::ports::CssParserPort;
 use crate::features::vdom::domain::{TextContent, VNode};
-use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::rendering::ports::canvas::RecordingCanvas;
+use crate::shared::rendering::ports::text::TextFont;
 
 struct DummyMeasurer;
 impl TextMeasurer for DummyMeasurer {
-    fn measure(&mut self, text: &str, _f: Option<&FontFamily>, _s: Option<FontSize>) -> Size {
+    fn measure(&mut self, text: &str, _font: TextFont<'_>) -> Size {
         let text_len = u32::try_from(text.len()).unwrap_or(0);
         Size::new(text_len.saturating_mul(8), 16)
     }
@@ -23,7 +23,7 @@ impl TextMeasurer for DummyMeasurer {
 
 struct FixedDummyMeasurer;
 impl TextMeasurer for FixedDummyMeasurer {
-    fn measure(&mut self, _text: &str, _f: Option<&FontFamily>, _s: Option<FontSize>) -> Size {
+    fn measure(&mut self, _text: &str, _font: TextFont<'_>) -> Size {
         Size::new(10, 10)
     }
 }

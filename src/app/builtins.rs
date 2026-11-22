@@ -758,13 +758,13 @@ mod tests {
         use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
         use crate::features::styling::domain::StyleSheetName;
         use crate::features::styling::ports::CssParserPort;
-        use crate::shared::config::domain::{FontFamily, FontSize};
         use crate::shared::primitives::geometry::{Position, Size};
         use crate::shared::primitives::{ModuleName, MonitorId, SizeConstraint};
+        use crate::shared::rendering::ports::text::TextFont;
 
         struct Glyphs;
         impl TextMeasurer for Glyphs {
-            fn measure(&mut self, text: &str, _: Option<&FontFamily>, _: Option<FontSize>) -> Size {
+            fn measure(&mut self, text: &str, _font: TextFont<'_>) -> Size {
                 Size::new(u32::try_from(text.chars().count()).unwrap_or(0) * 7, 16)
             }
         }

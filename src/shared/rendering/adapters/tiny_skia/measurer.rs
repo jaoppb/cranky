@@ -1,9 +1,9 @@
 //! Text measurement with cosmic-text, so layout sizes text with the same fonts the canvas draws it
 //! with.
 use super::paint::get_family;
-use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{LogicalPx, PhysicalPx, Scale, Size};
 use crate::shared::rendering::ports::font::Font;
+use crate::shared::rendering::ports::text::TextFont;
 use cosmic_text::{Attrs, Buffer, FontSystem, Metrics, Shaping};
 
 pub(crate) struct CosmicTextMeasurer<'a> {
@@ -30,16 +30,13 @@ impl<'a> CosmicTextMeasurer<'a> {
 use crate::utils::f32_to_u32;
 
 impl crate::features::layout_engine::domain::TextMeasurer for CosmicTextMeasurer<'_> {
-    fn measure(
-        &mut self,
-        text: &str,
-        font_family: Option<&FontFamily>,
-        font_size: Option<FontSize>,
-    ) -> Size {
-        let size = font_size
+    fn measure(&mut self, text: &str, font: TextFont<'_>) -> Size {
+        let size = font
+            .size()
             .unwrap_or_else(|| self.default_font.size())
             .value();
-        let family = font_family
+        let family = font
+            .family()
             .unwrap_or_else(|| self.default_font.family())
             .as_str();
 

@@ -19,7 +19,7 @@ pub mod test_support {
         AnyModulePort, LayoutEvent, LayoutEventSender, ModuleInitError,
     };
     use crate::features::vdom::domain::{UiCommand, UiCommandSender, VNode};
-    use crate::shared::config::domain::{Config, FontFamily, FontSize, ModuleConfig};
+    use crate::shared::config::domain::{Config, ModuleConfig};
     use crate::shared::events::signals::{SignalHub, SignalKind};
     use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
     use crate::shared::primitives::render::ModuleFrame;
@@ -29,7 +29,7 @@ pub mod test_support {
         BorderStroke, PaintTarget, RgbaImage, RoundedRect,
     };
     use crate::shared::rendering::ports::font::Font;
-    use crate::shared::rendering::ports::text::{TextPlacement, TextRun};
+    use crate::shared::rendering::ports::text::{TextFont, TextPlacement, TextRun};
 
     pub(crate) struct MockLayoutSender;
     impl LayoutEventSender for MockLayoutSender {
@@ -149,12 +149,7 @@ pub mod test_support {
     pub(crate) struct MockMeasurer;
 
     impl TextMeasurer for MockMeasurer {
-        fn measure(
-            &mut self,
-            _text: &str,
-            _font_family: Option<&FontFamily>,
-            _font_size: Option<FontSize>,
-        ) -> Size {
+        fn measure(&mut self, _text: &str, _font: TextFont<'_>) -> Size {
             Size::new(10, 10)
         }
     }
