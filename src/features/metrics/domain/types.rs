@@ -162,3 +162,29 @@ impl DiskMetric {
         &self.mount_point
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_disk_metric_keeps_total_available_and_used_apart() {
+        let disk = DiskMetric::new(
+            DiskName::new("nvme1"),
+            MountPoint::new("/data"),
+            MemoryBytes::new(1000),
+            MemoryBytes::new(250),
+            MemoryBytes::new(750),
+        );
+        assert_eq!(
+            serde_json::to_value(disk).unwrap(),
+            serde_json::json!({
+                "name": "nvme1",
+                "mount_point": "/data",
+                "total_bytes": 1000,
+                "available_bytes": 250,
+                "used_bytes": 750,
+            })
+        );
+    }
+}

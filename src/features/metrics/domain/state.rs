@@ -94,3 +94,54 @@ impl MetricsState {
         self.temperature.as_ref()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::metrics::domain::{
+        DiskName, MemoryMetrics, MountPoint, NetworkMetrics, TemperatureMode,
+    };
+
+    #[test]
+    fn test_new_moves_every_reading_into_its_own_field() {
+        let disk = DiskMetric::new(
+            DiskName::new("sda"),
+            MountPoint::new("/home"),
+            MemoryBytes::new(500),
+            MemoryBytes::new(120),
+            MemoryBytes::new(380),
+        );
+        let config: MetricsConfig =
+            serde_json::from_value(serde_json::json!({ "temperature": "fahrenheit" })).unwrap();
+        let state = MetricsState::new(CreateMetricsCommand::new(
+            CpuUsage::new(12.5),
+            vec![CpuUsage::new(3.0), CpuUsage::new(7.0)],
+            MemoryMetrics::new(
+                MemoryBytes::new(100),
+                MemoryBytes::new(400),
+                MemoryBytes::new(30),
+                MemoryBytes::new(90),
+            ),
+            vec![disk.clone()],
+            NetworkMetrics::new(NetworkSpeed::new(11), NetworkSpeed::new(22)),
+            Some(Temperature::new(41.0)),
+            config.clone(),
+        ));
+
+        assert_eq!(state.cpu_usage, CpuUsage::new(12.5));
+        assert_eq!(state.per_core, vec![CpuUsage::new(3.0), CpuUsage::new(7.0)]);
+        assert_eq!(state.memory_used, MemoryBytes::new(100));
+        assert_eq!(state.memory_total, MemoryBytes::new(400));
+        assert_eq!(state.swap_used, MemoryBytes::new(30));
+        assert_eq!(state.swap_total, MemoryBytes::new(90));
+        assert_eq!(state.disks, vec![disk]);
+        assert_eq!(state.network_tx, NetworkSpeed::new(11));
+        assert_eq!(state.network_rx, NetworkSpeed::new(22));
+        assert_eq!(state.temperature, Some(Temperature::new(41.0)));
+        assert_eq!(
+            state.config.temperature(),
+            Some(&TemperatureMode::Fahrenheit)
+        );
+        assert_eq!(state.config, config);
+    }
+}
