@@ -1,11 +1,8 @@
 //! Turns the tables a Lua `render()` returns into a `VNode` tree.
-use super::parser_props::{
-    parse_common_props, parse_image_data_and_size, parse_module_options, parse_text_content,
-};
+use super::parser_kinds::{parse_module_params, parse_progress_bar};
+use super::parser_props::{parse_common_props, parse_image_data_and_size, parse_text_content};
 use super::userdata::LuaVNode;
-use crate::features::styling::domain::{Orientation, ProgressValue};
-use crate::features::vdom::domain::{ImageContent, ProgressBar, TextContent, VNode};
-use crate::shared::primitives::{ModuleInstanceId, ModuleName};
+use crate::features::vdom::domain::{ImageContent, TextContent, VNode};
 use mlua::{Lua, LuaSerdeExt};
 
 pub(super) fn parse_table_children(lua: &Lua, table: &mlua::Table) -> mlua::Result<Vec<VNode>> {
@@ -30,44 +27,14 @@ fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
             let text_str = parse_text_content(&table);
             VNode::new_text(TextContent::new(text_str), selectors, interactions)
         }
-        "progress" => {
-            let value_num = table.get::<Option<f32>>("value")?.unwrap_or(0.0);
-            let orientation_str = table
-                .get::<Option<String>>("orientation")?
-                .unwrap_or_default();
-            let orientation = match orientation_str.to_lowercase().as_str() {
-                "vertical" => Orientation::Vertical,
-                _ => Orientation::Horizontal,
-            };
-            VNode::new_progress(
-                ProgressBar::new(
-                    ProgressValue::new(value_num).unwrap_or_default(),
-                    orientation,
-                ),
-                selectors,
-                interactions,
-            )
-        }
+        "progress" => VNode::new_progress(parse_progress_bar(&table)?, selectors, interactions),
         "rect" => VNode::new_rect(selectors, interactions),
         "image" => {
             let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
-            VNode::new_image(
-                ImageContent::new(data, pixel_size),
-                selectors,
-                interactions.into_tooltip(),
-            )
+            let image = ImageContent::new(data, pixel_size);
+            VNode::new_image(image, selectors, interactions.into_tooltip())
         }
-        "module" => {
-            let name_str = table.get::<String>("name")?;
-            let instance_id_str = table.get::<Option<String>>("instance_id")?;
-            let options = parse_module_options(lua, &table)?;
-            let params = crate::features::vdom::domain::ModuleParams::new(
-                ModuleName::new(name_str),
-                instance_id_str.map(ModuleInstanceId::new),
-                options,
-            );
-            VNode::new_module(params, selectors, interactions)
-        }
+        "module" => VNode::new_module(parse_module_params(lua, &table)?, selectors, interactions),
         _ => return lua.from_value::<VNode>(mlua::Value::Table(table)),
     };
 

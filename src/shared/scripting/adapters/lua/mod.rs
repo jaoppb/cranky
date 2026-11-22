@@ -10,6 +10,8 @@ pub mod module;
 pub mod module_impl;
 mod module_port;
 mod parser_floating;
+mod parser_kinds;
+mod parser_panel;
 mod parser_props;
 pub mod sync;
 #[cfg(test)]
