@@ -1,7 +1,7 @@
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
+use crate::features::module_runtime::domain::RenderServices;
 use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
-use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
 use crate::features::module_runtime::test_support::{
     ChannelDisplaySender, MockCanvasFactory, MockLayoutSender, MockSurfaceManager, MockUiSender,
     TestModulePort,
@@ -48,11 +48,11 @@ pub(super) fn create_test_event_loop_and_channel() -> (
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
 
     (event_loop, id, display_rx)

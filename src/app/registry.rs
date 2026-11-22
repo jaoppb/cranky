@@ -299,9 +299,11 @@ impl ModuleRegistry {
         let handle = crate::features::module_runtime::application::ModuleActor::new(
             module,
             ctx,
-            deps.canvas_factory.clone(),
-            style_resolver,
-            vdom_diff,
+            crate::features::module_runtime::domain::RenderServices::new(
+                deps.canvas_factory.clone(),
+                style_resolver,
+                vdom_diff,
+            ),
         )
         .spawn();
         self.lazy_actor_handles.insert(id, handle);
@@ -542,9 +544,11 @@ impl<
             crate::features::module_runtime::application::ModuleActor::new(
                 module,
                 ctx,
-                deps.canvas_factory.clone(),
-                style_resolver,
-                vdom_diff,
+                crate::features::module_runtime::domain::RenderServices::new(
+                    deps.canvas_factory.clone(),
+                    style_resolver,
+                    vdom_diff,
+                ),
             )
             .spawn();
         }
@@ -625,9 +629,11 @@ impl<
             crate::features::module_runtime::application::ModuleActor::new(
                 module,
                 ctx,
-                deps.canvas_factory.clone(),
-                style_resolver,
-                vdom_diff,
+                crate::features::module_runtime::domain::RenderServices::new(
+                    deps.canvas_factory.clone(),
+                    style_resolver,
+                    vdom_diff,
+                ),
             )
             .spawn();
         }

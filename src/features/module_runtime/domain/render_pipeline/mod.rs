@@ -9,6 +9,7 @@ pub mod measurer;
 pub mod outcome;
 pub mod paint_phase;
 pub mod pipeline;
+pub mod services;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
@@ -21,3 +22,4 @@ pub use floating_phase::*;
 pub use outcome::*;
 pub(crate) use paint_phase::*;
 pub use pipeline::*;
+pub(crate) use services::RenderServices;

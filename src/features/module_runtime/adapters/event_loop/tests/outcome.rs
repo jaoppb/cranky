@@ -4,10 +4,9 @@ use super::lifecycle::make_test_rect_node;
 use crate::features::layout_engine::domain::{DisplayCommandSender, FloatingKind, PopupTarget};
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
+use crate::features::module_runtime::domain::RenderServices;
 use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
-use crate::features::module_runtime::domain::{
-    FloatingLayouts, PointerHandler, RenderOutcome, RenderPipeline,
-};
+use crate::features::module_runtime::domain::{FloatingLayouts, RenderOutcome};
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockDisplaySender, MockLayoutSender, MockUiSender, RecordingSurfaceManager,
@@ -33,11 +32,11 @@ pub(super) fn event_loop<LS: LayoutEventSender, DS: DisplayCommandSender>(
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     )
 }
 

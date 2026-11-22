@@ -3,7 +3,7 @@ use crate::features::module_runtime::adapters::event_loop::dispatch::{
 };
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
+use crate::features::module_runtime::domain::RenderServices;
 use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockDisplaySender, MockLayoutSender, MockSurfaceManager, MockUiSender,
     TestModulePort,
@@ -50,11 +50,11 @@ fn test_discover_monitors_reads_wayland_monitor_scales() {
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
 
     let discovered = event_loop
@@ -97,11 +97,11 @@ fn test_discover_monitors_ignores_module_sizes_cache() {
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
 
     let discovered = event_loop

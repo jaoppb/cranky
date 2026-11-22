@@ -92,19 +92,19 @@ impl<
                 let layout_ctx = LayoutContext {
                     monitor_id: &monitor_id,
                     scale,
-                    style_resolver: self.style_resolver.as_ref(),
+                    style_resolver: self.services.style_resolver.as_ref(),
                     child_errors: &child_errors,
                     current_bounds,
                     current_constraint,
                     current_child_sizes,
                     interaction_context,
-                    canvas_factory: &mut self.canvas_factory,
+                    canvas_factory: &mut self.services.canvas_factory,
                     layout_engine: engine,
                     popup_layout_engine: &mut popup_engine,
                     panel_layout_engine: &mut panel_engine,
                     tooltip_layout_engine: &mut tooltip_engine,
                 };
-                let input = layout_ctx.diff_input(self.vdom_diff.as_ref());
+                let input = layout_ctx.diff_input(self.services.vdom_diff.as_ref());
                 self.render_pipeline
                     .diff(self.port.as_ref(), input)
                     .and_then(|diff| self.render_pipeline.layout_and_paint(diff, layout_ctx))

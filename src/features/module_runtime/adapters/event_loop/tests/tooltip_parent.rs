@@ -2,8 +2,9 @@ use super::lifecycle::make_test_rect_node;
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, PopupTarget};
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
+use crate::features::module_runtime::domain::FloatingLayouts;
+use crate::features::module_runtime::domain::RenderServices;
 use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
-use crate::features::module_runtime::domain::{FloatingLayouts, PointerHandler, RenderPipeline};
 use crate::features::module_runtime::test_support::{
     ChannelDisplaySender, MockCanvasFactory, MockLayoutSender, MockSurfaceManager, MockUiSender,
     TestModulePort,
@@ -55,11 +56,11 @@ fn test_event_loop_tooltip_dispatch_carries_floating_parent_when_embedded() {
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
 
     let outcome = crate::features::module_runtime::domain::RenderOutcome::new(

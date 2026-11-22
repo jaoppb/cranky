@@ -1,7 +1,7 @@
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
+use crate::features::module_runtime::domain::RenderServices;
 use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockDisplaySender, MockLayoutSender, MockUiSender, TestModulePort,
 };
@@ -69,11 +69,11 @@ fn embedded_event_loop(
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
     (event_loop, layout_tx, surface_manager)
 }

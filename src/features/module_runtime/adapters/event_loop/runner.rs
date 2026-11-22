@@ -3,16 +3,13 @@ use super::events::EventLoopEvent;
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::{DisplayCommandSender, RenderNode};
 use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
+use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline, RenderServices};
 use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender};
-use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
-use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::Rect;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 pub(in crate::features::module_runtime) struct EventLoop<
     F: CanvasFactory + 'static,
@@ -24,9 +21,7 @@ pub(in crate::features::module_runtime) struct EventLoop<
     pub(crate) ctx: ModuleContext<LS, DS, US>,
     pub(crate) pointer_handler: PointerHandler,
     pub(crate) render_pipeline: RenderPipeline,
-    pub(crate) canvas_factory: F,
-    pub(crate) vdom_diff: Arc<dyn VdomDiffPort>,
-    pub(crate) style_resolver: Arc<dyn StyleResolverPort>,
+    pub(crate) services: RenderServices<F>,
     /// Also this module's dedup key for each floating kind: a display
     /// command is only ever sent when a fresh (anchor, layout) pair differs
     /// from what's cached here, so there's one cache per kind, not a
@@ -51,24 +46,19 @@ impl<
     US: UiCommandSender + 'static,
 > EventLoop<F, LS, DS, US>
 {
+    /// An event loop for `port` that has handled no pointer event and rendered no monitor yet.
     #[must_use]
     pub(crate) fn new(
         port: Box<dyn AnyModulePort>,
         ctx: ModuleContext<LS, DS, US>,
-        pointer_handler: PointerHandler,
-        render_pipeline: RenderPipeline,
-        canvas_factory: F,
-        style_resolver: Arc<dyn StyleResolverPort>,
-        vdom_diff: Arc<dyn VdomDiffPort>,
+        services: RenderServices<F>,
     ) -> Self {
         Self {
             port,
             ctx,
-            pointer_handler,
-            render_pipeline,
-            canvas_factory,
-            vdom_diff,
-            style_resolver,
+            pointer_handler: PointerHandler::new(),
+            render_pipeline: RenderPipeline::new(),
+            services,
             popup_render_trees: HashMap::new(),
             panel_render_trees: HashMap::new(),
             tooltip_render_trees: HashMap::new(),
@@ -90,9 +80,7 @@ impl<
         crate::features::module_runtime::application::ModuleActor::new(
             self.port,
             self.ctx,
-            self.canvas_factory,
-            self.style_resolver,
-            self.vdom_diff,
+            self.services,
         )
     }
 

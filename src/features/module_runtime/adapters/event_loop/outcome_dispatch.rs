@@ -37,7 +37,7 @@ impl<
         let mut floating = FloatingDispatcher {
             display_sender: self.ctx.display_sender(),
             module_id: self.ctx.id(),
-            canvas_factory: &mut self.canvas_factory,
+            canvas_factory: &mut self.services.canvas_factory,
             scale: outcome.scale(),
             monitor_id,
             parent: floating_parent,

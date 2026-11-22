@@ -1,7 +1,7 @@
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
+use crate::features::module_runtime::domain::RenderServices;
 use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
-use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
 use crate::features::module_runtime::ports::LayoutEvent;
 use crate::features::module_runtime::test_support::{
     ChannelLayoutSender, MockCanvasFactory, MockDisplaySender, MockLayoutSender,
@@ -47,11 +47,11 @@ fn test_dispatch_render_outcome_emits_layout_events() {
                 None, None, None, None, None,
             ))),
             ctx,
-            PointerHandler::new(),
-            RenderPipeline::new(),
-            MockCanvasFactory,
-            Arc::new(CompositeStyleResolver::new(vec![])),
-            Arc::new(DefaultVdomDiffAdapter::new()),
+            RenderServices::new(
+                MockCanvasFactory,
+                Arc::new(CompositeStyleResolver::new(vec![])),
+                Arc::new(DefaultVdomDiffAdapter::new()),
+            ),
         );
 
         let outcome = crate::features::module_runtime::domain::RenderOutcome::new(
@@ -124,11 +124,11 @@ fn test_handle_pointer_event_no_tree_returns_false() {
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
 
     let event = crate::shared::events::core::PointerEvent::Click {
@@ -164,11 +164,11 @@ fn test_handle_lifecycle_event_popup_dismissed_returns_true() {
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
 
     let changed = event_loop.handle_lifecycle_event(

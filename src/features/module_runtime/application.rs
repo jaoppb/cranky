@@ -2,11 +2,9 @@
 //! and the channels it sends layout, display and UI commands through.
 use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::module_runtime::adapters::EventLoop;
-use crate::features::module_runtime::domain::{ModuleIdentity, PointerHandler, RenderPipeline};
+use crate::features::module_runtime::domain::{ModuleIdentity, RenderServices};
 use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender};
-use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::UiCommandSender;
-use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::events::signals::SignalHub;
 #[cfg(test)]
 use crate::shared::primitives::ModuleInstanceId;
@@ -143,9 +141,7 @@ pub(crate) struct ModuleActor<
 > {
     port: Box<dyn AnyModulePort>,
     ctx: ModuleContext<LS, DS, US>,
-    canvas_factory: F,
-    style_resolver: Arc<dyn StyleResolverPort>,
-    vdom_diff: Arc<dyn VdomDiffPort>,
+    services: RenderServices<F>,
 }
 
 impl<
@@ -156,19 +152,15 @@ impl<
 > ModuleActor<F, LS, DS, US>
 {
     #[must_use]
-    pub(crate) fn new(
+    pub(crate) const fn new(
         port: Box<dyn AnyModulePort>,
         ctx: ModuleContext<LS, DS, US>,
-        canvas_factory: F,
-        style_resolver: Arc<dyn StyleResolverPort>,
-        vdom_diff: Arc<dyn VdomDiffPort>,
+        services: RenderServices<F>,
     ) -> Self {
         Self {
             port,
             ctx,
-            canvas_factory,
-            style_resolver,
-            vdom_diff,
+            services,
         }
     }
 
@@ -177,15 +169,7 @@ impl<
     /// actor outside the normal config-driven lifecycle (a lazy spawn, see
     /// `ModuleRegistry::spawn_module_lazy`) can track and later abort it.
     pub(crate) fn spawn(self) -> tokio::task::JoinHandle<()> {
-        let event_loop = EventLoop::new(
-            self.port,
-            self.ctx,
-            PointerHandler::new(),
-            RenderPipeline::new(),
-            self.canvas_factory,
-            self.style_resolver,
-            self.vdom_diff,
-        );
+        let event_loop = EventLoop::new(self.port, self.ctx, self.services);
 
         tokio::spawn(async move {
             event_loop.run().await;
@@ -332,11 +316,7 @@ mod tests {
             let event_loop = EventLoop::new(
                 port,
                 ctx,
-                PointerHandler::new(),
-                RenderPipeline::new(),
-                canvas_factory,
-                resolver,
-                diff_adapter,
+                RenderServices::new(canvas_factory, resolver, diff_adapter),
             );
 
             TestFixture {
