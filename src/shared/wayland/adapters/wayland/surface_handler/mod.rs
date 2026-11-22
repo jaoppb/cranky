@@ -28,36 +28,25 @@ pub(super) fn handle_cmd(
     queue_handle: &QueueHandle<WaylandState>,
     cmd: &SurfaceCommand,
 ) -> Result<(), DisplayServerError> {
-    let Some(shm) = state.shm.clone() else {
+    if state.shm.is_none() || bar_index(state, cmd).is_none() {
         return Ok(());
-    };
-
-    let Some(bar_index) = state
-        .bars
-        .iter()
-        .position(|bar| bar.output_name == cmd.monitor_id().as_str())
-    else {
-        return Ok(());
-    };
-
-    let width = cmd.buffer().size().width();
-    let height = cmd.buffer().size().height();
-    let dims = (
-        width,
-        height,
-        i32::try_from(width).unwrap_or(0),
-        i32::try_from(height).unwrap_or(0),
-    );
+    }
 
     let embed = state.hub.config_rx().borrow().popup().embed();
     match cmd.parent() {
-        None => handle_bar_surface(state, queue_handle, &shm, bar_index, cmd, dims),
+        None => handle_bar_surface(state, queue_handle, cmd),
         Some(SurfaceParent::Floating(kind)) if embed == PopupEmbed::Composite => {
-            handle_composite_child(state, bar_index, kind, cmd);
+            handle_composite_child(state, kind, cmd);
             Ok(())
         }
-        Some(parent) => {
-            handle_module_surface(state, queue_handle, &shm, bar_index, parent, cmd, dims)
-        }
+        Some(_) => handle_module_surface(state, queue_handle, cmd),
     }
+}
+
+/// The index of the bar on `cmd`'s monitor, if that monitor has one.
+fn bar_index(state: &WaylandState, cmd: &SurfaceCommand) -> Option<usize> {
+    state
+        .bars
+        .iter()
+        .position(|bar| bar.output_name == cmd.monitor_id().as_str())
 }
