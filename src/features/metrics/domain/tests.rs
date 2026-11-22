@@ -1,8 +1,11 @@
-use super::command::{CreateMetricsCommand, MemoryMetrics, NetworkMetrics};
+use super::command::{
+    CpuMetrics, CreateMetricsCommand, DeviceMetrics, MemoryMetrics, MemoryUsage, NetworkMetrics,
+    SystemMetrics,
+};
 use super::config::{CpuMode, MetricsConfig, TemperatureMode};
-use super::state::MetricsState;
+use super::state::{CpuSample, MetricsState};
 use super::types::{
-    CpuUsage, DiskMetric, DiskName, MemoryBytes, MountPoint, NetworkSpeed, Temperature,
+    CpuUsage, DiskMetric, DiskName, DiskSpace, MemoryBytes, MountPoint, NetworkSpeed, Temperature,
 };
 
 #[test]
@@ -11,12 +14,9 @@ fn test_normalize_cpu_usage_0to100() {
     let nproc = 4.0;
     let per_core = vec![100.0, 0.0, 0.0, 0.0];
 
-    let (norm_global, norm_per_core) = MetricsState::normalize_cpu_usage(
-        &CpuMode::Percentage0to100,
-        global_cpu,
-        nproc,
-        per_core.clone(),
-    );
+    let (norm_global, norm_per_core) = CpuSample::new(global_cpu, nproc, per_core.clone())
+        .normalize(&CpuMode::Percentage0to100)
+        .into_parts();
     assert_eq!(norm_global, CpuUsage::new(25.0));
     let expected_per_core: Vec<CpuUsage> = per_core.into_iter().map(CpuUsage::new).collect();
     assert_eq!(norm_per_core, expected_per_core);
@@ -28,12 +28,9 @@ fn test_normalize_cpu_usage_nproc() {
     let nproc = 4.0;
     let per_core = vec![100.0, 0.0, 0.0, 0.0];
 
-    let (norm_global, norm_per_core) = MetricsState::normalize_cpu_usage(
-        &CpuMode::PercentageNproc,
-        global_cpu,
-        nproc,
-        per_core.clone(),
-    );
+    let (norm_global, norm_per_core) = CpuSample::new(global_cpu, nproc, per_core.clone())
+        .normalize(&CpuMode::PercentageNproc)
+        .into_parts();
     assert_eq!(norm_global, CpuUsage::new(100.0));
     let expected_per_core: Vec<CpuUsage> = per_core.into_iter().map(CpuUsage::new).collect();
     assert_eq!(norm_per_core, expected_per_core);
@@ -41,8 +38,9 @@ fn test_normalize_cpu_usage_nproc() {
 
 #[test]
 fn test_normalize_cpu_usage_disabled() {
-    let (norm_global, norm_per_core) =
-        MetricsState::normalize_cpu_usage(&CpuMode::Disabled, 25.0, 4.0, vec![100.0, 0.0]);
+    let (norm_global, norm_per_core) = CpuSample::new(25.0, 4.0, vec![100.0, 0.0])
+        .normalize(&CpuMode::Disabled)
+        .into_parts();
     assert_eq!(norm_global, CpuUsage::new(0.0));
     assert_eq!(norm_per_core, vec![CpuUsage::new(0.0), CpuUsage::new(0.0)]);
 }
@@ -72,9 +70,11 @@ fn test_disk_metric() {
     let disk_metric = DiskMetric::new(
         DiskName::new("nvme0n1"),
         MountPoint::new("/"),
-        MemoryBytes::new(100),
-        MemoryBytes::new(20),
-        MemoryBytes::new(80),
+        DiskSpace::new(
+            MemoryBytes::new(100),
+            MemoryBytes::new(20),
+            MemoryBytes::new(80),
+        ),
     );
     assert_eq!(disk_metric.name().as_str(), "nvme0n1");
     assert_eq!(disk_metric.mount_point().as_str(), "/");
@@ -83,10 +83,8 @@ fn test_disk_metric() {
 #[test]
 fn test_metrics_state_new() {
     let mem = MemoryMetrics::new(
-        MemoryBytes::new(100),
-        MemoryBytes::new(200),
-        MemoryBytes::new(10),
-        MemoryBytes::new(20),
+        MemoryUsage::new(MemoryBytes::new(100), MemoryBytes::new(200)),
+        MemoryUsage::new(MemoryBytes::new(10), MemoryBytes::new(20)),
     );
     assert_eq!(mem.used(), MemoryBytes::new(100));
     assert_eq!(mem.total(), MemoryBytes::new(200));
@@ -98,12 +96,8 @@ fn test_metrics_state_new() {
     assert_eq!(net.rx(), NetworkSpeed::new(2));
 
     let cmd = CreateMetricsCommand::new(
-        CpuUsage::new(10.0),
-        vec![],
-        mem.clone(),
-        vec![],
-        net.clone(),
-        Some(Temperature::new(40.0)),
+        SystemMetrics::new(CpuMetrics::new(CpuUsage::new(10.0), vec![]), mem.clone()),
+        DeviceMetrics::new(vec![], net.clone(), Some(Temperature::new(40.0))),
         MetricsConfig::default(),
     );
     assert_eq!(cmd.cpu_usage(), &CpuUsage::new(10.0));

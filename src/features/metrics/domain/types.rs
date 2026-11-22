@@ -132,21 +132,34 @@ pub(crate) struct DiskMetric {
     used_bytes: MemoryBytes,
 }
 
+/// How a disk's space splits: its total size, the bytes still available and the bytes used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DiskSpace {
+    total: MemoryBytes,
+    available: MemoryBytes,
+    used: MemoryBytes,
+}
+
+impl DiskSpace {
+    #[must_use]
+    pub(crate) const fn new(total: MemoryBytes, available: MemoryBytes, used: MemoryBytes) -> Self {
+        Self {
+            total,
+            available,
+            used,
+        }
+    }
+}
+
 impl DiskMetric {
     #[must_use]
-    pub(crate) const fn new(
-        name: DiskName,
-        mount_point: MountPoint,
-        total_bytes: MemoryBytes,
-        available_bytes: MemoryBytes,
-        used_bytes: MemoryBytes,
-    ) -> Self {
+    pub(crate) const fn new(name: DiskName, mount_point: MountPoint, space: DiskSpace) -> Self {
         Self {
             name,
             mount_point,
-            total_bytes,
-            available_bytes,
-            used_bytes,
+            total_bytes: space.total,
+            available_bytes: space.available,
+            used_bytes: space.used,
         }
     }
 
@@ -172,9 +185,11 @@ mod tests {
         let disk = DiskMetric::new(
             DiskName::new("nvme1"),
             MountPoint::new("/data"),
-            MemoryBytes::new(1000),
-            MemoryBytes::new(250),
-            MemoryBytes::new(750),
+            DiskSpace::new(
+                MemoryBytes::new(1000),
+                MemoryBytes::new(250),
+                MemoryBytes::new(750),
+            ),
         );
         assert_eq!(
             serde_json::to_value(disk).unwrap(),
