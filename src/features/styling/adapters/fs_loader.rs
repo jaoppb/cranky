@@ -6,7 +6,8 @@
 
 use super::lightningcss::LightningPropertyReparser;
 use crate::features::styling::domain::{
-    ComputedStyle, ElementQuery, InheritedStyle, Layer, StyleSheetName, StylingError, fold_matches,
+    CascadeOrigin, ComputedStyle, ElementQuery, InheritedStyle, Layer, StyleSheetName,
+    StylingError, fold_matches,
 };
 use crate::features::styling::ports::{
     ParsedStyleSheetPort, StyleLoaderPort, StyleReloadSender, StyleResolverPort,
@@ -51,7 +52,9 @@ impl StyleResolverPort for CompositeStyleResolver {
                 sheet
                     .matching_rules(query)
                     .into_iter()
-                    .map(move |rule_match| rule_match.into_matched(layer, sheet_index))
+                    .map(move |rule_match| {
+                        rule_match.into_matched(CascadeOrigin::new(layer, sheet_index))
+                    })
             })
             .collect();
         fold_matches(matches).collapse(inherited, &LightningPropertyReparser)
