@@ -1,6 +1,6 @@
 //! The Wayland dispatch state: bound globals, outputs, bars, input devices and floating surfaces.
-use super::dispatch_pointer_button::PointerGrab;
 use super::keyboard::KeyboardInput;
+use super::pointer_grab::PointerGrab;
 use super::types::{FloatingSurface, WaylandBar, WaylandOutputInfo};
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
 use crate::shared::env::domain::AppEnvironment;
@@ -82,6 +82,22 @@ impl WaylandState {
             pending_children: HashMap::new(),
             last_button_serial: None,
             app_env,
+        }
+    }
+
+    /// Asks the app for a render, without waiting for it to be queued.
+    pub(super) fn request_render(&self) {
+        let tx = self.command_tx.clone();
+        tokio::spawn(async move {
+            let _ = tx.send(DisplayCommand::RequestRender).await;
+        });
+    }
+
+    /// Withdraws the published scale of monitor `output_name`, if it had one.
+    pub(super) fn forget_scale(&self, output_name: &str) {
+        let mut scales = self.hub.monitor_scales_rx().borrow().clone();
+        if scales.remove(&MonitorId::new(output_name)).is_some() {
+            let _ = self.hub.monitor_scales_tx().send(scales);
         }
     }
 

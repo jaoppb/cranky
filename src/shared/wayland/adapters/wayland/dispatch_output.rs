@@ -1,4 +1,5 @@
 use super::state::WaylandState;
+use super::types::WaylandBar;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use tracing::debug;
@@ -17,38 +18,36 @@ impl Dispatch<WlOutput, ()> for WaylandState {
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
     ) {
-        let mut scale_updated_output = None;
-        if let Some(info) = state.outputs.iter_mut().find(|info| &info.output == proxy) {
-            match event {
-                wl_output::Event::Name { name } => {
-                    info.name = name;
-                    if !info.name.is_empty() {
-                        scale_updated_output = Some((info.name.clone(), info.scale));
-                    }
-                }
-                wl_output::Event::Scale { factor } => {
-                    info.scale = factor;
-                    if !info.name.is_empty() {
-                        scale_updated_output = Some((info.name.clone(), factor));
-                    }
-                }
-                _ => {}
-            }
+        let Some(info) = state.outputs.iter_mut().find(|info| &info.output == proxy) else {
+            return;
+        };
+        match event {
+            wl_output::Event::Name { name } => info.name = name,
+            wl_output::Event::Scale { factor } => info.scale = factor,
+            _ => return,
         }
-        if let Some((name, factor)) = scale_updated_output {
-            if let Some(bar) = state.bars.iter_mut().find(|bar| bar.output_name == name) {
-                bar.scale = factor;
-                bar.surface.set_buffer_scale(factor);
-            }
-            let mut scales = state.hub.monitor_scales_rx().borrow().clone();
-            let factor_f32 = i16::try_from(factor).map_or(1.0, f32::from);
-            scales.insert(
-                crate::shared::primitives::MonitorId::new(&name),
-                crate::shared::primitives::geometry::Scale::new(factor_f32),
-            );
-            let _ = state.hub.monitor_scales_tx().send(scales);
+        if info.name.is_empty() {
+            return;
         }
+        let (name, scale) = (info.name.clone(), info.scale);
+        apply_output_scale(state, &name, scale);
     }
+}
+
+/// Gives the bar on output `name`, if any, buffer scale `scale`, and
+/// publishes it as that monitor's scale.
+fn apply_output_scale(state: &mut WaylandState, name: &str, scale: i32) {
+    if let Some(bar) = state.bars.iter_mut().find(|bar| bar.output_name == name) {
+        bar.scale = scale;
+        bar.surface.set_buffer_scale(scale);
+    }
+    state.publish_scale(name, scale);
+}
+
+/// A layer surface's configure to `size`, already acknowledged.
+struct LayerConfigure<'a> {
+    layer_surface: &'a ZwlrLayerSurfaceV1,
+    size: Size,
 }
 
 impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
@@ -67,43 +66,63 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
         } = event
         {
             proxy.ack_configure(serial);
-            if let Some(bar) = state
-                .bars
-                .iter_mut()
-                .find(|bar| &bar.layer_surface == proxy)
-            {
-                bar.configure.mark_configured();
-                if width > 0 && height > 0 {
-                    let old_width = bar.width;
-                    let old_height = bar.height;
-
-                    bar.width = width;
-                    bar.height = height;
-
-                    if old_width != width || old_height != height {
-                        debug!("Bar resized to {}x{}", width, height);
-
-                        if let Some(shm) = state.shm.as_ref()
-                            && let Ok(new_shm) = ShmBuffer::new(
-                                ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path()),
-                                Size::new(width, height),
-                                queue_handle,
-                            )
-                        {
-                            bar.shm_buffer = new_shm;
-                        }
-                    }
-
-                    let tx = state.command_tx.clone();
-                    tokio::spawn(async move {
-                        let _ = tx
-                            .send(crate::features::layout_engine::domain::DisplayCommand::RequestRender)
-                            .await;
-                    });
-                }
-            }
+            let configure = LayerConfigure {
+                layer_surface: proxy,
+                size: Size::new(width, height),
+            };
+            on_layer_surface_configure(state, &configure, queue_handle);
         }
     }
+}
+
+/// Opens the configure gate of the bar `configure` is for; a size the
+/// compositor chose then becomes the bar's, with a buffer of that size, and
+/// asks for a render.
+fn on_layer_surface_configure(
+    state: &mut WaylandState,
+    configure: &LayerConfigure<'_>,
+    queue_handle: &QueueHandle<WaylandState>,
+) {
+    let Some(bar) = state
+        .bars
+        .iter_mut()
+        .find(|bar| &bar.layer_surface == configure.layer_surface)
+    else {
+        return;
+    };
+    bar.configure.mark_configured();
+    let (width, height) = (configure.size.width(), configure.size.height());
+    if width == 0 || height == 0 {
+        return;
+    }
+    let old_size = (bar.width, bar.height);
+    (bar.width, bar.height) = (width, height);
+    if old_size != (width, height) {
+        let runtime_dir = state.app_env.xdg_runtime_dir().as_path();
+        let source = state
+            .shm
+            .as_ref()
+            .map(|shm| ShmSource::new(shm, runtime_dir));
+        reallocate_bar_buffer(bar, source, queue_handle);
+    }
+    state.request_render();
+}
+
+/// Gives `bar` a buffer of its new size from `source`, keeping the old one
+/// when there is no source or the allocation fails.
+fn reallocate_bar_buffer(
+    bar: &mut WaylandBar,
+    source: Option<ShmSource<'_>>,
+    queue_handle: &QueueHandle<WaylandState>,
+) {
+    debug!("Bar resized to {}x{}", bar.width, bar.height);
+    let Some(source) = source else {
+        return;
+    };
+    let Ok(new_shm) = ShmBuffer::new(source, Size::new(bar.width, bar.height), queue_handle) else {
+        return;
+    };
+    bar.shm_buffer = new_shm;
 }
 
 #[cfg(test)]

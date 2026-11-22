@@ -11,68 +11,23 @@ use crate::shared::events::core::{
 };
 use crate::shared::primitives::geometry::Position;
 use crate::shared::wayland::composite::route::PointerTarget;
-use std::collections::BTreeSet;
 use wayland_client::WEnum;
 use wayland_client::protocol::wl_pointer;
 
-/// The held buttons and, while any is, the frozen target's origin on the
-/// pointer surface: the child layer's origin at press time, or (0, 0) for a
-/// module on its own surface.
-#[derive(Debug)]
-pub(crate) struct PointerGrab {
-    held: BTreeSet<u32>,
-    origin: Position,
-}
-
-impl Default for PointerGrab {
-    fn default() -> Self {
-        Self {
-            held: BTreeSet::new(),
-            origin: Position::new(0, 0),
-        }
-    }
-}
-
-impl PointerGrab {
-    pub(crate) fn is_active(&self) -> bool {
-        !self.held.is_empty()
-    }
-
-    /// Starts a grab frozen at `origin`; a grab already active keeps its own.
-    fn begin(&mut self, origin: Position) {
-        if self.held.is_empty() {
-            self.origin = origin;
-        }
-    }
-
-    fn hold(&mut self, button: u32) {
-        self.held.insert(button);
-    }
-
-    /// Returns whether this release ended the grab; releasing a button that
-    /// is not held changes nothing.
-    fn release(&mut self, button: u32) -> bool {
-        self.held.remove(&button) && self.held.is_empty()
-    }
-
-    pub(crate) fn cancel(&mut self) {
-        self.held.clear();
-    }
-
-    /// `pos` relative to the frozen target's origin; may be negative or past
-    /// the target's size, which the target hit-tests itself.
-    pub(crate) const fn local(&self, pos: Position) -> Position {
-        Position::new(
-            pos.x().saturating_sub(self.origin.x()),
-            pos.y().saturating_sub(self.origin.y()),
-        )
-    }
-}
-
 /// The frozen target with the pointer relative to its press-time origin.
-pub(super) fn grabbed(state: &WaylandState) -> Option<(PointerTarget, Position)> {
+fn grabbed(state: &WaylandState) -> Option<(PointerTarget, Position)> {
     let pos = state.pointer_grab.local(pointer_pos(state));
     state.pointer_target.clone().map(|target| (target, pos))
+}
+
+/// Where a pointer event at the current position goes: the grabbed target
+/// while a button is held, else whatever it retargets to.
+pub(super) fn route_pointer(state: &mut WaylandState) -> Option<(PointerTarget, Position)> {
+    if state.pointer_grab.is_active() {
+        grabbed(state)
+    } else {
+        retarget(state)
+    }
 }
 
 /// The first press retargets and freezes; later presses join the grab.
@@ -112,30 +67,41 @@ fn release(state: &mut WaylandState, button: u32) {
     } else {
         retarget(state)
     };
-    if let Some((target, pos)) = routed {
-        let (surface, button) = (target.2, PointerButton::from_raw(button));
-        send(
-            state,
-            &target,
-            PointerEvent::ButtonRelease {
-                surface,
-                button,
-                pos,
-            },
-        );
-        send(
-            state,
-            &target,
-            PointerEvent::Click {
-                surface,
-                button,
-                pos,
-            },
-        );
+    if let Some(routed) = routed {
+        send_release_and_click(state, routed, PointerButton::from_raw(button));
     }
     if ended {
         retarget_entering(state);
     }
+}
+
+/// Sends `ButtonRelease` then `Click` of `button` to the target `routed`
+/// names, at its position.
+fn send_release_and_click(
+    state: &WaylandState,
+    routed: (PointerTarget, Position),
+    button: PointerButton,
+) {
+    let (target, pos) = routed;
+    let surface = target.2;
+    send(
+        state,
+        &target,
+        PointerEvent::ButtonRelease {
+            surface,
+            button,
+            pos,
+        },
+    );
+    send(
+        state,
+        &target,
+        PointerEvent::Click {
+            surface,
+            button,
+            pos,
+        },
+    );
 }
 
 /// Records a button event's serial: `xdg_popup.grab` needs it even when
@@ -153,6 +119,16 @@ pub(super) fn handle_pointer_button(
     button_state: WEnum<wl_pointer::ButtonState>,
 ) {
     tracing::debug!(button, ?button_state, "wl_pointer Button");
+    press_or_release(state, button, button_state);
+}
+
+/// Presses or releases `button` as `button_state` says; an unknown state
+/// does nothing.
+fn press_or_release(
+    state: &mut WaylandState,
+    button: u32,
+    button_state: WEnum<wl_pointer::ButtonState>,
+) {
     match button_state {
         WEnum::Value(wl_pointer::ButtonState::Pressed) => press(state, button),
         WEnum::Value(wl_pointer::ButtonState::Released) => release(state, button),
@@ -166,15 +142,8 @@ pub(super) fn handle_pointer_axis(
     value: f64,
 ) {
     tracing::debug!(?axis, value, "wl_pointer Axis");
-    let routed = if state.pointer_grab.is_active() {
-        grabbed(state)
-    } else {
-        retarget(state)
-    };
-    let Some((target, _)) = routed else { return };
-    let axis = match axis {
-        WEnum::Value(wl_pointer::Axis::VerticalScroll) => ScrollAxis::Vertical,
-        _ => ScrollAxis::Horizontal,
+    let Some((target, _)) = route_pointer(state) else {
+        return;
     };
     let (surface, amount) = (target.2, ScrollDelta::new(value));
     send(
@@ -182,10 +151,18 @@ pub(super) fn handle_pointer_axis(
         &target,
         PointerEvent::Scroll {
             surface,
-            axis,
+            axis: scroll_axis(axis),
             amount,
         },
     );
+}
+
+/// The scroll axis of a `wl_pointer` axis: vertical, or else horizontal.
+const fn scroll_axis(axis: WEnum<wl_pointer::Axis>) -> ScrollAxis {
+    match axis {
+        WEnum::Value(wl_pointer::Axis::VerticalScroll) => ScrollAxis::Vertical,
+        _ => ScrollAxis::Horizontal,
+    }
 }
 
 #[cfg(test)]
@@ -202,12 +179,12 @@ mod tests {
     };
     use crate::shared::wayland::adapters::wayland::state::WaylandState;
     use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::{
-        CHILD, LEFT, PRESSED, RELEASED, RIGHT, bar, bar_module, child, clicks, drain, enter, leave,
-        motion, owner, popup, press, release,
+        CHILD, Event, LEFT, PRESSED, RELEASED, RIGHT, bar, bar_module, child, clicks, drain, enter,
+        leave, motion, owner, popup, press, release,
     };
     use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, popup_kind, solid};
     use wayland_client::WEnum;
-    use wayland_client::protocol::wl_pointer::Axis;
+    use wayland_client::protocol::wl_pointer::{Axis, ButtonState};
 
     fn scroll(surface: SurfaceKind) -> PointerEvent {
         PointerEvent::Scroll {
@@ -256,6 +233,23 @@ mod tests {
         );
     }
 
+    /// The left button's `button_state` with serial `serial`.
+    fn left_button(state: &mut WaylandState, serial: u32, button_state: WEnum<ButtonState>) {
+        record_button_serial(state, serial);
+        handle_pointer_button(state, LEFT, button_state);
+    }
+
+    /// The left release at child-local (`x`, `y`) that ends a grab on the
+    /// child, back over the popup owner's own area.
+    fn release_back_to_owner(x: i32, y: i32) -> Vec<Event> {
+        let mut expected = release(SurfaceKind::Bar, x, y).map(child).to_vec();
+        expected.extend([
+            child(leave(SurfaceKind::Bar)),
+            owner(enter(SurfaceKind::Popup)),
+        ]);
+        expected
+    }
+
     /// The implicit grab: a drag off the pressed child keeps every event on
     /// the child, relative to its origin, until the release ends it.
     #[test]
@@ -265,8 +259,7 @@ mod tests {
         let mut rx = state.hub.pointer_rx();
         handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
         drain(&mut rx);
-        record_button_serial(&mut state, 7);
-        handle_pointer_button(&mut state, LEFT, PRESSED);
+        left_button(&mut state, 7, PRESSED);
         handle_pointer_motion(&mut state, (2.0, 2.0));
         scroll_down(&mut state);
         assert_eq!(
@@ -277,14 +270,8 @@ mod tests {
                 child(scroll(SurfaceKind::Bar)),
             ]
         );
-        record_button_serial(&mut state, 8);
-        handle_pointer_button(&mut state, LEFT, RELEASED);
-        let mut expected = release(SurfaceKind::Bar, -8, 0).map(child).to_vec();
-        expected.extend([
-            child(leave(SurfaceKind::Bar)),
-            owner(enter(SurfaceKind::Popup)),
-        ]);
-        assert_eq!(drain(&mut rx), expected);
+        left_button(&mut state, 8, RELEASED);
+        assert_eq!(drain(&mut rx), release_back_to_owner(-8, 0));
         handle_pointer_motion(&mut state, (3.0, 2.0));
         assert_eq!(
             drain(&mut rx),

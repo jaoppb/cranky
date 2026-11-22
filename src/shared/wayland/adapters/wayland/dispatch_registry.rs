@@ -1,11 +1,10 @@
 use super::state::WaylandState;
 use super::types::WaylandOutputInfo;
 use wayland_client::protocol::{
-    wl_output::WlOutput,
     wl_region::WlRegion,
     wl_registry::{self, WlRegistry},
 };
-use wayland_client::{Connection, Dispatch, QueueHandle, delegate_noop};
+use wayland_client::{Connection, Dispatch, Proxy, QueueHandle, delegate_noop};
 
 delegate_noop!(WaylandState: WlRegion);
 
@@ -23,72 +22,103 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                 name,
                 interface,
                 version,
-            } => match interface.as_str() {
-                "wl_compositor" => {
-                    state.compositor = Some(proxy.bind(name, version, queue_handle, ()));
-                }
-                "wl_shm" => state.shm = Some(proxy.bind(name, version, queue_handle, ())),
-                "zwlr_layer_shell_v1" => {
-                    state.layer_shell = Some(proxy.bind(name, version, queue_handle, ()));
-                }
-                "xdg_wm_base" => {
-                    state.xdg_wm_base =
-                        Some(proxy.bind(name, u32::min(version, 5), queue_handle, ()));
-                }
-                "wl_subcompositor" => {
-                    state.subcompositor = Some(proxy.bind(name, version, queue_handle, ()));
-                }
-                "wl_output" => {
-                    let output: WlOutput = proxy.bind(name, version, queue_handle, ());
-                    state.outputs.push(WaylandOutputInfo {
-                        global_id: name,
-                        output,
-                        name: String::new(),
-                        scale: 1,
-                    });
-                }
-                "wl_seat" => state.seat = Some(proxy.bind(name, version, queue_handle, ())),
-                _ => {}
-            },
-            wl_registry::Event::GlobalRemove { name } => {
-                if let Some(pos) = state.outputs.iter().position(|info| info.global_id == name) {
-                    let info = state.outputs.remove(pos);
-                    if let Some(bar_pos) = state
-                        .bars
-                        .iter()
-                        .position(|bar| bar.output_name == info.name)
-                    {
-                        let mut bar = state.bars.remove(bar_pos);
-                        for (_, module_surface) in bar.module_surfaces.drain() {
-                            module_surface.subsurface.destroy();
-                            module_surface.surface.destroy();
-                        }
-                        bar.layer_surface.destroy();
-                        bar.surface.destroy();
-                    }
-                    info.output.release();
-
-                    if !info.name.is_empty() {
-                        let mut scales = state.hub.monitor_scales_rx().borrow().clone();
-                        if scales
-                            .remove(&crate::shared::primitives::MonitorId::new(&info.name))
-                            .is_some()
-                        {
-                            let _ = state.hub.monitor_scales_tx().send(scales);
-                        }
-                    }
-
-                    let tx = state.command_tx.clone();
-                    tokio::spawn(async move {
-                        let _ = tx
-                            .send(crate::features::layout_engine::domain::DisplayCommand::RequestRender)
-                            .await;
-                    });
-                }
+            } => {
+                let global = AnnouncedGlobal {
+                    registry: proxy,
+                    name,
+                    version,
+                    queue_handle,
+                };
+                on_global(state, &interface, &global);
             }
+            wl_registry::Event::GlobalRemove { name } => on_global_remove(state, name),
             _ => {}
         }
     }
+}
+
+/// A global the registry announced, with what binding it takes.
+struct AnnouncedGlobal<'a> {
+    registry: &'a WlRegistry,
+    name: u32,
+    version: u32,
+    queue_handle: &'a QueueHandle<WaylandState>,
+}
+
+impl AnnouncedGlobal<'_> {
+    /// Binds the global at the version it was announced with.
+    fn bind<I>(&self) -> I
+    where
+        I: Proxy + 'static,
+        WaylandState: Dispatch<I, ()>,
+    {
+        self.bind_at_most(self.version)
+    }
+
+    /// Binds the global at its announced version, or `max_version` if lower.
+    fn bind_at_most<I>(&self, max_version: u32) -> I
+    where
+        I: Proxy + 'static,
+        WaylandState: Dispatch<I, ()>,
+    {
+        let version = u32::min(self.version, max_version);
+        self.registry
+            .bind(self.name, version, self.queue_handle, ())
+    }
+}
+
+/// Binds `global` if it is one of the interfaces the bar uses; an output is
+/// recorded unnamed, at scale 1, until its own events arrive.
+fn on_global(state: &mut WaylandState, interface: &str, global: &AnnouncedGlobal<'_>) {
+    match interface {
+        "wl_compositor" => state.compositor = Some(global.bind()),
+        "wl_shm" => state.shm = Some(global.bind()),
+        "zwlr_layer_shell_v1" => state.layer_shell = Some(global.bind()),
+        "xdg_wm_base" => state.xdg_wm_base = Some(global.bind_at_most(5)),
+        "wl_subcompositor" => state.subcompositor = Some(global.bind()),
+        "wl_output" => state.outputs.push(WaylandOutputInfo {
+            global_id: global.name,
+            output: global.bind(),
+            name: String::new(),
+            scale: 1,
+        }),
+        "wl_seat" => state.seat = Some(global.bind()),
+        _ => {}
+    }
+}
+
+/// Forgets the output that was global `name`, if it was one: destroys its
+/// bar, releases it, withdraws its scale and asks for a render.
+fn on_global_remove(state: &mut WaylandState, name: u32) {
+    let Some(pos) = state.outputs.iter().position(|info| info.global_id == name) else {
+        return;
+    };
+    let info = state.outputs.remove(pos);
+    destroy_bar(state, &info.name);
+    info.output.release();
+    if !info.name.is_empty() {
+        state.forget_scale(&info.name);
+    }
+    state.request_render();
+}
+
+/// Destroys the bar on output `output_name`, if any, with its module
+/// surfaces.
+fn destroy_bar(state: &mut WaylandState, output_name: &str) {
+    let Some(bar_pos) = state
+        .bars
+        .iter()
+        .position(|bar| bar.output_name == output_name)
+    else {
+        return;
+    };
+    let mut bar = state.bars.remove(bar_pos);
+    for (_, module_surface) in bar.module_surfaces.drain() {
+        module_surface.subsurface.destroy();
+        module_surface.surface.destroy();
+    }
+    bar.layer_surface.destroy();
+    bar.surface.destroy();
 }
 
 #[cfg(test)]

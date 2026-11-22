@@ -57,9 +57,7 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 surface_x,
                 surface_y,
                 ..
-            } => {
-                handle_pointer_motion(state, (surface_x, surface_y));
-            }
+            } => handle_pointer_motion(state, (surface_x, surface_y)),
             wl_pointer::Event::Button {
                 button,
                 state: btn_state,
@@ -86,9 +84,10 @@ mod tests {
     use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::{
         LEFT, PRESSED, RELEASED, child, clicks, drain, enter, leave, motion, popup,
     };
-    use wayland_client::protocol::wl_pointer::{self, Axis, WlPointer};
+    use wayland_client::WEnum;
+    use wayland_client::protocol::wl_pointer::{self, Axis};
     use wayland_client::protocol::wl_seat::Capability;
-    use wayland_client::{Dispatch, WEnum};
+    use wayland_client::protocol::wl_surface::WlSurface;
 
     const ESC_EVDEV: u32 = 1;
 
@@ -120,14 +119,57 @@ mod tests {
     /// Delivers `event` through the real `wl_pointer` dispatch handler.
     fn deliver(fake: &Fake, state: &mut WaylandState, event: wl_pointer::Event) {
         let pointer = fake.seat().get_pointer(&fake.queue_handle, ());
-        <WaylandState as Dispatch<WlPointer, ()>>::event(
+        fake.deliver(state, (&pointer, event));
+    }
+
+    fn left_button(serial: u32, state: WEnum<wl_pointer::ButtonState>) -> wl_pointer::Event {
+        wl_pointer::Event::Button {
+            serial,
+            time: 0,
+            button: LEFT,
             state,
-            &pointer,
-            event,
-            &(),
-            fake.connection(),
-            &fake.queue_handle,
-        );
+        }
+    }
+
+    /// The enter on `surface` at (11, 3), and the leave from it.
+    fn crossing(surface: &WlSurface) -> [wl_pointer::Event; 2] {
+        let enter = wl_pointer::Event::Enter {
+            serial: 1,
+            surface: surface.clone(),
+            surface_x: 11.0,
+            surface_y: 3.0,
+        };
+        let leave = wl_pointer::Event::Leave {
+            serial: 9,
+            surface: surface.clone(),
+        };
+        [enter, leave]
+    }
+
+    /// Enter on `surface` at (11, 3), motion to (12, 3), a left click with
+    /// serials 7 and 8, a vertical scroll, a frame and the leave.
+    fn pointer_session(surface: &WlSurface) -> Vec<wl_pointer::Event> {
+        let [enter, leave] = crossing(surface);
+        let motion = wl_pointer::Event::Motion {
+            time: 0,
+            surface_x: 12.0,
+            surface_y: 3.0,
+        };
+        let axis = wl_pointer::Event::Axis {
+            time: 0,
+            axis: WEnum::Value(Axis::VerticalScroll),
+            value: 2.5,
+        };
+        let (pressed, released) = (left_button(7, PRESSED), left_button(8, RELEASED));
+        vec![
+            enter,
+            motion,
+            pressed,
+            released,
+            axis,
+            wl_pointer::Event::Frame,
+            leave,
+        ]
     }
 
     #[test]
@@ -135,39 +177,9 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        let button = |serial, state| wl_pointer::Event::Button {
-            serial,
-            time: 0,
-            button: LEFT,
-            state,
-        };
-        deliver(
-            &fake,
-            &mut state,
-            wl_pointer::Event::Enter {
-                serial: 1,
-                surface: surface.clone(),
-                surface_x: 11.0,
-                surface_y: 3.0,
-            },
-        );
-        let motion_to = |surface_x| wl_pointer::Event::Motion {
-            time: 0,
-            surface_x,
-            surface_y: 3.0,
-        };
-        deliver(&fake, &mut state, motion_to(12.0));
-        deliver(&fake, &mut state, button(7, PRESSED));
-        deliver(&fake, &mut state, button(8, RELEASED));
-        let axis = wl_pointer::Event::Axis {
-            time: 0,
-            axis: WEnum::Value(Axis::VerticalScroll),
-            value: 2.5,
-        };
-        deliver(&fake, &mut state, axis);
-        deliver(&fake, &mut state, wl_pointer::Event::Frame);
-        let left = wl_pointer::Event::Leave { serial: 9, surface };
-        deliver(&fake, &mut state, left);
+        for event in pointer_session(&surface) {
+            deliver(&fake, &mut state, event);
+        }
 
         let mut expected = vec![
             child(enter(SurfaceKind::Bar)),
