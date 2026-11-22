@@ -1,69 +1,8 @@
 use super::super::command::SurfaceCommand;
-use super::super::floating_bounds::to_i32;
-use super::super::input_region::{is_click_through, set_empty_input_region};
 use super::super::state::WaylandState;
-use super::super::types::ModuleSurface;
-use super::{bar_index, copy_surface_data};
-use crate::features::layout_engine::domain::FloatingKind;
-use crate::shared::events::core::SurfaceKind;
-use crate::shared::primitives::ModuleId;
-use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
+use super::subsurface::SubsurfaceFrame;
 use crate::shared::wayland::ports::DisplayServerError;
-use crate::shared::wayland::surface_parent::SurfaceParent;
-use std::collections::HashMap;
 use wayland_client::QueueHandle;
-use wayland_client::protocol::wl_surface::WlSurface;
-
-/// The surface a child's subsurface should be parented to, plus the
-/// `SurfaceKind` to record for it in `surface_to_id` — `None` for a tooltip
-/// child, which (like the tooltip's own surface in `setup_new_floating`)
-/// gets no pointer routing today. `None` overall means the parent isn't
-/// ready yet (a popup not yet shown, or already torn down).
-///
-/// The kind is always `SurfaceKind::Bar` when present: it names which of
-/// the *child's* trees to hit-test, and a child's own subsurface always
-/// shows its main tree, whatever it happens to be parented to. Recording
-/// the parent's kind instead would hit-test the child's own (empty) popup
-/// tree, so clicks inside an embedded module would never land.
-fn resolve_parent_surface(
-    state: &WaylandState,
-    bar_index: usize,
-    parent: &SurfaceParent,
-) -> Option<(WlSurface, Option<SurfaceKind>)> {
-    match parent {
-        SurfaceParent::Bar => state
-            .bars
-            .get(bar_index)
-            .map(|bar| (bar.surface.clone(), Some(SurfaceKind::Bar))),
-        SurfaceParent::Floating(kind) => {
-            let surface_kind = match kind {
-                FloatingKind::Popup(_) | FloatingKind::Panel(_) => Some(SurfaceKind::Bar),
-                FloatingKind::Tooltip => None,
-            };
-            state
-                .floating_surfaces
-                .get(kind)
-                .map(|floating| (floating.surface.clone(), surface_kind))
-        }
-    }
-}
-
-fn module_surfaces_mut<'a>(
-    state: &'a mut WaylandState,
-    bar_index: usize,
-    parent: &SurfaceParent,
-) -> Option<&'a mut HashMap<ModuleId, ModuleSurface>> {
-    match parent {
-        SurfaceParent::Bar => state
-            .bars
-            .get_mut(bar_index)
-            .map(|bar| &mut bar.module_surfaces),
-        SurfaceParent::Floating(kind) => state
-            .floating_surfaces
-            .get_mut(kind)
-            .map(|floating| &mut floating.module_surfaces),
-    }
-}
 
 /// Creates or updates a module's own subsurface, parented to whichever
 /// physical surface `parent` names — `bar.surface` for a module embedded in
@@ -76,114 +15,25 @@ pub(super) fn handle_module_surface(
     queue_handle: &QueueHandle<WaylandState>,
     cmd: &SurfaceCommand,
 ) -> Result<(), DisplayServerError> {
-    // handle_cmd routes a frame here only with a parent, once wl_shm is bound and its monitor
-    // has a bar.
-    let (Some(parent), Some(bar_index), Some(shm)) =
-        (cmd.parent(), bar_index(state, cmd), state.shm.clone())
-    else {
+    let Some(frame) = SubsurfaceFrame::for_command(state, queue_handle, cmd)? else {
         return Ok(());
     };
-    let Some(bar_scale) = state.bars.get(bar_index).map(|bar| bar.scale) else {
-        return Ok(());
-    };
-    let size = *cmd.buffer().size();
-    let compositor = state
-        .compositor
-        .clone()
-        .ok_or_else(|| DisplayServerError::Internal("Compositor not bound".to_string()))?;
-    let subcompositor = state
-        .subcompositor
-        .clone()
-        .ok_or_else(|| DisplayServerError::Internal("Subcompositor not bound".to_string()))?;
-    let xdg_runtime_dir = state.app_env.xdg_runtime_dir().as_path().clone();
-
     // The parent surface not existing yet (a popup whose child rendered
     // before `ShowFloatingSurface` was processed) or not existing any more
     // (torn down after the child's last render) both mean: nothing to
     // parent against this frame. Drop it — the child resubmits on its own
     // next signal tick or bounds change.
-    let Some((parent_surface, surface_kind)) = resolve_parent_surface(state, bar_index, parent)
-    else {
+    let Some((parent_surface, surface_kind)) = frame.parent_surface(state) else {
         return Ok(());
     };
-
-    let mut new_surface_to_register = None;
-    if let Some(module_surfaces) = module_surfaces_mut(state, bar_index, parent)
-        && let std::collections::hash_map::Entry::Vacant(entry) =
-            module_surfaces.entry(cmd.module_id())
-    {
-        let surface = compositor.create_surface(queue_handle, ());
-        surface.set_buffer_scale(bar_scale);
-        let subsurface = subcompositor.get_subsurface(&surface, &parent_surface, queue_handle, ());
-        subsurface.set_desync();
-        if matches!(parent, SurfaceParent::Floating(kind) if is_click_through(kind)) {
-            set_empty_input_region(&compositor, &surface, queue_handle);
-        }
-
-        let shm_buffer = ShmBuffer::new(ShmSource::new(&shm, &xdg_runtime_dir), size, queue_handle)
-            .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
-
-        new_surface_to_register = Some(surface.clone());
-        entry.insert(ModuleSurface {
-            surface,
-            subsurface,
-            shm_buffer,
-            size: *cmd.buffer().size(),
-            x: 0,
-            y: 0,
-        });
-    }
-
-    if let Some(surface) = new_surface_to_register
-        && let Some(kind) = surface_kind
-    {
-        state
-            .surface_to_id
-            .insert(surface, (cmd.module_id(), cmd.monitor_id().clone(), kind));
-    }
-
-    let Some(module_surface) = module_surfaces_mut(state, bar_index, parent)
-        .and_then(|surfaces| surfaces.get_mut(&cmd.module_id()))
-    else {
+    let Some(module_surface) = frame.module_surface(state, &parent_surface)? else {
         return Ok(());
     };
-
-    if module_surface.size != *cmd.buffer().size() {
-        module_surface.shm_buffer =
-            ShmBuffer::new(ShmSource::new(&shm, &xdg_runtime_dir), size, queue_handle)
-                .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
-        module_surface.size = *cmd.buffer().size();
-    }
-
-    if module_surface.x != cmd.position().x() || module_surface.y != cmd.position().y() {
-        module_surface
-            .subsurface
-            .set_position(cmd.position().x(), cmd.position().y());
-        module_surface.x = cmd.position().x();
-        module_surface.y = cmd.position().y();
-    }
-
-    copy_surface_data(&mut module_surface.shm_buffer, cmd.buffer().data());
-
-    module_surface.surface.set_buffer_scale(bar_scale);
-    module_surface
-        .surface
-        .attach(Some(module_surface.shm_buffer.current_buffer()), 0, 0);
-    module_surface
-        .surface
-        .damage_buffer(0, 0, to_i32(size.width()), to_i32(size.height()));
-    module_surface.surface.commit();
-    parent_surface.commit();
-    module_surface.shm_buffer.swap_buffers();
+    frame.present(module_surface, &parent_surface)?;
     let ms_surface = module_surface.surface.clone();
-
     if let Some(kind) = surface_kind {
-        state.surface_to_id.insert(
-            ms_surface,
-            (cmd.module_id(), cmd.monitor_id().clone(), kind),
-        );
+        state.surface_to_id.insert(ms_surface, frame.route(kind));
     }
-
     Ok(())
 }
 
