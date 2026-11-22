@@ -63,30 +63,46 @@ pub(super) fn compute_module_bounds(
     default_h: i32,
 ) -> ModuleAnchorBounds {
     match (placement, anchor_rect) {
-        (Some(child), Some(rect)) => ModuleAnchorBounds {
-            x: child.x.saturating_add(rect.x()),
-            y: child.y.saturating_add(rect.y()),
-            width: to_i32(rect.width()),
-            height: to_i32(rect.height()),
-        },
-        (Some(child), None) => ModuleAnchorBounds {
-            x: child.x,
-            y: child.y,
-            width: to_i32(child.size.width()),
-            height: to_i32(child.size.height()),
-        },
-        (None, Some(rect)) => ModuleAnchorBounds {
-            x: rect.x(),
-            y: rect.y(),
-            width: to_i32(rect.width()),
-            height: to_i32(rect.height()),
-        },
+        (Some(child), Some(rect)) => ModuleAnchorBounds::of_rect(rect).offset_by(child),
+        (Some(child), None) => ModuleAnchorBounds::of_child(child),
+        (None, Some(rect)) => ModuleAnchorBounds::of_rect(rect),
         (None, None) => ModuleAnchorBounds {
             x: 0,
             y: 0,
             width: 1,
             height: default_h,
         },
+    }
+}
+
+impl ModuleAnchorBounds {
+    /// Exactly `rect`.
+    fn of_rect(rect: Rect) -> Self {
+        Self {
+            x: rect.x(),
+            y: rect.y(),
+            width: to_i32(rect.width()),
+            height: to_i32(rect.height()),
+        }
+    }
+
+    /// The whole of `child`: its origin and its buffer size.
+    fn of_child(child: ChildPlacement) -> Self {
+        Self {
+            x: child.x,
+            y: child.y,
+            width: to_i32(child.size.width()),
+            height: to_i32(child.size.height()),
+        }
+    }
+
+    /// These bounds moved by `child`'s origin.
+    const fn offset_by(self, child: ChildPlacement) -> Self {
+        Self {
+            x: child.x.saturating_add(self.x),
+            y: child.y.saturating_add(self.y),
+            ..self
+        }
     }
 }
 

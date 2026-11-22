@@ -1,12 +1,11 @@
 use super::floating_anchor::FloatingParentRole;
+use super::floating_popup::{FloatingGlobals, PopupObjects, grab_popup, pointer_route};
 use super::floating_render::create_positioner;
-use super::input_region::{is_click_through, set_empty_input_region};
-use super::state::WaylandState;
+use super::state::{WaylandState, allocate_buffer, bound_global};
 use super::types::FloatingSurface;
 use crate::features::layout_engine::domain::FloatingKind;
-use crate::shared::events::core::SurfaceKind;
 use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
-use crate::shared::wayland::composite::PixelsMut;
+use crate::shared::wayland::composite::{CompositeLayers, PixelsMut};
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
@@ -27,28 +26,11 @@ pub(super) fn create_new_floating(
     queue_handle: &QueueHandle<WaylandState>,
     frame: FloatingFrame,
 ) -> Result<(), DisplayServerError> {
-    let shm = state
-        .shm
-        .as_ref()
-        .ok_or_else(|| DisplayServerError::ConnectionFailed {
-            reason: "SHM not bound".to_string(),
-        })?;
-    let shm_buffer = ShmBuffer::new(
-        ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path()),
-        *frame.buffer.size(),
-        queue_handle,
-    )
-    .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
-
-    let xdg_wm_base =
-        state
-            .xdg_wm_base
-            .as_ref()
-            .ok_or_else(|| DisplayServerError::ConnectionFailed {
-                reason: "XDG WM Base not bound".to_string(),
-            })?;
+    let shm = bound_global(state.shm.as_ref(), "SHM")?;
+    let source = ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path());
+    let shm_buffer = allocate_buffer(source, *frame.buffer.size(), queue_handle)?;
+    let xdg_wm_base = bound_global(state.xdg_wm_base.as_ref(), "XDG WM Base")?;
     let positioner = create_positioner(xdg_wm_base, queue_handle, &frame.placement);
-
     setup_new_floating(
         state,
         queue_handle,
@@ -63,111 +45,74 @@ pub(super) fn create_new_floating(
 fn setup_new_floating(
     state: &mut WaylandState,
     queue_handle: &QueueHandle<WaylandState>,
-    info: NewFloatingInfo,
+    mut info: NewFloatingInfo,
 ) -> Result<(), DisplayServerError> {
-    let NewFloatingInfo {
-        frame,
-        mut shm_buffer,
-        positioner,
-    } = info;
-    let FloatingFrame {
-        kind,
-        parent,
-        buffer: base,
-        placement,
-    } = frame;
-    let anchor_info = &placement.anchor;
-    let xdg_wm_base =
-        state
-            .xdg_wm_base
-            .as_ref()
-            .ok_or_else(|| DisplayServerError::ConnectionFailed {
-                reason: "XDG WM Base not bound".to_string(),
-            })?;
-    let compositor =
-        state
-            .compositor
-            .as_ref()
-            .ok_or_else(|| DisplayServerError::ConnectionFailed {
-                reason: "Compositor not bound".to_string(),
-            })?;
+    let globals = FloatingGlobals {
+        xdg_wm_base: bound_global(state.xdg_wm_base.as_ref(), "XDG WM Base")?,
+        compositor: bound_global(state.compositor.as_ref(), "Compositor")?,
+        queue_handle,
+    };
     // Past every fallible step: claim children that rendered before this
     // surface existed. Blend only; the configure handler attaches it.
-    let layers = state.pending_children.remove(&kind).unwrap_or_default();
-    let (size, scale) = (*base.size(), anchor_info.bar_scale);
-    let mut pixels = PixelsMut::new(shm_buffer.mmap_mut(), size);
-    pixels.copy_from(base.data());
-    pixels.blend_layers(&layers, scale);
-    let surface = compositor.create_surface(queue_handle, ());
-    surface.set_buffer_scale(anchor_info.bar_scale);
-    if is_click_through(&kind) {
-        set_empty_input_region(compositor, &surface, queue_handle);
+    let layers = state
+        .pending_children
+        .remove(&info.frame.kind)
+        .unwrap_or_default();
+    info.blend_initial_frame(&layers);
+    let objects = globals.open_popup(&info.frame, &info.positioner);
+    grab_popup(state, &info.frame.kind, &objects.xdg_popup);
+    if let FloatingParentRole::Layer(layer) = &info.frame.placement.anchor.parent_role {
+        layer.get_popup(&objects.xdg_popup);
     }
-    let xdg_surface = xdg_wm_base.get_xdg_surface(&surface, queue_handle, ());
-    // A popup nested inside another floating surface (decision 7) names its
-    // parent directly; a top-level one leaves it unset and relies on
-    // `zwlr_layer_surface_v1.get_popup` below instead.
-    let parent_xdg_surface = match &anchor_info.parent_role {
-        FloatingParentRole::Popup(parent_surface) => Some(parent_surface),
-        FloatingParentRole::Layer(_) => None,
-    };
-    let xdg_popup = xdg_surface.get_popup(parent_xdg_surface, &positioner, queue_handle, ());
-
-    if let FloatingKind::Popup(_) = &kind
-        && let (Some(seat), Some(serial)) = (state.seat.as_ref(), state.last_button_serial)
-    {
-        xdg_popup.grab(seat, serial.value());
+    info.positioner.destroy();
+    objects.surface.commit();
+    if let Some(route) = pointer_route(&info.frame) {
+        state.surface_to_id.insert(objects.surface.clone(), route);
     }
+    let (kind, floating) = info.into_floating_surface(layers, objects);
+    state.floating_surfaces.insert(kind, floating);
+    Ok(())
+}
 
-    if let FloatingParentRole::Layer(layer) = &anchor_info.parent_role {
-        layer.get_popup(&xdg_popup);
-    }
-    positioner.destroy();
-    surface.commit();
-
-    match &kind {
-        FloatingKind::Popup(target) => {
-            state.surface_to_id.insert(
-                surface.clone(),
-                (
-                    target.module_id(),
-                    anchor_info.target_monitor_id.clone(),
-                    SurfaceKind::Popup,
-                ),
-            );
-        }
-        FloatingKind::Panel(target) => {
-            state.surface_to_id.insert(
-                surface.clone(),
-                (
-                    target.module_id(),
-                    anchor_info.target_monitor_id.clone(),
-                    SurfaceKind::Panel,
-                ),
-            );
-        }
-        FloatingKind::Tooltip => {}
+impl NewFloatingInfo {
+    /// Paints the frame's base, with `layers` blended over it at the
+    /// anchor's scale, into the buffer's back slot.
+    fn blend_initial_frame(&mut self, layers: &CompositeLayers) {
+        let base = &self.frame.buffer;
+        let mut pixels = PixelsMut::new(self.shm_buffer.mmap_mut(), *base.size());
+        pixels.copy_from(base.data());
+        pixels.blend_layers(layers, self.frame.placement.anchor.bar_scale);
     }
 
-    state.floating_surfaces.insert(
-        kind,
-        FloatingSurface {
-            surface,
-            xdg_surface,
-            xdg_popup,
-            shm_buffer,
-            size,
+    /// The floating surface this frame becomes on `objects`, with `layers`
+    /// composited into it, not configured yet; and its kind.
+    fn into_floating_surface(
+        self,
+        layers: CompositeLayers,
+        objects: PopupObjects,
+    ) -> (FloatingKind, FloatingSurface) {
+        let FloatingFrame {
+            kind,
+            parent,
+            buffer: base,
+            placement,
+        } = self.frame;
+        let floating = FloatingSurface {
+            surface: objects.surface,
+            xdg_surface: objects.xdg_surface,
+            xdg_popup: objects.xdg_popup,
+            shm_buffer: self.shm_buffer,
+            size: *base.size(),
             reposition_token: 0,
             module_surfaces: std::collections::HashMap::new(),
             parent,
             base,
             layers,
             configure: super::types::ConfigureGate::default(),
-            scale: anchor_info.bar_scale,
-        },
-    );
-
-    Ok(())
+            scale: placement.anchor.bar_scale,
+        };
+        (kind, floating)
+    }
 }
 
 #[cfg(test)]
@@ -176,6 +121,7 @@ mod tests {
     use crate::features::layout_engine::domain::PopupTarget;
     use crate::shared::config::domain::PopupEmbed;
     use crate::shared::events::core::PointerSerial;
+    use crate::shared::events::core::SurfaceKind;
     use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset};
     use crate::shared::wayland::adapters::wayland::floating_anchor::AnchorInfo;
     use crate::shared::wayland::adapters::wayland::state::WaylandState;

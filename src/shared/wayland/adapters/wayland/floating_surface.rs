@@ -1,4 +1,4 @@
-use super::floating_anchor::{handle_conflicts, resolve_anchor};
+use super::floating_anchor::{AnchorInfo, handle_conflicts, resolve_anchor};
 use super::floating_setup::{
     FloatingFrame, FloatingPlacement, create_new_floating, update_existing_floating,
 };
@@ -19,6 +19,32 @@ pub(super) fn show_floating(
     queue_handle: &QueueHandle<WaylandState>,
     request: ShowFloating,
 ) -> Result<(), DisplayServerError> {
+    let Some(ancestor_kinds) = nesting_ancestors(state, &request) else {
+        return Ok(());
+    };
+    if let FloatingKind::Popup(ref target) = request.kind {
+        handle_conflicts(state, target, &ancestor_kinds);
+    }
+    let Some(anchor) = resolve_anchor(state, &request) else {
+        return Ok(());
+    };
+    let placement = floating_placement(state, &request, anchor);
+    let frame = FloatingFrame {
+        kind: request.kind,
+        parent: request.parent,
+        buffer: request.buffer,
+        placement,
+    };
+    if state.floating_surfaces.contains_key(&frame.kind) {
+        update_existing_floating(state, queue_handle, frame)
+    } else {
+        create_new_floating(state, queue_handle, frame)
+    }
+}
+
+/// The floating surfaces `request`'s surface nests in, nearest first, or
+/// `None` (logged) when its parents loop back to it.
+fn nesting_ancestors(state: &WaylandState, request: &ShowFloating) -> Option<Vec<FloatingKind>> {
     let parent_of = |child_kind: &FloatingKind| -> Option<FloatingKind> {
         if *child_kind == request.kind {
             request.parent.clone()
@@ -31,41 +57,29 @@ pub(super) fn show_floating(
     };
     let Ok(ancestor_kinds) = ancestors(&request.kind, parent_of) else {
         tracing::warn!(kind = ?request.kind, "popup nesting cycle detected, dropping");
-        return Ok(());
+        return None;
     };
+    Some(ancestor_kinds)
+}
 
-    if let FloatingKind::Popup(ref target) = request.kind {
-        handle_conflicts(state, target, &ancestor_kinds);
-    }
-
-    let Some(anchor) = resolve_anchor(state, &request) else {
-        return Ok(());
-    };
-
+/// Where `request`'s surface goes once anchored at `anchor`: its logical
+/// size and its own offset, else a popup's configured one.
+fn floating_placement(
+    state: &WaylandState,
+    request: &ShowFloating,
+    anchor: AnchorInfo,
+) -> FloatingPlacement {
     let effective_offset = match request.kind {
         FloatingKind::Popup(_) => request
             .offset
             .unwrap_or_else(|| state.hub.config_rx().borrow().popup().offset()),
         _ => request.offset.unwrap_or_default(),
     };
-
-    let placement = FloatingPlacement {
+    FloatingPlacement {
         anchor,
         text_w: i32::try_from(request.logical_size.width()).unwrap_or(1),
         text_h: i32::try_from(request.logical_size.height()).unwrap_or(1),
         offset: effective_offset,
-    };
-    let frame = FloatingFrame {
-        kind: request.kind,
-        parent: request.parent,
-        buffer: request.buffer,
-        placement,
-    };
-
-    if state.floating_surfaces.contains_key(&frame.kind) {
-        update_existing_floating(state, queue_handle, frame)
-    } else {
-        create_new_floating(state, queue_handle, frame)
     }
 }
 

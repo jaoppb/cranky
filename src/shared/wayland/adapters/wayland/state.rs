@@ -6,13 +6,15 @@ use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
 use crate::shared::env::domain::AppEnvironment;
 use crate::shared::events::core::SurfaceKind;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::geometry::Scale;
+use crate::shared::primitives::geometry::{Scale, Size};
 use crate::shared::primitives::{ModuleId, MonitorId};
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::composite::CompositeLayers;
 use crate::shared::wayland::composite::route::PointerTarget;
 use crate::shared::wayland::ports::DisplayServerError;
 use std::collections::HashMap;
 use std::sync::Arc;
+use wayland_client::QueueHandle;
 use wayland_client::protocol::{
     wl_compositor::WlCompositor, wl_pointer::WlPointer, wl_seat::WlSeat, wl_shm::WlShm,
     wl_subcompositor::WlSubcompositor, wl_surface::WlSurface,
@@ -118,4 +120,15 @@ pub(super) fn bound_global<'a, T>(
     global.ok_or_else(|| DisplayServerError::ConnectionFailed {
         reason: format!("{name} not bound"),
     })
+}
+
+/// Two `size` slots from `source`, or the internal error allocating them
+/// failed with.
+pub(super) fn allocate_buffer(
+    source: ShmSource<'_>,
+    size: Size,
+    queue_handle: &QueueHandle<WaylandState>,
+) -> Result<ShmBuffer, DisplayServerError> {
+    ShmBuffer::new(source, size, queue_handle)
+        .map_err(|error| DisplayServerError::Internal(error.to_string()))
 }

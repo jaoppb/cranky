@@ -1,10 +1,10 @@
 //! A bar's layer surface: which outputs get one, how it is opened, and the
 //! geometry it reserves on its output.
-use super::state::{WaylandState, bound_global};
+use super::state::{WaylandState, allocate_buffer, bound_global};
 use super::types::{ConfigureGate, WaylandBar};
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::Size;
-use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
+use crate::shared::wayland::adapters::shm::ShmSource;
 use crate::shared::wayland::ports::DisplayServerError;
 use std::collections::HashMap;
 use tracing::debug;
@@ -112,12 +112,8 @@ impl BarGlobals<'_> {
         queue_handle: &QueueHandle<WaylandState>,
     ) -> Result<WaylandBar, DisplayServerError> {
         let (surface, layer_surface) = self.open_layer_surface(spec, queue_handle);
-        let shm_buffer = ShmBuffer::new(
-            self.shm,
-            Size::new(INITIAL_WIDTH, spec.height),
-            queue_handle,
-        )
-        .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
+        let size = Size::new(INITIAL_WIDTH, spec.height);
+        let shm_buffer = allocate_buffer(self.shm, size, queue_handle)?;
         Ok(WaylandBar {
             output_name: spec.name.clone(),
             surface,

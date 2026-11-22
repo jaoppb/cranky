@@ -1,20 +1,10 @@
-use super::floating_anchor::FloatingParentRole;
+use super::floating_anchor::{AnchorInfo, FloatingParentRole};
 use super::floating_bounds::to_i32;
 use super::state::WaylandState;
-use super::types::FloatingSurface;
+use super::types::{FloatingSurface, WaylandBar};
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::shared::primitives::MonitorId;
-
-/// What `resolve_tooltip_anchor` found: everything `resolve_anchor` needs
-/// from the `Tooltip` arm, computed in one place so that arm stays a
-/// handful of lines regardless of how many surface kinds it has to search.
-pub(super) struct TooltipAnchor {
-    pub(super) bar_scale: i32,
-    pub(super) parent_role: FloatingParentRole,
-    pub(super) target_monitor_id: MonitorId,
-    pub(super) anchor_x: i32,
-    pub(super) anchor_y: i32,
-}
+use wayland_client::protocol::wl_surface::WlSurface;
 
 /// Finds the bar or floating surface that owns the hovered element and
 /// derives a tooltip's anchor from it. Tries every bar first (a module
@@ -25,81 +15,95 @@ pub(super) struct TooltipAnchor {
 /// pass, hovering such a module would leave the tooltip anchor unresolved.
 /// A child composited into the popup's own surface is found through
 /// `pointer_target` instead; hovering the popup owner's own content still
-/// resolves nothing.
-pub(super) fn resolve_tooltip_anchor(state: &WaylandState) -> Option<TooltipAnchor> {
-    let parent_surface = state.pointer_surface.clone()?;
-    let mut pointer_x = state.pointer_pos.0;
-    let mut bar_scale = 1;
-    let mut bar_height = 0;
-    let mut parent_role = None;
-    let mut target_monitor_id = MonitorId::new("");
-
-    'search: {
-        for bar in &state.bars {
-            if bar.surface == parent_surface {
-                bar_scale = bar.scale;
-                bar_height = bar.height;
-                parent_role = Some(FloatingParentRole::Layer(bar.layer_surface.clone()));
-                target_monitor_id = MonitorId::new(&bar.output_name);
-                break 'search;
-            }
-            if let Some(child) = bar
-                .module_surfaces
-                .values()
-                .find(|child| child.surface == parent_surface)
-            {
-                bar_scale = bar.scale;
-                bar_height = bar.height;
-                parent_role = Some(FloatingParentRole::Layer(bar.layer_surface.clone()));
-                pointer_x += f64::from(child.x);
-                target_monitor_id = MonitorId::new(&bar.output_name);
-                break 'search;
-            }
-        }
-        for (floating_kind, floating) in &state.floating_surfaces {
-            let Some(floating_monitor_id) = (match floating_kind {
-                FloatingKind::Popup(target) | FloatingKind::Panel(target) => {
-                    Some(target.monitor_id())
-                }
-                FloatingKind::Tooltip => None,
-            }) else {
-                continue;
-            };
-            // A composited child's pointer coordinates are already local to
-            // the popup surface, so it adds no origin; a subsurface child's
-            // are local to its own surface, so it adds its offset.
-            let child_x = if floating.surface == parent_surface && hovers_layer(state, floating) {
-                0
-            } else if let Some(child) = floating
-                .module_surfaces
-                .values()
-                .find(|child| child.surface == parent_surface)
-            {
-                child.x
-            } else {
-                continue;
-            };
-            if let Some(bar) = state
-                .bars
+/// resolves nothing. A tooltip anchors on one point of its parent.
+pub(super) fn resolve_tooltip_anchor(state: &WaylandState) -> Option<AnchorInfo> {
+    let parent_surface = state.pointer_surface.as_ref()?;
+    let parent = state
+        .bars
+        .iter()
+        .find_map(|bar| bar_tooltip_parent(bar, parent_surface))
+        .or_else(|| {
+            state
+                .floating_surfaces
                 .iter()
-                .find(|bar| bar.output_name == floating_monitor_id.as_str())
-            {
-                bar_scale = bar.scale;
-                bar_height = bar.height;
-            }
-            parent_role = Some(FloatingParentRole::Popup(floating.xdg_surface.clone()));
-            pointer_x += f64::from(child_x);
-            target_monitor_id = floating_monitor_id.clone();
-            break 'search;
-        }
-    }
-
-    Some(TooltipAnchor {
-        bar_scale,
-        parent_role: parent_role?,
-        target_monitor_id,
+                .find_map(|entry| floating_tooltip_parent(state, entry, parent_surface))
+        })?;
+    let pointer_x = state.pointer_pos.0 + f64::from(parent.child_x);
+    Some(AnchorInfo {
+        bar_scale: parent.bar_scale,
+        parent_role: parent.role,
         anchor_x: i32::try_from(crate::utils::f64_to_i64(pointer_x)).unwrap_or(0),
-        anchor_y: to_i32(bar_height),
+        anchor_y: to_i32(parent.bar_height),
+        anchor_w: 1,
+        anchor_h: 1,
+        target_monitor_id: parent.monitor_id,
+    })
+}
+
+/// The surface a tooltip nests in, found from the hovered surface: its role,
+/// monitor and bar, and the hovered surface's x origin on it.
+struct TooltipParent {
+    role: FloatingParentRole,
+    monitor_id: MonitorId,
+    bar_scale: i32,
+    bar_height: u32,
+    child_x: i32,
+}
+
+/// `bar` as the tooltip's parent when `hovered` is the bar itself or one of
+/// its module subsurfaces.
+fn bar_tooltip_parent(bar: &WaylandBar, hovered: &WlSurface) -> Option<TooltipParent> {
+    let child_x = if bar.surface == *hovered {
+        0
+    } else {
+        bar.module_surfaces
+            .values()
+            .find(|child| child.surface == *hovered)?
+            .x
+    };
+    Some(TooltipParent {
+        role: FloatingParentRole::Layer(bar.layer_surface.clone()),
+        monitor_id: MonitorId::new(&bar.output_name),
+        bar_scale: bar.scale,
+        bar_height: bar.height,
+        child_x,
+    })
+}
+
+/// The popup or panel of `entry` as the tooltip's parent when `hovered` is
+/// a child composited into it or one of its module subsurfaces; a tooltip is
+/// never a parent. Without a bar on its monitor, scale 1 and height 0.
+fn floating_tooltip_parent(
+    state: &WaylandState,
+    entry: (&FloatingKind, &FloatingSurface),
+    hovered: &WlSurface,
+) -> Option<TooltipParent> {
+    let (FloatingKind::Popup(target) | FloatingKind::Panel(target), floating) = entry else {
+        return None;
+    };
+    // A composited child's pointer coordinates are already local to
+    // the popup surface, so it adds no origin; a subsurface child's
+    // are local to its own surface, so it adds its offset.
+    let child_x = if floating.surface == *hovered && hovers_layer(state, floating) {
+        0
+    } else {
+        floating
+            .module_surfaces
+            .values()
+            .find(|child| child.surface == *hovered)?
+            .x
+    };
+    let monitor_id = target.monitor_id();
+    let bar = state
+        .bars
+        .iter()
+        .find(|bar| bar.output_name == monitor_id.as_str());
+    Some(TooltipParent {
+        role: FloatingParentRole::Popup(floating.xdg_surface.clone()),
+        monitor_id: monitor_id.clone(),
+        bar_scale: bar.map_or(1, |bar| bar.scale),
+        bar_height: bar.map_or(0, |bar| bar.height),
+        child_x,
     })
 }
 

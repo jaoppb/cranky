@@ -46,9 +46,9 @@ mod tests {
     const SET_ANCHOR_RECT: u16 = 2;
     const SET_OFFSET: u16 = 6;
 
-    #[test]
-    fn positioner_carries_the_logical_size_the_anchor_rect_and_the_offset() {
-        let fake = Fake::new();
+    /// The positioner of a 0×5 placement at (3, 4), 0×7, shifted by
+    /// (-2, 9), and every request sent to it as `(opcode, first words)`.
+    fn positioned(fake: &Fake) -> Vec<(u16, [u32; 4])> {
         let state = fake.state(PopupEmbed::Composite);
         let xdg_wm_base = state.xdg_wm_base.as_ref().expect("xdg_wm_base");
         let anchor = AnchorInfo {
@@ -61,7 +61,6 @@ mod tests {
             target_monitor_id: MonitorId::new("DP-1"),
         };
         fake.requests();
-
         let placement = FloatingPlacement {
             anchor,
             text_w: 0,
@@ -69,14 +68,18 @@ mod tests {
             offset: PopupOffset::new(-2, 9),
         };
         let positioner = create_positioner(xdg_wm_base, &fake.queue_handle, &placement);
-
         let object = positioner.id().protocol_id();
-        let sent: Vec<(u16, [u32; 4])> = fake
-            .requests()
+        fake.requests()
             .into_iter()
             .filter(|request| request.object == object)
             .map(|request| (request.opcode, request.args))
-            .collect();
+            .collect()
+    }
+
+    #[test]
+    fn positioner_carries_the_logical_size_the_anchor_rect_and_the_offset() {
+        let fake = Fake::new();
+        let sent = positioned(&fake);
         // Zero extents are raised to 1: a positioner rejects empty rects.
         assert!(sent.contains(&(SET_SIZE, [1, 5, 0, 0])), "{sent:?}");
         assert!(sent.contains(&(SET_ANCHOR_RECT, [3, 4, 1, 7])), "{sent:?}");
