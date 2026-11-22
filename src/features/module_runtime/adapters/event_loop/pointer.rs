@@ -115,3 +115,29 @@ impl<
         changed || outcome.has_state_changed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::tests::fixture::{hub_with_dp1, wired_event_loop};
+    use crate::features::module_runtime::domain::Change;
+    use crate::features::module_runtime::domain::PointerAction;
+    use crate::features::module_runtime::domain::pointer_handler::PointerOutcome;
+    use crate::features::module_runtime::test_support::RecordingModulePort;
+    use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
+    use crate::shared::primitives::FunctionName;
+
+    /// A call that names no monitor runs the script function with no argument.
+    #[test]
+    fn a_call_with_no_monitor_runs_the_function_without_arguments() {
+        let rect = VNode::new_rect(ElementSelectors::default(), Interactions::default());
+        let port = RecordingModulePort::new(rect, vec![]);
+        let log = port.log();
+        let (mut event_loop, _wiring) = wired_event_loop(port, hub_with_dp1(1.0));
+        let reset = PointerAction::CallFunction(FunctionName::new("reset"), None);
+        let outcome = PointerOutcome::new(vec![reset], Change::Unchanged);
+
+        assert!(event_loop.execute_outcome(&outcome));
+        let calls = std::mem::take(&mut log.lock().unwrap().calls);
+        assert_eq!(calls, [("reset".to_string(), Vec::<String>::new())]);
+    }
+}

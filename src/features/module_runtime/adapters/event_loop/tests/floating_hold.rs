@@ -132,3 +132,17 @@ fn test_event_loop_does_not_show_a_held_panel() {
 fn test_event_loop_does_not_show_a_held_tooltip() {
     assert_held_then_shown(render_with_tooltip, &FloatingKind::Tooltip);
 }
+
+/// A held popup leaves the surface showing what it showed, sending nothing, and keeps it as what
+/// is shown: the same plain popup afterwards is not sent again.
+#[test]
+fn a_held_popup_keeps_what_it_showed() {
+    let (mut event_loop, _id, display_rx) = create_test_event_loop_and_channel();
+    let mon = MonitorId::new("DP-1");
+    event_loop.dispatch_render_outcome(&mon, &render_with_popup(bar()));
+    assert_eq!(display_rx.try_iter().count(), 1);
+
+    event_loop.dispatch_render_outcome(&mon, &render_with_popup(unsettled()));
+    event_loop.dispatch_render_outcome(&mon, &render_with_popup(bar()));
+    assert!(display_rx.try_recv().is_err());
+}
