@@ -73,3 +73,53 @@ fn test_tokenize() {
     assert_eq!(tokens.len(), 2);
     assert_eq!(tokens[0], "rgb(255, 255, 255)");
 }
+
+#[test]
+fn test_parse_hex_rejects_digits_that_are_not_hex() {
+    for input in [
+        "#gg0000",
+        "#00gg00",
+        "#0000gg",
+        "#aé000",
+        "#gg000000",
+        "#00gg0000",
+        "#0000gg00",
+        "#000000gg",
+        "#aé00000",
+    ] {
+        assert_eq!(
+            DrawingColor::parse(input),
+            Err(ColorError::InvalidFormat(input.to_string())),
+            "{input}"
+        );
+    }
+}
+
+#[test]
+fn test_parse_hex_rejects_lengths_other_than_six_or_eight() {
+    for input in ["#12345", "#1234567", "#123456789"] {
+        assert_eq!(
+            DrawingColor::parse(input),
+            Err(ColorError::InvalidFormat(input.to_string())),
+            "{input}"
+        );
+    }
+}
+
+#[test]
+fn test_parse_hex_reads_the_alpha_of_eight_digits() {
+    let color = DrawingColor::parse("#11223344").unwrap();
+    assert_eq!(
+        color,
+        DrawingColor::Solid(Color::rgb(0x11, 0x22, 0x33).with_alpha(0x44))
+    );
+}
+
+#[test]
+fn test_parse_gradient_without_an_angle_runs_at_zero_degrees() {
+    let color = DrawingColor::parse("#ff0000 #00ff00").unwrap();
+    assert_eq!(
+        color,
+        DrawingColor::Gradient(vec![Color::rgb(255, 0, 0), Color::rgb(0, 255, 0)], 0.0)
+    );
+}
