@@ -1,3 +1,10 @@
+mod actions;
 mod api;
+mod dsl;
 mod lifecycle;
+mod metadata;
+mod module_port;
 mod signals;
+mod support;
+mod sync;
+mod sys;
