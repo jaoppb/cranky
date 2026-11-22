@@ -62,8 +62,9 @@ pub struct Rect {
 }
 
 impl Rect {
+    /// The box whose top-left corner is at `position`, `size` large.
     #[must_use]
-    pub(crate) const fn new(position: Position, size: Size) -> Self {
+    pub const fn new(position: Position, size: Size) -> Self {
         Self { position, size }
     }
 

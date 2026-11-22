@@ -3,13 +3,13 @@
 use super::paint::get_family;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{LogicalPx, PhysicalPx, Scale, Size};
+use crate::shared::rendering::ports::font::Font;
 use cosmic_text::{Attrs, Buffer, FontSystem, Metrics, Shaping};
 
 pub(crate) struct CosmicTextMeasurer<'a> {
     font_system: &'a mut FontSystem,
     scale: Scale,
-    default_font_family: FontFamily,
-    default_font_size: FontSize,
+    default_font: Font,
 }
 
 impl<'a> CosmicTextMeasurer<'a> {
@@ -17,14 +17,12 @@ impl<'a> CosmicTextMeasurer<'a> {
     pub(crate) const fn new(
         font_system: &'a mut FontSystem,
         scale: Scale,
-        default_font_family: FontFamily,
-        default_font_size: FontSize,
+        default_font: Font,
     ) -> Self {
         Self {
             font_system,
             scale,
-            default_font_family,
-            default_font_size,
+            default_font,
         }
     }
 }
@@ -38,8 +36,12 @@ impl crate::features::layout_engine::domain::TextMeasurer for CosmicTextMeasurer
         font_family: Option<&FontFamily>,
         font_size: Option<FontSize>,
     ) -> Size {
-        let size = font_size.unwrap_or(self.default_font_size).value();
-        let family = font_family.unwrap_or(&self.default_font_family).as_str();
+        let size = font_size
+            .unwrap_or_else(|| self.default_font.size())
+            .value();
+        let family = font_family
+            .unwrap_or_else(|| self.default_font.family())
+            .as_str();
 
         let physical_size = LogicalPx::new(size).apply_scale(self.scale).value();
         let metrics = Metrics::new(physical_size, physical_size * 1.0);

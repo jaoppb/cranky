@@ -1,35 +1,37 @@
+use super::target;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::{Color, DrawingColor};
+use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
 use crate::shared::rendering::adapters::tiny_skia::canvas::TinySkiaCosmicCanvas;
+use crate::shared::rendering::adapters::tiny_skia::factory::FontCache;
 use crate::shared::rendering::adapters::tiny_skia::factory::TinySkiaCanvasFactory;
 use crate::shared::rendering::ports::canvas::Canvas;
-use cosmic_text::{FontSystem, SwashCache};
+use crate::shared::rendering::ports::draw::{BorderStroke, PaintTarget, RoundedRect};
+use crate::shared::rendering::ports::font::Font;
 use tiny_skia::Pixmap;
 
 #[test]
 fn test_canvas_draw_rect() {
     let mut pixmap = Pixmap::new(100, 100).unwrap();
-    let mut font_system = FontSystem::new();
-    let mut swash_cache = SwashCache::new();
+    let mut fonts = FontCache::new();
 
     {
         let mut canvas = TinySkiaCosmicCanvas::new(
-            pixmap.as_mut(),
-            &mut font_system,
-            &mut swash_cache,
-            Scale::new(1.0),
-            FontFamily::new("sans-serif".to_string()),
-            FontSize::new(14.0),
+            target(&mut pixmap, 1.0),
+            &mut fonts,
+            Font::new(
+                FontFamily::new("sans-serif".to_string()),
+                FontSize::new(14.0),
+            ),
         );
 
         canvas.draw_rect(
-            LogicalPx::new(10.0),
-            LogicalPx::new(10.0),
-            LogicalPx::new(80.0),
-            LogicalPx::new(80.0),
+            RoundedRect::new(
+                Rect::new(Position::new(10, 10), Size::new(80, 80)),
+                LogicalPx::new(0.0),
+            ),
             DrawingColor::Solid(Color::rgb(255, 0, 0)),
-            LogicalPx::new(0.0),
         );
     }
 
@@ -47,50 +49,57 @@ fn test_canvas_factory() {
     let mut data = vec![0; 100 * 100 * 4];
     {
         let _canvas = factory.create_canvas(
-            &mut data,
-            Size::new(100, 100),
-            Scale::new(1.0),
-            FontFamily::new("sans-serif".to_string()),
-            FontSize::new(14.0),
+            PaintTarget::new(&mut data, Size::new(100, 100), Scale::new(1.0)),
+            Font::new(
+                FontFamily::new("sans-serif".to_string()),
+                FontSize::new(14.0),
+            ),
         );
     }
     let _measurer = factory.create_text_measurer(
         Scale::new(1.0),
-        FontFamily::new("sans-serif".to_string()),
-        FontSize::new(14.0),
+        Font::new(
+            FontFamily::new("sans-serif".to_string()),
+            FontSize::new(14.0),
+        ),
     );
 }
 
 #[test]
 fn test_canvas_draw_border() {
     let mut pixmap = Pixmap::new(100, 100).unwrap();
-    let mut font_system = FontSystem::new();
-    let mut swash_cache = SwashCache::new();
+    let mut fonts = FontCache::new();
 
     {
         let mut canvas = TinySkiaCosmicCanvas::new(
-            pixmap.as_mut(),
-            &mut font_system,
-            &mut swash_cache,
-            Scale::new(1.0),
-            FontFamily::new("sans-serif".to_string()),
-            FontSize::new(14.0),
+            target(&mut pixmap, 1.0),
+            &mut fonts,
+            Font::new(
+                FontFamily::new("sans-serif".to_string()),
+                FontSize::new(14.0),
+            ),
         );
 
         canvas.draw_border(
-            Position::new(0, 0),
-            Size::new(20, 20),
-            DrawingColor::Solid(Color::rgb(0, 255, 0)),
-            LogicalPx::new(0.0),
-            LogicalPx::new(2.0),
+            RoundedRect::new(
+                Rect::new(Position::new(0, 0), Size::new(20, 20)),
+                LogicalPx::new(0.0),
+            ),
+            BorderStroke::new(
+                DrawingColor::Solid(Color::rgb(0, 255, 0)),
+                LogicalPx::new(2.0),
+            ),
         );
 
         canvas.draw_border(
-            Position::new(20, 20),
-            Size::new(60, 60),
-            DrawingColor::Solid(Color::rgb(0, 0, 255)),
-            LogicalPx::new(10.0),
-            LogicalPx::new(2.0),
+            RoundedRect::new(
+                Rect::new(Position::new(20, 20), Size::new(60, 60)),
+                LogicalPx::new(10.0),
+            ),
+            BorderStroke::new(
+                DrawingColor::Solid(Color::rgb(0, 0, 255)),
+                LogicalPx::new(2.0),
+            ),
         );
     }
 
@@ -105,24 +114,22 @@ fn test_canvas_draw_border() {
 #[test]
 fn test_canvas_draw_rect_with_radius() {
     let mut pixmap = Pixmap::new(100, 100).unwrap();
-    let mut font_system = FontSystem::new();
-    let mut swash_cache = SwashCache::new();
+    let mut fonts = FontCache::new();
 
     let mut canvas = TinySkiaCosmicCanvas::new(
-        pixmap.as_mut(),
-        &mut font_system,
-        &mut swash_cache,
-        Scale::new(1.0),
-        FontFamily::new("sans-serif".to_string()),
-        FontSize::new(14.0),
+        target(&mut pixmap, 1.0),
+        &mut fonts,
+        Font::new(
+            FontFamily::new("sans-serif".to_string()),
+            FontSize::new(14.0),
+        ),
     );
 
     canvas.draw_rect(
-        LogicalPx::new(10.0),
-        LogicalPx::new(10.0),
-        LogicalPx::new(80.0),
-        LogicalPx::new(80.0),
+        RoundedRect::new(
+            Rect::new(Position::new(10, 10), Size::new(80, 80)),
+            LogicalPx::new(20.0),
+        ),
         DrawingColor::Gradient(vec![Color::rgb(255, 0, 0), Color::rgb(0, 255, 0)], 45.0),
-        LogicalPx::new(20.0),
     );
 }

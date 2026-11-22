@@ -5,8 +5,10 @@ use super::text_placement::{text_alignment, text_origin};
 use crate::features::styling::domain::{ComputedStyle, Orientation};
 use crate::shared::config::domain::BorderRadius;
 use crate::shared::primitives::color::DrawingColor;
-use crate::shared::primitives::geometry::{LogicalPx, Position, Rect, Size};
+use crate::shared::primitives::geometry::{LogicalPx, Rect};
 use crate::shared::rendering::ports::canvas::Canvas;
+use crate::shared::rendering::ports::draw::{BorderStroke, RgbaImage, RoundedRect};
+use crate::shared::rendering::ports::text::{TextFont, TextPlacement, TextRun};
 
 fn draw_bg_and_border(
     canvas: &mut dyn Canvas,
@@ -14,30 +16,17 @@ fn draw_bg_and_border(
     style: &ComputedStyle,
     bg_override: Option<&DrawingColor>,
 ) {
-    let left = f32::from(i16::try_from(rect.x()).unwrap_or(0));
-    let top = f32::from(i16::try_from(rect.y()).unwrap_or(0));
-    let width = f32::from(u16::try_from(rect.width()).unwrap_or(0));
-    let height = f32::from(u16::try_from(rect.height()).unwrap_or(0));
     let radius = LogicalPx::new(style.border_radius().map_or(0.0, BorderRadius::value));
+    let shape = RoundedRect::new(*rect, radius);
 
     let background = bg_override.or_else(|| style.background());
     if let Some(color) = background {
-        canvas.draw_rect(
-            LogicalPx::new(left),
-            LogicalPx::new(top),
-            LogicalPx::new(width),
-            LogicalPx::new(height),
-            color.clone(),
-            radius,
-        );
+        canvas.draw_rect(shape, color.clone());
     }
     if let (Some(size), Some(color)) = (style.border_size(), style.border_color()) {
         canvas.draw_border(
-            Position::new(rect.x(), rect.y()),
-            Size::new(rect.width(), rect.height()),
-            color.clone(),
-            radius,
-            LogicalPx::new(size.value()),
+            shape,
+            BorderStroke::new(color.clone(), LogicalPx::new(size.value())),
         );
     }
 }
@@ -57,36 +46,21 @@ fn render_progress(
 
     let radius = LogicalPx::new(style.border_radius().map_or(0.0, BorderRadius::value));
     let clamped = progress_val.clamp(0.0, 1.0);
-    let left = f32::from(i16::try_from(rect.x()).unwrap_or(0));
-    let top = f32::from(i16::try_from(rect.y()).unwrap_or(0));
-    let width = f32::from(u16::try_from(rect.width()).unwrap_or(0));
-    let height = f32::from(u16::try_from(rect.height()).unwrap_or(0));
+    let track = RoundedRect::new(*rect, radius);
 
     match orientation {
         Orientation::Horizontal => {
-            let fill_w = (width * clamped).round();
+            let fill_w = (track.width().value() * clamped).round();
             if fill_w > 0.0 {
-                canvas.draw_rect(
-                    LogicalPx::new(left),
-                    LogicalPx::new(top),
-                    LogicalPx::new(fill_w),
-                    LogicalPx::new(height),
-                    fill.clone(),
-                    radius,
-                );
+                canvas.draw_rect(track.with_width(LogicalPx::new(fill_w)), fill.clone());
             }
         }
         Orientation::Vertical => {
-            let fill_h = (height * clamped).round();
-            let fill_y = top + (height - fill_h);
+            let fill_h = (track.height().value() * clamped).round();
             if fill_h > 0.0 {
                 canvas.draw_rect(
-                    LogicalPx::new(left),
-                    LogicalPx::new(fill_y),
-                    LogicalPx::new(width),
-                    LogicalPx::new(fill_h),
+                    track.with_bottom_height(LogicalPx::new(fill_h)),
                     fill.clone(),
-                    radius,
                 );
             }
         }
@@ -104,12 +78,12 @@ fn render_text(
         DrawingColor::Solid(crate::shared::primitives::color::Color::rgb(255, 255, 255))
     });
     canvas.draw_text(
-        text.as_str(),
-        style.font_family(),
-        style.font_size(),
-        text_color,
-        text_origin(rect, style),
-        text_alignment(rect, style),
+        TextRun::new(
+            text.as_str(),
+            TextFont::new(style.font_family(), style.font_size()),
+            text_color,
+        ),
+        TextPlacement::new(text_origin(rect, style), text_alignment(rect, style)),
     );
 }
 
@@ -164,13 +138,7 @@ impl RenderNode {
                 pixel_size,
                 ..
             } => {
-                let logical_size = Size::new(rect.width(), rect.height());
-                canvas.draw_image(
-                    data,
-                    *pixel_size,
-                    logical_size,
-                    Position::new(rect.x(), rect.y()),
-                );
+                canvas.draw_image(RgbaImage::new(data, *pixel_size), *rect);
             }
         }
     }
@@ -350,16 +318,16 @@ mod tests {
         DrawingColor::Solid(Color::rgb(red, green, blue))
     }
 
-    fn progress_node(
-        rect: Rect,
-        value: f32,
-        orientation: Orientation,
-        style: ComputedStyle,
-    ) -> RenderNode {
+    /// A progress bar at (2, 4), 100x10 when horizontal and 10x100 when vertical.
+    fn progress_node(value: f32, orientation: Orientation, style: ComputedStyle) -> RenderNode {
+        let size = match orientation {
+            Orientation::Horizontal => Size::new(100, 10),
+            Orientation::Vertical => Size::new(10, 100),
+        };
         RenderNode::Progress {
             path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
-            rect,
+            rect: Rect::new(Position::new(2, 4), size),
             value: ProgressValue::new(value).unwrap(),
             orientation,
             style,
@@ -415,9 +383,8 @@ mod tests {
         let mut style = ComputedStyle::default();
         style.set_accent_color(solid(200, 0, 0));
         style.set_border_radius(BorderRadius::new(3.0));
-        let rect = Rect::new(Position::new(2, 4), Size::new(100, 10));
         let mut canvas = RecordingCanvas::default();
-        progress_node(rect, 0.25, Orientation::Horizontal, style).render_to_canvas(&mut canvas);
+        progress_node(0.25, Orientation::Horizontal, style).render_to_canvas(&mut canvas);
         assert_eq!(
             canvas.calls,
             [CanvasCall::Rect {
@@ -432,9 +399,8 @@ mod tests {
     fn test_vertical_progress_fills_from_the_bottom() {
         let mut style = ComputedStyle::default();
         style.set_color(solid(0, 200, 0));
-        let rect = Rect::new(Position::new(2, 4), Size::new(10, 100));
         let mut canvas = RecordingCanvas::default();
-        progress_node(rect, 0.25, Orientation::Vertical, style).render_to_canvas(&mut canvas);
+        progress_node(0.25, Orientation::Vertical, style).render_to_canvas(&mut canvas);
         assert_eq!(
             canvas.calls,
             [CanvasCall::Rect {
@@ -449,16 +415,15 @@ mod tests {
     fn test_progress_draws_no_fill_without_a_fill_color_or_value() {
         let mut background = ComputedStyle::default();
         background.set_background(solid(1, 2, 3));
-        let rect = Rect::new(Position::new(0, 0), Size::new(100, 10));
         let mut canvas = RecordingCanvas::default();
-        progress_node(rect, 0.5, Orientation::Horizontal, background).render_to_canvas(&mut canvas);
+        progress_node(0.5, Orientation::Horizontal, background).render_to_canvas(&mut canvas);
         assert_eq!(canvas.kinds(), ["rect"]);
 
         let mut accent = ComputedStyle::default();
         accent.set_accent_color(solid(200, 0, 0));
         for orientation in [Orientation::Horizontal, Orientation::Vertical] {
             let mut canvas = RecordingCanvas::default();
-            progress_node(rect, 0.0, orientation, accent.clone()).render_to_canvas(&mut canvas);
+            progress_node(0.0, orientation, accent.clone()).render_to_canvas(&mut canvas);
             assert_eq!(canvas.calls, Vec::new());
         }
     }

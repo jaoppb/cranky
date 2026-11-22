@@ -1,29 +1,33 @@
 //! Where the tiny-skia canvas puts each shape: position, size, radius and scale.
+use super::target;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::{Color, DrawingColor};
-use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
+use crate::shared::primitives::geometry::Rect;
+use crate::shared::primitives::geometry::{LogicalPx, Position, Size};
 use crate::shared::rendering::adapters::tiny_skia::canvas::TinySkiaCosmicCanvas;
+use crate::shared::rendering::adapters::tiny_skia::factory::FontCache;
 use crate::shared::rendering::ports::canvas::Canvas;
-use cosmic_text::{FontSystem, SwashCache};
+use crate::shared::rendering::ports::draw::{BorderStroke, RgbaImage, RoundedRect};
+use crate::shared::rendering::ports::font::Font;
 use tiny_skia::Pixmap;
 
 fn red() -> DrawingColor {
     DrawingColor::Solid(Color::rgb(255, 0, 0))
 }
 
-/// Draws with `draw` on a fresh `width`x`height` canvas at `scale`, and returns the pixmap.
-fn paint(width: u32, height: u32, scale: f32, draw: impl FnOnce(&mut dyn Canvas)) -> Pixmap {
-    let mut pixmap = Pixmap::new(width, height).unwrap();
-    let mut font_system = FontSystem::new();
-    let mut swash_cache = SwashCache::new();
+/// Draws with `draw` on a fresh square canvas `side` pixels wide at `scale`, and returns the
+/// pixmap.
+fn paint(side: u32, scale: f32, draw: impl FnOnce(&mut dyn Canvas)) -> Pixmap {
+    let mut pixmap = Pixmap::new(side, side).unwrap();
+    let mut fonts = FontCache::new();
     {
         let mut canvas = TinySkiaCosmicCanvas::new(
-            pixmap.as_mut(),
-            &mut font_system,
-            &mut swash_cache,
-            Scale::new(scale),
-            FontFamily::new("sans-serif".to_string()),
-            FontSize::new(14.0),
+            target(&mut pixmap, scale),
+            &mut fonts,
+            Font::new(
+                FontFamily::new("sans-serif".to_string()),
+                FontSize::new(14.0),
+            ),
         );
         draw(&mut canvas);
     }
@@ -36,14 +40,13 @@ fn inked(pixmap: &Pixmap, x: u32, y: u32) -> bool {
 
 #[test]
 fn rect_covers_exactly_its_area() {
-    let pixmap = paint(100, 100, 1.0, |canvas| {
+    let pixmap = paint(100, 1.0, |canvas| {
         canvas.draw_rect(
-            LogicalPx::new(10.0),
-            LogicalPx::new(20.0),
-            LogicalPx::new(30.0),
-            LogicalPx::new(50.0),
+            RoundedRect::new(
+                Rect::new(Position::new(10, 20), Size::new(30, 50)),
+                LogicalPx::new(0.0),
+            ),
             red(),
-            LogicalPx::new(0.0),
         );
     });
     assert!(inked(&pixmap, 10, 20) && inked(&pixmap, 39, 69));
@@ -54,14 +57,13 @@ fn rect_covers_exactly_its_area() {
 
 #[test]
 fn rect_is_scaled_to_physical_pixels() {
-    let pixmap = paint(200, 200, 2.0, |canvas| {
+    let pixmap = paint(200, 2.0, |canvas| {
         canvas.draw_rect(
-            LogicalPx::new(10.0),
-            LogicalPx::new(20.0),
-            LogicalPx::new(30.0),
-            LogicalPx::new(50.0),
+            RoundedRect::new(
+                Rect::new(Position::new(10, 20), Size::new(30, 50)),
+                LogicalPx::new(0.0),
+            ),
             red(),
-            LogicalPx::new(0.0),
         );
     });
     assert!(inked(&pixmap, 20, 40) && inked(&pixmap, 79, 139));
@@ -72,14 +74,13 @@ fn rect_is_scaled_to_physical_pixels() {
 #[test]
 fn rect_radius_rounds_the_corners() {
     let draw = |radius: f32| {
-        paint(100, 100, 1.0, |canvas| {
+        paint(100, 1.0, |canvas| {
             canvas.draw_rect(
-                LogicalPx::new(10.0),
-                LogicalPx::new(20.0),
-                LogicalPx::new(40.0),
-                LogicalPx::new(30.0),
+                RoundedRect::new(
+                    Rect::new(Position::new(10, 20), Size::new(40, 30)),
+                    LogicalPx::new(radius),
+                ),
                 red(),
-                LogicalPx::new(radius),
             );
         })
     };
@@ -92,13 +93,13 @@ fn rect_radius_rounds_the_corners() {
 
 #[test]
 fn border_strokes_the_edges_of_its_area() {
-    let pixmap = paint(100, 100, 1.0, |canvas| {
+    let pixmap = paint(100, 1.0, |canvas| {
         canvas.draw_border(
-            Position::new(10, 20),
-            Size::new(40, 30),
-            red(),
-            LogicalPx::new(0.0),
-            LogicalPx::new(2.0),
+            RoundedRect::new(
+                Rect::new(Position::new(10, 20), Size::new(40, 30)),
+                LogicalPx::new(0.0),
+            ),
+            BorderStroke::new(red(), LogicalPx::new(2.0)),
         );
     });
     for (x, y) in [(10, 35), (49, 35), (30, 20), (30, 49), (10, 20), (49, 49)] {
@@ -111,24 +112,24 @@ fn border_strokes_the_edges_of_its_area() {
 
 #[test]
 fn border_radius_rounds_and_zero_width_draws_nothing() {
-    let rounded = paint(100, 100, 1.0, |canvas| {
+    let rounded = paint(100, 1.0, |canvas| {
         canvas.draw_border(
-            Position::new(10, 20),
-            Size::new(40, 30),
-            red(),
-            LogicalPx::new(10.0),
-            LogicalPx::new(2.0),
+            RoundedRect::new(
+                Rect::new(Position::new(10, 20), Size::new(40, 30)),
+                LogicalPx::new(10.0),
+            ),
+            BorderStroke::new(red(), LogicalPx::new(2.0)),
         );
     });
     assert!(!inked(&rounded, 10, 20) && inked(&rounded, 30, 20));
 
-    let hairline = paint(100, 100, 1.0, |canvas| {
+    let hairline = paint(100, 1.0, |canvas| {
         canvas.draw_border(
-            Position::new(10, 20),
-            Size::new(40, 30),
-            red(),
-            LogicalPx::new(0.0),
-            LogicalPx::new(0.0),
+            RoundedRect::new(
+                Rect::new(Position::new(10, 20), Size::new(40, 30)),
+                LogicalPx::new(0.0),
+            ),
+            BorderStroke::new(red(), LogicalPx::new(0.0)),
         );
     });
     assert!(hairline.pixels().iter().all(|pixel| pixel.alpha() == 0));
@@ -138,12 +139,10 @@ fn border_radius_rounds_and_zero_width_draws_nothing() {
 fn image_is_stretched_from_its_pixels_over_its_logical_rect() {
     // Two texels, red then green, stretched over 20x10 logical pixels at (30, 40).
     let image_data = [255, 0, 0, 255, 0, 255, 0, 255];
-    let pixmap = paint(100, 100, 1.0, |canvas| {
+    let pixmap = paint(100, 1.0, |canvas| {
         canvas.draw_image(
-            &image_data,
-            Size::new(2, 1),
-            Size::new(20, 10),
-            Position::new(30, 40),
+            RgbaImage::new(&image_data, Size::new(2, 1)),
+            Rect::new(Position::new(30, 40), Size::new(20, 10)),
         );
     });
     let left = pixmap.pixel(31, 45).unwrap();
@@ -159,12 +158,10 @@ fn image_is_stretched_from_its_pixels_over_its_logical_rect() {
 #[test]
 fn image_position_and_size_are_scaled() {
     let image_data = [255, 0, 0, 255, 0, 255, 0, 255];
-    let pixmap = paint(200, 200, 2.0, |canvas| {
+    let pixmap = paint(200, 2.0, |canvas| {
         canvas.draw_image(
-            &image_data,
-            Size::new(2, 1),
-            Size::new(20, 10),
-            Position::new(30, 40),
+            RgbaImage::new(&image_data, Size::new(2, 1)),
+            Rect::new(Position::new(30, 40), Size::new(20, 10)),
         );
     });
     assert!(inked(&pixmap, 61, 81) && inked(&pixmap, 98, 98));

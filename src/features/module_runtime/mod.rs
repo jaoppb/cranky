@@ -21,10 +21,15 @@ pub mod test_support {
     use crate::features::vdom::domain::{UiCommand, UiCommandSender, VNode};
     use crate::shared::config::domain::{Config, FontFamily, FontSize, ModuleConfig};
     use crate::shared::events::signals::{SignalHub, SignalKind};
-    use crate::shared::primitives::geometry::{Position, Scale, Size};
+    use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
     use crate::shared::primitives::render::ModuleFrame;
     use crate::shared::primitives::{FunctionName, MonitorId};
     use crate::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
+    use crate::shared::rendering::ports::draw::{
+        BorderStroke, PaintTarget, RgbaImage, RoundedRect,
+    };
+    use crate::shared::rendering::ports::font::Font;
+    use crate::shared::rendering::ports::text::{TextPlacement, TextRun};
 
     pub(crate) struct MockLayoutSender;
     impl LayoutEventSender for MockLayoutSender {
@@ -90,23 +95,11 @@ pub mod test_support {
     pub(crate) struct MockCanvasFactory;
 
     impl CanvasFactory for MockCanvasFactory {
-        fn create_canvas(
-            &mut self,
-            _data: &mut [u8],
-            _size: Size,
-            _scale: Scale,
-            _font_family: FontFamily,
-            _font_size: FontSize,
-        ) -> impl Canvas + '_ {
+        fn create_canvas(&mut self, _target: PaintTarget<'_>, _font: Font) -> impl Canvas + '_ {
             MockCanvas
         }
 
-        fn create_text_measurer(
-            &mut self,
-            _scale: Scale,
-            _font_family: FontFamily,
-            _font_size: FontSize,
-        ) -> impl TextMeasurer + '_ {
+        fn create_text_measurer(&mut self, _scale: Scale, _font: Font) -> impl TextMeasurer + '_ {
             MockMeasurer
         }
     }
@@ -116,44 +109,16 @@ pub mod test_support {
     impl Canvas for MockCanvas {
         fn draw_rect(
             &mut self,
-            _x: crate::shared::primitives::geometry::LogicalPx,
-            _y: crate::shared::primitives::geometry::LogicalPx,
-            _w: crate::shared::primitives::geometry::LogicalPx,
-            _h: crate::shared::primitives::geometry::LogicalPx,
+            _shape: RoundedRect,
             _color: crate::shared::primitives::color::DrawingColor,
-            _radius: crate::shared::primitives::geometry::LogicalPx,
         ) {
         }
 
-        fn draw_border(
-            &mut self,
-            _pos: Position,
-            _size: Size,
-            _color: crate::shared::primitives::color::DrawingColor,
-            _radius: crate::shared::primitives::geometry::LogicalPx,
-            _border_size: crate::shared::primitives::geometry::LogicalPx,
-        ) {
-        }
+        fn draw_border(&mut self, _shape: RoundedRect, _stroke: BorderStroke) {}
 
-        fn draw_text(
-            &mut self,
-            _text: &str,
-            _font_family: Option<&FontFamily>,
-            _font_size: Option<FontSize>,
-            _color: crate::shared::primitives::color::DrawingColor,
-            _pos: Position,
-            _alignment: crate::shared::primitives::TextAlignment,
-        ) {
-        }
+        fn draw_text(&mut self, _run: TextRun<'_>, _placement: TextPlacement) {}
 
-        fn draw_image(
-            &mut self,
-            _image_data: &[u8],
-            _pixel_size: Size,
-            _logical_size: Size,
-            _pos: Position,
-        ) {
-        }
+        fn draw_image(&mut self, _image: RgbaImage<'_>, _area: Rect) {}
     }
 
     pub(crate) struct MockMeasurer;

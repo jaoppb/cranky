@@ -1,14 +1,20 @@
 //! How the canvas, the measurer and the factory use their target, scale and default font.
+use super::target;
 use crate::features::layout_engine::domain::TextMeasurer;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::TextAlignment;
 use crate::shared::primitives::color::{Color, DrawingColor};
+use crate::shared::primitives::geometry::Rect;
 use crate::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
 use crate::shared::rendering::adapters::tiny_skia::canvas::TinySkiaCosmicCanvas;
+use crate::shared::rendering::adapters::tiny_skia::factory::FontCache;
 use crate::shared::rendering::adapters::tiny_skia::factory::TinySkiaCanvasFactory;
 use crate::shared::rendering::adapters::tiny_skia::measurer::CosmicTextMeasurer;
 use crate::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
-use cosmic_text::{FontSystem, SwashCache};
+use crate::shared::rendering::ports::draw::{BorderStroke, PaintTarget, RgbaImage, RoundedRect};
+use crate::shared::rendering::ports::font::Font;
+use crate::shared::rendering::ports::text::{TextFont, TextPlacement, TextRun};
+use cosmic_text::FontSystem;
 use tiny_skia::{Pixmap, PixmapRef};
 
 fn sans() -> FontFamily {
@@ -19,24 +25,20 @@ fn sans() -> FontFamily {
 /// canvas whose default size is `default_size`, with an optional size override.
 fn ink_box(default_size: f32, size: Option<FontSize>, position: Position) -> [u32; 4] {
     let mut pixmap = Pixmap::new(200, 80).unwrap();
-    let mut font_system = FontSystem::new();
-    let mut swash_cache = SwashCache::new();
+    let mut fonts = FontCache::new();
     {
         let mut canvas = TinySkiaCosmicCanvas::new(
-            pixmap.as_mut(),
-            &mut font_system,
-            &mut swash_cache,
-            Scale::new(1.0),
-            sans(),
-            FontSize::new(default_size),
+            target(&mut pixmap, 1.0),
+            &mut fonts,
+            Font::new(sans(), FontSize::new(default_size)),
         );
         canvas.draw_text(
-            "Hg",
-            None,
-            size,
-            DrawingColor::Solid(Color::rgb(255, 0, 0)),
-            position,
-            TextAlignment::default(),
+            TextRun::new(
+                "Hg",
+                TextFont::new(None, size),
+                DrawingColor::Solid(Color::rgb(255, 0, 0)),
+            ),
+            TextPlacement::new(position, TextAlignment::default()),
         );
     }
     let inked: Vec<(u32, u32)> = (0..80u32)
@@ -85,8 +87,7 @@ fn measurer_sizes_text_in_logical_pixels_with_its_default_size() {
         CosmicTextMeasurer::new(
             &mut font_system,
             Scale::new(scale),
-            sans(),
-            FontSize::new(size),
+            Font::new(sans(), FontSize::new(size)),
         )
         .measure("Hg", None, None)
     };
@@ -101,19 +102,15 @@ fn factory_canvas_paints_rows_of_its_size_at_its_scale() {
     let mut data = vec![0; 60 * 20 * 4];
     {
         let mut canvas = factory.create_canvas(
-            &mut data,
-            Size::new(60, 20),
-            Scale::new(2.0),
-            sans(),
-            FontSize::new(14.0),
+            PaintTarget::new(&mut data, Size::new(60, 20), Scale::new(2.0)),
+            Font::new(sans(), FontSize::new(14.0)),
         );
         canvas.draw_rect(
-            LogicalPx::new(0.0),
-            LogicalPx::new(0.0),
-            LogicalPx::new(10.0),
-            LogicalPx::new(5.0),
+            RoundedRect::new(
+                Rect::new(Position::new(0, 0), Size::new(10, 5)),
+                LogicalPx::new(0.0),
+            ),
             DrawingColor::Solid(Color::rgb(255, 0, 0)),
-            LogicalPx::new(0.0),
         );
     }
     let pixmap = PixmapRef::from_bytes(&data, 60, 20).unwrap();
@@ -125,7 +122,7 @@ fn factory_canvas_paints_rows_of_its_size_at_its_scale() {
 fn factory_measurer_uses_its_scale_and_default_size() {
     let mut factory = TinySkiaCanvasFactory::new();
     let size = factory
-        .create_text_measurer(Scale::new(2.0), sans(), FontSize::new(28.0))
+        .create_text_measurer(Scale::new(2.0), Font::new(sans(), FontSize::new(28.0)))
         .measure("Hg", None, None);
     assert_eq!(size.height(), 28);
 }
@@ -136,41 +133,31 @@ fn canvas_over_a_buffer_of_the_wrong_size_draws_nothing() {
     let mut data = vec![0; 10];
     {
         let mut canvas = factory.create_canvas(
-            &mut data,
-            Size::new(60, 20),
-            Scale::new(1.0),
-            sans(),
-            FontSize::new(14.0),
+            PaintTarget::new(&mut data, Size::new(60, 20), Scale::new(1.0)),
+            Font::new(sans(), FontSize::new(14.0)),
         );
         let color = DrawingColor::Solid(Color::rgb(255, 0, 0));
         canvas.draw_rect(
-            LogicalPx::new(0.0),
-            LogicalPx::new(0.0),
-            LogicalPx::new(10.0),
-            LogicalPx::new(5.0),
+            RoundedRect::new(
+                Rect::new(Position::new(0, 0), Size::new(10, 5)),
+                LogicalPx::new(0.0),
+            ),
             color.clone(),
-            LogicalPx::new(0.0),
         );
         canvas.draw_border(
-            Position::new(0, 0),
-            Size::new(10, 5),
-            color.clone(),
-            LogicalPx::new(0.0),
-            LogicalPx::new(1.0),
+            RoundedRect::new(
+                Rect::new(Position::new(0, 0), Size::new(10, 5)),
+                LogicalPx::new(0.0),
+            ),
+            BorderStroke::new(color.clone(), LogicalPx::new(1.0)),
         );
         canvas.draw_text(
-            "x",
-            None,
-            None,
-            color,
-            Position::new(0, 0),
-            TextAlignment::default(),
+            TextRun::new("x", TextFont::new(None, None), color),
+            TextPlacement::new(Position::new(0, 0), TextAlignment::default()),
         );
         canvas.draw_image(
-            &[255, 0, 0, 255],
-            Size::new(1, 1),
-            Size::new(4, 4),
-            Position::new(0, 0),
+            RgbaImage::new(&[255, 0, 0, 255], Size::new(1, 1)),
+            Rect::new(Position::new(0, 0), Size::new(4, 4)),
         );
     }
     assert_eq!(data, vec![0; 10]);
