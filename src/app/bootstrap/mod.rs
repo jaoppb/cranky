@@ -90,10 +90,11 @@ pub fn run() -> Result<(), BootError> {
         let active_signals = app.active_signals();
 
         // 3. Initialize secondary adapters, and wire the supervisor in for
-        // later on-demand starts triggered by a lazily-spawned module.
+        // later on-demand starts triggered by a lazily-spawned module. It
+        // reads its `[metrics]` settings from the hub, which still holds the
+        // initial configuration: the config watcher starts below.
         let (zbus_adapter, sni_adapter, adapter_supervisor) =
-            init_secondary_adapters(&hub, &app_env, initial_config.metrics(), active_signals)
-                .await?;
+            init_secondary_adapters(&hub, &app_env, active_signals).await?;
         app.set_adapter_supervisor(adapter_supervisor);
 
         let _config_watcher = config_adapter.watch(&hub)?;

@@ -8,7 +8,8 @@ use std::sync::Arc;
 use tracing::error;
 
 /// Opens the `DBus` connections (an unreachable bus is logged, not fatal),
-/// builds the on-demand adapter supervisor around them, and eagerly
+/// builds the on-demand adapter supervisor around them and the hub, whose
+/// configuration is still the initial one, and eagerly
 /// `ensure`s every signal already active from the initial config load. Systray is handled separately: its
 /// `start()` needs `&mut self` on the very instance `CrankyApp::run` later
 /// drives via `SniPort::trigger_action`, so it isn't part of the supervisor
@@ -16,7 +17,6 @@ use tracing::error;
 pub(super) async fn init_secondary_adapters(
     hub: &Arc<SignalHub>,
     app_env: &Arc<AppEnvironment>,
-    metrics_config: &crate::features::metrics::domain::MetricsConfig,
     active_signals: &std::collections::HashSet<SignalKind>,
 ) -> Result<
     (
@@ -35,12 +35,7 @@ pub(super) async fn init_secondary_adapters(
     let dbus_manager =
         crate::shared::dbus::subscription_manager::DbusSubscriptionManager::new(conn.clone(), hub);
 
-    let mut supervisor = AdapterSupervisor::new(
-        hub.clone(),
-        app_env.clone(),
-        metrics_config.clone(),
-        conn.clone(),
-    );
+    let mut supervisor = AdapterSupervisor::new(hub.clone(), app_env.clone(), conn.clone());
     for kind in [
         SignalKind::Mpris,
         SignalKind::Metrics,
