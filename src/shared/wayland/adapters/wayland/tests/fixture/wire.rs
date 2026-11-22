@@ -34,6 +34,11 @@ impl Fake {
     /// Every request that reached the socket since the last call, without
     /// flushing the client's queue first.
     pub(crate) fn received(&self) -> Vec<Request> {
+        decode_requests(&self.read_socket())
+    }
+
+    /// Every byte waiting on the server end of the socket.
+    fn read_socket(&self) -> Vec<u8> {
         self.server.set_nonblocking(true).expect("nonblocking");
         let mut bytes = Vec::new();
         let mut chunk = [0u8; 4096];
@@ -43,33 +48,37 @@ impl Fake {
             }
             bytes.extend_from_slice(&chunk[..count]);
         }
-        let word = |offset: usize| {
-            bytes
-                .get(offset..offset.checked_add(4)?)
-                .and_then(|slice| <[u8; 4]>::try_from(slice).ok())
-                .map(u32::from_ne_bytes)
-        };
-        let mut out = Vec::new();
-        let mut offset = 0usize;
-        while let (Some(object), Some(head)) = (word(offset), offset.checked_add(4).and_then(word))
-        {
-            let size = usize::try_from(head >> 16).expect("size");
-            let arg_word = |index: usize| {
-                let start = offset.checked_add(8)?.checked_add(index.checked_mul(4)?)?;
-                (start < offset.checked_add(size)?)
-                    .then(|| word(start))
-                    .flatten()
-            };
-            out.push(Request {
-                object,
-                opcode: u16::try_from(head & 0xffff).expect("opcode"),
-                arg: offset.checked_add(8).and_then(word).unwrap_or(0),
-                args: [0, 1, 2, 3].map(|index| arg_word(index).unwrap_or(0)),
-            });
-            offset = offset.saturating_add(size.max(8));
-        }
-        out
+        bytes
     }
+}
+
+/// The requests `bytes` holds, in send order.
+fn decode_requests(bytes: &[u8]) -> Vec<Request> {
+    let word = |offset: usize| {
+        bytes
+            .get(offset..offset.checked_add(4)?)
+            .and_then(|slice| <[u8; 4]>::try_from(slice).ok())
+            .map(u32::from_ne_bytes)
+    };
+    let mut out = Vec::new();
+    let mut offset = 0usize;
+    while let (Some(object), Some(head)) = (word(offset), offset.checked_add(4).and_then(word)) {
+        let size = usize::try_from(head >> 16).expect("size");
+        let arg_word = |index: usize| {
+            let start = offset.checked_add(8)?.checked_add(index.checked_mul(4)?)?;
+            (start < offset.checked_add(size)?)
+                .then(|| word(start))
+                .flatten()
+        };
+        out.push(Request {
+            object,
+            opcode: u16::try_from(head & 0xffff).expect("opcode"),
+            arg: offset.checked_add(8).and_then(word).unwrap_or(0),
+            args: [0, 1, 2, 3].map(|index| arg_word(index).unwrap_or(0)),
+        });
+        offset = offset.saturating_add(size.max(8));
+    }
+    out
 }
 
 /// The wire id of a protocol object.
