@@ -208,4 +208,18 @@ mod tests {
         assert!((style.margin().top() - 0.0).abs() < f64::EPSILON);
         assert!((style.gap().unwrap().value() - 5.0).abs() < f64::EPSILON);
     }
+
+    #[test]
+    fn test_box_margin_new_takes_top_bottom_left_right() {
+        let margin = BoxMargin::new(1.5, 2.5, 3.5, 4.5);
+        assert_eq!(
+            margin,
+            BoxMargin {
+                top: 1.5,
+                bottom: 2.5,
+                left: 3.5,
+                right: 4.5,
+            }
+        );
+    }
 }

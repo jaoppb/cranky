@@ -861,4 +861,90 @@ mod tests {
         assert_eq!(tree.rect().width(), 280);
         assert_eq!(tree.rect().height(), 190);
     }
+
+    /// Sizes text from its font: ten pixels per character of the family name plus one per
+    /// character of text wide, and the font size tall.
+    struct FontMeasurer;
+    impl TextMeasurer for FontMeasurer {
+        fn measure(
+            &mut self,
+            text: &str,
+            font: Option<&FontFamily>,
+            size: Option<FontSize>,
+        ) -> Size {
+            let family = font.map_or(0, |family| family.as_str().len());
+            let width = family.saturating_mul(10).saturating_add(text.len());
+            let height = size.map_or(0.0, FontSize::value);
+            Size::new(
+                u32::try_from(width).unwrap(),
+                crate::utils::f32_to_u32(height),
+            )
+        }
+    }
+
+    #[test]
+    fn test_text_leaf_is_measured_in_its_own_font_family_and_size() {
+        let mut style = ComputedStyle::default();
+        style.set_font_family(FontFamily::new("mono".to_string()));
+        style.set_font_size(FontSize::new(17.0));
+        let root = StyledNode::Flex {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            children: vec![text_leaf("abc", style)],
+            style: ComputedStyle::default_for_flex(),
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        };
+        let mut adapter = TaffyLayoutAdapter::new();
+
+        let tree = adapter
+            .calculate_layout(root, &mut FontMeasurer, Position::new(7, 3))
+            .unwrap();
+
+        let RenderNode::Flex { children, .. } = tree else {
+            panic!("Expected RenderNode::Flex");
+        };
+        let leaf = children[0].rect();
+        assert_eq!((leaf.width(), leaf.height()), (43, 17));
+        assert_eq!((leaf.x(), leaf.y()), (7, 3));
+    }
+
+    #[test]
+    fn test_a_container_whose_style_changed_is_laid_out_with_the_new_style() {
+        let padded = |top: f64, left: f64| {
+            let mut style = ComputedStyle::default_for_flex();
+            style.set_padding(crate::features::layout_engine::domain::BoxMargin::new(
+                top, 0.0, left, 0.0,
+            ));
+            StyledNode::Flex {
+                path: NodePath::root_in(SurfaceSpace::Bar),
+                node_key: None,
+                children: vec![text_leaf("hey", ComputedStyle::default())],
+                style,
+                on_click: None,
+                on_hover: None,
+                tooltip: None,
+                popup: None,
+                panel: None,
+            }
+        };
+        let mut adapter = TaffyLayoutAdapter::new();
+        let mut measurer = MockMeasurer;
+        let first = adapter
+            .calculate_layout(padded(1.0, 2.0), &mut measurer, Position::new(0, 0))
+            .unwrap();
+        assert_eq!((first.rect().width(), first.rect().height()), (32, 21));
+
+        let second = adapter
+            .calculate_layout(padded(6.0, 9.0), &mut measurer, Position::new(0, 0))
+            .unwrap();
+        assert_eq!((second.rect().width(), second.rect().height()), (39, 26));
+        let RenderNode::Flex { children, .. } = second else {
+            panic!("Expected RenderNode::Flex");
+        };
+        assert_eq!((children[0].rect().x(), children[0].rect().y()), (9, 6));
+    }
 }

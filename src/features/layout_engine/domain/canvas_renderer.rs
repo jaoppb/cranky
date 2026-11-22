@@ -488,4 +488,55 @@ mod tests {
             }]
         );
     }
+
+    fn rect_node(style: ComputedStyle) -> RenderNode {
+        RenderNode::Rect {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            rect: Rect::new(Position::new(6, 2), Size::new(30, 12)),
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    #[test]
+    fn test_rect_falls_back_to_its_color_when_it_has_no_background() {
+        let mut colored = ComputedStyle::default();
+        colored.set_color(solid(70, 80, 90));
+        let mut canvas = RecordingCanvas::default();
+        rect_node(colored.clone()).render_to_canvas(&mut canvas);
+        assert_eq!(
+            canvas.calls,
+            [CanvasCall::Rect {
+                area: [6.0, 2.0, 30.0, 12.0],
+                radius: 0.0,
+                color: solid(70, 80, 90),
+            }]
+        );
+
+        colored.set_background(solid(5, 6, 7));
+        let mut canvas = RecordingCanvas::default();
+        rect_node(colored).render_to_canvas(&mut canvas);
+        assert_eq!(
+            canvas.calls,
+            [CanvasCall::Rect {
+                area: [6.0, 2.0, 30.0, 12.0],
+                radius: 0.0,
+                color: solid(5, 6, 7),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_text_paints_its_background_under_the_text() {
+        let mut style = ComputedStyle::default();
+        style.set_background(solid(9, 8, 7));
+        let mut canvas = RecordingCanvas::default();
+        text_node(style).render_to_canvas(&mut canvas);
+        assert_eq!(canvas.kinds(), ["rect", "text"]);
+    }
 }

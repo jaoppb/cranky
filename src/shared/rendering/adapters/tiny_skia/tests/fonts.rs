@@ -97,6 +97,23 @@ fn measurer_sizes_text_in_logical_pixels_with_its_default_size() {
 }
 
 #[test]
+fn measurer_sizes_text_in_the_size_it_is_asked_for_over_its_default() {
+    let mut font_system = FontSystem::new();
+    let mut measurer = CosmicTextMeasurer::new(
+        &mut font_system,
+        Scale::new(2.0),
+        Font::new(sans(), FontSize::new(14.0)),
+    );
+    let family = sans();
+    assert_eq!(
+        measurer
+            .measure("Hg", Some(&family), Some(FontSize::new(23.0)))
+            .height(),
+        23
+    );
+}
+
+#[test]
 fn factory_canvas_paints_rows_of_its_size_at_its_scale() {
     let mut factory = TinySkiaCanvasFactory::new();
     let mut data = vec![0; 60 * 20 * 4];

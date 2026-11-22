@@ -37,3 +37,36 @@ impl<M: TextMeasurer> TextMeasurer for ModuleSizeMeasurer<'_, M> {
         size
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Reports the font it was asked for: the family name's length wide and the size tall.
+    struct FontEcho;
+    impl TextMeasurer for FontEcho {
+        fn measure(
+            &mut self,
+            text: &str,
+            font: Option<&FontFamily>,
+            size: Option<FontSize>,
+        ) -> Size {
+            let family = font.map_or(0, |family| family.as_str().len());
+            let width = family.saturating_mul(100).saturating_add(text.len());
+            Size::new(
+                u32::try_from(width).unwrap(),
+                crate::utils::f32_to_u32(size.map_or(0.0, FontSize::value)),
+            )
+        }
+    }
+
+    #[test]
+    fn test_measure_forwards_the_text_and_its_font_to_the_inner_measurer() {
+        let mut measurer = ModuleSizeMeasurer::new(FontEcho, None);
+        let family = FontFamily::new("serif".to_string());
+        assert_eq!(
+            measurer.measure("ab", Some(&family), Some(FontSize::new(19.0))),
+            Size::new(502, 19)
+        );
+    }
+}
