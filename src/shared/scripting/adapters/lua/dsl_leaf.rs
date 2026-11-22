@@ -80,87 +80,55 @@ pub(super) fn parse_text_node(
     }
 }
 
-pub(super) fn parse_progress_node(
-    lua: &Lua,
-    val: mlua::Value,
+/// The progress node of `ui.progress({ value = ..., orientation = ..., ... })`.
+pub(super) fn parse_progress_table(lua: &Lua, table: &mlua::Table) -> mlua::Result<VNode> {
+    let value_num = table.get::<Option<f32>>("value")?.unwrap_or(0.0);
+    let orientation_str = table
+        .get::<Option<String>>("orientation")?
+        .unwrap_or_default();
+    let orientation = match orientation_str.to_lowercase().as_str() {
+        "vertical" => Orientation::Vertical,
+        _ => Orientation::Horizontal,
+    };
+    let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
+        parse_common_props(lua, table)?;
+    let mut node = VNode::new_progress(
+        ProgressValue::new(value_num).unwrap_or_default(),
+        orientation,
+        class,
+        id,
+        on_click,
+        on_hover,
+        tooltip,
+    );
+    if let Some(popup_spec) = popup {
+        node = node.with_popup(popup_spec);
+    }
+    if let Some(panel_spec) = panel {
+        node = node.with_panel(panel_spec);
+    }
+    if let Some(node_key) = key {
+        node = node.with_key(node_key);
+    }
+    Ok(node)
+}
+
+/// The progress node of `ui.progress(value, orientation, class)`: a number fills that far in
+/// the given orientation with the given class, anything else is an empty horizontal bar.
+pub(super) fn progress_from_value(
+    val: &mlua::Value,
     orientation_opt: Option<&str>,
     class_opt: Option<&str>,
-) -> mlua::Result<VNode> {
-    match val {
-        mlua::Value::Table(table) => {
-            let value_num = table.get::<Option<f32>>("value")?.unwrap_or(0.0);
-            let orientation_str = table
-                .get::<Option<String>>("orientation")?
-                .unwrap_or_default();
-            let orientation = match orientation_str.to_lowercase().as_str() {
-                "vertical" => Orientation::Vertical,
-                _ => Orientation::Horizontal,
-            };
-            let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
-                parse_common_props(lua, &table)?;
-            let mut node = VNode::new_progress(
-                ProgressValue::new(value_num).unwrap_or_default(),
-                orientation,
-                class,
-                id,
-                on_click,
-                on_hover,
-                tooltip,
-            );
-            if let Some(popup_spec) = popup {
-                node = node.with_popup(popup_spec);
-            }
-            if let Some(panel_spec) = panel {
-                node = node.with_panel(panel_spec);
-            }
-            if let Some(node_key) = key {
-                node = node.with_key(node_key);
-            }
-            Ok(node)
-        }
-        mlua::Value::Number(number) => {
-            let val_f32 = f64_to_f32(number);
-            let orientation = match orientation_opt
-                .unwrap_or("horizontal")
-                .to_lowercase()
-                .as_str()
-            {
-                "vertical" => Orientation::Vertical,
-                _ => Orientation::Horizontal,
-            };
-            let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
-            Ok(VNode::new_progress(
-                ProgressValue::new(val_f32).unwrap_or_default(),
-                orientation,
-                class,
-                None,
-                None,
-                None,
-                None,
-            ))
-        }
+) -> VNode {
+    let fill = match val {
+        mlua::Value::Number(number) => Some(f64_to_f32(*number)),
         mlua::Value::Integer(integer) => {
-            let val_f32 = f64_to_f32(i32::try_from(integer).map_or(0.0, f64::from));
-            let orientation = match orientation_opt
-                .unwrap_or("horizontal")
-                .to_lowercase()
-                .as_str()
-            {
-                "vertical" => Orientation::Vertical,
-                _ => Orientation::Horizontal,
-            };
-            let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
-            Ok(VNode::new_progress(
-                ProgressValue::new(val_f32).unwrap_or_default(),
-                orientation,
-                class,
-                None,
-                None,
-                None,
-                None,
-            ))
+            Some(f64_to_f32(i32::try_from(*integer).map_or(0.0, f64::from)))
         }
-        _ => Ok(VNode::new_progress(
+        _ => None,
+    };
+    let Some(val_f32) = fill else {
+        return VNode::new_progress(
             ProgressValue::default(),
             Orientation::Horizontal,
             None,
@@ -168,6 +136,24 @@ pub(super) fn parse_progress_node(
             None,
             None,
             None,
-        )),
-    }
+        );
+    };
+    let orientation = match orientation_opt
+        .unwrap_or("horizontal")
+        .to_lowercase()
+        .as_str()
+    {
+        "vertical" => Orientation::Vertical,
+        _ => Orientation::Horizontal,
+    };
+    let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
+    VNode::new_progress(
+        ProgressValue::new(val_f32).unwrap_or_default(),
+        orientation,
+        class,
+        None,
+        None,
+        None,
+        None,
+    )
 }
