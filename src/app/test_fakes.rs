@@ -21,8 +21,8 @@ use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Sender;
 
 type Deps = ModuleRuntimeDependencies<
@@ -38,11 +38,14 @@ type SiteResolver = Box<dyn Fn(Option<ModuleId>, &ModuleKey) -> Option<ModuleId>
 /// The parent a site was spawned under, if any.
 type ParentLookup = Box<dyn Fn(ModuleId) -> Option<ModuleId> + Send + Sync>;
 
+/// The parent, key, options and surface one `spawn_module` call received.
+pub(super) type SpawnRequest = (ModuleId, ModuleKey, ModuleOptions, LayoutSurface);
+
 /// A registry that answers from the data a test puts in its fields.
 ///
 /// Nothing is loaded or spawned: `spawn_all` hands out `senders` once, and
 /// `spawn_module` always fails with `ModuleNotFound`, counting its calls in
-/// `spawn_module_calls`.
+/// `spawn_module_calls` and keeping what each received in `spawn_requests`.
 pub(super) struct FakeRegistry {
     pub(crate) root_module: Option<ModuleId>,
     pub(crate) module_ids: Vec<ModuleId>,
@@ -53,6 +56,7 @@ pub(super) struct FakeRegistry {
     pub(crate) resolve_site: SiteResolver,
     pub(crate) parent_of: ParentLookup,
     pub(crate) spawn_module_calls: Arc<AtomicUsize>,
+    pub(crate) spawn_requests: Arc<Mutex<Vec<SpawnRequest>>>,
     active_signals: HashSet<SignalKind>,
 }
 
@@ -68,6 +72,7 @@ impl Default for FakeRegistry {
             resolve_site: Box::new(|_, _| None),
             parent_of: Box::new(|_| None),
             spawn_module_calls: Arc::new(AtomicUsize::new(0)),
+            spawn_requests: Arc::new(Mutex::new(Vec::new())),
             active_signals: HashSet::new(),
         }
     }
@@ -130,14 +135,17 @@ impl
 
     fn spawn_module(
         &mut self,
-        _parent: ModuleId,
+        parent: ModuleId,
         key: &ModuleKey,
-        _options: ModuleOptions,
-        _surface: LayoutSurface,
+        options: ModuleOptions,
+        surface: LayoutSurface,
         _config: &Config,
         _deps: &Deps,
     ) -> Result<SpawnedModule<WatchLayoutSender>, RegistryLoadError> {
         self.spawn_module_calls.fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut requests) = self.spawn_requests.lock() {
+            requests.push((parent, key.clone(), options, surface));
+        }
         Err(RegistryLoadError::ModuleNotFound(key.name().clone()))
     }
 

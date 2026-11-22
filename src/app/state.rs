@@ -1673,6 +1673,71 @@ mod tests {
         });
     }
 
+    /// A lazy spawn hands the registry the parent, the full key, the options and the floating
+    /// surface of the site the parent laid its child out at.
+    #[test]
+    fn test_ensure_lazy_spawn_passes_the_site_options_and_surface_to_the_registry() {
+        crate::test_utils::block_on(async {
+            let config = Config::default();
+            let hub = Arc::new(SignalHub::new(config.clone()));
+            let (display_tx, display_rx) = mpsc::channel(32);
+            let (layout_tx, layout_rx) = mpsc::channel(32);
+            let (ui_tx, ui_rx) = mpsc::channel(32);
+            let (_system_tx, system_rx) = mpsc::channel(32);
+            let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManager);
+
+            let parent = ModuleId::new(1);
+            let fake_registry = FakeRegistry::default();
+            let requests = fake_registry.spawn_requests.clone();
+
+            let canvas_factory =
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+            let services = StateServices::new(
+                hub,
+                surface_manager,
+                canvas_factory,
+                Arc::new(display_tx),
+                Arc::new(layout_tx),
+                Arc::new(ui_tx),
+            );
+            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+            let mut app =
+                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+
+            let key = crate::shared::primitives::ModuleKey::new(
+                crate::shared::primitives::ModuleName::new("calendar"),
+                Some(crate::shared::primitives::ModuleInstanceId::new("cal-2")),
+            );
+            let options = crate::shared::primitives::ModuleOptions::new(HashMap::from([(
+                "format".to_string(),
+                crate::shared::primitives::DynamicValue::String("%A %d".to_string()),
+            )]));
+            let layouts = [crate::shared::primitives::ChildModuleLayout::new(
+                key.clone(),
+                crate::shared::primitives::ChildBounds::new(
+                    Rect::new(Position::new(0, 0), Size::new(50, 20)),
+                    crate::shared::primitives::SizeConstraint::none(),
+                ),
+                crate::shared::primitives::LayoutSurface::Popup,
+            )
+            .with_options(options.clone())];
+
+            app.handle_container_layouts(parent, &MonitorId::new("DP-1"), &layouts)
+                .await;
+
+            let requests = requests.lock().unwrap();
+            assert_eq!(
+                requests.as_slice(),
+                [(
+                    parent,
+                    key,
+                    options,
+                    crate::shared::primitives::LayoutSurface::Popup
+                )]
+            );
+        });
+    }
+
     /// Bug: `would_cycle` compared ancestors by bare `ModuleName`, so two
     /// sites embedding the same module name with distinct `instance_id`s
     /// (e.g. two `ui.module("clock", {instance_id=...})` calls at

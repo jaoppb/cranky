@@ -1,3 +1,4 @@
+mod child_layouts;
 mod discover_monitors;
 mod dispatch;
 mod embedded_report;
@@ -5,5 +6,8 @@ mod floating_dedup;
 mod floating_hold;
 mod lifecycle;
 mod monitor_focus;
+mod outcome;
+mod outcome_events;
+mod render_scale;
 mod resume;
 mod tooltip_parent;

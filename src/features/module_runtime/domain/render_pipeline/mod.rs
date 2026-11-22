@@ -13,6 +13,8 @@ pub mod pipeline;
 mod tests;
 #[cfg(test)]
 mod tests_changes;
+#[cfg(test)]
+mod tests_inputs;
 
 pub use context::*;
 pub use floating_phase::*;

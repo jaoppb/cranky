@@ -1233,4 +1233,76 @@ mod tests {
             );
         });
     }
+
+    /// A lazy spawn keeps everything its site asked for: the options the module is
+    /// initialised with, its full key (instance id included), its parent and its surface.
+    #[test]
+    fn test_spawn_module_keeps_the_site_options_key_parent_and_surface() {
+        crate::test_utils::block_on(async {
+            let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+                crate::shared::env::domain::BaseDirectories::new(
+                    crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from(
+                        "/tmp",
+                    )),
+                ),
+                crate::shared::env::domain::RustLog::new(String::new()),
+                None,
+            ));
+            let mut registry = ModuleRegistry::new(app_env);
+            let dto: ConfigDto = toml::from_str("[root]\nname = \"bar\"").unwrap();
+            let config = dto.into_domain(&MockValidator);
+            TestRegistryPort::load(&mut registry, &config).unwrap();
+            let root_id = TestRegistryPort::root_module(&registry).unwrap();
+            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+                std::sync::Arc::new(SignalHub::new(config.clone())),
+                std::sync::Arc::new(
+                    crate::features::module_runtime::test_support::MockSurfaceManager,
+                ),
+                std::sync::Arc::new(
+                    crate::features::module_runtime::test_support::MockLayoutSender,
+                ),
+                std::sync::Arc::new(
+                    crate::features::module_runtime::test_support::MockDisplaySender,
+                ),
+                std::sync::Arc::new(crate::features::module_runtime::test_support::MockUiSender),
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
+            );
+            let key = crate::shared::primitives::ModuleKey::new(
+                crate::shared::primitives::ModuleName::new("calendar"),
+                Some(crate::shared::primitives::ModuleInstanceId::new("cal-2")),
+            );
+            let options = ModuleOptions::new(HashMap::from([(
+                "format".to_string(),
+                crate::shared::primitives::DynamicValue::String("%A %d".to_string()),
+            )]));
+
+            let id = registry
+                .spawn_module(
+                    root_id,
+                    &key,
+                    options.clone(),
+                    crate::shared::primitives::LayoutSurface::Panel,
+                    &config,
+                    &deps,
+                )
+                .unwrap()
+                .id();
+
+            assert_eq!(
+                registry.module_configs.get(&id).map(ModuleConfig::options),
+                Some(&options)
+            );
+            assert_eq!(
+                TestRegistryPort::module_keys(&registry).get(&id),
+                Some(&key)
+            );
+            assert_eq!(TestRegistryPort::parent_of(&registry, id), Some(root_id));
+            assert_eq!(
+                registry.sites.get(&id).map(ModuleSiteInfo::surface),
+                Some(crate::shared::primitives::LayoutSurface::Panel)
+            );
+        });
+    }
 }
