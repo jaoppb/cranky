@@ -9,10 +9,10 @@ use super::outcome::SizeChange;
 use super::pipeline::RenderPipeline;
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
-use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{ChildModuleLayout, MonitorId, SizeConstraint};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
+use crate::shared::rendering::ports::font::Font;
 
 /// Records what this layout reports to its embedder and returns the change,
 /// if any: the unpinned size, not the pinned one (the embedder sizes the host
@@ -92,14 +92,9 @@ pub(crate) fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
             substituted.resolve_styles(ctx.style_resolver, ctx.interaction_context.as_ref(), None)
         };
 
-        let default_font_family = FontFamily::new(String::new());
-        let default_font_size = FontSize::new(14.0);
-
-        let measurer_inner = ctx.canvas_factory.create_text_measurer(
-            ctx.scale,
-            default_font_family,
-            default_font_size,
-        );
+        let measurer_inner = ctx
+            .canvas_factory
+            .create_text_measurer(ctx.scale, Font::fallback());
         let mut measurer = ModuleSizeMeasurer::new(measurer_inner, ctx.current_child_sizes);
 
         let render_node_res = ctx.layout_engine.calculate_layout_with_constraints(

@@ -17,23 +17,50 @@ pub struct Config {
 }
 
 impl Config {
+    /// This configuration with its `[root]` table replaced; every table of `config.toml` is
+    /// optional and defaults on its own, so each one is set on its own.
     #[must_use]
-    pub(crate) const fn new(
-        root: RootConfig,
-        modules: ModulesConfig,
-        rendering: RenderingMode,
+    pub(crate) fn with_root(mut self, root: RootConfig) -> Self {
+        self.root = root;
+        self
+    }
+
+    /// This configuration with its `[modules]` table replaced.
+    #[must_use]
+    pub(crate) fn with_modules(mut self, modules: ModulesConfig) -> Self {
+        self.modules = modules;
+        self
+    }
+
+    /// This configuration with its `[rendering]` table replaced.
+    #[must_use]
+    pub(crate) const fn with_rendering(mut self, rendering: RenderingMode) -> Self {
+        self.rendering = rendering;
+        self
+    }
+
+    /// This configuration with its `[metrics]` table replaced.
+    #[must_use]
+    pub(crate) const fn with_metrics(
+        mut self,
         metrics: crate::features::metrics::domain::MetricsConfig,
-        tooltip: TooltipConfig,
-        popup: PopupConfig,
     ) -> Self {
-        Self {
-            root,
-            modules,
-            rendering,
-            metrics,
-            tooltip,
-            popup,
-        }
+        self.metrics = metrics;
+        self
+    }
+
+    /// This configuration with its `[tooltip]` table replaced.
+    #[must_use]
+    pub(crate) fn with_tooltip(mut self, tooltip: TooltipConfig) -> Self {
+        self.tooltip = tooltip;
+        self
+    }
+
+    /// This configuration with its `[popup]` table replaced.
+    #[must_use]
+    pub(crate) const fn with_popup(mut self, popup: PopupConfig) -> Self {
+        self.popup = popup;
+        self
     }
 
     /// Settings of the bar itself, from the `[root]` table.

@@ -1,10 +1,10 @@
 //! Layout descriptors for child modules embedded in a container, and the size reports
 //! children send back to their embedder.
-use super::super::geometry::{Rect, Size};
+use super::super::geometry::Size;
 use super::super::ids::{ModuleInstanceId, ModuleName};
 use super::super::options::ModuleOptions;
 use super::module_key::ModuleKey;
-use super::size_constraint::SizeConstraint;
+use super::size_constraint::ChildBounds;
 use super::surface::LayoutSurface;
 use std::collections::HashMap;
 
@@ -12,8 +12,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChildModuleLayout {
     key: ModuleKey,
-    bounds: Rect,
-    constraint: SizeConstraint,
+    bounds: ChildBounds,
     /// Whatever options the embedding `ui.module(name, { ... })` call passed
     /// — carried through so a lazy spawn (no config stanza) can `init()` the
     /// actor with them, the same way a config-declared module would.
@@ -25,21 +24,23 @@ pub struct ChildModuleLayout {
 }
 
 impl ChildModuleLayout {
+    /// Lays out the module `key` at `bounds` in the tree of `surface`, with no options until
+    /// `with_options` passes the embedding call's.
     #[must_use]
-    pub(crate) const fn new(
-        key: ModuleKey,
-        bounds: Rect,
-        constraint: SizeConstraint,
-        options: ModuleOptions,
-        surface: LayoutSurface,
-    ) -> Self {
+    pub(crate) fn new(key: ModuleKey, bounds: ChildBounds, surface: LayoutSurface) -> Self {
         Self {
             key,
             bounds,
-            constraint,
-            options,
+            options: ModuleOptions::default(),
             surface,
         }
+    }
+
+    /// This layout with the options the embedding `ui.module(name, { ... })` call passed.
+    #[must_use]
+    pub(crate) fn with_options(mut self, options: ModuleOptions) -> Self {
+        self.options = options;
+        self
     }
 
     #[must_use]
@@ -47,14 +48,11 @@ impl ChildModuleLayout {
         &self.key
     }
 
+    /// The rect this child occupies in its parent's tree and the size constraint the parent's
+    /// CSS placed on it.
     #[must_use]
-    pub(crate) const fn bounds(&self) -> &Rect {
-        &self.bounds
-    }
-
-    #[must_use]
-    pub(crate) const fn constraint(&self) -> SizeConstraint {
-        self.constraint
+    pub(crate) const fn bounds(&self) -> ChildBounds {
+        self.bounds
     }
 
     #[must_use]

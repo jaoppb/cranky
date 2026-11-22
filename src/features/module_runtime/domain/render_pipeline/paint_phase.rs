@@ -1,10 +1,11 @@
 //! Last pipeline phase: paints a laid-out tree into a buffer of physical pixels (4 bytes each) at
 //! the monitor's scale.
 use crate::features::layout_engine::domain::RenderNode;
-use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
+use crate::shared::rendering::ports::draw::PaintTarget;
+use crate::shared::rendering::ports::font::Font;
 use crate::utils::{f32_to_u32, f64_to_f32};
 
 pub(crate) fn paint_pipeline<F: CanvasFactory>(
@@ -14,9 +15,6 @@ pub(crate) fn paint_pipeline<F: CanvasFactory>(
     canvas_factory: &mut F,
 ) -> Option<(RenderBuffer, Position)> {
     let bounds = current_bounds.filter(|rect| rect.width() > 0 && rect.height() > 0)?;
-
-    let default_font_family = FontFamily::new(String::new());
-    let default_font_size = FontSize::new(14.0);
 
     let w_f32 = f64_to_f32(f64::from(bounds.width()));
     let h_f32 = f64_to_f32(f64::from(bounds.height()));
@@ -30,11 +28,8 @@ pub(crate) fn paint_pipeline<F: CanvasFactory>(
     let mut data = vec![0u8; len];
     {
         let mut canvas = canvas_factory.create_canvas(
-            &mut data,
-            phys_size,
-            scale,
-            default_font_family,
-            default_font_size,
+            PaintTarget::new(&mut data, phys_size, scale),
+            Font::fallback(),
         );
         render_node.render_to_canvas(&mut canvas);
     }

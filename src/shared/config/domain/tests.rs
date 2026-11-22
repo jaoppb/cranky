@@ -27,15 +27,35 @@ fn test_margin_offset() {
 #[test]
 fn test_margin_config() {
     let margin = MarginConfig::new(
-        MarginOffset::new(1),
-        MarginOffset::new(2),
-        MarginOffset::new(3),
-        MarginOffset::new(4),
+        AxisMargins::new(MarginOffset::new(1), MarginOffset::new(2)),
+        AxisMargins::new(MarginOffset::new(3), MarginOffset::new(4)),
     );
     assert_eq!(margin.top().value(), 1);
     assert_eq!(margin.bottom().value(), 2);
     assert_eq!(margin.left().value(), 3);
     assert_eq!(margin.right().value(), 4);
+}
+
+#[test]
+fn test_partial_margin_overrides_each_side_it_sets() {
+    let partial = PartialMarginConfig::new(
+        AxisMargins::new(Some(MarginOffset::new(1)), Some(MarginOffset::new(2))),
+        AxisMargins::new(None, Some(MarginOffset::new(4))),
+    );
+    assert_eq!(partial.top(), Some(MarginOffset::new(1)));
+    assert_eq!(partial.bottom(), Some(MarginOffset::new(2)));
+    assert_eq!(partial.left(), None);
+    assert_eq!(partial.right(), Some(MarginOffset::new(4)));
+
+    let base = MarginConfig::new(
+        AxisMargins::new(MarginOffset::new(10), MarginOffset::new(20)),
+        AxisMargins::new(MarginOffset::new(30), MarginOffset::new(40)),
+    );
+    let merged = base.with_partial_overrides(&partial);
+    assert_eq!(
+        [merged.top(), merged.bottom(), merged.left(), merged.right()].map(MarginOffset::value),
+        [1, 2, 30, 4]
+    );
 }
 
 #[test]
@@ -54,23 +74,11 @@ fn test_modules_config() {
     let mut modules_map = HashMap::new();
     modules_map.insert(
         ModuleName::new("time"),
-        ModuleConfig::new(
-            ModuleName::new("time"),
-            crate::shared::config::domain::Enablement::Enabled,
-            EngineSelection::Auto,
-            ModuleOptions::default(),
-        ),
+        ModuleConfig::new(ModuleName::new("time"), ModuleOptions::default()),
     );
     let modules = ModulesConfig::new(modules_map);
 
-    let config = Config::new(
-        RootConfig::default(),
-        modules,
-        RenderingMode::default(),
-        crate::features::metrics::domain::MetricsConfig::default(),
-        TooltipConfig::default(),
-        PopupConfig::default(),
-    );
+    let config = Config::default().with_modules(modules);
     assert!(config.modules().get(&ModuleName::new("time")).is_some());
     assert_eq!(
         config
@@ -106,12 +114,8 @@ fn test_popup_config() {
 #[test]
 fn test_module_config_engine() {
     let explicit = EngineSelection::Explicit(EngineId::new("rhai"));
-    let cfg = ModuleConfig::new(
-        "clock".into(),
-        crate::shared::config::domain::Enablement::Enabled,
-        explicit.clone(),
-        ModuleOptions::default(),
-    );
+    let cfg =
+        ModuleConfig::new("clock".into(), ModuleOptions::default()).with_engine(explicit.clone());
     assert_eq!(cfg.engine(), &explicit);
     assert_eq!(
         cfg.engine().as_explicit().map(EngineId::as_str),
@@ -130,13 +134,13 @@ fn test_module_config_engine() {
 #[test]
 fn test_tooltip_config_builder() {
     let background = crate::shared::primitives::DrawingColor::Solid(
-        crate::shared::primitives::Color::new(10, 20, 30, 255),
+        crate::shared::primitives::Color::rgb(10, 20, 30),
     );
     let border_color = crate::shared::primitives::DrawingColor::Solid(
-        crate::shared::primitives::Color::new(40, 50, 60, 255),
+        crate::shared::primitives::Color::rgb(40, 50, 60),
     );
     let text_color = crate::shared::primitives::DrawingColor::Solid(
-        crate::shared::primitives::Color::new(70, 80, 90, 255),
+        crate::shared::primitives::Color::rgb(70, 80, 90),
     );
     let font = Some(FontFamily::new("Roboto".to_string()));
     let size = Some(FontSize::new(14.0));

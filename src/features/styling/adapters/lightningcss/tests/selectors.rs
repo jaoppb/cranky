@@ -57,7 +57,7 @@ fn test_structural_pseudo_classes() {
     assert!(style_first.background().is_some());
     // Odd: 1st is 2n+1 -> #111111
     if let Some(DrawingColor::Solid(background)) = style_first.background() {
-        assert_eq!(*background, Color::new(17, 17, 17, 255));
+        assert_eq!(*background, Color::rgb(17, 17, 17));
     }
 
     // 2. Second child (index 1, total 3)
@@ -72,7 +72,7 @@ fn test_structural_pseudo_classes() {
     assert!(style_second.padding().is_none());
     // Even: 2nd is 2n -> #222222
     if let Some(DrawingColor::Solid(background)) = style_second.background() {
-        assert_eq!(*background, Color::new(34, 34, 34, 255));
+        assert_eq!(*background, Color::rgb(34, 34, 34));
     }
 
     // 3. Last child (index 2, total 3)

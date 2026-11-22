@@ -15,7 +15,7 @@ pub(super) const MAX_HOLD_ROUNDS: u8 = 4;
 /// placeholder). A zero-width host has nothing to settle at.
 fn is_unsettled(node: &RenderNode, sizes: Option<&ChildSizesMap>) -> bool {
     node.collect_module_layouts().iter().any(|layout| {
-        let host_width = layout.bounds().width();
+        let host_width = layout.bounds().rect().width();
         let report = sizes.and_then(|child_sizes| {
             child_sizes.report_by_name_or_key(layout.key().name(), layout.key().instance_id())
         });

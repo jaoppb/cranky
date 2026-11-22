@@ -1,10 +1,29 @@
 use super::canvas::TinySkiaCosmicCanvas;
 use super::measurer::CosmicTextMeasurer;
-use crate::shared::config::domain::{FontFamily, FontSize};
-use crate::shared::primitives::geometry::{Scale, Size};
+use crate::shared::primitives::geometry::Scale;
 use crate::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
+use crate::shared::rendering::ports::draw::PaintTarget;
+use crate::shared::rendering::ports::font::Font;
 use cosmic_text::{FontSystem, SwashCache};
-use tiny_skia::PixmapMut;
+
+/// The font system text is shaped with and the cache its glyphs are rasterised into, which the
+/// canvases of one factory share.
+#[derive(Debug)]
+pub(super) struct FontCache {
+    pub(super) font_system: FontSystem,
+    pub(super) swash_cache: SwashCache,
+}
+
+impl FontCache {
+    /// Loads the system fonts into a new font system, with an empty glyph cache.
+    #[must_use]
+    pub(super) fn new() -> Self {
+        Self {
+            font_system: FontSystem::new(),
+            swash_cache: SwashCache::new(),
+        }
+    }
+}
 
 /// Makes the canvases and text measurers a render pipeline paints with, all sharing its one font
 /// system and glyph cache.
@@ -12,8 +31,7 @@ use tiny_skia::PixmapMut;
 /// A clone loads its own font system and cache rather than sharing them.
 #[derive(Debug)]
 pub struct TinySkiaCanvasFactory {
-    font_system: FontSystem,
-    swash_cache: SwashCache,
+    fonts: FontCache,
 }
 
 impl Default for TinySkiaCanvasFactory {
@@ -33,38 +51,21 @@ impl TinySkiaCanvasFactory {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            font_system: FontSystem::new(),
-            swash_cache: SwashCache::new(),
+            fonts: FontCache::new(),
         }
     }
 }
 
 impl CanvasFactory for TinySkiaCanvasFactory {
-    fn create_canvas<'a>(
-        &'a mut self,
-        data: &'a mut [u8],
-        size: Size,
-        scale: Scale,
-        font_family: FontFamily,
-        font_size: FontSize,
-    ) -> impl Canvas + 'a {
-        let pixmap = PixmapMut::from_bytes(data, size.width(), size.height());
-        TinySkiaCosmicCanvas::from_optional_pixmap(
-            pixmap,
-            &mut self.font_system,
-            &mut self.swash_cache,
-            scale,
-            font_family,
-            font_size,
-        )
+    fn create_canvas<'a>(&'a mut self, target: PaintTarget<'a>, font: Font) -> impl Canvas + 'a {
+        TinySkiaCosmicCanvas::new(target, &mut self.fonts, font)
     }
 
     fn create_text_measurer(
         &mut self,
         scale: Scale,
-        font_family: FontFamily,
-        font_size: FontSize,
+        font: Font,
     ) -> impl crate::features::layout_engine::domain::TextMeasurer + '_ {
-        CosmicTextMeasurer::new(&mut self.font_system, scale, font_family, font_size)
+        CosmicTextMeasurer::new(&mut self.fonts.font_system, scale, font)
     }
 }

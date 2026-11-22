@@ -115,9 +115,11 @@ mod tests {
     #[test]
     fn test_real_provider_paths() {
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/")),
+            crate::shared::env::domain::BaseDirectories::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/")),
+            ),
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));

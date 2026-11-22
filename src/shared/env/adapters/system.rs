@@ -2,7 +2,8 @@
 //! `HYPRLAND_INSTANCE_SIGNATURE` from the process environment, with fallbacks for the optional
 //! ones.
 use crate::shared::env::domain::{
-    AppEnvironment, HomeDir, HyprlandInstanceSignature, RustLog, XdgCacheHome, XdgRuntimeDir,
+    AppEnvironment, BaseDirectories, HomeDir, HyprlandInstanceSignature, RustLog, XdgCacheHome,
+    XdgRuntimeDir,
 };
 use crate::shared::env::ports::{EnvironmentError, EnvironmentPort};
 use std::env;
@@ -40,9 +41,11 @@ impl EnvironmentPort for OsEnvironmentAdapter {
         let hyprland_instance_signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").ok();
 
         Ok(AppEnvironment::new(
-            HomeDir::new(home_path),
-            XdgCacheHome::new(xdg_cache_home),
-            XdgRuntimeDir::new(PathBuf::from(xdg_runtime_dir)),
+            BaseDirectories::new(
+                HomeDir::new(home_path),
+                XdgCacheHome::new(xdg_cache_home),
+                XdgRuntimeDir::new(PathBuf::from(xdg_runtime_dir)),
+            ),
             RustLog::new(rust_log),
             hyprland_instance_signature.map(HyprlandInstanceSignature::new),
         ))

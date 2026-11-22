@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::shared::dbus::domain::{
-    BusType, DBusValue, Destination, Interface, Member, Path, PropertiesMap, PropertyName,
+    BusObject, BusType, DBusValue, Destination, Interface, PropertiesMap, PropertyName,
+    QualifiedMember,
 };
 use crate::shared::dbus::ports::DbusConnectionError;
 
@@ -11,19 +12,16 @@ use super::parser::parse_value;
 impl ZbusConnectionAdapter<Connected> {
     pub(crate) async fn call_method_impl(
         &self,
-        bus: BusType,
-        destination: &Destination,
-        path: &Path,
-        interface: &Interface,
-        method: &Member,
+        object: &BusObject,
+        method: &QualifiedMember,
     ) -> Result<DBusValue, DbusConnectionError> {
-        let conn = self.get_conn(bus)?;
+        let conn = self.get_conn(object.bus())?;
         let msg = conn
             .call_method(
-                Some(destination.as_str()),
-                path.as_str(),
-                Some(interface.as_str()),
-                method.as_str(),
+                Some(object.destination().as_str()),
+                object.path().as_str(),
+                Some(method.interface().as_str()),
+                method.member().as_str(),
                 &(),
             )
             .await
@@ -37,16 +35,14 @@ impl ZbusConnectionAdapter<Connected> {
 
     pub(crate) async fn get_all_properties_impl(
         &self,
-        bus: BusType,
-        destination: &Destination,
-        path: &Path,
+        object: &BusObject,
         interface: &Interface,
     ) -> Result<PropertiesMap, DbusConnectionError> {
-        let conn = self.get_conn(bus)?;
+        let conn = self.get_conn(object.bus())?;
         let msg = conn
             .call_method(
-                Some(destination.as_str()),
-                path.as_str(),
+                Some(object.destination().as_str()),
+                object.path().as_str(),
                 Some("org.freedesktop.DBus.Properties"),
                 "GetAll",
                 &(interface.as_str(),),

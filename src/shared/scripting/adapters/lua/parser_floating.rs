@@ -3,7 +3,7 @@ use crate::features::vdom::domain::{
     AnchorDirection, ExclusiveZone, HorizontalAnchor, KeyboardInteractivity, PanelAnchor,
     PanelLayer, PanelSpec, PopupOffset, PopupSpec, VerticalAnchor,
 };
-use crate::shared::config::domain::{MarginConfig, MarginOffset};
+use crate::shared::config::domain::{AxisMargins, MarginConfig, MarginOffset};
 use mlua::Lua;
 
 fn parse_offset(table: &mlua::Table) -> Option<PopupOffset> {
@@ -49,10 +49,8 @@ fn parse_margin(table: &mlua::Table) -> MarginConfig {
                 .flatten()
                 .unwrap_or(0);
             MarginConfig::new(
-                MarginOffset::new(top),
-                MarginOffset::new(bottom),
-                MarginOffset::new(left),
-                MarginOffset::new(right),
+                AxisMargins::new(MarginOffset::new(top), MarginOffset::new(bottom)),
+                AxisMargins::new(MarginOffset::new(left), MarginOffset::new(right)),
             )
         },
     )

@@ -23,14 +23,17 @@ use cranky::features::styling::ports::{CssParserPort, StyleResolverPort};
 use cranky::features::vdom::adapters::DefaultVdomDiffAdapter;
 use cranky::features::vdom::domain::{NodeKey, TextContent, VNode};
 use cranky::features::vdom::ports::VdomDiffPort;
-use cranky::shared::config::domain::{Config, EngineSelection, FontFamily, FontSize, ModuleConfig};
+use cranky::shared::config::domain::{Config, FontFamily, FontSize, ModuleConfig};
 use cranky::shared::dbus::domain::DBusSubscription;
 use cranky::shared::events::signals::{SignalHub, SignalKind};
 use cranky::shared::primitives::color::{Color, DrawingColor};
-use cranky::shared::primitives::geometry::{LogicalPx, Position, Scale, Size};
+use cranky::shared::primitives::geometry::{LogicalPx, Position, Rect, Scale, Size};
 use cranky::shared::primitives::{FunctionName, ModuleOptions, MonitorId, TextAlignment};
 use cranky::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory;
 use cranky::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
+use cranky::shared::rendering::ports::draw::{BorderStroke, PaintTarget, RoundedRect};
+use cranky::shared::rendering::ports::font::Font;
+use cranky::shared::rendering::ports::text::{TextFont, TextPlacement, TextRun};
 use cranky::shared::scripting::adapters::lua::LuaModule;
 use cranky::shared::scripting::adapters::rhai::RhaiModule;
 
@@ -382,8 +385,7 @@ fn bench_layout(criterion: &mut Criterion) {
         bencher.iter(|| {
             let mut measurer = canvas_factory.create_text_measurer(
                 Scale::new(1.0),
-                FontFamily::new(String::new()),
-                FontSize::new(14.0),
+                Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
             let res = layout_engine.calculate_layout(
                 black_box(tree_small.clone()),
@@ -399,8 +401,7 @@ fn bench_layout(criterion: &mut Criterion) {
         bencher.iter(|| {
             let mut measurer = canvas_factory.create_text_measurer(
                 Scale::new(1.0),
-                FontFamily::new(String::new()),
-                FontSize::new(14.0),
+                Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
             let res = layout_engine.calculate_layout(
                 black_box(tree_medium.clone()),
@@ -416,8 +417,7 @@ fn bench_layout(criterion: &mut Criterion) {
         bencher.iter(|| {
             let mut measurer = canvas_factory.create_text_measurer(
                 Scale::new(1.0),
-                FontFamily::new(String::new()),
-                FontSize::new(14.0),
+                Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
             let res = layout_engine.calculate_layout(
                 black_box(tree_large.clone()),
@@ -441,35 +441,23 @@ fn bench_rendering(criterion: &mut Criterion) {
     let size = Size::new(800, 40);
     let mut buffer = vec![0_u8; 800_usize.saturating_mul(40).saturating_mul(4)];
 
-    let bg_color = DrawingColor::Solid(Color::new(30, 30, 46, 255));
-    let border_color = DrawingColor::Solid(Color::new(137, 180, 250, 255));
-    let text_color = DrawingColor::Solid(Color::new(205, 214, 244, 255));
+    let bg_color = DrawingColor::Solid(Color::rgb(30, 30, 46));
+    let border_color = DrawingColor::Solid(Color::rgb(137, 180, 250));
+    let text_color = DrawingColor::Solid(Color::rgb(205, 214, 244));
 
     group.bench_function("tinyskia_draw_rect_and_border", |bencher| {
         bencher.iter(|| {
             let mut canvas = canvas_factory.create_canvas(
-                black_box(&mut buffer),
-                black_box(size),
-                Scale::new(1.0),
-                FontFamily::new(String::new()),
-                FontSize::new(14.0),
+                PaintTarget::new(black_box(&mut buffer), black_box(size), Scale::new(1.0)),
+                Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
 
-            canvas.draw_rect(
-                LogicalPx::new(0.0),
-                LogicalPx::new(0.0),
-                LogicalPx::new(800.0),
-                LogicalPx::new(40.0),
-                bg_color.clone(),
-                LogicalPx::new(4.0),
-            );
+            let shape = RoundedRect::new(Rect::new(Position::new(0, 0), size), LogicalPx::new(4.0));
+            canvas.draw_rect(shape, bg_color.clone());
 
             canvas.draw_border(
-                Position::new(0, 0),
-                size,
-                border_color.clone(),
-                LogicalPx::new(4.0),
-                LogicalPx::new(1.0),
+                shape,
+                BorderStroke::new(border_color.clone(), LogicalPx::new(1.0)),
             );
         });
     });
@@ -477,20 +465,17 @@ fn bench_rendering(criterion: &mut Criterion) {
     group.bench_function("tinyskia_draw_text", |bencher| {
         bencher.iter(|| {
             let mut canvas = canvas_factory.create_canvas(
-                black_box(&mut buffer),
-                black_box(size),
-                Scale::new(1.0),
-                FontFamily::new(String::new()),
-                FontSize::new(14.0),
+                PaintTarget::new(black_box(&mut buffer), black_box(size), Scale::new(1.0)),
+                Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
 
             canvas.draw_text(
-                black_box("Workspace 1: Web | Cranky Bar Benchmark Testing"),
-                None,
-                Some(FontSize::new(13.0)),
-                text_color.clone(),
-                Position::new(12, 10),
-                TextAlignment::default(),
+                TextRun::new(
+                    black_box("Workspace 1: Web | Cranky Bar Benchmark Testing"),
+                    TextFont::new(None, Some(FontSize::new(13.0))),
+                    text_color.clone(),
+                ),
+                TextPlacement::new(Position::new(12, 10), TextAlignment::default()),
             );
         });
     });
@@ -541,12 +526,7 @@ fn bench_scripting(criterion: &mut Criterion) {
     "#;
 
     let config = Config::default();
-    let module_config = ModuleConfig::new(
-        "test_bench".into(),
-        cranky::shared::config::domain::Enablement::Enabled,
-        EngineSelection::Auto,
-        ModuleOptions::default(),
-    );
+    let module_config = ModuleConfig::new("test_bench".into(), ModuleOptions::default());
 
     let mut lua_mod = LuaModule::new("test_lua".to_string(), lua_source.to_string());
     let _ = lua_mod.init(&module_config, &config);

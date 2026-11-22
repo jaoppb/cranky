@@ -1,11 +1,11 @@
+use super::script::RhaiScript;
 use crate::features::module_runtime::ports::ModuleInitError;
 use crate::shared::config::domain::ModuleConfig;
 use crate::shared::events::signals::SignalKind;
-use rhai::{AST, Dynamic, Engine, Scope};
+use rhai::Dynamic;
 
 pub(super) fn setup_config_maps(
-    scope: &mut Scope<'static>,
-    engine: &Engine,
+    script: &mut RhaiScript<'_>,
     config: &ModuleConfig,
     full_config: &crate::shared::config::domain::Config,
 ) -> Result<(), ModuleInitError> {
@@ -23,10 +23,12 @@ pub(super) fn setup_config_maps(
 
     let options_json = serde_json::to_string(config.options())
         .map_err(|error| ModuleInitError::ConfigError(error.to_string()))?;
-    let options_rhai: rhai::Map = engine
+    let options_rhai: rhai::Map = script
+        .engine()
         .parse_json(&options_json, true)
         .map_err(|error| ModuleInitError::ScriptError(error.to_string()))?;
 
+    let scope = script.scope_mut();
     let mut config_map = scope.get_value::<rhai::Map>("config").unwrap_or_default();
     config_map.insert("module".into(), Dynamic::from(options_rhai.clone()));
     config_map.insert("options".into(), Dynamic::from(options_rhai));
@@ -63,21 +65,29 @@ fn parse_dbus_subscription(
         _ => crate::shared::dbus::domain::BusType::Session,
     };
 
-    Some(crate::shared::dbus::domain::DBusSubscription::new(
-        bus,
-        map.get("destination")
-            .and_then(|value| value.clone().try_cast::<String>())
-            .map(crate::shared::dbus::domain::Destination::new),
-        map.get("path")
-            .and_then(|value| value.clone().try_cast::<String>())
-            .map(crate::shared::dbus::domain::Path::new),
-        map.get("interface")
-            .and_then(|value| value.clone().try_cast::<String>())
-            .map(crate::shared::dbus::domain::Interface::new),
-        map.get("member")
-            .and_then(|value| value.clone().try_cast::<String>())
-            .map(crate::shared::dbus::domain::Member::new),
-    ))
+    Some(
+        crate::shared::dbus::domain::DBusSubscription::new(bus)
+            .with_destination(
+                map.get("destination")
+                    .and_then(|value| value.clone().try_cast::<String>())
+                    .map(crate::shared::dbus::domain::Destination::new),
+            )
+            .with_path(
+                map.get("path")
+                    .and_then(|value| value.clone().try_cast::<String>())
+                    .map(crate::shared::dbus::domain::Path::new),
+            )
+            .with_interface(
+                map.get("interface")
+                    .and_then(|value| value.clone().try_cast::<String>())
+                    .map(crate::shared::dbus::domain::Interface::new),
+            )
+            .with_member(
+                map.get("member")
+                    .and_then(|value| value.clone().try_cast::<String>())
+                    .map(crate::shared::dbus::domain::Member::new),
+            ),
+    )
 }
 
 fn parse_subscriptions_array(
@@ -105,9 +115,7 @@ fn parse_subscriptions_array(
 }
 
 pub(super) fn evaluate_metadata(
-    engine: &Engine,
-    scope: &mut Scope<'static>,
-    ast: &AST,
+    script: &mut RhaiScript<'_>,
     module_name: &str,
 ) -> (
     Vec<SignalKind>,
@@ -118,6 +126,7 @@ pub(super) fn evaluate_metadata(
     let mut dbus_subs = Vec::new();
     let mut styles = Vec::new();
 
+    let (engine, scope, ast) = script.parts();
     if let Ok(meta) = engine.call_fn::<rhai::Map>(scope, ast, "metadata", ()) {
         if let Some(subs_arr) = meta
             .get("subscriptions")

@@ -4,7 +4,7 @@ use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::{Color, DrawingColor};
 
 fn solid(red: u8, green: u8, blue: u8) -> DrawingColor {
-    DrawingColor::Solid(Color::new(red, green, blue, 255))
+    DrawingColor::Solid(Color::rgb(red, green, blue))
 }
 
 #[test]

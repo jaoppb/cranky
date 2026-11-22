@@ -339,4 +339,80 @@ mod tests {
         let vnode = value_to_vnode(&lua, val).expect("Conversion failed");
         assert_eq!(vnode.key(), None);
     }
+
+    /// The value, orientation and class names of the progress node `script` returns.
+    fn progress_of(
+        script: &str,
+    ) -> (
+        f32,
+        crate::features::styling::domain::Orientation,
+        Vec<String>,
+    ) {
+        let lua = Lua::new();
+        register_cranky_api(&lua).expect("DSL registration failed");
+        let val = lua.load(script).eval::<mlua::Value>().expect("Eval failed");
+        let vnode = value_to_vnode(&lua, val).expect("Conversion failed");
+        let crate::features::vdom::domain::kind::VNodeKind::Progress { value, orientation } =
+            vnode.kind()
+        else {
+            panic!("expected a progress node, got {:?}", vnode.kind());
+        };
+        let classes = vnode.class_names().map_or_else(Vec::new, |list| {
+            list.iter().map(|name| name.as_str().to_string()).collect()
+        });
+        (value.value(), *orientation, classes)
+    }
+
+    #[test]
+    fn test_lua_progress_table_form_reads_its_own_keys() {
+        use crate::features::styling::domain::Orientation;
+        let (value, orientation, classes) = progress_of(
+            r#"return ui.progress({ value = 0.25, orientation = "Vertical", class = "cpu" })"#,
+        );
+        assert!((value - 0.25).abs() < f32::EPSILON);
+        assert_eq!(orientation, Orientation::Vertical);
+        assert_eq!(classes, ["cpu"]);
+
+        let (value, orientation, classes) = progress_of("return ui.progress({})");
+        assert!(value.abs() < f32::EPSILON);
+        assert_eq!(orientation, Orientation::Horizontal);
+        assert_eq!(classes, Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_lua_progress_positional_form_reads_orientation_and_class() {
+        use crate::features::styling::domain::Orientation;
+        let (value, orientation, classes) =
+            progress_of(r#"return ui.progress(0.75, "VERTICAL", "cpu-bar")"#);
+        assert!((value - 0.75).abs() < f32::EPSILON);
+        assert_eq!(orientation, Orientation::Vertical);
+        assert_eq!(classes, ["cpu-bar"]);
+
+        let (value, orientation, classes) = progress_of("return ui.progress(0.5)");
+        assert!((value - 0.5).abs() < f32::EPSILON);
+        assert_eq!(orientation, Orientation::Horizontal);
+        assert_eq!(classes, Vec::<String>::new());
+
+        let (value, orientation, classes) =
+            progress_of(r#"return ui.progress(1, "vertical", "full")"#);
+        assert!((value - 1.0).abs() < f32::EPSILON);
+        assert_eq!(orientation, Orientation::Vertical);
+        assert_eq!(classes, ["full"]);
+
+        let (value, orientation, classes) =
+            progress_of(r#"return ui.progress(0, "sideways", "empty")"#);
+        assert!(value.abs() < f32::EPSILON);
+        assert_eq!(orientation, Orientation::Horizontal);
+        assert_eq!(classes, ["empty"]);
+    }
+
+    #[test]
+    fn test_lua_progress_of_another_value_is_an_empty_horizontal_bar() {
+        use crate::features::styling::domain::Orientation;
+        let (value, orientation, classes) =
+            progress_of(r#"return ui.progress("full", "vertical", "ignored")"#);
+        assert!(value.abs() < f32::EPSILON);
+        assert_eq!(orientation, Orientation::Horizontal);
+        assert_eq!(classes, Vec::<String>::new());
+    }
 }

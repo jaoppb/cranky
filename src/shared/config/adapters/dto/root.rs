@@ -2,9 +2,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use crate::shared::config::domain::{
-    self, CreatePartialRootConfigCommand, CreateRootConfigCommand,
-};
+use crate::shared::config::domain::{self, CreatePartialRootConfigCommand};
 use crate::shared::primitives::ModuleName;
 use crate::shared::primitives::geometry::BarHeight;
 
@@ -43,14 +41,13 @@ impl Default for RootConfigDto {
 impl RootConfigDto {
     #[must_use]
     pub(crate) fn into_domain(self) -> domain::RootConfig {
-        domain::RootConfig::new(CreateRootConfigCommand::new(
-            ModuleName::new(self.name),
-            BarHeight::new(self.height),
-            self.vertical_alignment.into_domain(),
-            self.margin.into_domain(),
-            self.unfocused.map(PartialRootConfigDto::into_domain),
-            json_map_to_options(self.options),
-        ))
+        domain::RootConfig::default()
+            .with_name(ModuleName::new(self.name))
+            .with_height(BarHeight::new(self.height))
+            .with_vertical_alignment(self.vertical_alignment.into_domain())
+            .with_margin(self.margin.into_domain())
+            .with_unfocused(self.unfocused.map(PartialRootConfigDto::into_domain))
+            .with_options(json_map_to_options(self.options))
     }
 }
 

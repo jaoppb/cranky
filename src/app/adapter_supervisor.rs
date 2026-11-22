@@ -101,9 +101,11 @@ mod tests {
 
     fn test_env() -> Arc<AppEnvironment> {
         Arc::new(AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::BaseDirectories::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            ),
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ))

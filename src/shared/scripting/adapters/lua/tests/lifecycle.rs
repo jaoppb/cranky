@@ -12,8 +12,6 @@ fn test_systray_missing_icon_regression() {
     let mut module = LuaModule::built_in("systray").expect("Failed to load systray module");
     let module_config = ModuleConfig::new(
         "systray".into(),
-        crate::shared::config::domain::Enablement::Enabled,
-        crate::shared::config::domain::EngineSelection::Auto,
         crate::shared::primitives::ModuleOptions::default(),
     );
     let config = crate::shared::config::domain::Config::default();
@@ -68,8 +66,6 @@ fn test_systray_with_icon_renders_image() {
     let mut module = LuaModule::built_in("systray").expect("Failed to load systray module");
     let module_config = ModuleConfig::new(
         "systray".into(),
-        crate::shared::config::domain::Enablement::Enabled,
-        crate::shared::config::domain::EngineSelection::Auto,
         crate::shared::primitives::ModuleOptions::default(),
     );
     let config = crate::shared::config::domain::Config::default();
@@ -136,8 +132,6 @@ fn test_calendar_lua_config_monday() {
     );
     let module_config = ModuleConfig::new(
         "calendar".into(),
-        crate::shared::config::domain::Enablement::Enabled,
-        crate::shared::config::domain::EngineSelection::Auto,
         crate::shared::primitives::ModuleOptions::new(opts),
     );
     let config = crate::shared::config::domain::Config::default();
@@ -174,8 +168,6 @@ fn test_time_signal_is_whole_second_rfc_3339_with_a_numeric_offset() {
     let mut module = LuaModule::new("time_text".into(), source.to_string());
     let module_config = ModuleConfig::new(
         "time_text".into(),
-        crate::shared::config::domain::Enablement::Enabled,
-        crate::shared::config::domain::EngineSelection::Auto,
         crate::shared::primitives::ModuleOptions::default(),
     );
     let config = crate::shared::config::domain::Config::default();

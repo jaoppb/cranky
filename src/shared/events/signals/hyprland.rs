@@ -1,6 +1,7 @@
 //! Hyprland workspace, monitor and focus state, updated by applying window-manager events.
 
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 
 use crate::features::workspaces::domain::{
     Monitor, MonitorName, Workspace, WorkspaceId, WorkspaceName,
@@ -93,24 +94,9 @@ impl HyprlandState {
         }
     }
 
-    fn apply_special_workspace_activated(
-        &mut self,
-        id: Option<&WorkspaceId>,
-        name: Option<&WorkspaceName>,
-        monitor_name: &MonitorName,
-    ) {
+    fn show_special_workspace(&mut self, id: Option<&WorkspaceId>, monitor_name: &MonitorName) {
         if let Some(monitor) = self.monitors.get_mut(monitor_name) {
             monitor.set_special_workspace(id.cloned());
-        }
-        if let Some(ws_id) = id {
-            if let Some(workspace) = self.workspaces.get_mut(ws_id) {
-                workspace.set_monitor(monitor_name.clone());
-            } else if let Some(ws_name) = name {
-                self.workspaces.insert(
-                    ws_id.clone(),
-                    Workspace::new(ws_id.clone(), ws_name.clone(), Some(monitor_name.clone())),
-                );
-            }
         }
     }
 
@@ -173,7 +159,11 @@ impl HyprlandState {
                 name,
                 monitor_name,
             } => {
-                self.apply_special_workspace_activated(id.as_ref(), name.as_ref(), monitor_name);
+                self.show_special_workspace(id.as_ref(), monitor_name);
+                if let Some(ws_id) = id {
+                    let slot = self.workspaces.entry(ws_id.clone());
+                    place_special_workspace(slot, name.as_ref(), monitor_name);
+                }
             }
             WindowManagerEvent::MonitorRemoved { name } => {
                 self.monitors.remove(name);
@@ -186,6 +176,23 @@ impl HyprlandState {
             WindowManagerEvent::MonitorAdded { .. }
             | WindowManagerEvent::ActiveWindowChanged { .. }
             | WindowManagerEvent::WindowTitleChanged { .. } => {}
+        }
+    }
+}
+
+/// Moves the special workspace in `slot` to `monitor_name`, recording an unknown one if named.
+fn place_special_workspace(
+    slot: Entry<'_, WorkspaceId, Workspace>,
+    name: Option<&WorkspaceName>,
+    monitor_name: &MonitorName,
+) {
+    match slot {
+        Entry::Occupied(mut known) => known.get_mut().set_monitor(monitor_name.clone()),
+        Entry::Vacant(unknown) => {
+            if let Some(ws_name) = name {
+                let (id, monitor) = (unknown.key().clone(), Some(monitor_name.clone()));
+                unknown.insert(Workspace::new(id, ws_name.clone(), monitor));
+            }
         }
     }
 }

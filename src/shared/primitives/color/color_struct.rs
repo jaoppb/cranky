@@ -12,15 +12,22 @@ pub struct Color {
 }
 
 impl Color {
-    /// Builds a color from straight (not premultiplied) channels; alpha 255 is opaque.
+    /// Builds an opaque color from its red, green and blue channels.
     #[must_use]
-    pub const fn new(red: u8, green: u8, blue: u8, alpha: u8) -> Self {
+    pub const fn rgb(red: u8, green: u8, blue: u8) -> Self {
         Self {
             red,
             green,
             blue,
-            alpha,
+            alpha: 255,
         }
+    }
+
+    /// This color with its alpha channel replaced: straight (not premultiplied), 255 is opaque.
+    #[must_use]
+    pub(crate) const fn with_alpha(mut self, alpha: u8) -> Self {
+        self.alpha = alpha;
+        self
     }
 
     #[must_use]

@@ -279,12 +279,7 @@ impl ModuleRegistry {
         crate::features::module_runtime::ports::SpawnedModule<WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
-        let cfg = ModuleConfig::new(
-            key.name().clone(),
-            crate::shared::config::domain::Enablement::Enabled,
-            crate::shared::config::domain::EngineSelection::Auto,
-            options,
-        );
+        let cfg = ModuleConfig::new(key.name().clone(), options);
         let (id, module) = self.load_single_module(
             &cfg,
             full_config,
@@ -473,12 +468,7 @@ impl<
         // 1. Load the root module (default "bar")
         let root_name = config.root().name();
         let root_cfg = config.modules().get(root_name).cloned().unwrap_or_else(|| {
-            ModuleConfig::new(
-                root_name.clone(),
-                crate::shared::config::domain::Enablement::Enabled,
-                crate::shared::config::domain::EngineSelection::Auto,
-                config.root().options().clone(),
-            )
+            ModuleConfig::new(root_name.clone(), config.root().options().clone())
         });
         let (root_id, root_module) = self.load_single_module(
             &root_cfg,
@@ -512,12 +502,7 @@ impl<
                     if let Some(name_str) = item.as_str() {
                         let mod_name = crate::shared::primitives::ModuleName::new(name_str);
                         if !self.name_to_ids.contains_key(&mod_name) {
-                            let auto_cfg = ModuleConfig::new(
-                                mod_name,
-                                crate::shared::config::domain::Enablement::Enabled,
-                                crate::shared::config::domain::EngineSelection::Auto,
-                                ModuleOptions::default(),
-                            );
+                            let auto_cfg = ModuleConfig::new(mod_name, ModuleOptions::default());
                             let (id, module) = self.load_single_module(
                                 &auto_cfg,
                                 config,
@@ -721,9 +706,11 @@ mod tests {
     #[test]
     fn test_per_site_module_identity() {
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::BaseDirectories::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            ),
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));
@@ -737,8 +724,6 @@ mod tests {
 
         let calendar_cfg = ModuleConfig::new(
             crate::shared::primitives::ModuleName::new("calendar"),
-            crate::shared::config::domain::Enablement::Enabled,
-            crate::shared::config::domain::EngineSelection::Auto,
             crate::shared::primitives::ModuleOptions::default(),
         );
 
@@ -943,9 +928,13 @@ mod tests {
     fn test_spawn_module_lazy_mints_a_working_site() {
         crate::test_utils::block_on(async {
             let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::BaseDirectories::new(
+                    crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from(
+                        "/tmp",
+                    )),
+                ),
                 crate::shared::env::domain::RustLog::new(String::new()),
                 None,
             ));
@@ -1007,9 +996,11 @@ mod tests {
     #[test]
     fn test_spawn_module_lazy_propagates_not_found() {
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::BaseDirectories::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            ),
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));
@@ -1068,9 +1059,13 @@ mod tests {
     fn test_reload_preserves_embedded_surface() {
         crate::test_utils::block_on(async {
             let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::BaseDirectories::new(
+                    crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from(
+                        "/tmp",
+                    )),
+                ),
                 crate::shared::env::domain::RustLog::new(String::new()),
                 None,
             ));
@@ -1156,9 +1151,13 @@ mod tests {
     fn test_clear_aborts_orphaned_lazy_actors() {
         crate::test_utils::block_on(async {
             let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::BaseDirectories::new(
+                    crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from(
+                        "/tmp",
+                    )),
+                ),
                 crate::shared::env::domain::RustLog::new(String::new()),
                 None,
             ));

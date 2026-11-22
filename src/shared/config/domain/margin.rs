@@ -13,19 +13,42 @@ pub struct MarginConfig {
     right: MarginOffset,
 }
 
+/// The margins at the two ends of one axis: top and bottom, or left and right, as the
+/// `vertical` and `horizontal` keys of a margin table set them together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AxisMargins<T> {
+    start: T,
+    end: T,
+}
+
+impl<T> AxisMargins<T> {
+    /// Pairs the margin at the start of the axis (top or left) with the one at its end (bottom or
+    /// right).
+    #[must_use]
+    pub(crate) const fn new(start: T, end: T) -> Self {
+        Self { start, end }
+    }
+}
+
+impl<T: Copy> AxisMargins<T> {
+    /// The same margin at both ends.
+    #[must_use]
+    pub(crate) const fn both(margin: T) -> Self {
+        Self::new(margin, margin)
+    }
+}
+
 impl MarginConfig {
     #[must_use]
     pub(crate) const fn new(
-        top: MarginOffset,
-        bottom: MarginOffset,
-        left: MarginOffset,
-        right: MarginOffset,
+        vertical: AxisMargins<MarginOffset>,
+        horizontal: AxisMargins<MarginOffset>,
     ) -> Self {
         Self {
-            top,
-            bottom,
-            left,
-            right,
+            top: vertical.start,
+            bottom: vertical.end,
+            left: horizontal.start,
+            right: horizontal.end,
         }
     }
 
@@ -87,16 +110,14 @@ pub(crate) struct PartialMarginConfig {
 impl PartialMarginConfig {
     #[must_use]
     pub(crate) const fn new(
-        top: Option<MarginOffset>,
-        bottom: Option<MarginOffset>,
-        left: Option<MarginOffset>,
-        right: Option<MarginOffset>,
+        vertical: AxisMargins<Option<MarginOffset>>,
+        horizontal: AxisMargins<Option<MarginOffset>>,
     ) -> Self {
         Self {
-            top,
-            bottom,
-            left,
-            right,
+            top: vertical.start,
+            bottom: vertical.end,
+            left: horizontal.start,
+            right: horizontal.end,
         }
     }
 

@@ -39,7 +39,7 @@ fn test_id_beats_class_regardless_of_source_order() {
         &LightningPropertyReparser,
     );
 
-    assert_eq!(solid(&style), Color::new(255, 255, 255, 255));
+    assert_eq!(solid(&style), Color::rgb(255, 255, 255));
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn test_important_beats_specificity_and_source_order() {
         &InheritedStyle::default(),
         &LightningPropertyReparser,
     );
-    assert_eq!(solid(&style), Color::new(0, 0, 0, 255));
+    assert_eq!(solid(&style), Color::rgb(0, 0, 0));
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn test_module_layer_beats_base_layer_for_normal_declarations() {
     let query = ElementQuery::new("bar", Some(&id), &[], &[], None);
     let (style, _) = resolver.resolve_style(&query, &InheritedStyle::default());
 
-    assert_eq!(solid(&style), Color::new(0, 0, 0, 255));
+    assert_eq!(solid(&style), Color::rgb(0, 0, 0));
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn test_base_layer_wins_when_important() {
 
     // Important flips layer order: base's !important beats module's normal
     // declaration even though the module selector is more specific.
-    assert_eq!(solid(&style), Color::new(255, 255, 255, 255));
+    assert_eq!(solid(&style), Color::rgb(255, 255, 255));
 }
 
 #[test]
@@ -144,5 +144,5 @@ fn test_workspace_hover_wins_over_active_focused() {
 
     // #414868 (the hover color), not #565f89 (active+focused) — hovering an
     // active, focused workspace item must still show the hover highlight.
-    assert_eq!(solid(&style), Color::new(65, 72, 104, 255));
+    assert_eq!(solid(&style), Color::rgb(65, 72, 104));
 }

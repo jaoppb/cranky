@@ -10,6 +10,7 @@ mod metadata;
 mod module;
 mod module_impl;
 mod module_port;
+mod script;
 mod sync;
 #[cfg(test)]
 mod tests;

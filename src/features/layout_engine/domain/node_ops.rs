@@ -5,7 +5,7 @@ use super::render_node::RenderNode;
 use super::styled_node::StyledNode;
 use crate::features::vdom::domain::{NodePath, SurfaceSpace};
 use crate::shared::primitives::geometry::Position;
-use crate::shared::primitives::{ChildModuleLayout, LayoutSurface, SizeConstraint};
+use crate::shared::primitives::{ChildBounds, ChildModuleLayout, LayoutSurface, SizeConstraint};
 
 const fn layout_surface_of(surface: SurfaceSpace) -> LayoutSurface {
     match surface {
@@ -50,13 +50,14 @@ impl RenderNode {
                     (rect.width() > 0).then(|| rect.width()),
                     style.height().is_some().then(|| rect.height()),
                 );
-                out.push(ChildModuleLayout::new(
-                    key.clone(),
-                    *rect,
-                    constraint,
-                    options.clone(),
-                    layout_surface_of(path.surface()),
-                ));
+                out.push(
+                    ChildModuleLayout::new(
+                        key.clone(),
+                        ChildBounds::new(*rect, constraint),
+                        layout_surface_of(path.surface()),
+                    )
+                    .with_options(options.clone()),
+                );
             }
             _ => {}
         }
@@ -271,9 +272,9 @@ mod tests {
 
         let layouts = root.collect_module_layouts();
         assert_eq!(layouts.len(), 1);
-        assert_eq!(layouts[0].constraint().width(), Some(120));
-        assert_eq!(layouts[0].constraint().height(), None);
-        assert_eq!(*layouts[0].bounds(), rect);
+        assert_eq!(layouts[0].bounds().constraint().width(), Some(120));
+        assert_eq!(layouts[0].bounds().constraint().height(), None);
+        assert_eq!(layouts[0].bounds().rect(), rect);
     }
 
     #[test]
@@ -288,10 +289,10 @@ mod tests {
 
         let layouts = root.collect_module_layouts();
         assert_eq!(layouts.len(), 1);
-        assert_eq!(layouts[0].constraint().width(), Some(300));
+        assert_eq!(layouts[0].bounds().constraint().width(), Some(300));
         // height was never pinned, so it stays unconstrained even though
         // width was.
-        assert_eq!(layouts[0].constraint().height(), None);
+        assert_eq!(layouts[0].bounds().constraint().height(), None);
     }
 
     #[test]
@@ -304,7 +305,7 @@ mod tests {
         let root = flex(&[], vec![module_leaf(rect, style)], None);
 
         let layouts = root.collect_module_layouts();
-        assert_eq!(layouts[0].constraint().width(), Some(280));
+        assert_eq!(layouts[0].bounds().constraint().width(), Some(280));
     }
 
     #[test]
@@ -315,6 +316,42 @@ mod tests {
         let root = flex(&[], vec![module_leaf(rect, ComputedStyle::default())], None);
 
         let layouts = root.collect_module_layouts();
-        assert_eq!(layouts[0].constraint().width(), None);
+        assert_eq!(layouts[0].bounds().constraint().width(), None);
+    }
+
+    #[test]
+    fn test_collect_module_layouts_carries_key_options_and_surface() {
+        let rect = Rect::new(Position::new(7, 11), Size::new(90, 30));
+        let options =
+            crate::shared::primitives::ModuleOptions::new(std::collections::HashMap::from([(
+                "format".to_string(),
+                crate::shared::primitives::DynamicValue::String("%H".to_string()),
+            )]));
+        let mut node = module_leaf(rect, ComputedStyle::default());
+        let RenderNode::Module {
+            key,
+            options: slot,
+            path,
+            ..
+        } = &mut node
+        else {
+            panic!("module_leaf builds a module node");
+        };
+        let key = key.clone();
+        *slot = options;
+        *path = NodePath::new(SurfaceSpace::Popup, vec![0]);
+        let root = flex(&[], vec![node], None);
+
+        let layouts = root.collect_module_layouts();
+        assert_eq!(layouts.len(), 1);
+        assert_eq!(layouts[0].key(), &key);
+        assert_eq!(layouts[0].bounds().rect(), rect);
+        assert_eq!(
+            layouts[0].options().get("format"),
+            Some(&crate::shared::primitives::DynamicValue::String(
+                "%H".to_string()
+            ))
+        );
+        assert_eq!(layouts[0].surface(), LayoutSurface::Popup);
     }
 }

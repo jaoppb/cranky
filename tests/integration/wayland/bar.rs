@@ -5,7 +5,9 @@ use super::sway::{Rgb, Screenshot};
 use crate::support::{Context, Outcome, within};
 use cranky::features::layout_engine::domain::DisplayCommand;
 use cranky::shared::config::domain::Config;
-use cranky::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
+use cranky::shared::env::domain::{
+    AppEnvironment, BaseDirectories, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir,
+};
 use cranky::shared::events::signals::SignalHub;
 use cranky::shared::primitives::geometry::{Position, Scale, Size};
 use cranky::shared::primitives::render::{ModuleFrame, PlacedBuffer, RenderBuffer};
@@ -37,9 +39,11 @@ impl Bar {
             .map(PathBuf::from)
             .context("XDG_RUNTIME_DIR is not set")?;
         let env = Arc::new(AppEnvironment::new(
-            HomeDir::new(runtime_dir.clone()),
-            XdgCacheHome::new(runtime_dir.clone()),
-            XdgRuntimeDir::new(runtime_dir),
+            BaseDirectories::new(
+                HomeDir::new(runtime_dir.clone()),
+                XdgCacheHome::new(runtime_dir.clone()),
+                XdgRuntimeDir::new(runtime_dir),
+            ),
             RustLog::new(String::new()),
             None,
         ));

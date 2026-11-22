@@ -5,7 +5,7 @@ use tokio::sync::watch;
 use tokio_stream::StreamExt;
 use tracing::debug;
 
-use crate::shared::dbus::domain::{DBusState, DBusSubscription};
+use crate::shared::dbus::domain::{BusObject, DBusState, DBusSubscription};
 use crate::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
 use crate::shared::events::signals::SignalHub;
 
@@ -38,7 +38,11 @@ impl DbusSubscriptionManager {
         if is_properties_changed && let (Some(dest), Some(path)) = (sub.destination(), sub.path()) {
             let mut stream = self
                 .conn
-                .subscribe_properties_changed(sub.bus(), dest, path)
+                .subscribe_properties_changed(&BusObject::new(
+                    sub.bus(),
+                    dest.clone(),
+                    path.clone(),
+                ))
                 .await?;
             debug!("Subscribed to DBus PropertiesChanged on {path:?}");
             let path_str = path.as_str().to_string();

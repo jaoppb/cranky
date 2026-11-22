@@ -33,6 +33,12 @@ impl ConfigDto {
         let tooltip = self.tooltip.into_domain();
         let popup = self.popup.into_domain();
 
-        domain::Config::new(root, modules, rendering, self.metrics, tooltip, popup)
+        domain::Config::default()
+            .with_root(root)
+            .with_modules(modules)
+            .with_rendering(rendering)
+            .with_metrics(self.metrics)
+            .with_tooltip(tooltip)
+            .with_popup(popup)
     }
 }

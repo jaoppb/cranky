@@ -1,6 +1,7 @@
 use super::helpers::monitor_info_to_rhai_map;
 use super::metadata::{evaluate_metadata, setup_config_maps};
 use super::module_impl::RhaiModule;
+use super::script::RhaiScript;
 use super::sync::RhaiStateSynchronizer;
 use crate::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
 use crate::shared::config::domain::ModuleConfig;
@@ -23,12 +24,14 @@ impl AnyModulePort for RhaiModule {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-            setup_config_maps(&mut scope, &engine, config, full_config)?;
+            let mut script = RhaiScript::new(&engine, &mut scope, &self.ast);
+            setup_config_maps(&mut script, config, full_config)?;
 
             // Call init if it exists
-            let _ = engine.call_fn::<()>(&mut scope, &self.ast, "init", ());
+            let (script_engine, script_scope, ast) = script.parts();
+            let _ = script_engine.call_fn::<()>(script_scope, ast, "init", ());
 
-            let meta = evaluate_metadata(&engine, &mut scope, &self.ast, &self.name);
+            let meta = evaluate_metadata(&mut script, &self.name);
             drop(scope);
             drop(engine);
             meta
@@ -63,13 +66,10 @@ impl AnyModulePort for RhaiModule {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
 
-        RhaiStateSynchronizer::sync(
-            &mut scope,
-            &engine,
-            &self.ast,
+        self.cached_monitors = RhaiStateSynchronizer::sync(
+            &mut RhaiScript::new(&engine, &mut scope, &self.ast),
             hub,
             changed,
-            &mut self.cached_monitors,
         );
         drop(scope);
         drop(engine);

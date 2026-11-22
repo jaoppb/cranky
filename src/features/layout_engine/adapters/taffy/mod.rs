@@ -292,7 +292,7 @@ mod tests {
         let layouts = render_tree.collect_module_layouts();
         assert_eq!(layouts.len(), 1);
         assert_eq!(layouts[0].key().name().as_str(), "workspace");
-        assert_eq!(layouts[0].bounds().x(), 16);
+        assert_eq!(layouts[0].bounds().rect().x(), 16);
     }
 
     #[test]

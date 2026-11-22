@@ -738,8 +738,8 @@ mod tests {
                     assert_eq!(monitor_id.as_str(), "DP-1");
                     assert_eq!(layouts.len(), 1);
                     assert_eq!(layouts[0].key().name().as_str(), "clock");
-                    assert_eq!(layouts[0].bounds().width(), 80);
-                    assert_eq!(layouts[0].bounds().height(), 24);
+                    assert_eq!(layouts[0].bounds().rect().width(), 80);
+                    assert_eq!(layouts[0].bounds().rect().height(), 24);
                     found_container_layouts = true;
                 }
             }

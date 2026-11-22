@@ -1,8 +1,8 @@
 //! The port every `DBus` consumer talks to, and its error type.
 
 use crate::shared::dbus::domain::{
-    BusType, DBusSubscription, DBusValue, Destination, Interface, Member, NameChangedStream, Path,
-    PropertiesMap, PropertyChangedStream, SignalStream,
+    BusObject, BusType, DBusSubscription, DBusValue, Destination, Interface, NameChangedStream,
+    PropertiesMap, PropertyChangedStream, QualifiedMember, SignalStream,
 };
 use async_trait::async_trait;
 use thiserror::Error;
@@ -37,11 +37,8 @@ pub trait DbusConnectionPort: Send + Sync {
     /// Returns `DbusConnectionError` if the method call or serialization fails.
     async fn call_method(
         &self,
-        bus: BusType,
-        destination: &Destination,
-        path: &Path,
-        interface: &Interface,
-        method: &Member,
+        object: &BusObject,
+        method: &QualifiedMember,
     ) -> Result<DBusValue, DbusConnectionError>;
 
     /// Get all properties from a `DBus` interface.
@@ -51,13 +48,11 @@ pub trait DbusConnectionPort: Send + Sync {
     /// Returns `DbusConnectionError` if getting properties fails.
     async fn get_all_properties(
         &self,
-        bus: BusType,
-        destination: &Destination,
-        path: &Path,
+        object: &BusObject,
         interface: &Interface,
     ) -> Result<PropertiesMap, DbusConnectionError>;
 
-    /// Subscribe to `PropertiesChanged` signals on a specific path.
+    /// Subscribe to the `PropertiesChanged` signals `object` sends.
     /// Returns a stream of `(interface_name, changed_properties)` tuples.
     ///
     /// # Errors
@@ -65,9 +60,7 @@ pub trait DbusConnectionPort: Send + Sync {
     /// Returns `DbusConnectionError` if creating the match rule or subscription fails.
     async fn subscribe_properties_changed(
         &self,
-        bus: BusType,
-        sender: &Destination,
-        path: &Path,
+        object: &BusObject,
     ) -> Result<PropertyChangedStream, DbusConnectionError>;
 
     /// List all currently owned bus names.
@@ -107,32 +100,25 @@ pub(crate) struct DisconnectedBus;
 impl DbusConnectionPort for DisconnectedBus {
     async fn call_method(
         &self,
-        bus: BusType,
-        _destination: &Destination,
-        _path: &Path,
-        _interface: &Interface,
-        _method: &Member,
+        object: &BusObject,
+        _method: &QualifiedMember,
     ) -> Result<DBusValue, DbusConnectionError> {
-        Err(DbusConnectionError::NotInitialized(bus))
+        Err(DbusConnectionError::NotInitialized(object.bus()))
     }
 
     async fn get_all_properties(
         &self,
-        bus: BusType,
-        _destination: &Destination,
-        _path: &Path,
+        object: &BusObject,
         _interface: &Interface,
     ) -> Result<PropertiesMap, DbusConnectionError> {
-        Err(DbusConnectionError::NotInitialized(bus))
+        Err(DbusConnectionError::NotInitialized(object.bus()))
     }
 
     async fn subscribe_properties_changed(
         &self,
-        bus: BusType,
-        _sender: &Destination,
-        _path: &Path,
+        object: &BusObject,
     ) -> Result<PropertyChangedStream, DbusConnectionError> {
-        Err(DbusConnectionError::NotInitialized(bus))
+        Err(DbusConnectionError::NotInitialized(object.bus()))
     }
 
     async fn list_names(&self, bus: BusType) -> Result<Vec<Destination>, DbusConnectionError> {

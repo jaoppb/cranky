@@ -168,7 +168,7 @@ fn css_wide_keyword(prop: &Property<'_>) -> Option<CssWideKeyword> {
 #[must_use]
 pub(crate) fn convert_color(color: &LightningCssColor) -> Option<Color> {
     if let LightningCssColor::RGBA(rgba) = color {
-        Some(Color::new(rgba.red, rgba.green, rgba.blue, rgba.alpha))
+        Some(Color::rgb(rgba.red, rgba.green, rgba.blue).with_alpha(rgba.alpha))
     } else {
         let raw = color.to_css_string(PrinterOptions::default()).ok()?;
         if let Ok(DrawingColor::Solid(solid_color)) = DrawingColor::parse(&raw) {

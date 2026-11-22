@@ -158,7 +158,7 @@ fn paint_calendar() -> Vec<(String, TextAlignment)> {
             CanvasCall::Text {
                 text, alignment, ..
             } => Some((text, alignment)),
-            CanvasCall::Rect | CanvasCall::Border | CanvasCall::Image => None,
+            CanvasCall::Rect { .. } | CanvasCall::Border { .. } | CanvasCall::Image { .. } => None,
         })
         .collect()
 }

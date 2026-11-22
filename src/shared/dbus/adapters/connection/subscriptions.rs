@@ -3,8 +3,8 @@ use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 
 use crate::shared::dbus::domain::{
-    BusType, DBusSubscription, Destination, Interface, Member, NameChangedStream, NameOwnerChanged,
-    Path, PropertiesMap, PropertyChangedStream, PropertyName, SignalStream,
+    BusObject, BusType, DBusSubscription, Destination, Interface, Member, NameChangedStream,
+    NameOwnerChanged, Path, PropertiesMap, PropertyChangedStream, PropertyName, SignalStream,
 };
 use crate::shared::dbus::ports::DbusConnectionError;
 
@@ -14,16 +14,15 @@ use super::parser::parse_value;
 impl ZbusConnectionAdapter<Connected> {
     pub(crate) async fn subscribe_properties_changed_impl(
         &self,
-        bus: BusType,
-        sender: &Destination,
-        path: &Path,
+        object: &BusObject,
     ) -> Result<PropertyChangedStream, DbusConnectionError> {
-        let conn = self.get_conn(bus)?.clone();
+        let conn = self.get_conn(object.bus())?.clone();
 
-        let sender = zbus::names::BusName::try_from(sender.as_str()).map_err(|error| {
-            DbusConnectionError::SubscriptionFailed(format!("Invalid sender: {error}"))
-        })?;
-        let path = zbus::ObjectPath::try_from(path.as_str()).map_err(|error| {
+        let sender =
+            zbus::names::BusName::try_from(object.destination().as_str()).map_err(|error| {
+                DbusConnectionError::SubscriptionFailed(format!("Invalid sender: {error}"))
+            })?;
+        let path = zbus::ObjectPath::try_from(object.path().as_str()).map_err(|error| {
             DbusConnectionError::SubscriptionFailed(format!("Invalid path: {error}"))
         })?;
         let rule = zbus::MatchRule::builder()
