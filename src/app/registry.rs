@@ -33,6 +33,19 @@ struct ModuleSiteInfo {
 }
 
 impl ModuleSiteInfo {
+    /// The site of a module the configuration declares: keyed by its name
+    /// alone, in its parent's bar tree.
+    const fn configured(
+        name: crate::shared::primitives::ModuleName,
+        parent: Option<ModuleId>,
+    ) -> Self {
+        Self {
+            key: crate::shared::primitives::ModuleKey::new(name, None),
+            parent,
+            surface: crate::shared::primitives::LayoutSurface::Bar,
+        }
+    }
+
     #[must_use]
     const fn parent(&self) -> Option<ModuleId> {
         self.parent
@@ -167,13 +180,13 @@ impl ModuleRegistry {
         std::sync::Arc::new(CompositeStyleResolver::new(parsed_sheets))
     }
 
+    /// Mints an id for the module `config` names, finds and initialises it,
+    /// and registers its subscriptions, styles and configuration. Where it
+    /// sits is recorded apart, by `record_site`.
     fn load_single_module(
         &mut self,
         config: &ModuleConfig,
         full_config: &crate::shared::config::domain::Config,
-        parent_id: Option<ModuleId>,
-        instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
-        surface: crate::shared::primitives::LayoutSurface,
     ) -> Result<
         (ModuleId, Box<dyn AnyModulePort>),
         crate::features::module_runtime::ports::RegistryLoadError,
@@ -237,22 +250,19 @@ impl ModuleRegistry {
             .entry(config.name().clone())
             .or_default()
             .push(id);
-        let key = crate::shared::primitives::ModuleKey::new(config.name().clone(), instance_id);
-        self.sites.insert(
-            id,
-            ModuleSiteInfo {
-                key: key.clone(),
-                parent: parent_id,
-                surface,
-            },
-        );
-        self.site_index.insert(
-            crate::shared::primitives::ModuleSite::new(parent_id, key),
-            id,
-        );
-        self.module_ids.push(id);
 
         Ok((id, module))
+    }
+
+    /// Records where the module `id` sits, and lists it among the modules
+    /// of the registry.
+    fn record_site(&mut self, id: ModuleId, site: ModuleSiteInfo) {
+        self.site_index.insert(
+            crate::shared::primitives::ModuleSite::new(site.parent, site.key.clone()),
+            id,
+        );
+        self.sites.insert(id, site);
+        self.module_ids.push(id);
     }
 
     /// Mints a `ModuleId` for a site with no config stanza — a `Module` node
@@ -269,24 +279,25 @@ impl ModuleRegistry {
         US: crate::features::vdom::domain::UiCommandSender + 'static,
     >(
         &mut self,
-        parent_id: ModuleId,
-        key: &crate::shared::primitives::ModuleKey,
-        options: ModuleOptions,
-        surface: crate::shared::primitives::LayoutSurface,
-        full_config: &crate::shared::config::domain::Config,
-        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
+        site: crate::features::module_runtime::ports::LazySite,
+        setup: &crate::features::module_runtime::ports::ModuleSetup<'_, Fact, LS, DS, US>,
     ) -> Result<
         crate::features::module_runtime::ports::SpawnedModule<WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
+        let (parent, surface) = (site.parent(), site.surface());
+        let (key, options) = site.into_key_and_options();
         let cfg = ModuleConfig::new(key.name().clone(), options);
-        let (id, module) = self.load_single_module(
-            &cfg,
-            full_config,
-            Some(parent_id),
-            key.instance_id().cloned(),
-            surface,
-        )?;
+        let (id, module) = self.load_single_module(&cfg, setup.config())?;
+        self.record_site(
+            id,
+            ModuleSiteInfo {
+                key,
+                parent: Some(parent),
+                surface,
+            },
+        );
+        let deps = setup.deps();
 
         let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
         let sender = WatchLayoutSender { tx: layout_tx };
@@ -450,14 +461,7 @@ impl<
         crate::features::module_runtime::ports::SpawnedModule<WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
-        self.spawn_module_lazy(
-            site.parent(),
-            site.key(),
-            site.options().clone(),
-            site.surface(),
-            setup.config(),
-            setup.deps(),
-        )
+        self.spawn_module_lazy(site, &setup)
     }
 
     fn load(
@@ -471,26 +475,22 @@ impl<
         let root_cfg = config.modules().get(root_name).cloned().unwrap_or_else(|| {
             ModuleConfig::new(root_name.clone(), config.root().options().clone())
         });
-        let (root_id, root_module) = self.load_single_module(
-            &root_cfg,
-            config,
-            None,
-            None,
-            crate::shared::primitives::LayoutSurface::Bar,
-        )?;
+        let (root_id, root_module) = self.load_single_module(&root_cfg, config)?;
+        self.record_site(
+            root_id,
+            ModuleSiteInfo::configured(root_cfg.name().clone(), None),
+        );
         self.modules.insert(root_id, root_module);
         self.root_module = Some(root_id);
 
         // 2. Load all configured child modules
         for mod_cfg in config.modules().modules().values() {
             if mod_cfg.is_enabled() && mod_cfg.name() != root_name {
-                let (id, module) = self.load_single_module(
-                    mod_cfg,
-                    config,
-                    Some(root_id),
-                    None,
-                    crate::shared::primitives::LayoutSurface::Bar,
-                )?;
+                let (id, module) = self.load_single_module(mod_cfg, config)?;
+                self.record_site(
+                    id,
+                    ModuleSiteInfo::configured(mod_cfg.name().clone(), Some(root_id)),
+                );
                 self.modules.insert(id, module);
             }
         }
@@ -503,14 +503,13 @@ impl<
                     if let Some(name_str) = item.as_str() {
                         let mod_name = crate::shared::primitives::ModuleName::new(name_str);
                         if !self.name_to_ids.contains_key(&mod_name) {
-                            let auto_cfg = ModuleConfig::new(mod_name, ModuleOptions::default());
-                            let (id, module) = self.load_single_module(
-                                &auto_cfg,
-                                config,
-                                Some(root_id),
-                                None,
-                                crate::shared::primitives::LayoutSurface::Bar,
-                            )?;
+                            let auto_cfg =
+                                ModuleConfig::new(mod_name.clone(), ModuleOptions::default());
+                            let (id, module) = self.load_single_module(&auto_cfg, config)?;
+                            self.record_site(
+                                id,
+                                ModuleSiteInfo::configured(mod_name, Some(root_id)),
+                            );
                             self.modules.insert(id, module);
                         }
                     }
@@ -777,24 +776,16 @@ mod tests {
         let parent_a = ModuleId::new(100);
         let parent_b = ModuleId::new(200);
 
-        let (id_a, _) = registry
-            .load_single_module(
-                &calendar_cfg,
-                &config,
-                Some(parent_a),
-                None,
-                crate::shared::primitives::LayoutSurface::Bar,
-            )
-            .unwrap();
-        let (id_b, _) = registry
-            .load_single_module(
-                &calendar_cfg,
-                &config,
-                Some(parent_b),
-                None,
-                crate::shared::primitives::LayoutSurface::Bar,
-            )
-            .unwrap();
+        let (id_a, _) = registry.load_single_module(&calendar_cfg, &config).unwrap();
+        registry.record_site(
+            id_a,
+            ModuleSiteInfo::configured(calendar_cfg.name().clone(), Some(parent_a)),
+        );
+        let (id_b, _) = registry.load_single_module(&calendar_cfg, &config).unwrap();
+        registry.record_site(
+            id_b,
+            ModuleSiteInfo::configured(calendar_cfg.name().clone(), Some(parent_b)),
+        );
 
         // Two sites embedding the same module name mint distinct ModuleIds.
         assert_ne!(id_a, id_b);

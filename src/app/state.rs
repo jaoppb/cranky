@@ -1736,12 +1736,11 @@ mod tests {
             let [site] = requests.as_slice() else {
                 panic!("expected one spawn, got {}", requests.len());
             };
-            assert_eq!(site.parent(), parent);
-            assert_eq!(site.key(), &key);
-            assert_eq!(site.options(), &options);
             assert_eq!(
-                site.surface(),
-                crate::shared::primitives::LayoutSurface::Popup
+                site,
+                &crate::features::module_runtime::ports::LazySite::new(parent, key)
+                    .with_options(options)
+                    .with_surface(crate::shared::primitives::LayoutSurface::Popup)
             );
         });
     }
