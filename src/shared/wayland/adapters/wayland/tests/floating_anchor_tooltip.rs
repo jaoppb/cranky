@@ -160,7 +160,7 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
 fn tooltip_anchor_resolves_for_composite_child() {
     let fake = Fake::new();
     let (mut state, surface) = popup(&fake, 1);
-    handle_pointer_enter(&mut state, &surface, 12.0, 4.0);
+    handle_pointer_enter(&mut state, &surface, (12.0, 4.0));
     let anchor = resolve_anchor(&state, &tooltip_request())
         .expect("tooltip anchor resolves for a composited child");
     let popup_xdg = state
@@ -179,7 +179,7 @@ fn tooltip_anchor_resolves_for_composite_child() {
 fn tooltip_anchor_ignores_popup_owner_own_content() {
     let fake = Fake::new();
     let (mut state, surface) = popup(&fake, 1);
-    handle_pointer_enter(&mut state, &surface, 1.0, 1.0);
+    handle_pointer_enter(&mut state, &surface, (1.0, 1.0));
     assert!(resolve_anchor(&state, &tooltip_request()).is_none());
 }
 

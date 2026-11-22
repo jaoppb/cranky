@@ -116,24 +116,26 @@ pub(super) fn retarget_entering(state: &mut WaylandState) {
     }
 }
 
-/// A new Enter means the compositor ended any implicit grab.
+/// A new Enter at surface-local `position` means the compositor ended any
+/// implicit grab.
 pub(super) fn handle_pointer_enter(
     state: &mut WaylandState,
     surface: &WlSurface,
-    surface_x: f64,
-    surface_y: f64,
+    position: (f64, f64),
 ) {
+    let (surface_x, surface_y) = position;
     tracing::debug!(surface_x, surface_y, "wl_pointer Enter");
     state.pointer_grab.cancel();
     state.pointer_surface = Some(surface.clone());
-    state.pointer_pos = (surface_x, surface_y);
+    state.pointer_pos = position;
     retarget_entering(state);
 }
 
-/// While a button is held, motion goes to the grabbed target relative to its
-/// press-time origin; otherwise it retargets first.
-pub(super) fn handle_pointer_motion(state: &mut WaylandState, surface_x: f64, surface_y: f64) {
-    state.pointer_pos = (surface_x, surface_y);
+/// Motion to surface-local `position`: while a button is held, it goes to the
+/// grabbed target relative to its press-time origin; otherwise it retargets
+/// first.
+pub(super) fn handle_pointer_motion(state: &mut WaylandState, position: (f64, f64)) {
+    state.pointer_pos = position;
     let routed = if state.pointer_grab.is_active() {
         grabbed(state)
     } else {
@@ -162,7 +164,9 @@ mod tests {
     use super::*;
     use crate::shared::config::domain::PopupEmbed;
     use crate::shared::primitives::{ModuleId, MonitorId};
-    use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::handle_pointer_button;
+    use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::{
+        handle_pointer_button, record_button_serial,
+    };
     use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::{
         CHILD, LEFT, OWNER, PRESSED, RELEASED, bar, bar_module, child, clicks, drain, enter, leave,
         motion, owner, popup,
@@ -174,7 +178,7 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 1.0, 1.0);
+        handle_pointer_enter(&mut state, &surface, (1.0, 1.0));
         assert_eq!(drain(&mut rx), vec![owner(enter(SurfaceKind::Popup))]);
     }
 
@@ -183,7 +187,7 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
         assert_eq!(
             drain(&mut rx),
             vec![
@@ -198,9 +202,9 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 1.0, 1.0);
+        handle_pointer_enter(&mut state, &surface, (1.0, 1.0));
         drain(&mut rx);
-        handle_pointer_motion(&mut state, 11.0, 3.0);
+        handle_pointer_motion(&mut state, (11.0, 3.0));
         assert_eq!(
             drain(&mut rx),
             vec![
@@ -209,9 +213,9 @@ mod tests {
                 child(motion(SurfaceKind::Bar, 1, 1)),
             ]
         );
-        handle_pointer_motion(&mut state, 12.0, 4.0);
+        handle_pointer_motion(&mut state, (12.0, 4.0));
         assert_eq!(drain(&mut rx), vec![child(motion(SurfaceKind::Bar, 2, 2))]);
-        handle_pointer_motion(&mut state, 2.0, 2.0);
+        handle_pointer_motion(&mut state, (2.0, 2.0));
         assert_eq!(
             drain(&mut rx),
             vec![
@@ -227,13 +231,13 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
         drain(&mut rx);
         handle_pointer_leave(&mut state);
         assert_eq!(drain(&mut rx), vec![child(leave(SurfaceKind::Bar))]);
         assert_eq!(state.pointer_target, None);
         handle_pointer_leave(&mut state);
-        handle_pointer_motion(&mut state, 11.0, 3.0);
+        handle_pointer_motion(&mut state, (11.0, 3.0));
         assert_eq!(drain(&mut rx), vec![]);
     }
 
@@ -271,10 +275,12 @@ mod tests {
         let mut state = fake.state(PopupEmbed::Composite);
         let surface = bar_module(&fake, &mut state);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 5.0, 6.0);
-        handle_pointer_motion(&mut state, 5.0, 6.0);
-        handle_pointer_button(&mut state, LEFT, PRESSED, 1);
-        handle_pointer_button(&mut state, LEFT, RELEASED, 2);
+        handle_pointer_enter(&mut state, &surface, (5.0, 6.0));
+        handle_pointer_motion(&mut state, (5.0, 6.0));
+        record_button_serial(&mut state, 1);
+        handle_pointer_button(&mut state, LEFT, PRESSED);
+        record_button_serial(&mut state, 2);
+        handle_pointer_button(&mut state, LEFT, RELEASED);
         handle_pointer_leave(&mut state);
         let mut expected = vec![
             bar(enter(SurfaceKind::Bar)),
@@ -291,9 +297,9 @@ mod tests {
         let (mut state, popup_surface) = popup(&fake, 1);
         let bar_surface = bar_module(&fake, &mut state);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &popup_surface, 11.0, 3.0);
+        handle_pointer_enter(&mut state, &popup_surface, (11.0, 3.0));
         drain(&mut rx);
-        handle_pointer_enter(&mut state, &bar_surface, 4.0, 4.0);
+        handle_pointer_enter(&mut state, &bar_surface, (4.0, 4.0));
         assert_eq!(
             drain(&mut rx),
             vec![child(leave(SurfaceKind::Bar)), bar(enter(SurfaceKind::Bar))]

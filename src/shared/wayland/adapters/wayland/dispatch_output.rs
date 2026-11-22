@@ -109,6 +109,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
 #[cfg(test)]
 mod tests {
     use crate::shared::config::domain::PopupEmbed;
+    use crate::shared::primitives::geometry::Size;
     use crate::shared::wayland::adapters::wayland::tests::fixture::Fake;
     use crate::shared::wayland::adapters::wayland::types::ConfigureGate;
 
@@ -122,7 +123,7 @@ mod tests {
         let mut bar = fake.bar("DP-1", 1);
         bar.configure = ConfigureGate::Pending;
         state.bars.push(bar);
-        fake.configure_bar(&mut state, 0, 0, 0);
+        fake.configure_bar(&mut state, Size::new(0, 0));
         assert_eq!(state.bars[0].configure, ConfigureGate::Configured);
         assert_eq!((state.bars[0].width, state.bars[0].height), (1, 1));
     }

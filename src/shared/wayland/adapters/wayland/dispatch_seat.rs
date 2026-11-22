@@ -1,6 +1,7 @@
 use super::dispatch_pointer::{handle_pointer_enter, handle_pointer_leave, handle_pointer_motion};
-use super::dispatch_pointer_button::{handle_pointer_axis, handle_pointer_button};
-use super::keyboard::KeyboardPresence;
+use super::dispatch_pointer_button::{
+    handle_pointer_axis, handle_pointer_button, record_button_serial,
+};
 use super::state::WaylandState;
 use wayland_client::protocol::{
     wl_pointer::{self, WlPointer},
@@ -26,12 +27,11 @@ impl Dispatch<WlSeat, ()> for WaylandState {
             {
                 state.pointer = Some(proxy.get_pointer(queue_handle, ()));
             }
-            let presence = if caps.contains(wl_seat::Capability::Keyboard) {
-                KeyboardPresence::Present
+            if caps.contains(wl_seat::Capability::Keyboard) {
+                state.keyboard.bind(proxy, queue_handle);
             } else {
-                KeyboardPresence::Absent
-            };
-            state.keyboard.on_capability(proxy, presence, queue_handle);
+                state.keyboard.release();
+            }
         }
     }
 }
@@ -51,14 +51,14 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 surface_x,
                 surface_y,
                 ..
-            } => handle_pointer_enter(state, &surface, surface_x, surface_y),
+            } => handle_pointer_enter(state, &surface, (surface_x, surface_y)),
             wl_pointer::Event::Leave { .. } => handle_pointer_leave(state),
             wl_pointer::Event::Motion {
                 surface_x,
                 surface_y,
                 ..
             } => {
-                handle_pointer_motion(state, surface_x, surface_y);
+                handle_pointer_motion(state, (surface_x, surface_y));
             }
             wl_pointer::Event::Button {
                 button,
@@ -66,7 +66,8 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 serial,
                 ..
             } => {
-                handle_pointer_button(state, button, btn_state, serial);
+                record_button_serial(state, serial);
+                handle_pointer_button(state, button, btn_state);
             }
             wl_pointer::Event::Axis { axis, value, .. } => handle_pointer_axis(state, axis, value),
             _ => {}
@@ -94,29 +95,25 @@ mod tests {
     #[test]
     fn keyboard_capability_binds_and_its_loss_forgets_the_keyboard() {
         let fake = Fake::new();
-        let seat = fake.seat();
         let mut state = fake.state(PopupEmbed::Composite);
+        state.seat = Some(fake.seat());
         state.keyboard = KeyboardInput::with_escape_code(ESC_EVDEV);
-        fake.seat_capabilities(
-            &mut state,
-            &seat,
-            Capability::Keyboard | Capability::Pointer,
-        );
+        fake.seat_capabilities(&mut state, Capability::Keyboard | Capability::Pointer);
         assert!(state.pointer.is_some());
         assert!(state.keyboard.is_escape(ESC_EVDEV));
-        fake.seat_capabilities(&mut state, &seat, Capability::empty());
+        fake.seat_capabilities(&mut state, Capability::empty());
         assert!(!state.keyboard.is_escape(ESC_EVDEV));
     }
 
     #[test]
     fn seat_without_keyboard_binds_none() {
         let fake = Fake::new();
-        let seat = fake.seat();
         let mut state = fake.state(PopupEmbed::Composite);
+        state.seat = Some(fake.seat());
         state.keyboard = KeyboardInput::with_escape_code(ESC_EVDEV);
-        fake.seat_capabilities(&mut state, &seat, Capability::Pointer);
+        fake.seat_capabilities(&mut state, Capability::Pointer);
         // No keyboard was bound, so losing it has nothing to forget.
-        fake.seat_capabilities(&mut state, &seat, Capability::empty());
+        fake.seat_capabilities(&mut state, Capability::empty());
         assert!(state.keyboard.is_escape(ESC_EVDEV));
     }
 

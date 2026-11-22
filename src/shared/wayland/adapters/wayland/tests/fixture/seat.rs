@@ -15,17 +15,13 @@ impl Fake {
         registry.bind(6, 7, &self.queue_handle, ())
     }
 
-    /// Delivers a `wl_seat.capabilities` event through the real dispatch
-    /// handler.
-    pub(crate) fn seat_capabilities(
-        &self,
-        state: &mut WaylandState,
-        seat: &WlSeat,
-        capabilities: SeatCapability,
-    ) {
+    /// Delivers a `wl_seat.capabilities` event for `state`'s seat through the
+    /// real dispatch handler.
+    pub(crate) fn seat_capabilities(&self, state: &mut WaylandState, capabilities: SeatCapability) {
+        let seat = state.seat.clone().expect("the state has a seat");
         <WaylandState as Dispatch<WlSeat, ()>>::event(
             state,
-            seat,
+            &seat,
             SeatEvent::Capabilities {
                 capabilities: WEnum::Value(capabilities),
             },
