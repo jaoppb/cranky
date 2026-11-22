@@ -415,4 +415,83 @@ mod tests {
         assert_eq!(workspace.name(), &WorkspaceName::new("magic"));
         assert_eq!(workspace.monitor(), Some(&MonitorName::new("HDMI-A-1")));
     }
+
+    #[test]
+    fn test_workspace_created_keeps_a_workspace_it_already_knows() {
+        let mut workspaces = BTreeMap::new();
+        workspaces.insert(
+            WorkspaceId::new(4),
+            Workspace::new(
+                WorkspaceId::new(4),
+                WorkspaceName::new("four"),
+                Some(MonitorName::new("HDMI-A-1")),
+            ),
+        );
+        let mut state = one_monitor_state(workspaces.clone());
+
+        state.apply_event(&WindowManagerEvent::WorkspaceCreated {
+            id: WorkspaceId::new(4),
+            name: WorkspaceName::new("renamed"),
+        });
+
+        assert_eq!(state.workspaces(), &workspaces);
+    }
+
+    #[test]
+    fn test_workspace_renamed_ignores_an_unknown_workspace() {
+        let mut state = one_monitor_state(BTreeMap::new());
+
+        state.apply_event(&WindowManagerEvent::WorkspaceRenamed {
+            id: WorkspaceId::new(7),
+            new_name: WorkspaceName::new("seven"),
+        });
+
+        assert!(state.workspaces().is_empty());
+    }
+
+    #[test]
+    fn test_monitor_focused_moves_its_workspace_onto_the_monitor() {
+        let mut workspaces = BTreeMap::new();
+        workspaces.insert(
+            WorkspaceId::new(2),
+            Workspace::new(
+                WorkspaceId::new(2),
+                WorkspaceName::new("two"),
+                Some(MonitorName::new("HDMI-A-1")),
+            ),
+        );
+        let mut state = one_monitor_state(workspaces);
+
+        state.apply_event(&WindowManagerEvent::MonitorFocused {
+            monitor_name: MonitorName::new("DP-1"),
+            workspace_id: WorkspaceId::new(2),
+        });
+
+        let workspace = state.workspaces().get(&WorkspaceId::new(2)).unwrap();
+        assert_eq!(workspace.monitor(), Some(&MonitorName::new("DP-1")));
+        assert_eq!(workspace.name(), &WorkspaceName::new("two"));
+    }
+
+    #[test]
+    fn test_workspace_renamed_takes_the_new_name_and_keeps_its_monitor() {
+        let mut workspaces = BTreeMap::new();
+        workspaces.insert(
+            WorkspaceId::new(4),
+            Workspace::new(
+                WorkspaceId::new(4),
+                WorkspaceName::new("four"),
+                Some(MonitorName::new("HDMI-A-1")),
+            ),
+        );
+        let mut state = one_monitor_state(workspaces);
+
+        state.apply_event(&WindowManagerEvent::WorkspaceRenamed {
+            id: WorkspaceId::new(4),
+            new_name: WorkspaceName::new("renamed"),
+        });
+
+        let workspace = state.workspaces().get(&WorkspaceId::new(4)).unwrap();
+        assert_eq!(workspace.name(), &WorkspaceName::new("renamed"));
+        assert_eq!(workspace.monitor(), Some(&MonitorName::new("HDMI-A-1")));
+    }
 }

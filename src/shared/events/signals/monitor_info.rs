@@ -106,6 +106,7 @@ mod tests {
         let infos = hub.get_monitor_infos();
         assert_eq!(infos.len(), 1);
         assert_eq!(infos[0].name(), "HDMI-A-1");
+        assert_eq!(infos[0].size(), Size::new(0, 0));
         assert!(!infos[0].is_focused());
         assert_eq!(infos[0].active_workspace_id(), None);
         assert_eq!(infos[0].special_workspace_id(), None);
@@ -126,5 +127,31 @@ mod tests {
 
         let infos = hub.get_monitor_infos();
         assert_eq!(infos, []);
+    }
+
+    #[test]
+    fn test_get_monitor_infos_reports_the_special_workspace_shown_on_a_monitor() {
+        let hub = SignalHub::new(Config::default());
+        let mut monitors = BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("DP-1"),
+            Monitor::new(
+                MonitorName::new("DP-1"),
+                WorkspaceId::new(4),
+                Some(WorkspaceId::new(-98)),
+            ),
+        );
+        let h_state = HyprlandState::new(BTreeMap::new(), monitors, None);
+        hub.hyprland_tx().send(h_state).unwrap();
+        let mut scales = hub.monitor_scales_rx().borrow().clone();
+        scales.insert(
+            crate::shared::primitives::MonitorId::new("DP-1"),
+            Scale::new(1.0),
+        );
+        hub.monitor_scales_tx().send(scales).unwrap();
+
+        let infos = hub.get_monitor_infos();
+        assert_eq!(infos[0].special_workspace_id(), Some(-98));
+        assert!(infos[0].is_focused(), "the only monitor counts as focused");
     }
 }
