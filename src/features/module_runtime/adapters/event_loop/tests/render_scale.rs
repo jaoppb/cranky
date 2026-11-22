@@ -1,24 +1,17 @@
 //! A render at a monitor's scale: the module's own buffer and the floating content the event loop
 //! paints for it.
-use super::outcome::event_loop;
+use super::outcome::plain_event_loop;
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::{DisplayCommand, ShowFloating};
-use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::RenderPipeline;
-use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
 use crate::features::module_runtime::test_support::{
-    ChannelDisplaySender, MockLayoutSender, MockUiSender, PipelineFixture, RecordingSurfaceManager,
-    TestModulePort, process_monitor,
+    PipelineFixture, TestModulePort, process_monitor,
 };
 use crate::features::vdom::domain::{
     ElementSelectors, Interactions, PopupSpec, TextContent, VNode,
 };
-use crate::shared::config::domain::Config;
-use crate::shared::events::signals::SignalHub;
+use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
-use crate::shared::primitives::{ModuleId, MonitorId};
-use std::collections::HashMap;
-use std::sync::Arc;
 
 /// A render on a monitor at scale 2 paints the module's own buffer at that scale, and the event
 /// loop paints the floating content it opened at the same scale.
@@ -44,28 +37,14 @@ fn a_render_at_scale_two_paints_its_buffer_and_its_popup_at_that_scale() {
     let (buffer, _) = outcome.buffer().expect("painted buffer");
     assert_eq!((buffer.width(), buffer.height()), (20, 20));
 
-    let (display_tx, display_rx) = std::sync::mpsc::channel();
-    let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-    let ctx = ModuleContext::new(
-        ModuleId::new(42),
-        ModuleHandles::new(
-            Arc::new(SignalHub::new(Config::default())),
-            Arc::new(RecordingSurfaceManager::default()),
-            ModuleSenders::new(
-                Arc::new(MockLayoutSender),
-                Arc::new(ChannelDisplaySender::new(display_tx)),
-                Arc::new(MockUiSender),
-            ),
-        ),
-        rx,
-    );
-    event_loop(ctx).dispatch_render_outcome(&monitor, &outcome);
+    let (mut event_loop, wiring) = plain_event_loop();
+    event_loop.dispatch_render_outcome(&monitor, &outcome);
 
     let Ok(DisplayCommand::ShowFloatingSurface(ShowFloating {
         buffer,
         logical_size,
         ..
-    })) = display_rx.try_recv()
+    })) = wiring.sent.display.try_recv()
     else {
         panic!("expected the popup to be shown");
     };

@@ -17,7 +17,7 @@ use crate::features::vdom::domain::UiCommand;
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::geometry::Scale;
-use crate::shared::primitives::{ChildBounds, ModuleId, MonitorId};
+use crate::shared::primitives::{ChildBounds, LayoutSurface, ModuleId, MonitorId};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
@@ -26,6 +26,9 @@ use tokio::sync::watch;
 /// The module every fixture event loop runs.
 pub(in super::super) const MODULE: ModuleId = ModuleId::new(42);
 
+/// The module that embeds a fixture module once `embed` placed it.
+pub(in super::super) const PARENT: ModuleId = ModuleId::new(7);
+
 /// An event loop whose senders all write to channels a test reads.
 pub(in super::super) type ChannelEventLoop =
     EventLoop<MockCanvasFactory, ChannelLayoutSender, ChannelDisplaySender, ChannelUiSender>;
@@ -33,6 +36,7 @@ pub(in super::super) type ChannelEventLoop =
 /// The receiving ends of everything a fixture event loop sends.
 pub(in super::super) struct Sent {
     pub(in super::super) layout_events: Receiver<LayoutEvent>,
+    pub(in super::super) display: Receiver<DisplayCommand>,
     pub(in super::super) ui_commands: Receiver<UiCommand>,
 }
 
@@ -59,7 +63,7 @@ fn channel_senders() -> (
     Sent,
 ) {
     let (layout_tx, layout_events) = channel();
-    let (display_tx, _) = channel::<DisplayCommand>();
+    let (display_tx, display) = channel();
     let (ui_tx, ui_commands) = channel();
     let senders = ModuleSenders::new(
         Arc::new(ChannelLayoutSender::new(layout_tx)),
@@ -68,6 +72,7 @@ fn channel_senders() -> (
     );
     let sent = Sent {
         layout_events,
+        display,
         ui_commands,
     };
     (senders, sent)
@@ -103,4 +108,21 @@ pub(in super::super) fn wired_event_loop(
         EventLoop::new(Box::new(port), ctx, plain_services()),
         wiring,
     )
+}
+
+/// `event_loop` embedded by `PARENT` on its `surface`.
+pub(in super::super) fn embed(
+    mut event_loop: ChannelEventLoop,
+    surface: LayoutSurface,
+) -> ChannelEventLoop {
+    event_loop.ctx = event_loop
+        .ctx
+        .with_parent(Some(PARENT))
+        .with_surface(surface);
+    event_loop
+}
+
+/// A hub on which Wayland reports no monitor.
+pub(in super::super) fn empty_hub() -> Arc<SignalHub> {
+    Arc::new(SignalHub::new(Config::default()))
 }

@@ -1,87 +1,25 @@
+use super::fixture::{ChannelEventLoop, Wiring, embed, hub_with_dp1, wired_event_loop};
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
-use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
-use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::RenderServices;
-use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
-use crate::features::module_runtime::test_support::{
-    MockCanvasFactory, MockDisplaySender, MockLayoutSender, MockUiSender, TestModulePort,
-};
-use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
-use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
+use crate::features::module_runtime::test_support::TestModulePort;
 use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
-use crate::shared::config::domain::Config;
-use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
-use crate::shared::primitives::render::ModuleFrame;
-use crate::shared::primitives::{ChildBounds, LayoutSurface, ModuleId, MonitorId, SizeConstraint};
-use crate::shared::wayland::ports::{SurfaceManagerPort, SurfaceParent};
+use crate::shared::primitives::geometry::{Position, Rect, Size};
+use crate::shared::primitives::{ChildBounds, LayoutSurface, MonitorId, SizeConstraint};
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-/// Counts every `submit_child_buffer` — the only observable proof that an
-/// embedded actor actually re-painted and handed its pixels to Wayland.
-#[derive(Default)]
-struct CountingSurfaceManager {
-    child_submits: AtomicUsize,
-}
-
-impl SurfaceManagerPort for CountingSurfaceManager {
-    fn submit_buffer(&self, _: ModuleFrame) {}
-
-    fn submit_child_buffer(&self, _: ModuleFrame, _: Option<SurfaceParent>) {
-        self.child_submits.fetch_add(1, Ordering::SeqCst);
-    }
-}
 
 type Layouts = HashMap<MonitorId, ChildBounds>;
-type TestEventLoop =
-    EventLoop<MockCanvasFactory, MockLayoutSender, MockDisplaySender, MockUiSender>;
 
-fn embedded_event_loop(
-    mon: &MonitorId,
-) -> (
-    TestEventLoop,
-    tokio::sync::watch::Sender<Layouts>,
-    Arc<CountingSurfaceManager>,
-) {
-    let hub = Arc::new(SignalHub::new(Config::default()));
-    let mut scales = hub.monitor_scales_rx().borrow().clone();
-    scales.insert(mon.clone(), Scale::new(1.0));
-    let _ = hub.monitor_scales_tx().send(scales);
+/// An actor for module 42 embedded in module 7's popup — the calendar-in-clock-popup case — on a
+/// hub where Wayland reports DP-1.
+fn embedded_event_loop() -> (ChannelEventLoop, Wiring) {
+    let rect = VNode::new_rect(ElementSelectors::default(), Interactions::default());
+    let (event_loop, wiring) = wired_event_loop(TestModulePort::new(rect), hub_with_dp1(1.0));
+    (embed(event_loop, LayoutSurface::Popup), wiring)
+}
 
-    let surface_manager = Arc::new(CountingSurfaceManager::default());
-    let (layout_tx, layout_rx) = tokio::sync::watch::channel(Layouts::new());
-    // Embedded inside module 7's popup — the calendar-in-clock-popup case.
-    let ctx = ModuleContext::new(
-        ModuleId::new(42),
-        ModuleHandles::new(
-            hub,
-            surface_manager.clone(),
-            ModuleSenders::new(
-                Arc::new(MockLayoutSender),
-                Arc::new(MockDisplaySender),
-                Arc::new(MockUiSender),
-            ),
-        ),
-        layout_rx,
-    )
-    .with_parent(Some(ModuleId::new(7)))
-    .with_surface(LayoutSurface::Popup);
-
-    let event_loop = EventLoop::new(
-        Box::new(TestModulePort::new(VNode::new_rect(
-            ElementSelectors::default(),
-            Interactions::default(),
-        ))),
-        ctx,
-        RenderServices::new(
-            MockCanvasFactory,
-            Arc::new(CompositeStyleResolver::new(vec![])),
-            Arc::new(DefaultVdomDiffAdapter::new()),
-        ),
-    );
-    (event_loop, layout_tx, surface_manager)
+/// How many frames the actor handed to Wayland: the only observable proof that an embedded actor
+/// actually re-painted.
+fn submits(wiring: &Wiring) -> usize {
+    wiring.surfaces.frames.lock().unwrap().len()
 }
 
 fn site(mon: &MonitorId) -> Layouts {
@@ -99,12 +37,13 @@ fn site(mon: &MonitorId) -> Layouts {
 #[test]
 fn suspended_embedded_actor_rerenders_when_site_returns() {
     let mon = MonitorId::new("DP-1");
-    let (mut event_loop, layout_tx, surface_manager) = embedded_event_loop(&mon);
+    let (mut event_loop, wiring) = embedded_event_loop();
+    let layout_tx = &wiring.layouts;
     let mut engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
 
     let _ = layout_tx.send(site(&mon));
     event_loop.render_all_monitors(&mut engines);
-    assert_eq!(surface_manager.child_submits.load(Ordering::SeqCst), 1);
+    assert_eq!(submits(&wiring), 1);
 
     // Popup closes: the parent withdraws the rect. Several passes happen
     // while suspended (any subscribed signal wakes the actor).
@@ -112,7 +51,7 @@ fn suspended_embedded_actor_rerenders_when_site_returns() {
     event_loop.render_all_monitors(&mut engines);
     event_loop.render_all_monitors(&mut engines);
     event_loop.render_all_monitors(&mut engines);
-    assert_eq!(surface_manager.child_submits.load(Ordering::SeqCst), 1);
+    assert_eq!(submits(&wiring), 1);
 
     // Popup reopens at the same rect. Relies on `retain_monitors` having
     // cleared the suspended monitor's rendered bounds: a pruning change that
@@ -120,5 +59,5 @@ fn suspended_embedded_actor_rerenders_when_site_returns() {
     // hole in the composited popup.
     let _ = layout_tx.send(site(&mon));
     event_loop.render_all_monitors(&mut engines);
-    assert_eq!(surface_manager.child_submits.load(Ordering::SeqCst), 2);
+    assert_eq!(submits(&wiring), 2);
 }
