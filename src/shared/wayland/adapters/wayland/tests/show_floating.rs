@@ -4,45 +4,18 @@
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget, ShowFloating};
 use crate::shared::config::domain::PopupEmbed;
 use crate::shared::primitives::geometry::Size;
-use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset};
-use crate::shared::wayland::adapters::wayland::floating_surface::{FloatingPayload, show_floating};
+use crate::shared::wayland::adapters::wayland::floating_surface::show_floating;
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::tests::fixture::positioner::{
     SET_OFFSET, SET_SIZE, positioner_requests,
 };
-use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, popup_kind, solid};
+use crate::shared::wayland::adapters::wayland::tests::fixture::{
+    Fake, popup_kind, show_request as request, solid,
+};
 
 fn show(fake: &Fake, state: &mut WaylandState, request: ShowFloating) {
-    let payload = FloatingPayload {
-        buffer: &request.buffer,
-        logical_size: request.logical_size,
-        offset: request.offset,
-    };
-    show_floating(
-        state,
-        &fake.queue_handle,
-        request.kind,
-        request.monitor_id,
-        request.anchor_rect,
-        &payload,
-        request.parent,
-    )
-    .expect("shown");
-}
-
-/// A request to show `buffer` as `kind`, nested in `parent`, at the
-/// buffer's own size, with no anchor rect and no offset of its own.
-fn request(kind: FloatingKind, buffer: RenderBuffer, parent: Option<FloatingKind>) -> ShowFloating {
-    ShowFloating {
-        kind,
-        monitor_id: None,
-        anchor_rect: None,
-        logical_size: *buffer.size(),
-        buffer,
-        offset: None,
-        parent,
-    }
+    show_floating(state, &fake.queue_handle, request).expect("shown");
 }
 
 fn popup_of(module: u32) -> FloatingKind {

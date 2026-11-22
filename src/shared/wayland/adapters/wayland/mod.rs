@@ -14,6 +14,7 @@ mod display_server;
 mod floating_anchor;
 mod floating_bounds;
 mod floating_composite;
+mod floating_frame;
 mod floating_render;
 mod floating_setup;
 mod floating_surface;

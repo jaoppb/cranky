@@ -3,9 +3,10 @@ use super::floating_teardown::{TeardownCause, teardown_floating};
 use super::state::WaylandState;
 use super::tooltip_anchor::resolve_tooltip_anchor;
 use super::types::ModuleSurface;
-use crate::features::layout_engine::domain::{FloatingKind, PopupExclusivity, PopupTarget};
+use crate::features::layout_engine::domain::{
+    FloatingKind, PopupExclusivity, PopupTarget, ShowFloating,
+};
 use crate::shared::primitives::MonitorId;
-use crate::shared::primitives::geometry::Rect;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 
@@ -59,20 +60,20 @@ pub(super) fn handle_conflicts(
     }
 }
 
-pub(super) fn resolve_anchor(
-    state: &WaylandState,
-    kind: &FloatingKind,
-    monitor_id: Option<MonitorId>,
-    anchor_rect: Option<Rect>,
-    parent: Option<&FloatingKind>,
-) -> Option<AnchorInfo> {
+/// Where `request`'s surface anchors and what it is parented to, or `None`
+/// while its owner's bar or parent surface does not exist.
+pub(super) fn resolve_anchor(state: &WaylandState, request: &ShowFloating) -> Option<AnchorInfo> {
+    let (kind, parent) = (&request.kind, request.parent.as_ref());
     let mut bar_scale = 1;
     let mut parent_role = None;
     let mut anchor_x = 0;
     let mut anchor_y = 0;
     let mut anchor_w = 1;
     let mut anchor_h = 1;
-    let mut target_monitor_id = monitor_id.unwrap_or_else(|| MonitorId::new(""));
+    let mut target_monitor_id = request
+        .monitor_id
+        .clone()
+        .unwrap_or_else(|| MonitorId::new(""));
 
     match kind {
         FloatingKind::Tooltip => {
@@ -118,8 +119,9 @@ pub(super) fn resolve_anchor(
                                 .and_then(|floating| floating.child_placement(module_id))
                         },
                     );
-                    let bounds =
-                        compute_module_bounds(placement, anchor_rect, to_i32(bar.height), extent);
+                    let bar_height = to_i32(bar.height);
+                    let bounds = compute_module_bounds(placement, request.anchor_rect, bar_height)
+                        .spanning(extent, bar_height);
                     anchor_x = bounds.x;
                     anchor_y = bounds.y;
                     anchor_w = bounds.width;

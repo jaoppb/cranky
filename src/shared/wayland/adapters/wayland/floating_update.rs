@@ -1,21 +1,19 @@
-use super::floating_anchor::AnchorInfo;
+use super::floating_bounds::to_i32;
 use super::floating_composite::repaint;
+use super::floating_frame::FloatingFrame;
 use super::floating_render::create_positioner;
-use super::floating_setup::FloatingPlacement;
 use super::state::WaylandState;
 use super::types::FloatingSurface;
-use crate::features::layout_engine::domain::FloatingKind;
-use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
 
-pub(super) fn commit_surface(
-    floating: &mut FloatingSurface,
-    bar_scale: i32,
-    w_i32: i32,
-    h_i32: i32,
-) {
+/// Attaches the back slot at `bar_scale`, damages all of it and commits.
+pub(super) fn commit_surface(floating: &mut FloatingSurface, bar_scale: i32) {
+    let (w_i32, h_i32) = (
+        to_i32(floating.size.width()),
+        to_i32(floating.size.height()),
+    );
     floating.surface.set_buffer_scale(bar_scale);
     floating
         .surface
@@ -28,19 +26,23 @@ pub(super) fn commit_surface(
 pub(super) fn update_existing_floating(
     state: &mut WaylandState,
     queue_handle: &QueueHandle<WaylandState>,
-    kind: &FloatingKind,
-    buffer: &RenderBuffer,
-    anchor_info: &AnchorInfo,
-    placement: &FloatingPlacement,
+    frame: FloatingFrame,
 ) -> Result<(), DisplayServerError> {
-    let Some(floating) = state.floating_surfaces.get_mut(kind) else {
+    let FloatingFrame {
+        kind,
+        buffer,
+        placement,
+        ..
+    } = frame;
+    let (size, bar_scale) = (*buffer.size(), placement.anchor.bar_scale);
+    let Some(floating) = state.floating_surfaces.get_mut(&kind) else {
         return Ok(());
     };
-    floating.scale = anchor_info.bar_scale;
+    floating.scale = bar_scale;
 
-    if floating.size == placement.size {
-        floating.base = buffer.clone();
-        repaint(floating, anchor_info.bar_scale);
+    if floating.size == size {
+        floating.base = buffer;
+        repaint(floating, bar_scale);
         return Ok(());
     }
 
@@ -52,7 +54,7 @@ pub(super) fn update_existing_floating(
         })?;
     let new_shm_buffer = ShmBuffer::new(
         ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path()),
-        placement.size,
+        size,
         queue_handle,
     )
     .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
@@ -64,14 +66,7 @@ pub(super) fn update_existing_floating(
             .ok_or_else(|| DisplayServerError::ConnectionFailed {
                 reason: "XDG WM Base not bound".to_string(),
             })?;
-    let positioner = create_positioner(
-        xdg_wm_base,
-        queue_handle,
-        placement.text_w,
-        placement.text_h,
-        anchor_info,
-        placement.offset,
-    );
+    let positioner = create_positioner(xdg_wm_base, queue_handle, &placement);
     floating.reposition_token = floating.reposition_token.wrapping_add(1);
     floating
         .xdg_popup
@@ -79,21 +74,25 @@ pub(super) fn update_existing_floating(
     positioner.destroy();
     // Blend into the new buffer, not the old one, before committing it.
     floating.shm_buffer = new_shm_buffer;
-    floating.size = placement.size;
+    floating.size = size;
     // Only now: `base` must keep the shm buffer's size if any step above fails.
-    floating.base = buffer.clone();
-    repaint(floating, anchor_info.bar_scale);
+    floating.base = buffer;
+    repaint(floating, bar_scale);
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::layout_engine::domain::FloatingKind;
     use crate::features::layout_engine::domain::PopupTarget;
     use crate::shared::config::domain::PopupEmbed;
     use crate::shared::primitives::geometry::Size;
     use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset};
-    use crate::shared::wayland::adapters::wayland::floating_anchor::FloatingParentRole;
+    use crate::shared::wayland::adapters::wayland::floating_anchor::{
+        AnchorInfo, FloatingParentRole,
+    };
+    use crate::shared::wayland::adapters::wayland::floating_frame::FloatingPlacement;
     use crate::shared::wayland::adapters::wayland::tests::fixture::wire::damage_of;
     use crate::shared::wayland::adapters::wayland::tests::fixture::{
         Fake, lose_runtime_dir, popup_kind, solid,
@@ -115,13 +114,18 @@ mod tests {
             target_monitor_id: MonitorId::new("DP-1"),
         };
         let placement = FloatingPlacement {
-            size: Size::new(2, 1),
+            anchor,
             text_w: 2,
             text_h: 1,
             offset: PopupOffset::default(),
         };
-        let base = solid(2, 1, [1; 4]);
-        update_existing_floating(state, &fake.queue_handle, kind, &base, &anchor, &placement)
+        let frame = FloatingFrame {
+            kind: kind.clone(),
+            parent: None,
+            buffer: solid(2, 1, [1; 4]),
+            placement,
+        };
+        update_existing_floating(state, &fake.queue_handle, frame)
     }
 
     #[test]

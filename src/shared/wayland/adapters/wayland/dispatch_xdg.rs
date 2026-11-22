@@ -108,7 +108,7 @@ mod tests {
     };
     use crate::shared::wayland::adapters::wayland::floating_composite::repaint;
     use crate::shared::wayland::adapters::wayland::floating_setup::{
-        FloatingPlacement, update_existing_floating,
+        FloatingFrame, FloatingPlacement, update_existing_floating,
     };
     use crate::shared::wayland::adapters::wayland::state::WaylandState;
     use crate::shared::wayland::adapters::wayland::tests::fixture::{
@@ -129,13 +129,9 @@ mod tests {
         floating
     }
 
-    /// An owner frame `base` placed at `base`'s own size.
-    fn owner_frame(
-        fake: &Fake,
-        state: &mut WaylandState,
-        kind: &FloatingKind,
-        base: &RenderBuffer,
-    ) {
+    /// An owner frame `base` for `configured`'s popup, placed at `base`'s
+    /// own size.
+    fn owner_frame(fake: &Fake, state: &mut WaylandState, base: RenderBuffer) {
         let anchor = AnchorInfo {
             bar_scale: 1,
             parent_role: FloatingParentRole::Popup(fake.xdg_surface()),
@@ -146,13 +142,18 @@ mod tests {
             target_monitor_id: MonitorId::new("DP-1"),
         };
         let placement = FloatingPlacement {
-            size: *base.size(),
+            anchor,
             text_w: 2,
             text_h: 1,
             offset: PopupOffset::default(),
         };
-        update_existing_floating(state, &fake.queue_handle, kind, base, &anchor, &placement)
-            .expect("owner frame");
+        let frame = FloatingFrame {
+            kind: popup_kind(),
+            parent: None,
+            buffer: base,
+            placement,
+        };
+        update_existing_floating(state, &fake.queue_handle, frame).expect("owner frame");
     }
 
     fn configured(state: &mut WaylandState, floating: FloatingSurface) -> FloatingKind {
@@ -174,8 +175,8 @@ mod tests {
         let mut state = fake.state(PopupEmbed::Composite);
         let floating = with_child(fake.floating(Size::new(2, 1), solid(2, 1, [0, 0, 0, 255])));
         let kind = configured(&mut state, floating);
-        owner_frame(&fake, &mut state, &kind, &solid(2, 1, [7, 7, 7, 255]));
-        owner_frame(&fake, &mut state, &kind, &solid(2, 1, BASE));
+        owner_frame(&fake, &mut state, solid(2, 1, [7, 7, 7, 255]));
+        owner_frame(&fake, &mut state, solid(2, 1, BASE));
 
         fake.configure(&mut state, &kind);
 
@@ -188,7 +189,7 @@ mod tests {
         let mut state = fake.state(PopupEmbed::Composite);
         let floating = with_child(fake.floating(Size::new(1, 1), solid(1, 1, [0, 0, 0, 255])));
         let kind = configured(&mut state, floating);
-        owner_frame(&fake, &mut state, &kind, &solid(2, 1, BASE));
+        owner_frame(&fake, &mut state, solid(2, 1, BASE));
 
         fake.configure(&mut state, &kind);
 
@@ -201,7 +202,7 @@ mod tests {
         let mut state = fake.state(PopupEmbed::Subsurface);
         let floating = fake.floating(Size::new(2, 1), solid(2, 1, [0, 0, 0, 255]));
         let kind = configured(&mut state, floating);
-        owner_frame(&fake, &mut state, &kind, &solid(2, 1, BASE));
+        owner_frame(&fake, &mut state, solid(2, 1, BASE));
 
         fake.configure(&mut state, &kind);
 

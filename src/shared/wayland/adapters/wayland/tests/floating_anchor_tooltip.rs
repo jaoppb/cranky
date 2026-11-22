@@ -1,4 +1,4 @@
-use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
+use crate::features::layout_engine::domain::{FloatingKind, PopupTarget, ShowFloating};
 use crate::shared::config::domain::Config;
 use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
 use crate::shared::events::signals::SignalHub;
@@ -12,7 +12,9 @@ use crate::shared::wayland::adapters::wayland::floating_anchor::{
 };
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::popup;
-use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, popup_kind};
+use crate::shared::wayland::adapters::wayland::tests::fixture::{
+    Fake, popup_kind, show_request, solid,
+};
 use crate::shared::wayland::adapters::wayland::types::{FloatingSurface, ModuleSurface};
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
@@ -139,7 +141,7 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
         app_env,
     };
 
-    let anchor = resolve_anchor(&state, &FloatingKind::Tooltip, None, None, None)
+    let anchor = resolve_anchor(&state, &tooltip_request())
         .expect("tooltip anchor must resolve for a module embedded in an open popup");
 
     assert!(
@@ -159,7 +161,7 @@ fn tooltip_anchor_resolves_for_composite_child() {
     let fake = Fake::new();
     let (mut state, surface) = popup(&fake, 1);
     handle_pointer_enter(&mut state, &surface, 12.0, 4.0);
-    let anchor = resolve_anchor(&state, &FloatingKind::Tooltip, None, None, None)
+    let anchor = resolve_anchor(&state, &tooltip_request())
         .expect("tooltip anchor resolves for a composited child");
     let popup_xdg = state
         .floating_surfaces
@@ -178,5 +180,9 @@ fn tooltip_anchor_ignores_popup_owner_own_content() {
     let fake = Fake::new();
     let (mut state, surface) = popup(&fake, 1);
     handle_pointer_enter(&mut state, &surface, 1.0, 1.0);
-    assert!(resolve_anchor(&state, &FloatingKind::Tooltip, None, None, None).is_none());
+    assert!(resolve_anchor(&state, &tooltip_request()).is_none());
+}
+
+fn tooltip_request() -> ShowFloating {
+    show_request(FloatingKind::Tooltip, solid(1, 1, [0; 4]), None)
 }

@@ -1,22 +1,13 @@
 use super::floating_anchor::{handle_conflicts, resolve_anchor};
-use super::floating_setup::{FloatingPlacement, create_new_floating, update_existing_floating};
+use super::floating_setup::{
+    FloatingFrame, FloatingPlacement, create_new_floating, update_existing_floating,
+};
 use super::floating_teardown::{TeardownCause, teardown_floating};
 use super::state::WaylandState;
-use crate::features::layout_engine::domain::FloatingKind;
 use crate::features::layout_engine::domain::popup::ancestors;
-use crate::shared::primitives::geometry::{Rect, Size};
-use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::primitives::{MonitorId, PopupOffset};
+use crate::features::layout_engine::domain::{FloatingKind, ShowFloating};
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
-
-/// An already laid-out and painted floating surface, as the module produced
-/// it — nothing left for Wayland to compute, only to place and blit.
-pub(super) struct FloatingPayload<'a> {
-    pub(crate) buffer: &'a RenderBuffer,
-    pub(crate) logical_size: Size,
-    pub(crate) offset: Option<PopupOffset>,
-}
 
 /// Shows or updates a floating surface. This is placement and blitting
 /// only — layout and painting happen once, in the module that owns the
@@ -26,15 +17,11 @@ pub(super) struct FloatingPayload<'a> {
 pub(super) fn show_floating(
     state: &mut WaylandState,
     queue_handle: &QueueHandle<WaylandState>,
-    kind: FloatingKind,
-    monitor_id: Option<MonitorId>,
-    anchor_rect: Option<Rect>,
-    payload: &FloatingPayload<'_>,
-    parent: Option<FloatingKind>,
+    request: ShowFloating,
 ) -> Result<(), DisplayServerError> {
     let parent_of = |child_kind: &FloatingKind| -> Option<FloatingKind> {
-        if *child_kind == kind {
-            parent.clone()
+        if *child_kind == request.kind {
+            request.parent.clone()
         } else {
             state
                 .floating_surfaces
@@ -42,53 +29,43 @@ pub(super) fn show_floating(
                 .and_then(|floating| floating.parent.clone())
         }
     };
-    let Ok(ancestor_kinds) = ancestors(&kind, parent_of) else {
-        tracing::warn!(?kind, "popup nesting cycle detected, dropping");
+    let Ok(ancestor_kinds) = ancestors(&request.kind, parent_of) else {
+        tracing::warn!(kind = ?request.kind, "popup nesting cycle detected, dropping");
         return Ok(());
     };
 
-    if let FloatingKind::Popup(ref target) = kind {
+    if let FloatingKind::Popup(ref target) = request.kind {
         handle_conflicts(state, target, &ancestor_kinds);
     }
 
-    let Some(anchor_info) = resolve_anchor(state, &kind, monitor_id, anchor_rect, parent.as_ref())
-    else {
+    let Some(anchor) = resolve_anchor(state, &request) else {
         return Ok(());
     };
 
-    let effective_offset = match kind {
-        FloatingKind::Popup(_) => payload
+    let effective_offset = match request.kind {
+        FloatingKind::Popup(_) => request
             .offset
             .unwrap_or_else(|| state.hub.config_rx().borrow().popup().offset()),
-        _ => payload.offset.unwrap_or_default(),
+        _ => request.offset.unwrap_or_default(),
     };
 
     let placement = FloatingPlacement {
-        size: *payload.buffer.size(),
-        text_w: i32::try_from(payload.logical_size.width()).unwrap_or(1),
-        text_h: i32::try_from(payload.logical_size.height()).unwrap_or(1),
+        anchor,
+        text_w: i32::try_from(request.logical_size.width()).unwrap_or(1),
+        text_h: i32::try_from(request.logical_size.height()).unwrap_or(1),
         offset: effective_offset,
     };
+    let frame = FloatingFrame {
+        kind: request.kind,
+        parent: request.parent,
+        buffer: request.buffer,
+        placement,
+    };
 
-    if state.floating_surfaces.contains_key(&kind) {
-        update_existing_floating(
-            state,
-            queue_handle,
-            &kind,
-            payload.buffer,
-            &anchor_info,
-            &placement,
-        )
+    if state.floating_surfaces.contains_key(&frame.kind) {
+        update_existing_floating(state, queue_handle, frame)
     } else {
-        create_new_floating(
-            state,
-            queue_handle,
-            kind,
-            payload.buffer,
-            &anchor_info,
-            &placement,
-            parent,
-        )
+        create_new_floating(state, queue_handle, frame)
     }
 }
 

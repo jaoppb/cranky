@@ -2,13 +2,13 @@
 
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
 use crate::shared::config::domain::PopupEmbed;
-use crate::shared::primitives::geometry::{Position, Size};
+use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
 use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset};
 use crate::shared::wayland::adapters::wayland::command::SurfaceCommand;
 use crate::shared::wayland::adapters::wayland::floating_anchor::{AnchorInfo, FloatingParentRole};
 use crate::shared::wayland::adapters::wayland::floating_setup::{
-    FloatingPlacement, create_new_floating,
+    FloatingFrame, FloatingPlacement, create_new_floating,
 };
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::surface_handler::handle_cmd;
@@ -36,21 +36,18 @@ fn open(fake: &Fake, state: &mut WaylandState, kind: &FloatingKind) -> u32 {
     };
     state.bars.push(bar);
     let placement = FloatingPlacement {
-        size: Size::new(10, 10),
+        anchor,
         text_w: 10,
         text_h: 10,
         offset: PopupOffset::default(),
     };
-    create_new_floating(
-        state,
-        &fake.queue_handle,
-        kind.clone(),
-        &solid(10, 10, [1; 4]),
-        &anchor,
-        &placement,
-        None,
-    )
-    .expect("create floating");
+    let frame = FloatingFrame {
+        kind: kind.clone(),
+        parent: None,
+        buffer: solid(10, 10, [1; 4]),
+        placement,
+    };
+    create_new_floating(state, &fake.queue_handle, frame).expect("create floating");
     id(&state.floating_surfaces[kind].surface)
 }
 
