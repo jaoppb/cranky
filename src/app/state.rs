@@ -7,7 +7,7 @@ use crate::features::module_runtime::ports::LayoutEvent;
 use crate::features::vdom::domain::UiCommand;
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::{ChildReport, ModuleId, MonitorId, geometry::Size};
+use crate::shared::primitives::{ChildReport, ModuleId, MonitorId};
 use crate::shared::wayland::ports::DisplayServerPort;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -28,6 +28,14 @@ pub enum AppError {
 }
 
 pub use crate::shared::wayland::domain::AppReadModel;
+
+/// The module and monitor a layout event is about: the module that reported a size or laid out
+/// its children, and the monitor it did so on.
+#[derive(Clone, Copy, Debug)]
+struct ModuleOnMonitor<'a> {
+    module: ModuleId,
+    monitor: &'a MonitorId,
+}
 
 pub(super) struct CrankyApp<
     R: crate::features::module_runtime::ports::ModuleRegistryPort<F, LS, DS, US, Snd> + 'static,
@@ -221,10 +229,13 @@ impl<
 
     async fn handle_container_layouts(
         &mut self,
-        parent_id: ModuleId,
-        monitor_id: &MonitorId,
+        parent: ModuleOnMonitor<'_>,
         layouts: &[crate::shared::primitives::ChildModuleLayout],
     ) {
+        let ModuleOnMonitor {
+            module: parent_id,
+            monitor: monitor_id,
+        } = parent;
         let mut seen = std::collections::HashSet::new();
         for child_layout in layouts {
             match self
@@ -250,17 +261,19 @@ impl<
                 }
                 None => {
                     self.ensure_lazy_spawn(
-                        parent_id,
-                        child_layout.key(),
-                        child_layout.options().clone(),
-                        child_layout.surface(),
+                        crate::features::module_runtime::ports::LazySite::new(
+                            parent_id,
+                            child_layout.key().clone(),
+                        )
+                        .with_options(child_layout.options().clone())
+                        .with_surface(child_layout.surface()),
                     )
                     .await;
                 }
             }
         }
 
-        self.suspend_stale_children(parent_id, monitor_id, &seen);
+        self.suspend_stale_children(parent, &seen);
     }
 
     /// Sends `child_id` its full, current cross-monitor bounds map, read back
@@ -291,10 +304,13 @@ impl<
     /// (seen before) but no longer has a live rect there.
     fn suspend_stale_children(
         &mut self,
-        parent_id: ModuleId,
-        monitor_id: &MonitorId,
+        parent: ModuleOnMonitor<'_>,
         seen: &std::collections::HashSet<ModuleId>,
     ) {
+        let ModuleOnMonitor {
+            module: parent_id,
+            monitor: monitor_id,
+        } = parent;
         let Some(mod_map) = self.read_model.computed_layouts.get(monitor_id) else {
             return;
         };
@@ -324,27 +340,30 @@ impl<
     /// previously recorded terminal failure is never retried until a hot
     /// reload clears it — so a popup left open behind a ticking parent
     /// doesn't retry a typo'd module name every frame.
-    async fn ensure_lazy_spawn(
-        &mut self,
-        parent: ModuleId,
-        key: &crate::shared::primitives::ModuleKey,
-        options: crate::shared::primitives::ModuleOptions,
-        surface: crate::shared::primitives::LayoutSurface,
-    ) {
-        let site = crate::shared::primitives::ModuleSite::new(Some(parent), key.clone());
-        if self.hub().module_errors_rx().borrow().contains_key(&site) {
+    async fn ensure_lazy_spawn(&mut self, site: crate::features::module_runtime::ports::LazySite) {
+        let parent = site.parent();
+        let module_site =
+            crate::shared::primitives::ModuleSite::new(Some(parent), site.key().clone());
+        let key = module_site.key();
+        if self
+            .hub()
+            .module_errors_rx()
+            .borrow()
+            .contains_key(&module_site)
+        {
             return;
         }
 
         if self.would_cycle(parent, key) {
-            self.record_module_error(site, "would create a cycle with an ancestor".to_string());
+            self.record_module_error(
+                module_site,
+                "would create a cycle with an ancestor".to_string(),
+            );
             return;
         }
 
         match self.registry.spawn_module(
-            crate::features::module_runtime::ports::LazySite::new(parent, key.clone())
-                .with_options(options)
-                .with_surface(surface),
+            site,
             crate::features::module_runtime::ports::ModuleSetup::new(
                 &self.read_model.config,
                 &self.deps,
@@ -375,7 +394,7 @@ impl<
             }
             Err(error) => {
                 tracing::warn!(module = %key, parent = %parent, err = %error, "Lazy module spawn failed");
-                self.record_module_error(site, error.to_string());
+                self.record_module_error(module_site, error.to_string());
             }
         }
     }
@@ -419,8 +438,11 @@ impl<
                     monitor_id,
                     layouts,
                 } => {
-                    self.handle_container_layouts(parent_id, &monitor_id, &layouts)
-                        .await;
+                    let parent = ModuleOnMonitor {
+                        module: parent_id,
+                        monitor: &monitor_id,
+                    };
+                    self.handle_container_layouts(parent, &layouts).await;
                 }
                 LayoutEvent::ModuleSizeChanged {
                     monitor_id,
@@ -428,7 +450,11 @@ impl<
                     size,
                     settled_width,
                 } => {
-                    self.handle_size_changed(&monitor_id, module_id, size, settled_width);
+                    let module = ModuleOnMonitor {
+                        module: module_id,
+                        monitor: &monitor_id,
+                    };
+                    self.handle_size_changed(module, ChildReport::new(size, settled_width));
                 }
             }
             if let Ok(next) = self.layout_rx.try_recv() {
@@ -704,13 +730,12 @@ impl<
         }
     }
 
-    pub(crate) fn handle_size_changed(
-        &mut self,
-        monitor_id: &MonitorId,
-        module_id: ModuleId,
-        size: Size,
-        settled_width: Option<u32>,
-    ) {
+    fn handle_size_changed(&mut self, module: ModuleOnMonitor<'_>, report: ChildReport) {
+        let ModuleOnMonitor {
+            module: module_id,
+            monitor: monitor_id,
+        } = module;
+        let size = *report.size();
         let key = self.read_model.module_keys.get(&module_id).cloned();
         tracing::trace!(monitor = %monitor_id, module = %module_id, ?size, ?key, "handle_size_changed called");
         self.read_model
@@ -722,7 +747,7 @@ impl<
         if let Some(key) = key {
             let mut sizes_map = self.hub().module_sizes_rx().borrow().clone();
             let mon_entry = sizes_map.entry(monitor_id.clone()).or_default();
-            mon_entry.insert_report(key, ChildReport::new(size, settled_width));
+            mon_entry.insert_report(key, report);
             let _ = self.hub().module_sizes_tx().send(sizes_map);
         }
     }
@@ -736,7 +761,7 @@ mod tests {
         ModuleHandles, ModuleRuntimeDependencies, ModuleSenders,
     };
     use crate::features::module_runtime::test_support::MockSurfaceManager;
-    use crate::shared::primitives::geometry::{BarWidth, Position, Rect};
+    use crate::shared::primitives::geometry::{BarWidth, Position, Rect, Size};
     use crate::shared::wayland::ports::DynSurfaceManager;
     use crate::shared::wayland::ports::MonitorBar;
     use std::sync::Arc;
@@ -1378,8 +1403,10 @@ mod tests {
             );
 
             app.handle_container_layouts(
-                parent_10,
-                &monitor,
+                ModuleOnMonitor {
+                    module: parent_10,
+                    monitor: &monitor,
+                },
                 &[crate::shared::primitives::ChildModuleLayout::new(
                     key.clone(),
                     crate::shared::primitives::ChildBounds::new(
@@ -1391,8 +1418,10 @@ mod tests {
             )
             .await;
             app.handle_container_layouts(
-                parent_20,
-                &monitor,
+                ModuleOnMonitor {
+                    module: parent_20,
+                    monitor: &monitor,
+                },
                 &[crate::shared::primitives::ChildModuleLayout::new(
                     key,
                     crate::shared::primitives::ChildBounds::new(
@@ -1469,8 +1498,10 @@ mod tests {
 
             // Popup open: the child gets a rect on DP-1.
             app.handle_container_layouts(
-                parent,
-                &monitor,
+                ModuleOnMonitor {
+                    module: parent,
+                    monitor: &monitor,
+                },
                 &[crate::shared::primitives::ChildModuleLayout::new(
                     key,
                     crate::shared::primitives::ChildBounds::new(
@@ -1490,7 +1521,14 @@ mod tests {
             assert!(child_layout_rx.borrow().contains_key(&monitor));
 
             // Popup closed: the parent's next render carries no children at all.
-            app.handle_container_layouts(parent, &monitor, &[]).await;
+            app.handle_container_layouts(
+                ModuleOnMonitor {
+                    module: parent,
+                    monitor: &monitor,
+                },
+                &[],
+            )
+            .await;
 
             assert!(
                 !app.read_model
@@ -1562,8 +1600,10 @@ mod tests {
                 crate::shared::primitives::ModuleName::new("calendar"),
             );
             app.handle_container_layouts(
-                parent,
-                &monitor,
+                ModuleOnMonitor {
+                    module: parent,
+                    monitor: &monitor,
+                },
                 &[crate::shared::primitives::ChildModuleLayout::new(
                     key,
                     crate::shared::primitives::ChildBounds::new(
@@ -1640,8 +1680,14 @@ mod tests {
 
             // First attempt: spawn_module is called and fails, and the failure
             // is recorded.
-            app.handle_container_layouts(parent, &monitor, &layouts)
-                .await;
+            app.handle_container_layouts(
+                ModuleOnMonitor {
+                    module: parent,
+                    monitor: &monitor,
+                },
+                &layouts,
+            )
+            .await;
             let site = crate::shared::primitives::ModuleSite::new(
                 Some(parent),
                 crate::shared::primitives::ModuleKey::from_name(
@@ -1652,8 +1698,14 @@ mod tests {
             assert_eq!(spawn_attempts.load(Ordering::SeqCst), 1);
 
             // Second identical attempt: spawn_module must not be called again.
-            app.handle_container_layouts(parent, &monitor, &layouts)
-                .await;
+            app.handle_container_layouts(
+                ModuleOnMonitor {
+                    module: parent,
+                    monitor: &monitor,
+                },
+                &layouts,
+            )
+            .await;
             assert_eq!(spawn_attempts.load(Ordering::SeqCst), 1);
         });
     }
@@ -1709,8 +1761,14 @@ mod tests {
             )
             .with_options(options.clone())];
 
-            app.handle_container_layouts(parent, &MonitorId::new("DP-1"), &layouts)
-                .await;
+            app.handle_container_layouts(
+                ModuleOnMonitor {
+                    module: parent,
+                    monitor: &MonitorId::new("DP-1"),
+                },
+                &layouts,
+            )
+            .await;
 
             let requests = std::mem::take(&mut *requests.lock().unwrap());
             let [site] = requests.as_slice() else {
@@ -2009,7 +2067,13 @@ mod tests {
             let (mut app, hub) = app_over(Config::default(), registry);
             let monitor = MonitorId::new("DP-2");
 
-            app.handle_size_changed(&monitor, clock, Size::new(80, 24), Some(64));
+            app.handle_size_changed(
+                ModuleOnMonitor {
+                    module: clock,
+                    monitor: &monitor,
+                },
+                ChildReport::new(Size::new(80, 24), Some(64)),
+            );
 
             assert_eq!(
                 app.read_model
@@ -2082,8 +2146,14 @@ mod tests {
                 crate::shared::primitives::LayoutSurface::Bar,
             )];
 
-            app.handle_container_layouts(parent, &MonitorId::new("DP-1"), &layouts)
-                .await;
+            app.handle_container_layouts(
+                ModuleOnMonitor {
+                    module: parent,
+                    monitor: &MonitorId::new("DP-1"),
+                },
+                &layouts,
+            )
+            .await;
 
             assert!(app.layout_senders.contains_key(&spawned));
             assert!(!app.layout_senders.contains_key(&parent));

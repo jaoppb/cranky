@@ -77,7 +77,6 @@ impl LazySite {
         self.parent
     }
 
-    #[cfg(test)]
     #[must_use]
     pub(crate) const fn key(&self) -> &ModuleKey {
         &self.key
