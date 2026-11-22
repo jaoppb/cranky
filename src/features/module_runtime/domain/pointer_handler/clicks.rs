@@ -1,20 +1,15 @@
 use super::action::PointerAction;
 use super::handler::PointerHandler;
 use super::hit_ref::capture_node_ref;
-use crate::features::layout_engine::domain::RenderNode;
+use super::target::PointerTarget;
 use crate::features::vdom::domain::{UiAction, UiCommand};
 use crate::shared::events::core::PointerButton;
-use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::Position;
 
 impl PointerHandler {
-    pub(crate) fn handle_button_press(
-        &mut self,
-        monitor_id: &MonitorId,
-        pos: Position,
-        render_tree: &RenderNode,
-    ) -> bool {
-        let hit = render_tree.hit_test(pos);
+    pub(crate) fn handle_button_press(&mut self, target: PointerTarget<'_>, pos: Position) -> bool {
+        let monitor_id = target.monitor_id();
+        let hit = target.tree().hit_test(pos);
         let target_ref = capture_node_ref(&hit);
         let old_active = self.active.get(monitor_id).cloned();
         if old_active == target_ref {
@@ -31,13 +26,13 @@ impl PointerHandler {
 
     pub(crate) fn handle_button_release(
         &mut self,
-        monitor_id: &MonitorId,
+        target: PointerTarget<'_>,
         pos: Position,
-        render_tree: &RenderNode,
     ) -> bool {
+        let monitor_id = target.monitor_id();
         let mut changed = self.active.remove(monitor_id).is_some();
 
-        let hit = render_tree.hit_test(pos);
+        let hit = target.tree().hit_test(pos);
         let target_ref = capture_node_ref(&hit);
         let old_focus = self.focused.get(monitor_id).cloned();
         if old_focus != target_ref {
@@ -53,12 +48,12 @@ impl PointerHandler {
     }
 
     pub(crate) fn handle_click(
-        monitor_id: &MonitorId,
+        target: PointerTarget<'_>,
         button: PointerButton,
         pos: Position,
-        render_tree: &RenderNode,
     ) -> Vec<PointerAction> {
-        let hit = render_tree.hit_test(pos);
+        let monitor_id = target.monitor_id();
+        let hit = target.tree().hit_test(pos);
         let hit_cmd = hit
             .iter()
             .rev()

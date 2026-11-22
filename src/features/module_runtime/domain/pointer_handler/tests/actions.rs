@@ -4,6 +4,7 @@
 use crate::features::layout_engine::domain::{NodePath, RenderNode, SurfaceSpace};
 use crate::features::module_runtime::domain::pointer_handler::action::PointerAction;
 use crate::features::module_runtime::domain::pointer_handler::handler::PointerHandler;
+use crate::features::module_runtime::domain::pointer_handler::target::PointerTarget;
 use crate::features::styling::domain::ComputedStyle;
 use crate::features::systray::domain::{SystrayActionName, SystrayId};
 use crate::features::vdom::domain::{ClickHandlers, NodeRef, UiAction, UiCommand};
@@ -67,7 +68,8 @@ fn release(x: i32, y: i32) -> PointerEvent {
 fn hovering_a_node_runs_its_hover_action_for_this_monitor() {
     let mon = MonitorId::new("HDMI-A-1");
     let call = tree(Some(UiAction::ScriptCall(FunctionName::new("peek"))), None);
-    let outcome = PointerHandler::new().handle_event(&motion(40, 11), &mon, &call);
+    let outcome =
+        PointerHandler::new().handle_event(&motion(40, 11), PointerTarget::new(&mon, &call));
     assert_eq!(
         outcome.into_actions(),
         vec![PointerAction::CallFunction(
@@ -77,7 +79,8 @@ fn hovering_a_node_runs_its_hover_action_for_this_monitor() {
     );
 
     let exec = tree(Some(UiAction::Exec("notify-send hi".into())), None);
-    let outcome = PointerHandler::new().handle_event(&motion(40, 11), &mon, &exec);
+    let outcome =
+        PointerHandler::new().handle_event(&motion(40, 11), PointerTarget::new(&mon, &exec));
     assert_eq!(
         outcome.into_actions(),
         vec![PointerAction::SendUi(UiCommand::Exec(
@@ -91,7 +94,8 @@ fn hovering_a_node_runs_its_hover_action_for_this_monitor() {
 fn tray_hover_and_click_carry_the_pointer_position() {
     let mon = MonitorId::new("DP-1");
     let hover = tree(Some(tray("Activate")), None);
-    let outcome = PointerHandler::new().handle_event(&motion(40, 11), &mon, &hover);
+    let outcome =
+        PointerHandler::new().handle_event(&motion(40, 11), PointerTarget::new(&mon, &hover));
     assert_eq!(
         outcome.into_actions(),
         vec![PointerAction::SendUi(UiCommand::SystrayAction {
@@ -108,8 +112,7 @@ fn tray_hover_and_click_carry_the_pointer_position() {
             button: PointerButton::Right,
             pos: Position::new(73, 19),
         },
-        &mon,
-        &click,
+        PointerTarget::new(&mon, &click),
     );
     assert_eq!(
         outcome.into_actions(),
@@ -127,10 +130,10 @@ fn moving_off_every_node_clears_the_hover_of_that_monitor_only() {
     let mon = MonitorId::new("DP-1");
     let other = MonitorId::new("HDMI-A-1");
     let node = tree(None, None);
-    let _ = handler.handle_event(&motion(40, 11), &mon, &node);
-    let _ = handler.handle_event(&motion(40, 11), &other, &node);
+    let _ = handler.handle_event(&motion(40, 11), PointerTarget::new(&mon, &node));
+    let _ = handler.handle_event(&motion(40, 11), PointerTarget::new(&other, &node));
 
-    let outcome = handler.handle_event(&motion(300, 11), &mon, &node);
+    let outcome = handler.handle_event(&motion(300, 11), PointerTarget::new(&mon, &node));
     assert!(outcome.has_state_changed());
     assert_eq!(outcome.into_actions(), vec![]);
     assert_eq!(handler.hovered_node(&mon), None);
@@ -144,7 +147,7 @@ fn pressing_outside_every_node_clears_the_press_once() {
     let node = tree(None, None);
     let mut changed = |event: PointerEvent| {
         handler
-            .handle_event(&event, &mon, &node)
+            .handle_event(&event, PointerTarget::new(&mon, &node))
             .has_state_changed()
     };
     assert!(changed(press(40, 11)));
@@ -161,7 +164,7 @@ fn releasing_outside_every_node_drops_the_focus() {
     let node = tree(None, None);
     let mut changed = |event: PointerEvent| {
         handler
-            .handle_event(&event, &mon, &node)
+            .handle_event(&event, PointerTarget::new(&mon, &node))
             .has_state_changed()
     };
     assert!(changed(release(40, 11)));
@@ -184,7 +187,7 @@ fn enter_and_scroll_events_do_nothing() {
         amount: ScrollDelta::new(-1.0),
     };
     for event in [enter, scroll] {
-        let outcome = handler.handle_event(&event, &mon, &node);
+        let outcome = handler.handle_event(&event, PointerTarget::new(&mon, &node));
         assert!(!outcome.has_state_changed());
         assert_eq!(outcome.into_actions(), vec![]);
     }

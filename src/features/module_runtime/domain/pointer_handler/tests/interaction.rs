@@ -5,6 +5,7 @@ mod tests {
         PointerAction, PointerOutcome,
     };
     use crate::features::module_runtime::domain::pointer_handler::handler::PointerHandler;
+    use crate::features::module_runtime::domain::pointer_handler::target::PointerTarget;
     use crate::features::styling::domain::ComputedStyle;
     use crate::features::vdom::domain::NodeRef;
     use crate::shared::events::core::{PointerButton, PointerEvent, SurfaceKind};
@@ -40,8 +41,7 @@ mod tests {
                 surface: SurfaceKind::Bar,
                 pos: Position::new(10, 10),
             },
-            &mon,
-            &tree,
+            PointerTarget::new(&mon, &tree),
         );
         assert!(outcome_motion.has_state_changed());
         assert_eq!(handler.hovered_node(&mon), Some(&root_ref()));
@@ -52,8 +52,7 @@ mod tests {
                 button: PointerButton::Left,
                 pos: Position::new(10, 10),
             },
-            &mon,
-            &tree,
+            PointerTarget::new(&mon, &tree),
         );
         assert!(outcome_press.has_state_changed());
         assert_eq!(handler.active_node(&mon), Some(&root_ref()));
@@ -64,8 +63,7 @@ mod tests {
                 button: PointerButton::Left,
                 pos: Position::new(10, 10),
             },
-            &mon,
-            &tree,
+            PointerTarget::new(&mon, &tree),
         );
         assert!(outcome_release.has_state_changed());
         assert_eq!(handler.active_node(&mon), None);
@@ -75,8 +73,7 @@ mod tests {
             &PointerEvent::PointerLeave {
                 surface: SurfaceKind::Bar,
             },
-            &mon,
-            &tree,
+            PointerTarget::new(&mon, &tree),
         );
         assert!(outcome_leave.has_state_changed());
         assert_eq!(handler.hovered_node(&mon), None);
@@ -97,12 +94,12 @@ mod tests {
 
         assert!(
             handler
-                .handle_event(&motion(10), &mon, &tree)
+                .handle_event(&motion(10), PointerTarget::new(&mon, &tree))
                 .has_state_changed()
         );
         assert!(
             !handler
-                .handle_event(&motion(20), &mon, &tree)
+                .handle_event(&motion(20), PointerTarget::new(&mon, &tree))
                 .has_state_changed()
         );
 
@@ -112,8 +109,7 @@ mod tests {
                 button: PointerButton::Left,
                 pos: Position::new(10, 10),
             },
-            &mon,
-            &tree,
+            PointerTarget::new(&mon, &tree),
         );
         assert!(!click.has_state_changed());
         assert_eq!(handler.hovered_node(&mon), Some(&root_ref()));
@@ -131,8 +127,7 @@ mod tests {
                 surface: SurfaceKind::Bar,
                 pos: Position::new(10, 10),
             },
-            &mon,
-            &make_test_tree(),
+            PointerTarget::new(&mon, &make_test_tree()),
         );
 
         let focused = handler.interaction_context(&mon, MonitorFocus::Focused);
@@ -206,8 +201,7 @@ mod tests {
                     surface: SurfaceKind::Bar,
                     pos: Position::new(10, 10),
                 },
-                mon,
-                &tree,
+                PointerTarget::new(mon, &tree),
             );
         }
         assert!(handler.hovered_node(&dead).is_some());
