@@ -176,6 +176,7 @@ fn apply_gap_longhand(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
 mod tests {
     use super::*;
     use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
+    use crate::features::styling::domain::cascade::declared_lengths_apply::FontSizeBases;
     use crate::features::styling::domain::{ComputedStyle, CssLength, StyleSheetName};
     use crate::features::styling::ports::CssParserPort;
     use crate::shared::config::domain::FontSize;
@@ -196,7 +197,10 @@ mod tests {
         let lengths = detect_relative_lengths(&props);
 
         let mut computed = ComputedStyle::default();
-        lengths.apply(&mut computed, FontSize::new(10.0), FontSize::new(14.0));
+        lengths.apply(
+            &mut computed,
+            FontSizeBases::new(FontSize::new(10.0), FontSize::new(14.0)),
+        );
 
         assert_eq!(computed.width(), Some(CssLength::Pixels(20.0)));
         // height was px, not relative: nothing pending, untouched here.
@@ -209,7 +213,10 @@ mod tests {
         let lengths = detect_relative_lengths(&props);
 
         let mut computed = ComputedStyle::default();
-        lengths.apply(&mut computed, FontSize::new(10.0), FontSize::new(20.0));
+        lengths.apply(
+            &mut computed,
+            FontSizeBases::new(FontSize::new(10.0), FontSize::new(20.0)),
+        );
 
         assert_eq!(
             computed

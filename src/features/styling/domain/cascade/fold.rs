@@ -38,7 +38,9 @@ pub(crate) fn fold_matches(mut matches: Vec<MatchedRule>) -> DeclaredStyle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::styling::domain::cascade::declared_lengths::DeclaredLengths;
+    use crate::features::styling::domain::cascade::declared_parts::{
+        DeclaredValues, FontRelativeLengths, VarDeclarations,
+    };
     use crate::features::styling::domain::cascade::declared_style::InheritableKeywords;
     use crate::features::styling::domain::cascade::inherited::InheritedStyle;
     use crate::features::styling::domain::cascade::priority::{Importance, Layer};
@@ -46,7 +48,6 @@ mod tests {
     use crate::features::styling::domain::computed_style::ComputedStyle;
     use crate::features::styling::ports::PropertyReparser;
     use crate::shared::primitives::color::DrawingColor;
-    use std::collections::HashMap;
 
     struct NoopReparser;
     impl PropertyReparser for NoopReparser {
@@ -59,12 +60,9 @@ mod tests {
         let mut style = ComputedStyle::default();
         style.set_color(DrawingColor::parse(hex).unwrap());
         DeclaredStyle::from_parts(
-            style,
-            InheritableKeywords::default(),
-            None,
-            DeclaredLengths::default(),
-            HashMap::new(),
-            HashMap::new(),
+            DeclaredValues::new(style, InheritableKeywords::default()),
+            FontRelativeLengths::default(),
+            VarDeclarations::default(),
         )
     }
 

@@ -214,9 +214,8 @@ mod tests {
         assert!(base.contains("bar {"));
     }
 
-    fn write_style(home: &TestHome, dir: &str, name: &str, content: &str) {
-        let dir = home.home().as_path().join(dir);
-        fs::create_dir_all(&dir).unwrap();
+    fn write_style(dir: &std::path::Path, name: &str, content: &str) {
+        fs::create_dir_all(dir).unwrap();
         fs::write(dir.join(format!("{name}.css")), content).unwrap();
     }
 
@@ -230,10 +229,14 @@ mod tests {
     #[test]
     fn user_stylesheet_wins_over_the_deployed_and_embedded_ones() {
         let home = TestHome::new("styling");
-        write_style(&home, SHARE_DIR, "base", "/* share */");
+        write_style(
+            &home.home().as_path().join(SHARE_DIR),
+            "base",
+            "/* share */",
+        );
         assert_eq!(load(&home, "base").unwrap(), "/* share */");
 
-        write_style(&home, USER_DIR, "base", "/* user */");
+        write_style(&home.home().as_path().join(USER_DIR), "base", "/* user */");
         assert_eq!(load(&home, "base").unwrap(), "/* user */");
     }
 
@@ -249,7 +252,7 @@ mod tests {
     #[test]
     fn stylesheet_with_no_builtin_is_loaded_from_disk() {
         let home = TestHome::new("styling");
-        write_style(&home, USER_DIR, "mine", "/* mine */");
+        write_style(&home.home().as_path().join(USER_DIR), "mine", "/* mine */");
         assert_eq!(load(&home, "mine").unwrap(), "/* mine */");
     }
 
@@ -257,7 +260,11 @@ mod tests {
     fn ensure_builtin_styles_deploys_every_builtin_and_repairs_edited_copies() {
         let home = TestHome::new("styling");
         // A stale deployed copy from an older version must be overwritten.
-        write_style(&home, SHARE_DIR, "clock", "/* stale */");
+        write_style(
+            &home.home().as_path().join(SHARE_DIR),
+            "clock",
+            "/* stale */",
+        );
 
         FsStyleLoader::new(home.env())
             .ensure_builtin_styles()
