@@ -1,14 +1,12 @@
 use super::super::{
     FloatingEngine, FloatingEngines, FloatingLayouts, FloatingPass, layout_floating,
 };
-use super::{RecordingEngine, Spec, content, tooltip_content};
+use super::{RecordingEngine, Spec, content, panel_on_every_edge, tooltip_content};
 use crate::features::layout_engine::domain::{RenderNode, StyledNode, StyledPanel, StyledPopup};
 use crate::features::module_runtime::test_support::MockCanvasFactory;
 use crate::features::vdom::domain::{
-    AnchorDirection, ExclusiveZone, InteractionContext, KeyboardInteractivity, NodePath, NodeRef,
-    PanelAnchor, PanelLayer, SurfaceSpace,
+    AnchorDirection, InteractionContext, NodePath, NodeRef, PanelLayer, SurfaceSpace,
 };
-use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::{MonitorFocus, MonitorId, PopupOffset};
 use std::collections::HashMap;
@@ -83,11 +81,7 @@ fn each_open_floating_kind_is_laid_out_by_its_own_engine() {
         rect: Rect::new(Position::new(60, 2), Size::new(15, 20)),
         panel: Some(StyledPanel::new(
             Box::new(panel_content.clone()),
-            PanelLayer::Overlay,
-            PanelAnchor::all(),
-            MarginConfig::default(),
-            ExclusiveZone::none(),
-            KeyboardInteractivity::None,
+            panel_on_every_edge(PanelLayer::Overlay),
         )),
         ..Spec::at_path(SurfaceSpace::Bar, &[1])
     }

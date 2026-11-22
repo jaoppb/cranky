@@ -126,14 +126,7 @@ impl VNode {
                 Some(&query),
                 &detached_inherited,
             ));
-            StyledPanel::new(
-                content,
-                panel_spec.layer(),
-                panel_spec.anchor(),
-                *panel_spec.margin(),
-                panel_spec.exclusive_zone(),
-                panel_spec.keyboard(),
-            )
+            StyledPanel::new(content, panel_spec.surface())
         });
 
         let children = match self.kind() {

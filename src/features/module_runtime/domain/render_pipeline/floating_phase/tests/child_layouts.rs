@@ -1,5 +1,5 @@
 use super::super::{FloatingEngine, FloatingEngines, FloatingPass, layout_floating};
-use super::{Spec, content};
+use super::{Spec, content, panel_on_every_edge};
 use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{
     LayoutError, RenderNode, StyledNode, StyledPanel, StyledPopup, TextMeasurer,
@@ -8,10 +8,8 @@ use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::test_support::MockCanvasFactory;
 use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::{
-    AnchorDirection, ExclusiveZone, InteractionContext, KeyboardInteractivity, NodePath, NodeRef,
-    PanelAnchor, PanelLayer, SurfaceSpace,
+    AnchorDirection, InteractionContext, NodePath, NodeRef, PanelLayer, SurfaceSpace,
 };
-use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::{
     ChildModuleLayout, LayoutSurface, ModuleKey, ModuleName, ModuleOptions, MonitorFocus, MonitorId,
@@ -59,11 +57,7 @@ fn bar(popup: &StyledNode, panel: &StyledNode, tooltip: &StyledNode) -> RenderNo
     let launcher = Spec {
         panel: Some(StyledPanel::new(
             Box::new(panel.clone()),
-            PanelLayer::Top,
-            PanelAnchor::all(),
-            MarginConfig::default(),
-            ExclusiveZone::none(),
-            KeyboardInteractivity::None,
+            panel_on_every_edge(PanelLayer::Top),
         )),
         ..Spec::at_path(SurfaceSpace::Bar, &[1])
     }

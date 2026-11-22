@@ -1,8 +1,11 @@
 //! Popup and panel content after styling, before layout.
 use crate::features::layout_engine::domain::styled_node::StyledNode;
+use crate::features::vdom::domain::{AnchorDirection, PanelSurface, PopupOffset};
+#[cfg(test)]
 use crate::features::vdom::domain::{
-    AnchorDirection, ExclusiveZone, KeyboardInteractivity, PanelAnchor, PanelLayer, PopupOffset,
+    ExclusiveZone, KeyboardInteractivity, PanelAnchor, PanelLayer,
 };
+#[cfg(test)]
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::Rect;
 
@@ -46,36 +49,18 @@ impl StyledPopup {
     }
 }
 
-/// A layer-shell panel's styled content with its layer, anchor edges, margin, exclusive zone
-/// and keyboard mode.
+/// A layer-shell panel's styled content with the surface placement it asks for: layer, anchor
+/// edges, margin, exclusive zone and keyboard mode.
 #[derive(Debug, Clone, PartialEq)]
 pub struct StyledPanel {
     content: Box<StyledNode>,
-    layer: PanelLayer,
-    anchor: PanelAnchor,
-    margin: MarginConfig,
-    exclusive_zone: ExclusiveZone,
-    keyboard: KeyboardInteractivity,
+    surface: PanelSurface,
 }
 
 impl StyledPanel {
     #[must_use]
-    pub(crate) const fn new(
-        content: Box<StyledNode>,
-        layer: PanelLayer,
-        anchor: PanelAnchor,
-        margin: MarginConfig,
-        exclusive_zone: ExclusiveZone,
-        keyboard: KeyboardInteractivity,
-    ) -> Self {
-        Self {
-            content,
-            layer,
-            anchor,
-            margin,
-            exclusive_zone,
-            keyboard,
-        }
+    pub(crate) const fn new(content: Box<StyledNode>, surface: PanelSurface) -> Self {
+        Self { content, surface }
     }
 
     #[must_use]
@@ -86,31 +71,31 @@ impl StyledPanel {
     #[cfg(test)]
     #[must_use]
     pub(crate) const fn layer(&self) -> PanelLayer {
-        self.layer
+        self.surface.layer()
     }
 
     #[cfg(test)]
     #[must_use]
     pub(crate) const fn anchor(&self) -> PanelAnchor {
-        self.anchor
+        self.surface.anchor()
     }
 
     #[cfg(test)]
     #[must_use]
     pub(crate) const fn margin(&self) -> &MarginConfig {
-        &self.margin
+        self.surface.margin()
     }
 
     #[cfg(test)]
     #[must_use]
     pub(crate) const fn exclusive_zone(&self) -> ExclusiveZone {
-        self.exclusive_zone
+        self.surface.exclusive_zone()
     }
 
     #[cfg(test)]
     #[must_use]
     pub(crate) const fn keyboard(&self) -> KeyboardInteractivity {
-        self.keyboard
+        self.surface.keyboard()
     }
 }
 
