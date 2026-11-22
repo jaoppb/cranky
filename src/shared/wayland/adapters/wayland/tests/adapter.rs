@@ -19,9 +19,11 @@ fn test_wayland_state_initialization() {
     crate::test_utils::block_on(async {
         let (command_tx, _) = tokio::sync::mpsc::channel(10);
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::BaseDirectories::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            ),
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));
@@ -76,9 +78,11 @@ fn test_wayland_adapter_methods() {
         let config_rx = hub.config_rx();
 
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::BaseDirectories::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            ),
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));
@@ -142,9 +146,11 @@ fn test_wayland_adapter_methods() {
 
         let (tx, _rx) = tokio::sync::mpsc::channel(10);
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::BaseDirectories::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            ),
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));

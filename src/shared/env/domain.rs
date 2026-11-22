@@ -81,12 +81,31 @@ impl HyprlandInstanceSignature {
     }
 }
 
+/// The directories the app keeps its files under: the home directory, and the XDG cache and
+/// runtime directories.
+#[derive(Debug)]
+pub struct BaseDirectories {
+    home: HomeDir,
+    cache: XdgCacheHome,
+    runtime: XdgRuntimeDir,
+}
+
+impl BaseDirectories {
+    /// Bundles the three directories as already read.
+    #[must_use]
+    pub const fn new(home: HomeDir, cache: XdgCacheHome, runtime: XdgRuntimeDir) -> Self {
+        Self {
+            home,
+            cache,
+            runtime,
+        }
+    }
+}
+
 /// Everything the app reads from the process environment, captured once at startup.
 #[derive(Debug)]
 pub struct AppEnvironment {
-    home: HomeDir,
-    xdg_cache_home: XdgCacheHome,
-    xdg_runtime_dir: XdgRuntimeDir,
+    directories: BaseDirectories,
     rust_log: RustLog,
     hyprland_instance_signature: Option<HyprlandInstanceSignature>,
 }
@@ -95,16 +114,12 @@ impl AppEnvironment {
     /// Bundles already-read values; the Hyprland signature is `None` outside a Hyprland session.
     #[must_use]
     pub const fn new(
-        home: HomeDir,
-        xdg_cache_home: XdgCacheHome,
-        xdg_runtime_dir: XdgRuntimeDir,
+        directories: BaseDirectories,
         rust_log: RustLog,
         hyprland_instance_signature: Option<HyprlandInstanceSignature>,
     ) -> Self {
         Self {
-            home,
-            xdg_cache_home,
-            xdg_runtime_dir,
+            directories,
             rust_log,
             hyprland_instance_signature,
         }
@@ -112,17 +127,17 @@ impl AppEnvironment {
 
     #[must_use]
     pub(crate) const fn home(&self) -> &HomeDir {
-        &self.home
+        &self.directories.home
     }
 
     #[must_use]
     pub(crate) const fn xdg_cache_home(&self) -> &XdgCacheHome {
-        &self.xdg_cache_home
+        &self.directories.cache
     }
 
     #[must_use]
     pub(crate) const fn xdg_runtime_dir(&self) -> &XdgRuntimeDir {
-        &self.xdg_runtime_dir
+        &self.directories.runtime
     }
 
     #[must_use]
@@ -144,9 +159,11 @@ mod tests {
     #[test]
     fn test_app_environment_keeps_each_value_in_its_place() {
         let env = AppEnvironment::new(
-            HomeDir::new(PathBuf::from("/home/someone")),
-            XdgCacheHome::new(PathBuf::from("/var/cache/someone")),
-            XdgRuntimeDir::new(PathBuf::from("/run/user/1000")),
+            BaseDirectories::new(
+                HomeDir::new(PathBuf::from("/home/someone")),
+                XdgCacheHome::new(PathBuf::from("/var/cache/someone")),
+                XdgRuntimeDir::new(PathBuf::from("/run/user/1000")),
+            ),
             RustLog::new("cranky=debug".to_string()),
             Some(HyprlandInstanceSignature::new("abc123".to_string())),
         );

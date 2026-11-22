@@ -2,7 +2,9 @@
 
 use super::Fake;
 use crate::shared::config::domain::{Config, PopupConfig, PopupEmbed};
-use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
+use crate::shared::env::domain::{
+    AppEnvironment, BaseDirectories, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir,
+};
 use crate::shared::events::signals::SignalHub;
 use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use crate::shared::wayland::adapters::wayland::keyboard::KeyboardInput;
@@ -51,12 +53,17 @@ pub(in crate::shared::wayland::adapters::wayland) fn lose_runtime_dir(state: &mu
     state.app_env = environment_with_runtime_dir(PathBuf::from("/nonexistent/cranky-runtime"));
 }
 
-fn environment_with_runtime_dir(runtime_dir: PathBuf) -> Arc<AppEnvironment> {
+/// An environment whose home and cache are `/tmp` and whose runtime directory is `runtime_dir`.
+pub(in crate::shared::wayland::adapters::wayland) fn environment_with_runtime_dir(
+    runtime_dir: PathBuf,
+) -> Arc<AppEnvironment> {
     let tmp = || PathBuf::from("/tmp");
     Arc::new(AppEnvironment::new(
-        HomeDir::new(tmp()),
-        XdgCacheHome::new(tmp()),
-        XdgRuntimeDir::new(runtime_dir),
+        BaseDirectories::new(
+            HomeDir::new(tmp()),
+            XdgCacheHome::new(tmp()),
+            XdgRuntimeDir::new(runtime_dir),
+        ),
         RustLog::new(String::new()),
         None,
     ))

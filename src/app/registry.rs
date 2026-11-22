@@ -706,9 +706,11 @@ mod tests {
     #[test]
     fn test_per_site_module_identity() {
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::BaseDirectories::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            ),
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));
@@ -926,9 +928,13 @@ mod tests {
     fn test_spawn_module_lazy_mints_a_working_site() {
         crate::test_utils::block_on(async {
             let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::BaseDirectories::new(
+                    crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from(
+                        "/tmp",
+                    )),
+                ),
                 crate::shared::env::domain::RustLog::new(String::new()),
                 None,
             ));
@@ -990,9 +996,11 @@ mod tests {
     #[test]
     fn test_spawn_module_lazy_propagates_not_found() {
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-            crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            crate::shared::env::domain::BaseDirectories::new(
+                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+            ),
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));
@@ -1051,9 +1059,13 @@ mod tests {
     fn test_reload_preserves_embedded_surface() {
         crate::test_utils::block_on(async {
             let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::BaseDirectories::new(
+                    crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from(
+                        "/tmp",
+                    )),
+                ),
                 crate::shared::env::domain::RustLog::new(String::new()),
                 None,
             ));
@@ -1139,9 +1151,13 @@ mod tests {
     fn test_clear_aborts_orphaned_lazy_actors() {
         crate::test_utils::block_on(async {
             let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
+                crate::shared::env::domain::BaseDirectories::new(
+                    crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from(
+                        "/tmp",
+                    )),
+                ),
                 crate::shared::env::domain::RustLog::new(String::new()),
                 None,
             ));

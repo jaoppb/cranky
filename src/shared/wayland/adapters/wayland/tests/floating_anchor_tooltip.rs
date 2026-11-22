@@ -1,6 +1,5 @@
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget, ShowFloating};
 use crate::shared::config::domain::Config;
-use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{ModuleId, MonitorId};
@@ -13,7 +12,7 @@ use crate::shared::wayland::adapters::wayland::floating_anchor::{
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::popup;
 use crate::shared::wayland::adapters::wayland::tests::fixture::{
-    Fake, popup_kind, show_request, solid,
+    Fake, environment_with_runtime_dir, popup_kind, show_request, solid,
 };
 use crate::shared::wayland::adapters::wayland::types::{FloatingSurface, ModuleSurface};
 use std::collections::HashMap;
@@ -108,13 +107,7 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
     );
 
     let (command_tx, _command_rx) = tokio::sync::mpsc::channel(1);
-    let app_env = Arc::new(AppEnvironment::new(
-        HomeDir::new(std::path::PathBuf::from("/tmp")),
-        XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-        XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-        RustLog::new(String::new()),
-        None,
-    ));
+    let app_env = environment_with_runtime_dir(std::path::PathBuf::from("/tmp"));
     let state = WaylandState {
         hub: Arc::new(SignalHub::new(Config::default())),
         compositor: None,

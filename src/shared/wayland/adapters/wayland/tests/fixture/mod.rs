@@ -8,7 +8,9 @@ mod request;
 mod seat;
 mod state;
 pub(in crate::shared::wayland::adapters::wayland) use request::show_request;
-pub(in crate::shared::wayland::adapters::wayland) use state::lose_runtime_dir;
+pub(in crate::shared::wayland::adapters::wayland) use state::{
+    environment_with_runtime_dir, lose_runtime_dir,
+};
 mod subsurface;
 pub mod wire;
 

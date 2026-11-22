@@ -100,9 +100,11 @@ impl TestHome {
         std::fs::create_dir_all(&dir).expect("failed to create test HOME");
 
         let env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::HomeDir::new(dir.clone()),
-            crate::shared::env::domain::XdgCacheHome::new(dir.join("cache")),
-            crate::shared::env::domain::XdgRuntimeDir::new(dir.join("runtime")),
+            crate::shared::env::domain::BaseDirectories::new(
+                crate::shared::env::domain::HomeDir::new(dir.clone()),
+                crate::shared::env::domain::XdgCacheHome::new(dir.join("cache")),
+                crate::shared::env::domain::XdgRuntimeDir::new(dir.join("runtime")),
+            ),
             crate::shared::env::domain::RustLog::new(String::new()),
             None,
         ));
