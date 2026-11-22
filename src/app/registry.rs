@@ -299,10 +299,7 @@ impl ModuleRegistry {
         );
         let deps = setup.deps();
 
-        let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
-        let sender = WatchLayoutSender { tx: layout_tx };
-
-        let ctx = self.build_site_context(id, layout_rx, deps);
+        let (ctx, sender) = self.build_site_context(id, deps);
 
         let style_resolver = self.create_style_resolver_for_module(module.styles());
         let vdom_diff = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
@@ -334,6 +331,9 @@ impl ModuleRegistry {
     /// default). An id with no recorded site falls back to `Bar` /
     /// no-parent, which only ever happens for a root module during initial
     /// `load()`, before `spawn_all` has a chance to run.
+    ///
+    /// The context reads its layout from a new channel, whose sender comes
+    /// back with it for whoever lays the module out.
     fn build_site_context<
         Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
         LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
@@ -342,27 +342,26 @@ impl ModuleRegistry {
     >(
         &self,
         id: ModuleId,
-        layout_rx: tokio::sync::watch::Receiver<
-            std::collections::HashMap<
-                crate::shared::primitives::MonitorId,
-                crate::shared::primitives::ChildBounds,
-            >,
-        >,
         deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
-    ) -> crate::features::module_runtime::application::ModuleContext<LS, DS, US> {
+    ) -> (
+        crate::features::module_runtime::application::ModuleContext<LS, DS, US>,
+        WatchLayoutSender,
+    ) {
+        let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
         let site = self.sites.get(&id);
         let parent_id = site.and_then(ModuleSiteInfo::parent);
         let surface = site.map_or(crate::shared::primitives::LayoutSurface::Bar, |site_info| {
             site_info.surface
         });
 
-        crate::features::module_runtime::application::ModuleContext::new(
+        let ctx = crate::features::module_runtime::application::ModuleContext::new(
             id,
             deps.handles.clone(),
             layout_rx,
         )
         .with_parent(parent_id)
-        .with_surface(surface)
+        .with_surface(surface);
+        (ctx, WatchLayoutSender { tx: layout_tx })
     }
 }
 
@@ -528,11 +527,8 @@ impl<
             std::collections::HashMap::new();
 
         for (id, module) in std::mem::take(&mut self.modules) {
-            let (layout_tx, layout_rx) =
-                tokio::sync::watch::channel(std::collections::HashMap::new());
-            layout_senders.insert(id, WatchLayoutSender { tx: layout_tx });
-
-            let ctx = self.build_site_context(id, layout_rx, deps);
+            let (ctx, sender) = self.build_site_context(id, deps);
+            layout_senders.insert(id, sender);
 
             let style_resolver = self.create_style_resolver_for_module(module.styles());
 
@@ -616,10 +612,8 @@ impl<
                 self.active_signals.insert(*sub);
             }
 
-            let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
-            new_senders.insert(id, WatchLayoutSender { tx: layout_tx });
-
-            let ctx = self.build_site_context(id, layout_rx, deps);
+            let (ctx, sender) = self.build_site_context(id, deps);
+            new_senders.insert(id, sender);
 
             let style_resolver = self.create_style_resolver_for_module(module.styles());
             let vdom_diff =
@@ -1181,8 +1175,7 @@ mod tests {
             // ...and the ModuleContext `reload_module` actually builds for the
             // rebuilt actor must carry that surface, not reset to
             // `ModuleContext::new`'s `LayoutSurface::Bar` default.
-            let (_layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
-            let ctx = registry.build_site_context(id, layout_rx, &deps);
+            let (ctx, _sender) = registry.build_site_context(id, &deps);
             assert_eq!(
                 ctx.surface(),
                 crate::shared::primitives::LayoutSurface::Popup
@@ -1415,9 +1408,7 @@ mod tests {
                 .unwrap()
                 .id();
 
-            let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
-            let mut ctx = registry.build_site_context(id, layout_rx, &deps);
-            let sender = WatchLayoutSender { tx: layout_tx };
+            let (mut ctx, sender) = registry.build_site_context(id, &deps);
 
             assert_eq!(ctx.id(), id);
             assert_eq!(ctx.parent_id(), Some(root_id));
