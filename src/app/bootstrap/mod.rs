@@ -53,7 +53,7 @@ pub fn run() -> Result<(), BootError> {
         let config_adapter = ConfigAdapter::new(font_validator, &app_env);
         let initial_config = config_adapter.load_initial()?;
 
-        let hub = Arc::new(SignalHub::new(initial_config.clone()));
+        let hub = Arc::new(SignalHub::new(initial_config));
 
         // 2. Initialize Wayland and Core App
         let (display_tx, display_rx) = mpsc::channel::<DisplayCommand>(100);
@@ -75,17 +75,25 @@ pub fn run() -> Result<(), BootError> {
         let layout_sender = std::sync::Arc::new(layout_tx);
         let ui_sender = std::sync::Arc::new(ui_tx);
 
-        let services = crate::app::state::StateServices::new(
-            hub.clone(),
-            surface_manager,
+        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+            crate::features::module_runtime::ports::ModuleHandles::new(
+                hub.clone(),
+                surface_manager,
+                crate::features::module_runtime::ports::ModuleSenders::new(
+                    layout_sender,
+                    display_sender,
+                    ui_sender,
+                ),
+            ),
             canvas_factory,
-            display_sender,
-            layout_sender,
-            ui_sender,
         );
-        let channels =
-            crate::app::state::StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-        let mut app = CrankyApp::new(initial_config.clone(), services, channels, registry)?;
+        let channels = crate::app::state::StateChannels::new(
+            crate::app::state::ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+            system_rx,
+        );
+        // The app starts from the configuration the hub holds, the initial one: it must be built
+        // before the config watcher starts below.
+        let mut app = CrankyApp::new(deps, channels, registry)?;
 
         let active_signals = app.active_signals();
 

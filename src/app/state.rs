@@ -9,7 +9,6 @@ use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::{ChildReport, ModuleId, MonitorId, geometry::Size};
 use crate::shared::wayland::ports::DisplayServerPort;
-use crate::shared::wayland::ports::DynSurfaceManager;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -38,19 +37,16 @@ pub(super) struct CrankyApp<
     US: crate::features::vdom::domain::UiCommandSender + 'static,
     Snd: crate::features::module_runtime::ports::LayoutSender + 'static,
 > {
-    hub: Arc<SignalHub>,
+    /// The hub, the surface manager, the outbound channels and the canvas
+    /// factory every module actor is spawned with; the app reads the hub too.
+    deps: crate::features::module_runtime::ports::ModuleRuntimeDependencies<F, LS, DS, US>,
     read_model: AppReadModel,
     display_rx: mpsc::Receiver<DisplayCommand>,
     layout_rx: mpsc::Receiver<LayoutEvent>,
     ui_rx: mpsc::Receiver<UiCommand>,
     system_rx: mpsc::Receiver<SystemCommand>,
     layout_senders: HashMap<ModuleId, Snd>,
-    surface_manager: DynSurfaceManager,
-    display_sender: Arc<DS>,
-    layout_sender: Arc<LS>,
-    ui_sender: Arc<US>,
     registry: Box<R>,
-    canvas_factory: F,
     /// `None` until `set_adapter_supervisor` is called — `bootstrap` wires it
     /// in once `init_secondary_adapters` has opened the `DBus` connections,
     /// which happens after `CrankyApp::new`. A lazy spawn before that point simply
@@ -59,57 +55,41 @@ pub(super) struct CrankyApp<
     adapter_supervisor: Option<crate::app::adapter_supervisor::AdapterSupervisor>,
 }
 
-pub(super) struct StateServices<F, LS, DS, US> {
-    hub: Arc<SignalHub>,
-    surface_manager: DynSurfaceManager,
-    canvas_factory: F,
-    display_sender: Arc<DS>,
-    layout_sender: Arc<LS>,
-    ui_sender: Arc<US>,
+/// The receiving ends of the three channels module actors send through: the
+/// ends of the senders in `ModuleSenders`.
+pub(super) struct ModuleReceivers {
+    layout: mpsc::Receiver<LayoutEvent>,
+    display: mpsc::Receiver<DisplayCommand>,
+    interface: mpsc::Receiver<UiCommand>,
 }
 
-impl<F, LS, DS, US> StateServices<F, LS, DS, US> {
+impl ModuleReceivers {
     #[must_use]
     pub(crate) const fn new(
-        hub: Arc<SignalHub>,
-        surface_manager: DynSurfaceManager,
-        canvas_factory: F,
-        display_sender: Arc<DS>,
-        layout_sender: Arc<LS>,
-        ui_sender: Arc<US>,
+        layout: mpsc::Receiver<LayoutEvent>,
+        display: mpsc::Receiver<DisplayCommand>,
+        interface: mpsc::Receiver<UiCommand>,
     ) -> Self {
         Self {
-            hub,
-            surface_manager,
-            canvas_factory,
-            display_sender,
-            layout_sender,
-            ui_sender,
+            layout,
+            display,
+            interface,
         }
     }
 }
 
 pub(super) struct StateChannels {
-    display: mpsc::Receiver<DisplayCommand>,
-    layout: mpsc::Receiver<LayoutEvent>,
-    interface: mpsc::Receiver<UiCommand>,
+    modules: ModuleReceivers,
     system: mpsc::Receiver<SystemCommand>,
 }
 
 impl StateChannels {
     #[must_use]
     pub(crate) const fn new(
-        display: mpsc::Receiver<DisplayCommand>,
-        layout: mpsc::Receiver<LayoutEvent>,
-        interface: mpsc::Receiver<UiCommand>,
+        modules: ModuleReceivers,
         system: mpsc::Receiver<SystemCommand>,
     ) -> Self {
-        Self {
-            display,
-            layout,
-            interface,
-            system,
-        }
+        Self { modules, system }
     }
 }
 
@@ -122,17 +102,18 @@ impl<
     Snd: crate::features::module_runtime::ports::LayoutSender + 'static,
 > CrankyApp<R, F, LS, DS, US, Snd>
 {
-    /// Creates a new [`CrankyApp`] instance and initializes modules from config.
+    /// Creates a new [`CrankyApp`] instance and initializes modules from the
+    /// configuration the hub holds, which at boot is the initial one.
     ///
     /// # Errors
     ///
     /// Returns [`AppError::Module`] if initial module loading fails.
     pub(crate) fn new(
-        config: Config,
-        services: StateServices<F, LS, DS, US>,
+        deps: crate::features::module_runtime::ports::ModuleRuntimeDependencies<F, LS, DS, US>,
         channels: StateChannels,
         mut registry: Box<R>,
     ) -> Result<Self, AppError> {
+        let config = deps.handles.hub().config_rx().borrow().clone();
         registry.load(&config).map_err(AppError::Module)?;
 
         let root_module = registry.root_module();
@@ -152,43 +133,22 @@ impl<
         };
 
         let mut app = Self {
-            hub: services.hub,
+            deps,
             read_model,
-            display_rx: channels.display,
-            layout_rx: channels.layout,
-            ui_rx: channels.interface,
+            display_rx: channels.modules.display,
+            layout_rx: channels.modules.layout,
+            ui_rx: channels.modules.interface,
             system_rx: channels.system,
             layout_senders: HashMap::new(),
-            surface_manager: services.surface_manager,
-            display_sender: services.display_sender,
-            layout_sender: services.layout_sender,
-            ui_sender: services.ui_sender,
             registry,
-            canvas_factory: services.canvas_factory,
             adapter_supervisor: None,
         };
-        let deps = app.module_runtime_dependencies();
-        app.layout_senders = app.registry.spawn_all(&deps);
+        app.layout_senders = app.registry.spawn_all(&app.deps);
         Ok(app)
     }
 
-    /// What every module actor this app spawns or reloads is built with: its handles to the hub,
-    /// the surface manager and the outbound channels, and a canvas factory of its own.
-    fn module_runtime_dependencies(
-        &self,
-    ) -> crate::features::module_runtime::ports::ModuleRuntimeDependencies<F, LS, DS, US> {
-        crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            crate::features::module_runtime::ports::ModuleHandles::new(
-                self.hub.clone(),
-                self.surface_manager.clone(),
-                crate::features::module_runtime::ports::ModuleSenders::new(
-                    self.layout_sender.clone(),
-                    self.display_sender.clone(),
-                    self.ui_sender.clone(),
-                ),
-            ),
-            self.canvas_factory.clone(),
-        )
+    const fn hub(&self) -> &Arc<SignalHub> {
+        self.deps.handles.hub()
     }
 
     /// Wires in the on-demand adapter starter (decision 3). Called from
@@ -372,7 +332,7 @@ impl<
         surface: crate::shared::primitives::LayoutSurface,
     ) {
         let site = crate::shared::primitives::ModuleSite::new(Some(parent), key.clone());
-        if self.hub.module_errors_rx().borrow().contains_key(&site) {
+        if self.hub().module_errors_rx().borrow().contains_key(&site) {
             return;
         }
 
@@ -381,15 +341,13 @@ impl<
             return;
         }
 
-        let deps = self.module_runtime_dependencies();
-
         match self.registry.spawn_module(
             crate::features::module_runtime::ports::LazySite::new(parent, key.clone())
                 .with_options(options)
                 .with_surface(surface),
             crate::features::module_runtime::ports::ModuleSetup::new(
                 &self.read_model.config,
-                &deps,
+                &self.deps,
             ),
         ) {
             Ok(spawned) => {
@@ -443,9 +401,9 @@ impl<
     }
 
     fn record_module_error(&self, site: crate::shared::primitives::ModuleSite, reason: String) {
-        let mut errors = self.hub.module_errors_rx().borrow().clone();
+        let mut errors = self.hub().module_errors_rx().borrow().clone();
         errors.insert(site, reason);
-        let _ = self.hub.module_errors_tx().send(errors);
+        let _ = self.hub().module_errors_tx().send(errors);
     }
 
     async fn handle_layout_events(
@@ -583,7 +541,7 @@ impl<
     ) {
         let mut needs_render = false;
         let mut cmd = initial;
-        let deps = self.module_runtime_dependencies();
+        let deps = self.deps.clone();
         loop {
             match cmd {
                 SystemCommand::ReloadModule(name) => {
@@ -637,8 +595,7 @@ impl<
                 .name_to_ids
                 .clone_from(self.registry.name_to_ids());
             self.read_model.module_keys = self.registry.module_keys();
-            let deps = self.module_runtime_dependencies();
-            self.layout_senders = self.registry.spawn_all(&deps);
+            self.layout_senders = self.registry.spawn_all(&self.deps);
         }
     }
 
@@ -671,7 +628,7 @@ impl<
     /// crash path — for a monitor with no surface left.
     fn prune_removed_monitors(&mut self) {
         let live: std::collections::HashSet<MonitorId> = self
-            .hub
+            .hub()
             .monitor_scales_rx()
             .borrow()
             .keys()
@@ -685,11 +642,11 @@ impl<
             .computed_layouts
             .retain(|id, _| live.contains(id));
 
-        let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
+        let mut sizes_map = self.hub().module_sizes_rx().borrow().clone();
         let before = sizes_map.len();
         sizes_map.retain(|id, _| live.contains(id));
         if sizes_map.len() != before {
-            let _ = self.hub.module_sizes_tx().send(sizes_map);
+            let _ = self.hub().module_sizes_tx().send(sizes_map);
         }
     }
 
@@ -704,9 +661,9 @@ impl<
         mut dbus: crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
         sni: impl crate::features::systray::ports::SniPort,
     ) -> Result<(), AppError> {
-        let mut config_rx = self.hub.config_rx();
-        let mut hyprland_rx = self.hub.hyprland_rx();
-        let mut monitor_scales_rx = self.hub.monitor_scales_rx();
+        let mut config_rx = self.hub().config_rx();
+        let mut hyprland_rx = self.hub().hyprland_rx();
+        let mut monitor_scales_rx = self.hub().monitor_scales_rx();
 
         self.registry.register_dbus_subscriptions(&mut dbus).await;
 
@@ -763,10 +720,10 @@ impl<
             .insert(module_id, size);
 
         if let Some(key) = key {
-            let mut sizes_map = self.hub.module_sizes_rx().borrow().clone();
+            let mut sizes_map = self.hub().module_sizes_rx().borrow().clone();
             let mon_entry = sizes_map.entry(monitor_id.clone()).or_default();
             mon_entry.insert_report(key, ChildReport::new(size, settled_width));
-            let _ = self.hub.module_sizes_tx().send(sizes_map);
+            let _ = self.hub().module_sizes_tx().send(sizes_map);
         }
     }
 }
@@ -775,8 +732,12 @@ impl<
 mod tests {
     use super::*;
     use crate::app::test_fakes::{FakeDisplayServer, FakeRegistry, FakeSni};
+    use crate::features::module_runtime::ports::{
+        ModuleHandles, ModuleRuntimeDependencies, ModuleSenders,
+    };
     use crate::features::module_runtime::test_support::MockSurfaceManager;
     use crate::shared::primitives::geometry::{BarWidth, Position, Rect};
+    use crate::shared::wayland::ports::DynSurfaceManager;
     use crate::shared::wayland::ports::MonitorBar;
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
@@ -891,7 +852,7 @@ mod tests {
     fn test_app_initialization() {
         crate::test_utils::block_on(async {
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
             let (ui_tx, ui_rx) = mpsc::channel(32);
@@ -908,16 +869,19 @@ mod tests {
             let layout_sender = Arc::new(layout_tx);
             let ui_sender = Arc::new(ui_tx);
 
-            let services = StateServices::new(
-                hub,
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    ModuleSenders::new(layout_sender, display_sender, ui_sender),
+                ),
                 canvas_factory,
-                display_sender,
-                layout_sender,
-                ui_sender,
             );
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let app_result = CrankyApp::new(config, services, channels, Box::new(fake_registry));
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let app_result = CrankyApp::new(deps, channels, Box::new(fake_registry));
 
             assert!(app_result.is_ok());
         });
@@ -927,7 +891,7 @@ mod tests {
     fn test_app_run_exit_on_display_error() {
         crate::test_utils::block_on(async {
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
             let (ui_tx, ui_rx) = mpsc::channel(32);
@@ -944,17 +908,19 @@ mod tests {
             let layout_sender = Arc::new(layout_tx);
             let ui_sender = Arc::new(ui_tx);
 
-            let services = StateServices::new(
-                hub.clone(),
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub.clone(),
+                    surface_manager,
+                    ModuleSenders::new(layout_sender, display_sender, ui_sender),
+                ),
                 canvas_factory,
-                display_sender,
-                layout_sender,
-                ui_sender,
             );
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let mut app =
-                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let mut app = CrankyApp::new(deps, channels, Box::new(fake_registry)).unwrap();
 
             let fake_display = FakeDisplayServer::failing("Test error");
 
@@ -1155,7 +1121,7 @@ mod tests {
     fn test_app_run_commands_and_signals() {
         crate::test_utils::block_on(async {
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
             let (ui_tx, ui_rx) = mpsc::channel(32);
@@ -1172,17 +1138,19 @@ mod tests {
             let layout_sender = Arc::new(layout_tx.clone());
             let ui_sender = Arc::new(ui_tx.clone());
 
-            let services = StateServices::new(
-                hub.clone(),
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub.clone(),
+                    surface_manager,
+                    ModuleSenders::new(layout_sender, display_sender, ui_sender),
+                ),
                 canvas_factory,
-                display_sender,
-                layout_sender,
-                ui_sender,
             );
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let mut app =
-                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let mut app = CrankyApp::new(deps, channels, Box::new(fake_registry)).unwrap();
 
             // Let it succeed twice, then fail to exit the loop
             let mut call_count = 0;
@@ -1237,7 +1205,7 @@ mod tests {
     fn test_container_layouts_calculated_preserves_multi_monitors() {
         crate::test_utils::block_on(async {
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
             let (ui_tx, ui_rx) = mpsc::channel(32);
@@ -1265,17 +1233,19 @@ mod tests {
             let layout_sender = Arc::new(layout_tx.clone());
             let ui_sender = Arc::new(ui_tx);
 
-            let services = StateServices::new(
-                hub.clone(),
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub.clone(),
+                    surface_manager,
+                    ModuleSenders::new(layout_sender, display_sender, ui_sender),
+                ),
                 canvas_factory,
-                display_sender,
-                layout_sender,
-                ui_sender,
             );
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let mut app =
-                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let mut app = CrankyApp::new(deps, channels, Box::new(fake_registry)).unwrap();
 
             // 1. Send ContainerLayoutsCalculated for DP-1
             layout_tx
@@ -1347,7 +1317,7 @@ mod tests {
             // "calendar" — resolve_site must route each parent's layout event to
             // its own site's ModuleId, never the other parent's.
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
             let (ui_tx, ui_rx) = mpsc::channel(32);
@@ -1388,17 +1358,19 @@ mod tests {
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
-            let services = StateServices::new(
-                hub,
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    ModuleSenders::new(Arc::new(layout_tx), Arc::new(display_tx), Arc::new(ui_tx)),
+                ),
                 canvas_factory,
-                Arc::new(display_tx),
-                Arc::new(layout_tx),
-                Arc::new(ui_tx),
             );
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let mut app =
-                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let mut app = CrankyApp::new(deps, channels, Box::new(fake_registry)).unwrap();
 
             let monitor = MonitorId::new("DP-1");
             let key = crate::shared::primitives::ModuleKey::from_name(
@@ -1447,7 +1419,7 @@ mod tests {
             // must be cleared and the child told directly — this is what stops
             // it from rendering there again (gap 8).
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
             let (ui_tx, ui_rx) = mpsc::channel(32);
@@ -1470,17 +1442,19 @@ mod tests {
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
-            let services = StateServices::new(
-                hub,
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    ModuleSenders::new(Arc::new(layout_tx), Arc::new(display_tx), Arc::new(ui_tx)),
+                ),
                 canvas_factory,
-                Arc::new(display_tx),
-                Arc::new(layout_tx),
-                Arc::new(ui_tx),
             );
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let mut app =
-                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let mut app = CrankyApp::new(deps, channels, Box::new(fake_registry)).unwrap();
 
             let (child_layout_tx, child_layout_rx) = tokio::sync::watch::channel(HashMap::new());
             app.layout_senders.insert(
@@ -1539,7 +1513,7 @@ mod tests {
             // create a cycle — must be rejected and recorded without ever
             // calling `spawn_module`.
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let hub_check = hub.clone();
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
@@ -1568,18 +1542,20 @@ mod tests {
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
-            let services = StateServices::new(
-                hub,
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    ModuleSenders::new(Arc::new(layout_tx), Arc::new(display_tx), Arc::new(ui_tx)),
+                ),
                 canvas_factory,
-                Arc::new(display_tx),
-                Arc::new(layout_tx),
-                Arc::new(ui_tx),
             );
             let spawn_attempts = fake_registry.spawn_module_calls.clone();
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let mut app =
-                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let mut app = CrankyApp::new(deps, channels, Box::new(fake_registry)).unwrap();
 
             let monitor = MonitorId::new("DP-1");
             let key = crate::shared::primitives::ModuleKey::from_name(
@@ -1615,7 +1591,7 @@ mod tests {
     fn test_ensure_lazy_spawn_does_not_retry_after_recorded_failure() {
         crate::test_utils::block_on(async {
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let hub_check = hub.clone();
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
@@ -1635,17 +1611,19 @@ mod tests {
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
-            let services = StateServices::new(
-                hub,
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    ModuleSenders::new(Arc::new(layout_tx), Arc::new(display_tx), Arc::new(ui_tx)),
+                ),
                 canvas_factory,
-                Arc::new(display_tx),
-                Arc::new(layout_tx),
-                Arc::new(ui_tx),
             );
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let mut app =
-                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let mut app = CrankyApp::new(deps, channels, Box::new(fake_registry)).unwrap();
 
             let monitor = MonitorId::new("DP-1");
             let key = crate::shared::primitives::ModuleKey::from_name(
@@ -1686,7 +1664,7 @@ mod tests {
     fn test_ensure_lazy_spawn_passes_the_site_options_and_surface_to_the_registry() {
         crate::test_utils::block_on(async {
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
             let (ui_tx, ui_rx) = mpsc::channel(32);
@@ -1699,17 +1677,19 @@ mod tests {
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
-            let services = StateServices::new(
-                hub,
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    ModuleSenders::new(Arc::new(layout_tx), Arc::new(display_tx), Arc::new(ui_tx)),
+                ),
                 canvas_factory,
-                Arc::new(display_tx),
-                Arc::new(layout_tx),
-                Arc::new(ui_tx),
             );
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let mut app =
-                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let mut app = CrankyApp::new(deps, channels, Box::new(fake_registry)).unwrap();
 
             let key = crate::shared::primitives::ModuleKey::new(
                 crate::shared::primitives::ModuleName::new("calendar"),
@@ -1757,7 +1737,7 @@ mod tests {
     fn test_would_cycle_distinguishes_instances_from_real_ancestors() {
         crate::test_utils::block_on(async {
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
             let (ui_tx, ui_rx) = mpsc::channel(32);
@@ -1791,16 +1771,19 @@ mod tests {
 
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
-            let services = StateServices::new(
-                hub,
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    ModuleSenders::new(Arc::new(layout_tx), Arc::new(display_tx), Arc::new(ui_tx)),
+                ),
                 canvas_factory,
-                Arc::new(display_tx),
-                Arc::new(layout_tx),
-                Arc::new(ui_tx),
             );
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let app = CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let app = CrankyApp::new(deps, channels, Box::new(fake_registry)).unwrap();
 
             let clock_b = crate::shared::primitives::ModuleKey::new(
                 crate::shared::primitives::ModuleName::new("clock"),
@@ -1839,7 +1822,7 @@ mod tests {
     fn test_prune_removed_monitors_drops_only_the_dead_monitor() {
         crate::test_utils::block_on(async {
             let config = Config::default();
-            let hub = Arc::new(SignalHub::new(config.clone()));
+            let hub = Arc::new(SignalHub::new(config));
             let (display_tx, display_rx) = mpsc::channel(32);
             let (layout_tx, layout_rx) = mpsc::channel(32);
             let (ui_tx, ui_rx) = mpsc::channel(32);
@@ -1852,17 +1835,19 @@ mod tests {
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
-            let services = StateServices::new(
-                hub,
-                surface_manager,
+            let deps = ModuleRuntimeDependencies::new(
+                ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    ModuleSenders::new(Arc::new(layout_tx), Arc::new(display_tx), Arc::new(ui_tx)),
+                ),
                 canvas_factory,
-                Arc::new(display_tx),
-                Arc::new(layout_tx),
-                Arc::new(ui_tx),
             );
-            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-            let mut app =
-                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+            let channels = StateChannels::new(
+                ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+                system_rx,
+            );
+            let mut app = CrankyApp::new(deps, channels, Box::new(fake_registry)).unwrap();
 
             let live_mon = MonitorId::new("eDP-1");
             let dead_mon = MonitorId::new("HDMI-A-1");
@@ -1880,7 +1865,7 @@ mod tests {
                 .computed_layouts
                 .insert(live_mon.clone(), HashMap::new());
 
-            let mut shared_sizes = app.hub.module_sizes_rx().borrow().clone();
+            let mut shared_sizes = app.hub().module_sizes_rx().borrow().clone();
             shared_sizes.insert(
                 dead_mon.clone(),
                 crate::shared::primitives::layout::ChildSizesMap::new(),
@@ -1889,15 +1874,15 @@ mod tests {
                 live_mon.clone(),
                 crate::shared::primitives::layout::ChildSizesMap::new(),
             );
-            app.hub.module_sizes_tx().send(shared_sizes).unwrap();
+            app.hub().module_sizes_tx().send(shared_sizes).unwrap();
 
             // Only "eDP-1" is still live per Wayland.
-            let mut scales = app.hub.monitor_scales_rx().borrow().clone();
+            let mut scales = app.hub().monitor_scales_rx().borrow().clone();
             scales.insert(
                 live_mon.clone(),
                 crate::shared::primitives::geometry::Scale::new(1.0),
             );
-            app.hub.monitor_scales_tx().send(scales).unwrap();
+            app.hub().monitor_scales_tx().send(scales).unwrap();
 
             app.prune_removed_monitors();
 
@@ -1906,7 +1891,7 @@ mod tests {
             assert!(!app.read_model.computed_layouts.contains_key(&dead_mon));
             assert!(app.read_model.computed_layouts.contains_key(&live_mon));
 
-            let after = app.hub.module_sizes_rx().borrow().clone();
+            let after = app.hub().module_sizes_rx().borrow().clone();
             assert!(!after.contains_key(&dead_mon));
             assert!(after.contains_key(&live_mon));
         });
@@ -1923,21 +1908,24 @@ mod tests {
 
     /// An app over `registry`, its hub started from `config`, on fresh channels.
     fn app_over(config: Config, registry: FakeRegistry) -> (TestApp, Arc<SignalHub>) {
-        let hub = Arc::new(SignalHub::new(config.clone()));
+        let hub = Arc::new(SignalHub::new(config));
         let (display_tx, display_rx) = mpsc::channel(32);
         let (layout_tx, layout_rx) = mpsc::channel(32);
         let (ui_tx, ui_rx) = mpsc::channel(32);
         let (_system_tx, system_rx) = mpsc::channel(32);
-        let services = StateServices::new(
-            hub.clone(),
-            Arc::new(MockSurfaceManager),
+        let deps = ModuleRuntimeDependencies::new(
+            ModuleHandles::new(
+                hub.clone(),
+                Arc::new(MockSurfaceManager),
+                ModuleSenders::new(Arc::new(layout_tx), Arc::new(display_tx), Arc::new(ui_tx)),
+            ),
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
-            Arc::new(display_tx),
-            Arc::new(layout_tx),
-            Arc::new(ui_tx),
         );
-        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
-        let app = CrankyApp::new(config, services, channels, Box::new(registry)).unwrap();
+        let channels = StateChannels::new(
+            ModuleReceivers::new(layout_rx, display_rx, ui_rx),
+            system_rx,
+        );
+        let app = CrankyApp::new(deps, channels, Box::new(registry)).unwrap();
         (app, hub)
     }
 
