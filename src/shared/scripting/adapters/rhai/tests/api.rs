@@ -33,8 +33,6 @@ mod tests {
         let mut module = RhaiModule::new("test_ns".into(), source).unwrap();
         let mod_config = crate::shared::config::domain::ModuleConfig::new(
             "test_ns".into(),
-            crate::shared::config::domain::Enablement::Enabled,
-            crate::shared::config::domain::EngineSelection::Auto,
             crate::shared::primitives::ModuleOptions::default(),
         );
         let config = crate::shared::config::domain::Config::default();

@@ -986,25 +986,11 @@ mod tests {
         );
         let opts = crate::shared::primitives::ModuleOptions::new(opts_map);
 
-        let root_config = crate::shared::config::domain::RootConfig::new(
-            crate::shared::config::domain::CreateRootConfigCommand::new(
-                crate::shared::primitives::ModuleName::new("bar"),
-                crate::shared::primitives::geometry::BarHeight::new(30),
-                crate::shared::config::domain::VerticalAlignment::Center,
-                crate::shared::config::domain::MarginConfig::default(),
-                Some(unfocused),
-                opts,
-            ),
-        );
+        let root_config = crate::shared::config::domain::RootConfig::default()
+            .with_unfocused(Some(unfocused))
+            .with_options(opts);
 
-        let config = Config::new(
-            root_config,
-            crate::shared::config::domain::ModulesConfig::default(),
-            crate::shared::config::domain::RenderingMode::default(),
-            crate::features::metrics::domain::MetricsConfig::default(),
-            crate::shared::config::domain::TooltipConfig::default(),
-            crate::shared::config::domain::PopupConfig::default(),
-        );
+        let config = Config::default().with_root(root_config);
 
         let mut name_to_ids = HashMap::new();
         name_to_ids.insert(
@@ -1097,25 +1083,9 @@ mod tests {
         );
         let opts = crate::shared::primitives::ModuleOptions::new(opts_map);
 
-        let root_config = crate::shared::config::domain::RootConfig::new(
-            crate::shared::config::domain::CreateRootConfigCommand::new(
-                crate::shared::primitives::ModuleName::new("bar"),
-                crate::shared::primitives::geometry::BarHeight::new(30),
-                crate::shared::config::domain::VerticalAlignment::Center,
-                crate::shared::config::domain::MarginConfig::default(),
-                None,
-                opts,
-            ),
-        );
+        let root_config = crate::shared::config::domain::RootConfig::default().with_options(opts);
 
-        let config = Config::new(
-            root_config,
-            crate::shared::config::domain::ModulesConfig::default(),
-            crate::shared::config::domain::RenderingMode::default(),
-            crate::features::metrics::domain::MetricsConfig::default(),
-            crate::shared::config::domain::TooltipConfig::default(),
-            crate::shared::config::domain::PopupConfig::default(),
-        );
+        let config = Config::default().with_root(root_config);
 
         let mut name_to_ids = HashMap::new();
         name_to_ids.insert(

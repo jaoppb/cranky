@@ -15,8 +15,6 @@ fn test_rhai_module_lifecycle() {
     let mut module = RhaiModule::new("test_life".into(), source).unwrap();
     let mod_config = crate::shared::config::domain::ModuleConfig::new(
         "test_life".into(),
-        crate::shared::config::domain::Enablement::Enabled,
-        crate::shared::config::domain::EngineSelection::Auto,
         crate::shared::primitives::ModuleOptions::default(),
     );
     let config = crate::shared::config::domain::Config::default();
@@ -110,8 +108,6 @@ fn test_time_signal_is_whole_second_rfc_3339_with_a_numeric_offset() {
     let mut module = RhaiModule::new("time_text".into(), source).unwrap();
     let mod_config = crate::shared::config::domain::ModuleConfig::new(
         "time_text".into(),
-        crate::shared::config::domain::Enablement::Enabled,
-        crate::shared::config::domain::EngineSelection::Auto,
         crate::shared::primitives::ModuleOptions::default(),
     );
     let config = crate::shared::config::domain::Config::default();

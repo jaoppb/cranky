@@ -275,12 +275,10 @@ mod tests {
     }
 
     fn panel_margin() -> crate::shared::config::domain::MarginConfig {
-        use crate::shared::config::domain::{MarginConfig, MarginOffset};
+        use crate::shared::config::domain::{AxisMargins, MarginConfig, MarginOffset};
         MarginConfig::new(
-            MarginOffset::new(1),
-            MarginOffset::new(2),
-            MarginOffset::new(3),
-            MarginOffset::new(4),
+            AxisMargins::new(MarginOffset::new(1), MarginOffset::new(2)),
+            AxisMargins::new(MarginOffset::new(3), MarginOffset::new(4)),
         )
     }
 

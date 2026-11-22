@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::shared::config::domain::{self, MarginOffset};
+use crate::shared::config::domain::{self, AxisMargins, MarginOffset};
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -27,10 +27,8 @@ impl MarginConfigDto {
     pub(crate) const fn into_domain(self) -> domain::MarginConfig {
         match self {
             Self::All(val) => domain::MarginConfig::new(
-                MarginOffset::new(val),
-                MarginOffset::new(val),
-                MarginOffset::new(val),
-                MarginOffset::new(val),
+                AxisMargins::both(MarginOffset::new(val)),
+                AxisMargins::both(MarginOffset::new(val)),
             ),
             Self::Fields {
                 top,
@@ -69,10 +67,14 @@ impl MarginConfigDto {
                     },
                 };
                 domain::MarginConfig::new(
-                    MarginOffset::new(top_offset),
-                    MarginOffset::new(bottom_offset),
-                    MarginOffset::new(left_offset),
-                    MarginOffset::new(right_offset),
+                    AxisMargins::new(
+                        MarginOffset::new(top_offset),
+                        MarginOffset::new(bottom_offset),
+                    ),
+                    AxisMargins::new(
+                        MarginOffset::new(left_offset),
+                        MarginOffset::new(right_offset),
+                    ),
                 )
             }
         }
@@ -111,10 +113,8 @@ impl PartialMarginConfigDto {
     pub(crate) const fn into_domain(self) -> domain::PartialMarginConfig {
         match self {
             Self::All(val) => domain::PartialMarginConfig::new(
-                Some(MarginOffset::new(val)),
-                Some(MarginOffset::new(val)),
-                Some(MarginOffset::new(val)),
-                Some(MarginOffset::new(val)),
+                AxisMargins::both(Some(MarginOffset::new(val))),
+                AxisMargins::both(Some(MarginOffset::new(val))),
             ),
             Self::Fields {
                 top,
@@ -153,10 +153,8 @@ impl PartialMarginConfigDto {
                     },
                 };
                 domain::PartialMarginConfig::new(
-                    top_offset,
-                    bottom_offset,
-                    left_offset,
-                    right_offset,
+                    AxisMargins::new(top_offset, bottom_offset),
+                    AxisMargins::new(left_offset, right_offset),
                 )
             }
         }

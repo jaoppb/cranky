@@ -21,8 +21,6 @@ fn test_lua_dbus_subscription_carries_every_field() {
     let mut module = LuaModule::new("dbus_watch".to_string(), source.to_string());
     let mod_config = ModuleConfig::new(
         "dbus_watch".into(),
-        crate::shared::config::domain::Enablement::Enabled,
-        crate::shared::config::domain::EngineSelection::Auto,
         crate::shared::primitives::ModuleOptions::default(),
     );
     module.init(&mod_config, &Config::default()).unwrap();

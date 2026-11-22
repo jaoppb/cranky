@@ -11,8 +11,6 @@ fn init_module(name: &str, source: &str) -> RhaiModule {
     let mut module = RhaiModule::new(name.into(), source).unwrap();
     let mod_config = ModuleConfig::new(
         name.into(),
-        crate::shared::config::domain::Enablement::Enabled,
-        crate::shared::config::domain::EngineSelection::Auto,
         crate::shared::primitives::ModuleOptions::default(),
     );
     module.init(&mod_config, &Config::default()).unwrap();

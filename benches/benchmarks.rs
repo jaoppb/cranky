@@ -23,7 +23,7 @@ use cranky::features::styling::ports::{CssParserPort, StyleResolverPort};
 use cranky::features::vdom::adapters::DefaultVdomDiffAdapter;
 use cranky::features::vdom::domain::{NodeKey, TextContent, VNode};
 use cranky::features::vdom::ports::VdomDiffPort;
-use cranky::shared::config::domain::{Config, EngineSelection, FontFamily, FontSize, ModuleConfig};
+use cranky::shared::config::domain::{Config, FontFamily, FontSize, ModuleConfig};
 use cranky::shared::dbus::domain::DBusSubscription;
 use cranky::shared::events::signals::{SignalHub, SignalKind};
 use cranky::shared::primitives::color::{Color, DrawingColor};
@@ -541,12 +541,7 @@ fn bench_scripting(criterion: &mut Criterion) {
     "#;
 
     let config = Config::default();
-    let module_config = ModuleConfig::new(
-        "test_bench".into(),
-        cranky::shared::config::domain::Enablement::Enabled,
-        EngineSelection::Auto,
-        ModuleOptions::default(),
-    );
+    let module_config = ModuleConfig::new("test_bench".into(), ModuleOptions::default());
 
     let mut lua_mod = LuaModule::new("test_lua".to_string(), lua_source.to_string());
     let _ = lua_mod.init(&module_config, &config);

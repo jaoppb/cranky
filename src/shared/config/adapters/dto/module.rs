@@ -42,19 +42,13 @@ impl ModulesConfigDto {
                     let selection = engine.map_or(domain::EngineSelection::Auto, |engine_name| {
                         domain::EngineSelection::Explicit(domain::EngineId::new(engine_name))
                     });
-                    domain::ModuleConfig::new(
-                        mod_name.clone(),
-                        domain::Enablement::from(enable),
-                        selection,
-                        json_map_to_options(options),
-                    )
+                    domain::ModuleConfig::new(mod_name.clone(), json_map_to_options(options))
+                        .with_enablement(domain::Enablement::from(enable))
+                        .with_engine(selection)
                 }
-                ModuleEntryDto::OptionsOnly(options) => domain::ModuleConfig::new(
-                    mod_name.clone(),
-                    domain::Enablement::Enabled,
-                    domain::EngineSelection::Auto,
-                    json_map_to_options(options),
-                ),
+                ModuleEntryDto::OptionsOnly(options) => {
+                    domain::ModuleConfig::new(mod_name.clone(), json_map_to_options(options))
+                }
             };
             map.insert(mod_name, mod_cfg);
         }

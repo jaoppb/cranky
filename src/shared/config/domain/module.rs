@@ -59,20 +59,30 @@ pub struct ModuleConfig {
 }
 
 impl ModuleConfig {
-    /// Builds an entry from already-parsed parts; the config DTOs are its usual caller.
+    /// Builds an entry as `[modules.<name>]` reads with only options in it: enabled, and run by
+    /// whichever engine loads it first.
     #[must_use]
-    pub const fn new(
-        name: ModuleName,
-        enablement: Enablement,
-        engine: EngineSelection,
-        options: ModuleOptions,
-    ) -> Self {
+    pub const fn new(name: ModuleName, options: ModuleOptions) -> Self {
         Self {
             name,
-            enablement,
-            engine,
+            enablement: Enablement::Enabled,
+            engine: EngineSelection::Auto,
             options,
         }
+    }
+
+    /// This entry with its `enable` key applied.
+    #[must_use]
+    pub(crate) const fn with_enablement(mut self, enablement: Enablement) -> Self {
+        self.enablement = enablement;
+        self
+    }
+
+    /// This entry with its `engine` key applied.
+    #[must_use]
+    pub(crate) fn with_engine(mut self, engine: EngineSelection) -> Self {
+        self.engine = engine;
+        self
     }
 
     #[must_use]

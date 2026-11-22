@@ -1,10 +1,7 @@
 //! The fixture's `WaylandState` builder.
 
 use super::Fake;
-use crate::features::metrics::domain::MetricsConfig;
-use crate::shared::config::domain::{
-    Config, ModulesConfig, PopupConfig, PopupEmbed, RenderingMode, RootConfig, TooltipConfig,
-};
+use crate::shared::config::domain::{Config, PopupConfig, PopupEmbed};
 use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
 use crate::shared::events::signals::SignalHub;
 use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
@@ -18,14 +15,8 @@ impl Fake {
     /// A `WaylandState` with every global bound and `popup.embed = embed`.
     pub(crate) fn state(&self, embed: PopupEmbed) -> WaylandState {
         let popup = PopupConfig::default();
-        let config = Config::new(
-            RootConfig::default(),
-            ModulesConfig::default(),
-            RenderingMode::default(),
-            MetricsConfig::default(),
-            TooltipConfig::default(),
-            PopupConfig::new(popup.behavior(), popup.offset(), embed),
-        );
+        let config =
+            Config::default().with_popup(PopupConfig::new(popup.behavior(), popup.offset(), embed));
         let app_env = environment_with_runtime_dir(PathBuf::from("/tmp"));
         let (command_tx, _command_rx) = tokio::sync::mpsc::channel(1);
         WaylandState {

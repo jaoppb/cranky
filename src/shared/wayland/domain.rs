@@ -219,11 +219,6 @@ impl AppReadModel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::metrics::domain::MetricsConfig;
-    use crate::shared::config::domain::{
-        CreateRootConfigCommand, MarginConfig, ModulesConfig, PopupConfig, RenderingMode,
-        TooltipConfig, VerticalAlignment,
-    };
     use crate::shared::primitives::geometry::BarHeight;
     use crate::shared::primitives::{ModuleOptions, SizeConstraint};
 
@@ -244,22 +239,10 @@ mod tests {
         for (id, name) in (1_u32..).zip(declared) {
             name_to_ids.insert(ModuleName::new(*name), vec![ModuleId::new(id)]);
         }
-        let root = RootConfig::new(CreateRootConfigCommand::new(
-            ModuleName::new("bar"),
-            BarHeight::new(BAR_HEIGHT),
-            VerticalAlignment::Center,
-            MarginConfig::default(),
-            None,
-            ModuleOptions::new(options),
-        ));
-        let config = Config::new(
-            root,
-            ModulesConfig::default(),
-            RenderingMode::default(),
-            MetricsConfig::default(),
-            TooltipConfig::default(),
-            PopupConfig::default(),
-        );
+        let root = RootConfig::default()
+            .with_height(BarHeight::new(BAR_HEIGHT))
+            .with_options(ModuleOptions::new(options));
+        let config = Config::default().with_root(root);
         let mut read_model = AppReadModel::new(config, None);
         read_model.name_to_ids = name_to_ids;
         let reported = (1_u32..)

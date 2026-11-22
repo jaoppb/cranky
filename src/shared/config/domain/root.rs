@@ -19,36 +19,6 @@ pub struct RootConfig {
     options: ModuleOptions,
 }
 
-pub(crate) struct CreateRootConfigCommand {
-    name: ModuleName,
-    height: BarHeight,
-    vertical_alignment: VerticalAlignment,
-    margin: MarginConfig,
-    unfocused: Option<PartialRootConfig>,
-    options: ModuleOptions,
-}
-
-impl CreateRootConfigCommand {
-    #[must_use]
-    pub(crate) const fn new(
-        name: ModuleName,
-        height: BarHeight,
-        vertical_alignment: VerticalAlignment,
-        margin: MarginConfig,
-        unfocused: Option<PartialRootConfig>,
-        options: ModuleOptions,
-    ) -> Self {
-        Self {
-            name,
-            height,
-            vertical_alignment,
-            margin,
-            unfocused,
-            options,
-        }
-    }
-}
-
 impl Default for RootConfig {
     fn default() -> Self {
         Self {
@@ -63,16 +33,50 @@ impl Default for RootConfig {
 }
 
 impl RootConfig {
+    /// These settings with the bar's script name replaced; every `[root]` key is optional and
+    /// defaults on its own, so each one is set on its own.
     #[must_use]
-    pub(crate) fn new(cmd: CreateRootConfigCommand) -> Self {
-        Self {
-            name: cmd.name,
-            height: cmd.height,
-            vertical_alignment: cmd.vertical_alignment,
-            margin: cmd.margin,
-            unfocused: cmd.unfocused,
-            options: cmd.options,
-        }
+    pub(crate) fn with_name(mut self, name: ModuleName) -> Self {
+        self.name = name;
+        self
+    }
+
+    /// These settings with the bar height replaced.
+    #[must_use]
+    pub(crate) const fn with_height(mut self, height: BarHeight) -> Self {
+        self.height = height;
+        self
+    }
+
+    /// These settings with the vertical alignment replaced.
+    #[must_use]
+    pub(crate) const fn with_vertical_alignment(
+        mut self,
+        vertical_alignment: VerticalAlignment,
+    ) -> Self {
+        self.vertical_alignment = vertical_alignment;
+        self
+    }
+
+    /// These settings with the margins replaced.
+    #[must_use]
+    pub(crate) const fn with_margin(mut self, margin: MarginConfig) -> Self {
+        self.margin = margin;
+        self
+    }
+
+    /// These settings with the `[root.unfocused]` overrides replaced.
+    #[must_use]
+    pub(crate) const fn with_unfocused(mut self, unfocused: Option<PartialRootConfig>) -> Self {
+        self.unfocused = unfocused;
+        self
+    }
+
+    /// These settings with the remaining `[root]` keys replaced.
+    #[must_use]
+    pub(crate) fn with_options(mut self, options: ModuleOptions) -> Self {
+        self.options = options;
+        self
     }
 
     #[must_use]
