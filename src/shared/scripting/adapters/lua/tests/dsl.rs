@@ -1,16 +1,17 @@
 #[cfg(test)]
 mod tests {
     use crate::features::vdom::domain::UiAction;
+    use crate::features::vdom::domain::{NodeTag, VNode};
     use crate::shared::events::core::PointerButton;
     use crate::shared::scripting::adapters::lua::{register_cranky_api, value_to_vnode};
     use mlua::Lua;
 
-    #[test]
-    fn test_vdom_dsl_constructors() {
-        let lua = Lua::new();
-        register_cranky_api(&lua).expect("DSL registration failed");
+    /// The tags of the children of `node`, in order.
+    fn child_tags(node: &VNode) -> Vec<NodeTag> {
+        node.children().iter().map(VNode::tag).collect()
+    }
 
-        let script = r#"
+    const CONSTRUCTORS_SCRIPT: &str = r#"
         local txt = ui.text({ text = "hello", class = "greeting" })
         local rect = ui.rect({ class = "box" })
         local prog = ui.progress({ value = 0.75, orientation = "vertical" })
@@ -20,36 +21,49 @@ mod tests {
         })
         return flex
     "#;
-        let val = lua.load(script).eval::<mlua::Value>().expect("Eval failed");
-        let vnode = value_to_vnode(&lua, val).expect("Conversion failed");
-        assert_eq!(vnode.tag(), crate::features::vdom::domain::NodeTag::Flex);
-        assert_eq!(vnode.children().len(), 3);
-        assert_eq!(
-            vnode.children()[0].tag(),
-            crate::features::vdom::domain::NodeTag::Text
-        );
-        assert_eq!(
-            vnode.children()[1].tag(),
-            crate::features::vdom::domain::NodeTag::Rect
-        );
-        assert_eq!(
-            vnode.children()[2].tag(),
-            crate::features::vdom::domain::NodeTag::Progress
-        );
-    }
 
     #[test]
-    fn test_lua_vnode_click_handlers() {
+    fn test_vdom_dsl_constructors() {
         let lua = Lua::new();
         register_cranky_api(&lua).expect("DSL registration failed");
 
-        let single_script = r#"
+        let val = lua
+            .load(CONSTRUCTORS_SCRIPT)
+            .eval::<mlua::Value>()
+            .expect("Eval failed");
+        let vnode = value_to_vnode(&lua, val).expect("Conversion failed");
+        assert_eq!(vnode.tag(), crate::features::vdom::domain::NodeTag::Flex);
+        assert_eq!(
+            child_tags(&vnode),
+            [NodeTag::Text, NodeTag::Rect, NodeTag::Progress]
+        );
+    }
+
+    const SINGLE_CLICK_SCRIPT: &str = r#"
         return ui.text({
             text = "click me",
             on_click = { Exec = "echo single" }
         })
     "#;
-        let single_val = lua.load(single_script).eval::<mlua::Value>().unwrap();
+
+    const MULTI_CLICK_SCRIPT: &str = r#"
+        return ui.text({
+            text = "multi click",
+            on_click = {
+                left = { Exec = "echo left" },
+                right = { Exec = "echo right" },
+                side = { Exec = "echo side" },
+                [276] = { Exec = "echo extra" }
+            }
+        })
+    "#;
+
+    #[test]
+    fn test_lua_vnode_single_click_handler_binds_every_button() {
+        let lua = Lua::new();
+        register_cranky_api(&lua).expect("DSL registration failed");
+
+        let single_val = lua.load(SINGLE_CLICK_SCRIPT).eval::<mlua::Value>().unwrap();
         let single_node = value_to_vnode(&lua, single_val).unwrap();
         let single_handlers = single_node.on_click().expect("on_click expected");
         assert_eq!(
@@ -64,19 +78,14 @@ mod tests {
             single_handlers.get(PointerButton::Middle),
             Some(&UiAction::Exec("echo single".into()))
         );
+    }
 
-        let multi_script = r#"
-        return ui.text({
-            text = "multi click",
-            on_click = {
-                left = { Exec = "echo left" },
-                right = { Exec = "echo right" },
-                side = { Exec = "echo side" },
-                [276] = { Exec = "echo extra" }
-            }
-        })
-    "#;
-        let multi_val = lua.load(multi_script).eval::<mlua::Value>().unwrap();
+    #[test]
+    fn test_lua_vnode_click_handlers_per_button() {
+        let lua = Lua::new();
+        register_cranky_api(&lua).expect("DSL registration failed");
+
+        let multi_val = lua.load(MULTI_CLICK_SCRIPT).eval::<mlua::Value>().unwrap();
         let multi_node = value_to_vnode(&lua, multi_val).unwrap();
         let multi_handlers = multi_node.on_click().expect("on_click expected");
         assert_eq!(
@@ -98,12 +107,7 @@ mod tests {
         assert_eq!(multi_handlers.get(PointerButton::Middle), None);
     }
 
-    #[test]
-    fn test_lua_vnode_with_popup() {
-        let lua = Lua::new();
-        register_cranky_api(&lua).expect("DSL registration failed");
-
-        let script = r#"
+    const POPUP_SCRIPT: &str = r#"
         return ui.flex({
             children = {
                 ui.text({
@@ -122,7 +126,13 @@ mod tests {
             }
         })
     "#;
-        let val = lua.load(script).eval::<mlua::Value>().unwrap();
+
+    #[test]
+    fn test_lua_vnode_with_popup() {
+        let lua = Lua::new();
+        register_cranky_api(&lua).expect("DSL registration failed");
+
+        let val = lua.load(POPUP_SCRIPT).eval::<mlua::Value>().unwrap();
         let node = value_to_vnode(&lua, val).unwrap();
         assert_eq!(node.children().len(), 1);
         let button_node = &node.children()[0];
@@ -163,12 +173,7 @@ mod tests {
         assert_eq!(popup.offset(), None);
     }
 
-    #[test]
-    fn test_lua_vnode_with_panel() {
-        let lua = Lua::new();
-        register_cranky_api(&lua).expect("DSL registration failed");
-
-        let script = r#"
+    const PANEL_SCRIPT: &str = r#"
         return ui.text({
             text = "Panel Trigger",
             panel = ui.panel({
@@ -185,7 +190,13 @@ mod tests {
             })
         })
     "#;
-        let val = lua.load(script).eval::<mlua::Value>().unwrap();
+
+    #[test]
+    fn test_lua_vnode_with_panel() {
+        let lua = Lua::new();
+        register_cranky_api(&lua).expect("DSL registration failed");
+
+        let val = lua.load(PANEL_SCRIPT).eval::<mlua::Value>().unwrap();
         let node = value_to_vnode(&lua, val).unwrap();
         assert!(node.panel().is_some());
         let panel = node.panel().unwrap();
@@ -193,13 +204,40 @@ mod tests {
             panel.layer(),
             crate::features::vdom::domain::PanelLayer::Overlay
         );
-        assert!(panel.anchor().top());
-        assert!(panel.anchor().right());
-        assert!(!panel.anchor().bottom());
-        assert_eq!(panel.margin().top().value(), 10);
-        assert_eq!(panel.margin().right().value(), 20);
+        let anchor = panel.anchor();
+        assert_eq!(
+            (anchor.top(), anchor.right(), anchor.bottom()),
+            (true, true, false)
+        );
+        let margin = panel.margin();
+        assert_eq!((margin.top().value(), margin.right().value()), (10, 20));
         assert_eq!(panel.content().children().len(), 1);
     }
+
+    /// Whether a panel is anchored to its top, bottom, left and right edges.
+    type Edges = (bool, bool, bool, bool);
+
+    /// Panel `anchor` values with the (top, bottom, left, right) edges each anchors.
+    const PANEL_ANCHOR_CASES: [(&str, Edges); 9] = [
+        (r#"{ "bottom", "left" }"#, (false, true, true, false)),
+        (
+            r#"{ "TOP", "right", "middle" }"#,
+            (true, false, false, true),
+        ),
+        (
+            r#"{ "top", "bottom", "left", "right" }"#,
+            (true, true, true, true),
+        ),
+        (
+            r#"{ "bottom", "top", "right", "left" }"#,
+            (true, true, true, true),
+        ),
+        (r#""top""#, (true, false, false, false)),
+        (r#""Bottom""#, (false, true, false, false)),
+        (r#""left""#, (false, false, true, false)),
+        (r#""right""#, (false, false, false, true)),
+        (r#""middle""#, (false, false, false, false)),
+    ];
 
     /// Every edge a panel's `anchor` names, as a list or as one string, in
     /// any case, and only those: unknown names anchor nothing.
@@ -207,27 +245,7 @@ mod tests {
     fn test_lua_panel_anchor_edges() {
         let lua = Lua::new();
         register_cranky_api(&lua).expect("DSL registration failed");
-        let cases = [
-            (r#"{ "bottom", "left" }"#, (false, true, true, false)),
-            (
-                r#"{ "TOP", "right", "middle" }"#,
-                (true, false, false, true),
-            ),
-            (
-                r#"{ "top", "bottom", "left", "right" }"#,
-                (true, true, true, true),
-            ),
-            (
-                r#"{ "bottom", "top", "right", "left" }"#,
-                (true, true, true, true),
-            ),
-            (r#""top""#, (true, false, false, false)),
-            (r#""Bottom""#, (false, true, false, false)),
-            (r#""left""#, (false, false, true, false)),
-            (r#""right""#, (false, false, false, true)),
-            (r#""middle""#, (false, false, false, false)),
-        ];
-        for (anchor, expected) in cases {
+        for (anchor, expected) in PANEL_ANCHOR_CASES {
             let script = format!(
                 "return ui.text({{ text = \"t\", panel = ui.panel({{ anchor = {anchor}, content = ui.text({{ text = \"p\" }}) }}) }})"
             );
@@ -262,12 +280,7 @@ mod tests {
         assert_eq!(node.children().len(), 2);
     }
 
-    #[test]
-    fn test_lua_shorthand_dsl() {
-        let lua = Lua::new();
-        register_cranky_api(&lua).expect("Registration failed");
-
-        let script = r#"
+    const SHORTHAND_SCRIPT: &str = r#"
         local t = ui.text("Hello World", "greeting-cls")
         local p = ui.progress(0.75, "vertical", "cpu-bar")
         local r = ui.rect("separator")
@@ -275,25 +288,23 @@ mod tests {
         local root = ui.flex({ t, p, r, m })
         return root
     "#;
-        let val = lua.load(script).eval::<mlua::Value>().unwrap();
+
+    #[test]
+    fn test_lua_shorthand_dsl() {
+        let lua = Lua::new();
+        register_cranky_api(&lua).expect("Registration failed");
+
+        let val = lua.load(SHORTHAND_SCRIPT).eval::<mlua::Value>().unwrap();
         let vnode = value_to_vnode(&lua, val).unwrap();
         assert_eq!(vnode.tag(), crate::features::vdom::domain::NodeTag::Flex);
-        assert_eq!(vnode.children().len(), 4);
         assert_eq!(
-            vnode.children()[0].tag(),
-            crate::features::vdom::domain::NodeTag::Text
-        );
-        assert_eq!(
-            vnode.children()[1].tag(),
-            crate::features::vdom::domain::NodeTag::Progress
-        );
-        assert_eq!(
-            vnode.children()[2].tag(),
-            crate::features::vdom::domain::NodeTag::Rect
-        );
-        assert_eq!(
-            vnode.children()[3].tag(),
-            crate::features::vdom::domain::NodeTag::Module
+            child_tags(&vnode),
+            [
+                NodeTag::Text,
+                NodeTag::Progress,
+                NodeTag::Rect,
+                NodeTag::Module
+            ]
         );
     }
     #[test]
@@ -379,31 +390,49 @@ mod tests {
         assert_eq!(classes, Vec::<String>::new());
     }
 
+    /// A positional `ui.progress` call with the value, orientation and classes of its node.
+    type PositionalProgress = (
+        &'static str,
+        f32,
+        crate::features::styling::domain::Orientation,
+        &'static [&'static str],
+    );
+
+    const POSITIONAL_PROGRESS_CASES: [PositionalProgress; 4] = {
+        use crate::features::styling::domain::Orientation;
+        [
+            (
+                r#"return ui.progress(0.75, "VERTICAL", "cpu-bar")"#,
+                0.75,
+                Orientation::Vertical,
+                &["cpu-bar"],
+            ),
+            ("return ui.progress(0.5)", 0.5, Orientation::Horizontal, &[]),
+            (
+                r#"return ui.progress(1, "vertical", "full")"#,
+                1.0,
+                Orientation::Vertical,
+                &["full"],
+            ),
+            (
+                r#"return ui.progress(0, "sideways", "empty")"#,
+                0.0,
+                Orientation::Horizontal,
+                &["empty"],
+            ),
+        ]
+    };
+
     #[test]
     fn test_lua_progress_positional_form_reads_orientation_and_class() {
-        use crate::features::styling::domain::Orientation;
-        let (value, orientation, classes) =
-            progress_of(r#"return ui.progress(0.75, "VERTICAL", "cpu-bar")"#);
-        assert!((value - 0.75).abs() < f32::EPSILON);
-        assert_eq!(orientation, Orientation::Vertical);
-        assert_eq!(classes, ["cpu-bar"]);
-
-        let (value, orientation, classes) = progress_of("return ui.progress(0.5)");
-        assert!((value - 0.5).abs() < f32::EPSILON);
-        assert_eq!(orientation, Orientation::Horizontal);
-        assert_eq!(classes, Vec::<String>::new());
-
-        let (value, orientation, classes) =
-            progress_of(r#"return ui.progress(1, "vertical", "full")"#);
-        assert!((value - 1.0).abs() < f32::EPSILON);
-        assert_eq!(orientation, Orientation::Vertical);
-        assert_eq!(classes, ["full"]);
-
-        let (value, orientation, classes) =
-            progress_of(r#"return ui.progress(0, "sideways", "empty")"#);
-        assert!(value.abs() < f32::EPSILON);
-        assert_eq!(orientation, Orientation::Horizontal);
-        assert_eq!(classes, ["empty"]);
+        for (script, expected_value, expected_orientation, expected_classes) in
+            POSITIONAL_PROGRESS_CASES
+        {
+            let (value, orientation, classes) = progress_of(script);
+            assert!((value - expected_value).abs() < f32::EPSILON, "{script}");
+            assert_eq!(orientation, expected_orientation, "{script}");
+            assert_eq!(classes, expected_classes, "{script}");
+        }
     }
 
     #[test]

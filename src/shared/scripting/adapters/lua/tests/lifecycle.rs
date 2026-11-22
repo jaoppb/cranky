@@ -7,73 +7,90 @@ use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::MonitorId;
 use crate::shared::scripting::adapters::lua::LuaModule;
 
-#[test]
-fn test_systray_missing_icon_regression() {
-    let mut module = LuaModule::built_in("systray").expect("Failed to load systray module");
-    let module_config = ModuleConfig::new(
-        "systray".into(),
+/// `module` initialised with `options` and the default configuration.
+fn initialised(
+    mut module: LuaModule,
+    options: crate::shared::primitives::ModuleOptions,
+) -> LuaModule {
+    let module_config = ModuleConfig::new(module.name.as_str().into(), options);
+    let config = crate::shared::config::domain::Config::default();
+    module.init(&module_config, &config).expect("Init failed");
+    module
+}
+
+/// The built-in Lua module `name`, initialised with `options` and the default configuration.
+fn init_built_in(name: &str, options: crate::shared::primitives::ModuleOptions) -> LuaModule {
+    initialised(
+        LuaModule::built_in(name).expect("Failed to load built-in module"),
+        options,
+    )
+}
+
+/// An active tray item, with `icon` when given.
+fn systray_item(icon: Option<crate::features::systray::domain::SystrayIcon>) -> SystrayItem {
+    let params = crate::features::systray::domain::SystrayItemParams::new(
+        SystrayId::new("test_systray"),
+        crate::features::systray::domain::SystrayAddress::new(
+            Destination::new("dest"),
+            ObjectPath::new("/path"),
+        ),
+        Title::new("Test Systray"),
+    )
+    .with_status(SystrayStatus::Active);
+    let params = match icon {
+        Some(_) => params.with_icon(icon),
+        None => params,
+    };
+    SystrayItem::new(
+        crate::features::systray::domain::CreateSystrayItemCommand::new(
+            params
+                .with_category(crate::features::systray::domain::SystrayCategory::ApplicationStatus)
+                .with_item_is_menu(crate::features::systray::domain::ItemIsMenu::Activatable),
+        ),
+    )
+}
+
+/// The tags of the children of the one item the built-in systray module renders for `item`,
+/// after checking the layout holds one flex item.
+fn rendered_systray_item_tags(item: SystrayItem) -> Vec<crate::features::vdom::domain::NodeTag> {
+    let mut module = init_built_in(
+        "systray",
         crate::shared::primitives::ModuleOptions::default(),
     );
-    let config = crate::shared::config::domain::Config::default();
-
-    module.init(&module_config, &config).expect("Init failed");
-
     let hub = SignalHub::new(crate::shared::config::domain::Config::default());
-    let item = SystrayItem::new(
-        crate::features::systray::domain::CreateSystrayItemCommand::new(
-            crate::features::systray::domain::SystrayItemParams::new(
-                SystrayId::new("test_systray"),
-                crate::features::systray::domain::SystrayAddress::new(
-                    Destination::new("dest"),
-                    ObjectPath::new("/path"),
-                ),
-                Title::new("Test Systray"),
-            )
-            .with_status(SystrayStatus::Active)
-            .with_category(crate::features::systray::domain::SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(crate::features::systray::domain::ItemIsMenu::Activatable),
-        ),
-    );
-
     let mut map = std::collections::BTreeMap::new();
     map.insert(item.id().clone(), item);
     hub.systray_tx().send(SystrayState::new(map)).unwrap();
-
     let subs = module.subscriptions().to_vec();
     module.refresh(&hub, &subs);
 
     let layout = module.render(&MonitorId::new("DP-1"));
-
     assert_eq!(layout.tag(), crate::features::vdom::domain::NodeTag::Flex);
     assert_eq!(layout.children().len(), 1);
     let item_node = &layout.children()[0];
-
     assert_eq!(
         item_node.tag(),
         crate::features::vdom::domain::NodeTag::Flex
     );
-    assert_eq!(item_node.children().len(), 2);
+    item_node
+        .children()
+        .iter()
+        .map(crate::features::vdom::domain::VNode::tag)
+        .collect()
+}
+
+#[test]
+fn test_systray_missing_icon_regression() {
+    use crate::features::vdom::domain::NodeTag;
     assert_eq!(
-        item_node.children()[0].tag(),
-        crate::features::vdom::domain::NodeTag::Rect
-    );
-    assert_eq!(
-        item_node.children()[1].tag(),
-        crate::features::vdom::domain::NodeTag::Text
+        rendered_systray_item_tags(systray_item(None)),
+        [NodeTag::Rect, NodeTag::Text]
     );
 }
 
 #[test]
 fn test_systray_with_icon_renders_image() {
-    let mut module = LuaModule::built_in("systray").expect("Failed to load systray module");
-    let module_config = ModuleConfig::new(
-        "systray".into(),
-        crate::shared::primitives::ModuleOptions::default(),
-    );
-    let config = crate::shared::config::domain::Config::default();
-    module.init(&module_config, &config).expect("Init failed");
-
-    let hub = SignalHub::new(crate::shared::config::domain::Config::default());
+    use crate::features::vdom::domain::NodeTag;
     let icon_img = crate::features::systray::domain::IconImage::new(
         vec![255; 16 * 16 * 4],
         crate::shared::primitives::geometry::Size::new(16, 16),
@@ -82,64 +99,23 @@ fn test_systray_with_icon_renders_image() {
         Some(crate::features::systray::domain::IconName::new("test-icon")),
         Some(icon_img),
     );
-
-    let item = SystrayItem::new(
-        crate::features::systray::domain::CreateSystrayItemCommand::new(
-            crate::features::systray::domain::SystrayItemParams::new(
-                SystrayId::new("test_systray"),
-                crate::features::systray::domain::SystrayAddress::new(
-                    Destination::new("dest"),
-                    ObjectPath::new("/path"),
-                ),
-                Title::new("Test Systray"),
-            )
-            .with_status(SystrayStatus::Active)
-            .with_icon(icon)
-            .with_category(crate::features::systray::domain::SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(crate::features::systray::domain::ItemIsMenu::Activatable),
-        ),
-    );
-
-    let mut map = std::collections::BTreeMap::new();
-    map.insert(item.id().clone(), item);
-    hub.systray_tx().send(SystrayState::new(map)).unwrap();
-
-    let subs = module.subscriptions().to_vec();
-    module.refresh(&hub, &subs);
-
-    let layout = module.render(&MonitorId::new("DP-1"));
-    assert_eq!(layout.tag(), crate::features::vdom::domain::NodeTag::Flex);
-    assert_eq!(layout.children().len(), 1);
-    let item_node = &layout.children()[0];
     assert_eq!(
-        item_node.tag(),
-        crate::features::vdom::domain::NodeTag::Flex
-    );
-    assert_eq!(item_node.children().len(), 2);
-    assert_eq!(
-        item_node.children()[0].tag(),
-        crate::features::vdom::domain::NodeTag::Image
-    );
-    assert_eq!(
-        item_node.children()[1].tag(),
-        crate::features::vdom::domain::NodeTag::Text
+        rendered_systray_item_tags(systray_item(icon)),
+        [NodeTag::Image, NodeTag::Text]
     );
 }
 
 #[test]
 fn test_calendar_lua_config_monday() {
-    let mut module = LuaModule::built_in("calendar").expect("Failed to load calendar module");
     let mut opts = std::collections::HashMap::new();
     opts.insert(
         "first_day_of_week".to_string(),
         crate::shared::primitives::DynamicValue::String("monday".to_string()),
     );
-    let module_config = ModuleConfig::new(
-        "calendar".into(),
+    let mut module = init_built_in(
+        "calendar",
         crate::shared::primitives::ModuleOptions::new(opts),
     );
-    let config = crate::shared::config::domain::Config::default();
-    module.init(&module_config, &config).expect("Init failed");
 
     let hub = SignalHub::new(crate::shared::config::domain::Config::default());
     // 2026-09-01T12:00:00Z
@@ -161,21 +137,19 @@ fn test_calendar_lua_config_monday() {
     }
 }
 
-#[test]
-fn test_time_signal_is_whole_second_rfc_3339_with_a_numeric_offset() {
-    let source = r#"
+const TIME_TEXT_SOURCE: &str = r#"
         function init() end
         function metadata() return { subscriptions = { "time" }, styles = {} } end
         function refresh() end
         function render(monitor) return ui.text({ text = signals.time }) end
     "#;
-    let mut module = LuaModule::new("time_text".into(), source.to_string());
-    let module_config = ModuleConfig::new(
-        "time_text".into(),
+
+#[test]
+fn test_time_signal_is_whole_second_rfc_3339_with_a_numeric_offset() {
+    let mut module = initialised(
+        LuaModule::new("time_text".into(), TIME_TEXT_SOURCE.to_string()),
         crate::shared::primitives::ModuleOptions::default(),
     );
-    let config = crate::shared::config::domain::Config::default();
-    module.init(&module_config, &config).expect("Init failed");
 
     let hub = SignalHub::new(crate::shared::config::domain::Config::default());
     // 2026-11-18T11:06:40Z, three hours west of UTC.

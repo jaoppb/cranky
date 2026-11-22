@@ -3,12 +3,7 @@ use crate::shared::primitives::{MonitorId, ScriptMonitorInfo};
 use crate::shared::scripting::adapters::lua::{LuaMonitor, register_cranky_api};
 use mlua::Lua;
 
-#[test]
-fn test_lua_cranky_namespaces_and_aliases() {
-    let lua = Lua::new();
-    register_cranky_api(&lua).expect("Registration failed");
-
-    let script = r#"
+const NAMESPACES_SCRIPT: &str = r#"
         assert(type(cranky) == "table", "cranky must be table")
         assert(type(cranky.ui) == "table", "cranky.ui must be table")
         assert(type(cranky.ui.element) == "table", "cranky.ui.element must be table")
@@ -33,8 +28,14 @@ fn test_lua_cranky_namespaces_and_aliases() {
         assert(type(ui.module) == "function", "ui.module must be function")
         return true
     "#;
+
+#[test]
+fn test_lua_cranky_namespaces_and_aliases() {
+    let lua = Lua::new();
+    register_cranky_api(&lua).expect("Registration failed");
+
     let result = lua
-        .load(script)
+        .load(NAMESPACES_SCRIPT)
         .eval::<bool>()
         .expect("Script evaluation failed");
     assert!(result);
@@ -67,6 +68,20 @@ fn test_lua_ui_actions() {
     assert_eq!(sub.get::<String>("action").unwrap(), "Primary");
 }
 
+const RICH_MONITOR_SCRIPT: &str = r#"
+        assert(test_mon.id == "DP-1", "id field")
+        assert(test_mon.name == "DP-1", "name field")
+        assert(test_mon.width == 1920, "width field")
+        assert(test_mon.height == 1080, "height field")
+        assert(test_mon.scale == 1.5, "scale field")
+        assert(test_mon.is_focused == true, "is_focused field")
+        assert(test_unfocused.is_focused == false, "unfocused is_focused field")
+        assert(test_mon.active_workspace_id == 1, "active_workspace_id field")
+        assert(test_mon.special_workspace_id == 2, "special_workspace_id field")
+        assert(tostring(test_mon) == "DP-1", "tostring()")
+        return true
+    "#;
+
 #[test]
 fn test_lua_rich_monitor_userdata() {
     let lua = Lua::new();
@@ -81,19 +96,6 @@ fn test_lua_rich_monitor_userdata() {
     let unfocused = LuaMonitor(ScriptMonitorInfo::from_id(&MonitorId::new("DP-2")));
     lua.globals().set("test_unfocused", unfocused).unwrap();
 
-    let script = r#"
-        assert(test_mon.id == "DP-1", "id field")
-        assert(test_mon.name == "DP-1", "name field")
-        assert(test_mon.width == 1920, "width field")
-        assert(test_mon.height == 1080, "height field")
-        assert(test_mon.scale == 1.5, "scale field")
-        assert(test_mon.is_focused == true, "is_focused field")
-        assert(test_unfocused.is_focused == false, "unfocused is_focused field")
-        assert(test_mon.active_workspace_id == 1, "active_workspace_id field")
-        assert(test_mon.special_workspace_id == 2, "special_workspace_id field")
-        assert(tostring(test_mon) == "DP-1", "tostring()")
-        return true
-    "#;
-    let result = lua.load(script).eval::<bool>().unwrap();
+    let result = lua.load(RICH_MONITOR_SCRIPT).eval::<bool>().unwrap();
     assert!(result);
 }

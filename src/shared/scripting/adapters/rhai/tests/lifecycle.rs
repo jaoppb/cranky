@@ -52,38 +52,41 @@ fn test_rhai_call_function_optional_not_found() {
     );
 }
 
+/// The name and source of every built-in Rhai widget.
+const BUILTINS: [(&str, &str); 7] = [
+    (
+        "clock",
+        include_str!("../../../../../../assets/widgets/clock.rhai"),
+    ),
+    (
+        "calendar",
+        include_str!("../../../../../../assets/widgets/calendar.rhai"),
+    ),
+    (
+        "workspace",
+        include_str!("../../../../../../assets/widgets/workspace.rhai"),
+    ),
+    (
+        "systray",
+        include_str!("../../../../../../assets/widgets/systray.rhai"),
+    ),
+    (
+        "metrics",
+        include_str!("../../../../../../assets/widgets/metrics.rhai"),
+    ),
+    (
+        "mpris",
+        include_str!("../../../../../../assets/widgets/mpris.rhai"),
+    ),
+    (
+        "bar",
+        include_str!("../../../../../../assets/widgets/bar.rhai"),
+    ),
+];
+
 #[test]
 fn test_rhai_all_builtins() {
-    for (name, source) in [
-        (
-            "clock",
-            include_str!("../../../../../../assets/widgets/clock.rhai"),
-        ),
-        (
-            "calendar",
-            include_str!("../../../../../../assets/widgets/calendar.rhai"),
-        ),
-        (
-            "workspace",
-            include_str!("../../../../../../assets/widgets/workspace.rhai"),
-        ),
-        (
-            "systray",
-            include_str!("../../../../../../assets/widgets/systray.rhai"),
-        ),
-        (
-            "metrics",
-            include_str!("../../../../../../assets/widgets/metrics.rhai"),
-        ),
-        (
-            "mpris",
-            include_str!("../../../../../../assets/widgets/mpris.rhai"),
-        ),
-        (
-            "bar",
-            include_str!("../../../../../../assets/widgets/bar.rhai"),
-        ),
-    ] {
+    for (name, source) in BUILTINS {
         let res = RhaiModule::new(name.into(), source);
         if let Err(error) = &res {
             eprintln!("ERROR for {name}: {error:?}");

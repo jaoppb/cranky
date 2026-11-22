@@ -1,11 +1,18 @@
 //! What a Rhai module sees after `init` and `refresh`: its `DBus` subscriptions, styles, signals
 //! and monitors.
 use crate::features::module_runtime::ports::AnyModulePort;
+use crate::features::mpris::domain::{MprisState, PlayerName};
+use crate::features::workspaces::domain::MonitorName;
 use crate::shared::config::domain::{Config, ModuleConfig};
 use crate::shared::dbus::domain::BusType;
+use crate::shared::dbus::domain::{DBusState, DBusValue};
+use crate::shared::events::signals::HyprlandState;
 use crate::shared::events::signals::{SignalHub, SignalKind};
 use crate::shared::primitives::MonitorId;
+use crate::shared::primitives::geometry::Scale;
 use crate::shared::scripting::adapters::rhai::RhaiModule;
+use crate::shared::scripting::adapters::test_support::{FULL_DBUS_FIELDS, dbus_fields};
+use std::collections::{BTreeMap, HashMap};
 
 fn init_module(name: &str, source: &str) -> RhaiModule {
     let mut module = RhaiModule::new(name.into(), source).unwrap();
@@ -25,11 +32,7 @@ fn rendered_text(module: &RhaiModule, monitor: &str) -> String {
     text.as_str().to_string()
 }
 
-#[test]
-fn test_rhai_dbus_subscription_carries_every_field() {
-    let module = init_module(
-        "dbus_watch",
-        r#"
+const DBUS_SOURCE: &str = r#"
         fn metadata() {
             #{ subscriptions: [
                 #{ type: "dbus", bus: "system", destination: "org.example.Dest",
@@ -39,37 +42,19 @@ fn test_rhai_dbus_subscription_carries_every_field() {
             ] }
         }
         fn render(monitor) { ui.text("") }
-    "#,
-    );
+    "#;
+
+#[test]
+fn test_rhai_dbus_subscription_carries_every_field() {
+    let module = init_module("dbus_watch", DBUS_SOURCE);
     let [full, bare] = module.dbus_subscriptions() else {
         panic!(
             "expected two subscriptions, got {:?}",
             module.dbus_subscriptions()
         );
     };
-    assert_eq!(full.bus(), BusType::System);
-    assert_eq!(
-        full.destination()
-            .map(crate::shared::dbus::domain::Destination::as_str),
-        Some("org.example.Dest")
-    );
-    assert_eq!(
-        full.path().map(crate::shared::dbus::domain::Path::as_str),
-        Some("/org/example/Path")
-    );
-    assert_eq!(
-        full.interface()
-            .map(crate::shared::dbus::domain::Interface::as_str),
-        Some("org.example.Iface")
-    );
-    assert_eq!(
-        full.member()
-            .map(crate::shared::dbus::domain::Member::as_str),
-        Some("Changed")
-    );
-    assert_eq!(bare.bus(), BusType::Session);
-    assert!(bare.destination().is_none() && bare.path().is_none());
-    assert!(bare.interface().is_none() && bare.member().is_none());
+    assert_eq!(dbus_fields(full), FULL_DBUS_FIELDS);
+    assert_eq!(dbus_fields(bare), (BusType::Session, [None; 4]));
     assert_eq!(module.subscriptions(), [SignalKind::DBus, SignalKind::DBus]);
 }
 
@@ -97,6 +82,32 @@ fn test_rhai_metadata_styles_and_their_fallback() {
     assert!(bare.subscriptions().is_empty() && bare.dbus_subscriptions().is_empty());
 }
 
+/// The MPRIS state with `player` active.
+fn mpris_playing(player: &str) -> MprisState {
+    MprisState {
+        active_player: Some(PlayerName::new(player)),
+        players: HashMap::new(),
+    }
+}
+
+/// A hub whose Hyprland focus, MPRIS player and `DBus` properties are set, with DP-1 at scale 2.
+fn hub_with_signals() -> SignalHub {
+    let hub = SignalHub::new(Config::default());
+    let focus = Some(MonitorName::new("DP-7"));
+    hub.hyprland_tx()
+        .send(HyprlandState::new(BTreeMap::new(), BTreeMap::new(), focus))
+        .unwrap();
+    hub.mpris_tx().send(mpris_playing("spotify")).unwrap();
+    let volume = ("org.example.Volume".to_string(), DBusValue::Int(42));
+    hub.dbus_tx()
+        .send(DBusState::new(HashMap::from([volume])))
+        .unwrap();
+    hub.monitor_scales_tx()
+        .send(HashMap::from([(MonitorId::new("DP-1"), Scale::new(2.0))]))
+        .unwrap();
+    hub
+}
+
 #[test]
 fn test_rhai_refresh_publishes_every_changed_signal_and_the_monitors() {
     // The systray list is a JSON array, which `parse_json` rejects, so scripts never see it.
@@ -110,38 +121,7 @@ fn test_rhai_refresh_publishes_every_changed_signal_and_the_monitors() {
         }
     "#,
     );
-    let hub = SignalHub::new(Config::default());
-    hub.hyprland_tx()
-        .send(
-            crate::shared::events::signals::hyprland::HyprlandState::new(
-                std::collections::BTreeMap::new(),
-                std::collections::BTreeMap::new(),
-                Some(crate::features::workspaces::domain::MonitorName::new(
-                    "DP-7",
-                )),
-            ),
-        )
-        .unwrap();
-    hub.mpris_tx()
-        .send(crate::features::mpris::domain::MprisState {
-            active_player: Some(crate::features::mpris::domain::PlayerName::new("spotify")),
-            players: std::collections::HashMap::new(),
-        })
-        .unwrap();
-    hub.dbus_tx()
-        .send(crate::shared::dbus::domain::DBusState::new(
-            std::collections::HashMap::from([(
-                "org.example.Volume".to_string(),
-                crate::shared::dbus::domain::DBusValue::Int(42),
-            )]),
-        ))
-        .unwrap();
-    hub.monitor_scales_tx()
-        .send(std::collections::HashMap::from([(
-            MonitorId::new("DP-1"),
-            crate::shared::primitives::geometry::Scale::new(2.0),
-        )]))
-        .unwrap();
+    let hub = hub_with_signals();
 
     module.refresh(
         &hub,
@@ -170,12 +150,7 @@ fn test_rhai_refresh_error_keeps_the_published_signals() {
     "#,
     );
     let hub = SignalHub::new(Config::default());
-    hub.mpris_tx()
-        .send(crate::features::mpris::domain::MprisState {
-            active_player: Some(crate::features::mpris::domain::PlayerName::new("vlc")),
-            players: std::collections::HashMap::new(),
-        })
-        .unwrap();
+    hub.mpris_tx().send(mpris_playing("vlc")).unwrap();
 
     module.refresh(&hub, &[SignalKind::Mpris]);
 

@@ -4,10 +4,9 @@ use crate::shared::config::domain::{Config, ModuleConfig};
 use crate::shared::dbus::domain::BusType;
 use crate::shared::events::signals::SignalKind;
 use crate::shared::scripting::adapters::lua::LuaModule;
+use crate::shared::scripting::adapters::test_support::{FULL_DBUS_FIELDS, dbus_fields};
 
-#[test]
-fn test_lua_dbus_subscription_carries_every_field() {
-    let source = r#"
+const DBUS_SOURCE: &str = r#"
         function metadata()
             return { subscriptions = {
                 { type = "dbus", bus = "system", destination = "org.example.Dest",
@@ -18,42 +17,18 @@ fn test_lua_dbus_subscription_carries_every_field() {
         end
         function render(monitor) return ui.text("") end
     "#;
-    let mut module = LuaModule::new("dbus_watch".to_string(), source.to_string());
-    let mod_config = ModuleConfig::new(
-        "dbus_watch".into(),
-        crate::shared::primitives::ModuleOptions::default(),
-    );
-    module.init(&mod_config, &Config::default()).unwrap();
 
+#[test]
+fn test_lua_dbus_subscription_carries_every_field() {
+    let module = init_module("dbus_watch", DBUS_SOURCE);
     let [full, bare] = module.dbus_subscriptions() else {
         panic!(
             "expected two subscriptions, got {:?}",
             module.dbus_subscriptions()
         );
     };
-    assert_eq!(full.bus(), BusType::System);
-    assert_eq!(
-        full.destination()
-            .map(crate::shared::dbus::domain::Destination::as_str),
-        Some("org.example.Dest")
-    );
-    assert_eq!(
-        full.path().map(crate::shared::dbus::domain::Path::as_str),
-        Some("/org/example/Path")
-    );
-    assert_eq!(
-        full.interface()
-            .map(crate::shared::dbus::domain::Interface::as_str),
-        Some("org.example.Iface")
-    );
-    assert_eq!(
-        full.member()
-            .map(crate::shared::dbus::domain::Member::as_str),
-        Some("Changed")
-    );
-    assert_eq!(bare.bus(), BusType::Session);
-    assert!(bare.destination().is_none() && bare.path().is_none());
-    assert!(bare.interface().is_none() && bare.member().is_none());
+    assert_eq!(dbus_fields(full), FULL_DBUS_FIELDS);
+    assert_eq!(dbus_fields(bare), (BusType::Session, [None; 4]));
     assert_eq!(module.subscriptions(), [SignalKind::DBus, SignalKind::DBus]);
 }
 

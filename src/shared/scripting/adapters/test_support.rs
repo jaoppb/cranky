@@ -48,3 +48,37 @@ pub(super) fn file_appears(path: &std::path::Path) -> bool {
     }
     false
 }
+
+/// The bus, destination, path, interface and member of `subscription`.
+pub(super) fn dbus_fields(
+    subscription: &crate::shared::dbus::domain::DBusSubscription,
+) -> (crate::shared::dbus::domain::BusType, [Option<&str>; 4]) {
+    (
+        subscription.bus(),
+        [
+            subscription
+                .destination()
+                .map(crate::shared::dbus::domain::Destination::as_str),
+            subscription
+                .path()
+                .map(crate::shared::dbus::domain::Path::as_str),
+            subscription
+                .interface()
+                .map(crate::shared::dbus::domain::Interface::as_str),
+            subscription
+                .member()
+                .map(crate::shared::dbus::domain::Member::as_str),
+        ],
+    )
+}
+
+/// The fields of the full `DBus` subscription both adapters' metadata tests declare.
+pub(super) const FULL_DBUS_FIELDS: (crate::shared::dbus::domain::BusType, [Option<&str>; 4]) = (
+    crate::shared::dbus::domain::BusType::System,
+    [
+        Some("org.example.Dest"),
+        Some("/org/example/Path"),
+        Some("org.example.Iface"),
+        Some("Changed"),
+    ],
+);
