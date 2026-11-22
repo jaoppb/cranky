@@ -1,3 +1,4 @@
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::TextMeasurer;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
@@ -5,6 +6,7 @@ use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{ClassNameList, CssLength, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
 use crate::features::vdom::domain::VNode;
+use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::rendering::ports::text::TextFont;
 
@@ -60,7 +62,10 @@ fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
 
     let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
     let node = engine
-        .calculate_layout(styled, &mut CalendarMeasurer, Position::new(0, 0))
+        .calculate_layout(
+            LayoutRoot::new(styled, Position::new(0, 0), SizeConstraint::none()),
+            &mut CalendarMeasurer,
+        )
         .unwrap();
     assert_eq!(node.rect().width(), 280);
 }

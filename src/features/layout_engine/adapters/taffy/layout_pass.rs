@@ -5,9 +5,9 @@ use super::leaf_size::size_to_dimension;
 use super::reconciler::{apply_patch, build_layout_state};
 use super::render_tree_builder::build_render_tree;
 use super::tree_builder::TaffyTreeBuilder;
-use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
+use crate::features::layout_engine::domain::{LayoutError, LayoutRoot, RenderNode, TextMeasurer};
 use crate::shared::primitives::SizeConstraint;
-use crate::shared::primitives::geometry::{Position, Size};
+use crate::shared::primitives::geometry::Size;
 use crate::utils::f32_to_u32;
 use taffy::style::Style;
 use taffy::tree::NodeId;
@@ -45,11 +45,11 @@ impl TaffyLayoutAdapter {
 
     pub(super) fn layout_pass(
         &mut self,
-        node: &StyledNode,
+        root: &LayoutRoot,
         measurer: &mut dyn TextMeasurer,
-        start_pos: Position,
-        constraint: SizeConstraint,
     ) -> Result<RenderNode, LayoutError> {
+        let node = root.node();
+        let constraint = root.constraint();
         let mut builder = TaffyTreeBuilder::new(&mut self.taffy);
         let new_state = if let Some(state) = &self.state {
             let patch = diff(state, node, measurer);
@@ -106,7 +106,7 @@ impl TaffyLayoutAdapter {
         }
 
         // Build RenderNode tree
-        let render_tree = build_render_tree(&self.taffy, root_node_id, node, start_pos)?;
+        let render_tree = build_render_tree(&self.taffy, root_node_id, node, root.origin())?;
 
         // The diff only patches nodes whose style changed, so the root must
         // go back to its own style for the next pass to start clean.

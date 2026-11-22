@@ -2,13 +2,13 @@ mod child_layouts;
 mod layout_floating;
 mod tooltip;
 
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{
     LayoutError, RenderNode, StyledNode, StyledPanel, StyledPopup, TextMeasurer,
 };
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::{NodeKey, NodePath, SurfaceSpace, TextContent};
-use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Rect, Size};
 
 /// Records the content it was asked to lay out, and returns a node on the
@@ -19,13 +19,12 @@ struct RecordingEngine {
 }
 
 impl LayoutEnginePort for RecordingEngine {
-    fn calculate_layout_with_constraints(
+    fn calculate_layout(
         &mut self,
-        node: StyledNode,
+        root: LayoutRoot,
         _measurer: &mut dyn TextMeasurer,
-        _start_pos: Position,
-        _constraint: SizeConstraint,
     ) -> Result<RenderNode, LayoutError> {
+        let node = root.node().clone();
         let laid_out = Spec {
             tooltip: node.tooltip().cloned(),
             ..Spec::at_path(node.path().surface(), &[])

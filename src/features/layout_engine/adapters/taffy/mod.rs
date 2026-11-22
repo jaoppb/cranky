@@ -11,10 +11,9 @@ mod style_builder;
 mod style_converter;
 mod tree_builder;
 
-use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
+use crate::features::layout_engine::domain::{LayoutError, LayoutRoot, RenderNode, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
-use crate::shared::primitives::SizeConstraint;
-use crate::shared::primitives::geometry::{Position, Size};
+use crate::shared::primitives::geometry::Size;
 use cranky_unsafe::SendTaffyTree;
 use reconciler::LayoutState;
 
@@ -67,14 +66,12 @@ impl TaffyLayoutAdapter {
 }
 
 impl LayoutEnginePort for TaffyLayoutAdapter {
-    fn calculate_layout_with_constraints(
+    fn calculate_layout(
         &mut self,
-        node: StyledNode,
+        root: LayoutRoot,
         measurer: &mut dyn TextMeasurer,
-        start_pos: Position,
-        constraint: SizeConstraint,
     ) -> Result<RenderNode, LayoutError> {
-        let result = self.layout_pass(&node, measurer, start_pos, constraint);
+        let result = self.layout_pass(&root, measurer);
         if result.is_err() {
             self.reset();
         }
@@ -95,9 +92,15 @@ mod tests {
     use crate::features::styling::domain::{ComputedStyle, GridTrack};
     use crate::features::vdom::domain::NodeKey;
     use crate::shared::config::domain::{FontFamily, FontSize};
+    use crate::shared::primitives::SizeConstraint;
     use crate::shared::primitives::geometry::{Position, Size};
     use crate::shared::primitives::{ModuleName, ModuleOptions};
     use crate::shared::rendering::ports::text::TextFont;
+
+    /// `node` laid out from the origin with no axis pinned.
+    fn unpinned(node: StyledNode) -> LayoutRoot {
+        LayoutRoot::new(node, Position::new(0, 0), SizeConstraint::none())
+    }
 
     struct MockMeasurer;
     impl TextMeasurer for MockMeasurer {
@@ -133,7 +136,7 @@ mod tests {
         };
 
         let render_tree = adapter
-            .calculate_layout(node, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(node), &mut measurer)
             .unwrap();
         assert_eq!(render_tree.rect().width(), 50);
         assert_eq!(render_tree.rect().height(), 20);
@@ -165,11 +168,13 @@ mod tests {
         let mut adapter = TaffyLayoutAdapter::new();
         let mut measurer = MockMeasurer;
         let pinned = adapter
-            .calculate_layout_with_constraints(
-                node(),
+            .calculate_layout(
+                LayoutRoot::new(
+                    node(),
+                    Position::new(0, 0),
+                    crate::shared::primitives::SizeConstraint::new(Some(300), None),
+                ),
                 &mut measurer,
-                Position::new(0, 0),
-                crate::shared::primitives::SizeConstraint::new(Some(300), None),
             )
             .unwrap();
         assert_eq!(pinned.rect().width(), 300);
@@ -185,7 +190,7 @@ mod tests {
         // `SizeConstraint` pin can produce a definite available space.
         let mut adapter = TaffyLayoutAdapter::new();
         let unconstrained = adapter
-            .calculate_layout(node(), &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(node()), &mut measurer)
             .unwrap();
         assert_eq!(unconstrained.rect().width(), 0);
         assert_eq!(unconstrained.rect().height(), 20);
@@ -214,7 +219,10 @@ mod tests {
         };
 
         let render_tree = adapter
-            .calculate_layout(node, &mut measurer, Position::new(10, 5))
+            .calculate_layout(
+                LayoutRoot::new(node, Position::new(10, 5), SizeConstraint::none()),
+                &mut measurer,
+            )
             .unwrap();
         assert_eq!(render_tree.rect().x(), 10);
         assert_eq!(render_tree.rect().y(), 5);
@@ -241,7 +249,7 @@ mod tests {
         };
 
         let render_tree = adapter
-            .calculate_layout(node, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(node), &mut measurer)
             .unwrap();
         assert_eq!(render_tree.rect().width(), 150);
         assert_eq!(render_tree.rect().height(), 28);
@@ -282,7 +290,7 @@ mod tests {
         };
 
         let render_tree = adapter
-            .calculate_layout(root, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(root), &mut measurer)
             .unwrap();
 
         let layouts = render_tree.collect_module_layouts();
@@ -340,7 +348,7 @@ mod tests {
         };
 
         let render_tree = adapter
-            .calculate_layout(grid, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(grid), &mut measurer)
             .unwrap();
 
         if let RenderNode::Grid { children, .. } = render_tree {
@@ -396,7 +404,7 @@ mod tests {
         };
 
         let render_tree = adapter
-            .calculate_layout(root, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(root), &mut measurer)
             .unwrap();
 
         if let RenderNode::Flex { children, .. } = render_tree {
@@ -455,23 +463,23 @@ mod tests {
             text_child(2, "three"),
         ]);
         adapter
-            .calculate_layout(populated, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(populated), &mut measurer)
             .unwrap();
 
         // N -> 0: every child node is freed.
         adapter
-            .calculate_layout(container(vec![]), &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(container(vec![])), &mut measurer)
             .unwrap();
 
         // Still empty: the pass that used to panic on a freed NodeId.
         adapter
-            .calculate_layout(container(vec![]), &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(container(vec![])), &mut measurer)
             .unwrap();
 
         // 0 -> N: the freed children must not be diffed against.
         let repopulated = container(vec![text_child(0, "one"), text_child(1, "two")]);
         let render_tree = adapter
-            .calculate_layout(repopulated, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(repopulated), &mut measurer)
             .unwrap();
 
         let RenderNode::Flex { children, .. } = render_tree else {
@@ -515,7 +523,7 @@ mod tests {
             nested(vec!["c"]),
         ] {
             adapter
-                .calculate_layout(frame, &mut measurer, Position::new(0, 0))
+                .calculate_layout(unpinned(frame), &mut measurer)
                 .unwrap();
         }
     }
@@ -564,7 +572,7 @@ mod tests {
             keyed_text_child(2, "c", "c-content"),
         ]);
         let first_tree = adapter
-            .calculate_layout(first, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(first), &mut measurer)
             .unwrap();
         let RenderNode::Flex {
             children: first_children,
@@ -581,7 +589,7 @@ mod tests {
             keyed_text_child(1, "c", "c-content"),
         ]);
         let second_tree = adapter
-            .calculate_layout(second, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(second), &mut measurer)
             .unwrap();
         let RenderNode::Flex {
             children: second_children,
@@ -623,7 +631,7 @@ mod tests {
             keyed_text_child(2, "c", "c-content"),
         ]);
         adapter
-            .calculate_layout(first, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(first), &mut measurer)
             .unwrap();
 
         let reordered = keyed_container(vec![
@@ -632,7 +640,7 @@ mod tests {
             keyed_text_child(2, "b", "b-content"),
         ]);
         let render_tree = adapter
-            .calculate_layout(reordered, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(reordered), &mut measurer)
             .unwrap();
 
         let RenderNode::Flex { children, .. } = render_tree else {
@@ -664,12 +672,12 @@ mod tests {
             text_child(1, "unkeyed"),
         ]);
         adapter
-            .calculate_layout(mixed_first, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(mixed_first), &mut measurer)
             .unwrap();
 
         let mixed_second = keyed_container(vec![text_child(0, "still-unkeyed")]);
         let render_tree = adapter
-            .calculate_layout(mixed_second, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(mixed_second), &mut measurer)
             .unwrap();
 
         let RenderNode::Flex { children, .. } = render_tree else {
@@ -684,11 +692,11 @@ mod tests {
             keyed_text_child(1, "dup", "two"),
         ]);
         adapter
-            .calculate_layout(dup_first, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(dup_first), &mut measurer)
             .unwrap();
         let dup_second = keyed_container(vec![keyed_text_child(0, "dup", "one")]);
         adapter
-            .calculate_layout(dup_second, &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(dup_second), &mut measurer)
             .unwrap();
     }
 
@@ -712,11 +720,13 @@ mod tests {
         let mut adapter = TaffyLayoutAdapter::new();
         let mut measurer = MockMeasurer;
         let pinned = adapter
-            .calculate_layout_with_constraints(
-                grid(),
+            .calculate_layout(
+                LayoutRoot::new(
+                    grid(),
+                    Position::new(0, 0),
+                    SizeConstraint::new(Some(280), None),
+                ),
                 &mut measurer,
-                Position::new(0, 0),
-                SizeConstraint::new(Some(280), None),
             )
             .unwrap();
         assert_eq!(pinned.rect().width(), 280);
@@ -724,7 +734,7 @@ mod tests {
         assert_eq!(adapter.intrinsic_size(), Some(Size::new(20, 20)));
 
         let free = adapter
-            .calculate_layout(grid(), &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(grid()), &mut measurer)
             .unwrap();
         assert_eq!(free.rect().width(), 20);
         assert_eq!(adapter.intrinsic_size(), None);
@@ -757,11 +767,7 @@ mod tests {
         let mut measurer = MockMeasurer;
 
         let tree = adapter
-            .calculate_layout(
-                text_leaf("hello", style),
-                &mut measurer,
-                Position::new(0, 0),
-            )
+            .calculate_layout(unpinned(text_leaf("hello", style)), &mut measurer)
             .unwrap();
 
         assert_eq!(tree.rect().width(), 54);
@@ -801,11 +807,13 @@ mod tests {
         let mut measurer = MockMeasurer;
 
         let tree = adapter
-            .calculate_layout_with_constraints(
-                grid,
+            .calculate_layout(
+                LayoutRoot::new(
+                    grid,
+                    Position::new(0, 0),
+                    crate::shared::primitives::SizeConstraint::new(Some(280), None),
+                ),
                 &mut measurer,
-                Position::new(0, 0),
-                crate::shared::primitives::SizeConstraint::new(Some(280), None),
             )
             .unwrap();
 
@@ -851,7 +859,7 @@ mod tests {
         let mut adapter = TaffyLayoutAdapter::new();
 
         let tree = adapter
-            .calculate_layout(node, &mut CalendarMeasurer, Position::new(0, 0))
+            .calculate_layout(unpinned(node), &mut CalendarMeasurer)
             .unwrap();
 
         assert_eq!(tree.rect().width(), 280);
@@ -892,7 +900,10 @@ mod tests {
         let mut adapter = TaffyLayoutAdapter::new();
 
         let tree = adapter
-            .calculate_layout(root, &mut FontMeasurer, Position::new(7, 3))
+            .calculate_layout(
+                LayoutRoot::new(root, Position::new(7, 3), SizeConstraint::none()),
+                &mut FontMeasurer,
+            )
             .unwrap();
 
         let RenderNode::Flex { children, .. } = tree else {
@@ -925,12 +936,12 @@ mod tests {
         let mut adapter = TaffyLayoutAdapter::new();
         let mut measurer = MockMeasurer;
         let first = adapter
-            .calculate_layout(padded(1.0, 2.0), &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(padded(1.0, 2.0)), &mut measurer)
             .unwrap();
         assert_eq!((first.rect().width(), first.rect().height()), (32, 21));
 
         let second = adapter
-            .calculate_layout(padded(6.0, 9.0), &mut measurer, Position::new(0, 0))
+            .calculate_layout(unpinned(padded(6.0, 9.0)), &mut measurer)
             .unwrap();
         assert_eq!((second.rect().width(), second.rect().height()), (39, 26));
         let RenderNode::Flex { children, .. } = second else {

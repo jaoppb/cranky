@@ -7,7 +7,8 @@ use std::hint::black_box;
 
 use cranky::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use cranky::features::layout_engine::domain::{
-    AlignItems, BoxMargin, FlexDirection, JustifyContent, NodePath, StyledNode, SurfaceSpace,
+    AlignItems, BoxMargin, FlexDirection, JustifyContent, LayoutRoot, NodePath, StyledNode,
+    SurfaceSpace,
 };
 use cranky::features::layout_engine::ports::LayoutEnginePort;
 use cranky::features::module_runtime::domain::render_pipeline::{
@@ -28,7 +29,9 @@ use cranky::shared::dbus::domain::DBusSubscription;
 use cranky::shared::events::signals::{SignalHub, SignalKind};
 use cranky::shared::primitives::color::{Color, DrawingColor};
 use cranky::shared::primitives::geometry::{LogicalPx, Position, Rect, Scale, Size};
-use cranky::shared::primitives::{FunctionName, ModuleOptions, MonitorId, TextAlignment};
+use cranky::shared::primitives::{
+    FunctionName, ModuleOptions, MonitorId, SizeConstraint, TextAlignment,
+};
 use cranky::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory;
 use cranky::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
 use cranky::shared::rendering::ports::draw::{BorderStroke, PaintTarget, RoundedRect};
@@ -394,9 +397,12 @@ fn bench_layout(criterion: &mut Criterion) {
                 Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
             let res = layout_engine.calculate_layout(
-                black_box(tree_small.clone()),
+                LayoutRoot::new(
+                    black_box(tree_small.clone()),
+                    Position::new(0, 0),
+                    SizeConstraint::none(),
+                ),
                 &mut measurer,
-                Position::new(0, 0),
             );
             let _ = black_box(res);
         });
@@ -410,9 +416,12 @@ fn bench_layout(criterion: &mut Criterion) {
                 Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
             let res = layout_engine.calculate_layout(
-                black_box(tree_medium.clone()),
+                LayoutRoot::new(
+                    black_box(tree_medium.clone()),
+                    Position::new(0, 0),
+                    SizeConstraint::none(),
+                ),
                 &mut measurer,
-                Position::new(0, 0),
             );
             let _ = black_box(res);
         });
@@ -426,9 +435,12 @@ fn bench_layout(criterion: &mut Criterion) {
                 Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
             let res = layout_engine.calculate_layout(
-                black_box(tree_large.clone()),
+                LayoutRoot::new(
+                    black_box(tree_large.clone()),
+                    Position::new(0, 0),
+                    SizeConstraint::none(),
+                ),
                 &mut measurer,
-                Position::new(0, 0),
             );
             let _ = black_box(res);
         });

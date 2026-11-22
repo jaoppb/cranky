@@ -2,14 +2,15 @@
 //! state is kept under and the painted bounds.
 use super::outcome::SizeChange;
 use super::pipeline::RenderPipeline;
-use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
+use crate::features::layout_engine::domain::LayoutRoot;
+use crate::features::layout_engine::domain::{LayoutError, RenderNode, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::test_support::{
     MockLayoutEngine, MockVdomDiff, PipelineFixture, TestModulePort, process_monitor,
 };
 use crate::features::vdom::domain::{InteractionContext, NodePath, NodeRef, SurfaceSpace, VNode};
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
-use crate::shared::primitives::{MonitorFocus, MonitorId, SizeConstraint};
+use crate::shared::primitives::{MonitorFocus, MonitorId};
 
 fn rect() -> VNode {
     VNode::new_rect(None, None, None, None, None)
@@ -93,12 +94,10 @@ fn paint_records_only_the_bounds_it_painted_at() {
 struct FailingEngine;
 
 impl LayoutEnginePort for FailingEngine {
-    fn calculate_layout_with_constraints(
+    fn calculate_layout(
         &mut self,
-        _node: StyledNode,
+        _root: LayoutRoot,
         _measurer: &mut dyn TextMeasurer,
-        _start_pos: Position,
-        _constraint: SizeConstraint,
     ) -> Result<RenderNode, LayoutError> {
         Err(LayoutError::EngineError("no layout".to_string()))
     }

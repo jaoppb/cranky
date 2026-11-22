@@ -302,12 +302,10 @@ pub mod test_support {
     pub(crate) struct MockLayoutEngine;
 
     impl crate::features::layout_engine::ports::LayoutEnginePort for MockLayoutEngine {
-        fn calculate_layout_with_constraints(
+        fn calculate_layout(
             &mut self,
-            _node: crate::features::layout_engine::domain::StyledNode,
+            _root: crate::features::layout_engine::domain::LayoutRoot,
             _measurer: &mut dyn TextMeasurer,
-            _start_pos: Position,
-            _constraint: crate::shared::primitives::SizeConstraint,
         ) -> Result<
             crate::features::layout_engine::domain::RenderNode,
             crate::features::layout_engine::domain::LayoutError,

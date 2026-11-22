@@ -1,4 +1,5 @@
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
@@ -141,11 +142,13 @@ fn paint_calendar() -> Vec<(String, TextAlignment)> {
     let resolver = resolver(include_str!("../../../../../../assets/styles/calendar.css"));
     let styled = root.resolve_styles(&resolver, None, None);
     let laid_out = TaffyLayoutAdapter::new()
-        .calculate_layout_with_constraints(
-            styled,
+        .calculate_layout(
+            LayoutRoot::new(
+                styled,
+                Position::new(0, 0),
+                SizeConstraint::new(Some(280), None),
+            ),
             &mut EightPerChar,
-            Position::new(0, 0),
-            SizeConstraint::new(Some(280), None),
         )
         .unwrap();
 

@@ -1,4 +1,5 @@
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{AlignItems, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
@@ -9,6 +10,7 @@ use crate::features::styling::domain::{
 };
 use crate::features::styling::ports::CssParserPort;
 use crate::features::vdom::domain::{TextContent, VNode};
+use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::rendering::ports::canvas::RecordingCanvas;
 use crate::shared::rendering::ports::text::TextFont;
@@ -72,7 +74,10 @@ fn test_arbitrary_style_name_and_progress_rendering() {
     let mut engine = TaffyLayoutAdapter::new();
 
     let render_h = engine
-        .calculate_layout(styled_h, &mut DummyMeasurer, Position::new(0, 0))
+        .calculate_layout(
+            LayoutRoot::new(styled_h, Position::new(0, 0), SizeConstraint::none()),
+            &mut DummyMeasurer,
+        )
         .unwrap();
     let mut canvas = RecordingCanvas::default();
     render_h.render_to_canvas(&mut canvas);
@@ -107,7 +112,10 @@ fn test_width_height_parsing_and_layout() {
 
     let mut engine = TaffyLayoutAdapter::new();
     let render_node = engine
-        .calculate_layout(styled_img, &mut FixedDummyMeasurer, Position::new(0, 0))
+        .calculate_layout(
+            LayoutRoot::new(styled_img, Position::new(0, 0), SizeConstraint::none()),
+            &mut FixedDummyMeasurer,
+        )
         .unwrap();
 
     assert_eq!(render_node.rect().width(), 20);

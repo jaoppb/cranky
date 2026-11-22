@@ -1,8 +1,10 @@
 //! The layout pass and per-monitor cache shared by all three floating kinds.
 use super::super::measurer::ModuleSizeMeasurer;
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::vdom::domain::InteractionContext;
+use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Scale};
 use crate::shared::primitives::{ChildSizesMap, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
@@ -45,7 +47,10 @@ pub(super) fn layout_floating_content<F: CanvasFactory, E: LayoutEnginePort>(
         .canvas_factory
         .create_text_measurer(pass.scale, Font::fallback());
     let mut measurer = ModuleSizeMeasurer::new(measurer_inner, pass.current_child_sizes);
-    match layout_engine.calculate_layout(content.clone(), &mut measurer, Position::new(0, 0)) {
+    match layout_engine.calculate_layout(
+        LayoutRoot::new(content.clone(), Position::new(0, 0), SizeConstraint::none()),
+        &mut measurer,
+    ) {
         Ok(node) => Some(node),
         Err(error) => {
             tracing::error!(err = ?error, "Floating content layout calculation failed");
@@ -94,7 +99,6 @@ mod tests {
     };
     use crate::features::module_runtime::test_support::MockCanvasFactory;
     use crate::features::styling::domain::ComputedStyle;
-    use crate::shared::primitives::SizeConstraint;
     use crate::shared::primitives::geometry::{Rect, Size};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -107,12 +111,10 @@ mod tests {
     }
 
     impl LayoutEnginePort for CountingEngine {
-        fn calculate_layout_with_constraints(
+        fn calculate_layout(
             &mut self,
-            _node: StyledNode,
+            _root: LayoutRoot,
             _measurer: &mut dyn TextMeasurer,
-            _start_pos: Position,
-            _constraint: SizeConstraint,
         ) -> Result<RenderNode, LayoutError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Ok(RenderNode::Rect {

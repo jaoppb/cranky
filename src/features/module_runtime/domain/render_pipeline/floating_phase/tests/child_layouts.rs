@@ -1,5 +1,6 @@
 use super::super::{FloatingEngine, FloatingEngines, FloatingPass, layout_floating};
 use super::{Spec, content};
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{
     LayoutError, RenderNode, StyledNode, StyledPanel, StyledPopup, TextMeasurer,
 };
@@ -13,8 +14,7 @@ use crate::features::vdom::domain::{
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::{
-    ChildModuleLayout, LayoutSurface, ModuleKey, ModuleName, ModuleOptions, MonitorFocus,
-    MonitorId, SizeConstraint,
+    ChildModuleLayout, LayoutSurface, ModuleKey, ModuleName, ModuleOptions, MonitorFocus, MonitorId,
 };
 use std::collections::HashMap;
 
@@ -24,15 +24,13 @@ struct ModuleEngine {
 }
 
 impl LayoutEnginePort for ModuleEngine {
-    fn calculate_layout_with_constraints(
+    fn calculate_layout(
         &mut self,
-        node: StyledNode,
+        root: LayoutRoot,
         _measurer: &mut dyn TextMeasurer,
-        _start_pos: Position,
-        _constraint: SizeConstraint,
     ) -> Result<RenderNode, LayoutError> {
         Ok(RenderNode::Module {
-            path: NodePath::root_in(node.path().surface()),
+            path: NodePath::root_in(root.node().path().surface()),
             node_key: None,
             rect: Rect::new(Position::new(0, 0), Size::new(30, 12)),
             key: ModuleKey::from_name(ModuleName::new(self.name)),
