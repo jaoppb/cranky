@@ -254,6 +254,64 @@ mod tests {
         });
     }
 
+    /// A `config.toml` path inside a fresh directory of its own, so a watcher sees only its edits.
+    fn fresh_config_path(tag: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!(
+            "cranky_config_{tag}_{}_{nanos}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir.join("config.toml")
+    }
+
+    /// Waits up to five seconds for the hub's config to reach `height`.
+    async fn reaches_height(rx: &mut tokio::sync::watch::Receiver<Config>, height: u32) -> bool {
+        let wait = async {
+            while rx.borrow_and_update().root().height().value() != height {
+                rx.changed().await.unwrap();
+            }
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(5), wait)
+            .await
+            .is_ok()
+    }
+
+    #[test]
+    fn test_config_adapter_load_initial_reads_an_existing_file() {
+        let path = fresh_config_path("initial");
+        std::fs::write(&path, "root = { height = 50 }").unwrap();
+
+        let config = ConfigAdapter::with_path(path.clone(), MockValidator)
+            .load_initial()
+            .unwrap();
+
+        assert_eq!(config.root().height().value(), 50);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn test_config_adapter_watch_publishes_an_edit_that_parses() {
+        crate::test_utils::block_on(async {
+            let path = fresh_config_path("reload");
+            std::fs::write(&path, "root = { height = 50 }").unwrap();
+            let hub = SignalHub::new(Config::default());
+            let mut rx = hub.config_rx();
+            let watcher = ConfigAdapter::with_path(path.clone(), MockValidator)
+                .watch(&hub)
+                .unwrap();
+
+            std::fs::write(&path, "root = { height = 60 }").unwrap();
+
+            assert!(reaches_height(&mut rx, 60).await);
+            drop(watcher);
+            std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+        });
+    }
+
     #[test]
     fn test_config_adapter_error_display() {
         let err1 = ConfigAdapterError::ConfigParseError {

@@ -9,6 +9,8 @@ mod style;
 mod tests;
 #[cfg(test)]
 mod tests_config;
+#[cfg(test)]
+mod tests_defaults;
 
 pub(crate) use config::*;
 #[cfg(test)]
