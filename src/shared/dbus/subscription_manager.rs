@@ -5,7 +5,9 @@ use tokio::sync::watch;
 use tokio_stream::StreamExt;
 use tracing::debug;
 
-use crate::shared::dbus::domain::{BusObject, DBusState, DBusSubscription};
+use crate::shared::dbus::domain::{
+    BusObject, DBusState, DBusSubscription, Path, PropertyChangedStream, SignalStream,
+};
 use crate::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
 use crate::shared::events::signals::SignalHub;
 
@@ -36,53 +38,77 @@ impl DbusSubscriptionManager {
         let tx = self.dbus_tx.clone();
 
         if is_properties_changed && let (Some(dest), Some(path)) = (sub.destination(), sub.path()) {
-            let mut stream = self
-                .conn
-                .subscribe_properties_changed(&BusObject::new(
-                    sub.bus(),
-                    dest.clone(),
-                    path.clone(),
-                ))
-                .await?;
-            debug!("Subscribed to DBus PropertiesChanged on {path:?}");
-            let path_str = path.as_str().to_string();
-            tokio::spawn(async move {
-                while let Some((iface, changed_props)) = stream.next().await {
-                    let iface_str = iface.as_str();
-                    tracing::debug!(
-                        "Received DBus PropertiesChanged on {path_str:?} for interface {iface_str:?}"
-                    );
-                    let mut properties = tx.borrow().properties().clone();
-                    for (key, value) in &changed_props {
-                        let k_str = key.as_str();
-                        let prop_key = format!("{iface_str}.{k_str}");
-                        properties.insert(prop_key, value.clone());
-                    }
-                    let _ = tx.send(DBusState::new(properties));
-                }
-            });
+            let object = BusObject::new(sub.bus(), dest.clone(), path.clone());
+            let stream = self.conn.subscribe_properties_changed(&object).await?;
+            log_subscribed_to_properties(path);
+            tokio::spawn(merge_property_changes(
+                stream,
+                path.as_str().to_string(),
+                tx,
+            ));
             return Ok(());
         }
 
         // Otherwise, generic signal
-        let mut stream = self.conn.subscribe_signal(sub).await?;
-        debug!("Subscribed to generic DBus signal");
-        tokio::spawn(async move {
-            while let Some((path, member, value)) = stream.next().await {
-                let path_str = path.as_str();
-                let member_str = member.as_str();
-                tracing::debug!(
-                    "Received generic DBus signal on {path_str:?} for member {member_str:?}"
-                );
-                let mut properties = tx.borrow().properties().clone();
-                let prop_key = format!("{path_str}.{member_str}");
-                properties.insert(prop_key, value);
-                let _ = tx.send(DBusState::new(properties));
-            }
-        });
+        let stream = self.conn.subscribe_signal(sub).await?;
+        log_subscribed_to_signal();
+        tokio::spawn(store_signals(stream, tx));
 
         Ok(())
     }
+}
+
+/// Merges every `PropertiesChanged` of `stream` (sent by the object at `path_str`) into the
+/// `DBus` state, each property under `interface.property`.
+async fn merge_property_changes(
+    mut stream: PropertyChangedStream,
+    path_str: String,
+    tx: watch::Sender<DBusState>,
+) {
+    while let Some((iface, changed_props)) = stream.next().await {
+        let iface_str = iface.as_str();
+        log_properties_changed(&path_str, iface_str);
+        let mut properties = tx.borrow().properties().clone();
+        for (key, value) in &changed_props {
+            let k_str = key.as_str();
+            let prop_key = format!("{iface_str}.{k_str}");
+            properties.insert(prop_key, value.clone());
+        }
+        let _ = tx.send(DBusState::new(properties));
+    }
+}
+
+/// Stores the value of every signal of `stream` in the `DBus` state, under `path.member`.
+async fn store_signals(mut stream: SignalStream, tx: watch::Sender<DBusState>) {
+    while let Some((path, member, value)) = stream.next().await {
+        let path_str = path.as_str();
+        let member_str = member.as_str();
+        log_signal_received(path_str, member_str);
+        let mut properties = tx.borrow().properties().clone();
+        let prop_key = format!("{path_str}.{member_str}");
+        properties.insert(prop_key, value);
+        let _ = tx.send(DBusState::new(properties));
+    }
+}
+
+/// Logs the `PropertiesChanged` subscription on `path`.
+fn log_subscribed_to_properties(path: &Path) {
+    debug!("Subscribed to DBus PropertiesChanged on {path:?}");
+}
+
+/// Logs a generic signal subscription.
+fn log_subscribed_to_signal() {
+    debug!("Subscribed to generic DBus signal");
+}
+
+/// Logs a `PropertiesChanged` received from `path_str` for `iface_str`.
+fn log_properties_changed(path_str: &str, iface_str: &str) {
+    tracing::debug!("Received DBus PropertiesChanged on {path_str:?} for interface {iface_str:?}");
+}
+
+/// Logs a generic signal received on `path_str` for `member_str`.
+fn log_signal_received(path_str: &str, member_str: &str) {
+    tracing::debug!("Received generic DBus signal on {path_str:?} for member {member_str:?}");
 }
 
 #[cfg(test)]

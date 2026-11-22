@@ -14,25 +14,21 @@ pub(super) fn parse_value(val: &zbus::Variant<'_>) -> DBusValue {
         Variant::U64(unsigned) => DBusValue::Int(i64::try_from(*unsigned).unwrap_or(i64::MAX)),
         Variant::F64(float) => DBusValue::Float(*float),
         Variant::Bool(boolean) => DBusValue::Bool(*boolean),
-        Variant::Array(array) => {
-            let mut items = Vec::new();
-            for item in array.iter() {
-                items.push(parse_value(item));
-            }
-            DBusValue::Array(items)
-        }
-        Variant::Dict(dict) => {
-            let mut map = HashMap::new();
-            for (key, value) in dict.iter() {
-                if let Variant::Str(key_str) = key {
-                    map.insert(key_str.as_str().to_string(), parse_value(value));
-                }
-            }
-            DBusValue::Dict(map)
-        }
+        Variant::Array(array) => DBusValue::Array(array.iter().map(parse_value).collect()),
+        Variant::Dict(dict) => DBusValue::Dict(parse_string_keyed_entries(dict)),
         Variant::Variant(inner) => parse_value(inner),
         _ => DBusValue::Null,
     }
+}
+
+/// The entries of `dict` whose key is a string, each value parsed; other entries are dropped.
+fn parse_string_keyed_entries(dict: &zbus::Dict<'_, '_>) -> HashMap<String, DBusValue> {
+    dict.iter()
+        .filter_map(|(key, value)| match key {
+            zbus::Variant::Str(key_str) => Some((key_str.as_str().to_string(), parse_value(value))),
+            _ => None,
+        })
+        .collect()
 }
 
 #[cfg(test)]
