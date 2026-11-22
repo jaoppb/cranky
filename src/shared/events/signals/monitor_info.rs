@@ -1,6 +1,6 @@
 //! The monitor list handed to scripts, built from Wayland's monitors and Hyprland's workspace data.
 
-use crate::features::workspaces::domain::MonitorName;
+use crate::features::workspaces::domain::{Monitor, MonitorName};
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{MonitorFocus, ScriptMonitorInfo};
 
@@ -22,36 +22,38 @@ impl SignalHub {
         let scales_guard = scales.borrow();
         let focused_opt = hypr_guard.effective_focused_monitor();
 
-        let mut infos = Vec::new();
-        for (mon_id, scale) in scales_guard.iter() {
-            let hypr_monitor = hypr_guard
-                .monitors()
-                .get(&MonitorName::new(mon_id.as_str()));
-            let is_focused = hypr_monitor.is_some()
-                && focused_opt.as_ref().map(MonitorName::as_str) == Some(mon_id.as_str());
-            let (active_ws, special_ws) = hypr_monitor.map_or((None, None), |monitor| {
-                (
-                    Some(monitor.active_workspace_id().value()),
-                    monitor
-                        .special_workspace_id()
-                        .map(crate::features::workspaces::domain::WorkspaceId::value),
-                )
-            });
-
-            infos.push(
+        let infos = scales_guard
+            .iter()
+            .map(|(mon_id, scale)| {
+                let hypr_monitor = hypr_guard
+                    .monitors()
+                    .get(&MonitorName::new(mon_id.as_str()));
+                let is_focused = hypr_monitor.is_some()
+                    && focused_opt.as_ref().map(MonitorName::as_str) == Some(mon_id.as_str());
+                let (active_ws, special_ws) = hypr_monitor.map_or((None, None), workspace_ids);
                 ScriptMonitorInfo::from_id(mon_id)
                     .with_name(mon_id.as_str().to_string())
                     .with_size(Size::new(0, 0))
                     .with_scale(*scale)
                     .with_focused(MonitorFocus::from(is_focused))
-                    .with_workspaces(active_ws, special_ws),
-            );
-        }
+                    .with_workspaces(active_ws, special_ws)
+            })
+            .collect();
         drop(scales_guard);
         drop(hypr_guard);
 
         infos
     }
+}
+
+/// The ids of the regular and the special workspace `monitor` shows, as scripts see them.
+fn workspace_ids(monitor: &Monitor) -> (Option<i32>, Option<i32>) {
+    (
+        Some(monitor.active_workspace_id().value()),
+        monitor
+            .special_workspace_id()
+            .map(crate::features::workspaces::domain::WorkspaceId::value),
+    )
 }
 
 #[cfg(test)]

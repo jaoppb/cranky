@@ -55,34 +55,25 @@ impl SignalHub {
     /// Builds the hub with `initial_config`, the current local time and empty state for every other source.
     #[must_use]
     pub fn new(initial_config: Config) -> Self {
-        let config = watch::channel(initial_config);
-        let hyprland = watch::channel(HyprlandState::new(
-            std::collections::BTreeMap::new(),
-            std::collections::BTreeMap::new(),
-            None,
-        ));
-        let time = watch::channel(Clock::new().now());
-        let dbus = watch::channel(DBusState::default());
-        let systray = watch::channel(SystrayState::default());
-        let metrics = watch::channel(MetricsState::default());
-        let mpris = watch::channel(MprisState::default());
-        let pointer = tokio::sync::broadcast::channel(32);
-        let module_sizes = watch::channel(HashMap::new());
-        let monitor_scales = watch::channel(HashMap::new());
-        let module_errors = watch::channel(HashMap::new());
-
         Self {
-            config,
-            hyprland,
-            time,
-            dbus,
-            systray,
-            metrics,
-            pointer,
-            mpris,
-            module_sizes,
-            monitor_scales,
-            module_errors,
+            // The state sources adapters publish and module scripts subscribe to.
+            config: watch::channel(initial_config),
+            hyprland: watch::channel(HyprlandState::new(
+                std::collections::BTreeMap::new(),
+                std::collections::BTreeMap::new(),
+                None,
+            )),
+            time: watch::channel(Clock::new().now()),
+            dbus: watch::channel(DBusState::default()),
+            systray: watch::channel(SystrayState::default()),
+            metrics: watch::channel(MetricsState::default()),
+            mpris: watch::channel(MprisState::default()),
+            // Pointer interactions, broadcast to the module actors.
+            pointer: tokio::sync::broadcast::channel(32),
+            // What module actors and the Wayland side report to each other, per monitor and site.
+            module_sizes: watch::channel(HashMap::new()),
+            monitor_scales: watch::channel(HashMap::new()),
+            module_errors: watch::channel(HashMap::new()),
         }
     }
 

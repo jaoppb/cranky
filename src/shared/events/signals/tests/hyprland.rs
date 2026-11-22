@@ -11,6 +11,54 @@ mod tests {
     use crate::shared::events::core::WindowManagerEvent;
     use crate::shared::events::signals::hyprland::HyprlandState;
 
+    /// The monitor workspace `id` is on, or `None` when it is unknown or on no monitor.
+    fn monitor_of(state: &HyprlandState, id: i32) -> Option<&MonitorName> {
+        state.workspaces().get(&WorkspaceId::new(id))?.monitor()
+    }
+
+    /// The workspace `monitor` shows; the monitor must be known.
+    fn active_workspace_of<'state>(
+        state: &'state HyprlandState,
+        monitor: &str,
+    ) -> &'state WorkspaceId {
+        state
+            .monitors()
+            .get(&MonitorName::new(monitor))
+            .unwrap()
+            .active_workspace_id()
+    }
+
+    /// The special workspace `monitor` shows, or `None` when it is unknown or shows none.
+    fn special_workspace_of<'state>(
+        state: &'state HyprlandState,
+        monitor: &str,
+    ) -> Option<&'state WorkspaceId> {
+        state
+            .monitors()
+            .get(&MonitorName::new(monitor))?
+            .special_workspace_id()
+    }
+
+    /// The single monitor `name`, showing workspace `active`.
+    fn only_monitor(name: &str, active: i32) -> BTreeMap<MonitorName, Monitor> {
+        let monitor = Monitor::new(MonitorName::new(name), WorkspaceId::new(active), None);
+        BTreeMap::from([(MonitorName::new(name), monitor)])
+    }
+
+    /// A state that knows workspace 2 on no monitor, as left by activating it while nothing
+    /// had focus.
+    fn state_with_workspace_two() -> HyprlandState {
+        let mut workspaces = BTreeMap::new();
+        workspaces.insert(
+            WorkspaceId::new(2),
+            Workspace::new(WorkspaceId::new(2), WorkspaceName::new("2"), None),
+        );
+        HyprlandState::new(workspaces, BTreeMap::new(), None)
+    }
+
+    // The create / activate / destroy, move / rename and focus / special steps were one test
+    // chained on one state. The first step ends in the state the second starts from; the third
+    // starts from the same workspaces with a DP-1 monitor added, not from what the second left.
     #[test]
     fn test_hyprland_state_apply_event() {
         let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
@@ -35,6 +83,12 @@ mod tests {
             name: WorkspaceName::new("1"),
         });
         assert!(!state.workspaces().contains_key(&WorkspaceId::new(1)));
+        assert_eq!(state, state_with_workspace_two());
+    }
+
+    #[test]
+    fn test_hyprland_state_apply_workspace_moved_and_renamed() {
+        let mut state = state_with_workspace_two();
 
         // Test WorkspaceMoved
         state.apply_event(&WindowManagerEvent::WorkspaceMoved {
@@ -42,14 +96,7 @@ mod tests {
             name: WorkspaceName::new("2"),
             monitor_name: MonitorName::new("DP-1"),
         });
-        assert_eq!(
-            state
-                .workspaces()
-                .get(&WorkspaceId::new(2))
-                .unwrap()
-                .monitor(),
-            Some(&MonitorName::new("DP-1"))
-        );
+        assert_eq!(monitor_of(&state, 2), Some(&MonitorName::new("DP-1")));
 
         // Test WorkspaceMoved (new workspace)
         state.apply_event(&WindowManagerEvent::WorkspaceMoved {
@@ -57,14 +104,7 @@ mod tests {
             name: WorkspaceName::new("3"),
             monitor_name: MonitorName::new("DP-2"),
         });
-        assert_eq!(
-            state
-                .workspaces()
-                .get(&WorkspaceId::new(3))
-                .unwrap()
-                .monitor(),
-            Some(&MonitorName::new("DP-2"))
-        );
+        assert_eq!(monitor_of(&state, 3), Some(&MonitorName::new("DP-2")));
 
         // Test WorkspaceRenamed
         state.apply_event(&WindowManagerEvent::WorkspaceRenamed {
@@ -72,27 +112,20 @@ mod tests {
             new_name: WorkspaceName::new("2-renamed"),
         });
         assert!(state.workspaces().contains_key(&WorkspaceId::new(2)));
+    }
+
+    #[test]
+    fn test_hyprland_state_apply_monitor_focused_and_special_workspace() {
+        let workspaces = state_with_workspace_two().workspaces().clone();
+        let mut state = HyprlandState::new(workspaces, only_monitor("DP-1", 1), None);
 
         // Test MonitorFocused
-        let mut monitors = BTreeMap::new();
-        monitors.insert(
-            MonitorName::new("DP-1"),
-            Monitor::new(MonitorName::new("DP-1"), WorkspaceId::new(1), None),
-        );
-        let mut state = HyprlandState::new(state.workspaces().clone(), monitors, None);
         state.apply_event(&WindowManagerEvent::MonitorFocused {
             monitor_name: MonitorName::new("DP-1"),
             workspace_id: WorkspaceId::new(2),
         });
         assert_eq!(state.focused_monitor(), Some(&MonitorName::new("DP-1")));
-        assert_eq!(
-            state
-                .monitors()
-                .get(&MonitorName::new("DP-1"))
-                .unwrap()
-                .active_workspace_id(),
-            &WorkspaceId::new(2)
-        );
+        assert_eq!(active_workspace_of(&state, "DP-1"), &WorkspaceId::new(2));
 
         // Test SpecialWorkspaceActivated
         state.apply_event(&WindowManagerEvent::SpecialWorkspaceActivated {
@@ -101,21 +134,10 @@ mod tests {
             monitor_name: MonitorName::new("DP-1"),
         });
         assert_eq!(
-            state
-                .monitors()
-                .get(&MonitorName::new("DP-1"))
-                .unwrap()
-                .special_workspace_id(),
+            special_workspace_of(&state, "DP-1"),
             Some(&WorkspaceId::new(99))
         );
-        assert_eq!(
-            state
-                .workspaces()
-                .get(&WorkspaceId::new(99))
-                .unwrap()
-                .monitor(),
-            Some(&MonitorName::new("DP-1"))
-        );
+        assert_eq!(monitor_of(&state, 99), Some(&MonitorName::new("DP-1")));
     }
 
     #[test]
@@ -251,31 +273,16 @@ mod tests {
 
     #[test]
     fn test_workspace_creation_and_activation_with_monitor_inference() {
-        let mut monitors = BTreeMap::new();
-        monitors.insert(
-            MonitorName::new("HEADLESS-1"),
-            Monitor::new(MonitorName::new("HEADLESS-1"), WorkspaceId::new(1), None),
-        );
-
-        let mut state = HyprlandState::new(
-            BTreeMap::new(),
-            monitors,
-            Some(MonitorName::new("HEADLESS-1")),
-        );
+        let monitors = only_monitor("HEADLESS-1", 1);
+        let focused = Some(MonitorName::new("HEADLESS-1"));
+        let mut state = HyprlandState::new(BTreeMap::new(), monitors, focused);
 
         // createworkspacev2>>4,4
         state.apply_event(&WindowManagerEvent::WorkspaceCreated {
             id: WorkspaceId::new(4),
             name: WorkspaceName::new("4"),
         });
-        assert_eq!(
-            state
-                .workspaces()
-                .get(&WorkspaceId::new(4))
-                .unwrap()
-                .monitor(),
-            Some(&MonitorName::new("HEADLESS-1"))
-        );
+        assert_eq!(monitor_of(&state, 4), Some(&MonitorName::new("HEADLESS-1")));
 
         // workspacev2>>4,4
         state.apply_event(&WindowManagerEvent::WorkspaceActivated {
@@ -283,11 +290,7 @@ mod tests {
             name: WorkspaceName::new("4"),
         });
         assert_eq!(
-            state
-                .monitors()
-                .get(&MonitorName::new("HEADLESS-1"))
-                .unwrap()
-                .active_workspace_id(),
+            active_workspace_of(&state, "HEADLESS-1"),
             &WorkspaceId::new(4)
         );
 

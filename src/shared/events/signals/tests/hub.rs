@@ -63,36 +63,48 @@ mod tests {
     }
 
     #[test]
-    fn test_signal_hub_other_propagation() {
+    fn test_signal_hub_dbus_propagation() {
         crate::test_utils::block_on(async {
             let hub = SignalHub::new(Config::default());
-
-            let dbus_tx = hub.dbus_tx();
             let mut dbus_rx = hub.dbus_rx();
-            dbus_tx.send(DBusState::default()).unwrap();
+            hub.dbus_tx().send(DBusState::default()).unwrap();
             assert!(dbus_rx.changed().await.is_ok());
+        });
+    }
 
-            let systray_tx = hub.systray_tx();
+    #[test]
+    fn test_signal_hub_systray_propagation() {
+        crate::test_utils::block_on(async {
+            let hub = SignalHub::new(Config::default());
             let mut systray_rx = hub.systray_rx();
-            systray_tx.send(SystrayState::default()).unwrap();
+            hub.systray_tx().send(SystrayState::default()).unwrap();
             assert!(systray_rx.changed().await.is_ok());
+        });
+    }
 
-            let metrics_tx = hub.metrics_tx();
+    #[test]
+    fn test_signal_hub_metrics_propagation() {
+        crate::test_utils::block_on(async {
+            let hub = SignalHub::new(Config::default());
             let mut metrics_rx = hub.metrics_rx();
-            metrics_tx.send(MetricsState::default()).unwrap();
+            hub.metrics_tx().send(MetricsState::default()).unwrap();
             assert!(metrics_rx.changed().await.is_ok());
+        });
+    }
 
-            let ptr_tx = hub.pointer_tx();
+    #[test]
+    fn test_signal_hub_pointer_propagation() {
+        crate::test_utils::block_on(async {
+            let hub = SignalHub::new(Config::default());
             let mut ptr_rx = hub.pointer_rx();
-            ptr_tx
+            let leave = PointerEvent::PointerLeave {
+                surface: SurfaceKind::Bar,
+            };
+            hub.pointer_tx()
                 .send((
                     ModuleId::new(1),
                     MonitorId::new("1"),
-                    crate::shared::events::core::InteractionEvent::Pointer(
-                        PointerEvent::PointerLeave {
-                            surface: SurfaceKind::Bar,
-                        },
-                    ),
+                    crate::shared::events::core::InteractionEvent::Pointer(leave),
                 ))
                 .unwrap();
             assert!(ptr_rx.recv().await.is_ok());
