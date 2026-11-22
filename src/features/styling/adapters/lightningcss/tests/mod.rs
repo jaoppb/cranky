@@ -11,6 +11,7 @@ mod property_grid_container;
 mod property_grid_item;
 mod selectors;
 mod text_align;
+mod vdom_bridge;
 
 use crate::features::styling::adapters::lightningcss::{
     LightningCssAdapter, LightningPropertyReparser,

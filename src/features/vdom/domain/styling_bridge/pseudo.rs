@@ -115,4 +115,29 @@ mod tests {
             !compute_pseudo_classes(&bar_root, Some(&resolved)).contains(&PseudoClass::Focused)
         );
     }
+
+    #[test]
+    fn test_hovered_active_and_focused_nodes_each_get_their_own_pseudo_class() {
+        let bar = |index: usize| NodePath::new(SurfaceSpace::Bar, vec![index]);
+        let interaction = InteractionContext::new(
+            Some(NodeRef::new(Vec::new(), bar(0))),
+            Some(NodeRef::new(Vec::new(), bar(1))),
+            Some(NodeRef::new(Vec::new(), bar(2))),
+            MonitorFocus::Unfocused,
+        );
+        let resolved = ResolvedInteraction::resolve(&empty_root(), SurfaceSpace::Bar, &interaction);
+
+        assert_eq!(
+            compute_pseudo_classes(&bar(0), Some(&resolved)),
+            [PseudoClass::Hover]
+        );
+        assert_eq!(
+            compute_pseudo_classes(&bar(1), Some(&resolved)),
+            [PseudoClass::Active]
+        );
+        assert_eq!(
+            compute_pseudo_classes(&bar(2), Some(&resolved)),
+            [PseudoClass::Focused]
+        );
+    }
 }

@@ -115,6 +115,28 @@ mod tests {
         assert_eq!(handler.hovered_node(&mon), Some(&root_ref()));
     }
 
+    /// Each of the three node slots of the interaction context reads its own
+    /// map: a node pressed (A), another focused (B) and a third hovered (C)
+    /// land in `active`, `focused` and `hovered` respectively.
+    #[test]
+    fn test_interaction_context_maps_hovered_active_and_focused_to_their_own_slots() {
+        let mut handler = PointerHandler::new();
+        let mon = MonitorId::new("DP-1");
+        let root = NodePath::root_in(SurfaceSpace::Bar);
+        let pressed = NodeRef::new(Vec::new(), root.child(0));
+        let focused = NodeRef::new(Vec::new(), root.child(1));
+        let hovered = NodeRef::new(Vec::new(), root.child(2));
+        handler.active.insert(mon.clone(), pressed.clone());
+        handler.focused.insert(mon.clone(), focused.clone());
+        handler.hovered.insert(mon.clone(), hovered.clone());
+
+        let context = handler.interaction_context(&mon, MonitorFocus::Focused);
+
+        assert_eq!(context.active(), Some(&pressed));
+        assert_eq!(context.focused(), Some(&focused));
+        assert_eq!(context.hovered(), Some(&hovered));
+    }
+
     /// The interaction context carries this monitor's hovered, pressed and
     /// focused nodes, and whether the monitor itself has focus, as given.
     #[test]
