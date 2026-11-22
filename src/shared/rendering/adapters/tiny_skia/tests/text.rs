@@ -44,7 +44,7 @@ fn test_canvas_draw_text() {
         "test ",
         None,
         None,
-        DrawingColor::Solid(Color::new(255, 255, 255, 255)),
+        DrawingColor::Solid(Color::rgb(255, 255, 255)),
         Position::new(10, 10),
         TextAlignment::default(),
     );
@@ -78,10 +78,7 @@ fn test_canvas_draw_text_gradient() {
         "gradient text",
         None,
         None,
-        DrawingColor::Gradient(
-            vec![Color::new(255, 0, 0, 255), Color::new(0, 255, 0, 255)],
-            0.0,
-        ),
+        DrawingColor::Gradient(vec![Color::rgb(255, 0, 0), Color::rgb(0, 255, 0)], 0.0),
         Position::new(10, 10),
         TextAlignment::default(),
     );
@@ -132,7 +129,7 @@ fn ink_span(align: TextAlign) -> (u32, u32) {
         "Ag",
         None,
         None,
-        DrawingColor::Solid(Color::new(255, 255, 255, 255)),
+        DrawingColor::Solid(Color::rgb(255, 255, 255)),
         Position::new(0, 0),
         TextAlignment::new(align, 200),
     );
@@ -176,7 +173,7 @@ fn test_draw_text_wider_than_box_starts_at_origin() {
         "a considerably long line",
         None,
         None,
-        DrawingColor::Solid(Color::new(255, 255, 255, 255)),
+        DrawingColor::Solid(Color::rgb(255, 255, 255)),
         Position::new(0, 0),
         TextAlignment::new(TextAlign::Center, 10),
     );

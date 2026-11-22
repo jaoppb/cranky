@@ -34,7 +34,7 @@ fn ink_box(default_size: f32, size: Option<FontSize>, position: Position) -> [u3
             "Hg",
             None,
             size,
-            DrawingColor::Solid(Color::new(255, 0, 0, 255)),
+            DrawingColor::Solid(Color::rgb(255, 0, 0)),
             position,
             TextAlignment::default(),
         );
@@ -112,7 +112,7 @@ fn factory_canvas_paints_rows_of_its_size_at_its_scale() {
             LogicalPx::new(0.0),
             LogicalPx::new(10.0),
             LogicalPx::new(5.0),
-            DrawingColor::Solid(Color::new(255, 0, 0, 255)),
+            DrawingColor::Solid(Color::rgb(255, 0, 0)),
             LogicalPx::new(0.0),
         );
     }
@@ -142,7 +142,7 @@ fn canvas_over_a_buffer_of_the_wrong_size_draws_nothing() {
             sans(),
             FontSize::new(14.0),
         );
-        let color = DrawingColor::Solid(Color::new(255, 0, 0, 255));
+        let color = DrawingColor::Solid(Color::rgb(255, 0, 0));
         canvas.draw_rect(
             LogicalPx::new(0.0),
             LogicalPx::new(0.0),

@@ -14,7 +14,7 @@ pub enum DrawingColor {
 
 impl Default for DrawingColor {
     fn default() -> Self {
-        Self::Solid(Color::new(0, 0, 0, 255))
+        Self::Solid(Color::rgb(0, 0, 0))
     }
 }
 

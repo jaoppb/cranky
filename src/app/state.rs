@@ -261,10 +261,7 @@ impl<
             {
                 Some(child_id) => {
                     seen.insert(child_id);
-                    let bounds = crate::shared::primitives::ChildBounds::new(
-                        *child_layout.bounds(),
-                        child_layout.constraint(),
-                    );
+                    let bounds = child_layout.bounds();
                     self.read_model
                         .computed_layouts
                         .entry(monitor_id.clone())
@@ -274,7 +271,7 @@ impl<
                     tracing::trace!(
                         child = %child_id,
                         monitor = %monitor_id,
-                        bounds = ?child_layout.bounds(),
+                        bounds = ?bounds.rect(),
                         "Updating computed_layouts for child module"
                     );
                     self.resend_child_bounds(child_id);
@@ -824,9 +821,10 @@ mod tests {
                 crate::shared::primitives::ModuleKey::from_name(
                     crate::shared::primitives::ModuleName::new("clock"),
                 ),
-                Rect::new(Position::new(x, 0), Size::new(80, 24)),
-                crate::shared::primitives::SizeConstraint::none(),
-                crate::shared::primitives::ModuleOptions::default(),
+                crate::shared::primitives::ChildBounds::new(
+                    Rect::new(Position::new(x, 0), Size::new(80, 24)),
+                    crate::shared::primitives::SizeConstraint::none(),
+                ),
                 crate::shared::primitives::LayoutSurface::Bar,
             )],
         }
@@ -1405,9 +1403,10 @@ mod tests {
                 &monitor,
                 &[crate::shared::primitives::ChildModuleLayout::new(
                     key.clone(),
-                    Rect::new(Position::new(10, 0), Size::new(50, 20)),
-                    crate::shared::primitives::SizeConstraint::none(),
-                    crate::shared::primitives::ModuleOptions::default(),
+                    crate::shared::primitives::ChildBounds::new(
+                        Rect::new(Position::new(10, 0), Size::new(50, 20)),
+                        crate::shared::primitives::SizeConstraint::none(),
+                    ),
                     crate::shared::primitives::LayoutSurface::Bar,
                 )],
             )
@@ -1417,9 +1416,10 @@ mod tests {
                 &monitor,
                 &[crate::shared::primitives::ChildModuleLayout::new(
                     key,
-                    Rect::new(Position::new(90, 0), Size::new(50, 20)),
-                    crate::shared::primitives::SizeConstraint::none(),
-                    crate::shared::primitives::ModuleOptions::default(),
+                    crate::shared::primitives::ChildBounds::new(
+                        Rect::new(Position::new(90, 0), Size::new(50, 20)),
+                        crate::shared::primitives::SizeConstraint::none(),
+                    ),
                     crate::shared::primitives::LayoutSurface::Bar,
                 )],
             )
@@ -1492,9 +1492,10 @@ mod tests {
                 &monitor,
                 &[crate::shared::primitives::ChildModuleLayout::new(
                     key,
-                    Rect::new(Position::new(0, 0), Size::new(50, 20)),
-                    crate::shared::primitives::SizeConstraint::none(),
-                    crate::shared::primitives::ModuleOptions::default(),
+                    crate::shared::primitives::ChildBounds::new(
+                        Rect::new(Position::new(0, 0), Size::new(50, 20)),
+                        crate::shared::primitives::SizeConstraint::none(),
+                    ),
                     crate::shared::primitives::LayoutSurface::Popup,
                 )],
             )
@@ -1582,9 +1583,10 @@ mod tests {
                 &monitor,
                 &[crate::shared::primitives::ChildModuleLayout::new(
                     key,
-                    Rect::new(Position::new(0, 0), Size::new(50, 20)),
-                    crate::shared::primitives::SizeConstraint::none(),
-                    crate::shared::primitives::ModuleOptions::default(),
+                    crate::shared::primitives::ChildBounds::new(
+                        Rect::new(Position::new(0, 0), Size::new(50, 20)),
+                        crate::shared::primitives::SizeConstraint::none(),
+                    ),
                     crate::shared::primitives::LayoutSurface::Bar,
                 )],
             )
@@ -1644,9 +1646,10 @@ mod tests {
             );
             let layouts = [crate::shared::primitives::ChildModuleLayout::new(
                 key,
-                Rect::new(Position::new(0, 0), Size::new(50, 20)),
-                crate::shared::primitives::SizeConstraint::none(),
-                crate::shared::primitives::ModuleOptions::default(),
+                crate::shared::primitives::ChildBounds::new(
+                    Rect::new(Position::new(0, 0), Size::new(50, 20)),
+                    crate::shared::primitives::SizeConstraint::none(),
+                ),
                 crate::shared::primitives::LayoutSurface::Bar,
             )];
 

@@ -8,7 +8,7 @@ use cosmic_text::{FontSystem, SwashCache};
 use tiny_skia::Pixmap;
 
 fn red() -> DrawingColor {
-    DrawingColor::Solid(Color::new(255, 0, 0, 255))
+    DrawingColor::Solid(Color::rgb(255, 0, 0))
 }
 
 /// Draws with `draw` on a fresh `width`x`height` canvas at `scale`, and returns the pixmap.

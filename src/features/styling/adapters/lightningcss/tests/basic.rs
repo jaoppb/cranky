@@ -63,7 +63,7 @@ fn test_parse_basic_css_rules() {
         &LightningPropertyReparser,
     );
     if let Some(DrawingColor::Solid(background)) = style_ws_hover.background() {
-        assert_eq!(*background, Color::new(122, 162, 247, 255));
+        assert_eq!(*background, Color::rgb(122, 162, 247));
     } else {
         panic!("Expected background color #7aa2f7");
     }
@@ -77,7 +77,7 @@ fn test_parse_basic_css_rules() {
         &LightningPropertyReparser,
     );
     if let Some(DrawingColor::Solid(text_color)) = style_hour.color() {
-        assert_eq!(*text_color, Color::new(192, 202, 245, 255));
+        assert_eq!(*text_color, Color::rgb(192, 202, 245));
     } else {
         panic!("Expected text color #c0caf5");
     }
@@ -149,7 +149,7 @@ fn test_gradient_border_color_resolution() {
     );
     assert_eq!(
         style_unfocused.border_color(),
-        Some(&DrawingColor::Solid(Color::new(86, 95, 137, 255)))
+        Some(&DrawingColor::Solid(Color::rgb(86, 95, 137)))
     );
 
     // 2. Focused bar -> Gradient #7aa2f7 #bb9af7 45deg
@@ -161,8 +161,8 @@ fn test_gradient_border_color_resolution() {
     );
     if let Some(DrawingColor::Gradient(colors, angle)) = style_focused.border_color() {
         assert_eq!(colors.len(), 2);
-        assert_eq!(colors[0], Color::new(122, 162, 247, 255));
-        assert_eq!(colors[1], Color::new(187, 154, 247, 255));
+        assert_eq!(colors[0], Color::rgb(122, 162, 247));
+        assert_eq!(colors[1], Color::rgb(187, 154, 247));
         assert!((angle - 45.0).abs() < f32::EPSILON);
     } else {
         panic!("Expected gradient border color on focused bar");

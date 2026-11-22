@@ -28,7 +28,7 @@ fn test_canvas_draw_rect() {
             LogicalPx::new(10.0),
             LogicalPx::new(80.0),
             LogicalPx::new(80.0),
-            DrawingColor::Solid(Color::new(255, 0, 0, 255)),
+            DrawingColor::Solid(Color::rgb(255, 0, 0)),
             LogicalPx::new(0.0),
         );
     }
@@ -80,7 +80,7 @@ fn test_canvas_draw_border() {
         canvas.draw_border(
             Position::new(0, 0),
             Size::new(20, 20),
-            DrawingColor::Solid(Color::new(0, 255, 0, 255)),
+            DrawingColor::Solid(Color::rgb(0, 255, 0)),
             LogicalPx::new(0.0),
             LogicalPx::new(2.0),
         );
@@ -88,7 +88,7 @@ fn test_canvas_draw_border() {
         canvas.draw_border(
             Position::new(20, 20),
             Size::new(60, 60),
-            DrawingColor::Solid(Color::new(0, 0, 255, 255)),
+            DrawingColor::Solid(Color::rgb(0, 0, 255)),
             LogicalPx::new(10.0),
             LogicalPx::new(2.0),
         );
@@ -122,10 +122,7 @@ fn test_canvas_draw_rect_with_radius() {
         LogicalPx::new(10.0),
         LogicalPx::new(80.0),
         LogicalPx::new(80.0),
-        DrawingColor::Gradient(
-            vec![Color::new(255, 0, 0, 255), Color::new(0, 255, 0, 255)],
-            45.0,
-        ),
+        DrawingColor::Gradient(vec![Color::rgb(255, 0, 0), Color::rgb(0, 255, 0)], 45.0),
         LogicalPx::new(20.0),
     );
 }

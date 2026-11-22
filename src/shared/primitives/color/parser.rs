@@ -42,7 +42,7 @@ fn parse_rgba_hex(input: &str) -> Option<Color> {
         let green = u8::from_str_radix(content.get(2..4)?, 16).ok()?;
         let blue = u8::from_str_radix(content.get(4..6)?, 16).ok()?;
         let alpha = u8::from_str_radix(content.get(6..8)?, 16).ok()?;
-        return Some(Color::new(red, green, blue, alpha));
+        return Some(Color::rgb(red, green, blue).with_alpha(alpha));
     }
     None
 }
@@ -53,7 +53,7 @@ fn parse_rgb_hex(input: &str) -> Option<Color> {
         let red = u8::from_str_radix(content.get(0..2)?, 16).ok()?;
         let green = u8::from_str_radix(content.get(2..4)?, 16).ok()?;
         let blue = u8::from_str_radix(content.get(4..6)?, 16).ok()?;
-        return Some(Color::new(red, green, blue, 255));
+        return Some(Color::rgb(red, green, blue));
     }
     None
 }
@@ -64,13 +64,13 @@ fn parse_hex(input: &str) -> Option<Color> {
         let red = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
         let green = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
         let blue = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
-        Some(Color::new(red, green, blue, 255))
+        Some(Color::rgb(red, green, blue))
     } else if hex.len() == 8 {
         let red = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
         let green = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
         let blue = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
         let alpha = u8::from_str_radix(hex.get(6..8)?, 16).ok()?;
-        Some(Color::new(red, green, blue, alpha))
+        Some(Color::rgb(red, green, blue).with_alpha(alpha))
     } else {
         None
     }
@@ -86,7 +86,7 @@ fn parse_css_rgb(input: &str) -> Option<Color> {
         let red = red_str.parse::<u8>().ok()?;
         let green = green_str.parse::<u8>().ok()?;
         let blue = blue_str.parse::<u8>().ok()?;
-        return Some(Color::new(red, green, blue, 255));
+        return Some(Color::rgb(red, green, blue));
     }
     None
 }
@@ -105,7 +105,7 @@ fn parse_css_rgba(input: &str) -> Option<Color> {
         let alpha_f = alpha_str.parse::<f32>().ok()?;
         let alpha =
             u8::try_from(crate::utils::f32_to_u32((alpha_f * 255.0).round())).unwrap_or(255);
-        return Some(Color::new(red, green, blue, alpha));
+        return Some(Color::rgb(red, green, blue).with_alpha(alpha));
     }
     None
 }

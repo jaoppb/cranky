@@ -4,7 +4,7 @@ use crate::shared::primitives::color::{Color, ColorError, DrawingColor};
 
 #[test]
 fn test_color_new() {
-    let color = Color::new(1, 2, 3, 4);
+    let color = Color::rgb(1, 2, 3).with_alpha(4);
     assert_eq!(color.red(), 1);
     assert_eq!(color.green(), 2);
     assert_eq!(color.blue(), 3);
@@ -14,28 +14,34 @@ fn test_color_new() {
 #[test]
 fn test_parse_hex() {
     let color = DrawingColor::parse("#ff0000").unwrap();
-    assert_eq!(color, DrawingColor::Solid(Color::new(255, 0, 0, 255)));
+    assert_eq!(color, DrawingColor::Solid(Color::rgb(255, 0, 0)));
 
     let color = DrawingColor::parse("#00ff00ff").unwrap();
-    assert_eq!(color, DrawingColor::Solid(Color::new(0, 255, 0, 255)));
+    assert_eq!(color, DrawingColor::Solid(Color::rgb(0, 255, 0)));
 }
 
 #[test]
 fn test_parse_rgb_rgba() {
     let color = DrawingColor::parse("rgb(ffffff)").unwrap();
-    assert_eq!(color, DrawingColor::Solid(Color::new(255, 255, 255, 255)));
+    assert_eq!(color, DrawingColor::Solid(Color::rgb(255, 255, 255)));
 
     let color = DrawingColor::parse("rgba(00000080)").unwrap();
-    assert_eq!(color, DrawingColor::Solid(Color::new(0, 0, 0, 128)));
+    assert_eq!(
+        color,
+        DrawingColor::Solid(Color::rgb(0, 0, 0).with_alpha(128))
+    );
 }
 
 #[test]
 fn test_parse_css_rgb_rgba() {
     let color = DrawingColor::parse("rgb(255, 128, 0)").unwrap();
-    assert_eq!(color, DrawingColor::Solid(Color::new(255, 128, 0, 255)));
+    assert_eq!(color, DrawingColor::Solid(Color::rgb(255, 128, 0)));
 
     let color = DrawingColor::parse("rgba(255, 128, 0, 0.5)").unwrap();
-    assert_eq!(color, DrawingColor::Solid(Color::new(255, 128, 0, 128)));
+    assert_eq!(
+        color,
+        DrawingColor::Solid(Color::rgb(255, 128, 0).with_alpha(128))
+    );
 }
 
 #[test]
@@ -43,8 +49,8 @@ fn test_parse_gradient() {
     let color = DrawingColor::parse("#ff0000 #00ff00 90deg").unwrap();
     if let DrawingColor::Gradient(colors, angle) = color {
         assert_eq!(colors.len(), 2);
-        assert_eq!(colors[0], Color::new(255, 0, 0, 255));
-        assert_eq!(colors[1], Color::new(0, 255, 0, 255));
+        assert_eq!(colors[0], Color::rgb(255, 0, 0));
+        assert_eq!(colors[1], Color::rgb(0, 255, 0));
         assert!((angle - 90.0).abs() < f32::EPSILON);
     } else {
         panic!("Expected gradient");

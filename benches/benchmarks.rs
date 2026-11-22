@@ -441,9 +441,9 @@ fn bench_rendering(criterion: &mut Criterion) {
     let size = Size::new(800, 40);
     let mut buffer = vec![0_u8; 800_usize.saturating_mul(40).saturating_mul(4)];
 
-    let bg_color = DrawingColor::Solid(Color::new(30, 30, 46, 255));
-    let border_color = DrawingColor::Solid(Color::new(137, 180, 250, 255));
-    let text_color = DrawingColor::Solid(Color::new(205, 214, 244, 255));
+    let bg_color = DrawingColor::Solid(Color::rgb(30, 30, 46));
+    let border_color = DrawingColor::Solid(Color::rgb(137, 180, 250));
+    let text_color = DrawingColor::Solid(Color::rgb(205, 214, 244));
 
     group.bench_function("tinyskia_draw_rect_and_border", |bencher| {
         bencher.iter(|| {

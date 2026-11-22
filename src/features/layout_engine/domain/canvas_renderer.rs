@@ -101,9 +101,7 @@ fn render_text(
 ) {
     draw_bg_and_border(canvas, rect, style, None);
     let text_color = style.color().cloned().unwrap_or_else(|| {
-        DrawingColor::Solid(crate::shared::primitives::color::Color::new(
-            255, 255, 255, 255,
-        ))
+        DrawingColor::Solid(crate::shared::primitives::color::Color::rgb(255, 255, 255))
     });
     canvas.draw_text(
         text.as_str(),
@@ -196,7 +194,7 @@ mod tests {
         let mut canvas = RecordingCanvas::default();
 
         let mut rect_style = ComputedStyle::default();
-        rect_style.set_background(DrawingColor::Solid(Color::new(255, 255, 255, 255)));
+        rect_style.set_background(DrawingColor::Solid(Color::rgb(255, 255, 255)));
         let rect = RenderNode::Rect {
             path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
@@ -214,7 +212,7 @@ mod tests {
 
         let mut canvas = RecordingCanvas::default();
         let mut flex_style = ComputedStyle::default();
-        flex_style.set_background(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
+        flex_style.set_background(DrawingColor::Solid(Color::rgb(0, 0, 0)));
         let flex = RenderNode::Flex {
             path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
@@ -232,7 +230,7 @@ mod tests {
 
         let mut canvas = RecordingCanvas::default();
         let mut text_style = ComputedStyle::default();
-        text_style.set_color(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
+        text_style.set_color(DrawingColor::Solid(Color::rgb(0, 0, 0)));
         let text = RenderNode::Text {
             path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
@@ -250,8 +248,8 @@ mod tests {
 
         let mut canvas = RecordingCanvas::default();
         let mut prog_style = ComputedStyle::default();
-        prog_style.set_background(DrawingColor::Solid(Color::new(0, 0, 0, 255)));
-        prog_style.set_accent_color(DrawingColor::Solid(Color::new(255, 0, 0, 255)));
+        prog_style.set_background(DrawingColor::Solid(Color::rgb(0, 0, 0)));
+        prog_style.set_accent_color(DrawingColor::Solid(Color::rgb(255, 0, 0)));
         let progress = RenderNode::Progress {
             path: NodePath::root_in(SurfaceSpace::Bar),
             node_key: None,
@@ -349,7 +347,7 @@ mod tests {
     }
 
     fn solid(red: u8, green: u8, blue: u8) -> DrawingColor {
-        DrawingColor::Solid(Color::new(red, green, blue, 255))
+        DrawingColor::Solid(Color::rgb(red, green, blue))
     }
 
     fn progress_node(

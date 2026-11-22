@@ -134,13 +134,13 @@ fn test_module_config_engine() {
 #[test]
 fn test_tooltip_config_builder() {
     let background = crate::shared::primitives::DrawingColor::Solid(
-        crate::shared::primitives::Color::new(10, 20, 30, 255),
+        crate::shared::primitives::Color::rgb(10, 20, 30),
     );
     let border_color = crate::shared::primitives::DrawingColor::Solid(
-        crate::shared::primitives::Color::new(40, 50, 60, 255),
+        crate::shared::primitives::Color::rgb(40, 50, 60),
     );
     let text_color = crate::shared::primitives::DrawingColor::Solid(
-        crate::shared::primitives::Color::new(70, 80, 90, 255),
+        crate::shared::primitives::Color::rgb(70, 80, 90),
     );
     let font = Some(FontFamily::new("Roboto".to_string()));
     let size = Some(FontSize::new(14.0));

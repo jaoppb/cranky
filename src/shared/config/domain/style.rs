@@ -181,9 +181,9 @@ impl TooltipConfig {
 impl Default for TooltipConfig {
     fn default() -> Self {
         Self {
-            background: DrawingColor::Solid(Color::new(0x1e, 0x1e, 0x2e, 255)),
-            border_color: DrawingColor::Solid(Color::new(0xc0, 0xca, 0xf5, 255)),
-            text_color: DrawingColor::Solid(Color::new(0xc0, 0xca, 0xf5, 255)),
+            background: DrawingColor::Solid(Color::rgb(0x1e, 0x1e, 0x2e)),
+            border_color: DrawingColor::Solid(Color::rgb(0xc0, 0xca, 0xf5)),
+            text_color: DrawingColor::Solid(Color::rgb(0xc0, 0xca, 0xf5)),
             font: Some(FontFamily::new("Inter".to_string())),
             size: Some(FontSize::new(12.0)),
             radius: BorderRadius::new(4.0),
