@@ -17,6 +17,11 @@ single-char-binding-names-threshold = 2
 # tests too; a two-state value is an enum whose variants name each state.
 max-fn-params-bools = 0
 max-struct-bools = 0
+# Arguments (`clippy::too_many_arguments`): no function takes more than three,
+# counting `self`, in tests too; values that belong together travel as a type
+# named after what it carries, and a function whose arguments show two jobs is
+# split.
+too-many-arguments-threshold = 3
 # Older versions that only a dependency can drop, for `clippy::multiple_crate_versions`.
 # The list names the same crates as the `skip` entries of the `[bans]` section in
 # `deny.toml`, which records the dependency that still requires each one; keep both
