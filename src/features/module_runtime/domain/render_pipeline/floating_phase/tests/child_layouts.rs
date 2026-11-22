@@ -1,4 +1,4 @@
-use super::super::{FloatingContentCaches, FloatingEngines, FloatingPass, layout_floating};
+use super::super::{FloatingEngine, FloatingEngines, FloatingPass, layout_floating};
 use super::{Spec, content};
 use crate::features::layout_engine::domain::{
     LayoutError, RenderNode, StyledNode, StyledPanel, StyledPopup, TextMeasurer,
@@ -97,32 +97,34 @@ fn floating_modules_are_listed_per_kind_and_each_kind_caches_its_own_content() {
     let monitor = MonitorId::new("HDMI-A-1");
     let (mut popup_cache, mut panel_cache, mut tooltip_cache) =
         (HashMap::new(), HashMap::new(), HashMap::new());
-    let mut child_layouts = Vec::new();
 
-    let _ = layout_floating(
+    let layouts = layout_floating(
         &bar(&popup, &panel, &tooltip),
-        Some(&interaction),
-        FloatingContentCaches {
-            popup: &mut popup_cache,
-            panel: &mut panel_cache,
-            tooltip: &mut tooltip_cache,
-        },
         FloatingEngines {
-            popup: &mut ModuleEngine { name: "calendar" },
-            panel: &mut ModuleEngine { name: "launcher" },
-            tooltip: &mut ModuleEngine { name: "weather" },
+            popup: FloatingEngine {
+                engine: &mut ModuleEngine { name: "calendar" },
+                cache: &mut popup_cache,
+            },
+            panel: FloatingEngine {
+                engine: &mut ModuleEngine { name: "launcher" },
+                cache: &mut panel_cache,
+            },
+            tooltip: FloatingEngine {
+                engine: &mut ModuleEngine { name: "weather" },
+                cache: &mut tooltip_cache,
+            },
         },
         &mut FloatingPass {
             monitor_id: &monitor,
             canvas_factory: &mut MockCanvasFactory,
             scale: Scale::new(1.0),
             current_child_sizes: None,
+            interaction: Some(&interaction),
         },
-        &mut child_layouts,
     );
 
     assert_eq!(
-        names(&child_layouts),
+        names(&layouts.module_layouts().collect::<Vec<_>>()),
         vec![
             ("calendar", LayoutSurface::Popup),
             ("launcher", LayoutSurface::Panel),

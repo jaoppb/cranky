@@ -1,10 +1,13 @@
 //! Second pipeline phase: resolves styles, lays out the module's tree and its floating content,
 //! and records any size change to report to the embedder.
 use super::context::{LayoutContext, PipelineDiff};
-use super::floating_phase::{FloatingEngines, FloatingPass, apply_gate, layout_floating};
+use super::floating_phase::{
+    FloatingEngine, FloatingEngines, FloatingLayouts, FloatingPass, apply_gate, layout_floating,
+};
 use super::measurer::ModuleSizeMeasurer;
 use super::outcome::{EmbedReport, PipelineLayout, SizeChange};
 use super::pipeline::RenderPipeline;
+use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{ChildReport, MonitorId};
@@ -34,6 +37,40 @@ fn report_size(
     pipeline.sizes_mut().insert(monitor_id.clone(), size);
     tracing::trace!(monitor = %monitor_id, ?size, ?old_size, ?settled_width, "Module size changed");
     Some(SizeChange::new(old_size, size).with_settled_width(settled_width))
+}
+
+/// Lays out the floating content open in `render_node`, each kind with its own engine and cache.
+fn floating_layouts<F: CanvasFactory, E: LayoutEnginePort>(
+    pipeline: &mut RenderPipeline,
+    render_node: &RenderNode,
+    ctx: &mut LayoutContext<'_, F, E>,
+) -> FloatingLayouts {
+    let caches = pipeline.floating_content_caches_mut();
+    let engines = FloatingEngines {
+        popup: FloatingEngine {
+            engine: ctx.popup_layout_engine,
+            cache: caches.popup,
+        },
+        panel: FloatingEngine {
+            engine: ctx.panel_layout_engine,
+            cache: caches.panel,
+        },
+        tooltip: FloatingEngine {
+            engine: ctx.tooltip_layout_engine,
+            cache: caches.tooltip,
+        },
+    };
+    layout_floating(
+        render_node,
+        engines,
+        &mut FloatingPass {
+            monitor_id: ctx.monitor_id,
+            canvas_factory: ctx.canvas_factory,
+            scale: ctx.scale,
+            current_child_sizes: ctx.current_child_sizes,
+            interaction: ctx.interaction_context.as_ref(),
+        },
+    )
 }
 
 pub(crate) fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
@@ -120,30 +157,11 @@ pub(crate) fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
 
     drop(diff);
 
-    let floating = layout_floating(
-        &render_node,
-        ctx.interaction_context.as_ref(),
-        pipeline.floating_content_caches_mut(),
-        FloatingEngines {
-            popup: ctx.popup_layout_engine,
-            panel: ctx.panel_layout_engine,
-            tooltip: ctx.tooltip_layout_engine,
-        },
-        &mut FloatingPass {
-            monitor_id,
-            canvas_factory: ctx.canvas_factory,
-            scale: ctx.scale,
-            current_child_sizes: ctx.current_child_sizes,
-        },
-        &mut child_layouts,
-    );
+    let floating = floating_layouts(pipeline, &render_node, ctx);
+    child_layouts.extend(floating.module_layouts());
 
-    let floating = apply_gate(
-        floating,
-        ctx.current_child_sizes,
-        pipeline.embed.gate_rounds_mut(),
-        monitor_id,
-    );
+    let rounds = pipeline.embed.gate_rounds_mut().entry(monitor_id.clone());
+    let floating = apply_gate(floating, ctx.current_child_sizes, rounds);
 
     Some(PipelineLayout::new(
         render_node,

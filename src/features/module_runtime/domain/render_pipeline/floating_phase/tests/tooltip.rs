@@ -1,5 +1,5 @@
-use super::super::FloatingPass;
 use super::super::tooltip::{HoverTrees, layout_tooltip};
+use super::super::{FloatingEngine, FloatingPass};
 use super::{RecordingEngine, Spec, tooltip_content};
 use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::module_runtime::test_support::MockCanvasFactory;
@@ -38,34 +38,40 @@ fn unkeyed(surface: SurfaceSpace, path: &[usize]) -> NodeRef {
 }
 
 /// The tooltip contents handed to the layout engine for `interaction`.
-fn picked(
-    bar: &RenderNode,
-    popup: Option<&RenderNode>,
-    panel: Option<&RenderNode>,
-    interaction: Option<&InteractionContext>,
-) -> Vec<StyledNode> {
+fn picked(trees: HoverTrees<'_>, interaction: Option<&InteractionContext>) -> Vec<StyledNode> {
     let mut engine = RecordingEngine::default();
     let _ = layout_tooltip(
-        HoverTrees { bar, popup, panel },
-        interaction,
-        &mut HashMap::new(),
-        &mut engine,
+        trees,
+        FloatingEngine {
+            engine: &mut engine,
+            cache: &mut HashMap::new(),
+        },
         &mut FloatingPass {
             monitor_id: &MonitorId::new("DP-1"),
             canvas_factory: &mut MockCanvasFactory,
             scale: Scale::new(1.0),
             current_child_sizes: None,
+            interaction,
         },
     );
     engine.laid_out
 }
 
+/// The trees of a bar with no popup or panel open.
+const fn bar_only(bar: &RenderNode) -> HoverTrees<'_> {
+    HoverTrees {
+        bar,
+        popup: None,
+        panel: None,
+    }
+}
+
 #[test]
 fn no_hover_lays_out_no_tooltip() {
     let bar = root(SurfaceSpace::Bar, Some("bar"), vec![]);
-    assert_eq!(picked(&bar, None, None, None), vec![]);
+    assert_eq!(picked(bar_only(&bar), None), vec![]);
     let idle = InteractionContext::new(None, None, None, MonitorFocus::Focused);
-    assert_eq!(picked(&bar, None, None, Some(&idle)), vec![]);
+    assert_eq!(picked(bar_only(&bar), Some(&idle)), vec![]);
 }
 
 #[test]
@@ -78,13 +84,13 @@ fn deepest_tooltip_on_the_hovered_path_wins() {
 
     let on_first = hover(unkeyed(SurfaceSpace::Bar, &[0]));
     assert_eq!(
-        picked(&bar, None, None, Some(&on_first)),
+        picked(bar_only(&bar), Some(&on_first)),
         vec![tooltip_content("first")]
     );
     // The second child has none of its own, so its ancestor's shows.
     let on_second = hover(unkeyed(SurfaceSpace::Bar, &[1]));
     assert_eq!(
-        picked(&bar, None, None, Some(&on_second)),
+        picked(bar_only(&bar), Some(&on_second)),
         vec![tooltip_content("outer")]
     );
 }
@@ -102,7 +108,14 @@ fn tooltip_is_looked_up_in_the_surface_the_hover_happened_on() {
     ] {
         let ctx = hover(unkeyed(surface, &[]));
         assert_eq!(
-            picked(&bar, Some(&popup), Some(&panel), Some(&ctx)),
+            picked(
+                HoverTrees {
+                    bar: &bar,
+                    popup: Some(&popup),
+                    panel: Some(&panel),
+                },
+                Some(&ctx)
+            ),
             vec![tooltip_content(expected)],
             "{surface:?}"
         );
@@ -118,7 +131,7 @@ fn hover_on_a_surface_that_is_not_open_lays_out_nothing() {
         SurfaceSpace::Tooltip,
     ] {
         let ctx = hover(unkeyed(surface, &[]));
-        assert_eq!(picked(&bar, None, None, Some(&ctx)), vec![], "{surface:?}");
+        assert_eq!(picked(bar_only(&bar), Some(&ctx)), vec![], "{surface:?}");
     }
 }
 
@@ -141,7 +154,7 @@ fn keyed_hover_follows_its_node_after_a_reorder() {
         ],
     );
     assert_eq!(
-        picked(&bar, None, None, Some(&hover(captured.clone()))),
+        picked(bar_only(&bar), Some(&hover(captured.clone()))),
         vec![tooltip_content("tip a")]
     );
 
@@ -155,8 +168,5 @@ fn keyed_hover_follows_its_node_after_a_reorder() {
             child(1, Some("b"), Some("tip b")),
         ],
     );
-    assert_eq!(
-        picked(&without_a, None, None, Some(&hover(captured))),
-        vec![]
-    );
+    assert_eq!(picked(bar_only(&without_a), Some(&hover(captured))), vec![]);
 }
