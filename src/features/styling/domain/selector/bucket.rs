@@ -108,6 +108,7 @@ mod tests {
     use super::*;
     use crate::features::styling::domain::cascade::{DeclaredStyle, Importance};
     use crate::features::styling::domain::identifiers::ClassName;
+    use crate::features::styling::domain::query::ElementIdentity;
 
     fn rule(selectors: Vec<CompiledSelector>) -> RuleEntry {
         RuleEntry {
@@ -138,7 +139,7 @@ mod tests {
 
         let class_foo = ClassName::new("foo").unwrap();
         let classes = [class_foo];
-        let query = ElementQuery::new("text", None, &classes, &[], None);
+        let query = ElementQuery::new(ElementIdentity::new("text", None, &classes), &[], None);
 
         assert_eq!(index.candidates(&query), vec![0]);
     }
@@ -153,7 +154,7 @@ mod tests {
         }])];
         let index = RuleIndex::build(&rules);
 
-        let query = ElementQuery::new("text", None, &[], &[], None);
+        let query = ElementQuery::new(ElementIdentity::new("text", None, &[]), &[], None);
         assert_eq!(index.candidates(&query), vec![0]);
     }
 
@@ -172,7 +173,7 @@ mod tests {
         let class_foo = ClassName::new("foo").unwrap();
         let class_bar = ClassName::new("bar").unwrap();
         let classes = [class_foo, class_bar];
-        let query = ElementQuery::new("text", None, &classes, &[], None);
+        let query = ElementQuery::new(ElementIdentity::new("text", None, &classes), &[], None);
 
         assert_eq!(index.candidates(&query), vec![0]);
     }

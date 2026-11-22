@@ -13,11 +13,9 @@ mod selectors;
 mod text_align;
 mod vdom_bridge;
 
-use crate::features::styling::adapters::lightningcss::{
-    LightningCssAdapter, LightningPropertyReparser,
-};
+use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{
-    ComputedStyle, ElementQuery, InheritedStyle, StyleSheetName,
+    ComputedStyle, ElementIdentity, ElementQuery, InheritedStyle, StyleSheetName,
 };
 use crate::features::styling::ports::CssParserPort;
 
@@ -28,12 +26,6 @@ fn declared(declarations: &str) -> ComputedStyle {
     let parsed = LightningCssAdapter::new()
         .parse_stylesheet(StyleSheetName::new("test").unwrap(), &css)
         .unwrap();
-    let query = ElementQuery::new("flex", None, &[], &[], None);
-    parsed
-        .resolve_style(
-            &query,
-            &InheritedStyle::default(),
-            &LightningPropertyReparser,
-        )
-        .0
+    let query = ElementQuery::new(ElementIdentity::new("flex", None, &[]), &[], None);
+    parsed.resolve_style(&query, &InheritedStyle::default()).0
 }

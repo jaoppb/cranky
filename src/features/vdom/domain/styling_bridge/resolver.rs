@@ -3,42 +3,17 @@ use super::mapper::map_to_styled_node;
 use super::pseudo::compute_pseudo_classes;
 use crate::features::layout_engine::domain::{StyledNode, StyledPanel, StyledPopup};
 use crate::features::styling::domain::{
-    ClassNameList, ComputedStyle, ElementQuery, Emptiness, InheritedStyle,
+    ClassNameList, ComputedStyle, ElementIdentity, ElementQuery, Emptiness, InheritedStyle,
+    SiblingPosition,
 };
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::{InteractionContext, NodePath, SurfaceSpace, VNode, VNodeKind};
 
-/// Where a node sits among its siblings — bundled so the recursive walk
-/// stays within clippy's argument-count limit.
-#[derive(Debug, Clone, Copy)]
-struct SiblingPosition {
-    index: usize,
-    total: usize,
-}
-
-impl SiblingPosition {
-    const fn root() -> Self {
-        Self { index: 0, total: 1 }
-    }
-
-    const fn new(index: usize, total: usize) -> Self {
-        Self { index, total }
-    }
-
-    const fn index(self) -> usize {
-        self.index
-    }
-
-    const fn total(self) -> usize {
-        self.total
-    }
-}
-
 /// The raw context (so a floating child can re-resolve its own
 /// `ResolvedInteraction` against its own tree below) plus the interaction
 /// already resolved against *this* surface's tree (what pseudo-class
-/// computation for the current node uses) — bundled for the same reason as
-/// `SiblingPosition`.
+/// computation for the current node uses) — bundled so the recursive walk
+/// stays within clippy's argument-count limit.
 #[derive(Debug, Clone, Copy)]
 struct Interaction<'a> {
     ctx: Option<&'a InteractionContext>,
@@ -86,17 +61,11 @@ impl VNode {
         let pseudo_classes = compute_pseudo_classes(path, interaction.resolved);
         let classes = self.class_names().map_or(&[][..], ClassNameList::as_slice);
         let query = ElementQuery::new(
-            self.tag().as_str(),
-            self.element_id(),
-            classes,
+            ElementIdentity::new(self.tag().as_str(), self.element_id(), classes),
             &pseudo_classes,
             parent,
         )
-        .with_structural_context(
-            position.index(),
-            position.total(),
-            Emptiness::from(self.is_empty()),
-        );
+        .with_structural_context(position, Emptiness::from(self.is_empty()));
 
         let mut style = match self.kind() {
             VNodeKind::Flex { .. } => ComputedStyle::default_for_flex(),

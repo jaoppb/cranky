@@ -14,12 +14,10 @@ use cranky::features::module_runtime::domain::render_pipeline::{
     DiffInput, LayoutContext, RenderPipeline,
 };
 use cranky::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
-use cranky::features::styling::adapters::lightningcss::{
-    LightningCssAdapter, LightningPropertyReparser,
-};
+use cranky::features::styling::adapters::lightningcss::LightningCssAdapter;
 use cranky::features::styling::domain::{
-    ClassName, ClassNameList, ComputedStyle, ElementQuery, InheritedStyle, PseudoClass,
-    StyleSheetName,
+    ClassName, ClassNameList, ComputedStyle, ElementIdentity, ElementQuery, InheritedStyle,
+    PseudoClass, StyleSheetName,
 };
 use cranky::features::styling::ports::{CssParserPort, StyleResolverPort};
 use cranky::features::vdom::adapters::DefaultVdomDiffAdapter;
@@ -291,20 +289,27 @@ fn bench_styling(criterion: &mut Criterion) {
     };
     let classes_hover = [class_container];
     let pseudos_hover = [PseudoClass::Hover];
-    let query_hover = ElementQuery::new("flex", None, &classes_hover, &pseudos_hover, None);
+    let query_hover = ElementQuery::new(
+        ElementIdentity::new("flex", None, &classes_hover),
+        &pseudos_hover,
+        None,
+    );
 
     let Ok(class_label) = ClassName::new("item-label") else {
         return;
     };
     let classes_simple = [class_label];
-    let query_simple = ElementQuery::new("text", None, &classes_simple, &[], None);
+    let query_simple = ElementQuery::new(
+        ElementIdentity::new("text", None, &classes_simple),
+        &[],
+        None,
+    );
 
     group.bench_function("resolve_style_simple_match", |bencher| {
         bencher.iter(|| {
             let style = parsed_sheet.resolve_style(
                 black_box(&query_simple),
                 black_box(&InheritedStyle::default()),
-                black_box(&LightningPropertyReparser),
             );
             black_box(style);
         });
@@ -315,7 +320,6 @@ fn bench_styling(criterion: &mut Criterion) {
             let style = parsed_sheet.resolve_style(
                 black_box(&query_hover),
                 black_box(&InheritedStyle::default()),
-                black_box(&LightningPropertyReparser),
             );
             black_box(style);
         });
@@ -354,14 +358,14 @@ fn bench_styling_rule_buckets(criterion: &mut Criterion) {
         return;
     };
     let classes_hot = [class_hot];
-    let query_many_rules = ElementQuery::new("text", None, &classes_hot, &[], None);
+    let query_many_rules =
+        ElementQuery::new(ElementIdentity::new("text", None, &classes_hot), &[], None);
 
     group.bench_function("resolve_style_many_rules_one_match", |bencher| {
         bencher.iter(|| {
             let style = many_rules_sheet.resolve_style(
                 black_box(&query_many_rules),
                 black_box(&InheritedStyle::default()),
-                black_box(&LightningPropertyReparser),
             );
             black_box(style);
         });

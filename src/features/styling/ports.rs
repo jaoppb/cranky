@@ -40,14 +40,14 @@ pub trait ParsedStyleSheetPort: Send + Sync {
     /// layer.
     fn name(&self) -> &StyleSheetName;
     /// Resolves this sheet's rules for `query`, applying inheritance from
-    /// `inherited` and substituting any `var()` references via `reparser`.
-    /// Returns the resolved style alongside the context `query`'s children
-    /// should inherit from.
+    /// `inherited` and re-parsing any property whose `var()` references were
+    /// substituted with the same CSS engine that parsed the sheet. Returns the
+    /// resolved style alongside the context `query`'s children should inherit
+    /// from.
     fn resolve_style(
         &self,
         query: &ElementQuery<'_>,
         inherited: &InheritedStyle,
-        reparser: &dyn PropertyReparser,
     ) -> (ComputedStyle, InheritedStyle);
     /// Every rule in this sheet that matches `query`, each tagged with its
     /// importance, specificity, and position in this sheet's source order.

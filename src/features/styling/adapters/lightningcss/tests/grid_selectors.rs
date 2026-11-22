@@ -1,10 +1,8 @@
 use crate::features::layout_engine::domain::{AlignItems, Gap, JustifyContent};
-use crate::features::styling::adapters::lightningcss::{
-    LightningCssAdapter, LightningPropertyReparser,
-};
+use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{
-    ClassName, DisplayMode, ElementQuery, GridAutoFlow, GridLinePlacement, GridPlacement,
-    GridTrack, InheritedStyle, StyleSheetName,
+    ClassName, DisplayMode, ElementIdentity, ElementQuery, GridAutoFlow, GridLinePlacement,
+    GridPlacement, GridTrack, InheritedStyle, StyleSheetName,
 };
 use crate::features::styling::ports::CssParserPort;
 
@@ -34,17 +32,11 @@ fn test_grid_properties_parsing() {
 
     let class_container = ClassName::new("container").unwrap();
     let query_grid = ElementQuery::new(
-        "grid",
-        None,
-        std::slice::from_ref(&class_container),
+        ElementIdentity::new("grid", None, std::slice::from_ref(&class_container)),
         &[],
         None,
     );
-    let (style_grid, _) = parsed.resolve_style(
-        &query_grid,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let (style_grid, _) = parsed.resolve_style(&query_grid, &InheritedStyle::default());
 
     assert_eq!(style_grid.display(), Some(DisplayMode::Grid));
     assert_eq!(
@@ -74,12 +66,12 @@ fn test_grid_properties_parsing() {
     );
 
     let class_item = ClassName::new("item").unwrap();
-    let query_item = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None);
-    let (style_item, _) = parsed.resolve_style(
-        &query_item,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
+    let query_item = ElementQuery::new(
+        ElementIdentity::new("flex", None, std::slice::from_ref(&class_item)),
+        &[],
+        None,
     );
+    let (style_item, _) = parsed.resolve_style(&query_item, &InheritedStyle::default());
 
     assert_eq!(
         style_item.grid_column(),

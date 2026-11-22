@@ -1,9 +1,8 @@
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
-use crate::features::styling::adapters::lightningcss::{
-    LightningCssAdapter, LightningPropertyReparser,
-};
+use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{
-    ClassName, ComputedStyle, ElementId, ElementQuery, InheritedStyle, PseudoClass, StyleSheetName,
+    ClassName, ComputedStyle, ElementId, ElementIdentity, ElementQuery, InheritedStyle,
+    PseudoClass, StyleSheetName,
 };
 use crate::features::styling::ports::{CssParserPort, StyleResolverPort};
 use crate::shared::primitives::color::{Color, DrawingColor};
@@ -32,12 +31,8 @@ fn test_id_beats_class_regardless_of_source_order() {
         ClassName::new("c").unwrap(),
     ];
     let id = ElementId::new("root").unwrap();
-    let query = ElementQuery::new("bar", Some(&id), &classes, &[], None);
-    let (style, _) = parsed.resolve_style(
-        &query,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let query = ElementQuery::new(ElementIdentity::new("bar", Some(&id), &classes), &[], None);
+    let (style, _) = parsed.resolve_style(&query, &InheritedStyle::default());
 
     assert_eq!(solid(&style), Color::rgb(255, 255, 255));
 }
@@ -61,12 +56,8 @@ fn test_important_beats_specificity_and_source_order() {
     // Give the class selector higher specificity than the id by matching it
     // alone against a query with no id, to prove importance — not specificity
     // — is what decides here in the id case above; this one is the control.
-    let query = ElementQuery::new("bar", None, &classes, &[], None);
-    let (style, _) = parsed.resolve_style(
-        &query,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let query = ElementQuery::new(ElementIdentity::new("bar", None, &classes), &[], None);
+    let (style, _) = parsed.resolve_style(&query, &InheritedStyle::default());
     assert_eq!(solid(&style), Color::rgb(0, 0, 0));
 }
 
@@ -90,7 +81,7 @@ fn test_module_layer_beats_base_layer_for_normal_declarations() {
 
     let resolver = CompositeStyleResolver::new(vec![base, module]);
     let id = ElementId::new("root").unwrap();
-    let query = ElementQuery::new("bar", Some(&id), &[], &[], None);
+    let query = ElementQuery::new(ElementIdentity::new("bar", Some(&id), &[]), &[], None);
     let (style, _) = resolver.resolve_style(&query, &InheritedStyle::default());
 
     assert_eq!(solid(&style), Color::rgb(0, 0, 0));
@@ -114,7 +105,7 @@ fn test_base_layer_wins_when_important() {
 
     let resolver = CompositeStyleResolver::new(vec![base, module]);
     let id = ElementId::new("root").unwrap();
-    let query = ElementQuery::new("bar", Some(&id), &[], &[], None);
+    let query = ElementQuery::new(ElementIdentity::new("bar", Some(&id), &[]), &[], None);
     let (style, _) = resolver.resolve_style(&query, &InheritedStyle::default());
 
     // Important flips layer order: base's !important beats module's normal
@@ -135,12 +126,12 @@ fn test_workspace_hover_wins_over_active_focused() {
         ClassName::new("active").unwrap(),
         ClassName::new("focused").unwrap(),
     ];
-    let query = ElementQuery::new("flex", None, &classes, &[PseudoClass::Hover], None);
-    let (style, _) = parsed.resolve_style(
-        &query,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
+    let query = ElementQuery::new(
+        ElementIdentity::new("flex", None, &classes),
+        &[PseudoClass::Hover],
+        None,
     );
+    let (style, _) = parsed.resolve_style(&query, &InheritedStyle::default());
 
     // #414868 (the hover color), not #565f89 (active+focused) — hovering an
     // active, focused workspace item must still show the hover highlight.

@@ -1,8 +1,7 @@
-use crate::features::styling::adapters::lightningcss::{
-    LightningCssAdapter, LightningPropertyReparser,
-};
+use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{
-    ClassName, ElementId, ElementQuery, InheritedStyle, PseudoClass, StyleSheetName,
+    ClassName, ElementId, ElementIdentity, ElementQuery, InheritedStyle, PseudoClass,
+    StyleSheetName,
 };
 use crate::features::styling::ports::CssParserPort;
 use crate::shared::primitives::color::{Color, DrawingColor};
@@ -40,28 +39,22 @@ fn test_parse_basic_css_rules() {
 
     // Test matching .workspace-btn
     let ws_class = ClassName::new("workspace-btn").unwrap();
-    let query_ws = ElementQuery::new("flex", None, std::slice::from_ref(&ws_class), &[], None);
-    let (style_ws, _) = parsed.resolve_style(
-        &query_ws,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
+    let query_ws = ElementQuery::new(
+        ElementIdentity::new("flex", None, std::slice::from_ref(&ws_class)),
+        &[],
+        None,
     );
+    let (style_ws, _) = parsed.resolve_style(&query_ws, &InheritedStyle::default());
     assert!((style_ws.border_radius().unwrap().value() - 4.0).abs() < f32::EPSILON);
     assert!((style_ws.font_size().unwrap().value() - 14.0).abs() < f32::EPSILON);
 
     // Test matching .workspace-btn:hover
     let query_ws_hover = ElementQuery::new(
-        "flex",
-        None,
-        std::slice::from_ref(&ws_class),
+        ElementIdentity::new("flex", None, std::slice::from_ref(&ws_class)),
         &[PseudoClass::Hover],
         None,
     );
-    let (style_ws_hover, _) = parsed.resolve_style(
-        &query_ws_hover,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let (style_ws_hover, _) = parsed.resolve_style(&query_ws_hover, &InheritedStyle::default());
     if let Some(DrawingColor::Solid(background)) = style_ws_hover.background() {
         assert_eq!(*background, Color::rgb(122, 162, 247));
     } else {
@@ -70,12 +63,9 @@ fn test_parse_basic_css_rules() {
 
     // Test matching #hour-main
     let hour_id = ElementId::new("hour-main").unwrap();
-    let query_hour = ElementQuery::new("text", Some(&hour_id), &[], &[], None);
-    let (style_hour, _) = parsed.resolve_style(
-        &query_hour,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let query_hour =
+        ElementQuery::new(ElementIdentity::new("text", Some(&hour_id), &[]), &[], None);
+    let (style_hour, _) = parsed.resolve_style(&query_hour, &InheritedStyle::default());
     if let Some(DrawingColor::Solid(text_color)) = style_hour.color() {
         assert_eq!(*text_color, Color::rgb(192, 202, 245));
     } else {
@@ -83,12 +73,8 @@ fn test_parse_basic_css_rules() {
     }
 
     // Test matching progress
-    let query_progress = ElementQuery::new("progress", None, &[], &[], None);
-    let (style_prog, _) = parsed.resolve_style(
-        &query_progress,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let query_progress = ElementQuery::new(ElementIdentity::new("progress", None, &[]), &[], None);
+    let (style_prog, _) = parsed.resolve_style(&query_progress, &InheritedStyle::default());
     assert!((style_prog.border_radius().unwrap().value() - 6.0).abs() < f32::EPSILON);
     assert!(style_prog.accent_color().is_some());
 }
@@ -105,22 +91,16 @@ fn test_descendant_combinator() {
         .parse_stylesheet(StyleSheetName::new("test").unwrap(), css)
         .unwrap();
 
-    let bar_parent = ElementQuery::new("bar", None, &[], &[], None);
+    let bar_parent = ElementQuery::new(ElementIdentity::new("bar", None, &[]), &[], None);
 
     let item_class = ClassName::new("item").unwrap();
     let item_query = ElementQuery::new(
-        "text",
-        None,
-        std::slice::from_ref(&item_class),
+        ElementIdentity::new("text", None, std::slice::from_ref(&item_class)),
         &[],
         Some(&bar_parent),
     );
 
-    let (style, _) = parsed.resolve_style(
-        &item_query,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let (style, _) = parsed.resolve_style(&item_query, &InheritedStyle::default());
     assert!(style.color().is_some());
 }
 
@@ -141,24 +121,20 @@ fn test_gradient_border_color_resolution() {
         .unwrap();
 
     // 1. Unfocused bar -> Solid #565f89
-    let query_unfocused = ElementQuery::new("bar", None, &[], &[], None);
-    let (style_unfocused, _) = parsed.resolve_style(
-        &query_unfocused,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let query_unfocused = ElementQuery::new(ElementIdentity::new("bar", None, &[]), &[], None);
+    let (style_unfocused, _) = parsed.resolve_style(&query_unfocused, &InheritedStyle::default());
     assert_eq!(
         style_unfocused.border_color(),
         Some(&DrawingColor::Solid(Color::rgb(86, 95, 137)))
     );
 
     // 2. Focused bar -> Gradient #7aa2f7 #bb9af7 45deg
-    let query_focused = ElementQuery::new("bar", None, &[], &[PseudoClass::Focused], None);
-    let (style_focused, _) = parsed.resolve_style(
-        &query_focused,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
+    let query_focused = ElementQuery::new(
+        ElementIdentity::new("bar", None, &[]),
+        &[PseudoClass::Focused],
+        None,
     );
+    let (style_focused, _) = parsed.resolve_style(&query_focused, &InheritedStyle::default());
     if let Some(DrawingColor::Gradient(colors, angle)) = style_focused.border_color() {
         assert_eq!(colors.len(), 2);
         assert_eq!(colors[0], Color::rgb(122, 162, 247));
