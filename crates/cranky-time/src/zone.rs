@@ -86,6 +86,15 @@ impl LeapSecond {
     }
 }
 
+/// What a zone file lists before its rule: the kinds of local time, the
+/// transitions between them, and the leap seconds.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Table {
+    pub kinds: Vec<Kind>,
+    pub transitions: Vec<Transition>,
+    pub leaps: Vec<Leap>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Zone {
     /// Never empty; the first one applies before the first transition.
@@ -99,12 +108,12 @@ pub(crate) struct Zone {
 
 impl Zone {
     /// `None` when there is no kind, or a transition names a missing one.
-    pub(crate) fn new(
-        kinds: Vec<Kind>,
-        transitions: Vec<Transition>,
-        leaps: Vec<Leap>,
-        rule: Option<Rule>,
-    ) -> Option<Self> {
+    pub(crate) fn new(table: Table, rule: Option<Rule>) -> Option<Self> {
+        let Table {
+            kinds,
+            transitions,
+            leaps,
+        } = table;
         let valid = !kinds.is_empty()
             && transitions
                 .iter()
@@ -196,18 +205,20 @@ mod tests {
 
     fn two_kinds() -> Zone {
         Zone::new(
-            vec![kind(-100, "OLD"), kind(3600, "NEW")],
-            vec![
-                Transition {
-                    instant: 1000,
-                    kind: 1,
-                },
-                Transition {
-                    instant: 2000,
-                    kind: 0,
-                },
-            ],
-            Vec::new(),
+            Table {
+                kinds: vec![kind(-100, "OLD"), kind(3600, "NEW")],
+                transitions: vec![
+                    Transition {
+                        instant: 1000,
+                        kind: 1,
+                    },
+                    Transition {
+                        instant: 2000,
+                        kind: 0,
+                    },
+                ],
+                leaps: Vec::new(),
+            },
             None,
         )
         .unwrap()
@@ -233,13 +244,25 @@ mod tests {
 
     #[test]
     fn a_zone_needs_a_kind_and_valid_transitions() {
-        assert_eq!(Zone::new(Vec::new(), Vec::new(), Vec::new(), None), None);
+        let empty = Table {
+            kinds: Vec::new(),
+            transitions: Vec::new(),
+            leaps: Vec::new(),
+        };
+        assert_eq!(Zone::new(empty, None), None);
         let dangling = vec![Transition {
             instant: 0,
             kind: 1,
         }];
         assert_eq!(
-            Zone::new(vec![kind(0, "X")], dangling, Vec::new(), None),
+            Zone::new(
+                Table {
+                    kinds: vec![kind(0, "X")],
+                    transitions: dangling,
+                    leaps: Vec::new(),
+                },
+                None
+            ),
             None
         );
     }
@@ -277,7 +300,12 @@ mod tests {
                 total: 2,
             },
         ];
-        let zone = Zone::new(vec![kind(0, "X")], Vec::new(), leaps, None).unwrap();
+        let table = Table {
+            kinds: vec![kind(0, "X")],
+            transitions: Vec::new(),
+            leaps,
+        };
+        let zone = Zone::new(table, None).unwrap();
         let seen = |instant| {
             let moment = zone.at_instant(instant);
             (moment.unix_seconds, moment.leap_second)
@@ -306,7 +334,12 @@ mod tests {
                 total: 1,
             },
         ];
-        let zone = Zone::new(vec![kind(0, "X")], Vec::new(), leaps, None).unwrap();
+        let table = Table {
+            kinds: vec![kind(0, "X")],
+            transitions: Vec::new(),
+            leaps,
+        };
+        let zone = Zone::new(table, None).unwrap();
         assert_eq!(zone.at_instant(200).unix_seconds, 199);
         assert_eq!(zone.at_instant(200).leap_second, LeapSecond::Ordinary);
     }
