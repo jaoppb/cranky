@@ -63,12 +63,17 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
         if self.config_path.exists() {
             self.load_from_path(&self.config_path)
         } else {
-            info!(
-                "Config not found at {:?}, using default placeholder config",
-                self.config_path
-            );
-            self.load_from_str(include_str!("../../../../config.toml"))
+            self.load_bundled_default()
         }
+    }
+
+    /// Loads the placeholder `config.toml` bundled in the binary, logging that the file is missing.
+    fn load_bundled_default(&self) -> Result<Config, ConfigAdapterError> {
+        info!(
+            "Config not found at {:?}, using default placeholder config",
+            self.config_path
+        );
+        self.load_from_str(include_str!("../../../../config.toml"))
     }
 
     fn load_from_path(&self, path: &Path) -> Result<Config, ConfigAdapterError> {
@@ -94,38 +99,24 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
     ///
     /// Returns `ConfigAdapterError` if creating or starting the filesystem watcher fails.
     pub(crate) fn watch(&self, hub: &SignalHub) -> Result<Box<dyn Watcher>, ConfigAdapterError> {
-        let config_tx = hub.config_tx();
-        let path = self.config_path.clone();
-        let validator = self.validator.clone();
+        let reloader = ConfigReloader {
+            path: self.config_path.clone(),
+            validator: self.validator.clone(),
+            config_tx: hub.config_tx(),
+        };
 
-        let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
-            let span = info_span!("config_watch_event");
-            let _enter = span.enter();
-            match res {
-                Ok(event) => {
-                    if event.kind.is_modify() {
-                        info!("Config file modified, reloading...");
-                        if path.exists() {
-                            match std::fs::read_to_string(&path) {
-                                Ok(content) => match toml::from_str::<ConfigDto>(&content) {
-                                    Ok(dto) => {
-                                        let new_config = dto.into_domain(validator.as_ref());
-                                        let _ = config_tx.send(new_config);
-                                    }
-                                    Err(error) => error!("Failed to parse updated config: {error}"),
-                                },
-                                Err(error) => error!("Failed to read updated config file: {error}"),
-                            }
-                        }
-                    }
-                }
-                Err(error) => error!("Config watcher error: {error:?}"),
-            }
-        })
-        .map_err(|error| ConfigAdapterError::Internal {
-            message: format!("Failed to create watcher: {error}"),
-        })?;
+        let mut watcher =
+            notify::recommended_watcher(move |res: notify::Result<Event>| reloader.handle(res))
+                .map_err(|error| ConfigAdapterError::Internal {
+                    message: format!("Failed to create watcher: {error}"),
+                })?;
 
+        self.watch_config_dir(&mut watcher)?;
+        Ok(Box::new(watcher))
+    }
+
+    /// Attaches `watcher` to the directory holding the config file, when that directory exists.
+    fn watch_config_dir(&self, watcher: &mut impl Watcher) -> Result<(), ConfigAdapterError> {
         if let Some(parent) = self.config_path.parent()
             && parent.exists()
         {
@@ -135,9 +126,66 @@ impl<V: FontValidatorPort + Send + Sync + 'static> ConfigAdapter<V> {
                     message: format!("Failed to start watching config dir: {error}"),
                 })?;
         }
-
-        Ok(Box::new(watcher))
+        Ok(())
     }
+}
+
+/// What the config watcher needs to turn a file event into a new config on the hub.
+struct ConfigReloader<V: FontValidatorPort> {
+    path: PathBuf,
+    validator: Arc<V>,
+    config_tx: tokio::sync::watch::Sender<Config>,
+}
+
+impl<V: FontValidatorPort> ConfigReloader<V> {
+    /// Reloads on a modification event and logs a watcher error; other events are ignored.
+    fn handle(&self, res: notify::Result<Event>) {
+        let span = config_watch_event_span();
+        let _enter = span.enter();
+        match res {
+            Ok(event) if event.kind.is_modify() => self.reload(),
+            Ok(_) => {}
+            Err(error) => log_watcher_error(&error),
+        }
+    }
+
+    /// Publishes the edited file on the hub when it reads and parses.
+    fn reload(&self) {
+        log_reloading();
+        if let Some(new_config) = read_updated_config(&self.path, self.validator.as_ref()) {
+            let _ = self.config_tx.send(new_config);
+        }
+    }
+}
+
+/// The span each config watcher event is handled in.
+fn config_watch_event_span() -> tracing::Span {
+    info_span!("config_watch_event")
+}
+
+/// Logs that the config file changed and is being reloaded.
+fn log_reloading() {
+    info!("Config file modified, reloading...");
+}
+
+/// Logs an error the file watcher reported instead of an event.
+fn log_watcher_error(error: &notify::Error) {
+    error!("Config watcher error: {error:?}");
+}
+
+/// Reads and parses the edited config file at `path`, logging why when it cannot; `None` when
+/// the file is gone, unreadable or not a valid config.
+fn read_updated_config<V: FontValidatorPort>(path: &Path, validator: &V) -> Option<Config> {
+    if !path.exists() {
+        return None;
+    }
+    let content = std::fs::read_to_string(path)
+        .inspect_err(|error| error!("Failed to read updated config file: {error}"))
+        .ok()?;
+    let dto = toml::from_str::<ConfigDto>(&content)
+        .inspect_err(|error| error!("Failed to parse updated config: {error}"))
+        .ok()?;
+    Some(dto.into_domain(validator))
 }
 
 #[cfg(test)]
@@ -310,6 +358,75 @@ mod tests {
             drop(watcher);
             std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
         });
+    }
+
+    /// A reloader for the file at `path` that publishes on `hub`.
+    fn reloader(path: PathBuf, hub: &SignalHub) -> ConfigReloader<MockValidator> {
+        ConfigReloader {
+            path,
+            validator: Arc::new(MockValidator),
+            config_tx: hub.config_tx(),
+        }
+    }
+
+    /// A file event of `kind` on `path`.
+    fn file_event(kind: notify::EventKind, path: &Path) -> Event {
+        Event::new(kind).add_path(path.to_path_buf())
+    }
+
+    /// The event kind a write to the file's content raises.
+    fn modified() -> notify::EventKind {
+        notify::EventKind::Modify(notify::event::ModifyKind::Data(
+            notify::event::DataChange::Content,
+        ))
+    }
+
+    #[test]
+    fn test_config_reloader_publishes_a_modified_file_that_parses() {
+        let path = fresh_config_path("reloader_valid");
+        std::fs::write(&path, "root = { height = 60 }").unwrap();
+        let hub = SignalHub::new(Config::default());
+        let mut rx = hub.config_rx();
+
+        reloader(path.clone(), &hub).handle(Ok(file_event(modified(), &path)));
+
+        assert!(rx.has_changed().unwrap());
+        assert_eq!(rx.borrow_and_update().root().height().value(), 60);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn test_config_reloader_ignores_a_modified_file_that_does_not_parse() {
+        let path = fresh_config_path("reloader_invalid");
+        std::fs::write(&path, "root = { height = ").unwrap();
+        let hub = SignalHub::new(Config::default());
+        let rx = hub.config_rx();
+
+        reloader(path.clone(), &hub).handle(Ok(file_event(modified(), &path)));
+
+        assert!(
+            !rx.has_changed().unwrap(),
+            "a broken edit publishes nothing"
+        );
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn test_config_reloader_reloads_only_on_a_modify_event() {
+        let path = fresh_config_path("reloader_kinds");
+        std::fs::write(&path, "root = { height = 60 }").unwrap();
+        let hub = SignalHub::new(Config::default());
+        let rx = hub.config_rx();
+        let reloader = reloader(path.clone(), &hub);
+
+        let create = notify::EventKind::Create(notify::event::CreateKind::File);
+        let access = notify::EventKind::Access(notify::event::AccessKind::Read);
+        reloader.handle(Ok(file_event(create, &path)));
+        reloader.handle(Ok(file_event(access, &path)));
+        reloader.handle(Err(notify::Error::generic("watcher failed")));
+
+        assert!(!rx.has_changed().unwrap(), "only a modification reloads");
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
     #[test]
