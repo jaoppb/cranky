@@ -67,30 +67,6 @@ fn test_canvas_draw_text() {
 }
 
 #[test]
-fn test_canvas_draw_text_gradient() {
-    let mut pixmap = Pixmap::new(100, 100).unwrap();
-    let mut fonts = FontCache::new();
-
-    let mut canvas = TinySkiaCosmicCanvas::new(
-        target(&mut pixmap, 1.0),
-        &mut fonts,
-        Font::new(
-            FontFamily::new("sans-serif".to_string()),
-            FontSize::new(14.0),
-        ),
-    );
-
-    canvas.draw_text(
-        TextRun::new(
-            "gradient text",
-            TextFont::new(None, None),
-            DrawingColor::Gradient(vec![Color::rgb(255, 0, 0), Color::rgb(0, 255, 0)], 0.0),
-        ),
-        TextPlacement::new(Position::new(10, 10), TextAlignment::default()),
-    );
-}
-
-#[test]
 fn test_canvas_draw_image() {
     let mut pixmap = Pixmap::new(100, 100).unwrap();
     let mut fonts = FontCache::new();

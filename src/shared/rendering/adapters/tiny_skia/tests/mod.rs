@@ -1,5 +1,8 @@
 mod canvas;
 mod fonts;
+mod glyphs;
+mod measure;
+mod pixels;
 mod placement;
 mod text;
 
