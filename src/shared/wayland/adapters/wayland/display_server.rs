@@ -129,3 +129,92 @@ impl DisplayServerPort for WaylandAdapter {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::shared::config::domain::{Config, PopupEmbed, RootConfig};
+    use crate::shared::events::core::SurfaceKind;
+    use crate::shared::primitives::geometry::BarHeight;
+    use crate::shared::primitives::{ModuleId, MonitorId};
+    use crate::shared::wayland::adapters::wayland::adapter::{WaylandAdapter, readiness_socket};
+    use crate::shared::wayland::adapters::wayland::state::WaylandState;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::Fake;
+    use crate::shared::wayland::ports::DisplayServerPort;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    /// An adapter over `state` on the fixture's connection.
+    fn adapter_over(fake: &Fake, state: WaylandState) -> WaylandAdapter {
+        let config_rx = state.hub.config_rx();
+        let connection = fake.connection().clone();
+        let (_notify_tx, notify_rx) = tokio::sync::mpsc::channel(1);
+        WaylandAdapter {
+            socket: readiness_socket(&connection).expect("socket"),
+            event_queue: connection.new_event_queue(),
+            connection,
+            state,
+            pending_surfaces: Arc::new(Mutex::new(HashMap::new())),
+            notify_rx,
+            config_rx,
+        }
+    }
+
+    fn bar_outputs(adapter: &WaylandAdapter) -> Vec<(&str, u32)> {
+        adapter
+            .state
+            .bars
+            .iter()
+            .map(|bar| (bar.output_name.as_str(), bar.config_height))
+            .collect()
+    }
+
+    /// A config change drops every bar and every pointer route, then builds
+    /// a bar of the new height for each output.
+    #[test]
+    fn config_change_recreates_every_bar() {
+        crate::test_utils::block_on(async {
+            let fake = Fake::new();
+            let mut state = fake.state(PopupEmbed::Composite);
+            state.outputs.push(fake.output_info(7, "DP-1"));
+            let old = fake.bar("DP-1", 1);
+            let old_layer = old.layer_surface.clone();
+            let route = (ModuleId::new(1), MonitorId::new("DP-1"), SurfaceKind::Bar);
+            state.surface_to_id.insert(old.surface.clone(), route);
+            state.bars.push(old);
+            let config_tx = state.hub.config_tx();
+            let mut adapter = adapter_over(&fake, state);
+            let root = RootConfig::default().with_height(BarHeight::new(40));
+            config_tx
+                .send(Config::default().with_root(root))
+                .expect("config");
+
+            adapter.dispatch_pending().expect("dispatched");
+
+            assert_eq!(bar_outputs(&adapter), vec![("DP-1", 40)]);
+            assert_ne!(adapter.state.bars[0].layer_surface, old_layer);
+            assert!(adapter.state.surface_to_id.is_empty());
+        });
+    }
+
+    /// Each named output without a bar gets one; an unnamed one waits, and a
+    /// bar that cannot be created yet is deferred without failing.
+    #[test]
+    fn outputs_without_bars_get_one_once_named() {
+        crate::test_utils::block_on(async {
+            let fake = Fake::new();
+            let mut state = fake.state(PopupEmbed::Composite);
+            state.outputs.push(fake.output_info(7, "DP-1"));
+            state.outputs.push(fake.output_info(8, ""));
+            let mut adapter = adapter_over(&fake, state);
+            adapter.dispatch_pending().expect("dispatched");
+            assert_eq!(bar_outputs(&adapter), vec![("DP-1", 30)]);
+
+            let mut state = fake.state(PopupEmbed::Composite);
+            state.compositor = None;
+            state.outputs.push(fake.output_info(9, "HDMI-A-1"));
+            let mut deferred = adapter_over(&fake, state);
+            deferred.dispatch_pending().expect("deferred, not failed");
+            assert!(deferred.state.bars.is_empty());
+        });
+    }
+}

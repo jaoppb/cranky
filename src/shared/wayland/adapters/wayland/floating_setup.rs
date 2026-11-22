@@ -173,12 +173,13 @@ fn setup_new_floating(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::layout_engine::domain::PopupTarget;
     use crate::shared::config::domain::PopupEmbed;
     use crate::shared::events::core::PointerSerial;
-    use crate::shared::primitives::{MonitorId, PopupOffset};
+    use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset};
     use crate::shared::wayland::adapters::wayland::floating_anchor::AnchorInfo;
     use crate::shared::wayland::adapters::wayland::state::WaylandState;
-    use crate::shared::wayland::adapters::wayland::tests::fixture::wire::id;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::wire::{Request, id};
     use crate::shared::wayland::adapters::wayland::tests::fixture::{
         Fake, lose_runtime_dir, popup_kind, solid,
     };
@@ -258,5 +259,91 @@ mod tests {
             .map(|request| request.args)
             .collect();
         assert_eq!(grabs, vec![[id(&seat), 42, 0, 0]]);
+    }
+
+    /// `zwlr_layer_surface_v1.get_popup` and `xdg_surface.get_popup`.
+    const LAYER_GET_POPUP: u16 = 5;
+    const XDG_GET_POPUP: u16 = 2;
+
+    /// A frame of `kind` anchored to `parent_role`.
+    fn frame_of(fake: &Fake, kind: FloatingKind, parent_role: FloatingParentRole) -> FloatingFrame {
+        let placement = FloatingPlacement {
+            anchor: AnchorInfo {
+                parent_role,
+                ..anchor(fake)
+            },
+            text_w: 2,
+            text_h: 1,
+            offset: PopupOffset::default(),
+        };
+        FloatingFrame {
+            kind,
+            parent: None,
+            buffer: solid(2, 1, [1; 4]),
+            placement,
+        }
+    }
+
+    /// A new popup or panel routes pointer events to its owner on its
+    /// monitor; a tooltip gets no routing.
+    #[test]
+    fn new_popup_and_panel_route_the_pointer_and_a_tooltip_does_not() {
+        let fake = Fake::new();
+        let target = PopupTarget::new(ModuleId::new(4), MonitorId::new("HDMI-A-1"));
+        let kinds = [
+            (
+                FloatingKind::Popup(target.clone()),
+                Some(SurfaceKind::Popup),
+            ),
+            (FloatingKind::Panel(target), Some(SurfaceKind::Panel)),
+            (FloatingKind::Tooltip, None),
+        ];
+        for (kind, surface_kind) in kinds {
+            let mut state = fake.state(PopupEmbed::Composite);
+            let role = FloatingParentRole::Popup(fake.xdg_surface());
+            let frame = frame_of(&fake, kind.clone(), role);
+            create_new_floating(&mut state, &fake.queue_handle, frame).expect("created");
+            let surface = &state.floating_surfaces[&kind].surface;
+            let route = surface_kind
+                .map(|surface_kind| (ModuleId::new(4), MonitorId::new("DP-1"), surface_kind));
+            assert_eq!(state.surface_to_id.get(surface), route.as_ref());
+        }
+    }
+
+    /// A popup on a bar is given to the bar's layer surface and has no xdg
+    /// parent; a nested one names its parent's `xdg_surface` instead.
+    #[test]
+    fn new_popup_is_parented_to_the_layer_surface_or_its_parent() {
+        let fake = Fake::new();
+        let bar = fake.bar("DP-1", 1);
+        let parent = fake.xdg_surface();
+        let roles = [
+            (FloatingParentRole::Layer(bar.layer_surface.clone()), (0, 1)),
+            (FloatingParentRole::Popup(parent.clone()), (id(&parent), 0)),
+        ];
+        for (role, expected) in roles {
+            let mut state = fake.state(PopupEmbed::Composite);
+            fake.requests();
+            let frame = frame_of(&fake, popup_kind(), role);
+            create_new_floating(&mut state, &fake.queue_handle, frame).expect("created");
+            let xdg_popup = id(&state.floating_surfaces[&popup_kind()].xdg_popup);
+            let parents = popup_parents(&fake.requests(), id(&bar.layer_surface), xdg_popup);
+            assert_eq!(parents, expected);
+        }
+    }
+
+    /// The parent `xdg_popup` names in its `xdg_surface.get_popup` (0 for
+    /// none), and how many times `layer_surface` was given it.
+    fn popup_parents(requests: &[Request], layer_surface: u32, xdg_popup: u32) -> (u32, usize) {
+        let get_popup = requests
+            .iter()
+            .find(|request| request.opcode == XDG_GET_POPUP && request.arg == xdg_popup)
+            .expect("xdg_surface.get_popup");
+        let to_layer = requests
+            .iter()
+            .filter(|request| request.object == layer_surface)
+            .filter(|request| request.opcode == LAYER_GET_POPUP && request.arg == xdg_popup)
+            .count();
+        (get_popup.args[1], to_layer)
     }
 }

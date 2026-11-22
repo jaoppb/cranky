@@ -154,6 +154,7 @@ fn tooltip_anchor_resolves_for_composite_child() {
     let fake = Fake::new();
     let (mut state, surface) = popup(&fake, 1);
     handle_pointer_enter(&mut state, &surface, (12.0, 4.0));
+    (state.bars[0].scale, state.bars[0].height) = (3, 24);
     let anchor = resolve_anchor(&state, &tooltip_request())
         .expect("tooltip anchor resolves for a composited child");
     let popup_xdg = state
@@ -164,8 +165,16 @@ fn tooltip_anchor_resolves_for_composite_child() {
         matches!(&anchor.parent_role, FloatingParentRole::Popup(x) if Some(x) == popup_xdg.as_ref())
     );
     assert_eq!(anchor.target_monitor_id, MonitorId::new("DP-1"));
-    // Already popup-local: no layer origin added on top.
-    assert_eq!(anchor.anchor_x, 12);
+    // Already popup-local: no layer origin added on top. A tooltip anchors
+    // on one point below its bar, at the bar's scale.
+    let placed = (
+        anchor.anchor_x,
+        anchor.anchor_y,
+        anchor.anchor_w,
+        anchor.anchor_h,
+        anchor.bar_scale,
+    );
+    assert_eq!(placed, (12, 24, 1, 1, 3));
 }
 
 #[test]

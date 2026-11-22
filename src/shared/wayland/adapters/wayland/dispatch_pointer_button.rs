@@ -401,6 +401,33 @@ mod tests {
         assert_eq!(drain(&mut rx), expected);
     }
 
+    /// Any axis but the vertical one scrolls horizontally.
+    #[test]
+    fn dispatch_pointer_button_horizontal_axis_scrolls_horizontally() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let surface = bar_module(&fake, &mut state);
+        let mut rx = state.hub.pointer_rx();
+        handle_pointer_enter(&mut state, &surface, (5.0, 6.0));
+        drain(&mut rx);
+        handle_pointer_axis(&mut state, WEnum::Value(Axis::HorizontalScroll), 1.5);
+        let scroll = PointerEvent::Scroll {
+            surface: SurfaceKind::Bar,
+            axis: ScrollAxis::Horizontal,
+            amount: ScrollDelta::new(1.5),
+        };
+        assert_eq!(drain(&mut rx), vec![bar(scroll)]);
+    }
+
+    #[test]
+    fn dispatch_pointer_button_axis_without_target_is_dropped() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let mut rx = state.hub.pointer_rx();
+        scroll_down(&mut state);
+        assert_eq!(drain(&mut rx), vec![]);
+    }
+
     #[test]
     fn dispatch_pointer_button_serial_recorded_without_target() {
         let fake = Fake::new();

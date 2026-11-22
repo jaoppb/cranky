@@ -116,3 +116,80 @@ fn hovers_layer(state: &WaylandState, floating: &FloatingSurface) -> bool {
                 .is_some_and(|layer| layer.monitor_id() == monitor)
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_tooltip_anchor;
+    use crate::features::layout_engine::domain::FloatingKind;
+    use crate::shared::config::domain::PopupEmbed;
+    use crate::shared::primitives::geometry::Size;
+    use crate::shared::primitives::{ModuleId, MonitorId};
+    use crate::shared::wayland::adapters::wayland::floating_anchor::FloatingParentRole;
+    use crate::shared::wayland::adapters::wayland::state::WaylandState;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, solid};
+
+    /// A state with a bar 24 high at scale 2 on DP-1 and the pointer at x 12.
+    fn with_bar(fake: &Fake) -> WaylandState {
+        let mut state = fake.state(PopupEmbed::Composite);
+        let mut bar = fake.bar("DP-1", 2);
+        bar.height = 24;
+        state.bars.push(bar);
+        state.pointer_pos = (12.0, 4.0);
+        state
+    }
+
+    #[test]
+    fn no_pointer_surface_anchors_nothing() {
+        let fake = Fake::new();
+        let state = with_bar(&fake);
+        assert!(resolve_tooltip_anchor(&state).is_none());
+    }
+
+    /// Hovering the bar itself anchors under the pointer, below the bar.
+    #[test]
+    fn bar_surface_anchors_on_its_layer_surface() {
+        let fake = Fake::new();
+        let mut state = with_bar(&fake);
+        state.pointer_surface = Some(state.bars[0].surface.clone());
+        let anchor = resolve_tooltip_anchor(&state).expect("anchor");
+        let layer = state.bars[0].layer_surface.clone();
+        assert!(
+            matches!(anchor.parent_role, FloatingParentRole::Layer(ref found) if *found == layer)
+        );
+        assert_eq!(anchor.target_monitor_id, MonitorId::new("DP-1"));
+        let placed = (anchor.bar_scale, anchor.anchor_x, anchor.anchor_y);
+        assert_eq!(placed, (2, 12, 24));
+    }
+
+    /// Hovering a bar module's subsurface adds the module's offset.
+    #[test]
+    fn bar_module_anchors_at_its_offset_on_the_bar() {
+        let fake = Fake::new();
+        let mut state = with_bar(&fake);
+        let mut module = fake.module_surface(&state.bars[0].surface);
+        module.x = 5;
+        state.pointer_surface = Some(module.surface.clone());
+        state.bars[0]
+            .module_surfaces
+            .insert(ModuleId::new(2), module);
+        let anchor = resolve_tooltip_anchor(&state).expect("anchor");
+        assert!(matches!(anchor.parent_role, FloatingParentRole::Layer(_)));
+        let placed = (anchor.bar_scale, anchor.anchor_x, anchor.anchor_y);
+        assert_eq!(placed, (2, 17, 24));
+    }
+
+    /// A module embedded in an open tooltip is never a tooltip's parent.
+    #[test]
+    fn module_inside_a_tooltip_anchors_nothing() {
+        let fake = Fake::new();
+        let mut state = with_bar(&fake);
+        let mut tooltip = fake.floating(Size::new(1, 1), solid(1, 1, [0; 4]));
+        let module = fake.module_surface(&tooltip.surface);
+        state.pointer_surface = Some(module.surface.clone());
+        tooltip.module_surfaces.insert(ModuleId::new(2), module);
+        state
+            .floating_surfaces
+            .insert(FloatingKind::Tooltip, tooltip);
+        assert!(resolve_tooltip_anchor(&state).is_none());
+    }
+}
