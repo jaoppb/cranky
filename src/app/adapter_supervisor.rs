@@ -149,4 +149,19 @@ mod tests {
             assert_eq!(supervisor.started.len(), 1);
         });
     }
+
+    /// An on-demand metrics sampler is built with the `[metrics]` settings of the configuration
+    /// the bar started with.
+    #[test]
+    fn test_supervisor_keeps_the_configured_metrics_settings() {
+        let metrics: MetricsConfig = toml::from_str("update_interval_ms = 2500").unwrap();
+        let hub = Arc::new(SignalHub::new(
+            Config::default().with_metrics(metrics.clone()),
+        ));
+
+        let supervisor =
+            AdapterSupervisor::new(hub, test_env(), metrics, Arc::new(DisconnectedBus));
+
+        assert_eq!(supervisor.metrics_config.update_interval_ms().value(), 2500);
+    }
 }

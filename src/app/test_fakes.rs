@@ -48,8 +48,10 @@ type ParentLookup = Box<dyn Fn(ModuleId) -> Option<ModuleId> + Send + Sync>;
 /// A registry that answers from the data a test puts in its fields.
 ///
 /// Nothing is loaded or spawned: `spawn_all` hands out `senders` once, and
-/// `spawn_module` always fails with `ModuleNotFound`, counting its calls in
-/// `spawn_module_calls` and keeping what each received in `spawn_requests`.
+/// `spawn_module` counts its calls in `spawn_module_calls` and keeps what each
+/// received in `spawn_requests`. It fails with `ModuleNotFound` unless
+/// `spawned_id` is set, in which case it lists that id in `module_ids` and
+/// hands out a sender for it.
 pub(super) struct FakeRegistry {
     pub(crate) root_module: Option<ModuleId>,
     pub(crate) module_ids: Vec<ModuleId>,
@@ -61,6 +63,7 @@ pub(super) struct FakeRegistry {
     pub(crate) parent_of: ParentLookup,
     pub(crate) spawn_module_calls: Arc<AtomicUsize>,
     pub(crate) spawn_requests: Arc<Mutex<Vec<LazySite>>>,
+    pub(crate) spawned_id: Option<ModuleId>,
     active_signals: HashSet<SignalKind>,
 }
 
@@ -77,6 +80,7 @@ impl Default for FakeRegistry {
             parent_of: Box::new(|_| None),
             spawn_module_calls: Arc::new(AtomicUsize::new(0)),
             spawn_requests: Arc::new(Mutex::new(Vec::new())),
+            spawned_id: None,
             active_signals: HashSet::new(),
         }
     }
@@ -146,7 +150,10 @@ impl
         if let Ok(mut requests) = self.spawn_requests.lock() {
             requests.push(site);
         }
-        Err(error)
+        let id = self.spawned_id.ok_or(error)?;
+        self.module_ids.push(id);
+        let (layout_tx, _layout_rx) = tokio::sync::watch::channel(HashMap::new());
+        Ok(SpawnedModule::new(id, WatchLayoutSender::new(layout_tx)))
     }
 
     fn modules_using_style(&self, _sheet: &StyleSheetName) -> Vec<ModuleName> {
@@ -166,9 +173,12 @@ impl
 type WaitOutcome = Pin<Box<dyn Future<Output = Result<(), DisplayServerError>> + Send>>;
 
 /// A display server whose only scripted behaviour is `wait_for_events`, which
-/// is what ends `CrankyApp::run`; every other request succeeds.
+/// is what ends `CrankyApp::run`; every other request succeeds, and
+/// `render_all` calls are counted.
 pub(super) struct FakeDisplayServer {
     pub(crate) wait_for_events: Box<dyn FnMut() -> WaitOutcome + Send + Sync>,
+    /// How many times `render_all` was called.
+    pub(crate) renders: Arc<AtomicUsize>,
 }
 
 impl FakeDisplayServer {
@@ -180,6 +190,7 @@ impl FakeDisplayServer {
                     reason.to_string(),
                 ))))
             }),
+            renders: Arc::new(AtomicUsize::new(0)),
         }
     }
 }
@@ -203,6 +214,7 @@ impl DisplayServerPort for FakeDisplayServer {
         _read_model: &AppReadModel,
         _layout_senders: &HashMap<ModuleId, Snd>,
     ) -> Result<(), DisplayServerError> {
+        self.renders.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 

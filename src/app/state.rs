@@ -1199,6 +1199,7 @@ mod tests {
                         )))
                     }
                 }),
+                renders: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             };
 
             let disconnected_bus = crate::shared::dbus::ports::DisconnectedBus;
@@ -1299,6 +1300,7 @@ mod tests {
                         ))
                     })
                 }),
+                renders: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             };
 
             let disconnected_bus = crate::shared::dbus::ports::DisconnectedBus;
@@ -1908,6 +1910,198 @@ mod tests {
             let after = app.hub.module_sizes_rx().borrow().clone();
             assert!(!after.contains_key(&dead_mon));
             assert!(after.contains_key(&live_mon));
+        });
+    }
+
+    type TestApp = CrankyApp<
+        FakeRegistry,
+        crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
+        mpsc::Sender<LayoutEvent>,
+        mpsc::Sender<DisplayCommand>,
+        mpsc::Sender<UiCommand>,
+        crate::app::registry::WatchLayoutSender,
+    >;
+
+    /// An app over `registry`, its hub started from `config`, on fresh channels.
+    fn app_over(config: Config, registry: FakeRegistry) -> (TestApp, Arc<SignalHub>) {
+        let hub = Arc::new(SignalHub::new(config.clone()));
+        let (display_tx, display_rx) = mpsc::channel(32);
+        let (layout_tx, layout_rx) = mpsc::channel(32);
+        let (ui_tx, ui_rx) = mpsc::channel(32);
+        let (_system_tx, system_rx) = mpsc::channel(32);
+        let services = StateServices::new(
+            hub.clone(),
+            Arc::new(MockSurfaceManager),
+            crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
+            Arc::new(display_tx),
+            Arc::new(layout_tx),
+            Arc::new(ui_tx),
+        );
+        let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+        let app = CrankyApp::new(config, services, channels, Box::new(registry)).unwrap();
+        (app, hub)
+    }
+
+    /// A configuration whose `[metrics]` table samples every 2.5 s instead of every second.
+    fn config_sampling_every_2500_ms() -> Config {
+        let metrics: crate::features::metrics::domain::MetricsConfig =
+            toml::from_str("update_interval_ms = 2500").unwrap();
+        Config::default().with_metrics(metrics)
+    }
+
+    /// The read model starts from the configuration the app is built with.
+    #[test]
+    fn test_new_app_reads_the_configuration_it_starts_with() {
+        crate::test_utils::block_on(async {
+            let (app, _hub) = app_over(config_sampling_every_2500_ms(), FakeRegistry::default());
+
+            assert_eq!(
+                app.read_model.config.metrics().update_interval_ms().value(),
+                2500
+            );
+        });
+    }
+
+    /// A size reported by a module's actor reaches the read model through the layout event loop,
+    /// and the hub with the width the module settled at, and the loop then renders.
+    #[test]
+    fn test_handle_layout_events_records_a_reported_size() {
+        crate::test_utils::block_on(async {
+            let clock = ModuleId::new(3);
+            let name = crate::shared::primitives::ModuleName::new("clock");
+            let mut registry = FakeRegistry::default();
+            registry.module_keys = HashMap::from([(
+                clock,
+                crate::shared::primitives::ModuleKey::from_name(name.clone()),
+            )]);
+            let (mut app, hub) = app_over(Config::default(), registry);
+            let mut display = FakeDisplayServer::failing("unused");
+            let renders = display.renders.clone();
+
+            app.handle_layout_events(
+                LayoutEvent::ModuleSizeChanged {
+                    monitor_id: MonitorId::new("DP-1"),
+                    module_id: clock,
+                    size: Size::new(120, 30),
+                    settled_width: Some(96),
+                },
+                &mut display,
+            )
+            .await;
+
+            assert_eq!(
+                app.read_model
+                    .module_sizes
+                    .get(&MonitorId::new("DP-1"))
+                    .and_then(|sizes| sizes.get(&clock)),
+                Some(&Size::new(120, 30))
+            );
+            assert_eq!(
+                hub.module_sizes_rx()
+                    .borrow()
+                    .get(&MonitorId::new("DP-1"))
+                    .and_then(|sizes| sizes.report_by_name_or_key(&name, None)),
+                Some(&ChildReport::new(Size::new(120, 30), Some(96)))
+            );
+            assert_eq!(renders.load(Ordering::SeqCst), 1);
+        });
+    }
+
+    /// A new size is kept per monitor in the read model and reported on the hub under the
+    /// module's key, together with the width the module settled at.
+    #[test]
+    fn test_handle_size_changed_records_the_size_and_reports_the_settled_width() {
+        crate::test_utils::block_on(async {
+            let clock = ModuleId::new(1);
+            let name = crate::shared::primitives::ModuleName::new("clock");
+            let mut registry = FakeRegistry::default();
+            registry.module_keys = HashMap::from([(
+                clock,
+                crate::shared::primitives::ModuleKey::from_name(name.clone()),
+            )]);
+            let (mut app, hub) = app_over(Config::default(), registry);
+            let monitor = MonitorId::new("DP-2");
+
+            app.handle_size_changed(&monitor, clock, Size::new(80, 24), Some(64));
+
+            assert_eq!(
+                app.read_model
+                    .module_sizes
+                    .get(&monitor)
+                    .and_then(|sizes| sizes.get(&clock)),
+                Some(&Size::new(80, 24))
+            );
+            let reported = hub.module_sizes_rx().borrow().clone();
+            assert_eq!(
+                reported
+                    .get(&monitor)
+                    .and_then(|sizes| sizes.report_by_name_or_key(&name, None)),
+                Some(&ChildReport::new(Size::new(80, 24), Some(64)))
+            );
+            assert!(!reported.contains_key(&MonitorId::new("DP-1")));
+        });
+    }
+
+    /// A Hyprland update re-renders only when the focused monitor moved, and remembers the
+    /// monitor it moved to.
+    #[test]
+    fn test_handle_hyprland_changed_renders_only_when_the_focus_moves() {
+        crate::test_utils::block_on(async {
+            let (app, _hub) = app_over(Config::default(), FakeRegistry::default());
+            let mut display = FakeDisplayServer::failing("unused");
+            let renders = display.renders.clone();
+            let focused_on = |name: &str| {
+                crate::shared::events::signals::HyprlandState::new(
+                    std::collections::BTreeMap::new(),
+                    std::collections::BTreeMap::new(),
+                    Some(crate::features::workspaces::domain::MonitorName::new(name)),
+                )
+            };
+            let mut focused = String::new();
+
+            app.handle_hyprland_changed(&focused_on("DP-1"), &mut focused, &mut display);
+            assert_eq!(focused, "DP-1");
+            assert_eq!(renders.load(Ordering::SeqCst), 1);
+
+            app.handle_hyprland_changed(&focused_on("DP-1"), &mut focused, &mut display);
+            assert_eq!(renders.load(Ordering::SeqCst), 1, "the focus did not move");
+
+            app.handle_hyprland_changed(&focused_on("HDMI-A-1"), &mut focused, &mut display);
+            assert_eq!(focused, "HDMI-A-1");
+            assert_eq!(renders.load(Ordering::SeqCst), 2);
+        });
+    }
+
+    /// A lazy spawn that succeeds takes the new actor's layout sender and refreshes the module
+    /// list of the read model from the registry, recording no error for the site.
+    #[test]
+    fn test_ensure_lazy_spawn_keeps_the_spawned_actor() {
+        crate::test_utils::block_on(async {
+            let parent = ModuleId::new(1);
+            let spawned = ModuleId::new(7);
+            let mut registry = FakeRegistry::default();
+            registry.module_ids = vec![parent];
+            registry.spawned_id = Some(spawned);
+            let (mut app, hub) = app_over(Config::default(), registry);
+            let key = crate::shared::primitives::ModuleKey::from_name(
+                crate::shared::primitives::ModuleName::new("calendar"),
+            );
+            let layouts = [crate::shared::primitives::ChildModuleLayout::new(
+                key,
+                crate::shared::primitives::ChildBounds::new(
+                    Rect::new(Position::new(0, 0), Size::new(50, 20)),
+                    crate::shared::primitives::SizeConstraint::none(),
+                ),
+                crate::shared::primitives::LayoutSurface::Bar,
+            )];
+
+            app.handle_container_layouts(parent, &MonitorId::new("DP-1"), &layouts)
+                .await;
+
+            assert!(app.layout_senders.contains_key(&spawned));
+            assert!(!app.layout_senders.contains_key(&parent));
+            assert_eq!(app.read_model.module_ids, vec![parent, spawned]);
+            assert!(hub.module_errors_rx().borrow().is_empty());
         });
     }
 }

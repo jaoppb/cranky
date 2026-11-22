@@ -125,6 +125,7 @@ fn utc_is_written_with_a_zero_offset_and_never_as_z() {
     assert_eq!(time.abbreviation(), "UTC");
     assert_eq!(time.zone_name(), None);
     assert_eq!(time.source(), Source::Utc);
+    assert_eq!(time.subsec_millis(), 0);
     assert_eq!(LocalTime::utc(0).to_string(), "1970-01-01T00:00:00+00:00");
     assert_eq!(LocalTime::utc(-1).to_string(), "1969-12-31T23:59:59+00:00");
 }

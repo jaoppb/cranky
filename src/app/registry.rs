@@ -709,6 +709,47 @@ mod tests {
         assert!(TestRegistryPort::root_module(&registry).is_some());
     }
 
+    /// The root sits on the bar with no parent, and every child it loads, whether configured
+    /// under `[modules]` or only named in a root section, sits on the bar under the root.
+    #[test]
+    fn test_module_registry_load_places_children_under_the_root() {
+        let home = crate::test_utils::TestHome::new("registry");
+        let mut registry = ModuleRegistry::new(home.env());
+        let toml_str = r#"
+            [root]
+            name = "bar"
+            left = ["clock"]
+
+            [modules.calendar]
+        "#;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+
+        TestRegistryPort::load(&mut registry, &config).unwrap();
+
+        let root = TestRegistryPort::root_module(&registry).unwrap();
+        assert_eq!(TestRegistryPort::parent_of(&registry, root), None);
+        for name in ["clock", "calendar"] {
+            let name = crate::shared::primitives::ModuleName::new(name);
+            let [child] = registry.name_to_ids[&name].as_slice() else {
+                panic!("expected one {name} module");
+            };
+            assert_eq!(TestRegistryPort::parent_of(&registry, *child), Some(root));
+            assert_eq!(
+                TestRegistryPort::resolve_site(
+                    &registry,
+                    Some(root),
+                    &crate::shared::primitives::ModuleKey::from_name(name.clone())
+                ),
+                Some(*child)
+            );
+            assert_eq!(
+                registry.sites.get(child).map(ModuleSiteInfo::surface),
+                Some(crate::shared::primitives::LayoutSurface::Bar)
+            );
+        }
+    }
+
     #[test]
     fn test_per_site_module_identity() {
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
@@ -1325,6 +1366,87 @@ mod tests {
                 registry.sites.get(&id).map(ModuleSiteInfo::surface),
                 Some(crate::shared::primitives::LayoutSurface::Panel)
             );
+        });
+    }
+
+    /// The context built for a site's actor carries the site's id, parent and surface, and
+    /// reads its layout from the channel the site's sender feeds.
+    #[test]
+    fn test_build_site_context_wires_the_site_and_its_layout_channel() {
+        crate::test_utils::block_on(async {
+            let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+                crate::shared::env::domain::BaseDirectories::new(
+                    crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from(
+                        "/tmp",
+                    )),
+                ),
+                crate::shared::env::domain::RustLog::new(String::new()),
+                None,
+            ));
+            let mut registry = ModuleRegistry::new(app_env);
+            let dto: ConfigDto = toml::from_str("[root]\nname = \"bar\"").unwrap();
+            let config = dto.into_domain(&MockValidator);
+            TestRegistryPort::load(&mut registry, &config).unwrap();
+            let root_id = TestRegistryPort::root_module(&registry).unwrap();
+            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    std::sync::Arc::new(SignalHub::new(config.clone())),
+                    std::sync::Arc::new(
+                        crate::features::module_runtime::test_support::MockSurfaceManager,
+                    ),
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockLayoutSender,
+                        ),
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockDisplaySender,
+                        ),
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockUiSender,
+                        ),
+                    ),
+                ),
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
+            );
+            let id = registry
+                .spawn_module(
+                    crate::features::module_runtime::ports::LazySite::new(
+                        root_id,
+                        crate::shared::primitives::ModuleKey::from_name(
+                            crate::shared::primitives::ModuleName::new("calendar"),
+                        ),
+                    )
+                    .with_surface(crate::shared::primitives::LayoutSurface::Panel),
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
+                )
+                .unwrap()
+                .id();
+
+            let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
+            let mut ctx = registry.build_site_context(id, layout_rx, &deps);
+            let sender = WatchLayoutSender { tx: layout_tx };
+
+            assert_eq!(ctx.id(), id);
+            assert_eq!(ctx.parent_id(), Some(root_id));
+            assert_eq!(
+                ctx.surface(),
+                crate::shared::primitives::LayoutSurface::Panel
+            );
+            let monitor = crate::shared::primitives::MonitorId::new("DP-1");
+            let bounds = crate::shared::primitives::ChildBounds::new(
+                crate::shared::primitives::geometry::Rect::new(
+                    crate::shared::primitives::geometry::Position::new(3, 0),
+                    crate::shared::primitives::geometry::Size::new(40, 20),
+                ),
+                crate::shared::primitives::SizeConstraint::none(),
+            );
+            crate::features::module_runtime::ports::LayoutSender::send_layout(
+                &sender,
+                HashMap::from([(monitor.clone(), bounds)]),
+            );
+            assert_eq!(ctx.rxs_mut().0.borrow().get(&monitor), Some(&bounds));
         });
     }
 }
