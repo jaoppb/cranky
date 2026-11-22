@@ -134,4 +134,86 @@ mod tests {
 
         assert_eq!(computed.border_size().map(BorderSize::value), Some(3.0));
     }
+
+    const fn px(value: f32) -> crate::features::styling::domain::CssLength {
+        crate::features::styling::domain::CssLength::Pixels(value)
+    }
+
+    #[test]
+    fn test_apply_resolves_css_lengths_against_em_and_rem_bases() {
+        let mut lengths = DeclaredLengths::default();
+        lengths.set_width(DeclaredLength::Ems(2.0));
+        lengths.set_height(DeclaredLength::Rem(2.0));
+        lengths.set_min_width(DeclaredLength::Ems(1.0));
+        lengths.set_min_height(DeclaredLength::Rem(1.0));
+        lengths.set_max_width(DeclaredLength::Ems(3.0));
+        lengths.set_max_height(DeclaredLength::Rem(3.0));
+        lengths.set_flex_basis(DeclaredLength::Ems(0.5));
+
+        let mut computed = ComputedStyle::default();
+        lengths.apply(&mut computed, FontSize::new(8.0), FontSize::new(14.0));
+
+        assert_eq!(computed.width(), Some(px(16.0)));
+        assert_eq!(computed.height(), Some(px(28.0)));
+        assert_eq!(computed.min_width(), Some(px(8.0)));
+        assert_eq!(computed.min_height(), Some(px(14.0)));
+        assert_eq!(computed.max_width(), Some(px(24.0)));
+        assert_eq!(computed.max_height(), Some(px(42.0)));
+        assert_eq!(computed.flex_basis(), Some(px(4.0)));
+    }
+
+    #[test]
+    fn test_apply_resolves_scalars_against_em_and_rem_bases() {
+        let mut lengths = DeclaredLengths::default();
+        lengths.set_border_size(DeclaredLength::Ems(0.25));
+        lengths.set_border_radius(DeclaredLength::Rem(0.5));
+        lengths.set_gap(DeclaredLength::Ems(1.5));
+        lengths.set_column_gap(DeclaredLength::Rem(2.0));
+        lengths.set_row_gap(DeclaredLength::Ems(3.0));
+
+        let mut computed = ComputedStyle::default();
+        lengths.apply(&mut computed, FontSize::new(8.0), FontSize::new(14.0));
+
+        assert_eq!(computed.border_size().map(BorderSize::value), Some(2.0));
+        assert_eq!(computed.border_radius().map(BorderRadius::value), Some(7.0));
+        assert_eq!(computed.gap().map(Gap::value), Some(12.0));
+        assert_eq!(computed.column_gap().map(Gap::value), Some(28.0));
+        assert_eq!(computed.row_gap().map(Gap::value), Some(24.0));
+    }
+
+    #[test]
+    fn test_apply_padding_resolves_declared_sides_and_keeps_the_others() {
+        let mut lengths = DeclaredLengths::default();
+        lengths.set_padding_right(DeclaredLength::Rem(1.0));
+        lengths.set_padding_bottom(DeclaredLength::Ems(0.5));
+
+        let mut computed = ComputedStyle::default();
+        computed.set_padding(BoxMargin::new(1.0, 2.0, 3.0, 4.0));
+        lengths.apply(&mut computed, FontSize::new(8.0), FontSize::new(14.0));
+
+        assert_eq!(
+            computed.padding(),
+            Some(&BoxMargin::new(1.0, 4.0, 3.0, 14.0))
+        );
+    }
+
+    #[test]
+    fn test_apply_margin_resolves_declared_sides_and_keeps_the_others() {
+        let mut lengths = DeclaredLengths::default();
+        lengths.set_margin_top(DeclaredLength::Ems(2.0));
+        lengths.set_margin_left(DeclaredLength::Rem(0.5));
+
+        let mut computed = ComputedStyle::default();
+        computed.set_margin(BoxMargin::new(5.0, 6.0, 1.0, 9.0));
+        lengths.apply(&mut computed, FontSize::new(8.0), FontSize::new(14.0));
+
+        assert_eq!(
+            computed.margin(),
+            Some(&BoxMargin::new(16.0, 6.0, 7.0, 9.0))
+        );
+
+        let mut bare = ComputedStyle::default();
+        lengths.apply(&mut bare, FontSize::new(8.0), FontSize::new(14.0));
+        assert_eq!(bare.margin(), Some(&BoxMargin::new(16.0, 0.0, 7.0, 0.0)));
+    }
 }

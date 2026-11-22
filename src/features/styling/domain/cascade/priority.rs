@@ -112,4 +112,11 @@ mod tests {
         let later = RulePriority::new(Importance::Normal, Layer::MODULE, spec(1), 0, 1);
         assert!(later > earlier);
     }
+
+    #[test]
+    fn test_later_sheet_beats_earlier_source_order_within_specificity() {
+        let earlier_sheet = RulePriority::new(Importance::Normal, Layer::MODULE, spec(1), 0, 7);
+        let later_sheet = RulePriority::new(Importance::Normal, Layer::MODULE, spec(1), 2, 0);
+        assert!(later_sheet > earlier_sheet);
+    }
 }
