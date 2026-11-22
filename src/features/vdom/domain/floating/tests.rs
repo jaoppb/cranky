@@ -2,17 +2,14 @@ use super::{
     AnchorDirection, ExclusiveZone, HorizontalAnchor, KeyboardInteractivity, PanelAnchor,
     PanelLayer, PanelSpec, PopupOffset, PopupSpec, VerticalAnchor,
 };
-use crate::features::vdom::domain::{TextContent, VNode};
+use crate::features::vdom::domain::{ElementSelectors, Interactions, TextContent, VNode};
 
 #[test]
 fn test_popup_spec_builder_and_accessors() {
     let content = Box::new(VNode::new_text(
         TextContent::new("popup".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     ));
     let spec = PopupSpec::new(content.clone())
         .with_anchor(AnchorDirection::Bottom)
@@ -27,11 +24,8 @@ fn test_popup_spec_builder_and_accessors() {
 fn test_panel_spec_builder_and_accessors() {
     let content = Box::new(VNode::new_text(
         TextContent::new("panel".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     ));
     let anchor = PanelAnchor::new(VerticalAnchor::Top, HorizontalAnchor::Right);
     let spec = PanelSpec::new(content.clone())

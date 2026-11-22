@@ -4,7 +4,7 @@ use super::{RecordingEngine, Spec, tooltip_content};
 use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::module_runtime::test_support::MockCanvasFactory;
 use crate::features::vdom::domain::{
-    AnchorSegment, InteractionContext, NodeKey, NodePath, NodeRef, SurfaceSpace,
+    AnchorSegment, InteractedNodes, InteractionContext, NodeKey, NodePath, NodeRef, SurfaceSpace,
 };
 use crate::shared::primitives::geometry::Scale;
 use crate::shared::primitives::{MonitorFocus, MonitorId};
@@ -30,7 +30,10 @@ fn child(index: usize, key: Option<&'static str>, tip: Option<&str>) -> RenderNo
 }
 
 fn hover(node_ref: NodeRef) -> InteractionContext {
-    InteractionContext::new(Some(node_ref), None, None, MonitorFocus::Focused)
+    InteractionContext::new(
+        InteractedNodes::new(Some(node_ref), None, None),
+        MonitorFocus::Focused,
+    )
 }
 
 fn unkeyed(surface: SurfaceSpace, path: &[usize]) -> NodeRef {
@@ -70,7 +73,10 @@ const fn bar_only(bar: &RenderNode) -> HoverTrees<'_> {
 fn no_hover_lays_out_no_tooltip() {
     let bar = root(SurfaceSpace::Bar, Some("bar"), vec![]);
     assert_eq!(picked(bar_only(&bar), None), vec![]);
-    let idle = InteractionContext::new(None, None, None, MonitorFocus::Focused);
+    let idle = InteractionContext::new(
+        InteractedNodes::new(None, None, None),
+        MonitorFocus::Focused,
+    );
     assert_eq!(picked(bar_only(&bar), Some(&idle)), vec![]);
 }
 

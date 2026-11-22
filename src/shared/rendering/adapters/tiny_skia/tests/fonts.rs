@@ -89,11 +89,31 @@ fn measurer_sizes_text_in_logical_pixels_with_its_default_size() {
             Scale::new(scale),
             Font::new(sans(), FontSize::new(size)),
         )
-        .measure("Hg", None, None)
+        .measure("Hg", TextFont::default())
     };
     assert_eq!(measure(1.0, 14.0).height(), 14);
     assert_eq!(measure(2.0, 14.0).height(), 14);
     assert_eq!(measure(1.0, 28.0).height(), 28);
+}
+
+#[test]
+fn measurer_sizes_text_in_the_size_it_is_asked_for_over_its_default() {
+    let mut font_system = FontSystem::new();
+    let mut measurer = CosmicTextMeasurer::new(
+        &mut font_system,
+        Scale::new(2.0),
+        Font::new(sans(), FontSize::new(14.0)),
+    );
+    let family = sans();
+    assert_eq!(
+        measurer
+            .measure(
+                "Hg",
+                TextFont::new(Some(&family), Some(FontSize::new(23.0)))
+            )
+            .height(),
+        23
+    );
 }
 
 #[test]
@@ -123,7 +143,7 @@ fn factory_measurer_uses_its_scale_and_default_size() {
     let mut factory = TinySkiaCanvasFactory::new();
     let size = factory
         .create_text_measurer(Scale::new(2.0), Font::new(sans(), FontSize::new(28.0)))
-        .measure("Hg", None, None);
+        .measure("Hg", TextFont::default());
     assert_eq!(size.height(), 28);
 }
 

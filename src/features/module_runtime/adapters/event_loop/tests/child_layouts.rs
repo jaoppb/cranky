@@ -5,22 +5,21 @@ use crate::features::module_runtime::domain::{RenderOutcome, RenderPipeline};
 use crate::features::module_runtime::test_support::{
     PipelineFixture, TestModulePort, process_monitor,
 };
-use crate::features::vdom::domain::{ModuleParams, PopupSpec, VNode};
+use crate::features::vdom::domain::{
+    ElementSelectors, Interactions, ModuleParams, PopupSpec, VNode,
+};
 use crate::shared::primitives::{LayoutSurface, ModuleKey, ModuleName, ModuleOptions, MonitorId};
 use std::collections::HashMap;
 
 fn rect() -> VNode {
-    VNode::new_rect(None, None, None, None, None)
+    VNode::new_rect(ElementSelectors::default(), Interactions::default())
 }
 
 fn module(name: &str) -> VNode {
     VNode::new_module(
         ModuleParams::new(ModuleName::new(name), None, ModuleOptions::default()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     )
 }
 
@@ -29,8 +28,12 @@ fn module(name: &str) -> VNode {
 fn child_layouts_list_the_bar_modules_then_the_floating_ones() {
     let mut pipeline = RenderPipeline::new();
     let mut fixture = PipelineFixture::<TaffyLayoutAdapter>::default();
-    let bar = VNode::new_flex(vec![module("clock"), rect()], None, None, None, None, None)
-        .with_popup(PopupSpec::new(Box::new(module("calendar"))));
+    let bar = VNode::new_flex(
+        vec![module("clock"), rect()],
+        ElementSelectors::default(),
+        Interactions::default(),
+    )
+    .with_popup(PopupSpec::new(Box::new(module("calendar"))));
 
     let outcome = process_monitor(
         &mut pipeline,
@@ -60,11 +63,8 @@ fn a_failed_child_is_laid_out_as_a_placeholder_instead_of_a_module() {
     let bar = || {
         VNode::new_flex(
             vec![module("calendar"), module("clock")],
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )
     };
     let names = |outcome: RenderOutcome| -> Vec<String> {

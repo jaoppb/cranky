@@ -8,6 +8,7 @@ mod signal_loop;
 mod sni_adapter;
 mod sni_event;
 mod sni_proxy;
+mod tray_items;
 mod watcher;
 
 #[cfg(test)]

@@ -4,7 +4,7 @@ use super::parser_props::{
 };
 use super::userdata::LuaVNode;
 use crate::features::styling::domain::{Orientation, ProgressValue};
-use crate::features::vdom::domain::{TextContent, VNode};
+use crate::features::vdom::domain::{ImageContent, ProgressBar, TextContent, VNode};
 use crate::shared::primitives::{ModuleInstanceId, ModuleName};
 use mlua::{Lua, LuaSerdeExt};
 
@@ -21,36 +21,14 @@ pub(super) fn parse_table_children(lua: &Lua, table: &mlua::Table) -> mlua::Resu
 
 fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
     let typ: String = table.get::<Option<String>>("type")?.unwrap_or_default();
-    let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
-        parse_common_props(lua, &table)?;
+    let (selectors, interactions, attachments) = parse_common_props(lua, &table)?;
 
-    let mut node = match typ.as_str() {
-        "flex" | "" => VNode::new_flex(
-            parse_table_children(lua, &table)?,
-            class,
-            id,
-            on_click,
-            on_hover,
-            tooltip,
-        ),
-        "grid" => VNode::new_grid(
-            parse_table_children(lua, &table)?,
-            class,
-            id,
-            on_click,
-            on_hover,
-            tooltip,
-        ),
+    let node = match typ.as_str() {
+        "flex" | "" => VNode::new_flex(parse_table_children(lua, &table)?, selectors, interactions),
+        "grid" => VNode::new_grid(parse_table_children(lua, &table)?, selectors, interactions),
         "text" => {
             let text_str = parse_text_content(&table);
-            VNode::new_text(
-                TextContent::new(text_str),
-                class,
-                id,
-                on_click,
-                on_hover,
-                tooltip,
-            )
+            VNode::new_text(TextContent::new(text_str), selectors, interactions)
         }
         "progress" => {
             let value_num = table.get::<Option<f32>>("value")?.unwrap_or(0.0);
@@ -62,19 +40,22 @@ fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
                 _ => Orientation::Horizontal,
             };
             VNode::new_progress(
-                ProgressValue::new(value_num).unwrap_or_default(),
-                orientation,
-                class,
-                id,
-                on_click,
-                on_hover,
-                tooltip,
+                ProgressBar::new(
+                    ProgressValue::new(value_num).unwrap_or_default(),
+                    orientation,
+                ),
+                selectors,
+                interactions,
             )
         }
-        "rect" => VNode::new_rect(class, id, on_click, on_hover, tooltip),
+        "rect" => VNode::new_rect(selectors, interactions),
         "image" => {
             let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
-            VNode::new_image(data, pixel_size, class, id, tooltip)
+            VNode::new_image(
+                ImageContent::new(data, pixel_size),
+                selectors,
+                interactions.into_tooltip(),
+            )
         }
         "module" => {
             let name_str = table.get::<String>("name")?;
@@ -85,21 +66,12 @@ fn table_to_vnode(lua: &Lua, table: mlua::Table) -> mlua::Result<VNode> {
                 instance_id_str.map(ModuleInstanceId::new),
                 options,
             );
-            VNode::new_module(params, class, id, on_click, on_hover, tooltip)
+            VNode::new_module(params, selectors, interactions)
         }
         _ => return lua.from_value::<VNode>(mlua::Value::Table(table)),
     };
 
-    if let Some(popup_spec) = popup {
-        node = node.with_popup(popup_spec);
-    }
-    if let Some(panel_spec) = panel {
-        node = node.with_panel(panel_spec);
-    }
-    if let Some(node_key) = key {
-        node = node.with_key(node_key);
-    }
-    Ok(node)
+    Ok(attachments.attach_to(node))
 }
 
 /// Converts a Lua value (either `LuaVNode` `UserData` or a table) into a `VNode`.

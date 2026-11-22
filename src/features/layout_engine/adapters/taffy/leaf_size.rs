@@ -1,6 +1,7 @@
 use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
 use crate::features::styling::domain::{ComputedStyle, Orientation};
 use crate::shared::primitives::geometry::Size;
+use crate::shared::rendering::ports::text::TextFont;
 use crate::utils::f64_to_f32;
 use taffy::style::{Dimension, Style};
 
@@ -36,9 +37,9 @@ fn apply_intrinsic(style: &mut Style, computed: &ComputedStyle, intrinsic: Size)
 pub(super) fn apply_node_dimensions(
     style: &mut Style,
     node: &StyledNode,
-    computed: &ComputedStyle,
     measurer: &mut dyn TextMeasurer,
 ) {
+    let computed = node.style();
     match node {
         StyledNode::Flex { .. } | StyledNode::Grid { .. } => {}
         StyledNode::Text {
@@ -48,8 +49,7 @@ pub(super) fn apply_node_dimensions(
         } => {
             let text_size = measurer.measure(
                 text.as_str(),
-                text_style.font_family(),
-                text_style.font_size(),
+                TextFont::new(text_style.font_family(), text_style.font_size()),
             );
             apply_intrinsic(style, computed, text_size);
         }

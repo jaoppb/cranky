@@ -1,7 +1,6 @@
 //! The cascaded, still unresolved lengths of the twenty length-bearing properties.
 use super::declared_length::DeclaredLength;
 use super::value::Cascade;
-use crate::shared::config::domain::FontSize;
 
 /// The twenty length-bearing properties that can carry `em`/`rem`.
 ///
@@ -104,31 +103,11 @@ impl DeclaredLengths {
     }
 }
 
-pub(super) fn resolve(
-    cascade: Cascade<DeclaredLength>,
-    font_size: FontSize,
-    root_font_size: FontSize,
-) -> Option<crate::features::styling::domain::CssLength> {
-    match cascade {
-        Cascade::Value(declared) => Some(declared.resolve(font_size, root_font_size)),
-        Cascade::NotDeclared | Cascade::Inherit | Cascade::Initial => None,
-    }
-}
-
-pub(super) fn resolve_scalar(
-    cascade: Cascade<DeclaredLength>,
-    font_size: FontSize,
-    root_font_size: FontSize,
-) -> Option<f32> {
-    match cascade {
-        Cascade::Value(declared) => Some(declared.resolve_scalar(font_size, root_font_size)),
-        Cascade::NotDeclared | Cascade::Inherit | Cascade::Initial => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use super::super::declared_lengths_apply::FontSizeBases;
     use super::*;
+    use crate::shared::config::domain::FontSize;
 
     #[test]
     fn test_merge_prefers_declared_over_not_declared() {
@@ -140,12 +119,13 @@ mod tests {
         base.merge_with(&later);
 
         let font_size = FontSize::new(14.0);
+        let bases = FontSizeBases::new(font_size, font_size);
         assert_eq!(
-            resolve(base.width, font_size, font_size),
+            bases.resolve(base.width),
             Some(crate::features::styling::domain::CssLength::Pixels(10.0))
         );
         assert_eq!(
-            resolve(base.height, font_size, font_size),
+            bases.resolve(base.height),
             Some(crate::features::styling::domain::CssLength::Pixels(20.0))
         );
     }

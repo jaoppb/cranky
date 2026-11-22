@@ -1,5 +1,5 @@
 //! The metrics snapshot published to modules, with CPU usage scaled per the configured mode.
-use super::command::CreateMetricsCommand;
+use super::command::{CpuMetrics, CreateMetricsCommand};
 use super::config::{CpuMode, MetricsConfig};
 use super::types::{CpuUsage, DiskMetric, MemoryBytes, NetworkSpeed, Temperature};
 use serde::{Deserialize, Serialize};
@@ -22,10 +22,58 @@ pub(crate) struct MetricsState {
     pub(crate) config: MetricsConfig,
 }
 
+/// One raw CPU reading as sysinfo reports it, before the configured mode scales it: the
+/// overall usage, the number of cores, and each core's usage.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct CpuSample {
+    global: f32,
+    nproc: f32,
+    per_core: Vec<f32>,
+}
+
+impl CpuSample {
+    #[must_use]
+    pub(crate) const fn new(global: f32, nproc: f32, per_core: Vec<f32>) -> Self {
+        Self {
+            global,
+            nproc,
+            per_core,
+        }
+    }
+
+    /// Scales this reading as `mode` asks: as reported, multiplied by the core count, or
+    /// zeroed when CPU usage is off.
+    #[must_use]
+    pub(crate) fn normalize(self, mode: &CpuMode) -> CpuMetrics {
+        let Self {
+            global,
+            nproc,
+            per_core,
+        } = self;
+        match mode {
+            CpuMode::Percentage0to100 => CpuMetrics::new(
+                CpuUsage::new(global),
+                per_core.into_iter().map(CpuUsage::new).collect(),
+            ),
+            CpuMode::PercentageNproc => CpuMetrics::new(
+                CpuUsage::new(global * nproc),
+                per_core.into_iter().map(CpuUsage::new).collect(),
+            ),
+            CpuMode::Disabled => CpuMetrics::new(
+                CpuUsage::new(0.0),
+                per_core.into_iter().map(|_| CpuUsage::new(0.0)).collect(),
+            ),
+        }
+    }
+}
+
 impl MetricsState {
     #[must_use]
     pub(crate) fn new(cmd: CreateMetricsCommand) -> Self {
-        let (cpu_usage, per_core, memory, disks, network, temperature, config) = cmd.into_parts();
+        let (system, devices, config) = cmd.into_parts();
+        let (cpu, memory) = system.into_parts();
+        let (disks, network, temperature) = devices.into_parts();
+        let (cpu_usage, per_core) = cpu.into_parts();
         Self {
             cpu_usage,
             per_core,
@@ -38,29 +86,6 @@ impl MetricsState {
             network_rx: network.rx(),
             temperature,
             config,
-        }
-    }
-
-    #[must_use]
-    pub(crate) fn normalize_cpu_usage(
-        mode: &CpuMode,
-        global_cpu: f32,
-        nproc: f32,
-        per_core: Vec<f32>,
-    ) -> (CpuUsage, Vec<CpuUsage>) {
-        match mode {
-            CpuMode::Percentage0to100 => (
-                CpuUsage::new(global_cpu),
-                per_core.into_iter().map(CpuUsage::new).collect(),
-            ),
-            CpuMode::PercentageNproc => (
-                CpuUsage::new(global_cpu * nproc),
-                per_core.into_iter().map(CpuUsage::new).collect(),
-            ),
-            CpuMode::Disabled => (
-                CpuUsage::new(0.0),
-                per_core.into_iter().map(|_| CpuUsage::new(0.0)).collect(),
-            ),
         }
     }
 
@@ -92,5 +117,63 @@ impl MetricsState {
     #[must_use]
     pub(crate) const fn temperature(&self) -> Option<&Temperature> {
         self.temperature.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::metrics::domain::{
+        DeviceMetrics, DiskName, DiskSpace, MemoryMetrics, MemoryUsage, MountPoint, NetworkMetrics,
+        SystemMetrics, TemperatureMode,
+    };
+
+    #[test]
+    fn test_new_moves_every_reading_into_its_own_field() {
+        let disk = DiskMetric::new(
+            DiskName::new("sda"),
+            MountPoint::new("/home"),
+            DiskSpace::new(
+                MemoryBytes::new(500),
+                MemoryBytes::new(120),
+                MemoryBytes::new(380),
+            ),
+        );
+        let config: MetricsConfig =
+            serde_json::from_value(serde_json::json!({ "temperature": "fahrenheit" })).unwrap();
+        let state = MetricsState::new(CreateMetricsCommand::new(
+            SystemMetrics::new(
+                CpuMetrics::new(
+                    CpuUsage::new(12.5),
+                    vec![CpuUsage::new(3.0), CpuUsage::new(7.0)],
+                ),
+                MemoryMetrics::new(
+                    MemoryUsage::new(MemoryBytes::new(100), MemoryBytes::new(400)),
+                    MemoryUsage::new(MemoryBytes::new(30), MemoryBytes::new(90)),
+                ),
+            ),
+            DeviceMetrics::new(
+                vec![disk.clone()],
+                NetworkMetrics::new(NetworkSpeed::new(11), NetworkSpeed::new(22)),
+                Some(Temperature::new(41.0)),
+            ),
+            config.clone(),
+        ));
+
+        assert_eq!(state.cpu_usage, CpuUsage::new(12.5));
+        assert_eq!(state.per_core, vec![CpuUsage::new(3.0), CpuUsage::new(7.0)]);
+        assert_eq!(state.memory_used, MemoryBytes::new(100));
+        assert_eq!(state.memory_total, MemoryBytes::new(400));
+        assert_eq!(state.swap_used, MemoryBytes::new(30));
+        assert_eq!(state.swap_total, MemoryBytes::new(90));
+        assert_eq!(state.disks, vec![disk]);
+        assert_eq!(state.network_tx, NetworkSpeed::new(11));
+        assert_eq!(state.network_rx, NetworkSpeed::new(22));
+        assert_eq!(state.temperature, Some(Temperature::new(41.0)));
+        assert_eq!(
+            state.config.temperature(),
+            Some(&TemperatureMode::Fahrenheit)
+        );
+        assert_eq!(state.config, config);
     }
 }

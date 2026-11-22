@@ -1,13 +1,17 @@
 use super::parser_props::{parse_common_props, parse_module_options};
 use super::vnode_parser::{parse_table_children, value_to_vnode};
 use crate::features::styling::domain::ClassNameList;
-use crate::features::vdom::domain::VNode;
+use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
 use crate::shared::primitives::{ModuleInstanceId, ModuleName, ModuleOptions};
 use mlua::Lua;
 
 pub(super) fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
     let mlua::Value::Table(table) = val else {
-        return Ok(VNode::new_flex(Vec::new(), None, None, None, None, None));
+        return Ok(VNode::new_flex(
+            Vec::new(),
+            ElementSelectors::default(),
+            Interactions::default(),
+        ));
     };
 
     let is_full_spec = table.contains_key("type")?
@@ -23,31 +27,29 @@ pub(super) fn parse_flex_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
 
     if is_full_spec {
         let children_vec = parse_table_children(lua, &table)?;
-        let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
-            parse_common_props(lua, &table)?;
-        let mut node = VNode::new_flex(children_vec, class, id, on_click, on_hover, tooltip);
-        if let Some(popup_spec) = popup {
-            node = node.with_popup(popup_spec);
-        }
-        if let Some(panel_spec) = panel {
-            node = node.with_panel(panel_spec);
-        }
-        if let Some(node_key) = key {
-            node = node.with_key(node_key);
-        }
-        return Ok(node);
+        let (selectors, interactions, attachments) = parse_common_props(lua, &table)?;
+        let node = VNode::new_flex(children_vec, selectors, interactions);
+        return Ok(attachments.attach_to(node));
     }
 
     let mut children_vec = Vec::new();
     for pair in table.sequence_values::<mlua::Value>() {
         children_vec.push(value_to_vnode(lua, pair?)?);
     }
-    Ok(VNode::new_flex(children_vec, None, None, None, None, None))
+    Ok(VNode::new_flex(
+        children_vec,
+        ElementSelectors::default(),
+        Interactions::default(),
+    ))
 }
 
 pub(super) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode> {
     let mlua::Value::Table(table) = val else {
-        return Ok(VNode::new_grid(Vec::new(), None, None, None, None, None));
+        return Ok(VNode::new_grid(
+            Vec::new(),
+            ElementSelectors::default(),
+            Interactions::default(),
+        ));
     };
 
     let is_full_spec = table.contains_key("type")?
@@ -63,53 +65,43 @@ pub(super) fn parse_grid_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNode
 
     if is_full_spec {
         let children_vec = parse_table_children(lua, &table)?;
-        let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
-            parse_common_props(lua, &table)?;
-        let mut node = VNode::new_grid(children_vec, class, id, on_click, on_hover, tooltip);
-        if let Some(popup_spec) = popup {
-            node = node.with_popup(popup_spec);
-        }
-        if let Some(panel_spec) = panel {
-            node = node.with_panel(panel_spec);
-        }
-        if let Some(node_key) = key {
-            node = node.with_key(node_key);
-        }
-        return Ok(node);
+        let (selectors, interactions, attachments) = parse_common_props(lua, &table)?;
+        let node = VNode::new_grid(children_vec, selectors, interactions);
+        return Ok(attachments.attach_to(node));
     }
 
     let mut children_vec = Vec::new();
     for pair in table.sequence_values::<mlua::Value>() {
         children_vec.push(value_to_vnode(lua, pair?)?);
     }
-    Ok(VNode::new_grid(children_vec, None, None, None, None, None))
+    Ok(VNode::new_grid(
+        children_vec,
+        ElementSelectors::default(),
+        Interactions::default(),
+    ))
 }
 
 pub(super) fn parse_rect_node(lua: &Lua, val: Option<mlua::Value>) -> mlua::Result<VNode> {
     match val {
         Some(mlua::Value::Table(table)) => {
-            let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
-                parse_common_props(lua, &table)?;
-            let mut node = VNode::new_rect(class, id, on_click, on_hover, tooltip);
-            if let Some(popup_spec) = popup {
-                node = node.with_popup(popup_spec);
-            }
-            if let Some(panel_spec) = panel {
-                node = node.with_panel(panel_spec);
-            }
-            if let Some(node_key) = key {
-                node = node.with_key(node_key);
-            }
-            Ok(node)
+            let (selectors, interactions, attachments) = parse_common_props(lua, &table)?;
+            let node = VNode::new_rect(selectors, interactions);
+            Ok(attachments.attach_to(node))
         }
         Some(mlua::Value::String(lua_string)) => {
             let class = lua_string
                 .to_str()
                 .ok()
                 .and_then(|text| ClassNameList::parse(text.as_ref()).ok());
-            Ok(VNode::new_rect(class, None, None, None, None))
+            Ok(VNode::new_rect(
+                ElementSelectors::new(class, None),
+                Interactions::default(),
+            ))
         }
-        _ => Ok(VNode::new_rect(None, None, None, None, None)),
+        _ => Ok(VNode::new_rect(
+            ElementSelectors::default(),
+            Interactions::default(),
+        )),
     }
 }
 
@@ -119,24 +111,14 @@ pub(super) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
             let name_str = table.get::<String>("name")?;
             let instance_id_str = table.get::<Option<String>>("instance_id")?;
             let options = parse_module_options(lua, &table)?;
-            let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
-                parse_common_props(lua, &table)?;
+            let (selectors, interactions, attachments) = parse_common_props(lua, &table)?;
             let params = crate::features::vdom::domain::ModuleParams::new(
                 ModuleName::new(name_str),
                 instance_id_str.map(ModuleInstanceId::new),
                 options,
             );
-            let mut node = VNode::new_module(params, class, id, on_click, on_hover, tooltip);
-            if let Some(popup_spec) = popup {
-                node = node.with_popup(popup_spec);
-            }
-            if let Some(panel_spec) = panel {
-                node = node.with_panel(panel_spec);
-            }
-            if let Some(node_key) = key {
-                node = node.with_key(node_key);
-            }
-            Ok(node)
+            let node = VNode::new_module(params, selectors, interactions);
+            Ok(attachments.attach_to(node))
         }
         mlua::Value::String(lua_string) => {
             let name_str = lua_string
@@ -147,7 +129,11 @@ pub(super) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
                 None,
                 ModuleOptions::default(),
             );
-            Ok(VNode::new_module(params, None, None, None, None, None))
+            Ok(VNode::new_module(
+                params,
+                ElementSelectors::default(),
+                Interactions::default(),
+            ))
         }
         _ => {
             let params = crate::features::vdom::domain::ModuleParams::new(
@@ -155,7 +141,11 @@ pub(super) fn parse_module_node(lua: &Lua, val: mlua::Value) -> mlua::Result<VNo
                 None,
                 ModuleOptions::default(),
             );
-            Ok(VNode::new_module(params, None, None, None, None, None))
+            Ok(VNode::new_module(
+                params,
+                ElementSelectors::default(),
+                Interactions::default(),
+            ))
         }
     }
 }

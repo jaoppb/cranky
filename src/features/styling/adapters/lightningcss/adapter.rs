@@ -8,8 +8,8 @@ use super::properties::{
 };
 use super::selector::compile_selector;
 use crate::features::styling::domain::{
-    ComputedStyle, DeclaredStyle, Importance, InheritableKeywords, RuleEntry, StyleSheetName,
-    StylingError,
+    ComputedStyle, DeclaredStyle, DeclaredValues, FontRelativeLengths, Importance,
+    InheritableKeywords, RuleEntry, StyleSheetName, StylingError, VarDeclarations,
 };
 use crate::features::styling::ports::{CssParserPort, ParsedStyleSheetPort};
 use lightningcss::rules::CssRule;
@@ -113,12 +113,9 @@ impl CssParserPort for LightningCssAdapter {
                     rule_entries.push(RuleEntry {
                         selectors: selectors.clone(),
                         style: DeclaredStyle::from_parts(
-                            important_style,
-                            important_keywords,
-                            important_font_size,
-                            important_lengths,
-                            important_custom,
-                            important_pending_vars,
+                            DeclaredValues::new(important_style, important_keywords),
+                            FontRelativeLengths::new(important_font_size, important_lengths),
+                            VarDeclarations::new(important_custom, important_pending_vars),
                         ),
                         importance: Importance::Important,
                     });
@@ -130,12 +127,9 @@ impl CssParserPort for LightningCssAdapter {
                     rule_entries.push(RuleEntry {
                         selectors,
                         style: DeclaredStyle::from_parts(
-                            normal_style,
-                            normal_keywords,
-                            normal_font_size,
-                            normal_lengths,
-                            normal_custom,
-                            normal_pending_vars,
+                            DeclaredValues::new(normal_style, normal_keywords),
+                            FontRelativeLengths::new(normal_font_size, normal_lengths),
+                            VarDeclarations::new(normal_custom, normal_pending_vars),
                         ),
                         importance: Importance::Normal,
                     });

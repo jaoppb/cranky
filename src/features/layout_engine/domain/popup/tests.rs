@@ -22,25 +22,33 @@ fn test_popup_target_and_exclusivity() {
     // 1. PerModuleAndMonitor (no other popups for module_a on screen_a)
     let conf_m_and_m = PopupExclusivity::compute_conflicts(
         &active,
-        &p1_1,
-        &[],
+        OpeningPopup::new(&p1_1, &[]),
         PopupBehavior::PerModuleAndMonitor,
     );
     assert_eq!(conf_m_and_m, Vec::<PopupTarget>::new());
 
     // 2. PerModule (module_a on screen_b conflicts, but not p1_1 itself)
-    let conf_module =
-        PopupExclusivity::compute_conflicts(&active, &p1_1, &[], PopupBehavior::PerModule);
+    let conf_module = PopupExclusivity::compute_conflicts(
+        &active,
+        OpeningPopup::new(&p1_1, &[]),
+        PopupBehavior::PerModule,
+    );
     assert_eq!(conf_module, vec![p1_2.clone()]);
 
     // 3. PerMonitor (module_b on screen_a conflicts, but not p1_1 itself)
-    let conf_screen =
-        PopupExclusivity::compute_conflicts(&active, &p1_1, &[], PopupBehavior::PerMonitor);
+    let conf_screen = PopupExclusivity::compute_conflicts(
+        &active,
+        OpeningPopup::new(&p1_1, &[]),
+        PopupBehavior::PerMonitor,
+    );
     assert_eq!(conf_screen, vec![p2_1.clone()]);
 
     // 4. Global (all other active popups conflict)
-    let conf_global =
-        PopupExclusivity::compute_conflicts(&active, &p1_1, &[], PopupBehavior::Global);
+    let conf_global = PopupExclusivity::compute_conflicts(
+        &active,
+        OpeningPopup::new(&p1_1, &[]),
+        PopupBehavior::Global,
+    );
     assert_eq!(conf_global, vec![p1_2, p2_1, p2_2]);
 }
 
@@ -66,7 +74,11 @@ fn test_compute_conflicts_never_returns_an_ancestor() {
         PopupBehavior::PerMonitor,
         PopupBehavior::Global,
     ] {
-        let conflicts = PopupExclusivity::compute_conflicts(&active, &child, &ancestors, behavior);
+        let conflicts = PopupExclusivity::compute_conflicts(
+            &active,
+            OpeningPopup::new(&child, &ancestors),
+            behavior,
+        );
         assert!(
             !conflicts.contains(&parent),
             "{behavior:?} must never return an ancestor"
@@ -74,8 +86,11 @@ fn test_compute_conflicts_never_returns_an_ancestor() {
     }
 
     // Global still catches the unrelated, non-ancestor popup.
-    let conflicts =
-        PopupExclusivity::compute_conflicts(&active, &child, &ancestors, PopupBehavior::Global);
+    let conflicts = PopupExclusivity::compute_conflicts(
+        &active,
+        OpeningPopup::new(&child, &ancestors),
+        PopupBehavior::Global,
+    );
     assert_eq!(conflicts, vec![unrelated]);
 }
 

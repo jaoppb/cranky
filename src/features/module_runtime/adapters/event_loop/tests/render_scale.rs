@@ -10,7 +10,9 @@ use crate::features::module_runtime::test_support::{
     ChannelDisplaySender, MockLayoutSender, MockUiSender, PipelineFixture, RecordingSurfaceManager,
     TestModulePort, process_monitor,
 };
-use crate::features::vdom::domain::{PopupSpec, TextContent, VNode};
+use crate::features::vdom::domain::{
+    ElementSelectors, Interactions, PopupSpec, TextContent, VNode,
+};
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
@@ -26,11 +28,8 @@ fn a_render_at_scale_two_paints_its_buffer_and_its_popup_at_that_scale() {
     let text = |label: &str| {
         VNode::new_text(
             TextContent::new(label.to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )
     };
     let bar = text("bar").with_popup(PopupSpec::new(Box::new(text("calendar"))));

@@ -1,16 +1,17 @@
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{ClassNameList, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
-use crate::features::vdom::domain::{TextContent, VNode};
-use crate::shared::config::domain::{FontFamily, FontSize};
+use crate::features::vdom::domain::{ElementSelectors, Interactions, TextContent, VNode};
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{TextAlign, TextAlignment};
 use crate::shared::rendering::ports::canvas::{CanvasCall, RecordingCanvas};
+use crate::shared::rendering::ports::text::TextFont;
 
 fn resolver(css: &str) -> CompositeStyleResolver {
     let sheet = LightningCssAdapter::new()
@@ -22,11 +23,11 @@ fn resolver(css: &str) -> CompositeStyleResolver {
 fn text(content: &str, class: Option<&str>) -> VNode {
     VNode::new_text(
         TextContent::new(content.to_string()),
-        class.map(|names| ClassNameList::parse(names).unwrap()),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(
+            class.map(|names| ClassNameList::parse(names).unwrap()),
+            None,
+        ),
+        Interactions::default(),
     )
 }
 
@@ -39,13 +40,13 @@ fn child_align(
 ) -> Option<TextAlign> {
     let root = VNode::new_flex(
         vec![text("hi", child_class)],
-        parent_class.map(|names| ClassNameList::parse(names).unwrap()),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(
+            parent_class.map(|names| ClassNameList::parse(names).unwrap()),
+            None,
+        ),
+        Interactions::default(),
     );
-    let StyledNode::Flex { children, .. } = root.resolve_styles(&resolver(css), None, None) else {
+    let StyledNode::Flex { children, .. } = root.resolve_styles(&resolver(css), None) else {
         panic!("expected a Flex root");
     };
     children
@@ -99,7 +100,7 @@ fn test_text_align_inherit_keyword_pulls_parent_value() {
 
 struct EightPerChar;
 impl TextMeasurer for EightPerChar {
-    fn measure(&mut self, text: &str, _f: Option<&FontFamily>, _s: Option<FontSize>) -> Size {
+    fn measure(&mut self, text: &str, _font: TextFont<'_>) -> Size {
         Size::new(u32::try_from(text.len()).unwrap_or(0).saturating_mul(8), 16)
     }
 }
@@ -114,38 +115,42 @@ fn paint_calendar() -> Vec<(String, TextAlignment)> {
             text("May 2026", Some("title")),
             text(">", Some("nav-btn")),
         ],
-        class("header"),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(class("header"), None),
+        Interactions::default(),
     );
     let days = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
         .iter()
         .map(|day| text(day, Some("weekday")))
         .collect();
-    let weekdays = VNode::new_grid(days, class("weekdays"), None, None, None, None);
+    let weekdays = VNode::new_grid(
+        days,
+        ElementSelectors::new(class("weekdays"), None),
+        Interactions::default(),
+    );
     let cells = (1..=7)
         .map(|day| text(&day.to_string(), Some("day")))
         .collect();
-    let grid = VNode::new_grid(cells, class("grid"), None, None, None, None);
+    let grid = VNode::new_grid(
+        cells,
+        ElementSelectors::new(class("grid"), None),
+        Interactions::default(),
+    );
     let root = VNode::new_flex(
         vec![header, weekdays, grid],
-        class("root"),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(class("root"), None),
+        Interactions::default(),
     );
 
     let resolver = resolver(include_str!("../../../../../../assets/styles/calendar.css"));
-    let styled = root.resolve_styles(&resolver, None, None);
+    let styled = root.resolve_styles(&resolver, None);
     let laid_out = TaffyLayoutAdapter::new()
-        .calculate_layout_with_constraints(
-            styled,
+        .calculate_layout(
+            LayoutRoot::new(
+                styled,
+                Position::new(0, 0),
+                SizeConstraint::new(Some(280), None),
+            ),
             &mut EightPerChar,
-            Position::new(0, 0),
-            SizeConstraint::new(Some(280), None),
         )
         .unwrap();
 

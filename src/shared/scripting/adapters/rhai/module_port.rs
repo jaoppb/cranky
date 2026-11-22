@@ -4,6 +4,7 @@ use super::module_impl::RhaiModule;
 use super::script::RhaiScript;
 use super::sync::RhaiStateSynchronizer;
 use crate::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
+use crate::features::vdom::domain::{ElementSelectors, Interactions};
 use crate::shared::config::domain::ModuleConfig;
 use crate::shared::events::signals::{SignalHub, SignalKind};
 use crate::shared::primitives::{MonitorId, ScriptMonitorInfo};
@@ -112,18 +113,19 @@ impl AnyModulePort for RhaiModule {
                         );
                         crate::features::vdom::domain::VNode::new_flex(
                             vec![],
-                            None,
-                            None,
-                            None,
-                            None,
-                            None,
+                            ElementSelectors::default(),
+                            Interactions::default(),
                         )
                     }
                 }
             }
             Err(error) => {
                 tracing::error!("Module render error in rhai: {error:?}");
-                crate::features::vdom::domain::VNode::new_flex(vec![], None, None, None, None, None)
+                crate::features::vdom::domain::VNode::new_flex(
+                    vec![],
+                    ElementSelectors::default(),
+                    Interactions::default(),
+                )
             }
         }
     }

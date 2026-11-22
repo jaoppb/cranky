@@ -246,20 +246,30 @@ mod tests {
         );
         let metrics_state = crate::features::metrics::domain::MetricsState::new(
             crate::features::metrics::domain::CreateMetricsCommand::new(
-                crate::features::metrics::domain::CpuUsage::new(50.0),
-                vec![],
-                crate::features::metrics::domain::MemoryMetrics::new(
-                    crate::features::metrics::domain::MemoryBytes::new(1024),
-                    crate::features::metrics::domain::MemoryBytes::new(2048),
-                    crate::features::metrics::domain::MemoryBytes::new(0),
-                    crate::features::metrics::domain::MemoryBytes::new(0),
+                crate::features::metrics::domain::SystemMetrics::new(
+                    crate::features::metrics::domain::CpuMetrics::new(
+                        crate::features::metrics::domain::CpuUsage::new(50.0),
+                        vec![],
+                    ),
+                    crate::features::metrics::domain::MemoryMetrics::new(
+                        crate::features::metrics::domain::MemoryUsage::new(
+                            crate::features::metrics::domain::MemoryBytes::new(1024),
+                            crate::features::metrics::domain::MemoryBytes::new(2048),
+                        ),
+                        crate::features::metrics::domain::MemoryUsage::new(
+                            crate::features::metrics::domain::MemoryBytes::new(0),
+                            crate::features::metrics::domain::MemoryBytes::new(0),
+                        ),
+                    ),
                 ),
-                vec![],
-                crate::features::metrics::domain::NetworkMetrics::new(
-                    crate::features::metrics::domain::NetworkSpeed::new(0),
-                    crate::features::metrics::domain::NetworkSpeed::new(0),
+                crate::features::metrics::domain::DeviceMetrics::new(
+                    vec![],
+                    crate::features::metrics::domain::NetworkMetrics::new(
+                        crate::features::metrics::domain::NetworkSpeed::new(0),
+                        crate::features::metrics::domain::NetworkSpeed::new(0),
+                    ),
+                    Some(crate::features::metrics::domain::Temperature::new(45.0)),
                 ),
-                Some(crate::features::metrics::domain::Temperature::new(45.0)),
                 crate::features::metrics::domain::MetricsConfig::default(),
             ),
         );
@@ -742,19 +752,20 @@ mod tests {
     #[test]
     fn test_calendar_fills_its_host_lua_and_rhai() {
         use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
+        use crate::features::layout_engine::domain::LayoutRoot;
         use crate::features::layout_engine::domain::{RenderNode, TextMeasurer};
         use crate::features::layout_engine::ports::LayoutEnginePort;
         use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
         use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
         use crate::features::styling::domain::StyleSheetName;
         use crate::features::styling::ports::CssParserPort;
-        use crate::shared::config::domain::{FontFamily, FontSize};
         use crate::shared::primitives::geometry::{Position, Size};
         use crate::shared::primitives::{ModuleName, MonitorId, SizeConstraint};
+        use crate::shared::rendering::ports::text::TextFont;
 
         struct Glyphs;
         impl TextMeasurer for Glyphs {
-            fn measure(&mut self, text: &str, _: Option<&FontFamily>, _: Option<FontSize>) -> Size {
+            fn measure(&mut self, text: &str, _font: TextFont<'_>) -> Size {
                 Size::new(u32::try_from(text.chars().count()).unwrap_or(0) * 7, 16)
             }
         }
@@ -799,14 +810,16 @@ mod tests {
 
             let styled = cal
                 .render(&MonitorId::new("DP-1"))
-                .resolve_styles(&resolver, None, None);
+                .resolve_styles(&resolver, None);
             let mut engine = TaffyLayoutAdapter::new();
             let tree = engine
-                .calculate_layout_with_constraints(
-                    styled,
+                .calculate_layout(
+                    LayoutRoot::new(
+                        styled,
+                        Position::new(0, 0),
+                        SizeConstraint::new(Some(280), None),
+                    ),
                     &mut Glyphs,
-                    Position::new(0, 0),
-                    SizeConstraint::new(Some(280), None),
                 )
                 .unwrap();
 

@@ -1,6 +1,8 @@
 use super::parser_props::{parse_common_props, parse_text_content};
 use crate::features::styling::domain::{ClassNameList, Orientation, ProgressValue};
-use crate::features::vdom::domain::{TextContent, VNode};
+use crate::features::vdom::domain::{
+    ElementSelectors, Interactions, ProgressBar, TextContent, VNode,
+};
 use crate::utils::f64_to_f32;
 use mlua::Lua;
 
@@ -12,26 +14,9 @@ pub(super) fn parse_text_node(
     match val {
         mlua::Value::Table(table) => {
             let text_str = parse_text_content(&table);
-            let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
-                parse_common_props(lua, &table)?;
-            let mut node = VNode::new_text(
-                TextContent::new(text_str),
-                class,
-                id,
-                on_click,
-                on_hover,
-                tooltip,
-            );
-            if let Some(popup_spec) = popup {
-                node = node.with_popup(popup_spec);
-            }
-            if let Some(panel_spec) = panel {
-                node = node.with_panel(panel_spec);
-            }
-            if let Some(node_key) = key {
-                node = node.with_key(node_key);
-            }
-            Ok(node)
+            let (selectors, interactions, attachments) = parse_common_props(lua, &table)?;
+            let node = VNode::new_text(TextContent::new(text_str), selectors, interactions);
+            Ok(attachments.attach_to(node))
         }
         mlua::Value::String(lua_string) => {
             let text_str = lua_string
@@ -40,42 +25,30 @@ pub(super) fn parse_text_node(
             let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
             Ok(VNode::new_text(
                 TextContent::new(text_str),
-                class,
-                None,
-                None,
-                None,
-                None,
+                ElementSelectors::new(class, None),
+                Interactions::default(),
             ))
         }
         mlua::Value::Integer(integer) => {
             let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
             Ok(VNode::new_text(
                 TextContent::new(integer.to_string()),
-                class,
-                None,
-                None,
-                None,
-                None,
+                ElementSelectors::new(class, None),
+                Interactions::default(),
             ))
         }
         mlua::Value::Number(number) => {
             let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
             Ok(VNode::new_text(
                 TextContent::new(number.to_string()),
-                class,
-                None,
-                None,
-                None,
-                None,
+                ElementSelectors::new(class, None),
+                Interactions::default(),
             ))
         }
         _ => Ok(VNode::new_text(
             TextContent::new(String::new()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )),
     }
 }
@@ -90,27 +63,16 @@ pub(super) fn parse_progress_table(lua: &Lua, table: &mlua::Table) -> mlua::Resu
         "vertical" => Orientation::Vertical,
         _ => Orientation::Horizontal,
     };
-    let (class, id, on_click, on_hover, tooltip, popup, panel, key) =
-        parse_common_props(lua, table)?;
-    let mut node = VNode::new_progress(
-        ProgressValue::new(value_num).unwrap_or_default(),
-        orientation,
-        class,
-        id,
-        on_click,
-        on_hover,
-        tooltip,
+    let (selectors, interactions, attachments) = parse_common_props(lua, table)?;
+    let node = VNode::new_progress(
+        ProgressBar::new(
+            ProgressValue::new(value_num).unwrap_or_default(),
+            orientation,
+        ),
+        selectors,
+        interactions,
     );
-    if let Some(popup_spec) = popup {
-        node = node.with_popup(popup_spec);
-    }
-    if let Some(panel_spec) = panel {
-        node = node.with_panel(panel_spec);
-    }
-    if let Some(node_key) = key {
-        node = node.with_key(node_key);
-    }
-    Ok(node)
+    Ok(attachments.attach_to(node))
 }
 
 /// The progress node of `ui.progress(value, orientation, class)`: a number fills that far in
@@ -129,13 +91,9 @@ pub(super) fn progress_from_value(
     };
     let Some(val_f32) = fill else {
         return VNode::new_progress(
-            ProgressValue::default(),
-            Orientation::Horizontal,
-            None,
-            None,
-            None,
-            None,
-            None,
+            ProgressBar::new(ProgressValue::default(), Orientation::Horizontal),
+            ElementSelectors::default(),
+            Interactions::default(),
         );
     };
     let orientation = match orientation_opt
@@ -148,12 +106,8 @@ pub(super) fn progress_from_value(
     };
     let class = class_opt.and_then(|class_name| ClassNameList::parse(class_name).ok());
     VNode::new_progress(
-        ProgressValue::new(val_f32).unwrap_or_default(),
-        orientation,
-        class,
-        None,
-        None,
-        None,
-        None,
+        ProgressBar::new(ProgressValue::new(val_f32).unwrap_or_default(), orientation),
+        ElementSelectors::new(class, None),
+        Interactions::default(),
     )
 }

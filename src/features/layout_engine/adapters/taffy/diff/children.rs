@@ -1,7 +1,6 @@
 use super::super::reconciler::{ChildrenPatch, LayoutState, Patch};
 use super::super::style_builder::node_to_style;
 use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
-use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::NodeKey;
 use std::collections::{HashMap, HashSet};
 
@@ -103,12 +102,10 @@ fn diff_children_keyed<'a>(
 pub(super) fn diff_container<'a>(
     old_state: &'a LayoutState,
     new_layout: &'a StyledNode,
-    old_style: &ComputedStyle,
-    new_style: &ComputedStyle,
-    new_children: &'a [StyledNode],
     measurer: &mut dyn TextMeasurer,
 ) -> Patch<'a> {
-    let style = if old_style == new_style {
+    let new_children = new_layout.children();
+    let style = if old_state.layout.style() == new_layout.style() {
         None
     } else {
         Some(node_to_style(new_layout, measurer))

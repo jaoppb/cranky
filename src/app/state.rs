@@ -504,7 +504,11 @@ impl<
                         ?pos,
                         "Received UiCommand::SystrayAction, triggering SNI action"
                     );
-                    match sni.trigger_action(&id, &action, pos).await {
+                    let call = crate::features::systray::domain::SystrayActionCall::new(
+                        action.clone(),
+                        pos,
+                    );
+                    match sni.trigger_action(&id, &call).await {
                         Ok(()) => tracing::debug!(?id, ?action, "SNI trigger_action succeeded"),
                         Err(error) => {
                             tracing::error!(?id, ?action, err = ?error, "SNI trigger_action failed");

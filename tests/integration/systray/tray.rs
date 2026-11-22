@@ -3,7 +3,9 @@
 use super::item::{Call, ItemService};
 use crate::support::{Context, Failure, Outcome, ensure, ensure_eq, within};
 use cranky::features::systray::adapters::SniAdapter;
-use cranky::features::systray::domain::{SystrayActionName, SystrayId, SystrayState};
+use cranky::features::systray::domain::{
+    SystrayActionCall, SystrayActionName, SystrayId, SystrayState,
+};
 use cranky::features::systray::ports::SniPort;
 use cranky::shared::config::domain::Config;
 use cranky::shared::events::signals::SignalHub;
@@ -90,7 +92,7 @@ impl Tray {
         position: Option<Position>,
     ) -> Outcome {
         self.adapter
-            .trigger_action(&self.id, &action, position)
+            .trigger_action(&self.id, &SystrayActionCall::new(action, position))
             .await
             .context("trigger_action")
     }

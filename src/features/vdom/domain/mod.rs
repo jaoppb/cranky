@@ -13,6 +13,8 @@ pub mod tag;
 pub mod vnode;
 
 pub use action::*;
+pub use constructors::{ElementSelectors, Interactions};
+pub(crate) use constructors::{ImageContent, ProgressBar};
 pub use diff::*;
 pub use errors::*;
 pub use floating::*;

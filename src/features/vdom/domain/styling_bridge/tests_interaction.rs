@@ -2,7 +2,9 @@
 mod tests {
     use crate::features::styling::domain::{ElementQuery, InheritedStyle};
     use crate::features::styling::ports::StyleResolverPort;
-    use crate::features::vdom::domain::{InteractionContext, TextContent, VNode};
+    use crate::features::vdom::domain::{
+        ElementSelectors, InteractedNodes, InteractionContext, Interactions, TextContent, VNode,
+    };
     use crate::shared::primitives::MonitorFocus;
 
     /// Records the pseudo-classes each element id was resolved with, so a
@@ -70,11 +72,8 @@ mod tests {
 
         let item_b = VNode::new_text(
             TextContent::new("b".to_string()),
-            None,
-            Some(ElementId::new("item-b").unwrap()),
-            None,
-            None,
-            None,
+            ElementSelectors::new(None, Some(ElementId::new("item-b").unwrap())),
+            Interactions::default(),
         )
         .with_key(NodeKey::new("b").unwrap());
 
@@ -88,13 +87,19 @@ mod tests {
             )],
             NodePath::root_in(SurfaceSpace::Bar),
         );
-        let interaction =
-            InteractionContext::new(Some(hovered), None, None, MonitorFocus::Unfocused);
+        let interaction = InteractionContext::new(
+            InteractedNodes::new(Some(hovered), None, None),
+            MonitorFocus::Unfocused,
+        );
 
         // Re-render with "a" removed: "b" is now at path [0].
-        let root = VNode::new_flex(vec![item_b], None, None, None, None, None);
+        let root = VNode::new_flex(
+            vec![item_b],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
         let resolver = RecordingResolver::new();
-        let _ = root.resolve_styles(&resolver, Some(&interaction), None);
+        let _ = root.resolve_styles(&resolver, Some(&interaction));
 
         assert_eq!(
             resolver.pseudo_classes_of("item-b"),
@@ -119,19 +124,13 @@ mod tests {
 
         let label = VNode::new_text(
             TextContent::new("B".to_string()),
-            None,
-            Some(ElementId::new("label-b").unwrap()),
-            None,
-            None,
-            None,
+            ElementSelectors::new(None, Some(ElementId::new("label-b").unwrap())),
+            Interactions::default(),
         );
         let item_b = VNode::new_flex(
             vec![label],
-            None,
-            Some(ElementId::new("item-b").unwrap()),
-            None,
-            None,
-            None,
+            ElementSelectors::new(None, Some(ElementId::new("item-b").unwrap())),
+            Interactions::default(),
         )
         .with_key(NodeKey::new("b").unwrap());
 
@@ -146,13 +145,19 @@ mod tests {
             )],
             NodePath::new(SurfaceSpace::Bar, vec![0]),
         );
-        let interaction =
-            InteractionContext::new(Some(hovered), None, None, MonitorFocus::Unfocused);
+        let interaction = InteractionContext::new(
+            InteractedNodes::new(Some(hovered), None, None),
+            MonitorFocus::Unfocused,
+        );
 
         // Re-render with "a" removed: "b" is now at [0], its label at [0, 0].
-        let root = VNode::new_flex(vec![item_b], None, None, None, None, None);
+        let root = VNode::new_flex(
+            vec![item_b],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
         let resolver = RecordingResolver::new();
-        let _ = root.resolve_styles(&resolver, Some(&interaction), None);
+        let _ = root.resolve_styles(&resolver, Some(&interaction));
 
         assert_eq!(
             resolver.pseudo_classes_of("item-b"),
@@ -176,29 +181,35 @@ mod tests {
 
         let list_a_item = VNode::new_text(
             TextContent::new("a1".to_string()),
-            None,
-            Some(ElementId::new("list-a-item").unwrap()),
-            None,
-            None,
-            None,
+            ElementSelectors::new(None, Some(ElementId::new("list-a-item").unwrap())),
+            Interactions::default(),
         )
         .with_key(NodeKey::new("1").unwrap());
-        let list_a = VNode::new_flex(vec![list_a_item], None, None, None, None, None)
-            .with_key(NodeKey::new("list-a").unwrap());
+        let list_a = VNode::new_flex(
+            vec![list_a_item],
+            ElementSelectors::default(),
+            Interactions::default(),
+        )
+        .with_key(NodeKey::new("list-a").unwrap());
 
         let list_b_item = VNode::new_text(
             TextContent::new("b1".to_string()),
-            None,
-            Some(ElementId::new("list-b-item").unwrap()),
-            None,
-            None,
-            None,
+            ElementSelectors::new(None, Some(ElementId::new("list-b-item").unwrap())),
+            Interactions::default(),
         )
         .with_key(NodeKey::new("1").unwrap());
-        let list_b = VNode::new_flex(vec![list_b_item], None, None, None, None, None)
-            .with_key(NodeKey::new("list-b").unwrap());
+        let list_b = VNode::new_flex(
+            vec![list_b_item],
+            ElementSelectors::default(),
+            Interactions::default(),
+        )
+        .with_key(NodeKey::new("list-b").unwrap());
 
-        let root = VNode::new_flex(vec![list_a, list_b], None, None, None, None, None);
+        let root = VNode::new_flex(
+            vec![list_a, list_b],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
 
         // Anchor chain ["list-a", "1"] must only ever resolve inside list-a.
         let hovered = NodeRef::new(
@@ -214,11 +225,13 @@ mod tests {
             ],
             NodePath::root_in(SurfaceSpace::Bar),
         );
-        let interaction =
-            InteractionContext::new(Some(hovered), None, None, MonitorFocus::Unfocused);
+        let interaction = InteractionContext::new(
+            InteractedNodes::new(Some(hovered), None, None),
+            MonitorFocus::Unfocused,
+        );
 
         let resolver = RecordingResolver::new();
-        let _ = root.resolve_styles(&resolver, Some(&interaction), None);
+        let _ = root.resolve_styles(&resolver, Some(&interaction));
 
         assert_eq!(
             resolver.pseudo_classes_of("list-a-item"),
@@ -240,17 +253,26 @@ mod tests {
         let keyed_item = |id: &str| {
             VNode::new_text(
                 TextContent::new(id.to_string()),
-                None,
-                Some(ElementId::new(id).unwrap()),
-                None,
-                None,
-                None,
+                ElementSelectors::new(None, Some(ElementId::new(id).unwrap())),
+                Interactions::default(),
             )
             .with_key(NodeKey::new("1").unwrap())
         };
-        let list_a = VNode::new_flex(vec![keyed_item("a-item")], None, None, None, None, None);
-        let list_b = VNode::new_flex(vec![keyed_item("b-item")], None, None, None, None, None);
-        let root = VNode::new_flex(vec![list_a, list_b], None, None, None, None, None);
+        let list_a = VNode::new_flex(
+            vec![keyed_item("a-item")],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
+        let list_b = VNode::new_flex(
+            vec![keyed_item("b-item")],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
+        let root = VNode::new_flex(
+            vec![list_a, list_b],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
 
         // What capture_node_ref produces for a hit on list B's item: the
         // unkeyed wrapper's position ([1]) is part of the anchor.
@@ -261,11 +283,13 @@ mod tests {
             )],
             NodePath::root_in(SurfaceSpace::Bar),
         );
-        let interaction =
-            InteractionContext::new(Some(hovered), None, None, MonitorFocus::Unfocused);
+        let interaction = InteractionContext::new(
+            InteractedNodes::new(Some(hovered), None, None),
+            MonitorFocus::Unfocused,
+        );
 
         let resolver = RecordingResolver::new();
-        let _ = root.resolve_styles(&resolver, Some(&interaction), None);
+        let _ = root.resolve_styles(&resolver, Some(&interaction));
 
         assert_eq!(resolver.pseudo_classes_of("a-item"), []);
         assert_eq!(
@@ -294,11 +318,8 @@ mod tests {
         let text = |id: &str, tooltip: Option<Box<VNode>>| {
             VNode::new_text(
                 TextContent::new(id.to_string()),
-                None,
-                Some(ElementId::new(id).unwrap()),
-                None,
-                None,
-                tooltip,
+                ElementSelectors::new(None, Some(ElementId::new(id).unwrap())),
+                Interactions::new(None, None, tooltip),
             )
         };
         text("button", Some(Box::new(text("tip", None))))
@@ -333,14 +354,12 @@ mod tests {
         ];
         for (surface, hovered_id) in cases {
             let hovered = NodeRef::new(Vec::new(), NodePath::root_in(surface));
-            let interaction =
-                InteractionContext::new(Some(hovered), None, None, MonitorFocus::Unfocused);
-            let resolver = RecordingResolver::new();
-            let _ = button_with_every_floating_kind().resolve_styles(
-                &resolver,
-                Some(&interaction),
-                None,
+            let interaction = InteractionContext::new(
+                InteractedNodes::new(Some(hovered), None, None),
+                MonitorFocus::Unfocused,
             );
+            let resolver = RecordingResolver::new();
+            let _ = button_with_every_floating_kind().resolve_styles(&resolver, Some(&interaction));
 
             for id in ["button", "tip", "pop", "pan"] {
                 let expected = if id == hovered_id {
@@ -368,7 +387,7 @@ mod tests {
         };
 
         let styled =
-            button_with_every_floating_kind().resolve_styles(&RecordingResolver::new(), None, None);
+            button_with_every_floating_kind().resolve_styles(&RecordingResolver::new(), None);
 
         let tooltip = styled.tooltip().unwrap();
         assert_eq!(*tooltip.path(), NodePath::root_in(SurfaceSpace::Tooltip));

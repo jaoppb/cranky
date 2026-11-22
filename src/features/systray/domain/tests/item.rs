@@ -2,7 +2,7 @@ use crate::features::systray::domain::command::{CreateSystrayItemCommand, Systra
 use crate::features::systray::domain::enums::{SystrayCategory, SystrayStatus};
 use crate::features::systray::domain::icon::{IconName, SystrayIcon};
 use crate::features::systray::domain::identifiers::{
-    Destination, ItemId, ItemIsMenu, ObjectPath, SystrayId, Title, WindowId,
+    Destination, ItemId, ItemIsMenu, ObjectPath, SystrayAddress, SystrayId, Title, WindowId,
 };
 use crate::features::systray::domain::item::SystrayItem;
 use crate::features::systray::domain::state::SystrayState;
@@ -24,8 +24,7 @@ fn test_systray_item() {
     let cmd = CreateSystrayItemCommand::new(
         SystrayItemParams::new(
             SystrayId::new("1"),
-            Destination::new("dest"),
-            ObjectPath::new("/"),
+            SystrayAddress::new(Destination::new("dest"), ObjectPath::new("/")),
             Title::new("t"),
         )
         .with_status(SystrayStatus::Active)
@@ -87,8 +86,7 @@ fn test_systray_state_serde() {
     let cmd = CreateSystrayItemCommand::new(
         SystrayItemParams::new(
             SystrayId::new("test_id"),
-            Destination::new("test_dest"),
-            ObjectPath::new("/test"),
+            SystrayAddress::new(Destination::new("test_dest"), ObjectPath::new("/test")),
             Title::new("test_title"),
         )
         .with_status(SystrayStatus::Active)

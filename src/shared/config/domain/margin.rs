@@ -14,9 +14,10 @@ pub struct MarginConfig {
 }
 
 /// The margins at the two ends of one axis: top and bottom, or left and right, as the
-/// `vertical` and `horizontal` keys of a margin table set them together.
+/// `vertical` and `horizontal` keys of a margin table set them together and a box's padding or
+/// margin is built by axis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct AxisMargins<T> {
+pub struct AxisMargins<T> {
     start: T,
     end: T,
 }
@@ -25,7 +26,7 @@ impl<T> AxisMargins<T> {
     /// Pairs the margin at the start of the axis (top or left) with the one at its end (bottom or
     /// right).
     #[must_use]
-    pub(crate) const fn new(start: T, end: T) -> Self {
+    pub const fn new(start: T, end: T) -> Self {
         Self { start, end }
     }
 }
@@ -35,6 +36,16 @@ impl<T: Copy> AxisMargins<T> {
     #[must_use]
     pub(crate) const fn both(margin: T) -> Self {
         Self::new(margin, margin)
+    }
+
+    #[must_use]
+    pub(crate) const fn start(&self) -> T {
+        self.start
+    }
+
+    #[must_use]
+    pub(crate) const fn end(&self) -> T {
+        self.end
     }
 }
 

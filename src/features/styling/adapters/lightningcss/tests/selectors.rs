@@ -1,13 +1,12 @@
 use crate::features::layout_engine::domain::BoxMargin;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
-use crate::features::styling::adapters::lightningcss::{
-    LightningCssAdapter, LightningPropertyReparser,
-};
+use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{
-    ClassName, ClassNameList, ElementQuery, Emptiness, InheritedStyle, Opacity, StyleSheetName,
+    ClassName, ClassNameList, ElementIdentity, ElementQuery, Emptiness, InheritedStyle, Opacity,
+    SiblingPosition, StyleSheetName,
 };
 use crate::features::styling::ports::CssParserPort;
-use crate::features::vdom::domain::VNode;
+use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
 use crate::shared::config::domain::BorderRadius;
 use crate::shared::primitives::color::{Color, DrawingColor};
 
@@ -45,13 +44,13 @@ fn test_structural_pseudo_classes() {
     let class_active = ClassName::new("active").unwrap();
 
     // 1. First child in a list of 3 (index 0, total 3)
-    let query_first = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
-        .with_structural_context(0, 3, Emptiness::NonEmpty);
-    let (style_first, _) = parsed.resolve_style(
-        &query_first,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let query_first = ElementQuery::new(
+        ElementIdentity::new("flex", None, std::slice::from_ref(&class_item)),
+        &[],
+        None,
+    )
+    .with_structural_context(SiblingPosition::new(0, 3), Emptiness::NonEmpty);
+    let (style_first, _) = parsed.resolve_style(&query_first, &InheritedStyle::default());
     assert_eq!(style_first.padding().map(BoxMargin::left), Some(10.0));
     assert_eq!(style_first.padding().map(BoxMargin::right), Some(0.0));
     assert!(style_first.background().is_some());
@@ -61,14 +60,13 @@ fn test_structural_pseudo_classes() {
     }
 
     // 2. Second child (index 1, total 3)
-    let query_second =
-        ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
-            .with_structural_context(1, 3, Emptiness::NonEmpty);
-    let (style_second, _) = parsed.resolve_style(
-        &query_second,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let query_second = ElementQuery::new(
+        ElementIdentity::new("flex", None, std::slice::from_ref(&class_item)),
+        &[],
+        None,
+    )
+    .with_structural_context(SiblingPosition::new(1, 3), Emptiness::NonEmpty);
+    let (style_second, _) = parsed.resolve_style(&query_second, &InheritedStyle::default());
     assert!(style_second.padding().is_none());
     // Even: 2nd is 2n -> #222222
     if let Some(DrawingColor::Solid(background)) = style_second.background() {
@@ -76,55 +74,54 @@ fn test_structural_pseudo_classes() {
     }
 
     // 3. Last child (index 2, total 3)
-    let query_last = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
-        .with_structural_context(2, 3, Emptiness::NonEmpty);
-    let (style_last, _) = parsed.resolve_style(
-        &query_last,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let query_last = ElementQuery::new(
+        ElementIdentity::new("flex", None, std::slice::from_ref(&class_item)),
+        &[],
+        None,
+    )
+    .with_structural_context(SiblingPosition::new(2, 3), Emptiness::NonEmpty);
+    let (style_last, _) = parsed.resolve_style(&query_last, &InheritedStyle::default());
     assert_eq!(style_last.padding().map(BoxMargin::right), Some(15.0));
 
     // 4. Only child (index 0, total 1)
-    let query_only = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
-        .with_structural_context(0, 1, Emptiness::NonEmpty);
-    let (style_only, _) = parsed.resolve_style(
-        &query_only,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let query_only = ElementQuery::new(
+        ElementIdentity::new("flex", None, std::slice::from_ref(&class_item)),
+        &[],
+        None,
+    )
+    .with_structural_context(SiblingPosition::new(0, 1), Emptiness::NonEmpty);
+    let (style_only, _) = parsed.resolve_style(&query_only, &InheritedStyle::default());
     assert_eq!(
         style_only.border_radius().map(BorderRadius::value),
         Some(8.0)
     );
 
     // 5. Empty
-    let query_empty = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
-        .with_structural_context(0, 1, Emptiness::Empty);
-    let (style_empty, _) = parsed.resolve_style(
-        &query_empty,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
-    );
+    let query_empty = ElementQuery::new(
+        ElementIdentity::new("flex", None, std::slice::from_ref(&class_item)),
+        &[],
+        None,
+    )
+    .with_structural_context(SiblingPosition::new(0, 1), Emptiness::Empty);
+    let (style_empty, _) = parsed.resolve_style(&query_empty, &InheritedStyle::default());
     assert!((style_empty.opacity().unwrap().value() - 0.5).abs() < f32::EPSILON);
 
     // 6. Not active vs Active
-    let query_not_active =
-        ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None);
-    let (style_not_active, _) = parsed.resolve_style(
-        &query_not_active,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
+    let query_not_active = ElementQuery::new(
+        ElementIdentity::new("flex", None, std::slice::from_ref(&class_item)),
+        &[],
+        None,
     );
+    let (style_not_active, _) = parsed.resolve_style(&query_not_active, &InheritedStyle::default());
     assert!(style_not_active.color().is_some());
 
     let active_classes = [class_item.clone(), class_active];
-    let query_active = ElementQuery::new("flex", None, &active_classes, &[], None);
-    let (style_active, _) = parsed.resolve_style(
-        &query_active,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
+    let query_active = ElementQuery::new(
+        ElementIdentity::new("flex", None, &active_classes),
+        &[],
+        None,
     );
+    let (style_active, _) = parsed.resolve_style(&query_active, &InheritedStyle::default());
     assert!(style_active.color().is_none());
 }
 
@@ -138,13 +135,13 @@ fn test_empty_pseudo_class_skips_an_element_with_content() {
         .unwrap();
     let class_item = ClassName::new("item").unwrap();
     let opacity = |emptiness| {
-        let query = ElementQuery::new("flex", None, std::slice::from_ref(&class_item), &[], None)
-            .with_structural_context(0, 1, emptiness);
-        let (style, _) = parsed.resolve_style(
-            &query,
-            &InheritedStyle::default(),
-            &LightningPropertyReparser,
-        );
+        let query = ElementQuery::new(
+            ElementIdentity::new("flex", None, std::slice::from_ref(&class_item)),
+            &[],
+            None,
+        )
+        .with_structural_context(SiblingPosition::new(0, 1), emptiness);
+        let (style, _) = parsed.resolve_style(&query, &InheritedStyle::default());
         style.opacity().map(Opacity::value)
     };
     assert_eq!(opacity(Emptiness::Empty), Some(0.5));
@@ -165,18 +162,15 @@ fn test_empty_pseudo_class_follows_the_vnode_children() {
     let opacity = |children: Vec<VNode>| {
         let node = VNode::new_flex(
             children,
-            Some(ClassNameList::parse("x").unwrap()),
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::new(Some(ClassNameList::parse("x").unwrap()), None),
+            Interactions::default(),
         );
-        node.resolve_styles(&resolver, None, None)
+        node.resolve_styles(&resolver, None)
             .style()
             .opacity()
             .map(Opacity::value)
     };
     assert_eq!(opacity(Vec::new()), Some(0.5));
-    let child = VNode::new_rect(None, None, None, None, None);
+    let child = VNode::new_rect(ElementSelectors::default(), Interactions::default());
     assert_eq!(opacity(vec![child]), None);
 }

@@ -10,12 +10,32 @@ use crate::shared::rendering::ports::canvas::Canvas;
 use crate::shared::rendering::ports::draw::{BorderStroke, RgbaImage, RoundedRect};
 use crate::shared::rendering::ports::text::{TextFont, TextPlacement, TextRun};
 
+/// A laid-out box and the computed style it is painted with.
+#[derive(Debug, Clone, Copy)]
+struct StyledBox<'a> {
+    rect: &'a Rect,
+    style: &'a ComputedStyle,
+}
+
+impl<'a> StyledBox<'a> {
+    const fn new(rect: &'a Rect, style: &'a ComputedStyle) -> Self {
+        Self { rect, style }
+    }
+}
+
+/// How far a progress bar is filled, and in which direction the fill grows.
+#[derive(Debug, Clone, Copy)]
+struct ProgressFill {
+    value: f32,
+    orientation: Orientation,
+}
+
 fn draw_bg_and_border(
     canvas: &mut dyn Canvas,
-    rect: &Rect,
-    style: &ComputedStyle,
+    styled: StyledBox<'_>,
     bg_override: Option<&DrawingColor>,
 ) {
+    let StyledBox { rect, style } = styled;
     let radius = LogicalPx::new(style.border_radius().map_or(0.0, BorderRadius::value));
     let shape = RoundedRect::new(*rect, radius);
 
@@ -31,28 +51,23 @@ fn draw_bg_and_border(
     }
 }
 
-fn render_progress(
-    canvas: &mut dyn Canvas,
-    rect: &Rect,
-    progress_val: f32,
-    orientation: Orientation,
-    style: &ComputedStyle,
-) {
-    draw_bg_and_border(canvas, rect, style, None);
+fn render_progress(canvas: &mut dyn Canvas, styled: StyledBox<'_>, fill: ProgressFill) {
+    draw_bg_and_border(canvas, styled, None);
+    let StyledBox { rect, style } = styled;
     let fill_color = style.accent_color().or_else(|| style.color());
-    let Some(fill) = fill_color else {
+    let Some(fill_paint) = fill_color else {
         return;
     };
 
     let radius = LogicalPx::new(style.border_radius().map_or(0.0, BorderRadius::value));
-    let clamped = progress_val.clamp(0.0, 1.0);
+    let clamped = fill.value.clamp(0.0, 1.0);
     let track = RoundedRect::new(*rect, radius);
 
-    match orientation {
+    match fill.orientation {
         Orientation::Horizontal => {
             let fill_w = (track.width().value() * clamped).round();
             if fill_w > 0.0 {
-                canvas.draw_rect(track.with_width(LogicalPx::new(fill_w)), fill.clone());
+                canvas.draw_rect(track.with_width(LogicalPx::new(fill_w)), fill_paint.clone());
             }
         }
         Orientation::Vertical => {
@@ -60,7 +75,7 @@ fn render_progress(
             if fill_h > 0.0 {
                 canvas.draw_rect(
                     track.with_bottom_height(LogicalPx::new(fill_h)),
-                    fill.clone(),
+                    fill_paint.clone(),
                 );
             }
         }
@@ -69,11 +84,11 @@ fn render_progress(
 
 fn render_text(
     canvas: &mut dyn Canvas,
-    rect: &Rect,
+    styled: StyledBox<'_>,
     text: &crate::features::vdom::domain::TextContent,
-    style: &ComputedStyle,
 ) {
-    draw_bg_and_border(canvas, rect, style, None);
+    draw_bg_and_border(canvas, styled, None);
+    let StyledBox { rect, style } = styled;
     let text_color = style.color().cloned().unwrap_or_else(|| {
         DrawingColor::Solid(crate::shared::primitives::color::Color::rgb(255, 255, 255))
     });
@@ -102,7 +117,7 @@ impl RenderNode {
                 style,
                 ..
             } => {
-                draw_bg_and_border(canvas, rect, style, None);
+                draw_bg_and_border(canvas, StyledBox::new(rect, style), None);
                 for child in children {
                     child.render_to_canvas(canvas);
                 }
@@ -114,23 +129,29 @@ impl RenderNode {
                 style,
                 ..
             } => {
-                render_progress(canvas, rect, value.value(), *orientation, style);
+                render_progress(
+                    canvas,
+                    StyledBox::new(rect, style),
+                    ProgressFill {
+                        value: value.value(),
+                        orientation: *orientation,
+                    },
+                );
             }
             Self::Rect { rect, style, .. } => {
                 draw_bg_and_border(
                     canvas,
-                    rect,
-                    style,
+                    StyledBox::new(rect, style),
                     style.background().or_else(|| style.color()),
                 );
             }
             Self::Module { rect, style, .. } => {
-                draw_bg_and_border(canvas, rect, style, None);
+                draw_bg_and_border(canvas, StyledBox::new(rect, style), None);
             }
             Self::Text {
                 rect, text, style, ..
             } => {
-                render_text(canvas, rect, text, style);
+                render_text(canvas, StyledBox::new(rect, style), text);
             }
             Self::Image {
                 rect,
@@ -150,7 +171,9 @@ mod tests {
     use super::super::style::BoxMargin;
     use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
     use crate::features::vdom::domain::{NodePath, SurfaceSpace, TextContent};
-    use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSize};
+    use crate::shared::config::domain::{
+        AxisMargins, BorderRadius, BorderSize, FontFamily, FontSize,
+    };
     use crate::shared::primitives::BinaryData;
     use crate::shared::primitives::color::{Color, DrawingColor};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
@@ -281,7 +304,10 @@ mod tests {
     #[test]
     fn test_text_is_drawn_inside_its_padding() {
         let mut padded = ComputedStyle::default();
-        padded.set_padding(BoxMargin::new(4.0, 4.0, 2.0, 2.0));
+        padded.set_padding(BoxMargin::new(
+            AxisMargins::new(4.0, 4.0),
+            AxisMargins::new(2.0, 2.0),
+        ));
         let mut canvas = RecordingCanvas::default();
         text_node(padded).render_to_canvas(&mut canvas);
         assert_eq!(drawn_text(&canvas).0, Position::new(22, 34));
@@ -294,7 +320,10 @@ mod tests {
     #[test]
     fn test_text_alignment_carries_style_align_and_padded_width() {
         let mut centered = ComputedStyle::default();
-        centered.set_padding(BoxMargin::new(4.0, 4.0, 2.0, 2.0));
+        centered.set_padding(BoxMargin::new(
+            AxisMargins::new(4.0, 4.0),
+            AxisMargins::new(2.0, 2.0),
+        ));
         centered.set_text_align(TextAlign::Center);
         let mut canvas = RecordingCanvas::default();
         text_node(centered).render_to_canvas(&mut canvas);
@@ -487,5 +516,56 @@ mod tests {
                 position: Position::new(6, 8),
             }]
         );
+    }
+
+    fn rect_node(style: ComputedStyle) -> RenderNode {
+        RenderNode::Rect {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            rect: Rect::new(Position::new(6, 2), Size::new(30, 12)),
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    #[test]
+    fn test_rect_falls_back_to_its_color_when_it_has_no_background() {
+        let mut colored = ComputedStyle::default();
+        colored.set_color(solid(70, 80, 90));
+        let mut canvas = RecordingCanvas::default();
+        rect_node(colored.clone()).render_to_canvas(&mut canvas);
+        assert_eq!(
+            canvas.calls,
+            [CanvasCall::Rect {
+                area: [6.0, 2.0, 30.0, 12.0],
+                radius: 0.0,
+                color: solid(70, 80, 90),
+            }]
+        );
+
+        colored.set_background(solid(5, 6, 7));
+        let mut canvas = RecordingCanvas::default();
+        rect_node(colored).render_to_canvas(&mut canvas);
+        assert_eq!(
+            canvas.calls,
+            [CanvasCall::Rect {
+                area: [6.0, 2.0, 30.0, 12.0],
+                radius: 0.0,
+                color: solid(5, 6, 7),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_text_paints_its_background_under_the_text() {
+        let mut style = ComputedStyle::default();
+        style.set_background(solid(9, 8, 7));
+        let mut canvas = RecordingCanvas::default();
+        text_node(style).render_to_canvas(&mut canvas);
+        assert_eq!(canvas.kinds(), ["rect", "text"]);
     }
 }

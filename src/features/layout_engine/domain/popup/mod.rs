@@ -9,4 +9,4 @@ mod tests;
 pub(crate) use chain::PopupCycle;
 pub(crate) use chain::{ancestors, descendants_deepest_first};
 pub(crate) use styled::{ActivePanel, AnchoredPopup, StyledPanel, StyledPopup};
-pub(crate) use target::{FloatingKind, PopupExclusivity, PopupTarget};
+pub(crate) use target::{FloatingKind, OpeningPopup, PopupExclusivity, PopupTarget};

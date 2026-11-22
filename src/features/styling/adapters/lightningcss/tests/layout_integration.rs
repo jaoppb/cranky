@@ -1,23 +1,25 @@
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{AlignItems, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
-use crate::features::styling::adapters::lightningcss::{
-    LightningCssAdapter, LightningPropertyReparser,
-};
+use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{
-    ClassName, ClassNameList, CssLength, ElementQuery, InheritedStyle, Orientation, ProgressValue,
-    StyleSheetName,
+    ClassName, ClassNameList, CssLength, ElementIdentity, ElementQuery, InheritedStyle,
+    Orientation, ProgressValue, StyleSheetName,
 };
 use crate::features::styling::ports::CssParserPort;
-use crate::features::vdom::domain::{TextContent, VNode};
-use crate::shared::config::domain::{FontFamily, FontSize};
+use crate::features::vdom::domain::{
+    ElementSelectors, ImageContent, Interactions, ProgressBar, TextContent, VNode,
+};
+use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::rendering::ports::canvas::RecordingCanvas;
+use crate::shared::rendering::ports::text::TextFont;
 
 struct DummyMeasurer;
 impl TextMeasurer for DummyMeasurer {
-    fn measure(&mut self, text: &str, _f: Option<&FontFamily>, _s: Option<FontSize>) -> Size {
+    fn measure(&mut self, text: &str, _font: TextFont<'_>) -> Size {
         let text_len = u32::try_from(text.len()).unwrap_or(0);
         Size::new(text_len.saturating_mul(8), 16)
     }
@@ -25,7 +27,7 @@ impl TextMeasurer for DummyMeasurer {
 
 struct FixedDummyMeasurer;
 impl TextMeasurer for FixedDummyMeasurer {
-    fn measure(&mut self, _text: &str, _f: Option<&FontFamily>, _s: Option<FontSize>) -> Size {
+    fn measure(&mut self, _text: &str, _font: TextFont<'_>) -> Size {
         Size::new(10, 10)
     }
 }
@@ -52,29 +54,25 @@ fn test_arbitrary_style_name_and_progress_rendering() {
 
     let clock_node = VNode::new_text(
         TextContent::new("12:00".to_string()),
-        Some(ClassNameList::parse("clock-label").unwrap()),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(Some(ClassNameList::parse("clock-label").unwrap()), None),
+        Interactions::default(),
     );
-    let styled_clock = clock_node.resolve_styles(&resolver, None, None);
+    let styled_clock = clock_node.resolve_styles(&resolver, None);
     assert!((styled_clock.style().font_size().unwrap().value() - 16.0).abs() < f32::EPSILON);
 
     let h_prog = VNode::new_progress(
-        ProgressValue::new(0.6).unwrap(),
-        Orientation::Horizontal,
-        Some(ClassNameList::parse("battery").unwrap()),
-        None,
-        None,
-        None,
-        None,
+        ProgressBar::new(ProgressValue::new(0.6).unwrap(), Orientation::Horizontal),
+        ElementSelectors::new(Some(ClassNameList::parse("battery").unwrap()), None),
+        Interactions::default(),
     );
-    let styled_h = h_prog.resolve_styles(&resolver, None, None);
+    let styled_h = h_prog.resolve_styles(&resolver, None);
     let mut engine = TaffyLayoutAdapter::new();
 
     let render_h = engine
-        .calculate_layout(styled_h, &mut DummyMeasurer, Position::new(0, 0))
+        .calculate_layout(
+            LayoutRoot::new(styled_h, Position::new(0, 0), SizeConstraint::none()),
+            &mut DummyMeasurer,
+        )
         .unwrap();
     let mut canvas = RecordingCanvas::default();
     render_h.render_to_canvas(&mut canvas);
@@ -96,20 +94,21 @@ fn test_width_height_parsing_and_layout() {
     let resolver = CompositeStyleResolver::new(vec![parsed]);
 
     let img_node = VNode::new_image(
-        vec![0; 400 * 4],
-        Size::new(48, 48),
-        Some(ClassNameList::parse("icon").unwrap()),
-        None,
+        ImageContent::new(vec![0; 400 * 4], Size::new(48, 48)),
+        ElementSelectors::new(Some(ClassNameList::parse("icon").unwrap()), None),
         None,
     );
 
-    let styled_img = img_node.resolve_styles(&resolver, None, None);
+    let styled_img = img_node.resolve_styles(&resolver, None);
     assert_eq!(styled_img.style().width(), Some(CssLength::Pixels(20.0)));
     assert_eq!(styled_img.style().height(), Some(CssLength::Pixels(20.0)));
 
     let mut engine = TaffyLayoutAdapter::new();
     let render_node = engine
-        .calculate_layout(styled_img, &mut FixedDummyMeasurer, Position::new(0, 0))
+        .calculate_layout(
+            LayoutRoot::new(styled_img, Position::new(0, 0), SizeConstraint::none()),
+            &mut FixedDummyMeasurer,
+        )
         .unwrap();
 
     assert_eq!(render_node.rect().width(), 20);
@@ -135,13 +134,13 @@ fn test_advanced_css_properties_parsing_and_layout() {
         .unwrap();
 
     let class = ClassName::new("box").unwrap();
-    let query = ElementQuery::new("flex", None, std::slice::from_ref(&class), &[], None);
-
-    let (style, _) = parsed.resolve_style(
-        &query,
-        &InheritedStyle::default(),
-        &LightningPropertyReparser,
+    let query = ElementQuery::new(
+        ElementIdentity::new("flex", None, std::slice::from_ref(&class)),
+        &[],
+        None,
     );
+
+    let (style, _) = parsed.resolve_style(&query, &InheritedStyle::default());
     assert!(style.background().is_some());
     assert!((style.flex_grow().unwrap().value() - 1.0).abs() < f32::EPSILON);
     assert!((style.flex_shrink().unwrap().value() - 0.0).abs() < f32::EPSILON);

@@ -40,22 +40,37 @@ pub enum FloatingKind {
     Panel(PopupTarget),
 }
 
+/// A popup being opened and its own ancestor chain (decision 7), nearest first: opening it
+/// never closes itself nor any popup it lives inside.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct OpeningPopup<'a> {
+    target: &'a PopupTarget,
+    ancestors: &'a [PopupTarget],
+}
+
+impl<'a> OpeningPopup<'a> {
+    #[must_use]
+    pub(crate) const fn new(target: &'a PopupTarget, ancestors: &'a [PopupTarget]) -> Self {
+        Self { target, ancestors }
+    }
+}
+
 /// Decides which open popups a newly opened one closes, per the configured `PopupBehavior`.
 #[derive(Debug)]
 pub struct PopupExclusivity;
 
 impl PopupExclusivity {
-    /// `ancestors` are `target`'s own ancestor chain (decision 7): opening a
+    /// `opening`'s ancestors are its own ancestor chain (decision 7): opening a
     /// nested popup must never dismiss the popup it lives inside, under any
     /// `PopupBehavior`, so they're excluded from every arm up front rather
     /// than repeating the exclusion four times.
     #[must_use]
     pub(crate) fn compute_conflicts(
         active_popups: &[PopupTarget],
-        target: &PopupTarget,
-        ancestors: &[PopupTarget],
+        opening: OpeningPopup<'_>,
         behavior: crate::shared::config::domain::PopupBehavior,
     ) -> Vec<PopupTarget> {
+        let OpeningPopup { target, ancestors } = opening;
         let candidates = active_popups
             .iter()
             .filter(|popup| *popup != target && !ancestors.contains(popup));

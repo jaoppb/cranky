@@ -1,6 +1,9 @@
 //! The `sysinfo`-backed sampler that gathers a `MetricsState` every update interval and
 //! sends it on the hub's metrics channel.
-use crate::features::metrics::domain::{DiskMetric, MetricsConfig, MetricsState, Temperature};
+use crate::features::metrics::domain::{
+    CpuSample, CreateMetricsCommand, DeviceMetrics, DiskMetric, DiskSpace, MemoryBytes,
+    MemoryMetrics, MemoryUsage, MetricsConfig, MetricsState, SystemMetrics, Temperature,
+};
 use crate::shared::events::signals::SignalHub;
 use std::sync::Arc;
 use sysinfo::{Components, Disks, Networks, System};
@@ -21,19 +24,10 @@ impl SysinfoAdapter {
         let hub = self.hub.clone();
 
         tokio::spawn(async move {
-            let mut sys = System::new();
-            let mut networks = Networks::new_with_refreshed_list();
-            let mut disks = Disks::new_with_refreshed_list();
-            let mut components = Components::new_with_refreshed_list();
+            let mut sources = SysinfoSources::new();
 
             loop {
-                let state = Self::gather_metrics(
-                    &mut sys,
-                    &mut networks,
-                    &mut disks,
-                    &mut components,
-                    &config,
-                );
+                let state = sources.gather(&config);
 
                 if hub.metrics_tx().send(state).is_err() {
                     // Receiver dropped
@@ -47,15 +41,38 @@ impl SysinfoAdapter {
             }
         });
     }
+}
 
+/// The sysinfo readers a sampling pass refreshes: the host (`System`, for CPU and memory) and
+/// the three device lists (disks, network interfaces and sensor components).
+struct SysinfoSources {
+    sys: System,
+    networks: Networks,
+    disks: Disks,
+    components: Components,
+}
+
+impl SysinfoSources {
+    /// Readers for this machine, with the device lists already enumerated.
     #[must_use]
-    pub(crate) fn gather_metrics(
-        sys: &mut System,
-        networks: &mut Networks,
-        disks: &mut Disks,
-        components: &mut Components,
-        config: &MetricsConfig,
-    ) -> MetricsState {
+    fn new() -> Self {
+        Self {
+            sys: System::new(),
+            networks: Networks::new_with_refreshed_list(),
+            disks: Disks::new_with_refreshed_list(),
+            components: Components::new_with_refreshed_list(),
+        }
+    }
+
+    /// Refreshes what `config` enables and reads it into one snapshot.
+    #[must_use]
+    fn gather(&mut self, config: &MetricsConfig) -> MetricsState {
+        let Self {
+            sys,
+            networks,
+            disks,
+            components,
+        } = self;
         sys.refresh_cpu_usage();
         sys.refresh_memory();
         if config.network().is_some()
@@ -80,8 +97,7 @@ impl SysinfoAdapter {
         let global_cpu = sys.global_cpu_usage();
 
         let per_core_raw: Vec<f32> = sys.cpus().iter().map(sysinfo::Cpu::cpu_usage).collect();
-        let (cpu_usage, per_core) =
-            MetricsState::normalize_cpu_usage(config.cpu(), global_cpu, nproc, per_core_raw);
+        let cpu = CpuSample::new(global_cpu, nproc, per_core_raw).normalize(config.cpu());
 
         // Network
         let mut network_tx: u64 = 0;
@@ -106,10 +122,10 @@ impl SysinfoAdapter {
                     crate::features::metrics::domain::MountPoint::new(
                         disk.mount_point().to_string_lossy(),
                     ),
-                    crate::features::metrics::domain::MemoryBytes::new(disk.total_space()),
-                    crate::features::metrics::domain::MemoryBytes::new(disk.available_space()),
-                    crate::features::metrics::domain::MemoryBytes::new(
-                        disk.total_space().saturating_sub(disk.available_space()),
+                    DiskSpace::new(
+                        MemoryBytes::new(disk.total_space()),
+                        MemoryBytes::new(disk.available_space()),
+                        MemoryBytes::new(disk.total_space().saturating_sub(disk.available_space())),
                     ),
                 ));
             }
@@ -120,21 +136,28 @@ impl SysinfoAdapter {
             Temperature::from_readings(components.iter().map(sysinfo::Component::temperature), mode)
         });
 
-        MetricsState::new(crate::features::metrics::domain::CreateMetricsCommand::new(
-            cpu_usage,
-            per_core,
-            crate::features::metrics::domain::MemoryMetrics::new(
-                crate::features::metrics::domain::MemoryBytes::new(sys.used_memory()),
-                crate::features::metrics::domain::MemoryBytes::new(sys.total_memory()),
-                crate::features::metrics::domain::MemoryBytes::new(sys.used_swap()),
-                crate::features::metrics::domain::MemoryBytes::new(sys.total_swap()),
+        MetricsState::new(CreateMetricsCommand::new(
+            SystemMetrics::new(
+                cpu,
+                MemoryMetrics::new(
+                    MemoryUsage::new(
+                        MemoryBytes::new(sys.used_memory()),
+                        MemoryBytes::new(sys.total_memory()),
+                    ),
+                    MemoryUsage::new(
+                        MemoryBytes::new(sys.used_swap()),
+                        MemoryBytes::new(sys.total_swap()),
+                    ),
+                ),
             ),
-            disk_metrics,
-            crate::features::metrics::domain::NetworkMetrics::new(
-                crate::features::metrics::domain::NetworkSpeed::new(network_tx),
-                crate::features::metrics::domain::NetworkSpeed::new(network_rx),
+            DeviceMetrics::new(
+                disk_metrics,
+                crate::features::metrics::domain::NetworkMetrics::new(
+                    crate::features::metrics::domain::NetworkSpeed::new(network_tx),
+                    crate::features::metrics::domain::NetworkSpeed::new(network_rx),
+                ),
+                temperature,
             ),
-            temperature,
             config.clone(),
         ))
     }
@@ -147,11 +170,6 @@ mod tests {
 
     #[test]
     fn test_sysinfo_adapter_gather_metrics_all_enabled() {
-        let mut sys = System::new();
-        let mut networks = Networks::new_with_refreshed_list();
-        let mut disks = Disks::new_with_refreshed_list();
-        let mut components = Components::new_with_refreshed_list();
-
         let config: MetricsConfig = serde_json::from_value(serde_json::json!({
             "cpu": "percentage_0_100",
             "network": "tx_rx",
@@ -161,24 +179,13 @@ mod tests {
         }))
         .unwrap();
 
-        let state = SysinfoAdapter::gather_metrics(
-            &mut sys,
-            &mut networks,
-            &mut disks,
-            &mut components,
-            &config,
-        );
+        let state = SysinfoSources::new().gather(&config);
 
         assert!(state.memory_total().value() > 0);
     }
 
     #[test]
     fn test_sysinfo_adapter_gather_metrics_all_disabled() {
-        let mut sys = System::new();
-        let mut networks = Networks::new_with_refreshed_list();
-        let mut disks = Disks::new_with_refreshed_list();
-        let mut components = Components::new_with_refreshed_list();
-
         let config: MetricsConfig = serde_json::from_value(serde_json::json!({
             "cpu": "disabled",
             "network": "disabled",
@@ -188,13 +195,7 @@ mod tests {
         }))
         .unwrap();
 
-        let state = SysinfoAdapter::gather_metrics(
-            &mut sys,
-            &mut networks,
-            &mut disks,
-            &mut components,
-            &config,
-        );
+        let state = SysinfoSources::new().gather(&config);
 
         assert_eq!(state.network_tx().value(), 0);
         assert_eq!(state.network_rx().value(), 0);

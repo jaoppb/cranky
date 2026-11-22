@@ -1,4 +1,5 @@
 //! Flexbox alignment enums and box spacing used by the computed style.
+use crate::shared::config::domain::AxisMargins;
 use serde::{Deserialize, Serialize};
 
 /// Main axis of a flex container.
@@ -85,14 +86,15 @@ pub struct BoxMargin {
 }
 
 impl BoxMargin {
-    /// Takes the sides as top, bottom, left, right, not in the clockwise CSS shorthand order.
+    /// Takes the sides by axis: top and bottom, then left and right, not in the clockwise CSS
+    /// shorthand order.
     #[must_use]
-    pub const fn new(top: f64, bottom: f64, left: f64, right: f64) -> Self {
+    pub const fn new(vertical: AxisMargins<f64>, horizontal: AxisMargins<f64>) -> Self {
         Self {
-            top,
-            bottom,
-            left,
-            right,
+            top: vertical.start(),
+            bottom: vertical.end(),
+            left: horizontal.start(),
+            right: horizontal.end(),
         }
     }
 
@@ -207,5 +209,19 @@ mod tests {
         assert!((style.padding().top() - 1.0).abs() < f64::EPSILON);
         assert!((style.margin().top() - 0.0).abs() < f64::EPSILON);
         assert!((style.gap().unwrap().value() - 5.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_box_margin_new_takes_top_bottom_left_right() {
+        let margin = BoxMargin::new(AxisMargins::new(1.5, 2.5), AxisMargins::new(3.5, 4.5));
+        assert_eq!(
+            margin,
+            BoxMargin {
+                top: 1.5,
+                bottom: 2.5,
+                left: 3.5,
+                right: 4.5,
+            }
+        );
     }
 }

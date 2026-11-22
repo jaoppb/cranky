@@ -4,7 +4,7 @@ use super::parser_props::{
     parse_common_props, parse_image_data_and_size, parse_panel_spec, parse_popup_spec,
 };
 use super::userdata::{LuaPanel, LuaPopup, LuaVNode};
-use crate::features::vdom::domain::VNode;
+use crate::features::vdom::domain::{ImageContent, VNode};
 use mlua::Lua;
 
 macro_rules! set_table_aliases {
@@ -103,18 +103,13 @@ pub(super) fn create_ui_element_table(lua: &Lua) -> mlua::Result<mlua::Table> {
 
     let image_fn = lua.create_function(|lua, table: mlua::Table| {
         let (data, pixel_size) = parse_image_data_and_size(lua, &table)?;
-        let (class, id, _, _, tooltip, popup, panel, key) = parse_common_props(lua, &table)?;
-        let mut node = VNode::new_image(data, pixel_size, class, id, tooltip);
-        if let Some(popup_spec) = popup {
-            node = node.with_popup(popup_spec);
-        }
-        if let Some(panel_spec) = panel {
-            node = node.with_panel(panel_spec);
-        }
-        if let Some(node_key) = key {
-            node = node.with_key(node_key);
-        }
-        Ok(LuaVNode(node))
+        let (selectors, interactions, attachments) = parse_common_props(lua, &table)?;
+        let node = VNode::new_image(
+            ImageContent::new(data, pixel_size),
+            selectors,
+            interactions.into_tooltip(),
+        );
+        Ok(LuaVNode(attachments.attach_to(node)))
     })?;
 
     let module_fn = lua.create_function(|lua, val: mlua::Value| {

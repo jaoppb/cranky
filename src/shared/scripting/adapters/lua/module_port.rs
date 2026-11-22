@@ -4,6 +4,7 @@ use super::sync::LuaStateSynchronizer;
 use super::userdata::LuaMonitor;
 use super::vnode_parser::value_to_vnode;
 use crate::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
+use crate::features::vdom::domain::{ElementSelectors, Interactions};
 use crate::shared::config::domain::ModuleConfig;
 use crate::shared::dbus::domain::DBusSubscription;
 use crate::shared::events::signals::{SignalHub, SignalKind};
@@ -154,7 +155,11 @@ impl AnyModulePort for LuaModule {
             Err(_) => {}
         }
 
-        crate::features::vdom::domain::VNode::new_flex(vec![], None, None, None, None, None)
+        crate::features::vdom::domain::VNode::new_flex(
+            vec![],
+            ElementSelectors::default(),
+            Interactions::default(),
+        )
     }
 
     fn call_function_with_args(

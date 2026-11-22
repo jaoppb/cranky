@@ -6,30 +6,47 @@ use taffy::tree::NodeId;
 use super::render_leaf_builder::build_leaf_render_node;
 use crate::utils::{f32_to_i32, f32_to_u32};
 
+/// One node of a computed taffy tree: the tree, and the id of the node in it.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct TaffyNode<'a> {
+    tree: &'a TaffyTree,
+    id: NodeId,
+}
+
+impl<'a> TaffyNode<'a> {
+    pub(super) const fn new(tree: &'a TaffyTree, id: NodeId) -> Self {
+        Self { tree, id }
+    }
+}
+
 fn build_children(
-    taffy: &TaffyTree,
-    node_id: NodeId,
+    parent: TaffyNode<'_>,
     children: &[StyledNode],
     pos: Position,
 ) -> Result<Vec<RenderNode>, LayoutError> {
-    let child_ids = taffy
-        .children(node_id)
+    let child_ids = parent
+        .tree
+        .children(parent.id)
         .map_err(|error| LayoutError::EngineError(error.to_string()))?;
     let mut render_children = Vec::new();
     for (child, &child_id) in children.iter().zip(child_ids.iter()) {
-        render_children.push(build_render_tree(taffy, child_id, child, pos)?);
+        render_children.push(build_render_tree(
+            TaffyNode::new(parent.tree, child_id),
+            child,
+            pos,
+        )?);
     }
     Ok(render_children)
 }
 
 pub(super) fn build_render_tree(
-    taffy: &TaffyTree,
-    node_id: NodeId,
+    laid_out: TaffyNode<'_>,
     node: &StyledNode,
     offset: Position,
 ) -> Result<RenderNode, LayoutError> {
-    let layout = taffy
-        .layout(node_id)
+    let layout = laid_out
+        .tree
+        .layout(laid_out.id)
         .map_err(|error| LayoutError::EngineError(error.to_string()))?;
 
     let abs_x = offset.x().saturating_add(f32_to_i32(layout.location.x));
@@ -61,7 +78,7 @@ pub(super) fn build_render_tree(
             path: path.clone(),
             node_key: node_key.clone(),
             rect,
-            children: build_children(taffy, node_id, children, Position::new(abs_x, abs_y))?,
+            children: build_children(laid_out, children, Position::new(abs_x, abs_y))?,
             style: style.clone(),
             on_click: on_click.clone(),
             on_hover: on_hover.clone(),
@@ -83,7 +100,7 @@ pub(super) fn build_render_tree(
             path: path.clone(),
             node_key: node_key.clone(),
             rect,
-            children: build_children(taffy, node_id, children, Position::new(abs_x, abs_y))?,
+            children: build_children(laid_out, children, Position::new(abs_x, abs_y))?,
             style: style.clone(),
             on_click: on_click.clone(),
             on_hover: on_hover.clone(),

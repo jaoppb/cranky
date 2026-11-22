@@ -3,20 +3,15 @@ use crate::features::layout_engine::adapters::taffy::reconciler::{LayoutState, P
 use crate::features::layout_engine::domain::{NodePath, StyledNode, SurfaceSpace, TextMeasurer};
 use crate::features::styling::domain::{ComputedStyle, CssLength, Orientation, ProgressValue};
 use crate::features::vdom::domain::TextContent;
-use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::BinaryData;
 use crate::shared::primitives::geometry::Size;
+use crate::shared::rendering::ports::text::TextFont;
 use taffy::tree::NodeId;
 
 struct FixedMeasurer;
 
 impl TextMeasurer for FixedMeasurer {
-    fn measure(
-        &mut self,
-        _text: &str,
-        _font: Option<&FontFamily>,
-        _size: Option<FontSize>,
-    ) -> Size {
+    fn measure(&mut self, _text: &str, _font: TextFont<'_>) -> Size {
         Size::new(10, 10)
     }
 }

@@ -35,14 +35,20 @@ pub(crate) fn compute_pseudo_classes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::vdom::domain::{InteractionContext, NodeRef, VNode};
+    use crate::features::vdom::domain::{
+        ElementSelectors, InteractedNodes, InteractionContext, Interactions, NodeRef, VNode,
+    };
     use crate::shared::primitives::MonitorFocus;
 
     /// `ResolvedInteraction::resolve` only needs to walk the tree when an
     /// anchor is non-empty; every test here captures a keyless ref, so an
     /// empty tree is a sufficient stand-in for "some surface's own root".
     fn empty_root() -> VNode {
-        VNode::new_flex(Vec::new(), None, None, None, None, None)
+        VNode::new_flex(
+            Vec::new(),
+            ElementSelectors::default(),
+            Interactions::default(),
+        )
     }
 
     #[test]
@@ -54,8 +60,10 @@ mod tests {
 
         let hovered_in_popup =
             NodeRef::new(Vec::new(), NodePath::new(SurfaceSpace::Popup, vec![0, 1]));
-        let interaction =
-            InteractionContext::new(Some(hovered_in_popup), None, None, MonitorFocus::Unfocused);
+        let interaction = InteractionContext::new(
+            InteractedNodes::new(Some(hovered_in_popup), None, None),
+            MonitorFocus::Unfocused,
+        );
 
         // Hovering inside the popup must not mark the bar node that owns it
         // as :hover, even though the indices happen to line up.
@@ -88,7 +96,10 @@ mod tests {
         // is_root() is true for a popup's own root too now — the
         // monitor-focus fallback must not spuriously mark a popup/panel
         // root :focus just because the underlying monitor has focus.
-        let interaction = InteractionContext::new(None, None, None, MonitorFocus::Focused);
+        let interaction = InteractionContext::new(
+            InteractedNodes::new(None, None, None),
+            MonitorFocus::Focused,
+        );
         let resolved = ResolvedInteraction::resolve(&empty_root(), SurfaceSpace::Bar, &interaction);
 
         let bar_root = NodePath::root_in(SurfaceSpace::Bar);
@@ -107,12 +118,42 @@ mod tests {
 
     #[test]
     fn test_unfocused_monitor_leaves_the_bar_root_without_focus() {
-        let interaction = InteractionContext::new(None, None, None, MonitorFocus::Unfocused);
+        let interaction = InteractionContext::new(
+            InteractedNodes::new(None, None, None),
+            MonitorFocus::Unfocused,
+        );
         let resolved = ResolvedInteraction::resolve(&empty_root(), SurfaceSpace::Bar, &interaction);
 
         let bar_root = NodePath::root_in(SurfaceSpace::Bar);
         assert!(
             !compute_pseudo_classes(&bar_root, Some(&resolved)).contains(&PseudoClass::Focused)
+        );
+    }
+
+    #[test]
+    fn test_hovered_active_and_focused_nodes_each_get_their_own_pseudo_class() {
+        let bar = |index: usize| NodePath::new(SurfaceSpace::Bar, vec![index]);
+        let interaction = InteractionContext::new(
+            InteractedNodes::new(
+                Some(NodeRef::new(Vec::new(), bar(0))),
+                Some(NodeRef::new(Vec::new(), bar(1))),
+                Some(NodeRef::new(Vec::new(), bar(2))),
+            ),
+            MonitorFocus::Unfocused,
+        );
+        let resolved = ResolvedInteraction::resolve(&empty_root(), SurfaceSpace::Bar, &interaction);
+
+        assert_eq!(
+            compute_pseudo_classes(&bar(0), Some(&resolved)),
+            [PseudoClass::Hover]
+        );
+        assert_eq!(
+            compute_pseudo_classes(&bar(1), Some(&resolved)),
+            [PseudoClass::Active]
+        );
+        assert_eq!(
+            compute_pseudo_classes(&bar(2), Some(&resolved)),
+            [PseudoClass::Focused]
         );
     }
 }

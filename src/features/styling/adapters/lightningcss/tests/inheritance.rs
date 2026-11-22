@@ -3,7 +3,7 @@ use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{CssLength, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
-use crate::features::vdom::domain::{TextContent, VNode};
+use crate::features::vdom::domain::{ElementSelectors, Interactions, TextContent, VNode};
 use crate::shared::config::domain::FontSize;
 use crate::shared::primitives::color::DrawingColor;
 
@@ -24,15 +24,16 @@ fn test_color_inherits_through_vdom_tree() {
 
     let child = VNode::new_text(
         TextContent::new("hi".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
-    let root = VNode::new_flex(vec![child], None, None, None, None, None);
+    let root = VNode::new_flex(
+        vec![child],
+        ElementSelectors::default(),
+        Interactions::default(),
+    );
 
-    let styled = root.resolve_styles(&resolver, None, None);
+    let styled = root.resolve_styles(&resolver, None);
     let StyledNode::Flex { children, .. } = &styled else {
         panic!("expected a Flex root");
     };
@@ -58,15 +59,16 @@ fn test_own_declared_color_wins_over_inherited() {
 
     let child = VNode::new_text(
         TextContent::new("hi".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
-    let root = VNode::new_flex(vec![child], None, None, None, None, None);
+    let root = VNode::new_flex(
+        vec![child],
+        ElementSelectors::default(),
+        Interactions::default(),
+    );
 
-    let styled = root.resolve_styles(&resolver, None, None);
+    let styled = root.resolve_styles(&resolver, None);
     let StyledNode::Flex { children, .. } = &styled else {
         panic!("expected a Flex root");
     };
@@ -96,15 +98,16 @@ fn test_em_resolves_through_vdom_tree_not_hardcoded_16px() {
 
     let child = VNode::new_text(
         TextContent::new("hi".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
-    let root = VNode::new_flex(vec![child], None, None, None, None, None);
+    let root = VNode::new_flex(
+        vec![child],
+        ElementSelectors::default(),
+        Interactions::default(),
+    );
 
-    let styled = root.resolve_styles(&resolver, None, None);
+    let styled = root.resolve_styles(&resolver, None);
     let StyledNode::Flex { children, .. } = &styled else {
         panic!("expected a Flex root");
     };
@@ -131,15 +134,16 @@ fn test_custom_property_inherits_and_var_resolves_through_vdom_tree() {
 
     let child = VNode::new_text(
         TextContent::new("hi".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
-    let root = VNode::new_flex(vec![child], None, None, None, None, None);
+    let root = VNode::new_flex(
+        vec![child],
+        ElementSelectors::default(),
+        Interactions::default(),
+    );
 
-    let styled = root.resolve_styles(&resolver, None, None);
+    let styled = root.resolve_styles(&resolver, None);
     let StyledNode::Flex { children, .. } = &styled else {
         panic!("expected a Flex root");
     };

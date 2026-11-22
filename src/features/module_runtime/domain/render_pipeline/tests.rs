@@ -6,7 +6,7 @@ use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockLayoutEngine, MockStyleResolver, MockVdomDiff, PipelineFixture,
     TestModulePort, process_monitor,
 };
-use crate::features::vdom::domain::VNode;
+use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
 use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use std::collections::HashMap;
@@ -15,7 +15,8 @@ use std::collections::HashMap;
 fn test_pipeline_diff_and_layout_phases() {
     let mut pipeline = RenderPipeline::new();
     let mon = MonitorId::new("DP-1");
-    let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
+    let rect = VNode::new_rect(ElementSelectors::default(), Interactions::default());
+    let port = TestModulePort::new(rect);
     let diff_adapter = MockVdomDiff;
     let resolver = MockStyleResolver;
     let mut factory = MockCanvasFactory;
@@ -106,7 +107,8 @@ fn test_render_pipeline_hidpi_paint_allocates_scaled_buffer() {
 fn test_process_monitor_initial_render_and_size_change() {
     let mut pipeline = RenderPipeline::new();
     let mon = MonitorId::new("DP-1");
-    let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
+    let rect = VNode::new_rect(ElementSelectors::default(), Interactions::default());
+    let port = TestModulePort::new(rect);
     let resolver = MockStyleResolver;
     let mut factory = MockCanvasFactory;
     let mut engine = MockLayoutEngine;
@@ -147,7 +149,8 @@ fn test_process_monitor_initial_render_and_size_change() {
 fn test_process_monitor_unchanged_returns_none() {
     let mut pipeline = RenderPipeline::new();
     let mon = MonitorId::new("DP-1");
-    let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
+    let rect = VNode::new_rect(ElementSelectors::default(), Interactions::default());
+    let port = TestModulePort::new(rect);
     let resolver = MockStyleResolver;
     let mut factory = MockCanvasFactory;
     let mut engine = MockLayoutEngine;

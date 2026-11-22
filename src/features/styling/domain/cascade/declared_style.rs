@@ -3,6 +3,8 @@
 use super::super::computed_style::ComputedStyle;
 use super::declared_length::DeclaredLength;
 use super::declared_lengths::DeclaredLengths;
+use super::declared_lengths_apply::FontSizeBases;
+use super::declared_parts::{DeclaredValues, FontRelativeLengths, VarDeclarations};
 use super::declared_style_resolve::{cascade_from, resolve, resolve_font_size};
 use super::inherited::{DEFAULT_FONT_SIZE, InheritedStyle};
 use super::value::{Cascade, CssWideKeyword};
@@ -57,20 +59,21 @@ pub(crate) struct DeclaredStyle {
 
 impl DeclaredStyle {
     /// Builds a `DeclaredStyle` from one rule's already-parsed
-    /// `ComputedStyle`, any CSS-wide keywords the adapter found on the four
-    /// inheritable properties, `font-size`'s own declaration if it used a
-    /// font-relative unit, every other length property's declaration that
-    /// did, this rule's own `--name` declarations, and any of its
-    /// properties whose value referenced `var(...)`.
+    /// `ComputedStyle` with any CSS-wide keywords the adapter found on the
+    /// inheritable properties (`values`), `font-size`'s own declaration if it
+    /// used a font-relative unit with every other length property's
+    /// declaration that did (`relative`), and this rule's own `--name`
+    /// declarations with any of its properties whose value referenced
+    /// `var(...)` (`vars`).
     #[must_use]
     pub(crate) fn from_parts(
-        computed: ComputedStyle,
-        keywords: InheritableKeywords,
-        font_size_declared: Option<DeclaredLength>,
-        lengths: DeclaredLengths,
-        custom_properties: HashMap<String, String>,
-        pending_vars: HashMap<String, String>,
+        values: DeclaredValues,
+        relative: FontRelativeLengths,
+        vars: VarDeclarations,
     ) -> Self {
+        let (computed, keywords) = values.into_parts();
+        let (font_size_declared, lengths) = relative.into_parts();
+        let (custom_properties, pending_vars) = vars.into_parts();
         let color = cascade_from(keywords.color, computed.color().cloned());
         let accent_color = cascade_from(keywords.accent_color, computed.accent_color().cloned());
         let font_family = cascade_from(
@@ -165,8 +168,10 @@ impl DeclaredStyle {
         // resolved, else the same fallback the renderer already uses when
         // painting an element with no font-size anywhere in its ancestry.
         let em_base = own_font_size.unwrap_or(FontSize::new(DEFAULT_FONT_SIZE));
-        self.lengths
-            .apply(&mut computed, em_base, inherited.root_font_size());
+        self.lengths.apply(
+            &mut computed,
+            FontSizeBases::new(em_base, inherited.root_font_size()),
+        );
 
         // What this element's own children resolve var() against: the
         // parent's custom properties, overridden by whatever this element
@@ -207,12 +212,9 @@ mod tests {
 
     fn declared(computed: ComputedStyle, keywords: InheritableKeywords) -> DeclaredStyle {
         DeclaredStyle::from_parts(
-            computed,
-            keywords,
-            None,
-            DeclaredLengths::default(),
-            HashMap::new(),
-            HashMap::new(),
+            DeclaredValues::new(computed, keywords),
+            FontRelativeLengths::default(),
+            VarDeclarations::default(),
         )
     }
 
@@ -300,12 +302,9 @@ mod tests {
     #[test]
     fn test_em_font_size_resolves_against_parent() {
         let style = DeclaredStyle::from_parts(
-            ComputedStyle::default(),
-            InheritableKeywords::default(),
-            Some(DeclaredLength::Ems(1.5)),
-            DeclaredLengths::default(),
-            HashMap::new(),
-            HashMap::new(),
+            DeclaredValues::new(ComputedStyle::default(), InheritableKeywords::default()),
+            FontRelativeLengths::new(Some(DeclaredLength::Ems(1.5)), DeclaredLengths::default()),
+            VarDeclarations::default(),
         );
         let mut parent = ComputedStyle::default();
         parent.set_font_size(FontSize::new(20.0));
@@ -318,12 +317,9 @@ mod tests {
     #[test]
     fn test_rem_font_size_resolves_against_root_not_parent() {
         let style = DeclaredStyle::from_parts(
-            ComputedStyle::default(),
-            InheritableKeywords::default(),
-            Some(DeclaredLength::Rem(2.0)),
-            DeclaredLengths::default(),
-            HashMap::new(),
-            HashMap::new(),
+            DeclaredValues::new(ComputedStyle::default(), InheritableKeywords::default()),
+            FontRelativeLengths::new(Some(DeclaredLength::Rem(2.0)), DeclaredLengths::default()),
+            VarDeclarations::default(),
         );
         let mut parent = ComputedStyle::default();
         parent.set_font_size(FontSize::new(20.0));
@@ -341,12 +337,9 @@ mod tests {
         let mut lengths = DeclaredLengths::default();
         lengths.set_width(DeclaredLength::Ems(2.0));
         let style = DeclaredStyle::from_parts(
-            own,
-            InheritableKeywords::default(),
-            None,
-            lengths,
-            HashMap::new(),
-            HashMap::new(),
+            DeclaredValues::new(own, InheritableKeywords::default()),
+            FontRelativeLengths::new(None, lengths),
+            VarDeclarations::default(),
         );
 
         let computed = collapse(style, &InheritedStyle::default());
@@ -361,12 +354,9 @@ mod tests {
         let mut custom = HashMap::new();
         custom.insert("--bg".to_string(), "#1a1b26".to_string());
         let style = DeclaredStyle::from_parts(
-            ComputedStyle::default(),
-            InheritableKeywords::default(),
-            None,
-            DeclaredLengths::default(),
-            custom,
-            HashMap::new(),
+            DeclaredValues::new(ComputedStyle::default(), InheritableKeywords::default()),
+            FontRelativeLengths::default(),
+            VarDeclarations::new(custom, HashMap::new()),
         );
 
         let (_, next_inherited) = style.collapse(&InheritedStyle::default(), &NoopReparser);
@@ -398,12 +388,9 @@ mod tests {
         pending.insert("background-color".to_string(), "var(--bg)".to_string());
 
         let style = DeclaredStyle::from_parts(
-            ComputedStyle::default(),
-            InheritableKeywords::default(),
-            None,
-            DeclaredLengths::default(),
-            HashMap::new(),
-            pending,
+            DeclaredValues::new(ComputedStyle::default(), InheritableKeywords::default()),
+            FontRelativeLengths::default(),
+            VarDeclarations::new(HashMap::new(), pending),
         );
         let inherited =
             InheritedStyle::default().descend(&ComputedStyle::default(), Arc::new(custom));

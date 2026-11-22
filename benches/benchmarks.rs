@@ -7,30 +7,31 @@ use std::hint::black_box;
 
 use cranky::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use cranky::features::layout_engine::domain::{
-    AlignItems, BoxMargin, FlexDirection, JustifyContent, NodePath, StyledNode, SurfaceSpace,
+    AlignItems, BoxMargin, FlexDirection, JustifyContent, LayoutRoot, NodePath, StyledNode,
+    SurfaceSpace,
 };
 use cranky::features::layout_engine::ports::LayoutEnginePort;
 use cranky::features::module_runtime::domain::render_pipeline::{
     DiffInput, LayoutContext, RenderPipeline,
 };
 use cranky::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
-use cranky::features::styling::adapters::lightningcss::{
-    LightningCssAdapter, LightningPropertyReparser,
-};
+use cranky::features::styling::adapters::lightningcss::LightningCssAdapter;
 use cranky::features::styling::domain::{
-    ClassName, ClassNameList, ComputedStyle, ElementQuery, InheritedStyle, PseudoClass,
-    StyleSheetName,
+    ClassName, ClassNameList, ComputedStyle, ElementIdentity, ElementQuery, InheritedStyle,
+    PseudoClass, StyleSheetName,
 };
 use cranky::features::styling::ports::{CssParserPort, StyleResolverPort};
 use cranky::features::vdom::adapters::DefaultVdomDiffAdapter;
-use cranky::features::vdom::domain::{NodeKey, TextContent, VNode};
+use cranky::features::vdom::domain::{ElementSelectors, Interactions, NodeKey, TextContent, VNode};
 use cranky::features::vdom::ports::VdomDiffPort;
-use cranky::shared::config::domain::{Config, FontFamily, FontSize, ModuleConfig};
+use cranky::shared::config::domain::{AxisMargins, Config, FontFamily, FontSize, ModuleConfig};
 use cranky::shared::dbus::domain::DBusSubscription;
 use cranky::shared::events::signals::{SignalHub, SignalKind};
 use cranky::shared::primitives::color::{Color, DrawingColor};
 use cranky::shared::primitives::geometry::{LogicalPx, Position, Rect, Scale, Size};
-use cranky::shared::primitives::{FunctionName, ModuleOptions, MonitorId, TextAlignment};
+use cranky::shared::primitives::{
+    FunctionName, ModuleOptions, MonitorId, SizeConstraint, TextAlignment,
+};
 use cranky::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory;
 use cranky::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
 use cranky::shared::rendering::ports::draw::{BorderStroke, PaintTarget, RoundedRect};
@@ -50,11 +51,8 @@ fn create_test_vnode_tree(depth: usize, branching: usize, prefix: &str) -> VNode
         let classes = class_name.map(|class| ClassNameList::new(vec![class]));
         let mut node = VNode::new_text(
             TextContent::new(format!("Text {prefix}")),
-            classes,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::new(classes, None),
+            Interactions::default(),
         );
         if let Some(key) = node_key {
             node = node.with_key(key);
@@ -73,7 +71,11 @@ fn create_test_vnode_tree(depth: usize, branching: usize, prefix: &str) -> VNode
         let node_key = NodeKey::new(format!("{prefix}_flex")).ok();
         let class_name = ClassName::new("container-box").ok();
         let classes = class_name.map(|class| ClassNameList::new(vec![class]));
-        let mut node = VNode::new_flex(children, classes, None, None, None, None);
+        let mut node = VNode::new_flex(
+            children,
+            ElementSelectors::new(classes, None),
+            Interactions::default(),
+        );
         if let Some(key) = node_key {
             node = node.with_key(key);
         }
@@ -86,7 +88,10 @@ fn create_styled_node_tree(depth: usize, branching: usize) -> StyledNode {
     style.set_flex_direction(FlexDirection::Row);
     style.set_justify_content(JustifyContent::SpaceBetween);
     style.set_align_items(AlignItems::Center);
-    style.set_margin(BoxMargin::new(1.0, 1.0, 1.0, 1.0));
+    style.set_margin(BoxMargin::new(
+        AxisMargins::new(1.0, 1.0),
+        AxisMargins::new(1.0, 1.0),
+    ));
 
     if depth == 0 {
         StyledNode::Text {
@@ -291,20 +296,27 @@ fn bench_styling(criterion: &mut Criterion) {
     };
     let classes_hover = [class_container];
     let pseudos_hover = [PseudoClass::Hover];
-    let query_hover = ElementQuery::new("flex", None, &classes_hover, &pseudos_hover, None);
+    let query_hover = ElementQuery::new(
+        ElementIdentity::new("flex", None, &classes_hover),
+        &pseudos_hover,
+        None,
+    );
 
     let Ok(class_label) = ClassName::new("item-label") else {
         return;
     };
     let classes_simple = [class_label];
-    let query_simple = ElementQuery::new("text", None, &classes_simple, &[], None);
+    let query_simple = ElementQuery::new(
+        ElementIdentity::new("text", None, &classes_simple),
+        &[],
+        None,
+    );
 
     group.bench_function("resolve_style_simple_match", |bencher| {
         bencher.iter(|| {
             let style = parsed_sheet.resolve_style(
                 black_box(&query_simple),
                 black_box(&InheritedStyle::default()),
-                black_box(&LightningPropertyReparser),
             );
             black_box(style);
         });
@@ -315,7 +327,6 @@ fn bench_styling(criterion: &mut Criterion) {
             let style = parsed_sheet.resolve_style(
                 black_box(&query_hover),
                 black_box(&InheritedStyle::default()),
-                black_box(&LightningPropertyReparser),
             );
             black_box(style);
         });
@@ -354,14 +365,14 @@ fn bench_styling_rule_buckets(criterion: &mut Criterion) {
         return;
     };
     let classes_hot = [class_hot];
-    let query_many_rules = ElementQuery::new("text", None, &classes_hot, &[], None);
+    let query_many_rules =
+        ElementQuery::new(ElementIdentity::new("text", None, &classes_hot), &[], None);
 
     group.bench_function("resolve_style_many_rules_one_match", |bencher| {
         bencher.iter(|| {
             let style = many_rules_sheet.resolve_style(
                 black_box(&query_many_rules),
                 black_box(&InheritedStyle::default()),
-                black_box(&LightningPropertyReparser),
             );
             black_box(style);
         });
@@ -390,9 +401,12 @@ fn bench_layout(criterion: &mut Criterion) {
                 Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
             let res = layout_engine.calculate_layout(
-                black_box(tree_small.clone()),
+                LayoutRoot::new(
+                    black_box(tree_small.clone()),
+                    Position::new(0, 0),
+                    SizeConstraint::none(),
+                ),
                 &mut measurer,
-                Position::new(0, 0),
             );
             let _ = black_box(res);
         });
@@ -406,9 +420,12 @@ fn bench_layout(criterion: &mut Criterion) {
                 Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
             let res = layout_engine.calculate_layout(
-                black_box(tree_medium.clone()),
+                LayoutRoot::new(
+                    black_box(tree_medium.clone()),
+                    Position::new(0, 0),
+                    SizeConstraint::none(),
+                ),
                 &mut measurer,
-                Position::new(0, 0),
             );
             let _ = black_box(res);
         });
@@ -422,9 +439,12 @@ fn bench_layout(criterion: &mut Criterion) {
                 Font::new(FontFamily::new(String::new()), FontSize::new(14.0)),
             );
             let res = layout_engine.calculate_layout(
-                black_box(tree_large.clone()),
+                LayoutRoot::new(
+                    black_box(tree_large.clone()),
+                    Position::new(0, 0),
+                    SizeConstraint::none(),
+                ),
                 &mut measurer,
-                Position::new(0, 0),
             );
             let _ = black_box(res);
         });

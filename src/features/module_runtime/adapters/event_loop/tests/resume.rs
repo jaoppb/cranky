@@ -8,7 +8,7 @@ use crate::features::module_runtime::test_support::{
 };
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
-use crate::features::vdom::domain::VNode;
+use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
@@ -71,7 +71,8 @@ fn embedded_event_loop(
 
     let event_loop = EventLoop::new(
         Box::new(TestModulePort::new(VNode::new_rect(
-            None, None, None, None, None,
+            ElementSelectors::default(),
+            Interactions::default(),
         ))),
         ctx,
         RenderServices::new(

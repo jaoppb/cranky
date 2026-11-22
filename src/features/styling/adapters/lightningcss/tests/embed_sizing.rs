@@ -1,12 +1,14 @@
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::TextMeasurer;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{ClassNameList, CssLength, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
-use crate::features::vdom::domain::VNode;
-use crate::shared::config::domain::{FontFamily, FontSize};
+use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
+use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
+use crate::shared::rendering::ports::text::TextFont;
 
 #[test]
 fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
@@ -16,7 +18,7 @@ fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
     // child reporting its own 240 default.
     struct CalendarMeasurer;
     impl TextMeasurer for CalendarMeasurer {
-        fn measure(&mut self, _t: &str, _f: Option<&FontFamily>, _s: Option<FontSize>) -> Size {
+        fn measure(&mut self, _t: &str, _font: TextFont<'_>) -> Size {
             Size::new(0, 0)
         }
         fn measure_module(&self, _key: &crate::shared::primitives::ModuleKey) -> Option<Size> {
@@ -49,18 +51,18 @@ fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
             None,
             crate::shared::primitives::ModuleOptions::default(),
         ),
-        Some(ClassNameList::parse("calendar").unwrap()),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(Some(ClassNameList::parse("calendar").unwrap()), None),
+        Interactions::default(),
     );
-    let styled = embed.resolve_styles(&resolver, None, None);
+    let styled = embed.resolve_styles(&resolver, None);
     assert_eq!(styled.style().min_width(), Some(CssLength::Pixels(280.0)));
 
     let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();
     let node = engine
-        .calculate_layout(styled, &mut CalendarMeasurer, Position::new(0, 0))
+        .calculate_layout(
+            LayoutRoot::new(styled, Position::new(0, 0), SizeConstraint::none()),
+            &mut CalendarMeasurer,
+        )
         .unwrap();
     assert_eq!(node.rect().width(), 280);
 }

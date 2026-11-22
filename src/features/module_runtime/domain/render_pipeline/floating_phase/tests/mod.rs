@@ -2,13 +2,17 @@ mod child_layouts;
 mod layout_floating;
 mod tooltip;
 
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{
     LayoutError, RenderNode, StyledNode, StyledPanel, StyledPopup, TextMeasurer,
 };
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::domain::ComputedStyle;
-use crate::features::vdom::domain::{NodeKey, NodePath, SurfaceSpace, TextContent};
-use crate::shared::primitives::SizeConstraint;
+use crate::features::vdom::domain::{ElementSelectors, Interactions};
+use crate::features::vdom::domain::{
+    NodeKey, NodePath, PanelAnchor, PanelLayer, PanelSpec, PanelSurface, SurfaceSpace, TextContent,
+    VNode,
+};
 use crate::shared::primitives::geometry::{Position, Rect, Size};
 
 /// Records the content it was asked to lay out, and returns a node on the
@@ -19,13 +23,12 @@ struct RecordingEngine {
 }
 
 impl LayoutEnginePort for RecordingEngine {
-    fn calculate_layout_with_constraints(
+    fn calculate_layout(
         &mut self,
-        node: StyledNode,
+        root: LayoutRoot,
         _measurer: &mut dyn TextMeasurer,
-        _start_pos: Position,
-        _constraint: SizeConstraint,
     ) -> Result<RenderNode, LayoutError> {
+        let node = root.node().clone();
         let laid_out = Spec {
             tooltip: node.tooltip().cloned(),
             ..Spec::at_path(node.path().surface(), &[])
@@ -53,6 +56,17 @@ fn content(surface: SurfaceSpace, text: &str, tooltip: Option<StyledNode>) -> St
 
 fn tooltip_content(text: &str) -> StyledNode {
     content(SurfaceSpace::Tooltip, text, None)
+}
+
+/// The surface of a panel on `layer` anchored to every edge, the rest left at its defaults.
+fn panel_on_every_edge(layer: PanelLayer) -> PanelSurface {
+    PanelSpec::new(Box::new(VNode::new_rect(
+        ElementSelectors::default(),
+        Interactions::default(),
+    )))
+    .with_layer(layer)
+    .with_anchor(PanelAnchor::all())
+    .surface()
 }
 
 /// Everything a test may want to set on a laid-out node; the rest is fixed.

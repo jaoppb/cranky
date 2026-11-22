@@ -13,11 +13,25 @@ fn fully_keyed(children: &[VNode]) -> bool {
         .all(|child| child.key().is_some_and(|key| seen.insert(key.as_str())))
 }
 
+/// The two child lists of one parent being reconciled: the children it had and the ones it has
+/// now.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ChildLists<'a> {
+    old: &'a [VNode],
+    new: &'a [VNode],
+}
+
+impl<'a> ChildLists<'a> {
+    #[must_use]
+    pub(crate) const fn new(old: &'a [VNode], new: &'a [VNode]) -> Self {
+        Self { old, new }
+    }
+}
+
 #[must_use]
 pub(crate) fn diff_children_with<F>(
     parent_id: NodeId,
-    old_children: &[VNode],
-    new_children: &[VNode],
+    lists: ChildLists<'_>,
     diff_nodes_fn: F,
 ) -> Patch
 where
@@ -28,9 +42,9 @@ where
     // has no well-defined match and silently produced wrong Move/Remove
     // pairs before — falling back to positional (with a warning) is honest
     // about not knowing which child is which.
-    let any_keyed = old_children.iter().any(|child| child.key().is_some())
-        || new_children.iter().any(|child| child.key().is_some());
-    let keyed = any_keyed && fully_keyed(old_children) && fully_keyed(new_children);
+    let any_keyed = lists.old.iter().any(|child| child.key().is_some())
+        || lists.new.iter().any(|child| child.key().is_some());
+    let keyed = any_keyed && fully_keyed(lists.old) && fully_keyed(lists.new);
 
     if any_keyed && !keyed {
         tracing::warn!(
@@ -44,7 +58,7 @@ where
 
     if keyed {
         let mut old_map: HashMap<&str, (usize, &VNode)> = HashMap::new();
-        for (idx, child) in old_children.iter().enumerate() {
+        for (idx, child) in lists.old.iter().enumerate() {
             if let Some(key) = child.key() {
                 old_map.insert(key.as_str(), (idx, child));
             }
@@ -52,7 +66,7 @@ where
 
         let mut matched_old_indices = std::collections::HashSet::new();
 
-        for (new_idx, new_child) in new_children.iter().enumerate() {
+        for (new_idx, new_child) in lists.new.iter().enumerate() {
             if let Some(key) = new_child.key() {
                 if let Some(&(old_idx, old_child)) = old_map.get(key.as_str()) {
                     matched_old_indices.insert(old_idx);
@@ -84,7 +98,7 @@ where
             }
         }
 
-        for (idx, child) in old_children.iter().enumerate() {
+        for (idx, child) in lists.old.iter().enumerate() {
             if !matched_old_indices.contains(&idx) {
                 child_patches.push(ChildPatchOp::Remove {
                     node_id: child.node_id(),
@@ -93,9 +107,9 @@ where
             }
         }
     } else {
-        let max_len = std::cmp::max(old_children.len(), new_children.len());
+        let max_len = std::cmp::max(lists.old.len(), lists.new.len());
         for index in 0..max_len {
-            match (old_children.get(index), new_children.get(index)) {
+            match (lists.old.get(index), lists.new.get(index)) {
                 (Some(old_child), Some(new_child)) => {
                     let patch = diff_nodes_fn(old_child, new_child);
                     if !patch.is_no_change() {
@@ -140,16 +154,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::vdom::domain::{NodeKey, TextContent};
+    use crate::features::vdom::domain::{ElementSelectors, Interactions, NodeKey, TextContent};
 
     fn text(content: &str) -> VNode {
         VNode::new_text(
             TextContent::new(content.to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )
     }
 
@@ -172,7 +183,7 @@ mod tests {
 
     fn child_patches(old: &[VNode], new: &[VNode]) -> Vec<ChildPatchOp> {
         let parent = text("parent").node_id();
-        match diff_children_with(parent, old, new, replace_if_different) {
+        match diff_children_with(parent, ChildLists::new(old, new), replace_if_different) {
             Patch::UpdateChildren {
                 node_id,
                 child_patches,
@@ -190,7 +201,11 @@ mod tests {
         let children = [keyed("a", "1"), keyed("b", "2")];
         let parent = text("parent").node_id();
         assert_eq!(
-            diff_children_with(parent, &children, &children, replace_if_different),
+            diff_children_with(
+                parent,
+                ChildLists::new(&children, &children),
+                replace_if_different
+            ),
             Patch::NoChange
         );
     }

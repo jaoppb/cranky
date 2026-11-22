@@ -136,7 +136,7 @@ pub(super) fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) 
 
     apply_display_mode(&mut style, computed, node);
     apply_sizing_and_flex(&mut style, computed);
-    apply_node_dimensions(&mut style, node, computed, measurer);
+    apply_node_dimensions(&mut style, node, measurer);
 
     style
 }

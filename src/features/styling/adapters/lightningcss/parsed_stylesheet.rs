@@ -1,10 +1,11 @@
 //! One parsed stylesheet: its rules plus a selector index used to find the rules that can
 //! match an element.
+use super::reparser::LightningPropertyReparser;
 use crate::features::styling::domain::{
-    ComputedStyle, ElementQuery, InheritedStyle, Layer, RuleEntry, RuleIndex, RuleMatch,
-    StyleSheetName, fold_matches, matches_selector, selector_specificity,
+    CascadeOrigin, ComputedStyle, ElementQuery, InheritedStyle, Layer, RuleEntry, RuleIndex,
+    RuleMatch, RuleRank, StyleSheetName, fold_matches, matches_selector, selector_specificity,
 };
-use crate::features::styling::ports::{ParsedStyleSheetPort, PropertyReparser};
+use crate::features::styling::ports::ParsedStyleSheetPort;
 
 pub(crate) struct LightningParsedStyleSheet {
     name: StyleSheetName,
@@ -29,7 +30,6 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
         &self,
         query: &ElementQuery<'_>,
         inherited: &InheritedStyle,
-        reparser: &dyn PropertyReparser,
     ) -> (ComputedStyle, InheritedStyle) {
         // Single sheet: layer and sheet index are irrelevant since every
         // match shares them, so importance/specificity/source-order alone
@@ -37,9 +37,10 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
         let matched = self
             .matching_rules(query)
             .into_iter()
-            .map(|rule_match| rule_match.into_matched(Layer::BASE, 0))
+            .map(|rule_match| rule_match.into_matched(CascadeOrigin::new(Layer::BASE, 0)))
             .collect();
-        let (result, next_inherited) = fold_matches(matched).collapse(inherited, reparser);
+        let (result, next_inherited) =
+            fold_matches(matched).collapse(inherited, &LightningPropertyReparser);
 
         tracing::trace!(
             stylesheet = %self.name.as_str(),
@@ -76,9 +77,7 @@ impl ParsedStyleSheetPort for LightningParsedStyleSheet {
                     .max()?;
                 let source_order = u32::try_from(index).unwrap_or(u32::MAX);
                 Some(RuleMatch::new(
-                    rule.importance,
-                    specificity,
-                    source_order,
+                    RuleRank::new(rule.importance, specificity, source_order),
                     rule.style.clone(),
                 ))
             })

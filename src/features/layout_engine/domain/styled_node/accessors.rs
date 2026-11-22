@@ -35,6 +35,19 @@ impl StyledNode {
         }
     }
 
+    /// This node's children in document order, or an empty slice for a leaf variant.
+    #[must_use]
+    pub(crate) fn children(&self) -> &[Self] {
+        match self {
+            Self::Flex { children, .. } | Self::Grid { children, .. } => children,
+            Self::Text { .. }
+            | Self::Progress { .. }
+            | Self::Rect { .. }
+            | Self::Image { .. }
+            | Self::Module { .. } => &[],
+        }
+    }
+
     #[must_use]
     pub(crate) const fn style(&self) -> &ComputedStyle {
         match self {

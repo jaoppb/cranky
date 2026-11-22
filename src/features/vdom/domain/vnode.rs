@@ -148,6 +148,7 @@ impl KeyedTree for VNode {
 mod tests {
     use super::super::tag::TextContent;
     use super::*;
+    use crate::features::vdom::domain::{ElementSelectors, ImageContent, Interactions};
     use crate::shared::primitives::geometry::Size;
     use crate::shared::primitives::{ModuleInstanceId, ModuleName, ModuleOptions};
     use std::collections::HashMap;
@@ -156,17 +157,18 @@ mod tests {
     fn test_vnode_constructors_and_accessors() {
         let text_node = VNode::new_text(
             TextContent::new("clock".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         assert_eq!(text_node.tag(), NodeTag::Text);
         assert!(text_node.tag().is_leaf());
         assert_eq!(text_node.children().len(), 0);
 
-        let flex_node = VNode::new_flex(vec![text_node], None, None, None, None, None);
+        let flex_node = VNode::new_flex(
+            vec![text_node],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
         assert_eq!(flex_node.tag(), NodeTag::Flex);
         assert!(flex_node.tag().is_container());
         assert_eq!(flex_node.children().len(), 1);
@@ -222,11 +224,8 @@ mod tests {
                 Some(ModuleInstanceId::new("h1")),
                 opts,
             ),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         assert_eq!(module_node.tag(), NodeTag::Module);
 
@@ -265,10 +264,8 @@ mod tests {
     #[test]
     fn test_vnode_image_debug_omission() {
         let node = VNode::new_image(
-            vec![1, 2, 3, 4, 5, 6, 7, 8],
-            Size::new(2, 1),
-            None,
-            None,
+            ImageContent::new(vec![1, 2, 3, 4, 5, 6, 7, 8], Size::new(2, 1)),
+            ElementSelectors::default(),
             None,
         );
         let debug_str = format!("{node:?}");
@@ -278,30 +275,29 @@ mod tests {
 
     #[test]
     fn test_vnode_is_empty() {
-        let empty_flex = VNode::new_flex(vec![], None, None, None, None, None);
+        let empty_flex =
+            VNode::new_flex(vec![], ElementSelectors::default(), Interactions::default());
         assert!(empty_flex.is_empty());
 
         let empty_text = VNode::new_text(
             TextContent::new("   ".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         assert!(empty_text.is_empty());
 
         let non_empty_text = VNode::new_text(
             TextContent::new("hello".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         assert!(!non_empty_text.is_empty());
 
-        let non_empty_flex = VNode::new_flex(vec![non_empty_text], None, None, None, None, None);
+        let non_empty_flex = VNode::new_flex(
+            vec![non_empty_text],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
         assert!(!non_empty_flex.is_empty());
     }
 

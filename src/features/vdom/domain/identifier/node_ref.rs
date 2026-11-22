@@ -88,45 +88,60 @@ impl NodeRef {
     }
 }
 
-/// Which nodes are hovered, pressed and focused on one monitor, and whether that monitor has focus;
-/// drives the `:hover`, `:active` and `:focus` pseudo-classes.
+/// The nodes the pointer and keyboard are on: the one hovered, the one pressed and the one holding
+/// focus, each absent when no node is.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InteractionContext {
+pub struct InteractedNodes {
     hovered: Option<NodeRef>,
     active: Option<NodeRef>,
     focused: Option<NodeRef>,
-    monitor_focus: MonitorFocus,
 }
 
-impl InteractionContext {
+impl InteractedNodes {
     #[must_use]
     pub(crate) const fn new(
         hovered: Option<NodeRef>,
         active: Option<NodeRef>,
         focused: Option<NodeRef>,
-        monitor_focus: MonitorFocus,
     ) -> Self {
         Self {
             hovered,
             active,
             focused,
+        }
+    }
+}
+
+/// Which nodes are hovered, pressed and focused on one monitor, and whether that monitor has focus;
+/// drives the `:hover`, `:active` and `:focus` pseudo-classes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InteractionContext {
+    nodes: InteractedNodes,
+    monitor_focus: MonitorFocus,
+}
+
+impl InteractionContext {
+    #[must_use]
+    pub(crate) const fn new(nodes: InteractedNodes, monitor_focus: MonitorFocus) -> Self {
+        Self {
+            nodes,
             monitor_focus,
         }
     }
 
     #[must_use]
     pub(crate) const fn hovered(&self) -> Option<&NodeRef> {
-        self.hovered.as_ref()
+        self.nodes.hovered.as_ref()
     }
 
     #[must_use]
     pub(crate) const fn active(&self) -> Option<&NodeRef> {
-        self.active.as_ref()
+        self.nodes.active.as_ref()
     }
 
     #[must_use]
     pub(crate) const fn focused(&self) -> Option<&NodeRef> {
-        self.focused.as_ref()
+        self.nodes.focused.as_ref()
     }
 
     /// The focus of the monitor this context belongs to, which `:focus` on the bar root follows.

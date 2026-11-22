@@ -3,6 +3,7 @@
 pub mod canvas_renderer;
 pub mod commands;
 pub mod errors;
+pub mod layout_root;
 pub mod measurer;
 pub mod node_ops;
 pub mod popup;
@@ -13,6 +14,7 @@ mod text_placement;
 
 pub use commands::*;
 pub use errors::*;
+pub use layout_root::*;
 pub use measurer::*;
 pub(crate) use popup::*;
 pub use render_node::*;

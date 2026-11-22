@@ -4,7 +4,7 @@ use super::state::WaylandState;
 use super::tooltip_anchor::resolve_tooltip_anchor;
 use super::types::ModuleSurface;
 use crate::features::layout_engine::domain::{
-    FloatingKind, PopupExclusivity, PopupTarget, ShowFloating,
+    FloatingKind, OpeningPopup, PopupExclusivity, PopupTarget, ShowFloating,
 };
 use crate::shared::primitives::MonitorId;
 use wayland_protocols::xdg::shell::client::xdg_surface::XdgSurface;
@@ -53,8 +53,11 @@ pub(super) fn handle_conflicts(
             _ => None,
         })
         .collect();
-    let conflicts =
-        PopupExclusivity::compute_conflicts(&active_targets, target, &ancestor_targets, behavior);
+    let conflicts = PopupExclusivity::compute_conflicts(
+        &active_targets,
+        OpeningPopup::new(target, &ancestor_targets),
+        behavior,
+    );
     for conf in conflicts {
         teardown_floating(state, &FloatingKind::Popup(conf), TeardownCause::External);
     }

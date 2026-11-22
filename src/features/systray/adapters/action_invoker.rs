@@ -1,9 +1,11 @@
-use crate::features::systray::domain::{ItemIsMenu, SystrayActionName, SystrayItem};
+use crate::features::systray::domain::{ItemIsMenu, SystrayActionCall, SystrayItem};
 use crate::shared::primitives::geometry::Position;
 use tracing::{debug, error, warn};
 use zbus::Proxy;
 
-async fn invoke_primary(proxy: &Proxy<'_>, item_is_menu: ItemIsMenu, pos_x: i32, pos_y: i32) {
+async fn invoke_primary(proxy: &Proxy<'_>, item_is_menu: ItemIsMenu, pos: Position) {
+    let pos_x = pos.x();
+    let pos_y = pos.y();
     if item_is_menu == ItemIsMenu::MenuOnly {
         debug!("trigger_action: item_is_menu=true, calling ContextMenu({pos_x}, {pos_y}) on D-Bus");
         match proxy.call_method("ContextMenu", &(pos_x, pos_y)).await {
@@ -64,17 +66,13 @@ async fn invoke_scroll(proxy: &Proxy<'_>, delta: i32, orientation: &str) {
     }
 }
 
-pub(super) async fn invoke_action(
-    proxy: &Proxy<'_>,
-    item: &SystrayItem,
-    action: &SystrayActionName,
-    pos: Option<Position>,
-) {
-    let pos_x = pos.map_or(0, crate::shared::primitives::geometry::Position::x);
-    let pos_y = pos.map_or(0, crate::shared::primitives::geometry::Position::y);
+pub(super) async fn invoke_action(proxy: &Proxy<'_>, item: &SystrayItem, call: &SystrayActionCall) {
+    let pos = call.position().unwrap_or_else(|| Position::new(0, 0));
+    let pos_x = pos.x();
+    let pos_y = pos.y();
 
-    match action.as_str() {
-        "Primary" => invoke_primary(proxy, item.item_is_menu(), pos_x, pos_y).await,
+    match call.name().as_str() {
+        "Primary" => invoke_primary(proxy, item.item_is_menu(), pos).await,
         "Activate" => {
             debug!("trigger_action: Calling Activate({pos_x}, {pos_y}) on D-Bus");
             match proxy.call_method("Activate", &(pos_x, pos_y)).await {

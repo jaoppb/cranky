@@ -3,6 +3,7 @@
 pub mod declared_length;
 pub mod declared_lengths;
 pub mod declared_lengths_apply;
+pub mod declared_parts;
 pub mod declared_style;
 pub mod declared_style_resolve;
 pub mod fold;
@@ -15,6 +16,7 @@ pub mod var_substitution;
 
 pub(crate) use declared_length::*;
 pub(crate) use declared_lengths::*;
+pub(crate) use declared_parts::*;
 pub(crate) use declared_style::*;
 pub(crate) use fold::*;
 pub use inherited::*;

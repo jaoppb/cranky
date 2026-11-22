@@ -1,16 +1,11 @@
 use super::sni_event::SniEvent;
 use super::sni_proxy::StatusNotifierItemProxy;
-use super::watcher::Watcher;
-use crate::features::systray::domain::{SystrayId, SystrayItem};
-use crate::shared::events::signals::SignalHub;
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use super::tray_items::TrayItems;
+use crate::features::systray::domain::SystrayId;
 
 pub(super) async fn run_signal_loop(
     proxy: StatusNotifierItemProxy<'static>,
-    items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
-    hub: Arc<SignalHub>,
+    tray: TrayItems,
     id: String,
 ) {
     let Ok(new_title) = proxy.receive_new_title().await else {
@@ -65,7 +60,7 @@ pub(super) async fn run_signal_loop(
         while let Some(event) = events.next().await {
             tracing::trace!("Received SNI event {event:?} for systray item {id}");
             let current_item = {
-                let lock = items.read().await;
+                let lock = tray.items().read().await;
                 lock.get(&SystrayId::new(&id)).cloned()
             };
 
@@ -76,17 +71,17 @@ pub(super) async fn run_signal_loop(
             let updated_item = event.apply(item, &proxy).await;
 
             {
-                let mut lock = items.write().await;
+                let mut lock = tray.items().write().await;
                 lock.insert(SystrayId::new(&id), updated_item);
             }
-            Watcher::publish_state(&items, &hub).await;
+            tray.publish().await;
         }
 
         tracing::debug!("Systray item {id} loop terminated, cleaning up state");
         {
-            let mut lock = items.write().await;
+            let mut lock = tray.items().write().await;
             lock.remove(&SystrayId::new(&id));
         }
-        Watcher::publish_state(&items, &hub).await;
+        tray.publish().await;
     });
 }

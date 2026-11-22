@@ -38,15 +38,18 @@ pub(crate) fn fold_matches(mut matches: Vec<MatchedRule>) -> DeclaredStyle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::styling::domain::cascade::declared_lengths::DeclaredLengths;
+    use crate::features::styling::domain::cascade::declared_parts::{
+        DeclaredValues, FontRelativeLengths, VarDeclarations,
+    };
     use crate::features::styling::domain::cascade::declared_style::InheritableKeywords;
     use crate::features::styling::domain::cascade::inherited::InheritedStyle;
-    use crate::features::styling::domain::cascade::priority::{Importance, Layer};
+    use crate::features::styling::domain::cascade::priority::{
+        CascadeOrigin, Importance, Layer, RuleRank,
+    };
     use crate::features::styling::domain::cascade::specificity::Specificity;
     use crate::features::styling::domain::computed_style::ComputedStyle;
     use crate::features::styling::ports::PropertyReparser;
     use crate::shared::primitives::color::DrawingColor;
-    use std::collections::HashMap;
 
     struct NoopReparser;
     impl PropertyReparser for NoopReparser {
@@ -59,12 +62,9 @@ mod tests {
         let mut style = ComputedStyle::default();
         style.set_color(DrawingColor::parse(hex).unwrap());
         DeclaredStyle::from_parts(
-            style,
-            InheritableKeywords::default(),
-            None,
-            DeclaredLengths::default(),
-            HashMap::new(),
-            HashMap::new(),
+            DeclaredValues::new(style, InheritableKeywords::default()),
+            FontRelativeLengths::default(),
+            VarDeclarations::default(),
         )
     }
 
@@ -72,21 +72,15 @@ mod tests {
     fn test_higher_priority_wins_regardless_of_vec_order() {
         let low = MatchedRule::new(
             RulePriority::new(
-                Importance::Normal,
-                Layer::BASE,
-                Specificity::new(0, 1, 0),
-                0,
-                0,
+                RuleRank::new(Importance::Normal, Specificity::new(0, 1, 0), 0),
+                CascadeOrigin::new(Layer::BASE, 0),
             ),
             style_with_color("#111111"),
         );
         let high = MatchedRule::new(
             RulePriority::new(
-                Importance::Normal,
-                Layer::MODULE,
-                Specificity::new(0, 0, 0),
-                0,
-                0,
+                RuleRank::new(Importance::Normal, Specificity::new(0, 0, 0), 0),
+                CascadeOrigin::new(Layer::MODULE, 0),
             ),
             style_with_color("#eeeeee"),
         );

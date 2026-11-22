@@ -7,6 +7,7 @@ use super::floating_phase::{
 use super::measurer::ModuleSizeMeasurer;
 use super::outcome::{EmbedReport, PipelineLayout, SizeChange};
 use super::pipeline::RenderPipeline;
+use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::primitives::geometry::{Position, Size};
@@ -104,17 +105,14 @@ pub(crate) fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
 
         tracing::trace!(monitor = %monitor_id, "Resolving styles for module VNode");
         let styled_node = if ctx.child_errors.is_empty() {
-            diff.new_vdom().resolve_styles(
-                ctx.style_resolver,
-                ctx.interaction_context.as_ref(),
-                None,
-            )
+            diff.new_vdom()
+                .resolve_styles(ctx.style_resolver, ctx.interaction_context.as_ref())
         } else {
             let substituted = crate::features::vdom::domain::substitute_failed_modules(
                 diff.new_vdom(),
                 ctx.child_errors,
             );
-            substituted.resolve_styles(ctx.style_resolver, ctx.interaction_context.as_ref(), None)
+            substituted.resolve_styles(ctx.style_resolver, ctx.interaction_context.as_ref())
         };
 
         let measurer_inner = ctx
@@ -122,11 +120,9 @@ pub(crate) fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
             .create_text_measurer(ctx.scale, Font::fallback());
         let mut measurer = ModuleSizeMeasurer::new(measurer_inner, ctx.current_child_sizes);
 
-        let render_node_res = ctx.layout_engine.calculate_layout_with_constraints(
-            styled_node,
+        let render_node_res = ctx.layout_engine.calculate_layout(
+            LayoutRoot::new(styled_node, Position::new(0, 0), ctx.current_constraint),
             &mut measurer,
-            Position::new(0, 0),
-            ctx.current_constraint,
         );
 
         let render_node = match render_node_res {

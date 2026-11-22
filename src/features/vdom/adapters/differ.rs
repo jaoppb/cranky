@@ -1,5 +1,5 @@
 //! `DefaultVdomDiffAdapter`, the `VdomDiffPort` implementation that walks two trees node by node.
-use super::children::diff_children_with;
+use super::children::{ChildLists, diff_children_with};
 use super::kind_differ::diff_node_kinds;
 use crate::features::vdom::domain::{DiffResult, Patch, VNode, VNodeKind};
 use crate::features::vdom::ports::VdomDiffPort;
@@ -44,8 +44,7 @@ impl DefaultVdomDiffAdapter {
                 ) {
                     diff_children_with(
                         old_node.node_id(),
-                        old_node.children(),
-                        new_node.children(),
+                        ChildLists::new(old_node.children(), new_node.children()),
                         |old_child, new_child| self.diff_nodes(old_child, new_child),
                     )
                 } else {
@@ -112,7 +111,9 @@ impl VdomDiffPort for DefaultVdomDiffAdapter {
 mod tests {
     use super::*;
     use crate::features::styling::domain::ClassNameList;
-    use crate::features::vdom::domain::{ChildPatchOp, NodeKey, TextContent};
+    use crate::features::vdom::domain::{
+        ChildPatchOp, ElementSelectors, Interactions, NodeKey, TextContent,
+    };
     use std::collections::HashMap;
 
     #[test]
@@ -120,11 +121,8 @@ mod tests {
         let adapter = DefaultVdomDiffAdapter::new();
         let new_node = VNode::new_text(
             TextContent::new("initial".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
 
         let res = adapter.diff(None, &new_node);
@@ -148,11 +146,8 @@ mod tests {
         let adapter = DefaultVdomDiffAdapter::new();
         let node = VNode::new_text(
             TextContent::new("static".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
 
         let res = adapter.diff(Some(&node), &node);
@@ -165,19 +160,13 @@ mod tests {
         let adapter = DefaultVdomDiffAdapter::new();
         let node1 = VNode::new_text(
             TextContent::new("hello".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         let node2 = VNode::new_text(
             TextContent::new("world".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
 
         let res = adapter.diff(Some(&node1), &node2);
@@ -197,19 +186,13 @@ mod tests {
 
         let node1 = VNode::new_text(
             TextContent::new("test".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         let node2 = VNode::new_text(
             TextContent::new("test".to_string()),
-            Some(classes),
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::new(Some(classes), None),
+            Interactions::default(),
         );
 
         let res = adapter.diff(Some(&node1), &node2);
@@ -230,32 +213,27 @@ mod tests {
 
         let child1 = VNode::new_text(
             TextContent::new("1".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )
         .with_key(first_key);
         let child2 = VNode::new_text(
             TextContent::new("2".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )
         .with_key(second_key);
 
         let old_tree = VNode::new_flex(
             vec![child1.clone(), child2.clone()],
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
-        let new_tree = VNode::new_flex(vec![child2, child1], None, None, None, None, None);
+        let new_tree = VNode::new_flex(
+            vec![child2, child1],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
         assert!(!res.is_unchanged());
@@ -282,34 +260,29 @@ mod tests {
 
         let child1 = VNode::new_text(
             TextContent::new("1".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )
         .with_key(dup.clone());
         let child2 = VNode::new_text(
             TextContent::new("2".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )
         .with_key(dup);
 
         let old_tree = VNode::new_flex(
             vec![child1.clone(), child2.clone()],
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         // Same two nodes, same duplicate key, but their text content swapped
         // position — a keyed diff would (wrongly) call this unchanged.
-        let new_tree = VNode::new_flex(vec![child2, child1], None, None, None, None, None);
+        let new_tree = VNode::new_flex(
+            vec![child2, child1],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
         match res.patch() {
@@ -332,37 +305,25 @@ mod tests {
         let adapter = DefaultVdomDiffAdapter::new();
         let keyed_child = VNode::new_text(
             TextContent::new("1".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )
         .with_key(NodeKey::new("k1").unwrap());
         let unkeyed_child = VNode::new_text(
             TextContent::new("2".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
 
         let old_tree = VNode::new_flex(
             vec![keyed_child.clone(), unkeyed_child.clone()],
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         let new_tree = VNode::new_flex(
             vec![unkeyed_child, keyed_child],
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
@@ -384,38 +345,30 @@ mod tests {
         let adapter = DefaultVdomDiffAdapter::new();
         let child1 = VNode::new_text(
             TextContent::new("1".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         let child2 = VNode::new_text(
             TextContent::new("2".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         let child3 = VNode::new_text(
             TextContent::new("3".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
 
         let old_tree = VNode::new_flex(
             vec![child1.clone(), child2.clone()],
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
-        let new_tree = VNode::new_flex(vec![child1, child2, child3], None, None, None, None, None);
+        let new_tree = VNode::new_flex(
+            vec![child1, child2, child3],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
         assert!(!res.is_unchanged());
@@ -443,11 +396,8 @@ mod tests {
                 None,
                 ModuleOptions::default(),
             ),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         let mut opts_map = HashMap::new();
         opts_map.insert("format".to_string(), DynamicValue::from("%H:%M"));
@@ -457,11 +407,8 @@ mod tests {
                 None,
                 ModuleOptions::new(opts_map),
             ),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
 
         let unchanged = adapter.diff(Some(&plain_module), &plain_module);
@@ -477,20 +424,14 @@ mod tests {
         let adapter = DefaultVdomDiffAdapter::new();
         let base = VNode::new_text(
             TextContent::new("btn".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
 
         let popup1 = VNode::new_text(
             TextContent::new("pop1".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         let with_pop1 = base
             .clone()
@@ -524,23 +465,25 @@ mod tests {
         let adapter = DefaultVdomDiffAdapter::new();
         let child1 = VNode::new_text(
             TextContent::new("A".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
         let child2 = VNode::new_text(
             TextContent::new("B".to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
 
-        let grid1 = VNode::new_grid(vec![child1.clone()], None, None, None, None, None);
-        let grid2 = VNode::new_grid(vec![child1, child2], None, None, None, None, None);
+        let grid1 = VNode::new_grid(
+            vec![child1.clone()],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
+        let grid2 = VNode::new_grid(
+            vec![child1, child2],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
 
         let unchanged = adapter.diff(Some(&grid1), &grid1);
         assert!(unchanged.is_unchanged());
@@ -559,24 +502,22 @@ mod tests {
         let item = |text: &str| {
             VNode::new_text(
                 TextContent::new(text.to_string()),
-                None,
-                None,
-                None,
-                None,
-                None,
+                ElementSelectors::default(),
+                Interactions::default(),
             )
         };
-        let old_list = VNode::new_flex(vec![item("a"), item("b")], None, None, None, None, None);
+        let old_list = VNode::new_flex(
+            vec![item("a"), item("b")],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
         let new_list = VNode::new_flex(
             vec![
                 item("a").with_key(NodeKey::new("a").unwrap()),
                 item("b").with_key(NodeKey::new("b").unwrap()),
             ],
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         );
 
         let res = adapter.diff(Some(&old_list), &new_list);
@@ -589,11 +530,8 @@ mod tests {
         let make = |key: &str| {
             VNode::new_text(
                 TextContent::new("same".to_string()),
-                None,
-                None,
-                None,
-                None,
-                None,
+                ElementSelectors::default(),
+                Interactions::default(),
             )
             .with_key(NodeKey::new(key).unwrap())
         };
