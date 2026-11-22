@@ -37,9 +37,9 @@ fn apply_intrinsic(style: &mut Style, computed: &ComputedStyle, intrinsic: Size)
 pub(super) fn apply_node_dimensions(
     style: &mut Style,
     node: &StyledNode,
-    computed: &ComputedStyle,
     measurer: &mut dyn TextMeasurer,
 ) {
+    let computed = node.style();
     match node {
         StyledNode::Flex { .. } | StyledNode::Grid { .. } => {}
         StyledNode::Text {

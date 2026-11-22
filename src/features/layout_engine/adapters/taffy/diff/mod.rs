@@ -94,33 +94,10 @@ pub(super) fn diff<'a>(
     }
 
     match (&old_state.layout, new_layout) {
-        (
-            StyledNode::Flex {
-                style: old_style, ..
-            },
-            StyledNode::Flex {
-                style: new_style,
-                children: new_children,
-                ..
-            },
-        )
-        | (
-            StyledNode::Grid {
-                style: old_style, ..
-            },
-            StyledNode::Grid {
-                style: new_style,
-                children: new_children,
-                ..
-            },
-        ) => diff_container(
-            old_state,
-            new_layout,
-            old_style,
-            new_style,
-            new_children,
-            measurer,
-        ),
+        (StyledNode::Flex { .. }, StyledNode::Flex { .. })
+        | (StyledNode::Grid { .. }, StyledNode::Grid { .. }) => {
+            diff_container(old_state, new_layout, measurer)
+        }
         (StyledNode::Module { .. }, StyledNode::Module { .. }) => {
             let style = node_to_style(new_layout, measurer);
             Patch::Update {

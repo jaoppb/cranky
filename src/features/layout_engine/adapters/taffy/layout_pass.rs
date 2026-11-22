@@ -3,7 +3,7 @@ use super::calc_resolve::resolve_pending_calcs;
 use super::diff::diff;
 use super::leaf_size::size_to_dimension;
 use super::reconciler::{apply_patch, build_layout_state};
-use super::render_tree_builder::build_render_tree;
+use super::render_tree_builder::{TaffyNode, build_render_tree};
 use super::tree_builder::TaffyTreeBuilder;
 use crate::features::layout_engine::domain::{LayoutError, LayoutRoot, RenderNode, TextMeasurer};
 use crate::shared::primitives::SizeConstraint;
@@ -106,7 +106,11 @@ impl TaffyLayoutAdapter {
         }
 
         // Build RenderNode tree
-        let render_tree = build_render_tree(&self.taffy, root_node_id, node, root.origin())?;
+        let render_tree = build_render_tree(
+            TaffyNode::new(&self.taffy, root_node_id),
+            node,
+            root.origin(),
+        )?;
 
         // The diff only patches nodes whose style changed, so the root must
         // go back to its own style for the next pass to start clean.
