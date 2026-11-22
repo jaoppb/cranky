@@ -1,7 +1,9 @@
 //! Builders that gather every property of a tray item before a [`super::SystrayItem`] is made.
 use super::enums::{SystrayCategory, SystrayStatus};
 use super::icon::SystrayIcon;
-use super::identifiers::{Destination, ItemId, ItemIsMenu, ObjectPath, SystrayId, Title, WindowId};
+use super::identifiers::{
+    Destination, ItemId, ItemIsMenu, ObjectPath, SystrayAddress, SystrayId, Title, WindowId,
+};
 use super::tooltip::SystrayTooltip;
 
 pub(crate) struct CreateSystrayItemCommand {
@@ -23,8 +25,7 @@ pub(crate) struct CreateSystrayItemCommand {
 
 pub(crate) struct SystrayItemParams {
     id: SystrayId,
-    destination: Destination,
-    path: ObjectPath,
+    address: SystrayAddress,
     title: Title,
     status: SystrayStatus,
     icon: Option<SystrayIcon>,
@@ -35,16 +36,10 @@ pub(crate) struct SystrayItemParams {
 
 impl SystrayItemParams {
     #[must_use]
-    pub(crate) const fn new(
-        id: SystrayId,
-        destination: Destination,
-        path: ObjectPath,
-        title: Title,
-    ) -> Self {
+    pub(crate) const fn new(id: SystrayId, address: SystrayAddress, title: Title) -> Self {
         Self {
             id,
-            destination,
-            path,
+            address,
             title,
             status: SystrayStatus::Passive,
             icon: None,
@@ -89,8 +84,7 @@ impl SystrayItemParams {
         self,
     ) -> (
         SystrayId,
-        Destination,
-        ObjectPath,
+        SystrayAddress,
         Title,
         SystrayStatus,
         Option<SystrayIcon>,
@@ -100,8 +94,7 @@ impl SystrayItemParams {
     ) {
         (
             self.id,
-            self.destination,
-            self.path,
+            self.address,
             self.title,
             self.status,
             self.icon,
@@ -115,8 +108,9 @@ impl SystrayItemParams {
 impl CreateSystrayItemCommand {
     #[must_use]
     pub(crate) fn new(params: SystrayItemParams) -> Self {
-        let (id, destination, path, title, status, icon, menu_path, category, item_is_menu) =
+        let (id, address, title, status, icon, menu_path, category, item_is_menu) =
             params.into_parts();
+        let (destination, path) = address.into_parts();
         Self {
             id,
             destination,

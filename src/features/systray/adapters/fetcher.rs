@@ -1,9 +1,9 @@
 use super::cleaner::parse_raw_tooltip;
 use super::icon_resolver::resolve_icon;
 use crate::features::systray::domain::{
-    CreateSystrayItemCommand, Destination, IconName, ItemId, ItemIsMenu, ObjectPath,
-    SystrayCategory, SystrayIcon, SystrayId, SystrayItem, SystrayItemParams, SystrayStatus,
-    SystrayTooltip, Title, WindowId,
+    CreateSystrayItemCommand, IconName, ItemId, ItemIsMenu, ObjectPath, SystrayAddress,
+    SystrayCategory, SystrayIcon, SystrayItem, SystrayItemParams, SystrayStatus, SystrayTooltip,
+    Title, WindowId,
 };
 use std::collections::HashMap;
 use zbus::Connection;
@@ -108,27 +108,24 @@ async fn fetch_all_props(
     Some(props.get_all(iface).await.unwrap_or_default())
 }
 
-pub(super) async fn fetch_systray_item(
-    conn: &Connection,
-    id: String,
-    dest: String,
-    path_str: String,
-) -> SystrayItem {
+pub(super) async fn fetch_systray_item(conn: &Connection, address: SystrayAddress) -> SystrayItem {
+    let id = address.id();
     let default_item = || {
         SystrayItem::new(CreateSystrayItemCommand::new(
-            SystrayItemParams::new(
-                SystrayId::new(id.clone()),
-                Destination::new(dest.clone()),
-                ObjectPath::new(path_str.clone()),
-                Title::new(String::new()),
-            )
-            .with_status(SystrayStatus::Unknown)
-            .with_category(SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(ItemIsMenu::Activatable),
+            SystrayItemParams::new(id.clone(), address.clone(), Title::new(String::new()))
+                .with_status(SystrayStatus::Unknown)
+                .with_category(SystrayCategory::ApplicationStatus)
+                .with_item_is_menu(ItemIsMenu::Activatable),
         ))
     };
 
-    let Some(mut all_props) = fetch_all_props(conn, &dest, &path_str).await else {
+    let Some(mut all_props) = fetch_all_props(
+        conn,
+        address.destination().as_str(),
+        address.path().as_str(),
+    )
+    .await
+    else {
         return default_item();
     };
 
@@ -161,7 +158,8 @@ pub(super) async fn fetch_systray_item(
     let menu_path_str = parse_menu_path(&mut all_props);
 
     tracing::debug!(
-        "SNI fetch [{id}]: title='{title}', status='{status_str}', icon_name='{icon_name:?}', theme_path='{icon_theme_path:?}'"
+        "SNI fetch [{}]: title='{title}', status='{status_str}', icon_name='{icon_name:?}', theme_path='{icon_theme_path:?}'",
+        id.as_str()
     );
 
     let status = parse_status(&status_str);
@@ -174,17 +172,12 @@ pub(super) async fn fetch_systray_item(
         .and_then(parse_raw_tooltip);
 
     let cmd = CreateSystrayItemCommand::new(
-        SystrayItemParams::new(
-            SystrayId::new(id),
-            Destination::new(dest),
-            ObjectPath::new(path_str),
-            Title::new(title),
-        )
-        .with_status(status)
-        .with_icon(icon)
-        .with_menu_path(menu_path_str.map(ObjectPath::new))
-        .with_category(SystrayCategory::parse_str(&category_str))
-        .with_item_is_menu(ItemIsMenu::from(item_is_menu_val)),
+        SystrayItemParams::new(id, address, Title::new(title))
+            .with_status(status)
+            .with_icon(icon)
+            .with_menu_path(menu_path_str.map(ObjectPath::new))
+            .with_category(SystrayCategory::parse_str(&category_str))
+            .with_item_is_menu(ItemIsMenu::from(item_is_menu_val)),
     )
     .with_item_id(item_id.map(ItemId::new))
     .with_window_id(window_id.map(WindowId::new))

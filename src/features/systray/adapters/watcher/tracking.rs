@@ -2,11 +2,8 @@ use super::Watcher;
 use crate::features::systray::adapters::fetcher::fetch_systray_item;
 use crate::features::systray::adapters::signal_loop::run_signal_loop;
 use crate::features::systray::adapters::sni_proxy::StatusNotifierItemProxy;
-use crate::features::systray::domain::{SystrayId, SystrayItem, SystrayState};
-use crate::shared::events::signals::SignalHub;
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use crate::features::systray::adapters::tray_items::TrayItems;
+use crate::features::systray::domain::SystrayAddress;
 use tracing::Instrument;
 use zbus::Connection;
 
@@ -18,53 +15,49 @@ impl Watcher {
     /// Returns a [`zbus::Error`] if creating the proxy or establishing D-Bus tracking fails.
     pub(crate) async fn track_item(
         conn: Connection,
-        items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
-        hub: Arc<SignalHub>,
-        dest: String,
-        path_str: String,
+        tray: TrayItems,
+        address: SystrayAddress,
     ) -> zbus::Result<()> {
-        let span = tracing::info_span!("track_item", ?dest, ?path_str);
-        Self::fetch_and_follow(conn, items, hub, dest, path_str)
+        let span = tracing::info_span!(
+            "track_item",
+            dest = ?address.destination().as_str(),
+            path_str = ?address.path().as_str()
+        );
+        Self::fetch_and_follow(conn, tray, address)
             .instrument(span)
             .await
     }
 
     async fn fetch_and_follow(
         conn: Connection,
-        items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
-        hub: Arc<SignalHub>,
-        dest: String,
-        path_str: String,
+        tray: TrayItems,
+        address: SystrayAddress,
     ) -> zbus::Result<()> {
-        let id = format!("{dest}{path_str}");
+        let id = address.id();
 
         let proxy = StatusNotifierItemProxy::builder(&conn)
-            .destination(dest.clone())
-            .path(path_str.clone())
+            .destination(address.destination().as_str().to_owned())
+            .path(address.path().as_str().to_owned())
             .build()
             .await?;
 
-        let item = fetch_systray_item(&conn, id.clone(), dest.clone(), path_str.clone()).await;
+        let item = fetch_systray_item(&conn, address).await;
 
         {
-            let mut lock = items.write().await;
-            lock.insert(SystrayId::new(&id), item);
+            let mut lock = tray.items().write().await;
+            lock.insert(id.clone(), item);
         }
-        Self::publish_state(&items, &hub).await;
+        tray.publish().await;
 
-        tracing::debug!("Setting up SNI signal streams for {id}");
-        run_signal_loop(proxy, items, hub, id).await;
+        tracing::debug!("Setting up SNI signal streams for {}", id.as_str());
+        run_signal_loop(proxy, tray, id.as_str().to_owned()).await;
 
         Ok(())
     }
 
-    pub(crate) async fn remove_by_destination(
-        items: &Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
-        hub: &Arc<SignalHub>,
-        destination: &str,
-    ) -> bool {
+    pub(crate) async fn remove_by_destination(tray: &TrayItems, destination: &str) -> bool {
         let keys_to_remove: Vec<_> = {
-            let lock = items.read().await;
+            let lock = tray.items().read().await;
             lock.iter()
                 .filter_map(|(id, item)| {
                     if item.destination().as_str() == destination {
@@ -78,7 +71,7 @@ impl Watcher {
 
         let mut removed = false;
         if !keys_to_remove.is_empty() {
-            let mut lock = items.write().await;
+            let mut lock = tray.items().write().await;
             for key in keys_to_remove {
                 tracing::debug!(
                     "Removing SNI systray item {} because D-Bus name {destination} disconnected",
@@ -88,19 +81,8 @@ impl Watcher {
                 removed = true;
             }
             drop(lock);
-            Self::publish_state(items, hub).await;
+            tray.publish().await;
         }
         removed
-    }
-
-    pub(crate) async fn publish_state(
-        items: &Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
-        hub: &Arc<SignalHub>,
-    ) {
-        let state = {
-            let lock = items.read().await;
-            SystrayState::new(lock.clone())
-        };
-        let _ = hub.systray_tx().send(state);
     }
 }

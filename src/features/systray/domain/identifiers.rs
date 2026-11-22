@@ -60,6 +60,46 @@ impl ObjectPath {
     }
 }
 
+/// Where a tray item lives on the bus: the bus name that owns it and its object path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SystrayAddress {
+    destination: Destination,
+    path: ObjectPath,
+}
+
+impl SystrayAddress {
+    #[must_use]
+    pub(crate) const fn new(destination: Destination, path: ObjectPath) -> Self {
+        Self { destination, path }
+    }
+
+    #[must_use]
+    pub(crate) const fn destination(&self) -> &Destination {
+        &self.destination
+    }
+
+    #[must_use]
+    pub(crate) const fn path(&self) -> &ObjectPath {
+        &self.path
+    }
+
+    /// The item's key in the registry and the hub's state: its bus name followed by its object
+    /// path.
+    #[must_use]
+    pub(crate) fn id(&self) -> SystrayId {
+        SystrayId::new(format!(
+            "{}{}",
+            self.destination.as_str(),
+            self.path.as_str()
+        ))
+    }
+
+    #[must_use]
+    pub(crate) fn into_parts(self) -> (Destination, ObjectPath) {
+        (self.destination, self.path)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub(crate) struct Title(String);

@@ -29,8 +29,7 @@ pub trait SniPort: Send + Sync {
     async fn trigger_action(
         &self,
         id: &crate::features::systray::domain::SystrayId,
-        action: &crate::features::systray::domain::SystrayActionName,
-        pos: Option<crate::shared::primitives::geometry::Position>,
+        call: &crate::features::systray::domain::SystrayActionCall,
     ) -> Result<(), SniPortError>;
 }
 

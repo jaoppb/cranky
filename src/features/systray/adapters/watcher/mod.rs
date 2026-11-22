@@ -1,10 +1,7 @@
 mod tracking;
 
-use crate::features::systray::domain::{SystrayId, SystrayItem};
-use crate::shared::events::signals::SignalHub;
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use super::tray_items::TrayItems;
+use crate::features::systray::domain::{Destination, ObjectPath, SystrayAddress};
 use tracing::{debug, error};
 use zbus::{Connection, interface};
 
@@ -17,8 +14,7 @@ enum HostRegistration {
 }
 
 pub(super) struct Watcher {
-    items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
-    hub: Arc<SignalHub>,
+    tray: TrayItems,
     conn: Connection,
     runtime: tokio::runtime::Handle,
     host: HostRegistration,
@@ -37,14 +33,12 @@ impl From<zbus::message::Header<'_>> for Sender {
 impl Watcher {
     #[must_use]
     pub(crate) const fn new(
-        items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
-        hub: Arc<SignalHub>,
+        tray: TrayItems,
         conn: Connection,
         runtime: tokio::runtime::Handle,
     ) -> Self {
         Self {
-            items,
-            hub,
+            tray,
             conn,
             runtime,
             host: HostRegistration::Registered,
@@ -77,11 +71,11 @@ impl Watcher {
         };
 
         let conn = self.conn.clone();
-        let items = self.items.clone();
-        let hub = self.hub.clone();
+        let tray = self.tray.clone();
+        let address = SystrayAddress::new(Destination::new(dbus_dest), ObjectPath::new(full_path));
 
         self.runtime.spawn(async move {
-            if let Err(error) = Self::track_item(conn, items, hub, dbus_dest, full_path).await {
+            if let Err(error) = Self::track_item(conn, tray, address).await {
                 error!("Failed to track SNI item: {error}");
             }
         });
@@ -93,7 +87,7 @@ impl Watcher {
 
     #[zbus(property)]
     async fn registered_status_notifier_items(&self) -> Vec<String> {
-        let items = self.items.read().await;
+        let items = self.tray.items().read().await;
         items.keys().map(|id| id.as_str().to_string()).collect()
     }
 

@@ -1,9 +1,9 @@
 use super::action_invoker::invoke_action;
+use super::tray_items::TrayItems;
 use super::watcher::Watcher;
-use crate::features::systray::domain::{SystrayActionName, SystrayId, SystrayItem};
+use crate::features::systray::domain::{SystrayActionCall, SystrayId};
 use crate::features::systray::ports::{SniPort, SniPortError};
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::geometry::Position;
 use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -18,9 +18,8 @@ use zbus::Connection;
 /// items.
 #[derive(Debug, Clone)]
 pub struct SniAdapter {
-    hub: Arc<SignalHub>,
+    tray: TrayItems,
     conn: Arc<tokio::sync::Mutex<Option<Connection>>>,
-    items: Arc<RwLock<BTreeMap<SystrayId, SystrayItem>>>,
 }
 
 impl SniAdapter {
@@ -29,9 +28,8 @@ impl SniAdapter {
     #[must_use]
     pub fn new(hub: Arc<SignalHub>) -> Self {
         Self {
-            hub,
+            tray: TrayItems::new(Arc::new(RwLock::new(BTreeMap::new())), hub),
             conn: Arc::new(tokio::sync::Mutex::new(None)),
-            items: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
 }
@@ -43,8 +41,7 @@ impl SniPort for SniAdapter {
             .await
             .map_err(|error| SniPortError::StartFailed(error.to_string()))?;
 
-        let items_clone = self.items.clone();
-        let hub_clone = self.hub.clone();
+        let tray_clone = self.tray.clone();
         let conn_clone = conn.clone();
 
         tokio::spawn(async move {
@@ -65,7 +62,7 @@ impl SniPort for SniAdapter {
                         .as_ref()
                         .is_none_or(|owner| owner.as_str().is_empty());
                     if is_unowned {
-                        Watcher::remove_by_destination(&items_clone, &hub_clone, args.name()).await;
+                        Watcher::remove_by_destination(&tray_clone, args.name()).await;
                     }
                 }
             }
@@ -76,8 +73,7 @@ impl SniPort for SniAdapter {
             Ok(()) => {
                 info!("Successfully claimed org.kde.StatusNotifierWatcher");
                 let watcher = Watcher::new(
-                    self.items.clone(),
-                    self.hub.clone(),
+                    self.tray.clone(),
                     conn.clone(),
                     tokio::runtime::Handle::current(),
                 );
@@ -101,10 +97,11 @@ impl SniPort for SniAdapter {
     async fn trigger_action(
         &self,
         id: &SystrayId,
-        action: &SystrayActionName,
-        pos: Option<Position>,
+        call: &SystrayActionCall,
     ) -> Result<(), SniPortError> {
-        self.route_action(id, action, pos)
+        let action = call.name();
+        let pos = call.position();
+        self.route_action(id, call)
             .instrument(tracing::info_span!("trigger_action", ?id, ?action, ?pos))
             .await
     }
@@ -114,12 +111,13 @@ impl SniAdapter {
     async fn route_action(
         &self,
         id: &SystrayId,
-        action: &SystrayActionName,
-        pos: Option<Position>,
+        call: &SystrayActionCall,
     ) -> Result<(), SniPortError> {
+        let action = call.name();
+        let pos = call.position();
         let (conn_opt, item_opt) = {
             let lock = self.conn.lock().await;
-            let items_lock = self.items.read().await;
+            let items_lock = self.tray.items().read().await;
             (lock.clone(), items_lock.get(id).cloned())
         };
 
@@ -150,7 +148,7 @@ impl SniAdapter {
                 }
             })?;
 
-            invoke_action(&proxy, item, action, pos).await;
+            invoke_action(&proxy, item, call).await;
         } else {
             if conn_opt.is_none() {
                 error!(

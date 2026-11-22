@@ -23,8 +23,10 @@ fn test_systray_missing_icon_regression() {
         crate::features::systray::domain::CreateSystrayItemCommand::new(
             crate::features::systray::domain::SystrayItemParams::new(
                 SystrayId::new("test_systray"),
-                Destination::new("dest"),
-                ObjectPath::new("/path"),
+                crate::features::systray::domain::SystrayAddress::new(
+                    Destination::new("dest"),
+                    ObjectPath::new("/path"),
+                ),
                 Title::new("Test Systray"),
             )
             .with_status(SystrayStatus::Active)
@@ -85,8 +87,10 @@ fn test_systray_with_icon_renders_image() {
         crate::features::systray::domain::CreateSystrayItemCommand::new(
             crate::features::systray::domain::SystrayItemParams::new(
                 SystrayId::new("test_systray"),
-                Destination::new("dest"),
-                ObjectPath::new("/path"),
+                crate::features::systray::domain::SystrayAddress::new(
+                    Destination::new("dest"),
+                    ObjectPath::new("/path"),
+                ),
                 Title::new("Test Systray"),
             )
             .with_status(SystrayStatus::Active)

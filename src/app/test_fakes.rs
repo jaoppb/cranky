@@ -7,13 +7,12 @@ use crate::features::module_runtime::ports::{
     ModuleSetup, RegistryLoadError, SpawnedModule,
 };
 use crate::features::styling::domain::StyleSheetName;
-use crate::features::systray::domain::{SystrayActionName, SystrayId};
+use crate::features::systray::domain::{SystrayActionCall, SystrayId};
 use crate::features::systray::ports::{SniPort, SniPortError};
 use crate::features::vdom::domain::UiCommand;
 use crate::shared::config::domain::Config;
 use crate::shared::dbus::subscription_manager::DbusSubscriptionManager;
 use crate::shared::events::signals::SignalKind;
-use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::{ModuleId, ModuleKey, ModuleName};
 use crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory;
 use crate::shared::wayland::ports::{AppReadModel, DisplayServerError, DisplayServerPort};
@@ -228,8 +227,7 @@ impl SniPort for FakeSni {
     async fn trigger_action(
         &self,
         _id: &SystrayId,
-        _action: &SystrayActionName,
-        _pos: Option<Position>,
+        _call: &SystrayActionCall,
     ) -> Result<(), SniPortError> {
         Ok(())
     }

@@ -1,4 +1,5 @@
 //! Value types for tray items and the state snapshot the hub publishes, free of D-Bus types.
+pub mod action_call;
 pub mod command;
 pub mod enums;
 pub mod icon;
@@ -9,6 +10,7 @@ pub mod state;
 mod tests;
 pub mod tooltip;
 
+pub use action_call::*;
 pub(crate) use command::*;
 pub use enums::*;
 pub(crate) use icon::*;
