@@ -126,7 +126,7 @@ fn test_discover_monitors_suspends_seen_monitor_with_no_live_layout() {
     let mut seen = std::collections::HashSet::new();
     seen.insert(MonitorId::new("DP-1"));
 
-    let discovered = discover_monitors(&hub, &layouts, &seen, Embedding::Embedded);
+    let discovered = discover_monitors(&hub, &layouts, Embedding::Embedded { seen: &seen });
     assert!(!discovered.contains(&MonitorId::new("DP-1")));
 }
 
@@ -143,13 +143,13 @@ fn test_discover_monitors_bootstraps_unseen_monitor_with_no_live_layout() {
     let layouts: HashMap<MonitorId, crate::shared::primitives::ChildBounds> = HashMap::new();
     let seen = std::collections::HashSet::new();
 
-    let discovered = discover_monitors(&hub, &layouts, &seen, Embedding::Embedded);
+    let discovered = discover_monitors(&hub, &layouts, Embedding::Embedded { seen: &seen });
     assert!(discovered.contains(&MonitorId::new("DP-1")));
 }
 
-/// A top-level actor has no embedding site to lose: it covers every monitor
-/// Wayland reports, even one it already rendered for and that no layout
-/// names, where an embedded actor stays suspended.
+/// A top-level actor has no embedding site to lose, so no rendered monitors
+/// to consult: it covers every monitor Wayland reports, even one no layout
+/// names.
 #[test]
 fn test_discover_monitors_top_level_covers_every_wayland_monitor() {
     let hub = SignalHub::new(Config::default());
@@ -159,10 +159,8 @@ fn test_discover_monitors_top_level_covers_every_wayland_monitor() {
     let _ = hub.monitor_scales_tx().send(scales);
 
     let layouts: HashMap<MonitorId, crate::shared::primitives::ChildBounds> = HashMap::new();
-    let mut seen = std::collections::HashSet::new();
-    seen.insert(MonitorId::new("DP-1"));
 
-    let mut discovered = discover_monitors(&hub, &layouts, &seen, Embedding::TopLevel);
+    let mut discovered = discover_monitors(&hub, &layouts, Embedding::TopLevel);
     discovered.sort_by(|left, right| left.as_str().cmp(right.as_str()));
     assert_eq!(
         discovered,
@@ -186,6 +184,6 @@ fn test_discover_monitors_embedded_keeps_seen_monitor_with_a_live_layout() {
     seen.insert(MonitorId::new("DP-1"));
     seen.insert(MonitorId::new("GHOST-1"));
 
-    let discovered = discover_monitors(&hub, &layouts, &seen, Embedding::Embedded);
+    let discovered = discover_monitors(&hub, &layouts, Embedding::Embedded { seen: &seen });
     assert_eq!(discovered, vec![MonitorId::new("DP-1")]);
 }

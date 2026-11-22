@@ -97,18 +97,19 @@ impl<
     }
 
     pub(crate) fn discover_monitors<V>(&self, layouts: &HashMap<MonitorId, V>) -> Vec<MonitorId> {
-        let seen: std::collections::HashSet<MonitorId> = self
-            .render_pipeline
-            .render_trees()
-            .keys()
-            .cloned()
-            .collect();
+        let seen: std::collections::HashSet<MonitorId>;
         let embedding = if self.ctx.parent_id().is_some() {
-            Embedding::Embedded
+            seen = self
+                .render_pipeline
+                .render_trees()
+                .keys()
+                .cloned()
+                .collect();
+            Embedding::Embedded { seen: &seen }
         } else {
             Embedding::TopLevel
         };
-        discover_monitors(self.ctx.hub(), layouts, &seen, embedding)
+        discover_monitors(self.ctx.hub(), layouts, embedding)
     }
 
     pub(crate) async fn run(mut self) {
