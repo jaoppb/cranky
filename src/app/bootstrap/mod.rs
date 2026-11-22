@@ -101,7 +101,7 @@ pub fn run() -> Result<(), BootError> {
         // later on-demand starts triggered by a lazily-spawned module. It
         // reads its `[metrics]` settings from the hub, which still holds the
         // initial configuration: the config watcher starts below.
-        let (zbus_adapter, sni_adapter, adapter_supervisor) =
+        let (bus, adapter_supervisor) =
             init_secondary_adapters(&hub, &app_env, active_signals).await?;
         app.set_adapter_supervisor(adapter_supervisor);
 
@@ -131,7 +131,7 @@ pub fn run() -> Result<(), BootError> {
 
         // 5. Start the Core App Orchestrator
         info!("Cranky started successfully.");
-        app.run(wayland_adapter, zbus_adapter, sni_adapter).await?;
+        app.run(wayland_adapter, bus).await?;
 
         Ok(())
     })

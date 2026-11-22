@@ -55,6 +55,8 @@ pub(super) struct CrankyApp<
     system_rx: mpsc::Receiver<SystemCommand>,
     layout_senders: HashMap<ModuleId, Snd>,
     registry: Box<R>,
+    /// The monitor Hyprland last reported focused, empty until it reports one.
+    focused_monitor: String,
     /// `None` until `set_adapter_supervisor` is called — `bootstrap` wires it
     /// in once `init_secondary_adapters` has opened the `DBus` connections,
     /// which happens after `CrankyApp::new`. A lazy spawn before that point simply
@@ -82,6 +84,27 @@ impl ModuleReceivers {
             layout,
             display,
             interface,
+        }
+    }
+}
+
+/// The session-bus adapters the app loop drives: the `DBus` signal
+/// subscriptions the modules asked for, registered when the loop starts, and
+/// the systray host that UI commands trigger item actions on.
+pub(super) struct BusAdapters<S> {
+    subscriptions: crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
+    systray: S,
+}
+
+impl<S> BusAdapters<S> {
+    #[must_use]
+    pub(crate) const fn new(
+        subscriptions: crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
+        systray: S,
+    ) -> Self {
+        Self {
+            subscriptions,
+            systray,
         }
     }
 }
@@ -149,6 +172,7 @@ impl<
             system_rx: channels.system,
             layout_senders: HashMap::new(),
             registry,
+            focused_monitor: String::new(),
             adapter_supervisor: None,
         };
         app.layout_senders = app.registry.spawn_all(&app.deps);
@@ -626,17 +650,16 @@ impl<
     }
 
     fn handle_hyprland_changed(
-        &self,
+        &mut self,
         state: &crate::shared::events::signals::HyprlandState,
-        current_focused_monitor: &mut String,
         display: &mut impl DisplayServerPort,
     ) {
         let new_focused = state
             .focused_monitor()
             .map_or_default(|monitor| monitor.as_str().to_string());
 
-        if new_focused != *current_focused_monitor {
-            *current_focused_monitor = new_focused;
+        if new_focused != self.focused_monitor {
+            self.focused_monitor = new_focused;
             let _ = display.render_all(&self.read_model, &self.layout_senders);
         }
     }
@@ -684,16 +707,19 @@ impl<
     pub(crate) async fn run(
         &mut self,
         mut display: impl DisplayServerPort,
-        mut dbus: crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
-        sni: impl crate::features::systray::ports::SniPort,
+        bus: BusAdapters<impl crate::features::systray::ports::SniPort>,
     ) -> Result<(), AppError> {
+        let BusAdapters {
+            mut subscriptions,
+            systray: sni,
+        } = bus;
         let mut config_rx = self.hub().config_rx();
         let mut hyprland_rx = self.hub().hyprland_rx();
         let mut monitor_scales_rx = self.hub().monitor_scales_rx();
 
-        self.registry.register_dbus_subscriptions(&mut dbus).await;
-
-        let mut current_focused_monitor = String::new();
+        self.registry
+            .register_dbus_subscriptions(&mut subscriptions)
+            .await;
 
         loop {
             let _ = display.flush();
@@ -721,7 +747,7 @@ impl<
                 }
                 Ok(()) = hyprland_rx.changed() => {
                     let state = hyprland_rx.borrow().clone();
-                    self.handle_hyprland_changed(&state, &mut current_focused_monitor, &mut display);
+                    self.handle_hyprland_changed(&state, &mut display);
                 }
                 Ok(()) = monitor_scales_rx.changed() => {
                     self.prune_removed_monitors();
@@ -957,7 +983,9 @@ mod tests {
                 );
             let fake_sni = FakeSni;
 
-            let result = app.run(fake_display, dbus_manager, fake_sni).await;
+            let result = app
+                .run(fake_display, BusAdapters::new(dbus_manager, fake_sni))
+                .await;
             assert!(result.is_err());
         });
     }
@@ -1221,7 +1249,9 @@ mod tests {
             );
             hub.monitor_scales_tx().send(scales).unwrap();
 
-            let result = app.run(fake_display, dbus_manager, fake_sni).await;
+            let result = app
+                .run(fake_display, BusAdapters::new(dbus_manager, fake_sni))
+                .await;
             assert!(result.is_err());
         });
     }
@@ -1308,7 +1338,9 @@ mod tests {
 
             // Run app in background task and verify clock_layouts gets both DP-1 and DP-2
             let app_handle = tokio::spawn(async move {
-                let _ = app.run(fake_display, dbus_manager, fake_sni).await;
+                let _ = app
+                    .run(fake_display, BusAdapters::new(dbus_manager, fake_sni))
+                    .await;
             });
 
             // Wait for clock_layouts to see both DP-1 and DP-2
@@ -2098,7 +2130,7 @@ mod tests {
     #[test]
     fn test_handle_hyprland_changed_renders_only_when_the_focus_moves() {
         crate::test_utils::block_on(async {
-            let (app, _hub) = app_over(Config::default(), FakeRegistry::default());
+            let (mut app, _hub) = app_over(Config::default(), FakeRegistry::default());
             let mut display = FakeDisplayServer::failing("unused");
             let renders = display.renders.clone();
             let focused_on = |name: &str| {
@@ -2108,17 +2140,15 @@ mod tests {
                     Some(crate::features::workspaces::domain::MonitorName::new(name)),
                 )
             };
-            let mut focused = String::new();
-
-            app.handle_hyprland_changed(&focused_on("DP-1"), &mut focused, &mut display);
-            assert_eq!(focused, "DP-1");
+            app.handle_hyprland_changed(&focused_on("DP-1"), &mut display);
+            assert_eq!(app.focused_monitor, "DP-1");
             assert_eq!(renders.load(Ordering::SeqCst), 1);
 
-            app.handle_hyprland_changed(&focused_on("DP-1"), &mut focused, &mut display);
+            app.handle_hyprland_changed(&focused_on("DP-1"), &mut display);
             assert_eq!(renders.load(Ordering::SeqCst), 1, "the focus did not move");
 
-            app.handle_hyprland_changed(&focused_on("HDMI-A-1"), &mut focused, &mut display);
-            assert_eq!(focused, "HDMI-A-1");
+            app.handle_hyprland_changed(&focused_on("HDMI-A-1"), &mut display);
+            assert_eq!(app.focused_monitor, "HDMI-A-1");
             assert_eq!(renders.load(Ordering::SeqCst), 2);
         });
     }

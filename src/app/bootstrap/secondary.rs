@@ -20,8 +20,7 @@ pub(super) async fn init_secondary_adapters(
     active_signals: &std::collections::HashSet<SignalKind>,
 ) -> Result<
     (
-        crate::shared::dbus::subscription_manager::DbusSubscriptionManager,
-        SniAdapter,
+        crate::app::state::BusAdapters<SniAdapter>,
         AdapterSupervisor,
     ),
     BootError,
@@ -55,5 +54,8 @@ pub(super) async fn init_secondary_adapters(
         }
     }
 
-    Ok((dbus_manager, sni_adapter, supervisor))
+    Ok((
+        crate::app::state::BusAdapters::new(dbus_manager, sni_adapter),
+        supervisor,
+    ))
 }
