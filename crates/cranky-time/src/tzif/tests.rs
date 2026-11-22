@@ -155,16 +155,23 @@ enum Width {
     Wide,
 }
 
-/// A header and a block of data: transitions as (instant, kind), kinds as
-/// (offset, index of the name), and leap seconds as (instant, total).
-fn file_part(
-    version: u8,
-    width: Width,
-    transitions: &[(i64, u8)],
-    kinds: &[(i32, u8)],
-    names: &[u8],
-    leaps: &[(i64, i32)],
-) -> Vec<u8> {
+/// A block of data: transitions as (instant, kind), kinds as (offset, index
+/// of the name), the name bytes, and leap seconds as (instant, total).
+struct Block<'a> {
+    transitions: &'a [(i64, u8)],
+    kinds: &'a [(i32, u8)],
+    names: &'a [u8],
+    leaps: &'a [(i64, i32)],
+}
+
+/// A header and a block of data.
+fn file_part(version: u8, width: Width, block: &Block<'_>) -> Vec<u8> {
+    let &Block {
+        transitions,
+        kinds,
+        names,
+        leaps,
+    } = block;
     let instant = |seconds: i64| match width {
         Width::Wide => seconds.to_be_bytes().to_vec(),
         Width::Narrow => i32::try_from(seconds).unwrap().to_be_bytes().to_vec(),
@@ -202,19 +209,30 @@ const KINDS: &[(i32, u8)] = &[(-3600, 0), (7200, 4)];
 const NAMES: &[u8] = b"OLD\0NEW\0";
 
 fn version_one(transitions: &[(i64, u8)], kinds: &[(i32, u8)], names: &[u8]) -> Vec<u8> {
-    file_part(0, Width::Narrow, transitions, kinds, names, &[])
+    let block = Block {
+        transitions,
+        kinds,
+        names,
+        leaps: &[],
+    };
+    file_part(0, Width::Narrow, &block)
 }
 
 fn version_two(footer: &[u8]) -> Vec<u8> {
-    let mut bytes = file_part(b'2', Width::Narrow, &[], &[(0, 0)], b"X\0", &[]);
-    bytes.extend(file_part(
-        b'2',
-        Width::Wide,
-        &[(1000, 1)],
-        KINDS,
-        NAMES,
-        &[(2000, 1)],
-    ));
+    let narrow = Block {
+        transitions: &[],
+        kinds: &[(0, 0)],
+        names: b"X\0",
+        leaps: &[],
+    };
+    let wide = Block {
+        transitions: &[(1000, 1)],
+        kinds: KINDS,
+        names: NAMES,
+        leaps: &[(2000, 1)],
+    };
+    let mut bytes = file_part(b'2', Width::Narrow, &narrow);
+    bytes.extend(file_part(b'2', Width::Wide, &wide));
     bytes.extend(footer);
     bytes
 }

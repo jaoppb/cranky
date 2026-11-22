@@ -63,11 +63,11 @@ impl Tray {
     }
 
     /// Emits a signal again and again until the tracked item satisfies
-    /// `accept`. The tray publishes an item before it has subscribed to the
-    /// item's signals (#42), so the first emissions can be lost.
+    /// `accept`, with no deadline of its own: callers bound it with `within`.
+    /// The tray publishes an item before it has subscribed to the item's
+    /// signals (#42), so the first emissions can be lost.
     pub(crate) async fn emit_until<'a, F>(
         &'a mut self,
-        what: &str,
         emit: impl Fn(&'a ItemService) -> F + Send + Sync,
         accept: impl Fn(&Value) -> bool + Send + Sync,
     ) -> Outcome
@@ -75,15 +75,12 @@ impl Tray {
         F: Future<Output = Outcome> + Send,
     {
         let (item, state, id) = (&self.item, &mut self.state, &self.id);
-        within(what, async {
-            loop {
-                emit(item).await?;
-                if let Ok(seen) = tokio::time::timeout(RE_EMIT, tracked(state, id, &accept)).await {
-                    return seen.map(|_| ());
-                }
+        loop {
+            emit(item).await?;
+            if let Ok(seen) = tokio::time::timeout(RE_EMIT, tracked(state, id, &accept)).await {
+                return seen.map(|_| ());
             }
-        })
-        .await?
+        }
     }
 
     pub(crate) async fn trigger(

@@ -20,6 +20,8 @@ use tracing::Instrument;
 pub(super) struct AdapterSupervisor {
     hub: Arc<SignalHub>,
     app_env: Arc<AppEnvironment>,
+    /// The `[metrics]` table of the configuration the hub holds when the
+    /// supervisor is built, which at boot is the initial configuration.
     metrics_config: MetricsConfig,
     dbus_conn: Arc<dyn DbusConnectionPort>,
     started: HashSet<SignalKind>,
@@ -30,9 +32,9 @@ impl AdapterSupervisor {
     pub(crate) fn new(
         hub: Arc<SignalHub>,
         app_env: Arc<AppEnvironment>,
-        metrics_config: MetricsConfig,
         dbus_conn: Arc<dyn DbusConnectionPort>,
     ) -> Self {
+        let metrics_config = hub.config_rx().borrow().metrics().clone();
         Self {
             hub,
             app_env,
@@ -115,12 +117,7 @@ mod tests {
     fn test_ensure_metrics_is_idempotent() {
         crate::test_utils::block_on(async {
             let hub = Arc::new(SignalHub::new(Config::default()));
-            let mut supervisor = AdapterSupervisor::new(
-                hub,
-                test_env(),
-                MetricsConfig::default(),
-                Arc::new(DisconnectedBus),
-            );
+            let mut supervisor = AdapterSupervisor::new(hub, test_env(), Arc::new(DisconnectedBus));
 
             assert!(!supervisor.started.contains(&SignalKind::Metrics));
             supervisor.ensure(SignalKind::Metrics).await;
@@ -136,17 +133,24 @@ mod tests {
     fn test_mark_started_prevents_later_ensure() {
         crate::test_utils::block_on(async {
             let hub = Arc::new(SignalHub::new(Config::default()));
-            let mut supervisor = AdapterSupervisor::new(
-                hub,
-                test_env(),
-                MetricsConfig::default(),
-                Arc::new(DisconnectedBus),
-            );
+            let mut supervisor = AdapterSupervisor::new(hub, test_env(), Arc::new(DisconnectedBus));
 
             supervisor.mark_started(SignalKind::Time);
             // No task should be spawned for a kind marked started at boot.
             supervisor.ensure(SignalKind::Time).await;
             assert_eq!(supervisor.started.len(), 1);
         });
+    }
+
+    /// An on-demand metrics sampler is built with the `[metrics]` settings of the configuration
+    /// the bar started with.
+    #[test]
+    fn test_supervisor_keeps_the_configured_metrics_settings() {
+        let metrics: MetricsConfig = toml::from_str("update_interval_ms = 2500").unwrap();
+        let hub = Arc::new(SignalHub::new(Config::default().with_metrics(metrics)));
+
+        let supervisor = AdapterSupervisor::new(hub, test_env(), Arc::new(DisconnectedBus));
+
+        assert_eq!(supervisor.metrics_config.update_interval_ms().value(), 2500);
     }
 }

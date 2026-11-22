@@ -5,7 +5,7 @@ pub mod item;
 pub mod tray;
 
 use crate::cases::{Case, case};
-use crate::support::{Outcome, ensure_eq};
+use crate::support::{Outcome, ensure_eq, within};
 use cranky::features::systray::domain::SystrayActionName;
 use cranky::shared::config::domain::Config;
 use cranky::shared::events::signals::SignalHub;
@@ -64,30 +64,35 @@ fn shows(item: &Value, pointer: &str, expected: &str) -> bool {
 
 async fn follows_title_and_status_signals() -> Outcome {
     let mut tray = Tray::with_item().await?;
-    tray.emit_until(
+    within(
         "NewTitle to reach the tray",
-        |item| item.retitle("Renamed"),
-        |item| shows(item, "/title", "Renamed"),
+        tray.emit_until(
+            |item| item.retitle("Renamed"),
+            |item| shows(item, "/title", "Renamed"),
+        ),
     )
-    .await?;
-    tray.emit_until(
+    .await??;
+    within(
         "NewStatus to reach the tray",
-        |item| item.restatus("NeedsAttention"),
-        |item| shows(item, "/status", "NeedsAttention"),
+        tray.emit_until(
+            |item| item.restatus("NeedsAttention"),
+            |item| shows(item, "/status", "NeedsAttention"),
+        ),
     )
-    .await
+    .await?
 }
 
 /// `NewMenu` refetches `ItemIsMenu`, so an item that turns into a menu-only
 /// item after registering is seen as one.
 async fn follows_the_menu_signal() -> Outcome {
     let mut tray = Tray::with_item().await?;
-    tray.emit_until(
+    within(
         "NewMenu to reach the tray",
-        ItemService::become_menu,
-        |item| item.pointer("/item_is_menu") == Some(&Value::from(true)),
+        tray.emit_until(ItemService::become_menu, |item| {
+            item.pointer("/item_is_menu") == Some(&Value::from(true))
+        }),
     )
-    .await
+    .await?
 }
 
 async fn forwards_actions_to_the_item() -> Outcome {

@@ -5,7 +5,7 @@
 //! between two newlines; only that second copy is read.
 
 use crate::posix_parse;
-use crate::zone::{Kind, Leap, Transition, Zone};
+use crate::zone::{Kind, Leap, Table, Transition, Zone};
 
 const MAGIC: &[u8] = b"TZif";
 const RESERVED: usize = 15;
@@ -21,16 +21,15 @@ pub(crate) fn parse(bytes: &[u8]) -> Option<Zone> {
     let mut reader = Reader { rest: bytes };
     let (version, counts) = header(&mut reader)?;
     if version == 0 {
-        let (kinds, transitions, leaps) = block(&mut reader, &counts, 4)?;
-        return Zone::new(kinds, transitions, leaps, None);
+        return Zone::new(block(&mut reader, &counts, 4)?, None);
     }
     reader.take(counts.block_size(4)?)?;
     let (_, counts) = header(&mut reader)?;
-    let (kinds, transitions, leaps) = block(&mut reader, &counts, 8)?;
+    let table = block(&mut reader, &counts, 8)?;
     // A rule this crate cannot read is left out, not refused: the zone is then
     // right up to its last transition, which is what the table itself says.
     let rule = posix_parse::parse(footer(&mut reader)?);
-    Zone::new(kinds, transitions, leaps, rule)
+    Zone::new(table, rule)
 }
 
 struct Reader<'a> {
@@ -99,9 +98,7 @@ fn integer(bytes: &[u8]) -> Option<i64> {
     )
 }
 
-type Block = (Vec<Kind>, Vec<Transition>, Vec<Leap>);
-
-fn block(reader: &mut Reader<'_>, counts: &Counts, width: usize) -> Option<Block> {
+fn block(reader: &mut Reader<'_>, counts: &Counts, width: usize) -> Option<Table> {
     if counts.kinds > MAX_KINDS {
         return None;
     }
@@ -140,7 +137,11 @@ fn block(reader: &mut Reader<'_>, counts: &Counts, width: usize) -> Option<Block
             })
         })
         .collect::<Option<Vec<_>>>()?;
-    Some((kinds, transitions, leaps))
+    Some(Table {
+        kinds,
+        transitions,
+        leaps,
+    })
 }
 
 fn kind(raw: [u8; KIND_SIZE], names: &[u8]) -> Option<Kind> {

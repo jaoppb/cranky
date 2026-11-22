@@ -183,14 +183,11 @@ mod tests {
         }
     }
 
-    fn weekday(month: i64, week: i64, weekday: i64, time: i64) -> Change {
-        Change {
-            day: Day::Weekday {
-                month,
-                week,
-                weekday,
-            },
-            time,
+    fn weekday(month: i64, week: i64, weekday: i64) -> Day {
+        Day::Weekday {
+            month,
+            week,
+            weekday,
         }
     }
 
@@ -215,8 +212,14 @@ mod tests {
     fn daylight_time_is_one_hour_ahead_unless_given() {
         let lisbon = Daylight {
             kind: kind(3600, "WEST"),
-            start: weekday(3, 5, 0, 3600),
-            end: weekday(10, 5, 0, 7200),
+            start: Change {
+                day: weekday(3, 5, 0),
+                time: 3600,
+            },
+            end: Change {
+                day: weekday(10, 5, 0),
+                time: 7200,
+            },
         };
         assert_eq!(
             parse(b"WET0WEST,M3.5.0/1,M10.5.0"),
@@ -224,8 +227,14 @@ mod tests {
         );
         let lord_howe = Daylight {
             kind: kind(39_600, "+11"),
-            start: weekday(10, 1, 0, 7200),
-            end: weekday(4, 1, 0, 7200),
+            start: Change {
+                day: weekday(10, 1, 0),
+                time: 7200,
+            },
+            end: Change {
+                day: weekday(4, 1, 0),
+                time: 7200,
+            },
         };
         assert_eq!(
             parse(b"<+1030>-10:30<+11>-11,M10.1.0,M4.1.0"),
@@ -237,8 +246,14 @@ mod tests {
     fn undated_daylight_time_follows_the_default_changes() {
         let daylight = Daylight {
             kind: kind(-14_400, "EDT"),
-            start: weekday(3, 2, 0, 7200),
-            end: weekday(11, 1, 0, 7200),
+            start: Change {
+                day: weekday(3, 2, 0),
+                time: 7200,
+            },
+            end: Change {
+                day: weekday(11, 1, 0),
+                time: 7200,
+            },
         };
         assert_eq!(
             parse(b"EST5EDT"),

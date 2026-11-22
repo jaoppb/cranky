@@ -83,13 +83,15 @@ impl LazySite {
     }
 
     #[must_use]
-    pub(crate) const fn options(&self) -> &ModuleOptions {
-        &self.options
-    }
-
-    #[must_use]
     pub(crate) const fn surface(&self) -> LayoutSurface {
         self.surface
+    }
+
+    /// The module's key and the options of the embedding call, for the spawn
+    /// that builds the module from them.
+    #[must_use]
+    pub(crate) fn into_key_and_options(self) -> (ModuleKey, ModuleOptions) {
+        (self.key, self.options)
     }
 }
 

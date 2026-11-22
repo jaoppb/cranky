@@ -33,6 +33,19 @@ struct ModuleSiteInfo {
 }
 
 impl ModuleSiteInfo {
+    /// The site of a module the configuration declares: keyed by its name
+    /// alone, in its parent's bar tree.
+    const fn configured(
+        name: crate::shared::primitives::ModuleName,
+        parent: Option<ModuleId>,
+    ) -> Self {
+        Self {
+            key: crate::shared::primitives::ModuleKey::new(name, None),
+            parent,
+            surface: crate::shared::primitives::LayoutSurface::Bar,
+        }
+    }
+
     #[must_use]
     const fn parent(&self) -> Option<ModuleId> {
         self.parent
@@ -167,13 +180,13 @@ impl ModuleRegistry {
         std::sync::Arc::new(CompositeStyleResolver::new(parsed_sheets))
     }
 
+    /// Mints an id for the module `config` names, finds and initialises it,
+    /// and registers its subscriptions, styles and configuration. Where it
+    /// sits is recorded apart, by `record_site`.
     fn load_single_module(
         &mut self,
         config: &ModuleConfig,
         full_config: &crate::shared::config::domain::Config,
-        parent_id: Option<ModuleId>,
-        instance_id: Option<crate::shared::primitives::ModuleInstanceId>,
-        surface: crate::shared::primitives::LayoutSurface,
     ) -> Result<
         (ModuleId, Box<dyn AnyModulePort>),
         crate::features::module_runtime::ports::RegistryLoadError,
@@ -237,22 +250,19 @@ impl ModuleRegistry {
             .entry(config.name().clone())
             .or_default()
             .push(id);
-        let key = crate::shared::primitives::ModuleKey::new(config.name().clone(), instance_id);
-        self.sites.insert(
-            id,
-            ModuleSiteInfo {
-                key: key.clone(),
-                parent: parent_id,
-                surface,
-            },
-        );
-        self.site_index.insert(
-            crate::shared::primitives::ModuleSite::new(parent_id, key),
-            id,
-        );
-        self.module_ids.push(id);
 
         Ok((id, module))
+    }
+
+    /// Records where the module `id` sits, and lists it among the modules
+    /// of the registry.
+    fn record_site(&mut self, id: ModuleId, site: ModuleSiteInfo) {
+        self.site_index.insert(
+            crate::shared::primitives::ModuleSite::new(site.parent, site.key.clone()),
+            id,
+        );
+        self.sites.insert(id, site);
+        self.module_ids.push(id);
     }
 
     /// Mints a `ModuleId` for a site with no config stanza — a `Module` node
@@ -269,29 +279,27 @@ impl ModuleRegistry {
         US: crate::features::vdom::domain::UiCommandSender + 'static,
     >(
         &mut self,
-        parent_id: ModuleId,
-        key: &crate::shared::primitives::ModuleKey,
-        options: ModuleOptions,
-        surface: crate::shared::primitives::LayoutSurface,
-        full_config: &crate::shared::config::domain::Config,
-        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
+        site: crate::features::module_runtime::ports::LazySite,
+        setup: &crate::features::module_runtime::ports::ModuleSetup<'_, Fact, LS, DS, US>,
     ) -> Result<
         crate::features::module_runtime::ports::SpawnedModule<WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
+        let (parent, surface) = (site.parent(), site.surface());
+        let (key, options) = site.into_key_and_options();
         let cfg = ModuleConfig::new(key.name().clone(), options);
-        let (id, module) = self.load_single_module(
-            &cfg,
-            full_config,
-            Some(parent_id),
-            key.instance_id().cloned(),
-            surface,
-        )?;
+        let (id, module) = self.load_single_module(&cfg, setup.config())?;
+        self.record_site(
+            id,
+            ModuleSiteInfo {
+                key,
+                parent: Some(parent),
+                surface,
+            },
+        );
+        let deps = setup.deps();
 
-        let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
-        let sender = WatchLayoutSender { tx: layout_tx };
-
-        let ctx = self.build_site_context(id, layout_rx, deps);
+        let (ctx, sender) = self.build_site_context(id, deps);
 
         let style_resolver = self.create_style_resolver_for_module(module.styles());
         let vdom_diff = Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
@@ -323,6 +331,9 @@ impl ModuleRegistry {
     /// default). An id with no recorded site falls back to `Bar` /
     /// no-parent, which only ever happens for a root module during initial
     /// `load()`, before `spawn_all` has a chance to run.
+    ///
+    /// The context reads its layout from a new channel, whose sender comes
+    /// back with it for whoever lays the module out.
     fn build_site_context<
         Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
         LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
@@ -331,27 +342,26 @@ impl ModuleRegistry {
     >(
         &self,
         id: ModuleId,
-        layout_rx: tokio::sync::watch::Receiver<
-            std::collections::HashMap<
-                crate::shared::primitives::MonitorId,
-                crate::shared::primitives::ChildBounds,
-            >,
-        >,
         deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
-    ) -> crate::features::module_runtime::application::ModuleContext<LS, DS, US> {
+    ) -> (
+        crate::features::module_runtime::application::ModuleContext<LS, DS, US>,
+        WatchLayoutSender,
+    ) {
+        let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
         let site = self.sites.get(&id);
         let parent_id = site.and_then(ModuleSiteInfo::parent);
         let surface = site.map_or(crate::shared::primitives::LayoutSurface::Bar, |site_info| {
             site_info.surface
         });
 
-        crate::features::module_runtime::application::ModuleContext::new(
+        let ctx = crate::features::module_runtime::application::ModuleContext::new(
             id,
             deps.handles.clone(),
             layout_rx,
         )
         .with_parent(parent_id)
-        .with_surface(surface)
+        .with_surface(surface);
+        (ctx, WatchLayoutSender { tx: layout_tx })
     }
 }
 
@@ -450,14 +460,7 @@ impl<
         crate::features::module_runtime::ports::SpawnedModule<WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
-        self.spawn_module_lazy(
-            site.parent(),
-            site.key(),
-            site.options().clone(),
-            site.surface(),
-            setup.config(),
-            setup.deps(),
-        )
+        self.spawn_module_lazy(site, &setup)
     }
 
     fn load(
@@ -471,26 +474,22 @@ impl<
         let root_cfg = config.modules().get(root_name).cloned().unwrap_or_else(|| {
             ModuleConfig::new(root_name.clone(), config.root().options().clone())
         });
-        let (root_id, root_module) = self.load_single_module(
-            &root_cfg,
-            config,
-            None,
-            None,
-            crate::shared::primitives::LayoutSurface::Bar,
-        )?;
+        let (root_id, root_module) = self.load_single_module(&root_cfg, config)?;
+        self.record_site(
+            root_id,
+            ModuleSiteInfo::configured(root_cfg.name().clone(), None),
+        );
         self.modules.insert(root_id, root_module);
         self.root_module = Some(root_id);
 
         // 2. Load all configured child modules
         for mod_cfg in config.modules().modules().values() {
             if mod_cfg.is_enabled() && mod_cfg.name() != root_name {
-                let (id, module) = self.load_single_module(
-                    mod_cfg,
-                    config,
-                    Some(root_id),
-                    None,
-                    crate::shared::primitives::LayoutSurface::Bar,
-                )?;
+                let (id, module) = self.load_single_module(mod_cfg, config)?;
+                self.record_site(
+                    id,
+                    ModuleSiteInfo::configured(mod_cfg.name().clone(), Some(root_id)),
+                );
                 self.modules.insert(id, module);
             }
         }
@@ -503,14 +502,13 @@ impl<
                     if let Some(name_str) = item.as_str() {
                         let mod_name = crate::shared::primitives::ModuleName::new(name_str);
                         if !self.name_to_ids.contains_key(&mod_name) {
-                            let auto_cfg = ModuleConfig::new(mod_name, ModuleOptions::default());
-                            let (id, module) = self.load_single_module(
-                                &auto_cfg,
-                                config,
-                                Some(root_id),
-                                None,
-                                crate::shared::primitives::LayoutSurface::Bar,
-                            )?;
+                            let auto_cfg =
+                                ModuleConfig::new(mod_name.clone(), ModuleOptions::default());
+                            let (id, module) = self.load_single_module(&auto_cfg, config)?;
+                            self.record_site(
+                                id,
+                                ModuleSiteInfo::configured(mod_name, Some(root_id)),
+                            );
                             self.modules.insert(id, module);
                         }
                     }
@@ -529,11 +527,8 @@ impl<
             std::collections::HashMap::new();
 
         for (id, module) in std::mem::take(&mut self.modules) {
-            let (layout_tx, layout_rx) =
-                tokio::sync::watch::channel(std::collections::HashMap::new());
-            layout_senders.insert(id, WatchLayoutSender { tx: layout_tx });
-
-            let ctx = self.build_site_context(id, layout_rx, deps);
+            let (ctx, sender) = self.build_site_context(id, deps);
+            layout_senders.insert(id, sender);
 
             let style_resolver = self.create_style_resolver_for_module(module.styles());
 
@@ -617,10 +612,8 @@ impl<
                 self.active_signals.insert(*sub);
             }
 
-            let (layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
-            new_senders.insert(id, WatchLayoutSender { tx: layout_tx });
-
-            let ctx = self.build_site_context(id, layout_rx, deps);
+            let (ctx, sender) = self.build_site_context(id, deps);
+            new_senders.insert(id, sender);
 
             let style_resolver = self.create_style_resolver_for_module(module.styles());
             let vdom_diff =
@@ -709,6 +702,47 @@ mod tests {
         assert!(TestRegistryPort::root_module(&registry).is_some());
     }
 
+    /// The root sits on the bar with no parent, and every child it loads, whether configured
+    /// under `[modules]` or only named in a root section, sits on the bar under the root.
+    #[test]
+    fn test_module_registry_load_places_children_under_the_root() {
+        let home = crate::test_utils::TestHome::new("registry");
+        let mut registry = ModuleRegistry::new(home.env());
+        let toml_str = r#"
+            [root]
+            name = "bar"
+            left = ["clock"]
+
+            [modules.calendar]
+        "#;
+        let dto: ConfigDto = toml::from_str(toml_str).unwrap();
+        let config = dto.into_domain(&MockValidator);
+
+        TestRegistryPort::load(&mut registry, &config).unwrap();
+
+        let root = TestRegistryPort::root_module(&registry).unwrap();
+        assert_eq!(TestRegistryPort::parent_of(&registry, root), None);
+        for name in ["clock", "calendar"] {
+            let name = crate::shared::primitives::ModuleName::new(name);
+            let [child] = registry.name_to_ids[&name].as_slice() else {
+                panic!("expected one {name} module");
+            };
+            assert_eq!(TestRegistryPort::parent_of(&registry, *child), Some(root));
+            assert_eq!(
+                TestRegistryPort::resolve_site(
+                    &registry,
+                    Some(root),
+                    &crate::shared::primitives::ModuleKey::from_name(name.clone())
+                ),
+                Some(*child)
+            );
+            assert_eq!(
+                registry.sites.get(child).map(ModuleSiteInfo::surface),
+                Some(crate::shared::primitives::LayoutSurface::Bar)
+            );
+        }
+    }
+
     #[test]
     fn test_per_site_module_identity() {
         let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
@@ -736,24 +770,16 @@ mod tests {
         let parent_a = ModuleId::new(100);
         let parent_b = ModuleId::new(200);
 
-        let (id_a, _) = registry
-            .load_single_module(
-                &calendar_cfg,
-                &config,
-                Some(parent_a),
-                None,
-                crate::shared::primitives::LayoutSurface::Bar,
-            )
-            .unwrap();
-        let (id_b, _) = registry
-            .load_single_module(
-                &calendar_cfg,
-                &config,
-                Some(parent_b),
-                None,
-                crate::shared::primitives::LayoutSurface::Bar,
-            )
-            .unwrap();
+        let (id_a, _) = registry.load_single_module(&calendar_cfg, &config).unwrap();
+        registry.record_site(
+            id_a,
+            ModuleSiteInfo::configured(calendar_cfg.name().clone(), Some(parent_a)),
+        );
+        let (id_b, _) = registry.load_single_module(&calendar_cfg, &config).unwrap();
+        registry.record_site(
+            id_b,
+            ModuleSiteInfo::configured(calendar_cfg.name().clone(), Some(parent_b)),
+        );
 
         // Two sites embedding the same module name mint distinct ModuleIds.
         assert_ne!(id_a, id_b);
@@ -1149,8 +1175,7 @@ mod tests {
             // ...and the ModuleContext `reload_module` actually builds for the
             // rebuilt actor must carry that surface, not reset to
             // `ModuleContext::new`'s `LayoutSurface::Bar` default.
-            let (_layout_tx, layout_rx) = tokio::sync::watch::channel(HashMap::new());
-            let ctx = registry.build_site_context(id, layout_rx, &deps);
+            let (ctx, _sender) = registry.build_site_context(id, &deps);
             assert_eq!(
                 ctx.surface(),
                 crate::shared::primitives::LayoutSurface::Popup
@@ -1325,6 +1350,85 @@ mod tests {
                 registry.sites.get(&id).map(ModuleSiteInfo::surface),
                 Some(crate::shared::primitives::LayoutSurface::Panel)
             );
+        });
+    }
+
+    /// The context built for a site's actor carries the site's id, parent and surface, and
+    /// reads its layout from the channel the site's sender feeds.
+    #[test]
+    fn test_build_site_context_wires_the_site_and_its_layout_channel() {
+        crate::test_utils::block_on(async {
+            let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+                crate::shared::env::domain::BaseDirectories::new(
+                    crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from(
+                        "/tmp",
+                    )),
+                ),
+                crate::shared::env::domain::RustLog::new(String::new()),
+                None,
+            ));
+            let mut registry = ModuleRegistry::new(app_env);
+            let dto: ConfigDto = toml::from_str("[root]\nname = \"bar\"").unwrap();
+            let config = dto.into_domain(&MockValidator);
+            TestRegistryPort::load(&mut registry, &config).unwrap();
+            let root_id = TestRegistryPort::root_module(&registry).unwrap();
+            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    std::sync::Arc::new(SignalHub::new(config.clone())),
+                    std::sync::Arc::new(
+                        crate::features::module_runtime::test_support::MockSurfaceManager,
+                    ),
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockLayoutSender,
+                        ),
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockDisplaySender,
+                        ),
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockUiSender,
+                        ),
+                    ),
+                ),
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
+            );
+            let id = registry
+                .spawn_module(
+                    crate::features::module_runtime::ports::LazySite::new(
+                        root_id,
+                        crate::shared::primitives::ModuleKey::from_name(
+                            crate::shared::primitives::ModuleName::new("calendar"),
+                        ),
+                    )
+                    .with_surface(crate::shared::primitives::LayoutSurface::Panel),
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
+                )
+                .unwrap()
+                .id();
+
+            let (mut ctx, sender) = registry.build_site_context(id, &deps);
+
+            assert_eq!(ctx.id(), id);
+            assert_eq!(ctx.parent_id(), Some(root_id));
+            assert_eq!(
+                ctx.surface(),
+                crate::shared::primitives::LayoutSurface::Panel
+            );
+            let monitor = crate::shared::primitives::MonitorId::new("DP-1");
+            let bounds = crate::shared::primitives::ChildBounds::new(
+                crate::shared::primitives::geometry::Rect::new(
+                    crate::shared::primitives::geometry::Position::new(3, 0),
+                    crate::shared::primitives::geometry::Size::new(40, 20),
+                ),
+                crate::shared::primitives::SizeConstraint::none(),
+            );
+            crate::features::module_runtime::ports::LayoutSender::send_layout(
+                &sender,
+                HashMap::from([(monitor.clone(), bounds)]),
+            );
+            assert_eq!(ctx.rxs_mut().0.borrow().get(&monitor), Some(&bounds));
         });
     }
 }

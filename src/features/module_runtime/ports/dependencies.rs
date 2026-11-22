@@ -106,7 +106,6 @@ impl<LS, DS, US> Clone for ModuleHandles<LS, DS, US> {
     }
 }
 
-#[derive(Clone)]
 pub(crate) struct ModuleRuntimeDependencies<
     Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
     LS: LayoutEventSender + 'static,
@@ -129,6 +128,22 @@ impl<
         Self {
             handles,
             canvas_factory,
+        }
+    }
+}
+
+// By hand: a derive would ask the three sender types to be `Clone`, which the handles do not need.
+impl<
+    Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
+    LS: LayoutEventSender + 'static,
+    DS: DisplayCommandSender + 'static,
+    US: UiCommandSender + 'static,
+> Clone for ModuleRuntimeDependencies<Fact, LS, DS, US>
+{
+    fn clone(&self) -> Self {
+        Self {
+            handles: self.handles.clone(),
+            canvas_factory: self.canvas_factory.clone(),
         }
     }
 }
