@@ -54,8 +54,7 @@ impl ShmBuffer {
             + 'static,
     {
         let (width, height) = (size.width(), size.height());
-        let frame_size =
-            usize::try_from(width.saturating_mul(height).saturating_mul(4)).unwrap_or_default();
+        let frame_size = frame_bytes(width, height);
         let total_size = frame_size.saturating_mul(2);
         let (shm, file) = SharedMapping::create(total_size, source.runtime_dir)?;
 
@@ -66,37 +65,11 @@ impl ShmBuffer {
             (),
         );
 
-        let width_i32 = i32::try_from(width).unwrap_or_default();
-        let height_i32 = i32::try_from(height).unwrap_or_default();
-        let stride_i32 = i32::try_from(width.saturating_mul(4)).unwrap_or_default();
-
-        let busy_0 = Arc::new(AtomicBool::new(false));
-        let user_data_0 = BufferUserData::new(busy_0.clone());
-        let buffer_0 = pool.create_buffer(
-            0,
-            width_i32,
-            height_i32,
-            stride_i32,
-            wayland_client::protocol::wl_shm::Format::Argb8888,
-            queue_handle,
-            user_data_0,
-        );
-
-        let busy_1 = Arc::new(AtomicBool::new(false));
-        let user_data_1 = BufferUserData::new(busy_1.clone());
-        let buffer_1 = pool.create_buffer(
-            i32::try_from(frame_size).unwrap_or_default(),
-            width_i32,
-            height_i32,
-            stride_i32,
-            wayland_client::protocol::wl_shm::Format::Argb8888,
-            queue_handle,
-            user_data_1,
-        );
-
+        let first = SlotGeometry::of_frame(width, height);
+        let second = first.at_offset(i32::try_from(frame_size).unwrap_or_default());
         let slots = [
-            BufferSlot::new(buffer_0, busy_0),
-            BufferSlot::new(buffer_1, busy_1),
+            create_slot(&pool, first, queue_handle),
+            create_slot(&pool, second, queue_handle),
         ];
 
         Ok(Self {
@@ -111,16 +84,14 @@ impl ShmBuffer {
 
     #[must_use]
     pub(crate) fn mmap_mut(&mut self) -> &mut [u8] {
-        let frame_size = usize::try_from(self.width.saturating_mul(self.height).saturating_mul(4))
-            .unwrap_or_default();
+        let frame_size = frame_bytes(self.width, self.height);
         let offset = self.back_index.saturating_mul(frame_size);
-        if let Some(slot) = self.slots.get(self.back_index)
-            && slot.is_busy()
+        if self
+            .slots
+            .get(self.back_index)
+            .is_some_and(BufferSlot::is_busy)
         {
-            tracing::debug!(
-                slot = self.back_index,
-                "Target back buffer is still marked busy by compositor; writing anyway"
-            );
+            log_busy_back_slot(self.back_index);
         }
         let end = offset.saturating_add(frame_size);
         self.shm
@@ -161,4 +132,67 @@ impl Drop for ShmBuffer {
         }
         self.pool.destroy();
     }
+}
+
+/// The bytes one ARGB8888 frame of `width`×`height` takes.
+fn frame_bytes(width: u32, height: u32) -> usize {
+    usize::try_from(width.saturating_mul(height).saturating_mul(4)).unwrap_or_default()
+}
+
+/// Notes that `mmap_mut` hands out a back slot the compositor has not
+/// released yet, which is drawn into anyway.
+fn log_busy_back_slot(slot: usize) {
+    tracing::debug!(
+        slot,
+        "Target back buffer is still marked busy by compositor; writing anyway"
+    );
+}
+
+/// Where one slot's ARGB8888 frame sits in the pool, as `create_buffer` takes it.
+#[derive(Clone, Copy)]
+struct SlotGeometry {
+    offset: i32,
+    width: i32,
+    height: i32,
+    stride: i32,
+}
+
+impl SlotGeometry {
+    /// A `width`×`height` frame at the start of the pool.
+    fn of_frame(width: u32, height: u32) -> Self {
+        Self {
+            offset: 0,
+            width: i32::try_from(width).unwrap_or_default(),
+            height: i32::try_from(height).unwrap_or_default(),
+            stride: i32::try_from(width.saturating_mul(4)).unwrap_or_default(),
+        }
+    }
+
+    /// The same frame `offset` bytes into the pool.
+    const fn at_offset(self, offset: i32) -> Self {
+        Self { offset, ..self }
+    }
+}
+
+/// A slot whose `wl_buffer` is `geometry` of `pool`, not busy.
+fn create_slot<S>(
+    pool: &WlShmPool,
+    geometry: SlotGeometry,
+    queue_handle: &QueueHandle<S>,
+) -> BufferSlot
+where
+    S: wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, BufferUserData>
+        + 'static,
+{
+    let busy = Arc::new(AtomicBool::new(false));
+    let buffer = pool.create_buffer(
+        geometry.offset,
+        geometry.width,
+        geometry.height,
+        geometry.stride,
+        wayland_client::protocol::wl_shm::Format::Argb8888,
+        queue_handle,
+        BufferUserData::new(busy.clone()),
+    );
+    BufferSlot::new(buffer, busy)
 }
