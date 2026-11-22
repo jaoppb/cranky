@@ -444,17 +444,20 @@ impl<
 
     fn spawn_module(
         &mut self,
-        parent: ModuleId,
-        key: &crate::shared::primitives::ModuleKey,
-        options: ModuleOptions,
-        surface: crate::shared::primitives::LayoutSurface,
-        config: &crate::shared::config::domain::Config,
-        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
+        site: crate::features::module_runtime::ports::LazySite,
+        setup: crate::features::module_runtime::ports::ModuleSetup<'_, Fact, LS, DS, US>,
     ) -> Result<
         crate::features::module_runtime::ports::SpawnedModule<WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
-        self.spawn_module_lazy(parent, key, options, surface, config, deps)
+        self.spawn_module_lazy(
+            site.parent(),
+            site.key(),
+            site.options().clone(),
+            site.surface(),
+            setup.config(),
+            setup.deps(),
+        )
     }
 
     fn load(
@@ -555,14 +558,15 @@ impl<
     fn reload_module(
         &mut self,
         name: &crate::shared::primitives::ModuleName,
-        config: &crate::shared::config::domain::Config,
-        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
+        setup: crate::features::module_runtime::ports::ModuleSetup<'_, Fact, LS, DS, US>,
     ) -> Result<
         std::collections::HashMap<ModuleId, WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
         use crate::app::builtins::BuiltinError;
         use crate::features::module_runtime::ports::RegistryLoadError;
+
+        let (config, deps) = (setup.config(), setup.deps());
 
         let mut new_senders: std::collections::HashMap<ModuleId, WatchLayoutSender> =
             std::collections::HashMap::new();
@@ -981,12 +985,9 @@ mod tests {
             let key = crate::shared::primitives::ModuleKey::from_name(name);
             let spawned = registry
                 .spawn_module(
-                    root_id,
-                    &key,
-                    crate::shared::primitives::ModuleOptions::default(),
-                    crate::shared::primitives::LayoutSurface::Popup,
-                    &config,
-                    &deps,
+                    crate::features::module_runtime::ports::LazySite::new(root_id, key.clone())
+                        .with_surface(crate::shared::primitives::LayoutSurface::Popup),
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
                 )
                 .unwrap();
             let id = spawned.id();
@@ -1048,12 +1049,8 @@ mod tests {
         let name = crate::shared::primitives::ModuleName::new("does-not-exist");
         let key = crate::shared::primitives::ModuleKey::from_name(name);
         let result = registry.spawn_module(
-            root_id,
-            &key,
-            crate::shared::primitives::ModuleOptions::default(),
-            crate::shared::primitives::LayoutSurface::Bar,
-            &config,
-            &deps,
+            crate::features::module_runtime::ports::LazySite::new(root_id, key),
+            crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
         );
         assert!(matches!(
             result,
@@ -1123,12 +1120,9 @@ mod tests {
             let key = crate::shared::primitives::ModuleKey::from_name(name.clone());
             let spawned = registry
                 .spawn_module(
-                    root_id,
-                    &key,
-                    crate::shared::primitives::ModuleOptions::default(),
-                    crate::shared::primitives::LayoutSurface::Popup,
-                    &config,
-                    &deps,
+                    crate::features::module_runtime::ports::LazySite::new(root_id, key)
+                        .with_surface(crate::shared::primitives::LayoutSurface::Popup),
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
                 )
                 .unwrap();
             let id = spawned.id();
@@ -1139,7 +1133,12 @@ mod tests {
 
             // Trigger a reload for that module name — the same path a widget
             // script or config hot-reload drives.
-            registry.reload_module(&name, &config, &deps).unwrap();
+            registry
+                .reload_module(
+                    &name,
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
+                )
+                .unwrap();
 
             // The recorded site facts must survive the reload...
             assert_eq!(
@@ -1216,12 +1215,9 @@ mod tests {
             let key = crate::shared::primitives::ModuleKey::from_name(name);
             let spawned = registry
                 .spawn_module(
-                    root_id,
-                    &key,
-                    crate::shared::primitives::ModuleOptions::default(),
-                    crate::shared::primitives::LayoutSurface::Popup,
-                    &config,
-                    &deps,
+                    crate::features::module_runtime::ports::LazySite::new(root_id, key.clone())
+                        .with_surface(crate::shared::primitives::LayoutSurface::Popup),
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
                 )
                 .unwrap();
             let id = spawned.id();
@@ -1308,12 +1304,10 @@ mod tests {
 
             let id = registry
                 .spawn_module(
-                    root_id,
-                    &key,
-                    options.clone(),
-                    crate::shared::primitives::LayoutSurface::Panel,
-                    &config,
-                    &deps,
+                    crate::features::module_runtime::ports::LazySite::new(root_id, key.clone())
+                        .with_options(options.clone())
+                        .with_surface(crate::shared::primitives::LayoutSurface::Panel),
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
                 )
                 .unwrap()
                 .id();

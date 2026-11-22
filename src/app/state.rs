@@ -384,12 +384,13 @@ impl<
         let deps = self.module_runtime_dependencies();
 
         match self.registry.spawn_module(
-            parent,
-            key,
-            options,
-            surface,
-            &self.read_model.config,
-            &deps,
+            crate::features::module_runtime::ports::LazySite::new(parent, key.clone())
+                .with_options(options)
+                .with_surface(surface),
+            crate::features::module_runtime::ports::ModuleSetup::new(
+                &self.read_model.config,
+                &deps,
+            ),
         ) {
             Ok(spawned) => {
                 let id = spawned.id();
@@ -529,10 +530,13 @@ impl<
             tracing::debug!("Base stylesheet changed; reloading all active modules");
             let all_modules: Vec<_> = self.read_model.module_names.values().cloned().collect();
             for mod_name in all_modules {
-                if let Ok(new_senders) =
-                    self.registry
-                        .reload_module(&mod_name, &self.read_model.config, deps)
-                {
+                if let Ok(new_senders) = self.registry.reload_module(
+                    &mod_name,
+                    crate::features::module_runtime::ports::ModuleSetup::new(
+                        &self.read_model.config,
+                        deps,
+                    ),
+                ) {
                     for (id, sender) in new_senders {
                         self.layout_senders.insert(id, sender);
                     }
@@ -548,10 +552,13 @@ impl<
             );
             let mut any_reloaded = false;
             for mod_name in mods {
-                match self
-                    .registry
-                    .reload_module(&mod_name, &self.read_model.config, deps)
-                {
+                match self.registry.reload_module(
+                    &mod_name,
+                    crate::features::module_runtime::ports::ModuleSetup::new(
+                        &self.read_model.config,
+                        deps,
+                    ),
+                ) {
                     Ok(new_senders) => {
                         for (id, sender) in new_senders {
                             self.layout_senders.insert(id, sender);
@@ -577,10 +584,13 @@ impl<
             match cmd {
                 SystemCommand::ReloadModule(name) => {
                     tracing::info!("Reloading module: {name}");
-                    match self
-                        .registry
-                        .reload_module(&name, &self.read_model.config, &deps)
-                    {
+                    match self.registry.reload_module(
+                        &name,
+                        crate::features::module_runtime::ports::ModuleSetup::new(
+                            &self.read_model.config,
+                            &deps,
+                        ),
+                    ) {
                         Ok(new_senders) => {
                             for (id, sender) in new_senders {
                                 self.layout_senders.insert(id, sender);
@@ -1716,15 +1726,16 @@ mod tests {
             app.handle_container_layouts(parent, &MonitorId::new("DP-1"), &layouts)
                 .await;
 
-            let requests = requests.lock().unwrap();
+            let requests = std::mem::take(&mut *requests.lock().unwrap());
+            let [site] = requests.as_slice() else {
+                panic!("expected one spawn, got {}", requests.len());
+            };
+            assert_eq!(site.parent(), parent);
+            assert_eq!(site.key(), &key);
+            assert_eq!(site.options(), &options);
             assert_eq!(
-                requests.as_slice(),
-                [(
-                    parent,
-                    key,
-                    options,
-                    crate::shared::primitives::LayoutSurface::Popup
-                )]
+                site.surface(),
+                crate::shared::primitives::LayoutSurface::Popup
             );
         });
     }

@@ -1,13 +1,13 @@
 //! The registry port that loads, reloads and spawns module actors and resolves embedded modules to
 //! them.
-use super::dependencies::ModuleRuntimeDependencies;
+use super::dependencies::{ModuleRuntimeDependencies, ModuleSetup};
 use super::errors::RegistryLoadError;
 use super::layout::{LayoutEventSender, LayoutSender};
 use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalKind;
-use crate::shared::primitives::ModuleId;
+use crate::shared::primitives::{LayoutSurface, ModuleId, ModuleKey, ModuleOptions};
 use async_trait::async_trait;
 
 /// The `ModuleId` minted for a lazy spawn, plus the sender its new actor's
@@ -34,6 +34,62 @@ impl<Snd: LayoutSender> SpawnedModule<Snd> {
     #[must_use]
     pub(crate) fn into_sender(self) -> Snd {
         self.sender
+    }
+}
+
+/// A module some parent embeds with no actor of its own yet: the parent, the module's key, the
+/// options the embedding call passed and which of the parent's surfaces it sits on, which a lazy
+/// spawn builds the new actor from.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct LazySite {
+    parent: ModuleId,
+    key: ModuleKey,
+    options: ModuleOptions,
+    surface: LayoutSurface,
+}
+
+impl LazySite {
+    /// The site of `key` under `parent`, with no options, in the parent's bar tree.
+    #[must_use]
+    pub(crate) fn new(parent: ModuleId, key: ModuleKey) -> Self {
+        Self {
+            parent,
+            key,
+            options: ModuleOptions::default(),
+            surface: LayoutSurface::Bar,
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn with_options(mut self, options: ModuleOptions) -> Self {
+        self.options = options;
+        self
+    }
+
+    #[must_use]
+    pub(crate) const fn with_surface(mut self, surface: LayoutSurface) -> Self {
+        self.surface = surface;
+        self
+    }
+
+    #[must_use]
+    pub(crate) const fn parent(&self) -> ModuleId {
+        self.parent
+    }
+
+    #[must_use]
+    pub(crate) const fn key(&self) -> &ModuleKey {
+        &self.key
+    }
+
+    #[must_use]
+    pub(crate) const fn options(&self) -> &ModuleOptions {
+        &self.options
+    }
+
+    #[must_use]
+    pub(crate) const fn surface(&self) -> LayoutSurface {
+        self.surface
     }
 }
 
@@ -66,8 +122,7 @@ pub(crate) trait ModuleRegistryPort<
     fn reload_module(
         &mut self,
         name: &crate::shared::primitives::ModuleName,
-        config: &Config,
-        deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
+        setup: ModuleSetup<'_, Fact, LS, DS, US>,
     ) -> Result<std::collections::HashMap<ModuleId, Snd>, RegistryLoadError>;
 
     fn root_module(&self) -> Option<ModuleId>;
@@ -117,12 +172,8 @@ pub(crate) trait ModuleRegistryPort<
     /// fatal at boot.
     fn spawn_module(
         &mut self,
-        parent: ModuleId,
-        key: &crate::shared::primitives::ModuleKey,
-        options: crate::shared::primitives::ModuleOptions,
-        surface: crate::shared::primitives::LayoutSurface,
-        config: &Config,
-        deps: &ModuleRuntimeDependencies<Fact, LS, DS, US>,
+        site: LazySite,
+        setup: ModuleSetup<'_, Fact, LS, DS, US>,
     ) -> Result<SpawnedModule<Snd>, RegistryLoadError>;
 
     fn modules_using_style(
