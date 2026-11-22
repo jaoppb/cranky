@@ -6,7 +6,7 @@ use super::declared_length::DeclaredLength;
 use super::declared_lengths::DeclaredLengths;
 use super::value::Cascade;
 use crate::features::layout_engine::domain::{BoxMargin, Gap};
-use crate::shared::config::domain::{BorderRadius, BorderSize, FontSize};
+use crate::shared::config::domain::{AxisMargins, BorderRadius, BorderSize, FontSize};
 
 /// The two font sizes a font-relative length resolves against: the element's own (the `em`
 /// base) and the root element's (the `rem` base).
@@ -124,7 +124,10 @@ impl DeclaredLengths {
         let left = bases
             .resolve_scalar(self.padding_left)
             .map_or_else(|| current.left(), f64::from);
-        computed.set_padding(BoxMargin::new(top, bottom, left, right));
+        computed.set_padding(BoxMargin::new(
+            AxisMargins::new(top, bottom),
+            AxisMargins::new(left, right),
+        ));
     }
 
     fn apply_margin(&self, computed: &mut ComputedStyle, bases: FontSizeBases) {
@@ -148,7 +151,10 @@ impl DeclaredLengths {
         let left = bases
             .resolve_scalar(self.margin_left)
             .map_or_else(|| current.left(), f64::from);
-        computed.set_margin(BoxMargin::new(top, bottom, left, right));
+        computed.set_margin(BoxMargin::new(
+            AxisMargins::new(top, bottom),
+            AxisMargins::new(left, right),
+        ));
     }
 }
 
@@ -244,7 +250,10 @@ mod tests {
         lengths.set_padding_bottom(DeclaredLength::Ems(0.5));
 
         let mut computed = ComputedStyle::default();
-        computed.set_padding(BoxMargin::new(1.0, 2.0, 3.0, 4.0));
+        computed.set_padding(BoxMargin::new(
+            AxisMargins::new(1.0, 2.0),
+            AxisMargins::new(3.0, 4.0),
+        ));
         lengths.apply(
             &mut computed,
             FontSizeBases::new(FontSize::new(8.0), FontSize::new(14.0)),
@@ -252,7 +261,10 @@ mod tests {
 
         assert_eq!(
             computed.padding(),
-            Some(&BoxMargin::new(1.0, 4.0, 3.0, 14.0))
+            Some(&BoxMargin::new(
+                AxisMargins::new(1.0, 4.0),
+                AxisMargins::new(3.0, 14.0)
+            ))
         );
     }
 
@@ -263,7 +275,10 @@ mod tests {
         lengths.set_margin_left(DeclaredLength::Rem(0.5));
 
         let mut computed = ComputedStyle::default();
-        computed.set_margin(BoxMargin::new(5.0, 6.0, 1.0, 9.0));
+        computed.set_margin(BoxMargin::new(
+            AxisMargins::new(5.0, 6.0),
+            AxisMargins::new(1.0, 9.0),
+        ));
         lengths.apply(
             &mut computed,
             FontSizeBases::new(FontSize::new(8.0), FontSize::new(14.0)),
@@ -271,7 +286,10 @@ mod tests {
 
         assert_eq!(
             computed.margin(),
-            Some(&BoxMargin::new(16.0, 6.0, 7.0, 9.0))
+            Some(&BoxMargin::new(
+                AxisMargins::new(16.0, 6.0),
+                AxisMargins::new(7.0, 9.0)
+            ))
         );
 
         let mut bare = ComputedStyle::default();
@@ -279,6 +297,12 @@ mod tests {
             &mut bare,
             FontSizeBases::new(FontSize::new(8.0), FontSize::new(14.0)),
         );
-        assert_eq!(bare.margin(), Some(&BoxMargin::new(16.0, 0.0, 7.0, 0.0)));
+        assert_eq!(
+            bare.margin(),
+            Some(&BoxMargin::new(
+                AxisMargins::new(16.0, 0.0),
+                AxisMargins::new(7.0, 0.0)
+            ))
+        );
     }
 }

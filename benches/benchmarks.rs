@@ -24,7 +24,7 @@ use cranky::features::styling::ports::{CssParserPort, StyleResolverPort};
 use cranky::features::vdom::adapters::DefaultVdomDiffAdapter;
 use cranky::features::vdom::domain::{NodeKey, TextContent, VNode};
 use cranky::features::vdom::ports::VdomDiffPort;
-use cranky::shared::config::domain::{Config, FontFamily, FontSize, ModuleConfig};
+use cranky::shared::config::domain::{AxisMargins, Config, FontFamily, FontSize, ModuleConfig};
 use cranky::shared::dbus::domain::DBusSubscription;
 use cranky::shared::events::signals::{SignalHub, SignalKind};
 use cranky::shared::primitives::color::{Color, DrawingColor};
@@ -87,7 +87,10 @@ fn create_styled_node_tree(depth: usize, branching: usize) -> StyledNode {
     style.set_flex_direction(FlexDirection::Row);
     style.set_justify_content(JustifyContent::SpaceBetween);
     style.set_align_items(AlignItems::Center);
-    style.set_margin(BoxMargin::new(1.0, 1.0, 1.0, 1.0));
+    style.set_margin(BoxMargin::new(
+        AxisMargins::new(1.0, 1.0),
+        AxisMargins::new(1.0, 1.0),
+    ));
 
     if depth == 0 {
         StyledNode::Text {

@@ -1,6 +1,7 @@
 use super::declared;
 use crate::features::layout_engine::domain::BoxMargin;
 use crate::features::styling::domain::{ComputedStyle, CssLength};
+use crate::shared::config::domain::AxisMargins;
 
 type Sides = fn(&ComputedStyle) -> Option<&BoxMargin>;
 
@@ -13,13 +14,16 @@ const BOX_PROPERTIES: [(&str, Sides); 2] = [
 
 #[test]
 fn box_shorthand_maps_css_order_to_each_side() {
-    // CSS order is top, right, bottom, left; `BoxMargin::new` takes top,
-    // bottom, left, right.
+    // CSS order is top, right, bottom, left; `BoxMargin::new` takes top and
+    // bottom, then left and right.
     for (property, sides) in BOX_PROPERTIES {
         let style = declared(&format!("{property}: 1px 2px 3px 4px;"));
         assert_eq!(
             sides(&style),
-            Some(&BoxMargin::new(1.0, 3.0, 4.0, 2.0)),
+            Some(&BoxMargin::new(
+                AxisMargins::new(1.0, 3.0),
+                AxisMargins::new(4.0, 2.0)
+            )),
             "{property}"
         );
     }
@@ -28,10 +32,22 @@ fn box_shorthand_maps_css_order_to_each_side() {
 #[test]
 fn box_longhand_replaces_only_its_own_side() {
     let cases = [
-        ("top", BoxMargin::new(9.0, 3.0, 4.0, 2.0)),
-        ("right", BoxMargin::new(1.0, 3.0, 4.0, 9.0)),
-        ("bottom", BoxMargin::new(1.0, 9.0, 4.0, 2.0)),
-        ("left", BoxMargin::new(1.0, 3.0, 9.0, 2.0)),
+        (
+            "top",
+            BoxMargin::new(AxisMargins::new(9.0, 3.0), AxisMargins::new(4.0, 2.0)),
+        ),
+        (
+            "right",
+            BoxMargin::new(AxisMargins::new(1.0, 3.0), AxisMargins::new(4.0, 9.0)),
+        ),
+        (
+            "bottom",
+            BoxMargin::new(AxisMargins::new(1.0, 9.0), AxisMargins::new(4.0, 2.0)),
+        ),
+        (
+            "left",
+            BoxMargin::new(AxisMargins::new(1.0, 3.0), AxisMargins::new(9.0, 2.0)),
+        ),
     ];
     for (property, sides) in BOX_PROPERTIES {
         for (side, expected) in &cases {
@@ -47,7 +63,10 @@ fn box_longhand_alone_leaves_the_other_sides_at_zero() {
         let style = declared(&format!("{property}-left: 7px;"));
         assert_eq!(
             sides(&style),
-            Some(&BoxMargin::new(0.0, 0.0, 7.0, 0.0)),
+            Some(&BoxMargin::new(
+                AxisMargins::new(0.0, 0.0),
+                AxisMargins::new(7.0, 0.0)
+            )),
             "{property}"
         );
     }
@@ -56,8 +75,20 @@ fn box_longhand_alone_leaves_the_other_sides_at_zero() {
 #[test]
 fn padding_and_margin_do_not_write_into_each_other() {
     let style = declared("padding-top: 5px; margin-bottom: 6px;");
-    assert_eq!(style.padding(), Some(&BoxMargin::new(5.0, 0.0, 0.0, 0.0)));
-    assert_eq!(style.margin(), Some(&BoxMargin::new(0.0, 6.0, 0.0, 0.0)));
+    assert_eq!(
+        style.padding(),
+        Some(&BoxMargin::new(
+            AxisMargins::new(5.0, 0.0),
+            AxisMargins::new(0.0, 0.0)
+        ))
+    );
+    assert_eq!(
+        style.margin(),
+        Some(&BoxMargin::new(
+            AxisMargins::new(0.0, 6.0),
+            AxisMargins::new(0.0, 0.0)
+        ))
+    );
 }
 
 #[test]

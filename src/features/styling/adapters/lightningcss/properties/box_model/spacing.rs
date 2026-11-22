@@ -2,6 +2,7 @@
 use super::utils::length_to_f64;
 use crate::features::layout_engine::domain::BoxMargin;
 use crate::features::styling::domain::ComputedStyle;
+use crate::shared::config::domain::AxisMargins;
 use lightningcss::properties::Property;
 
 pub(crate) fn apply_padding_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
@@ -11,17 +12,18 @@ pub(crate) fn apply_padding_properties(style: &mut ComputedStyle, prop: &Propert
             let right = length_to_f64(&padding.right);
             let bottom = length_to_f64(&padding.bottom);
             let left = length_to_f64(&padding.left);
-            style.set_padding(BoxMargin::new(top, bottom, left, right));
+            style.set_padding(BoxMargin::new(
+                AxisMargins::new(top, bottom),
+                AxisMargins::new(left, right),
+            ));
             true
         }
         Property::PaddingTop(len) => {
             let top = length_to_f64(len);
             let current = style.padding().cloned().unwrap_or_default();
             style.set_padding(BoxMargin::new(
-                top,
-                current.bottom(),
-                current.left(),
-                current.right(),
+                AxisMargins::new(top, current.bottom()),
+                AxisMargins::new(current.left(), current.right()),
             ));
             true
         }
@@ -29,10 +31,8 @@ pub(crate) fn apply_padding_properties(style: &mut ComputedStyle, prop: &Propert
             let right = length_to_f64(len);
             let current = style.padding().cloned().unwrap_or_default();
             style.set_padding(BoxMargin::new(
-                current.top(),
-                current.bottom(),
-                current.left(),
-                right,
+                AxisMargins::new(current.top(), current.bottom()),
+                AxisMargins::new(current.left(), right),
             ));
             true
         }
@@ -40,10 +40,8 @@ pub(crate) fn apply_padding_properties(style: &mut ComputedStyle, prop: &Propert
             let bottom = length_to_f64(len);
             let current = style.padding().cloned().unwrap_or_default();
             style.set_padding(BoxMargin::new(
-                current.top(),
-                bottom,
-                current.left(),
-                current.right(),
+                AxisMargins::new(current.top(), bottom),
+                AxisMargins::new(current.left(), current.right()),
             ));
             true
         }
@@ -51,10 +49,8 @@ pub(crate) fn apply_padding_properties(style: &mut ComputedStyle, prop: &Propert
             let left = length_to_f64(len);
             let current = style.padding().cloned().unwrap_or_default();
             style.set_padding(BoxMargin::new(
-                current.top(),
-                current.bottom(),
-                left,
-                current.right(),
+                AxisMargins::new(current.top(), current.bottom()),
+                AxisMargins::new(left, current.right()),
             ));
             true
         }
@@ -69,17 +65,18 @@ pub(crate) fn apply_margin_properties(style: &mut ComputedStyle, prop: &Property
             let right = length_to_f64(&margin.right);
             let bottom = length_to_f64(&margin.bottom);
             let left = length_to_f64(&margin.left);
-            style.set_margin(BoxMargin::new(top, bottom, left, right));
+            style.set_margin(BoxMargin::new(
+                AxisMargins::new(top, bottom),
+                AxisMargins::new(left, right),
+            ));
             true
         }
         Property::MarginTop(len) => {
             let top = length_to_f64(len);
             let current = style.margin().cloned().unwrap_or_default();
             style.set_margin(BoxMargin::new(
-                top,
-                current.bottom(),
-                current.left(),
-                current.right(),
+                AxisMargins::new(top, current.bottom()),
+                AxisMargins::new(current.left(), current.right()),
             ));
             true
         }
@@ -87,10 +84,8 @@ pub(crate) fn apply_margin_properties(style: &mut ComputedStyle, prop: &Property
             let right = length_to_f64(len);
             let current = style.margin().cloned().unwrap_or_default();
             style.set_margin(BoxMargin::new(
-                current.top(),
-                current.bottom(),
-                current.left(),
-                right,
+                AxisMargins::new(current.top(), current.bottom()),
+                AxisMargins::new(current.left(), right),
             ));
             true
         }
@@ -98,10 +93,8 @@ pub(crate) fn apply_margin_properties(style: &mut ComputedStyle, prop: &Property
             let bottom = length_to_f64(len);
             let current = style.margin().cloned().unwrap_or_default();
             style.set_margin(BoxMargin::new(
-                current.top(),
-                bottom,
-                current.left(),
-                current.right(),
+                AxisMargins::new(current.top(), bottom),
+                AxisMargins::new(current.left(), current.right()),
             ));
             true
         }
@@ -109,10 +102,8 @@ pub(crate) fn apply_margin_properties(style: &mut ComputedStyle, prop: &Property
             let left = length_to_f64(len);
             let current = style.margin().cloned().unwrap_or_default();
             style.set_margin(BoxMargin::new(
-                current.top(),
-                current.bottom(),
-                left,
-                current.right(),
+                AxisMargins::new(current.top(), current.bottom()),
+                AxisMargins::new(left, current.right()),
             ));
             true
         }

@@ -171,7 +171,9 @@ mod tests {
     use super::super::style::BoxMargin;
     use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
     use crate::features::vdom::domain::{NodePath, SurfaceSpace, TextContent};
-    use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSize};
+    use crate::shared::config::domain::{
+        AxisMargins, BorderRadius, BorderSize, FontFamily, FontSize,
+    };
     use crate::shared::primitives::BinaryData;
     use crate::shared::primitives::color::{Color, DrawingColor};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
@@ -302,7 +304,10 @@ mod tests {
     #[test]
     fn test_text_is_drawn_inside_its_padding() {
         let mut padded = ComputedStyle::default();
-        padded.set_padding(BoxMargin::new(4.0, 4.0, 2.0, 2.0));
+        padded.set_padding(BoxMargin::new(
+            AxisMargins::new(4.0, 4.0),
+            AxisMargins::new(2.0, 2.0),
+        ));
         let mut canvas = RecordingCanvas::default();
         text_node(padded).render_to_canvas(&mut canvas);
         assert_eq!(drawn_text(&canvas).0, Position::new(22, 34));
@@ -315,7 +320,10 @@ mod tests {
     #[test]
     fn test_text_alignment_carries_style_align_and_padded_width() {
         let mut centered = ComputedStyle::default();
-        centered.set_padding(BoxMargin::new(4.0, 4.0, 2.0, 2.0));
+        centered.set_padding(BoxMargin::new(
+            AxisMargins::new(4.0, 4.0),
+            AxisMargins::new(2.0, 2.0),
+        ));
         centered.set_text_align(TextAlign::Center);
         let mut canvas = RecordingCanvas::default();
         text_node(centered).render_to_canvas(&mut canvas);

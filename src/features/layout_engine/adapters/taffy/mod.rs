@@ -91,7 +91,7 @@ mod tests {
     };
     use crate::features::styling::domain::{ComputedStyle, GridTrack};
     use crate::features::vdom::domain::NodeKey;
-    use crate::shared::config::domain::{FontFamily, FontSize};
+    use crate::shared::config::domain::{AxisMargins, FontFamily, FontSize};
     use crate::shared::primitives::SizeConstraint;
     use crate::shared::primitives::geometry::{Position, Size};
     use crate::shared::primitives::{ModuleName, ModuleOptions};
@@ -275,7 +275,8 @@ mod tests {
 
         let mut root_style = ComputedStyle::default();
         root_style.set_padding(crate::features::layout_engine::domain::BoxMargin::new(
-            0.0, 0.0, 16.0, 16.0,
+            AxisMargins::new(0.0, 0.0),
+            AxisMargins::new(16.0, 16.0),
         ));
         let root = StyledNode::Flex {
             path: NodePath::root_in(SurfaceSpace::Bar),
@@ -761,7 +762,8 @@ mod tests {
         // out of it. 5 glyphs * 10 + 2px each side, 20 + 4px each end.
         let mut style = ComputedStyle::default();
         style.set_padding(crate::features::layout_engine::domain::BoxMargin::new(
-            4.0, 4.0, 2.0, 2.0,
+            AxisMargins::new(4.0, 4.0),
+            AxisMargins::new(2.0, 2.0),
         ));
         let mut adapter = TaffyLayoutAdapter::new();
         let mut measurer = MockMeasurer;
@@ -919,7 +921,8 @@ mod tests {
         let padded = |top: f64, left: f64| {
             let mut style = ComputedStyle::default_for_flex();
             style.set_padding(crate::features::layout_engine::domain::BoxMargin::new(
-                top, 0.0, left, 0.0,
+                AxisMargins::new(top, 0.0),
+                AxisMargins::new(left, 0.0),
             ));
             StyledNode::Flex {
                 path: NodePath::root_in(SurfaceSpace::Bar),
