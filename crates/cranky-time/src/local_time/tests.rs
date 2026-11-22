@@ -109,7 +109,6 @@ fn an_offset_with_seconds_is_shown_to_the_minute() {
     // Local mean time, before standard time: 3 h 06 min 28 s west.
     let before_1970 = LocalTime::in_zone(
         -2_300_000_000,
-        0,
         &located("America/Sao_Paulo"),
         Source::Localtime,
     );
@@ -156,14 +155,9 @@ fn the_year_always_has_four_digits() {
         "9999-12-31T23:59:59+00:00"
     );
     // The offset cannot push the local time past either end.
-    let last = LocalTime::in_zone(i64::MAX, 0, &located("Asia/Kolkata"), Source::Localtime);
+    let last = LocalTime::in_zone(i64::MAX, &located("Asia/Kolkata"), Source::Localtime);
     assert_eq!(last.to_string(), "9999-12-31T23:59:59+05:30");
-    let first = LocalTime::in_zone(
-        i64::MIN,
-        0,
-        &located("America/Sao_Paulo"),
-        Source::Localtime,
-    );
+    let first = LocalTime::in_zone(i64::MIN, &located("America/Sao_Paulo"), Source::Localtime);
     assert_eq!(first.to_string(), "0001-01-01T00:00:00-03:06");
 }
 

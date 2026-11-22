@@ -52,17 +52,21 @@ impl LocalTime {
     /// An instant, given in seconds from 1970, in UTC.
     #[must_use]
     pub fn utc(unix_seconds: i64) -> Self {
-        Self::in_zone(unix_seconds, 0, &Located::unnamed(Zone::utc()), Source::Utc)
+        Self::in_zone(unix_seconds, &Located::unnamed(Zone::utc()), Source::Utc)
     }
 
     pub(crate) fn at_instant(now: SystemTime, located: &Located, source: Source) -> Self {
         // A clock set before 1970 is read as 1970.
         let since_epoch = now.duration_since(UNIX_EPOCH).unwrap_or_default();
         let seconds = i64::try_from(since_epoch.as_secs()).unwrap_or(i64::MAX);
-        Self::in_zone(seconds, since_epoch.subsec_millis(), located, source)
+        Self {
+            subsec_millis: since_epoch.subsec_millis(),
+            ..Self::in_zone(seconds, located, source)
+        }
     }
 
-    fn in_zone(instant: i64, subsec_millis: u32, located: &Located, source: Source) -> Self {
+    /// The local time at the start of the second `instant`, with no milliseconds.
+    fn in_zone(instant: i64, located: &Located, source: Source) -> Self {
         let moment = located
             .zone
             .at_instant(instant.clamp(FIRST_SECOND, LAST_SECOND));
@@ -81,7 +85,7 @@ impl LocalTime {
             second: second_of_day
                 .rem_euclid(60)
                 .saturating_add(moment.leap_second.extra_seconds()),
-            subsec_millis,
+            subsec_millis: 0,
             offset_seconds: moment.kind.offset,
             abbreviation: moment.kind.abbreviation,
             zone_name: located.name.clone(),
