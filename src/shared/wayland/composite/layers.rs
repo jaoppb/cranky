@@ -1,64 +1,22 @@
 //! The embedded child modules' buffers a popup composites: one layer per module, kept in z-order
 //! from bottom to top.
-use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::primitives::{ModuleId, MonitorId, Position};
+use crate::shared::primitives::ModuleId;
+use crate::shared::primitives::render::ModuleFrame;
 
-/// One embedded module's rendered pixels, positioned inside the popup.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ChildLayer {
-    module_id: ModuleId,
-    monitor_id: MonitorId,
-    origin: Position,
-    buffer: RenderBuffer,
-}
-
-impl ChildLayer {
-    #[must_use]
-    pub(crate) const fn module_id(&self) -> ModuleId {
-        self.module_id
-    }
-
-    #[must_use]
-    pub(crate) const fn monitor_id(&self) -> &MonitorId {
-        &self.monitor_id
-    }
-
-    #[must_use]
-    pub(crate) const fn origin(&self) -> &Position {
-        &self.origin
-    }
-
-    #[must_use]
-    pub(crate) const fn buffer(&self) -> &RenderBuffer {
-        &self.buffer
-    }
-}
-
-/// Ordered set of child layers, bottom to top.
+/// Ordered set of child layers, bottom to top: each embedded module's frame, positioned inside the
+/// popup.
 #[derive(Debug, Default)]
 pub(crate) struct CompositeLayers {
-    layers: Vec<ChildLayer>,
+    layers: Vec<ModuleFrame>,
 }
 
 impl CompositeLayers {
     /// Replaces the module's layer in place (keeping its z-position) or adds it on top.
-    pub(crate) fn upsert(
-        &mut self,
-        module_id: ModuleId,
-        monitor_id: MonitorId,
-        origin: Position,
-        buffer: RenderBuffer,
-    ) {
-        let layer = ChildLayer {
-            module_id,
-            monitor_id,
-            origin,
-            buffer,
-        };
+    pub(crate) fn upsert(&mut self, layer: ModuleFrame) {
         match self
             .layers
             .iter_mut()
-            .find(|existing| existing.module_id == module_id)
+            .find(|existing| existing.module_id() == layer.module_id())
         {
             Some(slot) => *slot = layer,
             None => self.layers.push(layer),
@@ -67,18 +25,18 @@ impl CompositeLayers {
 
     #[cfg(test)]
     pub(crate) fn remove(&mut self, module_id: ModuleId) {
-        self.layers.retain(|layer| layer.module_id != module_id);
+        self.layers.retain(|layer| layer.module_id() != module_id);
     }
 
     #[must_use]
-    pub(crate) fn get(&self, module_id: ModuleId) -> Option<&ChildLayer> {
+    pub(crate) fn get(&self, module_id: ModuleId) -> Option<&ModuleFrame> {
         self.layers
             .iter()
-            .find(|layer| layer.module_id == module_id)
+            .find(|layer| layer.module_id() == module_id)
     }
 
     /// Layers from bottom to top.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &ChildLayer> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &ModuleFrame> {
         self.layers.iter()
     }
 
@@ -92,19 +50,19 @@ impl CompositeLayers {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::primitives::Size;
+    use crate::shared::primitives::render::{PlacedBuffer, RenderBuffer};
+    use crate::shared::primitives::{MonitorId, Position, Size};
 
     fn buf() -> RenderBuffer {
         RenderBuffer::new(vec![0u8; 4], Size::new(1, 1))
     }
 
     fn add(layers: &mut CompositeLayers, id: u32, x: i32) {
-        layers.upsert(
+        layers.upsert(ModuleFrame::new(
             ModuleId::new(id),
             MonitorId::new("m"),
-            Position::new(x, 0),
-            buf(),
-        );
+            PlacedBuffer::new(Position::new(x, 0), buf()),
+        ));
     }
 
     fn order(layers: &CompositeLayers) -> Vec<u32> {
@@ -122,7 +80,9 @@ mod tests {
         add(&mut layers, 1, 5);
         assert_eq!(order(&layers), vec![1, 2]);
         assert_eq!(
-            layers.get(ModuleId::new(1)).map(|layer| layer.origin().x()),
+            layers
+                .get(ModuleId::new(1))
+                .map(|layer| layer.position().x()),
             Some(5)
         );
     }

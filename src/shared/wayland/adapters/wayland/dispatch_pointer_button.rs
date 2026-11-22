@@ -190,6 +190,7 @@ mod tests {
     use crate::shared::events::core::{
         PointerEvent, PointerSerial, ScrollAxis, ScrollDelta, SurfaceKind,
     };
+    use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
     use crate::shared::primitives::{ModuleId, MonitorId, Position};
     use crate::shared::wayland::adapters::wayland::dispatch_pointer::{
         handle_pointer_enter, handle_pointer_leave, handle_pointer_motion,
@@ -291,9 +292,11 @@ mod tests {
         if let Some(floating) = state.floating_surfaces.get_mut(&popup_kind()) {
             let (id, monitor) = (ModuleId::new(CHILD), MonitorId::new("DP-1"));
             let smaller = solid(1, 1, [2; 4]);
-            floating
-                .layers
-                .upsert(id, monitor, Position::new(15, 5), smaller);
+            floating.layers.upsert(ModuleFrame::new(
+                id,
+                monitor,
+                PlacedBuffer::new(Position::new(15, 5), smaller),
+            ));
         }
         handle_pointer_button(&mut state, LEFT, RELEASED, 8);
         let mut expected = release(SurfaceKind::Bar, 1, 1).map(child).to_vec();

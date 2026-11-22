@@ -29,6 +29,7 @@ pub(super) fn repaint(floating: &mut FloatingSurface, bar_scale: i32) {
 mod tests {
     use super::*;
     use crate::shared::config::domain::PopupEmbed;
+    use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
     use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset, Position, Size};
     use crate::shared::wayland::adapters::wayland::floating_anchor::{
         AnchorInfo, FloatingParentRole,
@@ -49,12 +50,11 @@ mod tests {
 
     fn child_layers() -> CompositeLayers {
         let mut layers = CompositeLayers::default();
-        layers.upsert(
+        layers.upsert(ModuleFrame::new(
             ModuleId::new(9),
             MonitorId::new("DP-1"),
-            Position::new(1, 0),
-            solid(1, 1, CHILD),
-        );
+            PlacedBuffer::new(Position::new(1, 0), solid(1, 1, CHILD)),
+        ));
         layers
     }
 

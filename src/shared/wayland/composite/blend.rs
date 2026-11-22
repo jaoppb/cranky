@@ -43,8 +43,8 @@ impl<'a> PixelsMut<'a> {
     ) {
         for layer in layers.iter() {
             let origin = Position::new(
-                layer.origin().x().saturating_mul(scale),
-                layer.origin().y().saturating_mul(scale),
+                layer.position().x().saturating_mul(scale),
+                layer.position().y().saturating_mul(scale),
             );
             self.blend_over(layer.buffer(), origin);
         }

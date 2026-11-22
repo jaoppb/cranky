@@ -27,8 +27,8 @@ pub(in crate::shared::wayland) fn hit(
         .iter()
         .filter_map(|layer| {
             let local = Position::new(
-                pos.x().checked_sub(layer.origin().x())?,
-                pos.y().checked_sub(layer.origin().y())?,
+                pos.x().checked_sub(layer.position().x())?,
+                pos.y().checked_sub(layer.position().y())?,
             );
             let width = layer.buffer().width().checked_div(divisor)?;
             let height = layer.buffer().height().checked_div(divisor)?;
@@ -72,7 +72,7 @@ mod tests {
     use super::*;
     use crate::shared::primitives::Size;
     use crate::shared::primitives::geometry::Rect;
-    use crate::shared::primitives::render::RenderBuffer;
+    use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer, RenderBuffer};
 
     fn buf(width: u32, height: u32) -> RenderBuffer {
         let count = usize::try_from(width.saturating_mul(height).saturating_mul(4)).unwrap_or(0);
@@ -81,12 +81,14 @@ mod tests {
 
     /// Adds module `id`'s layer covering `bounds`.
     fn add(layers: &mut CompositeLayers, id: u32, bounds: Rect) {
-        layers.upsert(
+        layers.upsert(ModuleFrame::new(
             ModuleId::new(id),
             MonitorId::new("m"),
-            Position::new(bounds.x(), bounds.y()),
-            buf(bounds.width(), bounds.height()),
-        );
+            PlacedBuffer::new(
+                Position::new(bounds.x(), bounds.y()),
+                buf(bounds.width(), bounds.height()),
+            ),
+        ));
     }
 
     fn rect(origin: (i32, i32), size: (u32, u32)) -> Rect {

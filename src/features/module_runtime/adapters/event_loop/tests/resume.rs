@@ -11,7 +11,7 @@ use crate::features::vdom::domain::VNode;
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
-use crate::shared::primitives::render::RenderBuffer;
+use crate::shared::primitives::render::ModuleFrame;
 use crate::shared::primitives::{ChildBounds, LayoutSurface, ModuleId, MonitorId, SizeConstraint};
 use crate::shared::wayland::ports::{SurfaceManagerPort, SurfaceParent};
 use std::collections::HashMap;
@@ -26,16 +26,9 @@ struct CountingSurfaceManager {
 }
 
 impl SurfaceManagerPort for CountingSurfaceManager {
-    fn submit_buffer(&self, _: ModuleId, _: MonitorId, _: Position, _: RenderBuffer) {}
+    fn submit_buffer(&self, _: ModuleFrame) {}
 
-    fn submit_child_buffer(
-        &self,
-        _: ModuleId,
-        _: Option<SurfaceParent>,
-        _: MonitorId,
-        _: Position,
-        _: RenderBuffer,
-    ) {
+    fn submit_child_buffer(&self, _: ModuleFrame, _: Option<SurfaceParent>) {
         self.child_submits.fetch_add(1, Ordering::SeqCst);
     }
 }

@@ -4,6 +4,7 @@
 use super::{Fake, popup_kind, solid};
 use crate::shared::config::domain::PopupEmbed;
 use crate::shared::events::core::{InteractionEvent, PointerButton, PointerEvent, SurfaceKind};
+use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
 use crate::shared::primitives::{ModuleId, MonitorId, Position, Size};
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use tokio::sync::broadcast::Receiver;
@@ -37,12 +38,11 @@ pub(in crate::shared::wayland::adapters::wayland) fn popup(
         .push(fake.bar("DP-1", i32::try_from(scale).unwrap_or(1)));
     let mut floating = fake.floating(Size::new(20, 10), solid(20, 10, [0; 4]));
     let side = 4u32.saturating_mul(scale);
-    floating.layers.upsert(
+    floating.layers.upsert(ModuleFrame::new(
         ModuleId::new(CHILD),
         MonitorId::new("DP-1"),
-        Position::new(10, 2),
-        solid(side, side, [1; 4]),
-    );
+        PlacedBuffer::new(Position::new(10, 2), solid(side, side, [1; 4])),
+    ));
     let surface = floating.surface.clone();
     state.surface_to_id.insert(
         surface.clone(),

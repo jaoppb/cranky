@@ -1,6 +1,7 @@
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
 use crate::shared::config::domain::PopupEmbed;
 use crate::shared::primitives::geometry::{Position, Rect, Size};
+use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::adapters::wayland::floating_anchor::resolve_anchor;
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
@@ -15,7 +16,11 @@ fn popup_with_layer_at_30_10(fake: &Fake) -> WaylandState {
     let mut floating = fake.floating(Size::new(50, 20), solid(50, 20, [0; 4]));
     let (id, monitor) = (ModuleId::new(CHILD), MonitorId::new("DP-1"));
     let (origin, buffer) = (Position::new(30, 10), solid(4, 4, [1; 4]));
-    floating.layers.upsert(id, monitor, origin, buffer);
+    floating.layers.upsert(ModuleFrame::new(
+        id,
+        monitor,
+        PlacedBuffer::new(origin, buffer),
+    ));
     state.floating_surfaces.insert(popup_kind(), floating);
     state
 }

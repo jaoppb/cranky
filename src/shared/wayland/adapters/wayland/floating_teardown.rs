@@ -111,6 +111,7 @@ mod tests {
     use crate::features::layout_engine::domain::PopupTarget;
     use crate::shared::config::domain::PopupEmbed;
     use crate::shared::events::core::SurfaceKind;
+    use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
     use crate::shared::primitives::{ModuleId, MonitorId, Position, Size};
     use crate::shared::wayland::adapters::wayland::dispatch_pointer::{
         handle_pointer_enter, handle_pointer_leave, handle_pointer_motion,
@@ -132,7 +133,11 @@ mod tests {
     fn pending_layer() -> CompositeLayers {
         let mut layers = CompositeLayers::default();
         let (id, monitor) = (ModuleId::new(CHILD), MonitorId::new("DP-1"));
-        layers.upsert(id, monitor, Position::new(0, 0), solid(1, 1, [1; 4]));
+        layers.upsert(ModuleFrame::new(
+            id,
+            monitor,
+            PlacedBuffer::new(Position::new(0, 0), solid(1, 1, [1; 4])),
+        ));
         layers
     }
 

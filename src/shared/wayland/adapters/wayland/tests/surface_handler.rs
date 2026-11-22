@@ -4,6 +4,7 @@
 use crate::shared::config::domain::PopupEmbed;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::render::RenderBuffer;
+use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::adapters::wayland::command::SurfaceCommand;
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
@@ -21,11 +22,12 @@ const SET_POSITION: u16 = 1;
 /// Module 2's frame `buffer` at `position` on DP-1, parented to `parent`.
 fn cmd(parent: Option<SurfaceParent>, position: Position, buffer: RenderBuffer) -> SurfaceCommand {
     SurfaceCommand::new(
-        ModuleId::new(2),
+        ModuleFrame::new(
+            ModuleId::new(2),
+            MonitorId::new("DP-1"),
+            PlacedBuffer::new(position, buffer),
+        ),
         parent,
-        MonitorId::new("DP-1"),
-        position,
-        buffer,
     )
 }
 

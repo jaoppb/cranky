@@ -1,3 +1,4 @@
+use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
 use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
@@ -123,14 +124,18 @@ fn test_wayland_adapter_methods() {
         let _ = adapter.dispatch_pending();
 
         let cmd = SurfaceCommand::new(
-            crate::shared::primitives::ModuleId::new(1),
-            None,
-            crate::shared::primitives::MonitorId::new("test"),
-            crate::shared::primitives::geometry::Position::new(0, 0),
-            crate::shared::primitives::render::RenderBuffer::new(
-                vec![0; 4],
-                crate::shared::primitives::geometry::Size::new(1, 1),
+            ModuleFrame::new(
+                crate::shared::primitives::ModuleId::new(1),
+                crate::shared::primitives::MonitorId::new("test"),
+                PlacedBuffer::new(
+                    crate::shared::primitives::geometry::Position::new(0, 0),
+                    crate::shared::primitives::render::RenderBuffer::new(
+                        vec![0; 4],
+                        crate::shared::primitives::geometry::Size::new(1, 1),
+                    ),
+                ),
             ),
+            None,
         );
         let queue_handle = adapter.event_queue.handle();
         let _ = handle_cmd(&mut adapter.state, &queue_handle, &cmd);

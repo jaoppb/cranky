@@ -3,6 +3,7 @@
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
 use crate::shared::config::domain::PopupEmbed;
 use crate::shared::primitives::geometry::{Position, Size};
+use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
 use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset};
 use crate::shared::wayland::adapters::wayland::command::SurfaceCommand;
 use crate::shared::wayland::adapters::wayland::floating_anchor::{AnchorInfo, FloatingParentRole};
@@ -106,11 +107,12 @@ fn popup_and_panel_surfaces_stay_clickable() {
 fn embed_under(fake: &Fake, state: &mut WaylandState, parent: &FloatingKind) -> u32 {
     open(fake, state, parent);
     let cmd = SurfaceCommand::new(
-        ModuleId::new(2),
+        ModuleFrame::new(
+            ModuleId::new(2),
+            MonitorId::new("DP-1"),
+            PlacedBuffer::new(Position::new(0, 0), solid(4, 4, [1; 4])),
+        ),
         Some(SurfaceParent::Floating(parent.clone())),
-        MonitorId::new("DP-1"),
-        Position::new(0, 0),
-        solid(4, 4, [1; 4]),
     );
     handle_cmd(state, &fake.queue_handle, &cmd).expect("embed child");
     let children = &state.floating_surfaces[parent].module_surfaces;

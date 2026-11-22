@@ -10,12 +10,16 @@ pub(super) use layers::CompositeLayers;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::primitives::render::RenderBuffer;
+    use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer, RenderBuffer};
     use crate::shared::primitives::{ModuleId, MonitorId, Position, Size};
 
     fn layers_with(origin: Position, buffer: RenderBuffer) -> CompositeLayers {
         let mut layers = CompositeLayers::default();
-        layers.upsert(ModuleId::new(1), MonitorId::new("m"), origin, buffer);
+        layers.upsert(ModuleFrame::new(
+            ModuleId::new(1),
+            MonitorId::new("m"),
+            PlacedBuffer::new(origin, buffer),
+        ));
         layers
     }
 

@@ -101,7 +101,7 @@ impl Dispatch<XdgPositioner, ()> for WaylandState {
 mod tests {
     use crate::features::layout_engine::domain::FloatingKind;
     use crate::shared::config::domain::PopupEmbed;
-    use crate::shared::primitives::render::RenderBuffer;
+    use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer, RenderBuffer};
     use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset, Position, Size};
     use crate::shared::wayland::adapters::wayland::floating_anchor::{
         AnchorInfo, FloatingParentRole,
@@ -121,12 +121,11 @@ mod tests {
     const BLENDED: [u8; 8] = [5, 5, 5, 255, 1, 2, 3, 255];
 
     fn with_child(mut floating: FloatingSurface) -> FloatingSurface {
-        floating.layers.upsert(
+        floating.layers.upsert(ModuleFrame::new(
             ModuleId::new(9),
             MonitorId::new("DP-1"),
-            Position::new(1, 0),
-            solid(1, 1, [1, 2, 3, 255]),
-        );
+            PlacedBuffer::new(Position::new(1, 0), solid(1, 1, [1, 2, 3, 255])),
+        ));
         floating
     }
 

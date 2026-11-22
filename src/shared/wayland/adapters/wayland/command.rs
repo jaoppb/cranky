@@ -1,39 +1,30 @@
 //! A rendered buffer queued for a module's surface on one monitor, waiting for the Wayland loop to
 //! attach it.
 use crate::shared::primitives::geometry::Position;
-use crate::shared::primitives::render::RenderBuffer;
+use crate::shared::primitives::render::{ModuleFrame, RenderBuffer};
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::surface_parent::SurfaceParent;
 
 pub(crate) struct SurfaceCommand {
-    module_id: ModuleId,
+    frame: ModuleFrame,
     parent: Option<SurfaceParent>,
-    monitor_id: MonitorId,
-    position: Position,
-    buffer: RenderBuffer,
 }
 
 impl SurfaceCommand {
     #[must_use]
-    pub(crate) const fn new(
-        module_id: ModuleId,
-        parent: Option<SurfaceParent>,
-        monitor_id: MonitorId,
-        position: Position,
-        buffer: RenderBuffer,
-    ) -> Self {
-        Self {
-            module_id,
-            parent,
-            monitor_id,
-            position,
-            buffer,
-        }
+    pub(crate) const fn new(frame: ModuleFrame, parent: Option<SurfaceParent>) -> Self {
+        Self { frame, parent }
+    }
+
+    /// The module's frame as painted, for a consumer that keeps it whole (a composite layer).
+    #[must_use]
+    pub(crate) const fn frame(&self) -> &ModuleFrame {
+        &self.frame
     }
 
     #[must_use]
     pub(crate) const fn module_id(&self) -> ModuleId {
-        self.module_id
+        self.frame.module_id()
     }
 
     #[must_use]
@@ -43,16 +34,16 @@ impl SurfaceCommand {
 
     #[must_use]
     pub(crate) const fn monitor_id(&self) -> &MonitorId {
-        &self.monitor_id
+        self.frame.monitor_id()
     }
 
     #[must_use]
     pub(crate) const fn position(&self) -> Position {
-        self.position
+        self.frame.position()
     }
 
     #[must_use]
     pub(crate) const fn buffer(&self) -> &RenderBuffer {
-        &self.buffer
+        self.frame.buffer()
     }
 }

@@ -1,6 +1,5 @@
 use super::command::SurfaceCommand;
-use crate::shared::primitives::geometry::Position;
-use crate::shared::primitives::render::RenderBuffer;
+use crate::shared::primitives::render::ModuleFrame;
 use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::ports::{SurfaceManagerPort, SurfaceParent};
 use std::collections::HashMap;
@@ -25,32 +24,19 @@ impl std::fmt::Debug for WaylandSurfaceManager {
 }
 
 impl SurfaceManagerPort for WaylandSurfaceManager {
-    fn submit_buffer(
-        &self,
-        module_id: ModuleId,
-        monitor_id: MonitorId,
-        position: Position,
-        buffer: RenderBuffer,
-    ) {
-        self.submit_child_buffer(module_id, None, monitor_id, position, buffer);
+    fn submit_buffer(&self, frame: ModuleFrame) {
+        self.submit_child_buffer(frame, None);
     }
 
-    fn submit_child_buffer(
-        &self,
-        module_id: ModuleId,
-        parent: Option<SurfaceParent>,
-        monitor_id: MonitorId,
-        position: Position,
-        buffer: RenderBuffer,
-    ) {
+    fn submit_child_buffer(&self, frame: ModuleFrame, parent: Option<SurfaceParent>) {
         {
             let mut map = self
                 .pending_surfaces
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             map.insert(
-                (module_id, monitor_id.clone()),
-                SurfaceCommand::new(module_id, parent, monitor_id, position, buffer),
+                (frame.module_id(), frame.monitor_id().clone()),
+                SurfaceCommand::new(frame, parent),
             );
         }
         let _ = self.notify_tx.try_send(());

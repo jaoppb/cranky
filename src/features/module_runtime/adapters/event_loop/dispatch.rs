@@ -2,6 +2,7 @@ use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
 use crate::features::module_runtime::domain::RenderOutcome;
 use crate::features::module_runtime::ports::{LayoutEvent, LayoutEventSender};
 use crate::shared::events::signals::SignalHub;
+use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
 use crate::shared::primitives::{LayoutSurface, ModuleId, MonitorId};
 use crate::shared::wayland::ports::{DynSurfaceManager, SurfaceParent};
 use std::collections::{HashMap, HashSet};
@@ -141,11 +142,12 @@ pub(super) fn dispatch_outcome_buffer(
     if let Some((buffer, position)) = outcome.buffer().cloned() {
         let parent = parent_id.map(|pid| surface_parent_for(pid, surface, monitor_id));
         surface_manager.submit_child_buffer(
-            module_id,
+            ModuleFrame::new(
+                module_id,
+                monitor_id.clone(),
+                PlacedBuffer::new(position, buffer),
+            ),
             parent,
-            monitor_id.clone(),
-            position,
-            buffer,
         );
     }
 }

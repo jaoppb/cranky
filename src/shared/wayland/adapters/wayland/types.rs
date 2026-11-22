@@ -117,8 +117,8 @@ impl FloatingSurface {
             .get(module_id)
             .map(|layer| {
                 ChildPlacement::new(
-                    layer.origin().x(),
-                    layer.origin().y(),
+                    layer.position().x(),
+                    layer.position().y(),
                     *layer.buffer().size(),
                 )
             })
