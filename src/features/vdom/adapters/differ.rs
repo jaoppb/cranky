@@ -1,5 +1,5 @@
 //! `DefaultVdomDiffAdapter`, the `VdomDiffPort` implementation that walks two trees node by node.
-use super::children::diff_children_with;
+use super::children::{ChildLists, diff_children_with};
 use super::kind_differ::diff_node_kinds;
 use crate::features::vdom::domain::{DiffResult, Patch, VNode, VNodeKind};
 use crate::features::vdom::ports::VdomDiffPort;
@@ -44,8 +44,7 @@ impl DefaultVdomDiffAdapter {
                 ) {
                     diff_children_with(
                         old_node.node_id(),
-                        old_node.children(),
-                        new_node.children(),
+                        ChildLists::new(old_node.children(), new_node.children()),
                         |old_child, new_child| self.diff_nodes(old_child, new_child),
                     )
                 } else {
