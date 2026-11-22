@@ -1,6 +1,6 @@
 //! The layout pass and per-monitor cache shared by all three floating kinds.
 use super::super::measurer::ModuleSizeMeasurer;
-use crate::features::layout_engine::domain::LayoutRoot;
+use crate::features::layout_engine::domain::{LayoutError, LayoutRoot};
 use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::vdom::domain::InteractionContext;
@@ -23,6 +23,13 @@ pub(crate) type FloatingCache = HashMap<MonitorId, (StyledNode, Option<ChildSize
 pub(crate) struct FloatingEngine<'a, E: LayoutEnginePort> {
     pub(crate) engine: &'a mut E,
     pub(crate) cache: &'a mut FloatingCache,
+}
+
+impl<'a, E: LayoutEnginePort> FloatingEngine<'a, E> {
+    /// `engine` laying out one floating kind, with that kind's `cache`.
+    pub(crate) const fn new(engine: &'a mut E, cache: &'a mut FloatingCache) -> Self {
+        Self { engine, cache }
+    }
 }
 
 /// What every floating kind is laid out with on one monitor during one render.
@@ -53,10 +60,15 @@ pub(super) fn layout_floating_content<F: CanvasFactory, E: LayoutEnginePort>(
     ) {
         Ok(node) => Some(node),
         Err(error) => {
-            tracing::error!(err = ?error, "Floating content layout calculation failed");
+            log_layout_failed(&error);
             None
         }
     }
+}
+
+/// Logs a floating layout pass that failed with `error`.
+fn log_layout_failed(error: &LayoutError) {
+    tracing::error!(err = ?error, "Floating content layout calculation failed");
 }
 
 /// `layout_floating_content`, but skips the taffy pass entirely when
@@ -94,9 +106,7 @@ pub(super) fn layout_floating_content_cached<F: CanvasFactory, E: LayoutEnginePo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::layout_engine::domain::{
-        LayoutError, NodePath, SurfaceSpace, TextMeasurer,
-    };
+    use crate::features::layout_engine::domain::{NodePath, SurfaceSpace, TextMeasurer};
     use crate::features::module_runtime::test_support::MockCanvasFactory;
     use crate::features::styling::domain::ComputedStyle;
     use crate::shared::primitives::geometry::{Rect, Size};

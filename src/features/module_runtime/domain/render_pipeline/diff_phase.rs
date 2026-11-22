@@ -4,6 +4,8 @@ use super::context::{DiffInput, PipelineDiff};
 use super::pipeline::RenderPipeline;
 use crate::features::module_runtime::domain::Change;
 use crate::features::module_runtime::ports::AnyModulePort;
+use crate::features::vdom::domain::VNode;
+use crate::shared::primitives::MonitorId;
 
 #[must_use]
 pub(crate) fn diff_pipeline(
@@ -11,47 +13,55 @@ pub(crate) fn diff_pipeline(
     port: &dyn AnyModulePort,
     input: DiffInput<'_>,
 ) -> Option<PipelineDiff> {
-    let DiffInput {
-        monitor_id,
-        vdom_diff,
-        bounds: current_bounds,
-        child_sizes: current_child_sizes,
-        interaction,
-    } = input;
+    let monitor_id = input.monitor_id;
     let new_vdom = port.render(monitor_id);
-    let diff_result = vdom_diff.diff(pipeline.vdom_trees().get(monitor_id), &new_vdom);
+    let diff = PipelineDiff {
+        vdom: Change::from(vdom_dirty(pipeline, &input, &new_vdom)),
+        bounds: Change::from(bounds_changed(pipeline, &input)),
+        child_sizes: Change::from(child_sizes_changed(pipeline, &input)),
+        new_vdom,
+    };
+    if !diff.vdom_dirty() && !diff.bounds_changed() && !diff.child_sizes_changed() {
+        log_render_skipped(monitor_id);
+        return None;
+    }
+    Some(diff)
+}
 
-    let current_child_sizes_owned = current_child_sizes.cloned();
-    let bounds_changed = current_bounds != pipeline.rendered_bounds().get(monitor_id).copied();
-    let child_sizes_changed =
-        pipeline.last_child_sizes().get(monitor_id) != Some(&current_child_sizes_owned);
+/// Whether the tree must be styled and laid out again on the input's monitor: the script's tree
+/// differs from the last one, the interaction that restyles it changed, or no tree was laid out
+/// there yet.
+fn vdom_dirty(pipeline: &RenderPipeline, input: &DiffInput<'_>, new_vdom: &VNode) -> bool {
+    let monitor_id = input.monitor_id;
+    let diff_result = input
+        .vdom_diff
+        .diff(pipeline.vdom_trees().get(monitor_id), new_vdom);
     let interaction_changed = pipeline
         .last_interactions()
         .get(monitor_id)
         .map(Option::as_ref)
-        != Some(interaction);
-
-    if diff_result.is_unchanged()
-        && !bounds_changed
-        && !child_sizes_changed
-        && !interaction_changed
-        && pipeline.render_trees().contains_key(monitor_id)
-    {
-        tracing::trace!(
-            monitor = %monitor_id,
-            "VDOM, bounds, child sizes, and interaction unchanged; skipping style resolution, layout, and canvas render"
-        );
-        return None;
-    }
-
-    let vdom_dirty = !diff_result.is_unchanged()
+        != Some(input.interaction);
+    !diff_result.is_unchanged()
         || interaction_changed
-        || !pipeline.render_trees().contains_key(monitor_id);
+        || !pipeline.render_trees().contains_key(monitor_id)
+}
 
-    Some(PipelineDiff {
-        new_vdom,
-        vdom: Change::from(vdom_dirty),
-        bounds: Change::from(bounds_changed),
-        child_sizes: Change::from(child_sizes_changed),
-    })
+/// Whether the module is placed differently on the input's monitor than when it was last painted.
+fn bounds_changed(pipeline: &RenderPipeline, input: &DiffInput<'_>) -> bool {
+    input.bounds != pipeline.rendered_bounds().get(input.monitor_id).copied()
+}
+
+/// Whether the sizes the embedded children reported differ from those of the last layout on the
+/// input's monitor.
+fn child_sizes_changed(pipeline: &RenderPipeline, input: &DiffInput<'_>) -> bool {
+    let current_child_sizes_owned = input.child_sizes.cloned();
+    pipeline.last_child_sizes().get(input.monitor_id) != Some(&current_child_sizes_owned)
+}
+
+/// Logs that nothing changed on `monitor_id`, so no phase after the diff runs.
+fn log_render_skipped(monitor_id: &MonitorId) {
+    tracing::trace!(
+        monitor = %monitor_id,
+        "VDOM, bounds, child sizes, and interaction unchanged; skipping style resolution, layout, and canvas render"
+    );
 }

@@ -61,15 +61,21 @@ pub(in super::super) fn apply_gate(
     if let Entry::Occupied(counted) = &rounds
         && *counted.get() >= MAX_HOLD_ROUNDS
     {
-        tracing::warn!(
-            monitor = %rounds.key(),
-            "Embedded module did not settle on its host width; presenting the latest layout"
-        );
+        log_presented_unsettled(rounds.key());
         return floating;
     }
     let held_rounds = rounds.or_insert(0);
     *held_rounds = held_rounds.saturating_add(1);
     floating.with_held(held)
+}
+
+/// Logs that a floating surface on `monitor_id` is presented although its embedded module never
+/// settled.
+fn log_presented_unsettled(monitor_id: &MonitorId) {
+    tracing::warn!(
+        monitor = %monitor_id,
+        "Embedded module did not settle on its host width; presenting the latest layout"
+    );
 }
 
 #[cfg(test)]
