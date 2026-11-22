@@ -6,10 +6,7 @@ use crate::shared::env::domain::{
     AppEnvironment, BaseDirectories, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir,
 };
 use crate::shared::events::signals::SignalHub;
-use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
-use crate::shared::wayland::adapters::wayland::keyboard::KeyboardInput;
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -21,29 +18,13 @@ impl Fake {
             Config::default().with_popup(PopupConfig::new(popup.behavior(), popup.offset(), embed));
         let app_env = environment_with_runtime_dir(PathBuf::from("/tmp"));
         let (command_tx, _command_rx) = tokio::sync::mpsc::channel(1);
-        WaylandState {
-            hub: Arc::new(SignalHub::new(config)),
-            compositor: Some(self.compositor.clone()),
-            subcompositor: Some(self.subcompositor.clone()),
-            layer_shell: Some(self.layer_shell.clone()),
-            xdg_wm_base: Some(self.xdg_wm_base.clone()),
-            shm: Some(self.shm.clone()),
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            seat: None,
-            pointer: None,
-            keyboard: KeyboardInput::default(),
-            command_tx,
-            surface_to_id: HashMap::new(),
-            pointer_surface: None,
-            pointer_pos: (0.0, 0.0),
-            pointer_target: None,
-            pointer_grab: PointerGrab::default(),
-            floating_surfaces: HashMap::new(),
-            pending_children: HashMap::new(),
-            last_button_serial: None,
-            app_env,
-        }
+        let mut state = WaylandState::new(Arc::new(SignalHub::new(config)), command_tx, app_env);
+        state.compositor = Some(self.compositor.clone());
+        state.subcompositor = Some(self.subcompositor.clone());
+        state.layer_shell = Some(self.layer_shell.clone());
+        state.xdg_wm_base = Some(self.xdg_wm_base.clone());
+        state.shm = Some(self.shm.clone());
+        state
     }
 }
 

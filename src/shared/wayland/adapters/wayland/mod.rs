@@ -1,6 +1,7 @@
 //! The Wayland client: connection, globals, layer-shell bars, popups, input dispatch and buffer
 //! submission.
 mod adapter;
+mod bar_setup;
 pub mod command;
 mod dispatch_keyboard;
 mod dispatch_objects;

@@ -1,30 +1,24 @@
 //! The Wayland dispatch state: bound globals, outputs, bars, input devices and floating surfaces.
 use super::dispatch_pointer_button::PointerGrab;
 use super::keyboard::KeyboardInput;
-use super::types::{ConfigureGate, FloatingSurface, WaylandBar, WaylandOutputInfo};
+use super::types::{FloatingSurface, WaylandBar, WaylandOutputInfo};
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
 use crate::shared::env::domain::AppEnvironment;
 use crate::shared::events::core::SurfaceKind;
 use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::geometry::Size;
+use crate::shared::primitives::geometry::Scale;
 use crate::shared::primitives::{ModuleId, MonitorId};
-use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::composite::CompositeLayers;
 use crate::shared::wayland::composite::route::PointerTarget;
 use crate::shared::wayland::ports::DisplayServerError;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::debug;
-use wayland_client::QueueHandle;
 use wayland_client::protocol::{
-    wl_compositor::WlCompositor, wl_output::WlOutput, wl_pointer::WlPointer, wl_seat::WlSeat,
-    wl_shm::WlShm, wl_subcompositor::WlSubcompositor, wl_surface::WlSurface,
+    wl_compositor::WlCompositor, wl_pointer::WlPointer, wl_seat::WlSeat, wl_shm::WlShm,
+    wl_subcompositor::WlSubcompositor, wl_surface::WlSurface,
 };
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
-use wayland_protocols_wlr::layer_shell::v1::client::{
-    zwlr_layer_shell_v1::{Layer, ZwlrLayerShellV1},
-    zwlr_layer_surface_v1::Anchor,
-};
+use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1;
 
 pub(crate) struct WaylandState {
     pub(crate) hub: Arc<SignalHub>,
@@ -59,113 +53,53 @@ pub(crate) struct WaylandState {
 }
 
 impl WaylandState {
-    pub(crate) fn create_bar(
-        &mut self,
-        output: &WlOutput,
-        queue_handle: &QueueHandle<Self>,
-    ) -> Result<(), DisplayServerError> {
-        let (output_name, output_scale) = {
-            let info = self
-                .outputs
-                .iter()
-                .find(|info| &info.output == output)
-                .ok_or_else(|| DisplayServerError::ConnectionFailed {
-                    reason: "Output not found".to_string(),
-                })?;
-            if info.name.is_empty() {
-                return Ok(());
-            }
-            (info.name.clone(), info.scale)
-        };
-
-        if self.bars.iter().any(|bar| bar.output_name == output_name) {
-            return Ok(());
+    /// A state with no global bound, no output and no surface yet, sending
+    /// display commands to `command_tx`.
+    pub(super) fn new(
+        hub: Arc<SignalHub>,
+        command_tx: tokio::sync::mpsc::Sender<DisplayCommand>,
+        app_env: Arc<AppEnvironment>,
+    ) -> Self {
+        Self {
+            hub,
+            compositor: None,
+            subcompositor: None,
+            layer_shell: None,
+            xdg_wm_base: None,
+            shm: None,
+            outputs: Vec::new(),
+            bars: Vec::new(),
+            seat: None,
+            pointer: None,
+            keyboard: KeyboardInput::default(),
+            command_tx,
+            surface_to_id: HashMap::new(),
+            pointer_surface: None,
+            pointer_pos: (0.0, 0.0),
+            pointer_target: None,
+            pointer_grab: PointerGrab::default(),
+            floating_surfaces: HashMap::new(),
+            pending_children: HashMap::new(),
+            last_button_serial: None,
+            app_env,
         }
-
-        let root_config = self.hub.config_rx().borrow().root().clone();
-        let bar_height = root_config.height();
-        let margin = root_config.margin();
-        debug!(
-            "Creating bar for output: {} (height: {}, scale: {})",
-            output_name,
-            bar_height.value(),
-            output_scale
-        );
-
-        let compositor =
-            self.compositor
-                .as_ref()
-                .ok_or_else(|| DisplayServerError::ConnectionFailed {
-                    reason: "Compositor not bound".to_string(),
-                })?;
-        let layer_shell =
-            self.layer_shell
-                .as_ref()
-                .ok_or_else(|| DisplayServerError::ConnectionFailed {
-                    reason: "Layer shell not bound".to_string(),
-                })?;
-        let shm = self
-            .shm
-            .as_ref()
-            .ok_or_else(|| DisplayServerError::ConnectionFailed {
-                reason: "SHM not bound".to_string(),
-            })?;
-
-        let surface = compositor.create_surface(queue_handle, ());
-        surface.set_buffer_scale(output_scale);
-        let layer_surface = layer_shell.get_layer_surface(
-            &surface,
-            Some(output),
-            Layer::Top,
-            "cranky".to_string(),
-            queue_handle,
-            (),
-        );
-
-        layer_surface.set_anchor(Anchor::Top | Anchor::Left | Anchor::Right);
-        layer_surface.set_size(0, bar_height.value());
-        layer_surface.set_margin(
-            margin.top().value(),
-            margin.right().value(),
-            margin.bottom().value(),
-            margin.left().value(),
-        );
-        let height_i32 = i32::try_from(bar_height.value()).unwrap_or(0);
-        let zone = height_i32
-            .saturating_add(margin.top().value())
-            .saturating_add(margin.bottom().value());
-        layer_surface.set_exclusive_zone(zone);
-        surface.commit();
-
-        let shm_buffer = ShmBuffer::new(
-            ShmSource::new(shm, self.app_env.xdg_runtime_dir().as_path()),
-            Size::new(1920, bar_height.value()),
-            queue_handle,
-        )
-        .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
-
-        self.bars.push(WaylandBar {
-            output_name: output_name.clone(),
-            surface,
-            layer_surface,
-            shm_buffer,
-            width: 1920,
-            height: bar_height.value(),
-            config_height: bar_height.value(),
-            config_margin: *margin,
-            scale: output_scale,
-            module_surfaces: HashMap::new(),
-            configure: ConfigureGate::Pending,
-        });
-
-        let mut scales = self.hub.monitor_scales_rx().borrow().clone();
-        let scale_f32 = i16::try_from(output_scale).map_or(1.0, f32::from);
-        scales.insert(
-            MonitorId::new(&output_name),
-            crate::shared::primitives::geometry::Scale::new(scale_f32),
-        );
-        let _ = self.hub.monitor_scales_tx().send(scales);
-
-        Ok(())
     }
+
+    /// Publishes `scale` as the scale of monitor `output_name`.
+    pub(super) fn publish_scale(&self, output_name: &str, scale: i32) {
+        let mut scales = self.hub.monitor_scales_rx().borrow().clone();
+        let scale_f32 = i16::try_from(scale).map_or(1.0, f32::from);
+        scales.insert(MonitorId::new(output_name), Scale::new(scale_f32));
+        let _ = self.hub.monitor_scales_tx().send(scales);
+    }
+}
+
+/// `global`, or the connection failure naming it as not bound.
+pub(super) fn bound_global<'a, T>(
+    global: Option<&'a T>,
+    name: &str,
+) -> Result<&'a T, DisplayServerError> {
+    global.ok_or_else(|| DisplayServerError::ConnectionFailed {
+        reason: format!("{name} not bound"),
+    })
 }

@@ -1,10 +1,17 @@
+use super::bar_setup::apply_bar_geometry;
 use super::state::WaylandState;
+use super::types::WaylandBar;
 use crate::features::module_runtime::ports::LayoutSender;
+use crate::shared::config::domain::RootConfig;
+use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::geometry::{Position, Rect, Size};
 use crate::shared::primitives::{ChildBounds, ModuleId, MonitorId, SizeConstraint};
 use crate::shared::wayland::ports::AppReadModel;
 use std::collections::HashMap;
 use tracing::{debug, info_span};
+
+/// Each module's layout bounds, per monitor.
+type LayoutsByModule = HashMap<ModuleId, HashMap<MonitorId, ChildBounds>>;
 
 pub(super) fn render_outputs<Snd: LayoutSender>(
     state: &mut WaylandState,
@@ -15,76 +22,105 @@ pub(super) fn render_outputs<Snd: LayoutSender>(
     let _enter = span.enter();
 
     if state.bars.is_empty() {
-        debug!("No bars available for rendering.");
+        log_no_bars();
         return;
     }
 
-    let mut all_layouts_by_module: HashMap<ModuleId, HashMap<MonitorId, ChildBounds>> =
-        HashMap::new();
-
+    let mut all_layouts_by_module = LayoutsByModule::new();
     for bar in &mut state.bars {
-        if !bar.configure.is_configured() {
-            debug!("Skipping render for unconfigured bar: {}", bar.output_name);
+        let Some(size) = fit_bar_to_config(bar, &state.hub, read_model) else {
             continue;
-        }
-        let width = bar.width;
-
-        let is_focused = state
-            .hub
-            .hyprland_rx()
-            .borrow()
-            .focused_monitor()
-            .is_some_and(|name| name.as_str() == bar.output_name);
-
-        let mut root_config = read_model.config().root().clone();
-        if !is_focused {
-            root_config = root_config.as_unfocused();
-        }
-
-        // Check if hot-reload of height or margin is needed
-        if bar.config_height != root_config.height().value()
-            || bar.config_margin != *root_config.margin()
-        {
-            debug!(
-                "Hot-reloading bar height/margin for output: {}",
-                bar.output_name
-            );
-            bar.config_height = root_config.height().value();
-            bar.config_margin = *root_config.margin();
-
-            let margin = root_config.margin();
-            bar.layer_surface.set_size(0, bar.config_height);
-            bar.layer_surface.set_margin(
-                margin.top().value(),
-                margin.right().value(),
-                margin.bottom().value(),
-                margin.left().value(),
-            );
-            let height_i32 = i32::try_from(bar.config_height).unwrap_or(0);
-            let zone = height_i32
-                .saturating_add(margin.top().value())
-                .saturating_add(margin.bottom().value());
-            bar.layer_surface.set_exclusive_zone(zone);
-            bar.surface.commit();
-        }
-
-        let monitor_id = MonitorId::new(&bar.output_name);
+        };
         if let Some(root_id) = read_model.root_module() {
-            let bar_rect = Rect::new(Position::new(0, 0), Size::new(width, bar.config_height));
-            // The root always gets a full, two-axis pin matching its own
-            // layer-surface bounds — it has no parent to leave an axis free
-            // for, so this reproduces exactly the sizing it always had.
-            let constraint = SizeConstraint::new(Some(width), Some(bar.config_height));
-            all_layouts_by_module
-                .entry(root_id)
-                .or_default()
-                .insert(monitor_id, ChildBounds::new(bar_rect, constraint));
+            all_layouts_by_module.entry(root_id).or_default().insert(
+                MonitorId::new(&bar.output_name),
+                root_bounds(size.width(), size.height()),
+            );
         }
     }
+    send_layouts(&all_layouts_by_module, layout_senders);
+}
 
-    // Broadcast root layout bounds to the root module for ALL active monitors
+/// Logs that there is no bar to render.
+fn log_no_bars() {
+    debug!("No bars available for rendering.");
+}
+
+/// Logs that `bar` is skipped until its layer surface is configured.
+fn log_unconfigured_bar(bar: &WaylandBar) {
+    debug!("Skipping render for unconfigured bar: {}", bar.output_name);
+}
+
+/// Brings `bar` to the root config of its monitor's focus, hot-reloading
+/// its height and margin when they differ, and returns the size its root
+/// lays out at; `None`, leaving the bar as is, while it is not configured.
+fn fit_bar_to_config(
+    bar: &mut WaylandBar,
+    hub: &SignalHub,
+    read_model: &AppReadModel,
+) -> Option<Size> {
+    if !bar.configure.is_configured() {
+        log_unconfigured_bar(bar);
+        return None;
+    }
+    let root_config = focused_root_config(hub, read_model, &bar.output_name);
+    if bar.config_height != root_config.height().value()
+        || bar.config_margin != *root_config.margin()
+    {
+        reload_bar_geometry(bar, &root_config);
+    }
+    Some(Size::new(bar.width, bar.config_height))
+}
+
+/// The root config for `output_name`: as is on the focused monitor, with
+/// its unfocused overrides anywhere else.
+fn focused_root_config(
+    hub: &SignalHub,
+    read_model: &AppReadModel,
+    output_name: &str,
+) -> RootConfig {
+    let is_focused = hub
+        .hyprland_rx()
+        .borrow()
+        .focused_monitor()
+        .is_some_and(|name| name.as_str() == output_name);
+    let root_config = read_model.config().root().clone();
+    if is_focused {
+        root_config
+    } else {
+        root_config.as_unfocused()
+    }
+}
+
+/// Hot-reloads `bar`'s height and margin to `root_config`'s.
+fn reload_bar_geometry(bar: &mut WaylandBar, root_config: &RootConfig) {
+    debug!(
+        "Hot-reloading bar height/margin for output: {}",
+        bar.output_name
+    );
+    bar.config_height = root_config.height().value();
+    bar.config_margin = *root_config.margin();
+    apply_bar_geometry(&bar.layer_surface, bar.config_height, root_config.margin());
+    bar.surface.commit();
+}
+
+/// The root module's bounds on a `width`×`height` bar.
+const fn root_bounds(width: u32, height: u32) -> ChildBounds {
+    let bar_rect = Rect::new(Position::new(0, 0), Size::new(width, height));
+    // The root always gets a full, two-axis pin matching its own
+    // layer-surface bounds — it has no parent to leave an axis free
+    // for, so this reproduces exactly the sizing it always had.
+    let constraint = SizeConstraint::new(Some(width), Some(height));
+    ChildBounds::new(bar_rect, constraint)
+}
+
+/// Broadcasts root layout bounds to the root module for ALL active monitors.
+fn send_layouts<Snd: LayoutSender>(
+    layouts: &LayoutsByModule,
+    layout_senders: &HashMap<ModuleId, Snd>,
+) {
     for (id, sender) in layout_senders {
-        if let Some(rects) = all_layouts_by_module.get(id) {
+        if let Some(rects) = layouts.get(id) {
             sender.send_layout(rects.clone());
         }
     }

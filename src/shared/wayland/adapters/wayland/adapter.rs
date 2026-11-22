@@ -47,45 +47,16 @@ impl WaylandAdapter {
         command_tx: tokio::sync::mpsc::Sender<DisplayCommand>,
         app_env: Arc<AppEnvironment>,
     ) -> Result<(Self, WaylandSurfaceManager), DisplayServerError> {
-        let connection =
-            Connection::connect_to_env().map_err(|error| DisplayServerError::ConnectionFailed {
-                reason: error.to_string(),
-            })?;
+        let connection = Connection::connect_to_env().map_err(|error| connection_failed(&error))?;
         let event_queue = connection.new_event_queue();
         let queue_handle = event_queue.handle();
 
         connection.display().get_registry(&queue_handle, ());
 
-        let socket = readiness_socket(&connection).map_err(|error| {
-            DisplayServerError::ConnectionFailed {
-                reason: error.to_string(),
-            }
-        })?;
+        let socket = readiness_socket(&connection).map_err(|error| connection_failed(&error))?;
 
         let config_rx = hub.config_rx();
-        let state = WaylandState {
-            hub,
-            compositor: None,
-            shm: None,
-            layer_shell: None,
-            subcompositor: None,
-            xdg_wm_base: None,
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            seat: None,
-            pointer: None,
-            keyboard: super::keyboard::KeyboardInput::default(),
-            command_tx,
-            surface_to_id: HashMap::new(),
-            pointer_surface: None,
-            pointer_pos: (0.0, 0.0),
-            pointer_target: None,
-            pointer_grab: super::dispatch_pointer_button::PointerGrab::default(),
-            floating_surfaces: HashMap::new(),
-            pending_children: HashMap::new(),
-            last_button_serial: None,
-            app_env,
-        };
+        let state = WaylandState::new(hub, command_tx, app_env);
 
         let pending_surfaces = Arc::new(Mutex::new(HashMap::new()));
         let (notify_tx, notify_rx) = tokio::sync::mpsc::channel(1);
@@ -106,6 +77,13 @@ impl WaylandAdapter {
         };
 
         Ok((adapter, manager))
+    }
+}
+
+/// The connection failure `error` stands for.
+pub(super) fn connection_failed(error: &impl ToString) -> DisplayServerError {
+    DisplayServerError::ConnectionFailed {
+        reason: error.to_string(),
     }
 }
 
