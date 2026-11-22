@@ -56,6 +56,16 @@ impl WaylandState {
         Ok(())
     }
 
+    /// Every named output without a bar.
+    pub(super) fn outputs_without_bars(&self) -> Vec<WlOutput> {
+        self.outputs
+            .iter()
+            .filter(|info| !info.name.is_empty())
+            .filter(|info| !self.bars.iter().any(|bar| bar.output_name == info.name))
+            .map(|info| info.output.clone())
+            .collect()
+    }
+
     /// The bar `output` should get, or `None` while it has no name or once
     /// it has a bar.
     fn bar_spec<'a>(

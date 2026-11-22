@@ -1,4 +1,4 @@
-use super::adapter::WaylandAdapter;
+use super::adapter::{WaylandAdapter, connection_failed};
 use super::command::SurfaceCommand;
 use super::floating_surface::{hide_floating, show_floating};
 use super::render::render_outputs;
@@ -10,7 +10,9 @@ use crate::shared::wayland::ports::{AppReadModel, DisplayServerError, DisplaySer
 use async_trait::async_trait;
 use std::collections::HashMap;
 use tokio::io::Interest;
-use wayland_client::backend::WaylandError;
+use tokio::net::UnixStream;
+use wayland_client::backend::{ReadEventsGuard, WaylandError};
+use wayland_client::protocol::wl_output::WlOutput;
 
 #[async_trait]
 impl DisplayServerPort for WaylandAdapter {
@@ -20,30 +22,12 @@ impl DisplayServerPort for WaylandAdapter {
             tokio::select! {
                 result = self.socket.readable() => {
                     if result.is_ok() {
-                        // The outer `Err` is only ever `WouldBlock`: `try_io` clears the
-                        // readiness and the next call waits again. A real failure travels
-                        // as the inner `Err`.
-                        let read = self.socket.try_io(Interest::READABLE, || match r_guard.read() {
-                            Ok(_) => Ok(Ok(())),
-                            Err(WaylandError::Io(error)) if error.kind() == std::io::ErrorKind::WouldBlock => Err(error),
-                            Err(error) => Ok(Err(error)),
-                        });
-                        if let Ok(Err(error)) = read {
-                            return Err(DisplayServerError::ConnectionFailed { reason: error.to_string() });
-                        }
+                        read_events(&self.socket, r_guard)?;
                     }
                 }
                 Some(()) = self.notify_rx.recv() => {
                     drop(r_guard);
-                    let cmds: Vec<SurfaceCommand> = {
-                        let mut map = self.pending_surfaces.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                        map.drain().map(|(_, cmd)| cmd).collect()
-                    };
-                    let queue_handle = self.event_queue.handle();
-                    for cmd in cmds {
-                        handle_cmd(&mut self.state, &queue_handle, &cmd)?;
-                    }
-                    return Ok(());
+                    return self.apply_pending_surfaces();
                 }
             }
         }
@@ -51,50 +35,13 @@ impl DisplayServerPort for WaylandAdapter {
     }
 
     fn dispatch_pending(&mut self) -> Result<(), DisplayServerError> {
-        if self.config_rx.has_changed().unwrap_or(false) {
-            let _ = self.config_rx.borrow_and_update();
-            tracing::debug!("WaylandAdapter detected config change, recreating bars...");
-            self.state.bars.clear();
-            self.state.surface_to_id.clear();
-
-            let outputs: Vec<_> = self
-                .state
-                .outputs
-                .iter()
-                .map(|info| info.output.clone())
-                .collect();
-            for output in outputs {
-                let _ = self.state.create_bar(&output, &self.event_queue.handle());
-            }
-        }
-
+        self.recreate_bars_on_config_change();
         self.event_queue
             .dispatch_pending(&mut self.state)
-            .map_err(|error| DisplayServerError::ConnectionFailed {
-                reason: error.to_string(),
-            })?;
-
-        let outputs_missing_bars: Vec<_> = self
-            .state
-            .outputs
-            .iter()
-            .filter(|info| !info.name.is_empty())
-            .filter(|info| {
-                !self
-                    .state
-                    .bars
-                    .iter()
-                    .any(|bar| bar.output_name == info.name)
-            })
-            .map(|info| info.output.clone())
-            .collect();
-
-        for output in outputs_missing_bars {
-            if let Err(error) = self.state.create_bar(&output, &self.event_queue.handle()) {
-                tracing::debug!("Deferred bar creation: {}", error);
-            }
+            .map_err(|error| connection_failed(&error))?;
+        for output in self.state.outputs_without_bars() {
+            self.create_bar_or_defer(&output);
         }
-
         Ok(())
     }
 
@@ -127,6 +74,77 @@ impl DisplayServerPort for WaylandAdapter {
     fn hide_floating_surface(&mut self, kind: &FloatingKind) -> Result<(), DisplayServerError> {
         hide_floating(&mut self.state, kind);
         Ok(())
+    }
+}
+
+/// Reads the events waiting on `socket` into the queue `read_guard` was
+/// prepared for.
+fn read_events(socket: &UnixStream, read_guard: ReadEventsGuard) -> Result<(), DisplayServerError> {
+    // The outer `Err` is only ever `WouldBlock`: `try_io` clears the
+    // readiness and the next call waits again. A real failure travels
+    // as the inner `Err`.
+    let read = socket.try_io(Interest::READABLE, || match read_guard.read() {
+        Ok(_) => Ok(Ok(())),
+        Err(WaylandError::Io(error)) if error.kind() == std::io::ErrorKind::WouldBlock => {
+            Err(error)
+        }
+        Err(error) => Ok(Err(error)),
+    });
+    if let Ok(Err(error)) = read {
+        return Err(connection_failed(&error));
+    }
+    Ok(())
+}
+
+impl WaylandAdapter {
+    /// Applies every surface command queued since the last wake, the latest
+    /// per module and monitor.
+    fn apply_pending_surfaces(&mut self) -> Result<(), DisplayServerError> {
+        let cmds: Vec<SurfaceCommand> = {
+            let mut map = self
+                .pending_surfaces
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            map.drain().map(|(_, cmd)| cmd).collect()
+        };
+        let queue_handle = self.event_queue.handle();
+        for cmd in cmds {
+            handle_cmd(&mut self.state, &queue_handle, &cmd)?;
+        }
+        Ok(())
+    }
+
+    /// Rebuilds every bar when the config changed since the last look.
+    fn recreate_bars_on_config_change(&mut self) {
+        let Ok(true) = self.config_rx.has_changed() else {
+            return;
+        };
+        let _ = self.config_rx.borrow_and_update();
+        tracing::debug!("WaylandAdapter detected config change, recreating bars...");
+        self.recreate_bars();
+    }
+
+    /// Drops every bar and pointer route, then creates a bar per output.
+    fn recreate_bars(&mut self) {
+        self.state.bars.clear();
+        self.state.surface_to_id.clear();
+        let outputs: Vec<_> = self
+            .state
+            .outputs
+            .iter()
+            .map(|info| info.output.clone())
+            .collect();
+        for output in outputs {
+            let _ = self.state.create_bar(&output, &self.event_queue.handle());
+        }
+    }
+
+    /// Creates `output`'s bar, or logs why it has to wait.
+    fn create_bar_or_defer(&mut self, output: &WlOutput) {
+        let Err(error) = self.state.create_bar(output, &self.event_queue.handle()) else {
+            return;
+        };
+        tracing::debug!("Deferred bar creation: {}", error);
     }
 }
 
