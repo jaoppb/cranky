@@ -63,21 +63,29 @@ fn parse_dbus_subscription(
         _ => crate::shared::dbus::domain::BusType::Session,
     };
 
-    Some(crate::shared::dbus::domain::DBusSubscription::new(
-        bus,
-        map.get("destination")
-            .and_then(|value| value.clone().try_cast::<String>())
-            .map(crate::shared::dbus::domain::Destination::new),
-        map.get("path")
-            .and_then(|value| value.clone().try_cast::<String>())
-            .map(crate::shared::dbus::domain::Path::new),
-        map.get("interface")
-            .and_then(|value| value.clone().try_cast::<String>())
-            .map(crate::shared::dbus::domain::Interface::new),
-        map.get("member")
-            .and_then(|value| value.clone().try_cast::<String>())
-            .map(crate::shared::dbus::domain::Member::new),
-    ))
+    Some(
+        crate::shared::dbus::domain::DBusSubscription::new(bus)
+            .with_destination(
+                map.get("destination")
+                    .and_then(|value| value.clone().try_cast::<String>())
+                    .map(crate::shared::dbus::domain::Destination::new),
+            )
+            .with_path(
+                map.get("path")
+                    .and_then(|value| value.clone().try_cast::<String>())
+                    .map(crate::shared::dbus::domain::Path::new),
+            )
+            .with_interface(
+                map.get("interface")
+                    .and_then(|value| value.clone().try_cast::<String>())
+                    .map(crate::shared::dbus::domain::Interface::new),
+            )
+            .with_member(
+                map.get("member")
+                    .and_then(|value| value.clone().try_cast::<String>())
+                    .map(crate::shared::dbus::domain::Member::new),
+            ),
+    )
 }
 
 fn parse_subscriptions_array(

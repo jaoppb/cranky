@@ -7,8 +7,8 @@ use crate::cases::{Case, case};
 use crate::support::{Context, Outcome, ensure, ensure_eq, within};
 use cranky::shared::dbus::adapters::connection::{Connected, ZbusConnectionAdapter};
 use cranky::shared::dbus::domain::{
-    BusType, DBusSubscription, DBusValue, Destination, Interface, Member, NameChangedStream,
-    NameOwnerChanged, Path, PropertyName,
+    BusObject, BusType, DBusSubscription, DBusValue, Destination, Interface, Member,
+    NameChangedStream, NameOwnerChanged, Path, PropertyName, QualifiedMember,
 };
 use cranky::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
 use probe::ProbeService;
@@ -45,6 +45,10 @@ fn probe_path() -> Path {
 
 fn probe_interface() -> Interface {
     Interface::new(probe::INTERFACE)
+}
+
+fn probe_object() -> BusObject {
+    BusObject::new(BusType::Session, probe_destination(), probe_path())
 }
 
 /// Both addresses lead to the same private daemon, so this proves that both
@@ -87,11 +91,8 @@ async fn call(
 ) -> Result<DBusValue, DbusConnectionError> {
     adapter
         .call_method(
-            BusType::Session,
-            &probe_destination(),
-            &probe_path(),
-            &probe_interface(),
-            &Member::new(method),
+            &probe_object(),
+            &QualifiedMember::new(probe_interface(), Member::new(method)),
         )
         .await
 }
@@ -141,12 +142,7 @@ async fn reads_all_properties_with_their_types() -> Outcome {
     let adapter = adapter().await?;
     let _probe = ProbeService::start().await?;
     let properties = adapter
-        .get_all_properties(
-            BusType::Session,
-            &probe_destination(),
-            &probe_path(),
-            &probe_interface(),
-        )
+        .get_all_properties(&probe_object(), &probe_interface())
         .await
         .context("get all properties")?;
     let expected = [
@@ -178,7 +174,7 @@ async fn streams_property_changes() -> Outcome {
     let adapter = adapter().await?;
     let probe = ProbeService::start().await?;
     let mut updates = adapter
-        .subscribe_properties_changed(BusType::Session, &probe_destination(), &probe_path())
+        .subscribe_properties_changed(&probe_object())
         .await
         .context("subscribe to property changes")?;
     probe.relabel("second").await?;
@@ -237,13 +233,13 @@ async fn streams_a_signal_with_a_variant_body() -> Outcome {
     let adapter = adapter().await?;
     let probe = ProbeService::start().await?;
     let mut signals = adapter
-        .subscribe_signal(DBusSubscription::new(
-            BusType::Session,
-            Some(probe_destination()),
-            Some(probe_path()),
-            Some(probe_interface()),
-            Some(Member::new("Pinged")),
-        ))
+        .subscribe_signal(
+            DBusSubscription::new(BusType::Session)
+                .with_destination(Some(probe_destination()))
+                .with_path(Some(probe_path()))
+                .with_interface(Some(probe_interface()))
+                .with_member(Some(Member::new("Pinged"))),
+        )
         .await
         .context("subscribe to Pinged")?;
     probe.ping("hello").await?;

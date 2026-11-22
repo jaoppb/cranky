@@ -4,7 +4,7 @@ use tokio_stream::StreamExt;
 use tracing::warn;
 
 use crate::features::mpris::domain::{MprisState, PlayerName, PlayerState};
-use crate::shared::dbus::domain::{BusType, Destination, Interface, Path};
+use crate::shared::dbus::domain::{BusObject, BusType, Destination, Interface, Path};
 use crate::shared::dbus::ports::DbusConnectionPort;
 
 use super::props::update_state_from_props;
@@ -14,30 +14,25 @@ pub(super) async fn add_player(
     mpris_tx: &watch::Sender<MprisState>,
     dest: Destination,
 ) {
-    let path = Path::new("/org/mpris/MediaPlayer2");
+    let object = BusObject::new(BusType::Session, dest, Path::new("/org/mpris/MediaPlayer2"));
     let iface = Interface::new("org.mpris.MediaPlayer2.Player");
 
-    let props = match conn
-        .get_all_properties(BusType::Session, &dest, &path, &iface)
-        .await
-    {
+    let props = match conn.get_all_properties(&object, &iface).await {
         Ok(properties) => properties,
         Err(error) => {
+            let dest = object.destination();
             warn!("Failed to read MPRIS properties for {dest:?}: {error}");
             return;
         }
     };
 
-    let player_name = PlayerName::new(
-        dest.as_str()
-            .strip_prefix("org.mpris.MediaPlayer2.")
-            .unwrap_or(dest.as_str()),
-    );
+    let dest = object.destination().as_str();
+    let player_name = PlayerName::new(dest.strip_prefix("org.mpris.MediaPlayer2.").unwrap_or(dest));
     let mut state = PlayerState::new(player_name.clone());
 
     update_state_from_props(&mut state, &props);
 
-    spawn_property_listener(conn.clone(), mpris_tx.clone(), dest, path);
+    spawn_property_listener(conn.clone(), mpris_tx.clone(), object);
 
     let mut mpris_state = mpris_tx.borrow().clone();
     mpris_state
@@ -54,14 +49,11 @@ pub(super) async fn add_player(
 fn spawn_property_listener(
     conn: Arc<dyn DbusConnectionPort>,
     tx: watch::Sender<MprisState>,
-    dest: Destination,
-    path: Path,
+    object: BusObject,
 ) {
     tokio::spawn(async move {
-        if let Ok(mut stream) = conn
-            .subscribe_properties_changed(BusType::Session, &dest, &path)
-            .await
-        {
+        if let Ok(mut stream) = conn.subscribe_properties_changed(&object).await {
+            let dest = object.destination();
             while let Some((changed_iface, changed_props)) = stream.next().await {
                 if changed_iface.as_str() == "org.mpris.MediaPlayer2.Player" {
                     let mut mpris_state = tx.borrow().clone();

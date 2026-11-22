@@ -20,23 +20,46 @@ pub struct DBusSubscription {
 }
 
 impl DBusSubscription {
-    /// Builds a subscription; a `PropertiesChanged` member with a destination and path is watched
-    /// as property updates, anything else as a raw signal match rule.
+    /// Builds a subscription to every signal on `bus`; the `with_*` filters narrow it. A
+    /// `PropertiesChanged` member with a destination and path is watched as property updates,
+    /// anything else as a raw signal match rule.
     #[must_use]
-    pub const fn new(
-        bus: BusType,
-        destination: Option<Destination>,
-        path: Option<Path>,
-        interface: Option<Interface>,
-        member: Option<Member>,
-    ) -> Self {
+    pub const fn new(bus: BusType) -> Self {
         Self {
             bus,
-            destination,
-            path,
-            interface,
-            member,
+            destination: None,
+            path: None,
+            interface: None,
+            member: None,
         }
+    }
+
+    /// Only signals sent by `destination`, when given.
+    #[must_use]
+    pub fn with_destination(mut self, destination: Option<Destination>) -> Self {
+        self.destination = destination;
+        self
+    }
+
+    /// Only signals from the object at `path`, when given.
+    #[must_use]
+    pub fn with_path(mut self, path: Option<Path>) -> Self {
+        self.path = path;
+        self
+    }
+
+    /// Only signals of `interface`, when given.
+    #[must_use]
+    pub fn with_interface(mut self, interface: Option<Interface>) -> Self {
+        self.interface = interface;
+        self
+    }
+
+    /// Only the signal named `member`, when given.
+    #[must_use]
+    pub fn with_member(mut self, member: Option<Member>) -> Self {
+        self.member = member;
+        self
     }
 
     #[must_use]

@@ -11,8 +11,8 @@ pub use adapter::{Connected, Disconnected, ZbusConnectionAdapter};
 use async_trait::async_trait;
 
 use crate::shared::dbus::domain::{
-    BusType, DBusSubscription, DBusValue, Destination, Interface, Member, NameChangedStream, Path,
-    PropertiesMap, PropertyChangedStream, SignalStream,
+    BusObject, BusType, DBusSubscription, DBusValue, Destination, Interface, NameChangedStream,
+    PropertiesMap, PropertyChangedStream, QualifiedMember, SignalStream,
 };
 use crate::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
 
@@ -20,35 +20,25 @@ use crate::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
 impl DbusConnectionPort for ZbusConnectionAdapter<Connected> {
     async fn call_method(
         &self,
-        bus: BusType,
-        destination: &Destination,
-        path: &Path,
-        interface: &Interface,
-        method: &Member,
+        object: &BusObject,
+        method: &QualifiedMember,
     ) -> Result<DBusValue, DbusConnectionError> {
-        self.call_method_impl(bus, destination, path, interface, method)
-            .await
+        self.call_method_impl(object, method).await
     }
 
     async fn get_all_properties(
         &self,
-        bus: BusType,
-        destination: &Destination,
-        path: &Path,
+        object: &BusObject,
         interface: &Interface,
     ) -> Result<PropertiesMap, DbusConnectionError> {
-        self.get_all_properties_impl(bus, destination, path, interface)
-            .await
+        self.get_all_properties_impl(object, interface).await
     }
 
     async fn subscribe_properties_changed(
         &self,
-        bus: BusType,
-        sender: &Destination,
-        path: &Path,
+        object: &BusObject,
     ) -> Result<PropertyChangedStream, DbusConnectionError> {
-        self.subscribe_properties_changed_impl(bus, sender, path)
-            .await
+        self.subscribe_properties_changed_impl(object).await
     }
 
     async fn list_names(&self, bus: BusType) -> Result<Vec<Destination>, DbusConnectionError> {

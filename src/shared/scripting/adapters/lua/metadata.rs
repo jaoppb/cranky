@@ -136,25 +136,33 @@ fn parse_subscriptions_table(
                 BusType::Session
             };
             subs.push(SignalKind::DBus);
-            dbus_subs.push(DBusSubscription::new(
-                bus,
-                dbus_sub
-                    .get::<String>("destination")
-                    .ok()
-                    .map(crate::shared::dbus::domain::Destination::new),
-                dbus_sub
-                    .get::<String>("path")
-                    .ok()
-                    .map(crate::shared::dbus::domain::Path::new),
-                dbus_sub
-                    .get::<String>("interface")
-                    .ok()
-                    .map(crate::shared::dbus::domain::Interface::new),
-                dbus_sub
-                    .get::<String>("member")
-                    .ok()
-                    .map(crate::shared::dbus::domain::Member::new),
-            ));
+            dbus_subs.push(
+                DBusSubscription::new(bus)
+                    .with_destination(
+                        dbus_sub
+                            .get::<String>("destination")
+                            .ok()
+                            .map(crate::shared::dbus::domain::Destination::new),
+                    )
+                    .with_path(
+                        dbus_sub
+                            .get::<String>("path")
+                            .ok()
+                            .map(crate::shared::dbus::domain::Path::new),
+                    )
+                    .with_interface(
+                        dbus_sub
+                            .get::<String>("interface")
+                            .ok()
+                            .map(crate::shared::dbus::domain::Interface::new),
+                    )
+                    .with_member(
+                        dbus_sub
+                            .get::<String>("member")
+                            .ok()
+                            .map(crate::shared::dbus::domain::Member::new),
+                    ),
+            );
         }
     }
 }
