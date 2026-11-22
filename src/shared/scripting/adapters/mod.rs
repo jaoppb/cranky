@@ -2,6 +2,8 @@
 use crate::shared::config::domain::{EngineId, FileExtension};
 pub mod lua;
 pub mod rhai;
+#[cfg(test)]
+mod test_support;
 
 use crate::features::module_runtime::ports::AnyModulePort;
 use crate::shared::scripting::ports::{ModuleError, ScriptEnginePort};
