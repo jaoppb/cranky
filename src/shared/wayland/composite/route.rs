@@ -161,50 +161,26 @@ mod tests {
         (ModuleId::new(id), MonitorId::new("m"), SurfaceKind::Popup)
     }
 
+    fn crossing_of(leave: Option<&PointerTarget>, enter: Option<&PointerTarget>) -> Crossing {
+        Crossing {
+            leave: leave.cloned(),
+            enter: enter.cloned(),
+        }
+    }
+
     #[test]
     fn crossing_cases() {
         let (first, second) = (target(1), target(2));
         let cases: Vec<(Option<&PointerTarget>, Option<&PointerTarget>, Crossing)> = vec![
-            (
-                None,
-                Some(&first),
-                Crossing {
-                    leave: None,
-                    enter: Some(first.clone()),
-                },
-            ),
-            (
-                Some(&first),
-                Some(&first),
-                Crossing {
-                    leave: None,
-                    enter: None,
-                },
-            ),
+            (None, Some(&first), crossing_of(None, Some(&first))),
+            (Some(&first), Some(&first), crossing_of(None, None)),
             (
                 Some(&first),
                 Some(&second),
-                Crossing {
-                    leave: Some(first.clone()),
-                    enter: Some(second.clone()),
-                },
+                crossing_of(Some(&first), Some(&second)),
             ),
-            (
-                Some(&first),
-                None,
-                Crossing {
-                    leave: Some(first.clone()),
-                    enter: None,
-                },
-            ),
-            (
-                None,
-                None,
-                Crossing {
-                    leave: None,
-                    enter: None,
-                },
-            ),
+            (Some(&first), None, crossing_of(Some(&first), None)),
+            (None, None, crossing_of(None, None)),
         ];
         for (prev, next, expected) in cases {
             assert_eq!(crossing(prev, next), expected);

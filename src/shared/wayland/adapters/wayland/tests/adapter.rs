@@ -1,7 +1,11 @@
-use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
-use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
+use crate::shared::env::domain::AppEnvironment;
+use crate::shared::primitives::geometry::{Position, Size};
+use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer, RenderBuffer};
+use crate::shared::primitives::{ModuleId, MonitorId};
+use crate::shared::wayland::adapters::wayland::tests::fixture::environment_with_runtime_dir;
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use wayland_client::Connection;
@@ -14,44 +18,17 @@ use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::surface_handler::handle_cmd;
 use crate::shared::wayland::ports::DisplayServerPort;
 
+/// An environment whose home, cache and runtime directories are `/tmp`.
+fn tmp_environment() -> Arc<AppEnvironment> {
+    environment_with_runtime_dir(PathBuf::from("/tmp"))
+}
+
 #[test]
 fn test_wayland_state_initialization() {
     crate::test_utils::block_on(async {
         let (command_tx, _) = tokio::sync::mpsc::channel(10);
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::BaseDirectories::new(
-                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            ),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let state = WaylandState {
-            hub: Arc::new(SignalHub::new(
-                crate::shared::config::domain::Config::default(),
-            )),
-            compositor: None,
-            shm: None,
-            layer_shell: None,
-            subcompositor: None,
-            xdg_wm_base: None,
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            seat: None,
-            pointer: None,
-            keyboard: crate::shared::wayland::adapters::wayland::keyboard::KeyboardInput::default(),
-            command_tx,
-            surface_to_id: HashMap::new(),
-            pointer_surface: None,
-            pointer_pos: (0.0, 0.0),
-            pointer_target: None,
-            pointer_grab: PointerGrab::default(),
-            floating_surfaces: HashMap::new(),
-            pending_children: HashMap::new(),
-            last_button_serial: None,
-            app_env,
-        };
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let state = WaylandState::new(hub, command_tx, tmp_environment());
         assert!(state.bars.is_empty());
         assert!(state.outputs.is_empty());
 
@@ -63,65 +40,30 @@ fn test_wayland_state_initialization() {
     });
 }
 
+/// An adapter over a state with no global bound, on a connection nobody
+/// serves.
+fn unserved_adapter(hub: &Arc<SignalHub>) -> WaylandAdapter {
+    let (client_stream, _) = UnixStream::pair().unwrap();
+    let backend = wayland_client::backend::Backend::connect(client_stream).unwrap();
+    let connection = Connection::from_backend(backend);
+    let (command_tx, _) = tokio::sync::mpsc::channel(10);
+    let (_, notify_rx) = tokio::sync::mpsc::channel(1);
+    WaylandAdapter {
+        event_queue: connection.new_event_queue::<WaylandState>(),
+        socket: readiness_socket(&connection).unwrap(),
+        connection,
+        state: WaylandState::new(hub.clone(), command_tx, tmp_environment()),
+        pending_surfaces: Arc::new(Mutex::new(HashMap::new())),
+        notify_rx,
+        config_rx: hub.config_rx(),
+    }
+}
+
 #[test]
 fn test_wayland_adapter_methods() {
     crate::test_utils::block_on(async {
-        let (client_stream, _) = UnixStream::pair().unwrap();
-        let backend = wayland_client::backend::Backend::connect(client_stream).unwrap();
-        let connection = Connection::from_backend(backend);
-        let event_queue = connection.new_event_queue::<WaylandState>();
-        let socket = readiness_socket(&connection).unwrap();
-
-        let (command_tx, _) = tokio::sync::mpsc::channel(10);
-        let config = crate::shared::config::domain::Config::default();
-        let hub = Arc::new(SignalHub::new(config));
-        let config_rx = hub.config_rx();
-
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::BaseDirectories::new(
-                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            ),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let state = WaylandState {
-            hub: hub.clone(),
-            compositor: None,
-            shm: None,
-            layer_shell: None,
-            xdg_wm_base: None,
-            subcompositor: None,
-            outputs: Vec::new(),
-            bars: Vec::new(),
-            seat: None,
-            pointer: None,
-            keyboard: crate::shared::wayland::adapters::wayland::keyboard::KeyboardInput::default(),
-            command_tx,
-            surface_to_id: HashMap::new(),
-            pointer_surface: None,
-            pointer_pos: (0.0, 0.0),
-            pointer_target: None,
-            pointer_grab: PointerGrab::default(),
-            floating_surfaces: HashMap::new(),
-            pending_children: HashMap::new(),
-            last_button_serial: None,
-            app_env,
-        };
-
-        let pending_surfaces = Arc::new(Mutex::new(HashMap::new()));
-        let (_, notify_rx) = tokio::sync::mpsc::channel(1);
-
-        let mut adapter = WaylandAdapter {
-            connection,
-            event_queue,
-            state,
-            socket,
-            pending_surfaces,
-            notify_rx,
-            config_rx,
-        };
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let mut adapter = unserved_adapter(&hub);
 
         assert!(adapter.flush().is_ok());
 
@@ -129,14 +71,11 @@ fn test_wayland_adapter_methods() {
 
         let cmd = SurfaceCommand::new(
             ModuleFrame::new(
-                crate::shared::primitives::ModuleId::new(1),
-                crate::shared::primitives::MonitorId::new("test"),
+                ModuleId::new(1),
+                MonitorId::new("test"),
                 PlacedBuffer::new(
-                    crate::shared::primitives::geometry::Position::new(0, 0),
-                    crate::shared::primitives::render::RenderBuffer::new(
-                        vec![0; 4],
-                        crate::shared::primitives::geometry::Size::new(1, 1),
-                    ),
+                    Position::new(0, 0),
+                    RenderBuffer::new(vec![0; 4], Size::new(1, 1)),
                 ),
             ),
             None,
@@ -145,16 +84,7 @@ fn test_wayland_adapter_methods() {
         let _ = handle_cmd(&mut adapter.state, &queue_handle, &cmd);
 
         let (tx, _rx) = tokio::sync::mpsc::channel(10);
-        let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
-            crate::shared::env::domain::BaseDirectories::new(
-                crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
-                crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from("/tmp")),
-            ),
-            crate::shared::env::domain::RustLog::new(String::new()),
-            None,
-        ));
-        let _ = WaylandAdapter::new(hub, tx, app_env);
+        let _ = WaylandAdapter::new(hub, tx, tmp_environment());
     });
 }
 

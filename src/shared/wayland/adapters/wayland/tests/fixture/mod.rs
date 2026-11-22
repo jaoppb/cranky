@@ -2,6 +2,7 @@
 //! bound over a socket pair nobody reads from, so requests are just queued.
 
 mod bar;
+mod output;
 pub(in crate::shared::wayland::adapters::wayland) mod pointer;
 pub(in crate::shared::wayland::adapters::wayland::tests) mod positioner;
 mod request;

@@ -1,30 +1,16 @@
 use crate::features::layout_engine::domain::{FloatingKind, PopupTarget, ShowFloating};
-use crate::shared::config::domain::Config;
-use crate::shared::events::signals::SignalHub;
+use crate::shared::config::domain::PopupEmbed;
 use crate::shared::primitives::geometry::Size;
+use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};
-use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::adapters::wayland::dispatch_pointer::handle_pointer_enter;
-use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use crate::shared::wayland::adapters::wayland::floating_anchor::{
     FloatingParentRole, resolve_anchor,
 };
-use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::popup;
 use crate::shared::wayland::adapters::wayland::tests::fixture::{
-    Fake, environment_with_runtime_dir, popup_kind, show_request, solid,
+    Fake, popup_kind, show_request, solid,
 };
-use crate::shared::wayland::adapters::wayland::types::{FloatingSurface, ModuleSurface};
-use std::collections::HashMap;
-use std::os::unix::net::UnixStream;
-use std::path::Path;
-use std::sync::Arc;
-use wayland_client::Connection;
-use wayland_client::backend::Backend;
-use wayland_client::protocol::{
-    wl_compositor::WlCompositor, wl_shm::WlShm, wl_subcompositor::WlSubcompositor,
-};
-use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 
 /// Regression test (Gap A): the hovered element can belong to a module
 /// that isn't embedded in the bar at all, but in a module embedded inside
@@ -35,104 +21,26 @@ use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 /// return `None` because no bar owns the hovered surface.
 #[test]
 fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
-    let (client_stream, _server_stream) = UnixStream::pair().expect("socket pair");
-    let backend = Backend::connect(client_stream).expect("connect backend");
-    let connection = Connection::from_backend(backend);
-    let event_queue = connection.new_event_queue::<WaylandState>();
-    let queue_handle = event_queue.handle();
-
-    let display = connection.display();
-    let registry = display.get_registry(&queue_handle, ());
-    let compositor: WlCompositor = registry.bind(1, 1, &queue_handle, ());
-    let subcompositor: WlSubcompositor = registry.bind(2, 1, &queue_handle, ());
-    let shm: WlShm = registry.bind(3, 1, &queue_handle, ());
-    let xdg_wm_base: XdgWmBase = registry.bind(4, 1, &queue_handle, ());
-
+    let fake = Fake::new();
+    let mut state = fake.state(PopupEmbed::Composite);
     // The already-open popup's own surface/xdg_surface — what the embedded
     // module's tooltip must nest inside.
-    let popup_surface = compositor.create_surface(&queue_handle, ());
-    let popup_xdg_surface = xdg_wm_base.get_xdg_surface(&popup_surface, &queue_handle, ());
-    let positioner = xdg_wm_base.create_positioner(&queue_handle, ());
-    let popup_xdg_popup = popup_xdg_surface.get_popup(None, &positioner, &queue_handle, ());
-    let popup_shm_buffer = ShmBuffer::new(
-        ShmSource::new(&shm, Path::new("/tmp")),
-        Size::new(2, 2),
-        &queue_handle,
-    )
-    .expect("popup shm buffer");
-
+    let empty = RenderBuffer::new(Vec::new(), Size::new(0, 0));
+    let mut popup = fake.floating(Size::new(100, 100), empty);
     // The module embedded inside that popup's own content (decision 7, gap
     // 4): its own subsurface, parented to the popup's surface rather than
     // to a bar's.
-    let module_surface = compositor.create_surface(&queue_handle, ());
-    let module_subsurface =
-        subcompositor.get_subsurface(&module_surface, &popup_surface, &queue_handle, ());
-    let module_shm_buffer = ShmBuffer::new(
-        ShmSource::new(&shm, Path::new("/tmp")),
-        Size::new(2, 2),
-        &queue_handle,
-    )
-    .expect("module shm buffer");
-
-    let mut module_surfaces = HashMap::new();
-    module_surfaces.insert(
-        ModuleId::new(7),
-        ModuleSurface {
-            surface: module_surface.clone(),
-            subsurface: module_subsurface,
-            shm_buffer: module_shm_buffer,
-            size: Size::new(2, 2),
-            x: 5,
-            y: 3,
-        },
-    );
-
-    let mut floating_surfaces = HashMap::new();
-    floating_surfaces.insert(
-        FloatingKind::Popup(PopupTarget::new(ModuleId::new(1), MonitorId::new("DP-1"))),
-        FloatingSurface {
-            surface: popup_surface,
-            xdg_surface: popup_xdg_surface,
-            xdg_popup: popup_xdg_popup,
-            shm_buffer: popup_shm_buffer,
-            size: Size::new(100, 100),
-            reposition_token: 0,
-            module_surfaces,
-            parent: None,
-            base: crate::shared::primitives::render::RenderBuffer::new(Vec::new(), Size::new(0, 0)),
-            layers: crate::shared::wayland::composite::CompositeLayers::default(),
-            configure: crate::shared::wayland::adapters::wayland::types::ConfigureGate::default(),
-            scale: 1,
-        },
-    );
-
-    let (command_tx, _command_rx) = tokio::sync::mpsc::channel(1);
-    let app_env = environment_with_runtime_dir(std::path::PathBuf::from("/tmp"));
-    let state = WaylandState {
-        hub: Arc::new(SignalHub::new(Config::default())),
-        compositor: None,
-        subcompositor: None,
-        layer_shell: None,
-        xdg_wm_base: None,
-        shm: None,
-        outputs: Vec::new(),
-        bars: Vec::new(),
-        seat: None,
-        pointer: None,
-        keyboard: crate::shared::wayland::adapters::wayland::keyboard::KeyboardInput::default(),
-        command_tx,
-        surface_to_id: HashMap::new(),
-        // The pointer is over the embedded module's own subsurface, not
-        // any bar surface.
-        pointer_surface: Some(module_surface),
-        pointer_pos: (12.0, 4.0),
-        pointer_target: None,
-        pointer_grab: PointerGrab::default(),
-        floating_surfaces,
-        pending_children: HashMap::new(),
-        last_button_serial: None,
-        app_env,
-    };
+    let mut module = fake.module_surface(&popup.surface);
+    (module.x, module.y) = (5, 3);
+    // The pointer is over the embedded module's own subsurface, not any bar
+    // surface.
+    state.pointer_surface = Some(module.surface.clone());
+    state.pointer_pos = (12.0, 4.0);
+    popup.module_surfaces.insert(ModuleId::new(7), module);
+    let owner = PopupTarget::new(ModuleId::new(1), MonitorId::new("DP-1"));
+    state
+        .floating_surfaces
+        .insert(FloatingKind::Popup(owner), popup);
 
     let anchor = resolve_anchor(&state, &tooltip_request())
         .expect("tooltip anchor must resolve for a module embedded in an open popup");
@@ -145,8 +53,6 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
     // pointer_pos.0 (12) + the embedded module's own subsurface offset
     // (5), exactly the transform the bar-owned case already applies.
     assert_eq!(anchor.anchor_x, 17);
-
-    drop(event_queue);
 }
 
 #[test]
@@ -154,6 +60,7 @@ fn tooltip_anchor_resolves_for_composite_child() {
     let fake = Fake::new();
     let (mut state, surface) = popup(&fake, 1);
     handle_pointer_enter(&mut state, &surface, (12.0, 4.0));
+    (state.bars[0].scale, state.bars[0].height) = (3, 24);
     let anchor = resolve_anchor(&state, &tooltip_request())
         .expect("tooltip anchor resolves for a composited child");
     let popup_xdg = state
@@ -164,8 +71,16 @@ fn tooltip_anchor_resolves_for_composite_child() {
         matches!(&anchor.parent_role, FloatingParentRole::Popup(x) if Some(x) == popup_xdg.as_ref())
     );
     assert_eq!(anchor.target_monitor_id, MonitorId::new("DP-1"));
-    // Already popup-local: no layer origin added on top.
-    assert_eq!(anchor.anchor_x, 12);
+    // Already popup-local: no layer origin added on top. A tooltip anchors
+    // on one point below its bar, at the bar's scale.
+    let placed = (
+        anchor.anchor_x,
+        anchor.anchor_y,
+        anchor.anchor_w,
+        anchor.anchor_h,
+        anchor.bar_scale,
+    );
+    assert_eq!(placed, (12, 24, 1, 1, 3));
 }
 
 #[test]

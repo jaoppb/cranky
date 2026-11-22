@@ -99,120 +99,146 @@ impl AppReadModel {
         bar: &MonitorBar,
         root_config: &RootConfig,
     ) -> Vec<ModuleLayout> {
-        let monitor = &bar.monitor;
-        let mut layouts = Vec::new();
         let bar_height = root_config.height().value();
-        let bar_width_val = bar.width.value();
-
-        if let Some(root_id) = self.root_module {
-            layouts.push(ModuleLayout {
-                id: root_id,
-                bounds: Rect::new(Position::new(0, 0), Size::new(bar_width_val, bar_height)),
-            });
-        }
-
-        if let Some(mon_layouts) = self.computed_layouts.get(monitor) {
-            for (&mod_id, &bounds) in mon_layouts {
-                if Some(mod_id) != self.root_module {
-                    layouts.push(ModuleLayout {
-                        id: mod_id,
-                        bounds: bounds.rect(),
-                    });
-                }
-            }
+        let bar_width = bar.width.value();
+        let root_size = Size::new(bar_width, bar_height);
+        let mut layouts: Vec<ModuleLayout> = self.root_layout(root_size).into_iter().collect();
+        if let Some(computed) = self.computed_layouts_on(&bar.monitor) {
+            layouts.extend(computed);
             return layouts;
         }
 
-        let get_size = |id: &ModuleId| {
-            self.module_sizes
-                .get(monitor)
-                .and_then(|sizes| sizes.get(id))
-                .copied()
-                .unwrap_or(Size::new(0, 0))
+        let row = SlotRow {
+            model: self,
+            monitor: &bar.monitor,
+            height: i32::try_from(bar_height).unwrap_or(0),
+            width: i32::try_from(bar_width).unwrap_or(0),
         };
-
-        let gap = 8_i32;
-        let padding_h = 8_i32;
-        let available_height_i32 = i32::try_from(bar_height).unwrap_or(0);
-        let bar_width_i32 = i32::try_from(bar_width_val).unwrap_or(0);
-
-        let get_module_ids = |key: &str| -> Vec<ModuleId> {
-            let mut ids = Vec::new();
-            if let Some(DynamicValue::Array(arr)) = root_config.options().get(key) {
-                for value in arr {
-                    if let Some(name_str) = value.as_str() {
-                        let mod_name = ModuleName::new(name_str);
-                        if let Some(mod_ids) = self.name_to_ids.get(&mod_name) {
-                            ids.extend(mod_ids.iter().copied());
-                        }
-                    }
-                }
-            }
-            ids
-        };
-
-        let left_ids = get_module_ids("left");
-        let center_ids = get_module_ids("center");
-        let right_ids = get_module_ids("right");
-
-        // Calculate left modules
-        let mut left_x = padding_h;
-        for id in left_ids {
-            let size = get_size(&id);
-            let mod_height = i32::try_from(size.height()).unwrap_or(0);
-            let mod_width = i32::try_from(size.width()).unwrap_or(0);
-            let y = available_height_i32.saturating_sub(mod_height).max(0) / 2;
-            layouts.push(ModuleLayout {
-                id,
-                bounds: Rect::new(Position::new(left_x, y), size),
-            });
-            left_x = left_x.saturating_add(mod_width).saturating_add(gap);
-        }
-
-        // Calculate right modules
-        let mut right_x = bar_width_i32.saturating_sub(padding_h);
-        let mut right_layouts = Vec::new();
-        for id in right_ids.into_iter().rev() {
-            let size = get_size(&id);
-            let mod_height = i32::try_from(size.height()).unwrap_or(0);
-            let mod_width = i32::try_from(size.width()).unwrap_or(0);
-            right_x = right_x.saturating_sub(mod_width);
-            let y = available_height_i32.saturating_sub(mod_height).max(0) / 2;
-            right_layouts.push(ModuleLayout {
-                id,
-                bounds: Rect::new(Position::new(right_x, y), size),
-            });
-            right_x = right_x.saturating_sub(gap);
-        }
-        layouts.extend(right_layouts.into_iter().rev());
-
-        // Calculate center modules
-        let mut center_width = 0_i32;
-        let mut center_sizes = Vec::new();
-        for id in center_ids {
-            let size = get_size(&id);
-            let mod_width = i32::try_from(size.width()).unwrap_or(0);
-            center_width = center_width.saturating_add(mod_width);
-            center_sizes.push((id, size));
-        }
-        if !center_sizes.is_empty() {
-            let gap_count = i32::try_from(center_sizes.len().saturating_sub(1)).unwrap_or(0);
-            center_width = center_width.saturating_add(gap_count.saturating_mul(gap));
-        }
-
-        let mut center_x = (bar_width_i32.saturating_sub(center_width)) / 2;
-        for (id, size) in center_sizes {
-            let mod_height = i32::try_from(size.height()).unwrap_or(0);
-            let mod_width = i32::try_from(size.width()).unwrap_or(0);
-            let y = available_height_i32.saturating_sub(mod_height).max(0) / 2;
-            layouts.push(ModuleLayout {
-                id,
-                bounds: Rect::new(Position::new(center_x, y), size),
-            });
-            center_x = center_x.saturating_add(mod_width).saturating_add(gap);
-        }
-
+        layouts.extend(row.pack_left(self.slot_module_ids(root_config, "left")));
+        layouts.extend(row.pack_right(self.slot_module_ids(root_config, "right")));
+        layouts.extend(row.pack_center(self.slot_module_ids(root_config, "center")));
         layouts
+    }
+
+    /// The root module over the whole `size` bar, if there is a root.
+    #[cfg(test)]
+    fn root_layout(&self, size: Size) -> Option<ModuleLayout> {
+        self.root_module.map(|id| ModuleLayout {
+            id,
+            bounds: Rect::new(Position::new(0, 0), size),
+        })
+    }
+
+    /// Every module but the root laid out on `monitor`, if layouts were
+    /// computed for it.
+    #[cfg(test)]
+    fn computed_layouts_on(&self, monitor: &MonitorId) -> Option<Vec<ModuleLayout>> {
+        let mon_layouts = self.computed_layouts.get(monitor)?;
+        let layouts = mon_layouts
+            .iter()
+            .filter(|&(&id, _)| Some(id) != self.root_module)
+            .map(|(&id, &bounds)| ModuleLayout {
+                id,
+                bounds: bounds.rect(),
+            });
+        Some(layouts.collect())
+    }
+
+    /// The modules named in the root option `key`, in order, each name
+    /// standing for every module instance it has.
+    #[cfg(test)]
+    fn slot_module_ids(&self, root_config: &RootConfig, key: &str) -> Vec<ModuleId> {
+        let Some(DynamicValue::Array(values)) = root_config.options().get(key) else {
+            return Vec::new();
+        };
+        values
+            .iter()
+            .filter_map(DynamicValue::as_str)
+            .filter_map(|name| self.name_to_ids.get(&ModuleName::new(name)))
+            .flatten()
+            .copied()
+            .collect()
+    }
+}
+
+/// One bar's row for the test layout: modules packed from the left, from
+/// the right and in the centre, each centred vertically.
+#[cfg(test)]
+struct SlotRow<'a> {
+    model: &'a AppReadModel,
+    monitor: &'a MonitorId,
+    height: i32,
+    width: i32,
+}
+
+#[cfg(test)]
+impl SlotRow<'_> {
+    const GAP: i32 = 8;
+    const PADDING: i32 = 8;
+
+    /// `id`'s size on this row's monitor, zero when it reported none.
+    fn size_of(&self, id: ModuleId) -> Size {
+        self.model
+            .module_sizes
+            .get(self.monitor)
+            .and_then(|sizes| sizes.get(&id))
+            .copied()
+            .unwrap_or(Size::new(0, 0))
+    }
+
+    /// `id` with its left edge at `x`, centred vertically, and its width.
+    fn place(&self, id: ModuleId, x: i32) -> (ModuleLayout, i32) {
+        let size = self.size_of(id);
+        let mod_height = i32::try_from(size.height()).unwrap_or(0);
+        let mod_width = i32::try_from(size.width()).unwrap_or(0);
+        let y = self.height.saturating_sub(mod_height).max(0) / 2;
+        let bounds = Rect::new(Position::new(x, y), size);
+        (ModuleLayout { id, bounds }, mod_width)
+    }
+
+    /// `ids` side by side from `x`, a gap apart.
+    fn pack_from(&self, ids: Vec<ModuleId>, x: i32) -> Vec<ModuleLayout> {
+        let mut next_x = x;
+        ids.into_iter()
+            .map(|id| {
+                let (layout, mod_width) = self.place(id, next_x);
+                next_x = next_x.saturating_add(mod_width).saturating_add(Self::GAP);
+                layout
+            })
+            .collect()
+    }
+
+    fn pack_left(&self, ids: Vec<ModuleId>) -> Vec<ModuleLayout> {
+        self.pack_from(ids, Self::PADDING)
+    }
+
+    /// `ids` side by side, the last one against the right padding.
+    fn pack_right(&self, ids: Vec<ModuleId>) -> Vec<ModuleLayout> {
+        let mut right_x = self.width.saturating_sub(Self::PADDING);
+        let mut layouts: Vec<ModuleLayout> = ids
+            .into_iter()
+            .rev()
+            .map(|id| {
+                let width = i32::try_from(self.size_of(id).width()).unwrap_or(0);
+                right_x = right_x.saturating_sub(width);
+                let (layout, _) = self.place(id, right_x);
+                right_x = right_x.saturating_sub(Self::GAP);
+                layout
+            })
+            .collect();
+        layouts.reverse();
+        layouts
+    }
+
+    /// `ids` side by side, centred on the bar as one block.
+    fn pack_center(&self, ids: Vec<ModuleId>) -> Vec<ModuleLayout> {
+        let widths = ids
+            .iter()
+            .map(|&id| i32::try_from(self.size_of(id).width()).unwrap_or(0))
+            .fold(0_i32, i32::saturating_add);
+        let gap_count = i32::try_from(ids.len().saturating_sub(1)).unwrap_or(0);
+        let center_width = widths.saturating_add(gap_count.saturating_mul(Self::GAP));
+        self.pack_from(ids, (self.width.saturating_sub(center_width)) / 2)
     }
 }
 

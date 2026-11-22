@@ -7,7 +7,7 @@
 //! While a button is held, routing is frozen instead (see
 //! `dispatch_pointer_button`).
 
-use super::dispatch_pointer_button::grabbed;
+use super::dispatch_pointer_button::route_pointer;
 use super::state::WaylandState;
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::shared::events::core::{InteractionEvent, PointerEvent, SurfaceKind};
@@ -136,12 +136,7 @@ pub(super) fn handle_pointer_enter(
 /// first.
 pub(super) fn handle_pointer_motion(state: &mut WaylandState, position: (f64, f64)) {
     state.pointer_pos = position;
-    let routed = if state.pointer_grab.is_active() {
-        grabbed(state)
-    } else {
-        retarget(state)
-    };
-    if let Some((target, pos)) = routed {
+    if let Some((target, pos)) = route_pointer(state) {
         let surface = target.2;
         send(state, &target, PointerEvent::PointerMotion { surface, pos });
     }
@@ -153,6 +148,12 @@ pub(super) fn handle_pointer_leave(state: &mut WaylandState) {
     tracing::debug!("wl_pointer Leave");
     state.pointer_grab.cancel();
     state.pointer_surface = None;
+    leave_pointer_target(state);
+}
+
+/// Sends `PointerLeave` to the pointer target, if any, which is then
+/// cleared.
+fn leave_pointer_target(state: &mut WaylandState) {
     if let Some(target) = state.pointer_target.take() {
         let surface = target.2;
         send(state, &target, PointerEvent::PointerLeave { surface });

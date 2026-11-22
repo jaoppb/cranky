@@ -1,8 +1,10 @@
 mod bar;
 mod composite;
 mod module;
+mod subsurface;
 
 use super::command::SurfaceCommand;
+use super::floating_bounds::to_i32;
 use super::state::WaylandState;
 use crate::shared::config::domain::PopupEmbed;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
@@ -12,6 +14,7 @@ use bar::handle_bar_surface;
 use composite::handle_composite_child;
 use module::handle_module_surface;
 use wayland_client::QueueHandle;
+use wayland_client::protocol::wl_surface::WlSurface;
 
 pub(super) fn copy_surface_data(shm_buffer: &mut ShmBuffer, src_data: &[u8]) {
     let data = shm_buffer.mmap_mut();
@@ -21,6 +24,20 @@ pub(super) fn copy_surface_data(shm_buffer: &mut ShmBuffer, src_data: &[u8]) {
     {
         dest.copy_from_slice(src);
     }
+}
+
+/// Attaches `shm_buffer`'s back slot to `surface` at `scale`, damages all
+/// of it and commits.
+pub(super) fn attach_and_commit(surface: &WlSurface, shm_buffer: &ShmBuffer, scale: i32) {
+    surface.set_buffer_scale(scale);
+    surface.attach(Some(shm_buffer.current_buffer()), 0, 0);
+    surface.damage_buffer(
+        0,
+        0,
+        to_i32(shm_buffer.width()),
+        to_i32(shm_buffer.height()),
+    );
+    surface.commit();
 }
 
 pub(super) fn handle_cmd(

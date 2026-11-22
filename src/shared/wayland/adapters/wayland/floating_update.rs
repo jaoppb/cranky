@@ -2,11 +2,12 @@ use super::floating_bounds::to_i32;
 use super::floating_composite::repaint;
 use super::floating_frame::FloatingFrame;
 use super::floating_render::create_positioner;
-use super::state::WaylandState;
+use super::state::{WaylandState, allocate_buffer, bound_global};
 use super::types::FloatingSurface;
-use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
+use crate::shared::wayland::adapters::shm::ShmSource;
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
+use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
 
 /// Attaches the back slot at `bar_scale`, damages all of it and commits.
 pub(super) fn commit_surface(floating: &mut FloatingSurface, bar_scale: i32) {
@@ -28,57 +29,43 @@ pub(super) fn update_existing_floating(
     queue_handle: &QueueHandle<WaylandState>,
     frame: FloatingFrame,
 ) -> Result<(), DisplayServerError> {
-    let FloatingFrame {
-        kind,
-        buffer,
-        placement,
-        ..
-    } = frame;
-    let (size, bar_scale) = (*buffer.size(), placement.anchor.bar_scale);
-    let Some(floating) = state.floating_surfaces.get_mut(&kind) else {
+    let (size, bar_scale) = (*frame.buffer.size(), frame.placement.anchor.bar_scale);
+    let Some(floating) = state.floating_surfaces.get_mut(&frame.kind) else {
         return Ok(());
     };
     floating.scale = bar_scale;
 
     if floating.size == size {
-        floating.base = buffer;
+        floating.base = frame.buffer;
         repaint(floating, bar_scale);
         return Ok(());
     }
 
-    let shm = state
-        .shm
-        .as_ref()
-        .ok_or_else(|| DisplayServerError::ConnectionFailed {
-            reason: "SHM not bound".to_string(),
-        })?;
-    let new_shm_buffer = ShmBuffer::new(
-        ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path()),
-        size,
-        queue_handle,
-    )
-    .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
-
-    let xdg_wm_base =
-        state
-            .xdg_wm_base
-            .as_ref()
-            .ok_or_else(|| DisplayServerError::ConnectionFailed {
-                reason: "XDG WM Base not bound".to_string(),
-            })?;
-    let positioner = create_positioner(xdg_wm_base, queue_handle, &placement);
-    floating.reposition_token = floating.reposition_token.wrapping_add(1);
-    floating
-        .xdg_popup
-        .reposition(&positioner, floating.reposition_token);
-    positioner.destroy();
+    let shm = bound_global(state.shm.as_ref(), "SHM")?;
+    let source = ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path());
+    let new_shm_buffer = allocate_buffer(source, size, queue_handle)?;
+    let xdg_wm_base = bound_global(state.xdg_wm_base.as_ref(), "XDG WM Base")?;
+    reposition(
+        floating,
+        &create_positioner(xdg_wm_base, queue_handle, &frame.placement),
+    );
     // Blend into the new buffer, not the old one, before committing it.
     floating.shm_buffer = new_shm_buffer;
     floating.size = size;
     // Only now: `base` must keep the shm buffer's size if any step above fails.
-    floating.base = buffer;
+    floating.base = frame.buffer;
     repaint(floating, bar_scale);
     Ok(())
+}
+
+/// Moves `floating`'s popup to `positioner`'s placement under a new token,
+/// then destroys the positioner.
+fn reposition(floating: &mut FloatingSurface, positioner: &XdgPositioner) {
+    floating.reposition_token = floating.reposition_token.wrapping_add(1);
+    floating
+        .xdg_popup
+        .reposition(positioner, floating.reposition_token);
+    positioner.destroy();
 }
 
 #[cfg(test)]

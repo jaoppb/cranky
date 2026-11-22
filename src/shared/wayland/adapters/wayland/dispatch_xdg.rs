@@ -1,4 +1,5 @@
 use super::state::WaylandState;
+use super::types::FloatingSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle};
 use wayland_protocols::xdg::shell::client::{
     xdg_popup::{self, XdgPopup},
@@ -32,24 +33,41 @@ impl Dispatch<XdgSurface, ()> for WaylandState {
         _qh: &QueueHandle<Self>,
     ) {
         if let xdg_surface::Event::Configure { serial } = event {
-            tracing::debug!("xdg_surface Configure serial={serial}");
-            proxy.ack_configure(serial);
-            if let Some(floating) = state
-                .floating_surfaces
-                .values_mut()
-                .find(|floating| &floating.xdg_surface == proxy)
-            {
-                // Re-blend rather than attach the back slot as-is: after any
-                // commit it holds the previous frame, after a resize zeros.
-                tracing::debug!("Repainting floating surface on configure");
-                floating.configure.mark_configured();
-                let scale = floating.scale;
-                super::floating_composite::repaint(floating, scale);
-            } else {
-                tracing::debug!("Configure event for unknown xdg_surface");
-            }
+            on_xdg_surface_configure(state, proxy, serial);
         }
     }
+}
+
+/// Acknowledges configure `serial` of `xdg_surface`, then repaints the
+/// floating surface that owns it.
+fn on_xdg_surface_configure(state: &mut WaylandState, xdg_surface: &XdgSurface, serial: u32) {
+    tracing::debug!("xdg_surface Configure serial={serial}");
+    xdg_surface.ack_configure(serial);
+    repaint_owner_of(state, xdg_surface);
+}
+
+/// Finds the floating surface that owns `xdg_surface` and marks it
+/// configured and repaints it, or logs that none does.
+fn repaint_owner_of(state: &mut WaylandState, xdg_surface: &XdgSurface) {
+    let Some(floating) = state
+        .floating_surfaces
+        .values_mut()
+        .find(|floating| &floating.xdg_surface == xdg_surface)
+    else {
+        tracing::debug!("Configure event for unknown xdg_surface");
+        return;
+    };
+    mark_configured_and_repaint(floating);
+}
+
+/// Opens `floating`'s configure gate and repaints it at its own scale.
+fn mark_configured_and_repaint(floating: &mut FloatingSurface) {
+    // Re-blend rather than attach the back slot as-is: after any
+    // commit it holds the previous frame, after a resize zeros.
+    tracing::debug!("Repainting floating surface on configure");
+    floating.configure.mark_configured();
+    let scale = floating.scale;
+    super::floating_composite::repaint(floating, scale);
 }
 
 impl Dispatch<XdgPopup, ()> for WaylandState {
@@ -62,27 +80,40 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
         _qh: &QueueHandle<Self>,
     ) {
         match event {
-            xdg_popup::Event::Repositioned { token } => {
-                tracing::debug!("Floating surface popup repositioned (token={token})");
-            }
-            xdg_popup::Event::PopupDone => {
-                tracing::debug!("xdg_popup Event: PopupDone");
-                let matching_kind = state
-                    .floating_surfaces
-                    .iter()
-                    .find(|(_, floating)| &floating.xdg_popup == proxy)
-                    .map(|(kind, _)| kind.clone());
-                if let Some(kind) = matching_kind {
-                    super::floating_teardown::teardown_floating(
-                        state,
-                        &kind,
-                        super::floating_teardown::TeardownCause::External,
-                    );
-                }
-            }
-            other => tracing::debug!("xdg_popup Event: {other:?}"),
+            xdg_popup::Event::Repositioned { token } => log_popup_repositioned(token),
+            xdg_popup::Event::PopupDone => on_popup_done(state, proxy),
+            other => log_unhandled_popup_event(&other),
         }
     }
+}
+
+/// Logs the compositor's answer to a reposition under `token`; nothing
+/// else follows from it.
+fn log_popup_repositioned(token: u32) {
+    tracing::debug!("Floating surface popup repositioned (token={token})");
+}
+
+/// The compositor dismissed `xdg_popup`: tears its floating surface down.
+fn on_popup_done(state: &mut WaylandState, xdg_popup: &XdgPopup) {
+    tracing::debug!("xdg_popup Event: PopupDone");
+    let Some(kind) = state
+        .floating_surfaces
+        .iter()
+        .find(|(_, floating)| &floating.xdg_popup == xdg_popup)
+        .map(|(kind, _)| kind.clone())
+    else {
+        return;
+    };
+    super::floating_teardown::teardown_floating(
+        state,
+        &kind,
+        super::floating_teardown::TeardownCause::External,
+    );
+}
+
+/// Logs a popup event the adapter takes no action on.
+fn log_unhandled_popup_event(event: &xdg_popup::Event) {
+    tracing::debug!("xdg_popup Event: {event:?}");
 }
 
 impl Dispatch<XdgPositioner, ()> for WaylandState {
@@ -111,10 +142,16 @@ mod tests {
         FloatingFrame, FloatingPlacement, update_existing_floating,
     };
     use crate::shared::wayland::adapters::wayland::state::WaylandState;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::wire::id;
     use crate::shared::wayland::adapters::wayland::tests::fixture::{
         Fake, committed_bytes, popup_kind, solid,
     };
     use crate::shared::wayland::adapters::wayland::types::FloatingSurface;
+    use wayland_protocols::xdg::shell::client::xdg_popup;
+    use wayland_protocols::xdg::shell::client::xdg_surface;
+
+    /// `xdg_surface.ack_configure`.
+    const ACK_CONFIGURE: u16 = 4;
 
     const BASE: [u8; 4] = [5, 5, 5, 255];
     /// A 2×1 `BASE` with the 1×1 child at logical (1, 0).
@@ -229,5 +266,65 @@ mod tests {
             "swapped exactly once"
         );
         assert_eq!(committed_bytes(&mut floating.shm_buffer), BLENDED.to_vec());
+    }
+
+    /// A configure for an `xdg_surface` no floating surface owns is
+    /// acknowledged and nothing else.
+    #[test]
+    fn configure_of_an_unknown_xdg_surface_is_only_acknowledged() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let kind = popup_kind();
+        let floating = fake.floating(Size::new(1, 1), solid(1, 1, BASE));
+        state.floating_surfaces.insert(kind.clone(), floating);
+        let stranger = fake.xdg_surface();
+        fake.requests();
+        let configure = xdg_surface::Event::Configure { serial: 3 };
+        fake.deliver(&mut state, (&stranger, configure));
+        let sent: Vec<(u32, u16, u32)> = fake
+            .requests()
+            .iter()
+            .map(|request| (request.object, request.opcode, request.arg))
+            .collect();
+        assert_eq!(sent, vec![(id(&stranger), ACK_CONFIGURE, 3)]);
+        assert!(!state.floating_surfaces[&kind].configure.is_configured());
+    }
+
+    /// The compositor dismissing a popup tears it down.
+    #[test]
+    fn popup_done_tears_the_popup_down() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let floating = fake.floating(Size::new(1, 1), solid(1, 1, BASE));
+        let popup = floating.xdg_popup.clone();
+        state.floating_surfaces.insert(popup_kind(), floating);
+        fake.deliver(&mut state, (&popup, xdg_popup::Event::PopupDone));
+        assert!(state.floating_surfaces.is_empty());
+    }
+
+    /// A dismissal of a popup no floating surface owns, a reposition and a
+    /// configure leave every floating surface open.
+    #[test]
+    fn other_popup_events_keep_the_popup_open() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let floating = fake.floating(Size::new(1, 1), solid(1, 1, BASE));
+        let popup = floating.xdg_popup.clone();
+        state.floating_surfaces.insert(popup_kind(), floating);
+        let stranger = fake.floating(Size::new(1, 1), solid(1, 1, BASE));
+        fake.deliver(
+            &mut state,
+            (&stranger.xdg_popup, xdg_popup::Event::PopupDone),
+        );
+        let repositioned = xdg_popup::Event::Repositioned { token: 1 };
+        fake.deliver(&mut state, (&popup, repositioned));
+        let configure = xdg_popup::Event::Configure {
+            x: 0,
+            y: 0,
+            width: 1,
+            height: 1,
+        };
+        fake.deliver(&mut state, (&popup, configure));
+        assert!(state.floating_surfaces.contains_key(&popup_kind()));
     }
 }

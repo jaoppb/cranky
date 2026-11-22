@@ -9,7 +9,7 @@ use crate::shared::primitives::{ModuleId, MonitorId};
 use crate::shared::wayland::adapters::wayland::command::SurfaceCommand;
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::surface_handler::handle_cmd;
-use crate::shared::wayland::adapters::wayland::tests::fixture::wire::{damage_of, id};
+use crate::shared::wayland::adapters::wayland::tests::fixture::wire::{Request, damage_of, id};
 use crate::shared::wayland::adapters::wayland::tests::fixture::{
     Fake, lose_runtime_dir, popup_kind, solid,
 };
@@ -144,23 +144,26 @@ fn child_of_a_floating_surface_not_shown_is_dropped() {
     assert!(state.bars[0].module_surfaces.is_empty());
 }
 
+/// The position of every `set_position` among `requests` sent to
+/// `subsurface`, in send order.
+fn moves_of(requests: &[Request], subsurface: u32) -> Vec<[u32; 4]> {
+    requests
+        .iter()
+        .filter(|request| request.object == subsurface && request.opcode == SET_POSITION)
+        .map(|request| request.args)
+        .collect()
+}
+
 #[test]
 fn module_resubmitted_bigger_elsewhere_gets_a_new_buffer_and_moves() {
     let fake = Fake::new();
     let mut state = with_bar(&fake, PopupEmbed::Composite);
-    let first = cmd(
-        Some(SurfaceParent::Bar),
-        Position::new(0, 0),
-        solid(1, 1, [1; 4]),
-    );
+    let bar = Some(SurfaceParent::Bar);
+    let first = cmd(bar.clone(), Position::new(0, 0), solid(1, 1, [1; 4]));
     handle(&fake, &mut state, &first).expect("first frame");
     fake.requests();
 
-    let second = cmd(
-        Some(SurfaceParent::Bar),
-        Position::new(3, 4),
-        solid(3, 2, [2; 4]),
-    );
+    let second = cmd(bar, Position::new(3, 4), solid(3, 2, [2; 4]));
     handle(&fake, &mut state, &second).expect("second frame");
 
     let module = &state.bars[0].module_surfaces[&ModuleId::new(2)];
@@ -169,13 +172,10 @@ fn module_resubmitted_bigger_elsewhere_gets_a_new_buffer_and_moves() {
     assert_eq!(shm_size, (3, 2));
     assert_eq!((module.x, module.y), (3, 4));
     let requests = fake.requests();
-    let subsurface = id(&module.subsurface);
-    let moves: Vec<[u32; 4]> = requests
-        .iter()
-        .filter(|request| request.object == subsurface && request.opcode == SET_POSITION)
-        .map(|request| request.args)
-        .collect();
-    assert_eq!(moves, vec![[3, 4, 0, 0]]);
+    assert_eq!(
+        moves_of(&requests, id(&module.subsurface)),
+        vec![[3, 4, 0, 0]]
+    );
     assert_eq!(damage_of(&requests, &module.surface), vec![[0, 0, 3, 2]]);
     let registered = state
         .surface_to_id

@@ -2,7 +2,7 @@
 use super::floating_bounds::ChildPlacement;
 use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::ModuleId;
-use crate::shared::primitives::geometry::Size;
+use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
 use crate::shared::wayland::composite::CompositeLayers;
@@ -106,6 +106,16 @@ pub(crate) struct ModuleSurface {
 impl ModuleSurface {
     pub(super) const fn placement(&self) -> ChildPlacement {
         ChildPlacement::new(self.x, self.y, self.size)
+    }
+
+    /// Moves the subsurface to `position` on its parent, unless it is
+    /// already there.
+    pub(super) fn move_to(&mut self, position: Position) {
+        if self.x != position.x() || self.y != position.y() {
+            self.subsurface.set_position(position.x(), position.y());
+            self.x = position.x();
+            self.y = position.y();
+        }
     }
 }
 

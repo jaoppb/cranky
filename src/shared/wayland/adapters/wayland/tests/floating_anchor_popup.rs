@@ -86,3 +86,22 @@ fn popup_on_a_monitor_without_a_bar_has_no_anchor() {
     let rect = Rect::new(Position::new(2, 3), Size::new(5, 6));
     assert_eq!(top_level_bounds(&fake, &["HDMI-A-1"], rect), None);
 }
+
+/// A top-level panel anchors on the exact rect, not on the bar's column.
+#[test]
+fn top_level_panel_anchors_to_the_exact_rect() {
+    let fake = Fake::new();
+    let mut state = fake.state(PopupEmbed::Composite);
+    state.bars.push(fake.bar("DP-1", 2));
+    let owner = PopupTarget::new(ModuleId::new(1), MonitorId::new("DP-1"));
+    let mut request = show_request(FloatingKind::Panel(owner), solid(1, 1, [0; 4]), None);
+    request.anchor_rect = Some(Rect::new(Position::new(2, 3), Size::new(5, 6)));
+    let anchor = resolve_anchor(&state, &request).expect("panel anchor");
+    let bounds = (
+        anchor.anchor_x,
+        anchor.anchor_y,
+        anchor.anchor_w,
+        anchor.anchor_h,
+    );
+    assert_eq!(bounds, (2, 3, 5, 6));
+}
