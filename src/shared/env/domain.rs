@@ -135,3 +135,32 @@ impl AppEnvironment {
         self.hyprland_instance_signature.as_ref()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn test_app_environment_keeps_each_value_in_its_place() {
+        let env = AppEnvironment::new(
+            HomeDir::new(PathBuf::from("/home/someone")),
+            XdgCacheHome::new(PathBuf::from("/var/cache/someone")),
+            XdgRuntimeDir::new(PathBuf::from("/run/user/1000")),
+            RustLog::new("cranky=debug".to_string()),
+            Some(HyprlandInstanceSignature::new("abc123".to_string())),
+        );
+        assert_eq!(env.home().as_path(), Path::new("/home/someone"));
+        assert_eq!(
+            env.xdg_cache_home().as_path(),
+            Path::new("/var/cache/someone")
+        );
+        assert_eq!(env.xdg_runtime_dir().as_path(), Path::new("/run/user/1000"));
+        assert_eq!(env.rust_log().as_str(), "cranky=debug");
+        assert_eq!(
+            env.hyprland_instance_signature()
+                .map(HyprlandInstanceSignature::as_str),
+            Some("abc123")
+        );
+    }
+}

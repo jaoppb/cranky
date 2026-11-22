@@ -184,6 +184,7 @@ mod tests {
     use super::super::style::BoxMargin;
     use crate::features::styling::domain::{ComputedStyle, Orientation, ProgressValue};
     use crate::features::vdom::domain::{NodePath, SurfaceSpace, TextContent};
+    use crate::shared::config::domain::{BorderRadius, BorderSize, FontFamily, FontSize};
     use crate::shared::primitives::BinaryData;
     use crate::shared::primitives::color::{Color, DrawingColor};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
@@ -344,6 +345,184 @@ mod tests {
         assert_eq!(
             drawn_text(&canvas).1,
             TextAlignment::new(TextAlign::Left, 30)
+        );
+    }
+
+    fn solid(red: u8, green: u8, blue: u8) -> DrawingColor {
+        DrawingColor::Solid(Color::new(red, green, blue, 255))
+    }
+
+    fn progress_node(
+        rect: Rect,
+        value: f32,
+        orientation: Orientation,
+        style: ComputedStyle,
+    ) -> RenderNode {
+        RenderNode::Progress {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            rect,
+            value: ProgressValue::new(value).unwrap(),
+            orientation,
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    #[test]
+    fn test_background_and_border_fill_and_stroke_the_node_rect() {
+        let mut style = ComputedStyle::default();
+        style.set_background(solid(10, 20, 30));
+        style.set_border_color(solid(40, 50, 60));
+        style.set_border_radius(BorderRadius::new(4.0));
+        style.set_border_size(BorderSize::new(2.0));
+        let node = RenderNode::Flex {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            rect: Rect::new(Position::new(3, 5), Size::new(40, 20)),
+            children: vec![],
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        };
+        let mut canvas = RecordingCanvas::default();
+        node.render_to_canvas(&mut canvas);
+        assert_eq!(
+            canvas.calls,
+            [
+                CanvasCall::Rect {
+                    area: [3.0, 5.0, 40.0, 20.0],
+                    radius: 4.0,
+                    color: solid(10, 20, 30),
+                },
+                CanvasCall::Border {
+                    area: [3.0, 5.0, 40.0, 20.0],
+                    radius: 4.0,
+                    width: 2.0,
+                    color: solid(40, 50, 60),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn test_horizontal_progress_fills_from_the_left() {
+        let mut style = ComputedStyle::default();
+        style.set_accent_color(solid(200, 0, 0));
+        style.set_border_radius(BorderRadius::new(3.0));
+        let rect = Rect::new(Position::new(2, 4), Size::new(100, 10));
+        let mut canvas = RecordingCanvas::default();
+        progress_node(rect, 0.25, Orientation::Horizontal, style).render_to_canvas(&mut canvas);
+        assert_eq!(
+            canvas.calls,
+            [CanvasCall::Rect {
+                area: [2.0, 4.0, 25.0, 10.0],
+                radius: 3.0,
+                color: solid(200, 0, 0),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_vertical_progress_fills_from_the_bottom() {
+        let mut style = ComputedStyle::default();
+        style.set_color(solid(0, 200, 0));
+        let rect = Rect::new(Position::new(2, 4), Size::new(10, 100));
+        let mut canvas = RecordingCanvas::default();
+        progress_node(rect, 0.25, Orientation::Vertical, style).render_to_canvas(&mut canvas);
+        assert_eq!(
+            canvas.calls,
+            [CanvasCall::Rect {
+                area: [2.0, 79.0, 10.0, 25.0],
+                radius: 0.0,
+                color: solid(0, 200, 0),
+            }]
+        );
+    }
+
+    #[test]
+    fn test_progress_draws_no_fill_without_a_fill_color_or_value() {
+        let mut background = ComputedStyle::default();
+        background.set_background(solid(1, 2, 3));
+        let rect = Rect::new(Position::new(0, 0), Size::new(100, 10));
+        let mut canvas = RecordingCanvas::default();
+        progress_node(rect, 0.5, Orientation::Horizontal, background).render_to_canvas(&mut canvas);
+        assert_eq!(canvas.kinds(), ["rect"]);
+
+        let mut accent = ComputedStyle::default();
+        accent.set_accent_color(solid(200, 0, 0));
+        for orientation in [Orientation::Horizontal, Orientation::Vertical] {
+            let mut canvas = RecordingCanvas::default();
+            progress_node(rect, 0.0, orientation, accent.clone()).render_to_canvas(&mut canvas);
+            assert_eq!(canvas.calls, Vec::new());
+        }
+    }
+
+    #[test]
+    fn test_text_carries_its_style_font_and_color() {
+        let mut style = ComputedStyle::default();
+        style.set_color(solid(10, 20, 30));
+        style.set_font_family(FontFamily::new("Inter".to_string()));
+        style.set_font_size(FontSize::new(13.0));
+        let mut canvas = RecordingCanvas::default();
+        text_node(style).render_to_canvas(&mut canvas);
+        assert_eq!(
+            canvas.calls,
+            [CanvasCall::Text {
+                text: "7".to_string(),
+                font_family: Some(FontFamily::new("Inter".to_string())),
+                font_size: Some(FontSize::new(13.0)),
+                color: solid(10, 20, 30),
+                position: Position::new(20, 30),
+                alignment: TextAlignment::new(TextAlign::Left, 30),
+            }]
+        );
+
+        let mut canvas = RecordingCanvas::default();
+        text_node(ComputedStyle::default()).render_to_canvas(&mut canvas);
+        let [
+            CanvasCall::Text {
+                font_family,
+                font_size,
+                color,
+                ..
+            },
+        ] = canvas.calls.as_slice()
+        else {
+            panic!("expected one text request, got {:?}", canvas.calls);
+        };
+        assert_eq!((font_family, font_size), (&None, &None));
+        assert_eq!(color, &solid(255, 255, 255));
+    }
+
+    #[test]
+    fn test_image_is_drawn_at_its_rect_from_its_pixels() {
+        let image = RenderNode::Image {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            rect: Rect::new(Position::new(6, 8), Size::new(30, 20)),
+            data: BinaryData::new(vec![0; 24]),
+            pixel_size: Size::new(3, 2),
+            tooltip: None,
+            popup: None,
+            panel: None,
+        };
+        let mut canvas = RecordingCanvas::default();
+        image.render_to_canvas(&mut canvas);
+        assert_eq!(
+            canvas.calls,
+            [CanvasCall::Image {
+                pixel_size: Size::new(3, 2),
+                logical_size: Size::new(30, 20),
+                position: Position::new(6, 8),
+            }]
         );
     }
 }

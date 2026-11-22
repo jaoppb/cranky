@@ -317,4 +317,40 @@ mod tests {
         let layouts = root.collect_module_layouts();
         assert_eq!(layouts[0].constraint().width(), None);
     }
+
+    #[test]
+    fn test_collect_module_layouts_carries_key_options_and_surface() {
+        let rect = Rect::new(Position::new(7, 11), Size::new(90, 30));
+        let options =
+            crate::shared::primitives::ModuleOptions::new(std::collections::HashMap::from([(
+                "format".to_string(),
+                crate::shared::primitives::DynamicValue::String("%H".to_string()),
+            )]));
+        let mut node = module_leaf(rect, ComputedStyle::default());
+        let RenderNode::Module {
+            key,
+            options: slot,
+            path,
+            ..
+        } = &mut node
+        else {
+            panic!("module_leaf builds a module node");
+        };
+        let key = key.clone();
+        *slot = options;
+        *path = NodePath::new(SurfaceSpace::Popup, vec![0]);
+        let root = flex(&[], vec![node], None);
+
+        let layouts = root.collect_module_layouts();
+        assert_eq!(layouts.len(), 1);
+        assert_eq!(layouts[0].key(), &key);
+        assert_eq!(*layouts[0].bounds(), rect);
+        assert_eq!(
+            layouts[0].options().get("format"),
+            Some(&crate::shared::primitives::DynamicValue::String(
+                "%H".to_string()
+            ))
+        );
+        assert_eq!(layouts[0].surface(), LayoutSurface::Popup);
+    }
 }

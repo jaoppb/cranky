@@ -7,6 +7,8 @@ mod root;
 mod style;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_config;
 
 pub(crate) use config::*;
 #[cfg(test)]

@@ -39,6 +39,32 @@ fn test_margin_config() {
 }
 
 #[test]
+fn test_partial_margin_overrides_each_side_it_sets() {
+    let partial = PartialMarginConfig::new(
+        Some(MarginOffset::new(1)),
+        Some(MarginOffset::new(2)),
+        None,
+        Some(MarginOffset::new(4)),
+    );
+    assert_eq!(partial.top(), Some(MarginOffset::new(1)));
+    assert_eq!(partial.bottom(), Some(MarginOffset::new(2)));
+    assert_eq!(partial.left(), None);
+    assert_eq!(partial.right(), Some(MarginOffset::new(4)));
+
+    let base = MarginConfig::new(
+        MarginOffset::new(10),
+        MarginOffset::new(20),
+        MarginOffset::new(30),
+        MarginOffset::new(40),
+    );
+    let merged = base.with_partial_overrides(&partial);
+    assert_eq!(
+        [merged.top(), merged.bottom(), merged.left(), merged.right()].map(MarginOffset::value),
+        [1, 2, 30, 4]
+    );
+}
+
+#[test]
 fn test_root_config_defaults() {
     let root = RootConfig::default();
     assert_eq!(root.name().as_str(), "bar");

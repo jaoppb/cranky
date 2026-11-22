@@ -312,4 +312,107 @@ mod tests {
         assert!(json.contains("\"workspaces\":["));
         assert!(json.contains("\"id\":1"));
     }
+
+    fn one_monitor_state(workspaces: BTreeMap<WorkspaceId, Workspace>) -> HyprlandState {
+        let mut monitors = BTreeMap::new();
+        monitors.insert(
+            MonitorName::new("DP-1"),
+            Monitor::new(
+                MonitorName::new("DP-1"),
+                WorkspaceId::new(1),
+                Some(WorkspaceId::new(98)),
+            ),
+        );
+        HyprlandState::new(workspaces, monitors, None)
+    }
+
+    fn special_activated(id: Option<i32>, name: Option<&str>, monitor: &str) -> WindowManagerEvent {
+        WindowManagerEvent::SpecialWorkspaceActivated {
+            id: id.map(WorkspaceId::new),
+            name: name.map(WorkspaceName::new),
+            monitor_name: MonitorName::new(monitor),
+        }
+    }
+
+    #[test]
+    fn test_special_workspace_moves_a_known_workspace_to_its_monitor() {
+        let mut workspaces = BTreeMap::new();
+        workspaces.insert(
+            WorkspaceId::new(99),
+            Workspace::new(
+                WorkspaceId::new(99),
+                WorkspaceName::new("scratch"),
+                Some(MonitorName::new("HDMI-A-1")),
+            ),
+        );
+        let mut state = one_monitor_state(workspaces);
+
+        state.apply_event(&special_activated(Some(99), Some("ignored"), "DP-1"));
+
+        let workspace = state.workspaces().get(&WorkspaceId::new(99)).unwrap();
+        assert_eq!(workspace.monitor(), Some(&MonitorName::new("DP-1")));
+        assert_eq!(workspace.name(), &WorkspaceName::new("scratch"));
+        assert_eq!(
+            state
+                .monitors()
+                .get(&MonitorName::new("DP-1"))
+                .unwrap()
+                .special_workspace_id(),
+            Some(&WorkspaceId::new(99))
+        );
+    }
+
+    #[test]
+    fn test_special_workspace_without_a_name_is_not_created() {
+        let mut state = one_monitor_state(BTreeMap::new());
+
+        state.apply_event(&special_activated(Some(99), None, "DP-1"));
+
+        assert!(state.workspaces().is_empty());
+        assert_eq!(
+            state
+                .monitors()
+                .get(&MonitorName::new("DP-1"))
+                .unwrap()
+                .special_workspace_id(),
+            Some(&WorkspaceId::new(99))
+        );
+    }
+
+    #[test]
+    fn test_special_workspace_closed_clears_the_monitor_slot() {
+        let mut state = one_monitor_state(BTreeMap::new());
+
+        state.apply_event(&special_activated(None, None, "DP-1"));
+
+        assert!(state.workspaces().is_empty());
+        assert_eq!(
+            state
+                .monitors()
+                .get(&MonitorName::new("DP-1"))
+                .unwrap()
+                .special_workspace_id(),
+            None
+        );
+    }
+
+    #[test]
+    fn test_special_workspace_on_an_unknown_monitor_still_records_the_workspace() {
+        let mut state = one_monitor_state(BTreeMap::new());
+
+        state.apply_event(&special_activated(Some(99), Some("magic"), "HDMI-A-1"));
+
+        assert!(!state.monitors().contains_key(&MonitorName::new("HDMI-A-1")));
+        assert_eq!(
+            state
+                .monitors()
+                .get(&MonitorName::new("DP-1"))
+                .unwrap()
+                .special_workspace_id(),
+            Some(&WorkspaceId::new(98))
+        );
+        let workspace = state.workspaces().get(&WorkspaceId::new(99)).unwrap();
+        assert_eq!(workspace.name(), &WorkspaceName::new("magic"));
+        assert_eq!(workspace.monitor(), Some(&MonitorName::new("HDMI-A-1")));
+    }
 }
