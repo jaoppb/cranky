@@ -4,7 +4,7 @@
 use super::floating_bounds::to_i32;
 use super::floating_update::commit_surface;
 use super::types::FloatingSurface;
-use crate::shared::wayland::composite::composite_into;
+use crate::shared::wayland::composite::PixelsMut;
 
 /// Blends `floating.base` plus every child layer into the shm back buffer,
 /// then commits it, but only once the first configure has arrived. Before
@@ -12,13 +12,9 @@ use crate::shared::wayland::composite::composite_into;
 /// attaches.
 pub(super) fn repaint(floating: &mut FloatingSurface, bar_scale: i32) {
     let size = floating.size;
-    composite_into(
-        floating.shm_buffer.mmap_mut(),
-        size,
-        floating.base.data(),
-        &floating.layers,
-        bar_scale,
-    );
+    let mut pixels = PixelsMut::new(floating.shm_buffer.mmap_mut(), size);
+    pixels.copy_from(floating.base.data());
+    pixels.blend_layers(&floating.layers, bar_scale);
     if floating.configure.is_configured() {
         commit_surface(
             floating,

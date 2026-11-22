@@ -9,7 +9,7 @@ use crate::shared::primitives::PopupOffset;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::wayland::adapters::shm::ShmBuffer;
-use crate::shared::wayland::composite::composite_into;
+use crate::shared::wayland::composite::PixelsMut;
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
 use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
@@ -115,13 +115,9 @@ fn setup_new_floating(
     // surface existed. Blend only; the configure handler attaches it.
     let layers = state.pending_children.remove(&kind).unwrap_or_default();
     let (size, scale) = (info.size, anchor_info.bar_scale);
-    composite_into(
-        info.shm_buffer.mmap_mut(),
-        size,
-        info.base.data(),
-        &layers,
-        scale,
-    );
+    let mut pixels = PixelsMut::new(info.shm_buffer.mmap_mut(), size);
+    pixels.copy_from(info.base.data());
+    pixels.blend_layers(&layers, scale);
     let surface = compositor.create_surface(queue_handle, ());
     surface.set_buffer_scale(anchor_info.bar_scale);
     if is_click_through(&kind) {
