@@ -4,6 +4,7 @@
 use super::super::command::SurfaceCommand;
 use super::super::floating_composite::repaint;
 use super::super::state::WaylandState;
+use super::bar_index;
 use crate::features::layout_engine::domain::FloatingKind;
 
 /// Records `cmd`'s pixels as a layer of the floating surface `kind` and
@@ -12,24 +13,26 @@ use crate::features::layout_engine::domain::FloatingKind;
 /// No `surface_to_id` entry: the child has no surface of its own.
 pub(super) fn handle_composite_child(
     state: &mut WaylandState,
-    bar_index: usize,
     kind: &FloatingKind,
     cmd: &SurfaceCommand,
 ) {
-    let bar_scale = state.bars.get(bar_index).map_or(1, |bar| bar.scale);
-    let (module_id, monitor_id) = (cmd.module_id(), cmd.monitor_id().clone());
-    let (origin, buffer) = (cmd.position(), cmd.buffer().clone());
+    // handle_cmd routes a frame here only once its monitor has a bar.
+    let Some(bar_scale) = bar_index(state, cmd)
+        .and_then(|index| state.bars.get(index))
+        .map(|bar| bar.scale)
+    else {
+        return;
+    };
+    let layer = cmd.frame().clone();
     if let Some(floating) = state.floating_surfaces.get_mut(kind) {
-        floating
-            .layers
-            .upsert(module_id, monitor_id, origin, buffer);
+        floating.layers.upsert(layer);
         repaint(floating, bar_scale);
     } else {
         state
             .pending_children
             .entry(kind.clone())
             .or_default()
-            .upsert(module_id, monitor_id, origin, buffer);
+            .upsert(layer);
     }
 }
 
@@ -37,6 +40,7 @@ pub(super) fn handle_composite_child(
 mod tests {
     use super::*;
     use crate::shared::config::domain::PopupEmbed;
+    use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
     use crate::shared::primitives::{ModuleId, MonitorId, Position, Size};
     use crate::shared::wayland::adapters::wayland::surface_handler::handle_cmd;
     use crate::shared::wayland::adapters::wayland::tests::fixture::{
@@ -46,11 +50,12 @@ mod tests {
 
     fn child_cmd(kind: &FloatingKind, origin: Position) -> SurfaceCommand {
         SurfaceCommand::new(
-            ModuleId::new(9),
+            ModuleFrame::new(
+                ModuleId::new(9),
+                MonitorId::new("DP-1"),
+                PlacedBuffer::new(origin, solid(1, 1, [1, 2, 3, 255])),
+            ),
             Some(SurfaceParent::Floating(kind.clone())),
-            MonitorId::new("DP-1"),
-            origin,
-            solid(1, 1, [1, 2, 3, 255]),
         )
     }
 
@@ -77,7 +82,7 @@ mod tests {
         let back = floating.shm_buffer.current_buffer().clone();
         state.floating_surfaces.insert(kind.clone(), floating);
 
-        handle_composite_child(&mut state, 0, &kind, &child_cmd(&kind, Position::new(1, 0)));
+        handle_composite_child(&mut state, &kind, &child_cmd(&kind, Position::new(1, 0)));
 
         let floating = state.floating_surfaces.get_mut(&kind).expect("floating");
         assert_eq!(
@@ -120,9 +125,10 @@ mod tests {
     fn child_before_popup_is_held_pending() {
         let fake = Fake::new();
         let mut state = fake.state(PopupEmbed::Composite);
+        state.bars.push(fake.bar("DP-1", 1));
         let kind = popup_kind();
 
-        handle_composite_child(&mut state, 0, &kind, &child_cmd(&kind, Position::new(3, 4)));
+        handle_composite_child(&mut state, &kind, &child_cmd(&kind, Position::new(3, 4)));
 
         assert!(state.floating_surfaces.is_empty());
         let layer = state
@@ -130,7 +136,7 @@ mod tests {
             .get(&kind)
             .and_then(|layers| layers.get(ModuleId::new(9)))
             .expect("pending layer");
-        assert_eq!(*layer.origin(), Position::new(3, 4));
+        assert_eq!(layer.position(), Position::new(3, 4));
     }
 
     #[test]
@@ -138,7 +144,7 @@ mod tests {
         let fake = Fake::new();
         let (mut state, kind) = with_open_popup(&fake, PopupEmbed::Composite);
 
-        handle_composite_child(&mut state, 0, &kind, &child_cmd(&kind, Position::new(1, 0)));
+        handle_composite_child(&mut state, &kind, &child_cmd(&kind, Position::new(1, 0)));
 
         assert!(state.pending_children.is_empty());
         assert!(state.surface_to_id.is_empty());

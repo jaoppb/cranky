@@ -1,6 +1,6 @@
 use super::adapter::WaylandAdapter;
 use super::command::SurfaceCommand;
-use super::floating_surface::{FloatingPayload, hide_floating, show_floating};
+use super::floating_surface::{hide_floating, show_floating};
 use super::render::render_outputs;
 use super::surface_handler::handle_cmd;
 use crate::features::layout_engine::domain::FloatingKind;
@@ -108,12 +108,11 @@ impl DisplayServerPort for WaylandAdapter {
         read_model: &AppReadModel,
         layout_senders: &HashMap<ModuleId, Snd>,
     ) -> Result<(), DisplayServerError> {
-        render_outputs(
-            &mut self.state,
-            &self.connection,
-            read_model,
-            layout_senders,
-        );
+        render_outputs(&mut self.state, read_model, layout_senders);
+        // Without a bar nothing was rendered, and nothing is flushed.
+        if !self.state.bars.is_empty() {
+            let _ = self.connection.flush();
+        }
         Ok(())
     }
 
@@ -122,19 +121,7 @@ impl DisplayServerPort for WaylandAdapter {
         floating: crate::features::layout_engine::domain::ShowFloating,
     ) -> Result<(), DisplayServerError> {
         let queue_handle = self.event_queue.handle();
-        show_floating(
-            &mut self.state,
-            &queue_handle,
-            floating.kind,
-            floating.monitor_id,
-            floating.anchor_rect,
-            &FloatingPayload {
-                buffer: &floating.buffer,
-                logical_size: floating.logical_size,
-                offset: floating.offset,
-            },
-            floating.parent,
-        )
+        show_floating(&mut self.state, &queue_handle, floating)
     }
 
     fn hide_floating_surface(&mut self, kind: &FloatingKind) -> Result<(), DisplayServerError> {

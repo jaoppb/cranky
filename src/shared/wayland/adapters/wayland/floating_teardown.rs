@@ -111,11 +111,14 @@ mod tests {
     use crate::features::layout_engine::domain::PopupTarget;
     use crate::shared::config::domain::PopupEmbed;
     use crate::shared::events::core::SurfaceKind;
+    use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
     use crate::shared::primitives::{ModuleId, MonitorId, Position, Size};
     use crate::shared::wayland::adapters::wayland::dispatch_pointer::{
         handle_pointer_enter, handle_pointer_leave, handle_pointer_motion,
     };
-    use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::handle_pointer_button;
+    use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::{
+        handle_pointer_button, record_button_serial,
+    };
     use crate::shared::wayland::adapters::wayland::floating_surface::hide_floating;
     use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::{
         CHILD, Event, LEFT, OWNER, PRESSED, bar, bar_module, child, drain, enter, leave, owner,
@@ -132,7 +135,11 @@ mod tests {
     fn pending_layer() -> CompositeLayers {
         let mut layers = CompositeLayers::default();
         let (id, monitor) = (ModuleId::new(CHILD), MonitorId::new("DP-1"));
-        layers.upsert(id, monitor, Position::new(0, 0), solid(1, 1, [1; 4]));
+        layers.upsert(ModuleFrame::new(
+            id,
+            monitor,
+            PlacedBuffer::new(Position::new(0, 0), solid(1, 1, [1; 4])),
+        ));
         layers
     }
 
@@ -142,7 +149,7 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
         drain(&mut rx);
         teardown_floating(&mut state, &popup_kind(), TeardownCause::External);
         let expected = vec![child(leave(SurfaceKind::Bar)), dismissed()];
@@ -158,7 +165,7 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
         drain(&mut rx);
         handle_pointer_leave(&mut state);
         teardown_floating(&mut state, &popup_kind(), TeardownCause::External);
@@ -174,11 +181,11 @@ mod tests {
         let (mut state, surface) = popup(&fake, 1);
         let bar_surface = bar_module(&fake, &mut state);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
         drain(&mut rx);
         hide_floating(&mut state, &popup_kind());
         assert_eq!(drain(&mut rx), vec![child(leave(SurfaceKind::Bar))]);
-        handle_pointer_enter(&mut state, &bar_surface, 4.0, 4.0);
+        handle_pointer_enter(&mut state, &bar_surface, (4.0, 4.0));
         assert_eq!(drain(&mut rx), vec![bar(enter(SurfaceKind::Bar))]);
     }
 
@@ -187,13 +194,14 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
-        handle_pointer_button(&mut state, LEFT, PRESSED, 7);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
+        record_button_serial(&mut state, 7);
+        handle_pointer_button(&mut state, LEFT, PRESSED);
         drain(&mut rx);
         hide_floating(&mut state, &popup_kind());
         assert_eq!(drain(&mut rx), vec![child(leave(SurfaceKind::Bar))]);
         assert!(!state.pointer_grab.is_active());
-        handle_pointer_motion(&mut state, 12.0, 3.0);
+        handle_pointer_motion(&mut state, (12.0, 3.0));
         assert_eq!(drain(&mut rx), vec![]);
     }
 
@@ -202,7 +210,7 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 1.0, 1.0);
+        handle_pointer_enter(&mut state, &surface, (1.0, 1.0));
         drain(&mut rx);
         hide_floating(&mut state, &popup_kind());
         assert_eq!(drain(&mut rx), vec![owner(leave(SurfaceKind::Popup))]);
@@ -214,7 +222,7 @@ mod tests {
         let fake = Fake::new();
         let (mut state, _) = popup(&fake, 1);
         let bar_surface = bar_module(&fake, &mut state);
-        handle_pointer_enter(&mut state, &bar_surface, 4.0, 4.0);
+        handle_pointer_enter(&mut state, &bar_surface, (4.0, 4.0));
         let before = state.pointer_target.clone();
         let mut rx = state.hub.pointer_rx();
         hide_floating(&mut state, &popup_kind());

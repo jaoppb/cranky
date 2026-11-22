@@ -31,6 +31,23 @@ impl ModuleLayout {
     }
 }
 
+/// The bar a test lays out modules on: the monitor it is on and its width.
+#[cfg(test)]
+#[derive(Debug)]
+pub struct MonitorBar {
+    monitor: MonitorId,
+    width: BarWidth,
+}
+
+#[cfg(test)]
+impl MonitorBar {
+    /// The bar on `monitor`, `width` logical pixels wide.
+    #[must_use]
+    pub(crate) const fn new(monitor: MonitorId, width: BarWidth) -> Self {
+        Self { monitor, width }
+    }
+}
+
 /// The snapshot of app state the display server renders from: the config, the modules and their
 /// names, and each monitor's module sizes and layouts.
 #[derive(Debug)]
@@ -51,19 +68,14 @@ pub struct AppReadModel {
 impl AppReadModel {
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn new(
-        config: Config,
-        root_module: Option<ModuleId>,
-        module_ids: Vec<ModuleId>,
-        module_names: HashMap<ModuleId, ModuleName>,
-        name_to_ids: HashMap<ModuleName, Vec<ModuleId>>,
-    ) -> Self {
+    /// A read model of `config` with `root_module` and no other module.
+    pub(crate) fn new(config: Config, root_module: Option<ModuleId>) -> Self {
         Self {
             config,
             root_module,
-            module_ids,
-            module_names,
-            name_to_ids,
+            module_ids: Vec::new(),
+            module_names: HashMap::new(),
+            name_to_ids: HashMap::new(),
             module_keys: HashMap::new(),
             module_sizes: HashMap::new(),
             computed_layouts: HashMap::new(),
@@ -84,13 +96,13 @@ impl AppReadModel {
     #[must_use]
     pub(crate) fn calculate_layout(
         &self,
-        monitor: &MonitorId,
-        bar_width: BarWidth,
+        bar: &MonitorBar,
         root_config: &RootConfig,
     ) -> Vec<ModuleLayout> {
+        let monitor = &bar.monitor;
         let mut layouts = Vec::new();
         let bar_height = root_config.height().value();
-        let bar_width_val = bar_width.value();
+        let bar_width_val = bar.width.value();
 
         if let Some(root_id) = self.root_module {
             layouts.push(ModuleLayout {
@@ -248,8 +260,8 @@ mod tests {
             TooltipConfig::default(),
             PopupConfig::default(),
         );
-        let mut read_model =
-            AppReadModel::new(config, None, Vec::new(), HashMap::new(), name_to_ids);
+        let mut read_model = AppReadModel::new(config, None);
+        read_model.name_to_ids = name_to_ids;
         let reported = (1_u32..)
             .zip(sizes)
             .map(|(id, size)| (ModuleId::new(id), *size))
@@ -263,8 +275,7 @@ mod tests {
     fn placed(read_model: &AppReadModel, monitor: &str) -> Vec<(ModuleId, Rect)> {
         read_model
             .calculate_layout(
-                &MonitorId::new(monitor),
-                BarWidth::new(BAR_WIDTH),
+                &MonitorBar::new(MonitorId::new(monitor), BarWidth::new(BAR_WIDTH)),
                 read_model.config().root(),
             )
             .iter()

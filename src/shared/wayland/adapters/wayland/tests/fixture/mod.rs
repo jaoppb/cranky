@@ -3,8 +3,12 @@
 
 mod bar;
 pub(in crate::shared::wayland::adapters::wayland) mod pointer;
+pub(in crate::shared::wayland::adapters::wayland::tests) mod positioner;
+mod request;
 mod seat;
 mod state;
+pub(in crate::shared::wayland::adapters::wayland) use request::show_request;
+pub(in crate::shared::wayland::adapters::wayland) use state::lose_runtime_dir;
 mod subsurface;
 pub mod wire;
 
@@ -13,7 +17,7 @@ use crate::shared::config::domain::MarginConfig;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::render::RenderBuffer;
 use crate::shared::primitives::{ModuleId, MonitorId};
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::types::{
     ConfigureGate, FloatingSurface, WaylandBar,
@@ -74,11 +78,9 @@ impl Fake {
 
     pub(crate) fn shm_buffer(&self, size: Size) -> ShmBuffer {
         ShmBuffer::new(
-            &self.shm,
-            size.width(),
-            size.height(),
+            ShmSource::new(&self.shm, Path::new("/tmp")),
+            size,
             &self.queue_handle,
-            Path::new("/tmp"),
         )
         .expect("shm buffer")
     }

@@ -1,10 +1,10 @@
-use crate::features::layout_engine::domain::{FloatingKind, PopupTarget};
+use crate::features::layout_engine::domain::{FloatingKind, PopupTarget, ShowFloating};
 use crate::shared::config::domain::Config;
 use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{ModuleId, MonitorId};
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::adapters::wayland::dispatch_pointer::handle_pointer_enter;
 use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use crate::shared::wayland::adapters::wayland::floating_anchor::{
@@ -12,7 +12,9 @@ use crate::shared::wayland::adapters::wayland::floating_anchor::{
 };
 use crate::shared::wayland::adapters::wayland::state::WaylandState;
 use crate::shared::wayland::adapters::wayland::tests::fixture::pointer::popup;
-use crate::shared::wayland::adapters::wayland::tests::fixture::{Fake, popup_kind};
+use crate::shared::wayland::adapters::wayland::tests::fixture::{
+    Fake, popup_kind, show_request, solid,
+};
 use crate::shared::wayland::adapters::wayland::types::{FloatingSurface, ModuleSurface};
 use std::collections::HashMap;
 use std::os::unix::net::UnixStream;
@@ -53,8 +55,12 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
     let popup_xdg_surface = xdg_wm_base.get_xdg_surface(&popup_surface, &queue_handle, ());
     let positioner = xdg_wm_base.create_positioner(&queue_handle, ());
     let popup_xdg_popup = popup_xdg_surface.get_popup(None, &positioner, &queue_handle, ());
-    let popup_shm_buffer =
-        ShmBuffer::new(&shm, 2, 2, &queue_handle, Path::new("/tmp")).expect("popup shm buffer");
+    let popup_shm_buffer = ShmBuffer::new(
+        ShmSource::new(&shm, Path::new("/tmp")),
+        Size::new(2, 2),
+        &queue_handle,
+    )
+    .expect("popup shm buffer");
 
     // The module embedded inside that popup's own content (decision 7, gap
     // 4): its own subsurface, parented to the popup's surface rather than
@@ -62,8 +68,12 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
     let module_surface = compositor.create_surface(&queue_handle, ());
     let module_subsurface =
         subcompositor.get_subsurface(&module_surface, &popup_surface, &queue_handle, ());
-    let module_shm_buffer =
-        ShmBuffer::new(&shm, 2, 2, &queue_handle, Path::new("/tmp")).expect("module shm buffer");
+    let module_shm_buffer = ShmBuffer::new(
+        ShmSource::new(&shm, Path::new("/tmp")),
+        Size::new(2, 2),
+        &queue_handle,
+    )
+    .expect("module shm buffer");
 
     let mut module_surfaces = HashMap::new();
     module_surfaces.insert(
@@ -131,7 +141,7 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
         app_env,
     };
 
-    let anchor = resolve_anchor(&state, &FloatingKind::Tooltip, None, None, None)
+    let anchor = resolve_anchor(&state, &tooltip_request())
         .expect("tooltip anchor must resolve for a module embedded in an open popup");
 
     assert!(
@@ -150,8 +160,8 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
 fn tooltip_anchor_resolves_for_composite_child() {
     let fake = Fake::new();
     let (mut state, surface) = popup(&fake, 1);
-    handle_pointer_enter(&mut state, &surface, 12.0, 4.0);
-    let anchor = resolve_anchor(&state, &FloatingKind::Tooltip, None, None, None)
+    handle_pointer_enter(&mut state, &surface, (12.0, 4.0));
+    let anchor = resolve_anchor(&state, &tooltip_request())
         .expect("tooltip anchor resolves for a composited child");
     let popup_xdg = state
         .floating_surfaces
@@ -169,6 +179,10 @@ fn tooltip_anchor_resolves_for_composite_child() {
 fn tooltip_anchor_ignores_popup_owner_own_content() {
     let fake = Fake::new();
     let (mut state, surface) = popup(&fake, 1);
-    handle_pointer_enter(&mut state, &surface, 1.0, 1.0);
-    assert!(resolve_anchor(&state, &FloatingKind::Tooltip, None, None, None).is_none());
+    handle_pointer_enter(&mut state, &surface, (1.0, 1.0));
+    assert!(resolve_anchor(&state, &tooltip_request()).is_none());
+}
+
+fn tooltip_request() -> ShowFloating {
+    show_request(FloatingKind::Tooltip, solid(1, 1, [0; 4]), None)
 }

@@ -17,15 +17,6 @@ use xkbcommon::xkb;
 /// evdev key codes are offset by 8 in xkb.
 const EVDEV_OFFSET: u32 = 8;
 
-/// Whether the seat currently advertises the keyboard capability.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum KeyboardPresence {
-    /// The seat has a keyboard: one is bound if none is yet.
-    Present,
-    /// The seat lost its keyboard: the bound one is released.
-    Absent,
-}
-
 #[derive(Default)]
 pub(crate) struct KeyboardInput {
     device: Option<WlKeyboard>,
@@ -35,30 +26,24 @@ pub(crate) struct KeyboardInput {
 }
 
 impl KeyboardInput {
-    /// Follows the seat's keyboard capability: binds a `wl_keyboard` when it
-    /// appears, releases it and forgets everything about it when it goes.
-    pub(crate) fn on_capability<D>(
-        &mut self,
-        seat: &WlSeat,
-        presence: KeyboardPresence,
-        queue_handle: &QueueHandle<D>,
-    ) where
+    /// The seat has a keyboard: binds a `wl_keyboard` if none is yet.
+    pub(crate) fn bind<D>(&mut self, seat: &WlSeat, queue_handle: &QueueHandle<D>)
+    where
         D: Dispatch<WlKeyboard, ()> + 'static,
     {
-        match presence {
-            KeyboardPresence::Present => {
-                if self.device.is_none() {
-                    self.device = Some(seat.get_keyboard(queue_handle, ()));
-                }
+        if self.device.is_none() {
+            self.device = Some(seat.get_keyboard(queue_handle, ()));
+        }
+    }
+
+    /// The seat lost its keyboard: releases the bound one, if any, and
+    /// forgets everything about it.
+    pub(crate) fn release(&mut self) {
+        if let Some(device) = self.device.take() {
+            if device.version() >= 3 {
+                device.release();
             }
-            KeyboardPresence::Absent => {
-                if let Some(device) = self.device.take() {
-                    if device.version() >= 3 {
-                        device.release();
-                    }
-                    *self = Self::default();
-                }
-            }
+            *self = Self::default();
         }
     }
 
@@ -210,9 +195,9 @@ mod tests {
         let fake = Fake::new();
         let seat = fake.seat();
         let mut input = KeyboardInput::default();
-        input.on_capability(&seat, KeyboardPresence::Present, &fake.queue_handle);
+        input.bind(&seat, &fake.queue_handle);
         let first = input.device.clone().expect("keyboard bound");
-        input.on_capability(&seat, KeyboardPresence::Present, &fake.queue_handle);
+        input.bind(&seat, &fake.queue_handle);
         assert_eq!(input.device, Some(first));
     }
 
@@ -221,20 +206,44 @@ mod tests {
         let fake = Fake::new();
         let seat = fake.seat();
         let mut input = KeyboardInput::with_escape_code(ESC_EVDEV);
-        input.on_capability(&seat, KeyboardPresence::Present, &fake.queue_handle);
+        input.bind(&seat, &fake.queue_handle);
         input.set_focus(fake.surface());
-        input.on_capability(&seat, KeyboardPresence::Absent, &fake.queue_handle);
+        input.release();
         assert!(input.device.is_none());
         assert!(input.focus().is_none());
         assert!(!input.is_escape(ESC_EVDEV));
     }
 
     #[test]
-    fn test_lost_capability_without_device_keeps_the_keymap() {
+    fn test_lost_keyboard_before_version_3_is_forgotten_without_release() {
         let fake = Fake::new();
-        let seat = fake.seat();
+        let registry = fake
+            .connection()
+            .display()
+            .get_registry(&fake.queue_handle, ());
+        let seat: WlSeat = registry.bind(6, 2, &fake.queue_handle, ());
         let mut input = KeyboardInput::with_escape_code(ESC_EVDEV);
-        input.on_capability(&seat, KeyboardPresence::Absent, &fake.queue_handle);
+        input.bind(&seat, &fake.queue_handle);
+        let device = input.device.clone().expect("keyboard bound");
+        fake.requests();
+
+        input.release();
+
+        assert!(input.device.is_none());
+        assert!(!input.is_escape(ESC_EVDEV));
+        // `wl_keyboard.release` is opcode 0 and only exists from version 3.
+        let to_device: Vec<_> = fake
+            .requests()
+            .into_iter()
+            .filter(|request| request.object == device.id().protocol_id())
+            .collect();
+        assert_eq!(to_device, Vec::new());
+    }
+
+    #[test]
+    fn test_lost_capability_without_device_keeps_the_keymap() {
+        let mut input = KeyboardInput::with_escape_code(ESC_EVDEV);
+        input.release();
         assert!(input.is_escape(ESC_EVDEV));
     }
 

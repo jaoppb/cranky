@@ -26,14 +26,7 @@ impl Fake {
             TooltipConfig::default(),
             PopupConfig::new(popup.behavior(), popup.offset(), embed),
         );
-        let tmp = || PathBuf::from("/tmp");
-        let app_env = Arc::new(AppEnvironment::new(
-            HomeDir::new(tmp()),
-            XdgCacheHome::new(tmp()),
-            XdgRuntimeDir::new(tmp()),
-            RustLog::new(String::new()),
-            None,
-        ));
+        let app_env = environment_with_runtime_dir(PathBuf::from("/tmp"));
         let (command_tx, _command_rx) = tokio::sync::mpsc::channel(1);
         WaylandState {
             hub: Arc::new(SignalHub::new(config)),
@@ -59,4 +52,21 @@ impl Fake {
             app_env,
         }
     }
+}
+
+/// Points `state`'s runtime directory at one that does not exist, so creating
+/// any shared-memory buffer fails.
+pub(in crate::shared::wayland::adapters::wayland) fn lose_runtime_dir(state: &mut WaylandState) {
+    state.app_env = environment_with_runtime_dir(PathBuf::from("/nonexistent/cranky-runtime"));
+}
+
+fn environment_with_runtime_dir(runtime_dir: PathBuf) -> Arc<AppEnvironment> {
+    let tmp = || PathBuf::from("/tmp");
+    Arc::new(AppEnvironment::new(
+        HomeDir::new(tmp()),
+        XdgCacheHome::new(tmp()),
+        XdgRuntimeDir::new(runtime_dir),
+        RustLog::new(String::new()),
+        None,
+    ))
 }

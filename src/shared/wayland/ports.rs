@@ -1,39 +1,24 @@
 //! The ports the app and the render pipelines drive the display server through, and its error.
-use crate::shared::primitives::geometry::Position;
-use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::primitives::{ModuleId, MonitorId};
+use crate::shared::primitives::render::ModuleFrame;
 pub use crate::shared::wayland::domain::AppReadModel;
 #[cfg(test)]
-pub use crate::shared::wayland::domain::ModuleLayout;
+pub use crate::shared::wayland::domain::{ModuleLayout, MonitorBar};
 pub(crate) use crate::shared::wayland::surface_parent::SurfaceParent;
 use async_trait::async_trait;
 use std::sync::Arc;
 
 /// Where a render pipeline hands its finished buffers, to be shown on the module's surface.
 pub trait SurfaceManagerPort: Send + Sync {
-    /// Submit a rendered buffer for a specific module on a specific monitor.
-    fn submit_buffer(
-        &self,
-        module_id: ModuleId,
-        monitor_id: MonitorId,
-        position: Position,
-        buffer: RenderBuffer,
-    );
+    /// Submit a module's rendered frame for one monitor.
+    fn submit_buffer(&self, frame: ModuleFrame);
 
-    /// Submit a rendered buffer for a module with a parent surface to
+    /// Submit a module's rendered frame with a parent surface to
     /// subsurface against — `None` for the root painting its own
     /// layer-surface buffer directly, `Some` for anything embedded via
     /// `ui.module(name)`, wherever it was embedded.
-    fn submit_child_buffer(
-        &self,
-        module_id: ModuleId,
-        parent: Option<SurfaceParent>,
-        monitor_id: MonitorId,
-        position: Position,
-        buffer: RenderBuffer,
-    ) {
+    fn submit_child_buffer(&self, frame: ModuleFrame, parent: Option<SurfaceParent>) {
         let _ = parent;
-        self.submit_buffer(module_id, monitor_id, position, buffer);
+        self.submit_buffer(frame);
     }
 }
 

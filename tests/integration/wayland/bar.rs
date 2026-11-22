@@ -8,7 +8,7 @@ use cranky::shared::config::domain::Config;
 use cranky::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome, XdgRuntimeDir};
 use cranky::shared::events::signals::SignalHub;
 use cranky::shared::primitives::geometry::{Position, Scale, Size};
-use cranky::shared::primitives::render::RenderBuffer;
+use cranky::shared::primitives::render::{ModuleFrame, PlacedBuffer, RenderBuffer};
 use cranky::shared::primitives::{ModuleId, MonitorId};
 use cranky::shared::wayland::adapters::wayland::{WaylandAdapter, WaylandSurfaceManager};
 use cranky::shared::wayland::ports::{DisplayServerPort, SurfaceManagerPort};
@@ -132,12 +132,11 @@ impl Bar {
             .context("the buffer size overflows")?;
         // Premultiplied ARGB8888, little endian.
         let buffer = RenderBuffer::new([blue, green, red, 255].repeat(pixels), size);
-        self.manager.submit_buffer(
+        self.manager.submit_buffer(ModuleFrame::new(
             ModuleId::new(1),
             MonitorId::new(OUTPUT),
-            Position::new(0, 0),
-            buffer,
-        );
+            PlacedBuffer::new(Position::new(0, 0), buffer),
+        ));
         Ok(())
     }
 

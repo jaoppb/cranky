@@ -22,8 +22,8 @@ pub mod test_support {
     use crate::shared::config::domain::{Config, FontFamily, FontSize, ModuleConfig};
     use crate::shared::events::signals::{SignalHub, SignalKind};
     use crate::shared::primitives::geometry::{Position, Scale, Size};
-    use crate::shared::primitives::render::RenderBuffer;
-    use crate::shared::primitives::{FunctionName, ModuleId, MonitorId};
+    use crate::shared::primitives::render::ModuleFrame;
+    use crate::shared::primitives::{FunctionName, MonitorId};
     use crate::shared::rendering::ports::canvas::{Canvas, CanvasFactory};
 
     pub(crate) struct MockLayoutSender;
@@ -83,14 +83,7 @@ pub mod test_support {
     pub(crate) struct MockSurfaceManager;
 
     impl crate::shared::wayland::ports::SurfaceManagerPort for MockSurfaceManager {
-        fn submit_buffer(
-            &self,
-            _mod_id: ModuleId,
-            _mon_id: MonitorId,
-            _pos: Position,
-            _buf: RenderBuffer,
-        ) {
-        }
+        fn submit_buffer(&self, _frame: ModuleFrame) {}
     }
 
     #[derive(Debug, Default, Clone)]

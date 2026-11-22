@@ -1,3 +1,4 @@
+use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -22,12 +23,14 @@ fn test_wayland_surface_manager() {
             crate::shared::primitives::geometry::Size::new(10, 10),
         );
 
-        manager.submit_buffer(
+        manager.submit_buffer(ModuleFrame::new(
             module_id,
             monitor_id.clone(),
-            crate::shared::primitives::geometry::Position::new(0, 0),
-            buffer,
-        );
+            PlacedBuffer::new(
+                crate::shared::primitives::geometry::Position::new(0, 0),
+                buffer,
+            ),
+        ));
 
         notify_rx
             .recv()
@@ -65,18 +68,22 @@ fn test_wayland_surface_manager_coalesces_latest_frame() {
             crate::shared::primitives::geometry::Size::new(20, 20),
         );
 
-        manager.submit_buffer(
+        manager.submit_buffer(ModuleFrame::new(
             module_id,
             monitor_id.clone(),
-            crate::shared::primitives::geometry::Position::new(0, 0),
-            buffer1,
-        );
-        manager.submit_buffer(
+            PlacedBuffer::new(
+                crate::shared::primitives::geometry::Position::new(0, 0),
+                buffer1,
+            ),
+        ));
+        manager.submit_buffer(ModuleFrame::new(
             module_id,
             monitor_id.clone(),
-            crate::shared::primitives::geometry::Position::new(0, 0),
-            buffer2,
-        );
+            PlacedBuffer::new(
+                crate::shared::primitives::geometry::Position::new(0, 0),
+                buffer2,
+            ),
+        ));
 
         notify_rx
             .recv()
@@ -101,11 +108,15 @@ fn test_surface_command_struct() {
         crate::shared::primitives::geometry::Size::new(20, 20),
     );
     let cmd = SurfaceCommand::new(
-        module_id,
+        ModuleFrame::new(
+            module_id,
+            monitor_id.clone(),
+            PlacedBuffer::new(
+                crate::shared::primitives::geometry::Position::new(0, 0),
+                buffer,
+            ),
+        ),
         None,
-        monitor_id.clone(),
-        crate::shared::primitives::geometry::Position::new(0, 0),
-        buffer,
     );
 
     assert_eq!(cmd.module_id(), module_id);

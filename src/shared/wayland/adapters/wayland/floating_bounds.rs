@@ -39,14 +39,30 @@ pub(super) enum AnchorExtent {
     BarColumn,
 }
 
-/// Where a floating surface anchors on its parent, at the given `extent`.
+impl ModuleAnchorBounds {
+    /// These bounds at `extent`: unchanged when exact, else stretched to the
+    /// whole `bar_height` column from the top.
+    pub(super) const fn spanning(self, extent: AnchorExtent, bar_height: i32) -> Self {
+        match extent {
+            AnchorExtent::Exact => self,
+            AnchorExtent::BarColumn => Self {
+                y: 0,
+                height: bar_height,
+                ..self
+            },
+        }
+    }
+}
+
+/// Where a floating surface anchors on its parent, exactly: the child's
+/// placement offset by `anchor_rect`, either alone, or a thin `default_h`
+/// column at the origin without both.
 pub(super) fn compute_module_bounds(
     placement: Option<ChildPlacement>,
     anchor_rect: Option<Rect>,
     default_h: i32,
-    extent: AnchorExtent,
 ) -> ModuleAnchorBounds {
-    let bounds = match (placement, anchor_rect) {
+    match (placement, anchor_rect) {
         (Some(child), Some(rect)) => ModuleAnchorBounds {
             x: child.x.saturating_add(rect.x()),
             y: child.y.saturating_add(rect.y()),
@@ -71,14 +87,6 @@ pub(super) fn compute_module_bounds(
             width: 1,
             height: default_h,
         },
-    };
-    match extent {
-        AnchorExtent::Exact => bounds,
-        AnchorExtent::BarColumn => ModuleAnchorBounds {
-            y: 0,
-            height: default_h,
-            ..bounds
-        },
     }
 }
 
@@ -91,12 +99,14 @@ mod tests {
     fn precise_bounds_offset_anchor_rect_by_child_origin() {
         let placement = ChildPlacement::new(30, 10, Size::new(4, 4));
         let rect = Rect::new(Position::new(2, 3), Size::new(5, 6));
-        let bounds = compute_module_bounds(Some(placement), Some(rect), 24, AnchorExtent::Exact);
+        let bounds = compute_module_bounds(Some(placement), Some(rect), 24)
+            .spanning(AnchorExtent::Exact, 24);
         assert_eq!(
             (bounds.x, bounds.y, bounds.width, bounds.height),
             (32, 13, 5, 6)
         );
-        let bounds = compute_module_bounds(Some(placement), None, 24, AnchorExtent::Exact);
+        let bounds =
+            compute_module_bounds(Some(placement), None, 24).spanning(AnchorExtent::Exact, 24);
         assert_eq!(
             (bounds.x, bounds.y, bounds.width, bounds.height),
             (30, 10, 4, 4)
@@ -106,7 +116,8 @@ mod tests {
     #[test]
     fn bar_bounds_span_bar_height_from_top() {
         let placement = ChildPlacement::new(30, 10, Size::new(4, 4));
-        let bounds = compute_module_bounds(Some(placement), None, 24, AnchorExtent::BarColumn);
+        let bounds =
+            compute_module_bounds(Some(placement), None, 24).spanning(AnchorExtent::BarColumn, 24);
         assert_eq!(
             (bounds.x, bounds.y, bounds.width, bounds.height),
             (30, 0, 4, 24)
@@ -117,8 +128,8 @@ mod tests {
     fn bar_bounds_with_anchor_rect_keep_rect_x_and_span_bar_height() {
         let placement = ChildPlacement::new(30, 10, Size::new(4, 4));
         let rect = Rect::new(Position::new(2, 3), Size::new(5, 6));
-        let bounds =
-            compute_module_bounds(Some(placement), Some(rect), 24, AnchorExtent::BarColumn);
+        let bounds = compute_module_bounds(Some(placement), Some(rect), 24)
+            .spanning(AnchorExtent::BarColumn, 24);
         assert_eq!(
             (bounds.x, bounds.y, bounds.width, bounds.height),
             (32, 0, 5, 24)
@@ -128,12 +139,13 @@ mod tests {
     #[test]
     fn bounds_without_placement_use_the_anchor_rect_alone() {
         let rect = Rect::new(Position::new(2, 3), Size::new(5, 6));
-        let bounds = compute_module_bounds(None, Some(rect), 24, AnchorExtent::Exact);
+        let bounds = compute_module_bounds(None, Some(rect), 24).spanning(AnchorExtent::Exact, 24);
         assert_eq!(
             (bounds.x, bounds.y, bounds.width, bounds.height),
             (2, 3, 5, 6)
         );
-        let bounds = compute_module_bounds(None, Some(rect), 24, AnchorExtent::BarColumn);
+        let bounds =
+            compute_module_bounds(None, Some(rect), 24).spanning(AnchorExtent::BarColumn, 24);
         assert_eq!(
             (bounds.x, bounds.y, bounds.width, bounds.height),
             (2, 0, 5, 24)
@@ -143,7 +155,7 @@ mod tests {
     #[test]
     fn bounds_without_placement_or_rect_fall_back_to_a_thin_bar_column() {
         for extent in [AnchorExtent::Exact, AnchorExtent::BarColumn] {
-            let bounds = compute_module_bounds(None, None, 24, extent);
+            let bounds = compute_module_bounds(None, None, 24).spanning(extent, 24);
             assert_eq!(
                 (bounds.x, bounds.y, bounds.width, bounds.height),
                 (0, 0, 1, 24)

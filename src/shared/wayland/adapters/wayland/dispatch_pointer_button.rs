@@ -138,16 +138,21 @@ fn release(state: &mut WaylandState, button: u32) {
     }
 }
 
-/// Records the serial (`xdg_popup.grab` needs it even when nothing is hit),
-/// then handles the press or release.
+/// Records a button event's serial: `xdg_popup.grab` needs it even when
+/// nothing is hit.
+pub(super) fn record_button_serial(state: &mut WaylandState, serial: u32) {
+    tracing::debug!(serial, "wl_pointer Button serial");
+    state.last_button_serial = Some(PointerSerial::new(serial));
+}
+
+/// Handles a press or release; its serial is recorded apart, by
+/// `record_button_serial`.
 pub(super) fn handle_pointer_button(
     state: &mut WaylandState,
     button: u32,
     button_state: WEnum<wl_pointer::ButtonState>,
-    serial: u32,
 ) {
-    tracing::debug!(button, ?button_state, serial, "wl_pointer Button");
-    state.last_button_serial = Some(PointerSerial::new(serial));
+    tracing::debug!(button, ?button_state, "wl_pointer Button");
     match button_state {
         WEnum::Value(wl_pointer::ButtonState::Pressed) => press(state, button),
         WEnum::Value(wl_pointer::ButtonState::Released) => release(state, button),
@@ -190,6 +195,7 @@ mod tests {
     use crate::shared::events::core::{
         PointerEvent, PointerSerial, ScrollAxis, ScrollDelta, SurfaceKind,
     };
+    use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer};
     use crate::shared::primitives::{ModuleId, MonitorId, Position};
     use crate::shared::wayland::adapters::wayland::dispatch_pointer::{
         handle_pointer_enter, handle_pointer_leave, handle_pointer_motion,
@@ -220,10 +226,12 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 13.0, 5.0);
+        handle_pointer_enter(&mut state, &surface, (13.0, 5.0));
         drain(&mut rx);
-        handle_pointer_button(&mut state, LEFT, PRESSED, 7);
-        handle_pointer_button(&mut state, LEFT, RELEASED, 8);
+        record_button_serial(&mut state, 7);
+        handle_pointer_button(&mut state, LEFT, PRESSED);
+        record_button_serial(&mut state, 8);
+        handle_pointer_button(&mut state, LEFT, RELEASED);
         assert_eq!(
             drain(&mut rx),
             clicks(SurfaceKind::Bar, 3, 3).map(child).to_vec()
@@ -236,10 +244,12 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 5.0, 6.0);
+        handle_pointer_enter(&mut state, &surface, (5.0, 6.0));
         drain(&mut rx);
-        handle_pointer_button(&mut state, LEFT, PRESSED, 7);
-        handle_pointer_button(&mut state, LEFT, RELEASED, 8);
+        record_button_serial(&mut state, 7);
+        handle_pointer_button(&mut state, LEFT, PRESSED);
+        record_button_serial(&mut state, 8);
+        handle_pointer_button(&mut state, LEFT, RELEASED);
         assert_eq!(
             drain(&mut rx),
             clicks(SurfaceKind::Popup, 5, 6).map(owner).to_vec()
@@ -253,10 +263,11 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
         drain(&mut rx);
-        handle_pointer_button(&mut state, LEFT, PRESSED, 7);
-        handle_pointer_motion(&mut state, 2.0, 2.0);
+        record_button_serial(&mut state, 7);
+        handle_pointer_button(&mut state, LEFT, PRESSED);
+        handle_pointer_motion(&mut state, (2.0, 2.0));
         scroll_down(&mut state);
         assert_eq!(
             drain(&mut rx),
@@ -266,14 +277,15 @@ mod tests {
                 child(scroll(SurfaceKind::Bar)),
             ]
         );
-        handle_pointer_button(&mut state, LEFT, RELEASED, 8);
+        record_button_serial(&mut state, 8);
+        handle_pointer_button(&mut state, LEFT, RELEASED);
         let mut expected = release(SurfaceKind::Bar, -8, 0).map(child).to_vec();
         expected.extend([
             child(leave(SurfaceKind::Bar)),
             owner(enter(SurfaceKind::Popup)),
         ]);
         assert_eq!(drain(&mut rx), expected);
-        handle_pointer_motion(&mut state, 3.0, 2.0);
+        handle_pointer_motion(&mut state, (3.0, 2.0));
         assert_eq!(
             drain(&mut rx),
             vec![owner(motion(SurfaceKind::Popup, 3, 2))]
@@ -285,17 +297,21 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
-        handle_pointer_button(&mut state, LEFT, PRESSED, 7);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
+        record_button_serial(&mut state, 7);
+        handle_pointer_button(&mut state, LEFT, PRESSED);
         drain(&mut rx);
         if let Some(floating) = state.floating_surfaces.get_mut(&popup_kind()) {
             let (id, monitor) = (ModuleId::new(CHILD), MonitorId::new("DP-1"));
             let smaller = solid(1, 1, [2; 4]);
-            floating
-                .layers
-                .upsert(id, monitor, Position::new(15, 5), smaller);
+            floating.layers.upsert(ModuleFrame::new(
+                id,
+                monitor,
+                PlacedBuffer::new(Position::new(15, 5), smaller),
+            ));
         }
-        handle_pointer_button(&mut state, LEFT, RELEASED, 8);
+        record_button_serial(&mut state, 8);
+        handle_pointer_button(&mut state, LEFT, RELEASED);
         let mut expected = release(SurfaceKind::Bar, 1, 1).map(child).to_vec();
         expected.extend([
             child(leave(SurfaceKind::Bar)),
@@ -309,10 +325,11 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
         drain(&mut rx);
-        handle_pointer_button(&mut state, LEFT, RELEASED, 7);
-        handle_pointer_motion(&mut state, 2.0, 2.0);
+        record_button_serial(&mut state, 7);
+        handle_pointer_button(&mut state, LEFT, RELEASED);
+        handle_pointer_motion(&mut state, (2.0, 2.0));
         let mut expected = release(SurfaceKind::Bar, 1, 1).map(child).to_vec();
         expected.extend([
             child(leave(SurfaceKind::Bar)),
@@ -330,13 +347,16 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
-        handle_pointer_button(&mut state, LEFT, PRESSED, 7);
-        handle_pointer_button(&mut state, RIGHT, RELEASED, 8);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
+        record_button_serial(&mut state, 7);
+        handle_pointer_button(&mut state, LEFT, PRESSED);
+        record_button_serial(&mut state, 8);
+        handle_pointer_button(&mut state, RIGHT, RELEASED);
         drain(&mut rx);
-        handle_pointer_motion(&mut state, 2.0, 2.0);
+        handle_pointer_motion(&mut state, (2.0, 2.0));
         assert_eq!(drain(&mut rx), vec![child(motion(SurfaceKind::Bar, -8, 0))]);
-        handle_pointer_button(&mut state, LEFT, RELEASED, 9);
+        record_button_serial(&mut state, 9);
+        handle_pointer_button(&mut state, LEFT, RELEASED);
         let mut expected = release(SurfaceKind::Bar, -8, 0).map(child).to_vec();
         expected.extend([
             child(leave(SurfaceKind::Bar)),
@@ -352,12 +372,13 @@ mod tests {
         let fake = Fake::new();
         let (mut state, surface) = popup(&fake, 1);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 11.0, 3.0);
-        handle_pointer_button(&mut state, LEFT, PRESSED, 7);
+        handle_pointer_enter(&mut state, &surface, (11.0, 3.0));
+        record_button_serial(&mut state, 7);
+        handle_pointer_button(&mut state, LEFT, PRESSED);
         drain(&mut rx);
         handle_pointer_leave(&mut state);
-        handle_pointer_enter(&mut state, &surface, 2.0, 2.0);
-        handle_pointer_motion(&mut state, 3.0, 3.0);
+        handle_pointer_enter(&mut state, &surface, (2.0, 2.0));
+        handle_pointer_motion(&mut state, (3.0, 3.0));
         assert_eq!(
             drain(&mut rx),
             vec![
@@ -374,7 +395,7 @@ mod tests {
         let mut state = fake.state(PopupEmbed::Composite);
         let surface = bar_module(&fake, &mut state);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_enter(&mut state, &surface, 5.0, 6.0);
+        handle_pointer_enter(&mut state, &surface, (5.0, 6.0));
         scroll_down(&mut state);
         let expected = vec![bar(enter(SurfaceKind::Bar)), bar(scroll(SurfaceKind::Bar))];
         assert_eq!(drain(&mut rx), expected);
@@ -385,12 +406,28 @@ mod tests {
         let fake = Fake::new();
         let mut state = fake.state(PopupEmbed::Composite);
         let mut rx = state.hub.pointer_rx();
-        handle_pointer_button(&mut state, LEFT, PRESSED, 42);
+        record_button_serial(&mut state, 42);
+        handle_pointer_button(&mut state, LEFT, PRESSED);
         assert_eq!(state.last_button_serial, Some(PointerSerial::new(42)));
         let unknown = fake.surface();
-        handle_pointer_enter(&mut state, &unknown, 1.0, 1.0);
-        handle_pointer_button(&mut state, LEFT, RELEASED, 43);
+        handle_pointer_enter(&mut state, &unknown, (1.0, 1.0));
+        record_button_serial(&mut state, 43);
+        handle_pointer_button(&mut state, LEFT, RELEASED);
         assert_eq!(state.last_button_serial, Some(PointerSerial::new(43)));
         assert_eq!(drain(&mut rx), vec![]);
+    }
+
+    #[test]
+    fn dispatch_pointer_button_unknown_state_records_the_serial_only() {
+        let fake = Fake::new();
+        let (mut state, surface) = popup(&fake, 1);
+        let mut rx = state.hub.pointer_rx();
+        handle_pointer_enter(&mut state, &surface, (13.0, 5.0));
+        drain(&mut rx);
+        record_button_serial(&mut state, 5);
+        handle_pointer_button(&mut state, LEFT, WEnum::Unknown(7));
+        assert_eq!(drain(&mut rx), Vec::new());
+        assert_eq!(state.last_button_serial, Some(PointerSerial::new(5)));
+        assert!(!state.pointer_grab.is_active());
     }
 }

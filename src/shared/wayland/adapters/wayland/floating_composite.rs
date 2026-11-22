@@ -1,10 +1,9 @@
 //! Composite mode: embedded children's pixels blended into a floating
 //! surface's own shm buffer instead of living on their own subsurfaces.
 
-use super::floating_bounds::to_i32;
 use super::floating_update::commit_surface;
 use super::types::FloatingSurface;
-use crate::shared::wayland::composite::composite_into;
+use crate::shared::wayland::composite::PixelsMut;
 
 /// Blends `floating.base` plus every child layer into the shm back buffer,
 /// then commits it, but only once the first configure has arrived. Before
@@ -12,20 +11,11 @@ use crate::shared::wayland::composite::composite_into;
 /// attaches.
 pub(super) fn repaint(floating: &mut FloatingSurface, bar_scale: i32) {
     let size = floating.size;
-    composite_into(
-        floating.shm_buffer.mmap_mut(),
-        size,
-        floating.base.data(),
-        &floating.layers,
-        bar_scale,
-    );
+    let mut pixels = PixelsMut::new(floating.shm_buffer.mmap_mut(), size);
+    pixels.copy_from(floating.base.data());
+    pixels.blend_layers(&floating.layers, bar_scale);
     if floating.configure.is_configured() {
-        commit_surface(
-            floating,
-            bar_scale,
-            to_i32(size.width()),
-            to_i32(size.height()),
-        );
+        commit_surface(floating, bar_scale);
     }
 }
 
@@ -33,12 +23,13 @@ pub(super) fn repaint(floating: &mut FloatingSurface, bar_scale: i32) {
 mod tests {
     use super::*;
     use crate::shared::config::domain::PopupEmbed;
+    use crate::shared::primitives::render::{ModuleFrame, PlacedBuffer, RenderBuffer};
     use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset, Position, Size};
     use crate::shared::wayland::adapters::wayland::floating_anchor::{
         AnchorInfo, FloatingParentRole,
     };
     use crate::shared::wayland::adapters::wayland::floating_setup::{
-        FloatingPlacement, create_new_floating, update_existing_floating,
+        FloatingFrame, FloatingPlacement, create_new_floating, update_existing_floating,
     };
     use crate::shared::wayland::adapters::wayland::state::WaylandState;
     use crate::shared::wayland::adapters::wayland::tests::fixture::{
@@ -53,17 +44,17 @@ mod tests {
 
     fn child_layers() -> CompositeLayers {
         let mut layers = CompositeLayers::default();
-        layers.upsert(
+        layers.upsert(ModuleFrame::new(
             ModuleId::new(9),
             MonitorId::new("DP-1"),
-            Position::new(1, 0),
-            solid(1, 1, CHILD),
-        );
+            PlacedBuffer::new(Position::new(1, 0), solid(1, 1, CHILD)),
+        ));
         layers
     }
 
-    fn anchor(fake: &Fake) -> AnchorInfo {
-        AnchorInfo {
+    /// `base` as popup 1's owner frame, at its own size.
+    fn frame(fake: &Fake, base: RenderBuffer) -> FloatingFrame {
+        let anchor = AnchorInfo {
             bar_scale: 1,
             parent_role: FloatingParentRole::Popup(fake.xdg_surface()),
             anchor_x: 0,
@@ -71,15 +62,18 @@ mod tests {
             anchor_w: 1,
             anchor_h: 1,
             target_monitor_id: MonitorId::new("DP-1"),
-        }
-    }
-
-    fn placement(size: Size) -> FloatingPlacement {
-        FloatingPlacement {
-            size,
+        };
+        let placement = FloatingPlacement {
+            anchor,
             text_w: 2,
             text_h: 1,
             offset: PopupOffset::default(),
+        };
+        FloatingFrame {
+            kind: popup_kind(),
+            parent: None,
+            buffer: base,
+            placement,
         }
     }
 
@@ -139,18 +133,9 @@ mod tests {
         floating.layers = child_layers();
         let back = floating.shm_buffer.current_buffer().clone();
         state.floating_surfaces.insert(kind.clone(), floating);
-
-        let placement = placement(Size::new(2, 1));
         let base = solid(2, 1, BASE);
-        update_existing_floating(
-            &mut state,
-            &fake.queue_handle,
-            &kind,
-            &base,
-            &anchor(&fake),
-            &placement,
-        )
-        .expect("floating updated");
+        update_existing_floating(&mut state, &fake.queue_handle, frame(&fake, base))
+            .expect("floating updated");
 
         let floating = state.floating_surfaces.get_mut(&kind).expect("floating");
         assert_eq!(
@@ -172,18 +157,9 @@ mod tests {
         let mut floating = fake.floating(Size::new(1, 1), solid(1, 1, [0, 0, 0, 255]));
         floating.layers = child_layers();
         state.floating_surfaces.insert(kind.clone(), floating);
-
-        let placement = placement(Size::new(2, 1));
         let base = solid(2, 1, BASE);
-        update_existing_floating(
-            &mut state,
-            &fake.queue_handle,
-            &kind,
-            &base,
-            &anchor(&fake),
-            &placement,
-        )
-        .expect("floating updated");
+        update_existing_floating(&mut state, &fake.queue_handle, frame(&fake, base))
+            .expect("floating updated");
         fake.configure(&mut state, &kind);
 
         let floating = state.floating_surfaces.get_mut(&kind).expect("floating");
@@ -207,11 +183,7 @@ mod tests {
             let result = create_new_floating(
                 &mut state,
                 &fake.queue_handle,
-                kind.clone(),
-                &solid(2, 1, BASE),
-                &anchor(&fake),
-                &placement(Size::new(2, 1)),
-                None,
+                frame(&fake, solid(2, 1, BASE)),
             );
 
             assert!(result.is_err());
@@ -232,16 +204,8 @@ mod tests {
         state.pending_children.insert(kind.clone(), child_layers());
         let base = solid(2, 1, BASE);
 
-        create_new_floating(
-            &mut state,
-            &fake.queue_handle,
-            kind.clone(),
-            &base,
-            &anchor(&fake),
-            &placement(Size::new(2, 1)),
-            None,
-        )
-        .expect("floating created");
+        create_new_floating(&mut state, &fake.queue_handle, frame(&fake, base.clone()))
+            .expect("floating created");
 
         assert!(!state.pending_children.contains_key(&kind));
         let floating = state.floating_surfaces.get_mut(&kind).expect("floating");
@@ -263,15 +227,8 @@ mod tests {
         state.floating_surfaces.insert(kind.clone(), floating);
         let base = solid(2, 1, BASE);
 
-        update_existing_floating(
-            &mut state,
-            &fake.queue_handle,
-            &kind,
-            &base,
-            &anchor(&fake),
-            &placement(Size::new(2, 1)),
-        )
-        .expect("floating updated");
+        update_existing_floating(&mut state, &fake.queue_handle, frame(&fake, base.clone()))
+            .expect("floating updated");
 
         let floating = state.floating_surfaces.get_mut(&kind).expect("floating");
         assert_eq!(floating.size, Size::new(2, 1));
@@ -289,17 +246,8 @@ mod tests {
         floating.configure.mark_configured();
         state.floating_surfaces.insert(kind.clone(), floating);
         state.shm = None;
-
-        let placement = placement(Size::new(2, 1));
         let base = solid(2, 1, BASE);
-        let result = update_existing_floating(
-            &mut state,
-            &fake.queue_handle,
-            &kind,
-            &base,
-            &anchor(&fake),
-            &placement,
-        );
+        let result = update_existing_floating(&mut state, &fake.queue_handle, frame(&fake, base));
 
         assert!(result.is_err());
         let floating = state.floating_surfaces.get(&kind).expect("floating");

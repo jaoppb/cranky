@@ -1,5 +1,6 @@
 use super::state::WaylandState;
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::primitives::geometry::Size;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use tracing::debug;
 use wayland_client::protocol::wl_output::{self, WlOutput};
 use wayland_client::{Connection, Dispatch, QueueHandle};
@@ -84,11 +85,9 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
 
                         if let Some(shm) = state.shm.as_ref()
                             && let Ok(new_shm) = ShmBuffer::new(
-                                shm,
-                                width,
-                                height,
+                                ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path()),
+                                Size::new(width, height),
                                 queue_handle,
-                                state.app_env.xdg_runtime_dir().as_path(),
                             )
                         {
                             bar.shm_buffer = new_shm;
@@ -110,6 +109,7 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
 #[cfg(test)]
 mod tests {
     use crate::shared::config::domain::PopupEmbed;
+    use crate::shared::primitives::geometry::Size;
     use crate::shared::wayland::adapters::wayland::tests::fixture::Fake;
     use crate::shared::wayland::adapters::wayland::types::ConfigureGate;
 
@@ -123,7 +123,7 @@ mod tests {
         let mut bar = fake.bar("DP-1", 1);
         bar.configure = ConfigureGate::Pending;
         state.bars.push(bar);
-        fake.configure_bar(&mut state, 0, 0, 0);
+        fake.configure_bar(&mut state, Size::new(0, 0));
         assert_eq!(state.bars[0].configure, ConfigureGate::Configured);
         assert_eq!((state.bars[0].width, state.bars[0].height), (1, 1));
     }

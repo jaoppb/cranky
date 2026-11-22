@@ -1,17 +1,17 @@
 use super::super::command::SurfaceCommand;
+use super::super::floating_bounds::to_i32;
 use super::super::input_region::{is_click_through, set_empty_input_region};
 use super::super::state::WaylandState;
 use super::super::types::ModuleSurface;
-use super::copy_surface_data;
+use super::{bar_index, copy_surface_data};
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::shared::events::core::SurfaceKind;
 use crate::shared::primitives::ModuleId;
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::ports::DisplayServerError;
 use crate::shared::wayland::surface_parent::SurfaceParent;
 use std::collections::HashMap;
 use wayland_client::QueueHandle;
-use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_surface::WlSurface;
 
 /// The surface a child's subsurface should be parented to, plus the
@@ -74,12 +74,19 @@ fn module_surfaces_mut<'a>(
 pub(super) fn handle_module_surface(
     state: &mut WaylandState,
     queue_handle: &QueueHandle<WaylandState>,
-    shm: &WlShm,
-    bar_index: usize,
-    parent: &SurfaceParent,
     cmd: &SurfaceCommand,
-    (width, height, w_i32, h_i32): (u32, u32, i32, i32),
 ) -> Result<(), DisplayServerError> {
+    // handle_cmd routes a frame here only with a parent, once wl_shm is bound and its monitor
+    // has a bar.
+    let (Some(parent), Some(bar_index), Some(shm)) =
+        (cmd.parent(), bar_index(state, cmd), state.shm.clone())
+    else {
+        return Ok(());
+    };
+    let Some(bar_scale) = state.bars.get(bar_index).map(|bar| bar.scale) else {
+        return Ok(());
+    };
+    let size = *cmd.buffer().size();
     let compositor = state
         .compositor
         .clone()
@@ -88,11 +95,6 @@ pub(super) fn handle_module_surface(
         .subcompositor
         .clone()
         .ok_or_else(|| DisplayServerError::Internal("Subcompositor not bound".to_string()))?;
-    let bar_scale = state
-        .bars
-        .get(bar_index)
-        .map(|bar| bar.scale)
-        .ok_or_else(|| DisplayServerError::Internal("Bar not found".to_string()))?;
     let xdg_runtime_dir = state.app_env.xdg_runtime_dir().as_path().clone();
 
     // The parent surface not existing yet (a popup whose child rendered
@@ -118,9 +120,8 @@ pub(super) fn handle_module_surface(
             set_empty_input_region(&compositor, &surface, queue_handle);
         }
 
-        let shm_buffer =
-            ShmBuffer::new(shm, width, height, queue_handle, xdg_runtime_dir.as_path())
-                .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
+        let shm_buffer = ShmBuffer::new(ShmSource::new(&shm, &xdg_runtime_dir), size, queue_handle)
+            .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
 
         new_surface_to_register = Some(surface.clone());
         entry.insert(ModuleSurface {
@@ -149,7 +150,7 @@ pub(super) fn handle_module_surface(
 
     if module_surface.size != *cmd.buffer().size() {
         module_surface.shm_buffer =
-            ShmBuffer::new(shm, width, height, queue_handle, xdg_runtime_dir.as_path())
+            ShmBuffer::new(ShmSource::new(&shm, &xdg_runtime_dir), size, queue_handle)
                 .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
         module_surface.size = *cmd.buffer().size();
     }
@@ -168,7 +169,9 @@ pub(super) fn handle_module_surface(
     module_surface
         .surface
         .attach(Some(module_surface.shm_buffer.current_buffer()), 0, 0);
-    module_surface.surface.damage_buffer(0, 0, w_i32, h_i32);
+    module_surface
+        .surface
+        .damage_buffer(0, 0, to_i32(size.width()), to_i32(size.height()));
     module_surface.surface.commit();
     parent_surface.commit();
     module_surface.shm_buffer.swap_buffers();
