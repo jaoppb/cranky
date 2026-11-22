@@ -1,75 +1,38 @@
 use super::canvas::TinySkiaCosmicCanvas;
 use super::paint::get_paint;
+use super::physical_box::PhysicalBox;
 use crate::shared::primitives::color::DrawingColor;
+use crate::shared::primitives::geometry::Scale;
 use crate::shared::rendering::ports::draw::{BorderStroke, RoundedRect};
-use tiny_skia::{FillRule, LineCap, LineJoin, PathBuilder, Rect, Stroke, Transform};
+use tiny_skia::{FillRule, LineCap, LineJoin, Rect, Stroke, Transform};
 
 impl TinySkiaCosmicCanvas<'_> {
     pub(crate) fn draw_rect_impl(&mut self, shape: RoundedRect, color: &DrawingColor) {
         let Some(pixmap) = &mut self.pixmap else {
             return;
         };
-        let physical_x = shape.x().apply_scale(self.scale).value();
-        let physical_y = shape.y().apply_scale(self.scale).value();
-        let physical_w = shape.width().apply_scale(self.scale).value();
-        let physical_h = shape.height().apply_scale(self.scale).value();
+        let Some(physical_rect) = scaled_rect(&shape, self.scale) else {
+            return;
+        };
+        let paint = get_paint(color, physical_rect);
+        let clamped_radius = shape
+            .radius()
+            .apply_scale(self.scale)
+            .value()
+            .min(physical_rect.width() / 2.0)
+            .min(physical_rect.height() / 2.0);
 
-        if let Some(physical_rect) = Rect::from_xywh(physical_x, physical_y, physical_w, physical_h)
+        if clamped_radius <= 0.0 {
+            pixmap.fill_rect(physical_rect, &paint, Transform::identity(), None);
+        } else if let Some(path) = PhysicalBox::covering(physical_rect).rounded_path(clamped_radius)
         {
-            let paint = get_paint(color, physical_rect);
-            let clamped_radius = shape
-                .radius()
-                .apply_scale(self.scale)
-                .value()
-                .min(physical_rect.width() / 2.0)
-                .min(physical_rect.height() / 2.0);
-
-            if clamped_radius <= 0.0 {
-                pixmap.fill_rect(physical_rect, &paint, Transform::identity(), None);
-            } else {
-                let mut builder = PathBuilder::new();
-                let (rect_x, rect_y, rect_w, rect_h) = (
-                    physical_rect.left(),
-                    physical_rect.top(),
-                    physical_rect.width(),
-                    physical_rect.height(),
-                );
-                builder.move_to(rect_x + clamped_radius, rect_y);
-                builder.line_to(rect_x + rect_w - clamped_radius, rect_y);
-                builder.quad_to(
-                    rect_x + rect_w,
-                    rect_y,
-                    rect_x + rect_w,
-                    rect_y + clamped_radius,
-                );
-                builder.line_to(rect_x + rect_w, rect_y + rect_h - clamped_radius);
-                builder.quad_to(
-                    rect_x + rect_w,
-                    rect_y + rect_h,
-                    rect_x + rect_w - clamped_radius,
-                    rect_y + rect_h,
-                );
-                builder.line_to(rect_x + clamped_radius, rect_y + rect_h);
-                builder.quad_to(
-                    rect_x,
-                    rect_y + rect_h,
-                    rect_x,
-                    rect_y + rect_h - clamped_radius,
-                );
-                builder.line_to(rect_x, rect_y + clamped_radius);
-                builder.quad_to(rect_x, rect_y, rect_x + clamped_radius, rect_y);
-                builder.close();
-
-                if let Some(path) = builder.finish() {
-                    pixmap.fill_path(
-                        &path,
-                        &paint,
-                        FillRule::Winding,
-                        Transform::identity(),
-                        None,
-                    );
-                }
-            }
+            pixmap.fill_path(
+                &path,
+                &paint,
+                FillRule::Winding,
+                Transform::identity(),
+                None,
+            );
         }
     }
 
@@ -77,76 +40,48 @@ impl TinySkiaCosmicCanvas<'_> {
         let Some(pixmap) = &mut self.pixmap else {
             return;
         };
-        let physical_x = shape.x().apply_scale(self.scale).value();
-        let physical_y = shape.y().apply_scale(self.scale).value();
-        let physical_w = shape.width().apply_scale(self.scale).value();
-        let physical_h = shape.height().apply_scale(self.scale).value();
         let stroke_w = border.width().apply_scale(self.scale).value();
-
         if stroke_w <= 0.0 {
             return;
         }
+        let Some(physical_rect) = scaled_rect(&shape, self.scale) else {
+            return;
+        };
+        let paint = get_paint(border.color(), physical_rect);
 
-        if let Some(physical_rect) = Rect::from_xywh(physical_x, physical_y, physical_w, physical_h)
-        {
-            let paint = get_paint(border.color(), physical_rect);
-            let stroke = Stroke {
-                width: stroke_w,
-                miter_limit: 4.0,
-                line_cap: LineCap::Butt,
-                line_join: LineJoin::Miter,
-                dash: None,
-            };
+        let half_stroke = stroke_w / 2.0;
+        let bounds = PhysicalBox::inside_stroke(physical_rect, stroke_w);
+        let clamped_radius = (shape.radius().apply_scale(self.scale).value() - half_stroke)
+            .clamp(0.0, bounds.max_radius());
 
-            let half_stroke = stroke_w / 2.0;
-            let (border_x, border_y, border_w, border_h) = (
-                physical_rect.left() + half_stroke,
-                physical_rect.top() + half_stroke,
-                (physical_rect.width() - stroke_w).max(0.0),
-                (physical_rect.height() - stroke_w).max(0.0),
-            );
-
-            let max_radius = (border_w / 2.0).min(border_h / 2.0);
-            let clamped_radius = (shape.radius().apply_scale(self.scale).value() - half_stroke)
-                .clamp(0.0, max_radius);
-
-            let mut builder = PathBuilder::new();
-            if clamped_radius <= 0.0 {
-                builder.move_to(border_x, border_y);
-                builder.line_to(border_x + border_w, border_y);
-                builder.line_to(border_x + border_w, border_y + border_h);
-                builder.line_to(border_x, border_y + border_h);
-            } else {
-                builder.move_to(border_x + clamped_radius, border_y);
-                builder.line_to(border_x + border_w - clamped_radius, border_y);
-                builder.quad_to(
-                    border_x + border_w,
-                    border_y,
-                    border_x + border_w,
-                    border_y + clamped_radius,
-                );
-                builder.line_to(border_x + border_w, border_y + border_h - clamped_radius);
-                builder.quad_to(
-                    border_x + border_w,
-                    border_y + border_h,
-                    border_x + border_w - clamped_radius,
-                    border_y + border_h,
-                );
-                builder.line_to(border_x + clamped_radius, border_y + border_h);
-                builder.quad_to(
-                    border_x,
-                    border_y + border_h,
-                    border_x,
-                    border_y + border_h - clamped_radius,
-                );
-                builder.line_to(border_x, border_y + clamped_radius);
-                builder.quad_to(border_x, border_y, border_x + clamped_radius, border_y);
-            }
-            builder.close();
-
-            if let Some(path) = builder.finish() {
-                pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
-            }
+        let path = if clamped_radius <= 0.0 {
+            bounds.square_path()
+        } else {
+            bounds.rounded_path(clamped_radius)
+        };
+        if let Some(path) = path {
+            let stroke = border_stroke(stroke_w);
+            pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
         }
+    }
+}
+
+/// The rectangle of `shape` in physical pixels at `scale`, or `None` when it is not a valid one.
+fn scaled_rect(shape: &RoundedRect, scale: Scale) -> Option<Rect> {
+    let physical_x = shape.x().apply_scale(scale).value();
+    let physical_y = shape.y().apply_scale(scale).value();
+    let physical_w = shape.width().apply_scale(scale).value();
+    let physical_h = shape.height().apply_scale(scale).value();
+    Rect::from_xywh(physical_x, physical_y, physical_w, physical_h)
+}
+
+/// A solid stroke `width` pixels wide with butt caps and mitred joins.
+const fn border_stroke(width: f32) -> Stroke {
+    Stroke {
+        width,
+        miter_limit: 4.0,
+        line_cap: LineCap::Butt,
+        line_join: LineJoin::Miter,
+        dash: None,
     }
 }

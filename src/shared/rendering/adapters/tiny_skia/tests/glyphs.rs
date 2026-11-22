@@ -1,13 +1,10 @@
 //! Pins how glyphs are composited: gradient text, and the alpha of fully covered pixels.
-use super::target;
-use crate::shared::config::domain::{FontFamily, FontSize};
+use super::sans_canvas;
 use crate::shared::primitives::TextAlignment;
 use crate::shared::primitives::color::{Color, DrawingColor};
 use crate::shared::primitives::geometry::Position;
-use crate::shared::rendering::adapters::tiny_skia::canvas::TinySkiaCosmicCanvas;
 use crate::shared::rendering::adapters::tiny_skia::factory::FontCache;
 use crate::shared::rendering::ports::canvas::Canvas;
-use crate::shared::rendering::ports::font::Font;
 use crate::shared::rendering::ports::text::{TextFont, TextPlacement, TextRun};
 use tiny_skia::Pixmap;
 
@@ -15,16 +12,7 @@ use tiny_skia::Pixmap;
 fn gradient_text(origin: Position, angle: f32) -> Pixmap {
     let mut pixmap = Pixmap::new(100, 100).unwrap();
     let mut fonts = FontCache::new();
-
-    let mut canvas = TinySkiaCosmicCanvas::new(
-        target(&mut pixmap, 1.0),
-        &mut fonts,
-        Font::new(
-            FontFamily::new("sans-serif".to_string()),
-            FontSize::new(14.0),
-        ),
-    );
-
+    let mut canvas = sans_canvas(&mut pixmap, &mut fonts);
     canvas.draw_text(
         TextRun::new(
             "MW",
@@ -80,14 +68,7 @@ fn test_canvas_draw_text_gradient() {
 fn test_canvas_draw_text_covers_whole_pixels_opaquely() {
     let mut pixmap = Pixmap::new(100, 100).unwrap();
     let mut fonts = FontCache::new();
-    let mut canvas = TinySkiaCosmicCanvas::new(
-        target(&mut pixmap, 1.0),
-        &mut fonts,
-        Font::new(
-            FontFamily::new("sans-serif".to_string()),
-            FontSize::new(14.0),
-        ),
-    );
+    let mut canvas = sans_canvas(&mut pixmap, &mut fonts);
     canvas.draw_text(
         TextRun::new(
             "MW",

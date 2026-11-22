@@ -1,4 +1,4 @@
-use super::target;
+use super::{sans_canvas, target};
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::{Color, DrawingColor};
 use crate::shared::primitives::geometry::Rect;
@@ -65,41 +65,27 @@ fn test_canvas_factory() {
     );
 }
 
+/// A solid border of `color`, two logical pixels wide.
+fn two_px_stroke(color: Color) -> BorderStroke {
+    BorderStroke::new(DrawingColor::Solid(color), LogicalPx::new(2.0))
+}
+
 #[test]
 fn test_canvas_draw_border() {
     let mut pixmap = Pixmap::new(100, 100).unwrap();
     let mut fonts = FontCache::new();
 
     {
-        let mut canvas = TinySkiaCosmicCanvas::new(
-            target(&mut pixmap, 1.0),
-            &mut fonts,
-            Font::new(
-                FontFamily::new("sans-serif".to_string()),
-                FontSize::new(14.0),
-            ),
-        );
-
+        let mut canvas = sans_canvas(&mut pixmap, &mut fonts);
+        let square = Rect::new(Position::new(0, 0), Size::new(20, 20));
         canvas.draw_border(
-            RoundedRect::new(
-                Rect::new(Position::new(0, 0), Size::new(20, 20)),
-                LogicalPx::new(0.0),
-            ),
-            BorderStroke::new(
-                DrawingColor::Solid(Color::rgb(0, 255, 0)),
-                LogicalPx::new(2.0),
-            ),
+            RoundedRect::new(square, LogicalPx::new(0.0)),
+            two_px_stroke(Color::rgb(0, 255, 0)),
         );
-
+        let rounded = Rect::new(Position::new(20, 20), Size::new(60, 60));
         canvas.draw_border(
-            RoundedRect::new(
-                Rect::new(Position::new(20, 20), Size::new(60, 60)),
-                LogicalPx::new(10.0),
-            ),
-            BorderStroke::new(
-                DrawingColor::Solid(Color::rgb(0, 0, 255)),
-                LogicalPx::new(2.0),
-            ),
+            RoundedRect::new(rounded, LogicalPx::new(10.0)),
+            two_px_stroke(Color::rgb(0, 0, 255)),
         );
     }
 

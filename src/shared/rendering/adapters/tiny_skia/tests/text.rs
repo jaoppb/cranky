@@ -1,4 +1,4 @@
-use super::target;
+use super::{sans_canvas, target};
 use crate::features::layout_engine::domain::TextMeasurer;
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::color::{Color, DrawingColor};
@@ -38,14 +38,7 @@ fn test_canvas_draw_text() {
     let mut pixmap = Pixmap::new(100, 100).unwrap();
     let mut fonts = FontCache::new();
 
-    let mut canvas = TinySkiaCosmicCanvas::new(
-        target(&mut pixmap, 1.0),
-        &mut fonts,
-        Font::new(
-            FontFamily::new("sans-serif".to_string()),
-            FontSize::new(14.0),
-        ),
-    );
+    let mut canvas = sans_canvas(&mut pixmap, &mut fonts);
 
     canvas.draw_text(
         TextRun::new(
@@ -56,13 +49,7 @@ fn test_canvas_draw_text() {
         TextPlacement::new(Position::new(10, 10), TextAlignment::default()),
     );
 
-    let mut drawn = false;
-    for pixel in pixmap.pixels() {
-        if pixel.alpha() > 0 {
-            drawn = true;
-            break;
-        }
-    }
+    let drawn = pixmap.pixels().iter().any(|pixel| pixel.alpha() > 0);
     assert!(drawn, "Text should have drawn some pixels");
 }
 
