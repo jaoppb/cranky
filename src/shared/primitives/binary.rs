@@ -88,20 +88,28 @@ mod tests {
 
     #[test]
     fn test_binary_data_basic_operations() {
-        let raw = vec![1, 2, 3, 4, 5];
-        let binary = BinaryData::new(raw.clone());
+        let binary = BinaryData::new(vec![1, 2, 3, 4, 5]);
         assert_eq!(binary.len(), 5);
         assert!(!binary.is_empty());
         assert_eq!(binary.as_slice(), &[1, 2, 3, 4, 5]);
         assert_eq!(&*binary, &[1, 2, 3, 4, 5]);
         assert_eq!(binary.as_ref(), &[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_binary_data_converts_to_and_from_bytes() {
+        let raw = vec![1, 2, 3, 4, 5];
+        let binary = BinaryData::new(raw.clone());
 
         let into_v: Vec<u8> = binary.clone().into_vec();
         assert_eq!(into_v, raw);
 
         let from_slice: BinaryData = (&raw[..]).into();
         assert_eq!(from_slice, binary);
+    }
 
+    #[test]
+    fn test_binary_data_default_is_empty() {
         let empty = BinaryData::default();
         assert_eq!(empty.len(), 0);
         assert!(empty.is_empty());
