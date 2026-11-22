@@ -8,7 +8,7 @@ pub mod popup;
 mod tests;
 mod tooltip;
 
-pub(crate) use content::{FloatingCache, FloatingPass};
+pub(crate) use content::{FloatingCache, FloatingEngine, FloatingPass};
 pub(super) use gate::apply_gate;
 use panel::layout_panel;
 pub(crate) use popup::PopupRenderLayout;
@@ -16,7 +16,6 @@ use popup::layout_popup;
 
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
-use crate::features::vdom::domain::InteractionContext;
 use crate::shared::primitives::ChildModuleLayout;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use tooltip::{HoverTrees, layout_tooltip};
@@ -32,14 +31,14 @@ pub(crate) struct FloatingContentCaches<'a> {
     pub(crate) tooltip: &'a mut FloatingCache,
 }
 
-/// One layout engine per floating kind.
+/// One layout engine, with its content cache, per floating kind.
 ///
 /// Sharing one would diff one kind's tree against another's cached layout
 /// state whenever more than one is open at once.
 pub(crate) struct FloatingEngines<'a, E: LayoutEnginePort> {
-    pub(crate) popup: &'a mut E,
-    pub(crate) panel: &'a mut E,
-    pub(crate) tooltip: &'a mut E,
+    pub(crate) popup: FloatingEngine<'a, E>,
+    pub(crate) panel: FloatingEngine<'a, E>,
+    pub(crate) tooltip: FloatingEngine<'a, E>,
 }
 
 /// Whether a floating surface must keep what it shows because an embedded child has not settled
@@ -82,14 +81,10 @@ impl FloatingLayouts {
         }
     }
 
+    /// These layouts with the holds of the popup, the panel and the tooltip, in that order.
     #[must_use]
-    pub(super) const fn with_held(
-        mut self,
-        popup: FloatingHold,
-        panel: FloatingHold,
-        tooltip: FloatingHold,
-    ) -> Self {
-        self.held = [popup, panel, tooltip];
+    pub(super) const fn with_held(mut self, held: [FloatingHold; 3]) -> Self {
+        self.held = held;
         self
     }
 
@@ -122,46 +117,42 @@ impl FloatingLayouts {
     pub(crate) const fn tooltip(&self) -> Option<&RenderNode> {
         self.tooltip.as_ref()
     }
+
+    /// The modules embedded in the popup, the panel and the tooltip, in that order.
+    pub(crate) fn module_layouts(&self) -> impl Iterator<Item = ChildModuleLayout> + '_ {
+        let popup = self.popup.iter().map(PopupRenderLayout::node);
+        popup
+            .chain(self.panel.iter())
+            .chain(self.tooltip.iter())
+            .flat_map(RenderNode::collect_module_layouts)
+    }
 }
 
 /// Computes the floating layouts for whatever popup/panel/tooltip is
-/// currently active, extending `child_layouts` with any module nodes found
-/// inside them.
+/// currently active; `FloatingLayouts::module_layouts` lists the module nodes
+/// found inside them.
 pub(crate) fn layout_floating<F: CanvasFactory, E: LayoutEnginePort>(
     render_node: &RenderNode,
-    interaction: Option<&InteractionContext>,
-    caches: FloatingContentCaches<'_>,
     engines: FloatingEngines<'_, E>,
     pass: &mut FloatingPass<'_, F>,
-    child_layouts: &mut Vec<ChildModuleLayout>,
 ) -> FloatingLayouts {
-    let FloatingContentCaches {
-        popup: popup_cache,
-        panel: panel_cache,
-        tooltip: tooltip_cache,
-    } = caches;
     let FloatingEngines {
         popup: popup_engine,
         panel: panel_engine,
         tooltip: tooltip_engine,
     } = engines;
-    let popup = render_node.find_popup_with_anchor().and_then(|anchored| {
-        let layout = layout_popup(&anchored, popup_cache, popup_engine, pass)?;
-        child_layouts.extend(layout.node().collect_module_layouts());
-        Some(layout)
-    });
-    let panel = render_node.find_panel().and_then(|active| {
-        let node = layout_panel(&active, panel_cache, panel_engine, pass)?;
-        child_layouts.extend(node.collect_module_layouts());
-        Some(node)
-    });
+    let popup = render_node
+        .find_popup_with_anchor()
+        .and_then(|anchored| layout_popup(&anchored, popup_engine, pass));
+    let panel = render_node
+        .find_panel()
+        .and_then(|active| layout_panel(&active, panel_engine, pass));
     let trees = HoverTrees {
         bar: render_node,
         popup: popup.as_ref().map(PopupRenderLayout::node),
         panel: panel.as_ref(),
     };
-    let tooltip = layout_tooltip(trees, interaction, tooltip_cache, tooltip_engine, pass)
-        .inspect(|node| child_layouts.extend(node.collect_module_layouts()));
+    let tooltip = layout_tooltip(trees, tooltip_engine, pass);
 
     FloatingLayouts::new(popup, panel, tooltip)
 }

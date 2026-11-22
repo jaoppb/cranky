@@ -2,7 +2,10 @@ use super::lifecycle::make_test_rect_node;
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, PopupTarget};
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::{FloatingLayouts, PointerHandler, RenderPipeline};
+use crate::features::module_runtime::domain::FloatingLayouts;
+use crate::features::module_runtime::domain::RenderServices;
+use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
+use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
 use crate::features::module_runtime::test_support::{
     ChannelDisplaySender, MockCanvasFactory, MockLayoutSender, MockSurfaceManager, MockUiSender,
     TestModulePort,
@@ -39,11 +42,11 @@ fn test_event_loop_tooltip_dispatch_carries_floating_parent_when_embedded() {
     // `parent_id`'s open popup — exactly the "module-in-popup" case.
     let ctx = ModuleContext::new(
         id,
-        hub,
-        surface_manager,
-        layout_sender,
-        display_sender,
-        ui_sender,
+        ModuleHandles::new(
+            hub,
+            surface_manager,
+            ModuleSenders::new(layout_sender, display_sender, ui_sender),
+        ),
         rx,
     )
     .with_parent(Some(parent_id))
@@ -54,21 +57,23 @@ fn test_event_loop_tooltip_dispatch_carries_floating_parent_when_embedded() {
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
 
     let outcome = crate::features::module_runtime::domain::RenderOutcome::new(
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::new(None, None, Some(make_test_rect_node())),
+            EmbedReport::new(None, vec![]),
+        ),
         None,
-        vec![],
-        make_test_rect_node(),
-        None,
-        FloatingLayouts::new(None, None, Some(make_test_rect_node())),
+        Scale::new(1.0),
     );
-    event_loop.dispatch_render_outcome(&mon, &outcome, Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&mon, &outcome);
 
     let cmd = display_rx
         .try_recv()

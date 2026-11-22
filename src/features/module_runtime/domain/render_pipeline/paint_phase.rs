@@ -8,12 +8,29 @@ use crate::shared::rendering::ports::draw::PaintTarget;
 use crate::shared::rendering::ports::font::Font;
 use crate::utils::{f32_to_u32, f64_to_f32};
 
+/// A canvas factory together with the output scale of the monitor its canvases paint for.
+#[derive(Debug)]
+pub(crate) struct ScaledCanvasFactory<'a, F: CanvasFactory> {
+    factory: &'a mut F,
+    scale: Scale,
+}
+
+impl<'a, F: CanvasFactory> ScaledCanvasFactory<'a, F> {
+    #[must_use]
+    pub(crate) const fn new(factory: &'a mut F, scale: Scale) -> Self {
+        Self { factory, scale }
+    }
+}
+
 pub(crate) fn paint_pipeline<F: CanvasFactory>(
     render_node: &RenderNode,
     current_bounds: Option<Rect>,
-    scale: Scale,
-    canvas_factory: &mut F,
+    canvases: ScaledCanvasFactory<'_, F>,
 ) -> Option<(RenderBuffer, Position)> {
+    let ScaledCanvasFactory {
+        factory: canvas_factory,
+        scale,
+    } = canvases;
     let bounds = current_bounds.filter(|rect| rect.width() > 0 && rect.height() > 0)?;
 
     let w_f32 = f64_to_f32(f64::from(bounds.width()));

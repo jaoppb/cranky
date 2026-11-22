@@ -1,5 +1,6 @@
 use super::lifecycle::{create_test_event_loop_and_channel, make_test_rect_node};
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
+use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
 use crate::features::module_runtime::domain::{FloatingLayouts, PopupRenderLayout};
 use crate::features::styling::domain::ComputedStyle;
 use crate::shared::primitives::MonitorId;
@@ -35,13 +36,15 @@ fn test_event_loop_popup_dispatch_refreshes_on_anchor_move_alone() {
     let first_anchor = Rect::new(Position::new(0, 0), Size::new(50, 20));
     let popup_layout1 = PopupRenderLayout::new(first_anchor, popup_content.clone(), None);
     let outcome1 = crate::features::module_runtime::domain::RenderOutcome::new(
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::new(Some(popup_layout1), None, None),
+            EmbedReport::new(None, vec![]),
+        ),
         None,
-        vec![],
-        make_test_rect_node(),
-        None,
-        FloatingLayouts::new(Some(popup_layout1), None, None),
+        Scale::new(1.0),
     );
-    event_loop.dispatch_render_outcome(&mon, &outcome1, Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&mon, &outcome1);
     display_rx
         .try_recv()
         .expect("First dispatch should have sent ShowFloatingSurface");
@@ -52,13 +55,15 @@ fn test_event_loop_popup_dispatch_refreshes_on_anchor_move_alone() {
     assert_ne!(first_anchor, second_anchor);
     let popup_layout2 = PopupRenderLayout::new(second_anchor, popup_content, None);
     let outcome2 = crate::features::module_runtime::domain::RenderOutcome::new(
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::new(Some(popup_layout2), None, None),
+            EmbedReport::new(None, vec![]),
+        ),
         None,
-        vec![],
-        make_test_rect_node(),
-        None,
-        FloatingLayouts::new(Some(popup_layout2), None, None),
+        Scale::new(1.0),
     );
-    event_loop.dispatch_render_outcome(&mon, &outcome2, Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&mon, &outcome2);
 
     let cmd2 = display_rx
         .try_recv()

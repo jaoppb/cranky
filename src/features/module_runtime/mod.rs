@@ -91,6 +91,31 @@ pub mod test_support {
         fn submit_buffer(&self, _frame: ModuleFrame) {}
     }
 
+    /// Keeps every frame submitted to it, with the parent surface it was submitted under.
+    #[derive(Default)]
+    pub(crate) struct RecordingSurfaceManager {
+        pub(crate) frames: std::sync::Mutex<
+            Vec<(
+                ModuleFrame,
+                Option<crate::shared::wayland::ports::SurfaceParent>,
+            )>,
+        >,
+    }
+
+    impl crate::shared::wayland::ports::SurfaceManagerPort for RecordingSurfaceManager {
+        fn submit_buffer(&self, frame: ModuleFrame) {
+            self.frames.lock().unwrap().push((frame, None));
+        }
+
+        fn submit_child_buffer(
+            &self,
+            frame: ModuleFrame,
+            parent: Option<crate::shared::wayland::ports::SurfaceParent>,
+        ) {
+            self.frames.lock().unwrap().push((frame, parent));
+        }
+    }
+
     #[derive(Debug, Default, Clone)]
     pub(crate) struct MockCanvasFactory;
 
@@ -225,6 +250,57 @@ pub mod test_support {
                 crate::features::styling::domain::InheritedStyle::default(),
             )
         }
+    }
+
+    /// Owns everything a `LayoutContext` borrows, so a test builds one per render in one call:
+    /// scale 1, no bounds, constraint, child sizes or interaction, which the test then sets.
+    #[derive(Default)]
+    pub(crate) struct PipelineFixture<E> {
+        resolver: MockStyleResolver,
+        factory: MockCanvasFactory,
+        child_errors: std::collections::HashMap<crate::shared::primitives::ModuleKey, String>,
+        engine: E,
+        popup_engine: E,
+        panel_engine: E,
+        tooltip_engine: E,
+    }
+
+    impl<E: crate::features::layout_engine::ports::LayoutEnginePort> PipelineFixture<E> {
+        pub(crate) fn ctx<'a>(
+            &'a mut self,
+            monitor_id: &'a MonitorId,
+        ) -> crate::features::module_runtime::domain::LayoutContext<'a, MockCanvasFactory, E>
+        {
+            crate::features::module_runtime::domain::LayoutContext {
+                monitor_id,
+                scale: Scale::new(1.0),
+                style_resolver: &self.resolver,
+                child_errors: &self.child_errors,
+                current_bounds: None,
+                current_constraint: crate::shared::primitives::SizeConstraint::none(),
+                current_child_sizes: None,
+                interaction_context: None,
+                canvas_factory: &mut self.factory,
+                layout_engine: &mut self.engine,
+                popup_layout_engine: &mut self.popup_engine,
+                panel_layout_engine: &mut self.panel_engine,
+                tooltip_layout_engine: &mut self.tooltip_engine,
+            }
+        }
+    }
+
+    /// Runs every phase of one render on the context's monitor, as the event loop does, comparing
+    /// trees with `MockVdomDiff`.
+    pub(crate) fn process_monitor<F: CanvasFactory, E>(
+        pipeline: &mut crate::features::module_runtime::domain::RenderPipeline,
+        port: &dyn AnyModulePort,
+        ctx: crate::features::module_runtime::domain::LayoutContext<'_, F, E>,
+    ) -> Option<crate::features::module_runtime::domain::RenderOutcome>
+    where
+        E: crate::features::layout_engine::ports::LayoutEnginePort,
+    {
+        let diff = pipeline.diff(port, ctx.diff_input(&MockVdomDiff))?;
+        pipeline.layout_and_paint(diff, ctx)
     }
 
     #[derive(Debug, Default, Clone)]

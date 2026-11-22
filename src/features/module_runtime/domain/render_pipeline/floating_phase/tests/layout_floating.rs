@@ -1,5 +1,5 @@
 use super::super::{
-    FloatingContentCaches, FloatingEngines, FloatingLayouts, FloatingPass, layout_floating,
+    FloatingEngine, FloatingEngines, FloatingLayouts, FloatingPass, layout_floating,
 };
 use super::{RecordingEngine, Spec, content, tooltip_content};
 use crate::features::layout_engine::domain::{RenderNode, StyledNode, StyledPanel, StyledPopup};
@@ -24,24 +24,27 @@ fn run(bar: &RenderNode, interaction: Option<&InteractionContext>) -> (FloatingL
     let mut engines = Engines::default();
     let layouts = layout_floating(
         bar,
-        interaction,
-        FloatingContentCaches {
-            popup: &mut HashMap::new(),
-            panel: &mut HashMap::new(),
-            tooltip: &mut HashMap::new(),
-        },
         FloatingEngines {
-            popup: &mut engines.popup,
-            panel: &mut engines.panel,
-            tooltip: &mut engines.tooltip,
+            popup: FloatingEngine {
+                engine: &mut engines.popup,
+                cache: &mut HashMap::new(),
+            },
+            panel: FloatingEngine {
+                engine: &mut engines.panel,
+                cache: &mut HashMap::new(),
+            },
+            tooltip: FloatingEngine {
+                engine: &mut engines.tooltip,
+                cache: &mut HashMap::new(),
+            },
         },
         &mut FloatingPass {
             monitor_id: &MonitorId::new("DP-1"),
             canvas_factory: &mut MockCanvasFactory,
             scale: Scale::new(1.0),
             current_child_sizes: None,
+            interaction,
         },
-        &mut Vec::new(),
     );
     (layouts, engines)
 }

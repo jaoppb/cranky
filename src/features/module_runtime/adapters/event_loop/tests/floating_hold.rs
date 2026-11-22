@@ -3,7 +3,7 @@ use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, ShowFloating};
 use crate::features::module_runtime::domain::{LayoutContext, RenderOutcome, RenderPipeline};
 use crate::features::module_runtime::test_support::{
-    MockCanvasFactory, MockStyleResolver, MockVdomDiff, TestModulePort,
+    MockCanvasFactory, MockStyleResolver, TestModulePort, process_monitor,
 };
 use crate::features::vdom::domain::{
     InteractionContext, ModuleParams, NodePath, NodeRef, PanelSpec, PopupSpec, SurfaceSpace, VNode,
@@ -25,7 +25,9 @@ fn render(bar: VNode, interaction: Option<InteractionContext>) -> RenderOutcome 
     let mut panel_engine = TaffyLayoutAdapter::new();
     let mut tooltip_engine = TaffyLayoutAdapter::new();
     let child_errors = HashMap::new();
+    let monitor = MonitorId::new("DP-1");
     let ctx = LayoutContext {
+        monitor_id: &monitor,
         scale: Scale::new(1.0),
         style_resolver: &resolver,
         child_errors: &child_errors,
@@ -39,9 +41,7 @@ fn render(bar: VNode, interaction: Option<InteractionContext>) -> RenderOutcome 
         panel_layout_engine: &mut panel_engine,
         tooltip_layout_engine: &mut tooltip_engine,
     };
-    pipeline
-        .process_monitor(&MonitorId::new("DP-1"), &port, &MockVdomDiff, ctx)
-        .expect("render outcome")
+    process_monitor(&mut pipeline, &port, ctx).expect("render outcome")
 }
 
 fn bar() -> VNode {
@@ -92,10 +92,10 @@ fn assert_held_then_shown(render_kind: fn(VNode) -> RenderOutcome, kind: &Floati
     let (mut event_loop, _id, display_rx) = create_test_event_loop_and_channel();
     let mon = MonitorId::new("DP-1");
 
-    event_loop.dispatch_render_outcome(&mon, &render_kind(unsettled()), Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&mon, &render_kind(unsettled()));
     assert!(display_rx.try_recv().is_err());
 
-    event_loop.dispatch_render_outcome(&mon, &render_kind(bar()), Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&mon, &render_kind(bar()));
     let shown = display_rx.try_recv();
     assert!(
         matches!(&shown, Ok(DisplayCommand::ShowFloatingSurface(ShowFloating { kind: sent, .. })) if sent == kind),

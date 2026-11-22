@@ -140,16 +140,6 @@ impl<
         let module_names = registry.module_names();
         let name_to_ids = registry.name_to_ids().clone();
         let module_keys = registry.module_keys();
-        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            services.hub.clone(),
-            services.surface_manager.clone(),
-            services.layout_sender.clone(),
-            services.display_sender.clone(),
-            services.ui_sender.clone(),
-            services.canvas_factory.clone(),
-        );
-        let layout_senders = registry.spawn_all(&deps);
-
         let read_model = AppReadModel {
             config,
             root_module,
@@ -161,14 +151,14 @@ impl<
             computed_layouts: HashMap::new(),
         };
 
-        Ok(Self {
+        let mut app = Self {
             hub: services.hub,
             read_model,
             display_rx: channels.display,
             layout_rx: channels.layout,
             ui_rx: channels.interface,
             system_rx: channels.system,
-            layout_senders,
+            layout_senders: HashMap::new(),
             surface_manager: services.surface_manager,
             display_sender: services.display_sender,
             layout_sender: services.layout_sender,
@@ -176,7 +166,29 @@ impl<
             registry,
             canvas_factory: services.canvas_factory,
             adapter_supervisor: None,
-        })
+        };
+        let deps = app.module_runtime_dependencies();
+        app.layout_senders = app.registry.spawn_all(&deps);
+        Ok(app)
+    }
+
+    /// What every module actor this app spawns or reloads is built with: its handles to the hub,
+    /// the surface manager and the outbound channels, and a canvas factory of its own.
+    fn module_runtime_dependencies(
+        &self,
+    ) -> crate::features::module_runtime::ports::ModuleRuntimeDependencies<F, LS, DS, US> {
+        crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+            crate::features::module_runtime::ports::ModuleHandles::new(
+                self.hub.clone(),
+                self.surface_manager.clone(),
+                crate::features::module_runtime::ports::ModuleSenders::new(
+                    self.layout_sender.clone(),
+                    self.display_sender.clone(),
+                    self.ui_sender.clone(),
+                ),
+            ),
+            self.canvas_factory.clone(),
+        )
     }
 
     /// Wires in the on-demand adapter starter (decision 3). Called from
@@ -369,22 +381,16 @@ impl<
             return;
         }
 
-        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            self.hub.clone(),
-            self.surface_manager.clone(),
-            self.layout_sender.clone(),
-            self.display_sender.clone(),
-            self.ui_sender.clone(),
-            self.canvas_factory.clone(),
-        );
+        let deps = self.module_runtime_dependencies();
 
         match self.registry.spawn_module(
-            parent,
-            key,
-            options,
-            surface,
-            &self.read_model.config,
-            &deps,
+            crate::features::module_runtime::ports::LazySite::new(parent, key.clone())
+                .with_options(options)
+                .with_surface(surface),
+            crate::features::module_runtime::ports::ModuleSetup::new(
+                &self.read_model.config,
+                &deps,
+            ),
         ) {
             Ok(spawned) => {
                 let id = spawned.id();
@@ -524,10 +530,13 @@ impl<
             tracing::debug!("Base stylesheet changed; reloading all active modules");
             let all_modules: Vec<_> = self.read_model.module_names.values().cloned().collect();
             for mod_name in all_modules {
-                if let Ok(new_senders) =
-                    self.registry
-                        .reload_module(&mod_name, &self.read_model.config, deps)
-                {
+                if let Ok(new_senders) = self.registry.reload_module(
+                    &mod_name,
+                    crate::features::module_runtime::ports::ModuleSetup::new(
+                        &self.read_model.config,
+                        deps,
+                    ),
+                ) {
                     for (id, sender) in new_senders {
                         self.layout_senders.insert(id, sender);
                     }
@@ -543,10 +552,13 @@ impl<
             );
             let mut any_reloaded = false;
             for mod_name in mods {
-                match self
-                    .registry
-                    .reload_module(&mod_name, &self.read_model.config, deps)
-                {
+                match self.registry.reload_module(
+                    &mod_name,
+                    crate::features::module_runtime::ports::ModuleSetup::new(
+                        &self.read_model.config,
+                        deps,
+                    ),
+                ) {
                     Ok(new_senders) => {
                         for (id, sender) in new_senders {
                             self.layout_senders.insert(id, sender);
@@ -567,22 +579,18 @@ impl<
     ) {
         let mut needs_render = false;
         let mut cmd = initial;
-        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            self.hub.clone(),
-            self.surface_manager.clone(),
-            self.layout_sender.clone(),
-            self.display_sender.clone(),
-            self.ui_sender.clone(),
-            self.canvas_factory.clone(),
-        );
+        let deps = self.module_runtime_dependencies();
         loop {
             match cmd {
                 SystemCommand::ReloadModule(name) => {
                     tracing::info!("Reloading module: {name}");
-                    match self
-                        .registry
-                        .reload_module(&name, &self.read_model.config, &deps)
-                    {
+                    match self.registry.reload_module(
+                        &name,
+                        crate::features::module_runtime::ports::ModuleSetup::new(
+                            &self.read_model.config,
+                            &deps,
+                        ),
+                    ) {
                         Ok(new_senders) => {
                             for (id, sender) in new_senders {
                                 self.layout_senders.insert(id, sender);
@@ -625,14 +633,7 @@ impl<
                 .name_to_ids
                 .clone_from(self.registry.name_to_ids());
             self.read_model.module_keys = self.registry.module_keys();
-            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                self.hub.clone(),
-                self.surface_manager.clone(),
-                self.layout_sender.clone(),
-                self.display_sender.clone(),
-                self.ui_sender.clone(),
-                self.canvas_factory.clone(),
-            );
+            let deps = self.module_runtime_dependencies();
             self.layout_senders = self.registry.spawn_all(&deps);
         }
     }
@@ -1670,6 +1671,72 @@ mod tests {
             app.handle_container_layouts(parent, &monitor, &layouts)
                 .await;
             assert_eq!(spawn_attempts.load(Ordering::SeqCst), 1);
+        });
+    }
+
+    /// A lazy spawn hands the registry the parent, the full key, the options and the floating
+    /// surface of the site the parent laid its child out at.
+    #[test]
+    fn test_ensure_lazy_spawn_passes_the_site_options_and_surface_to_the_registry() {
+        crate::test_utils::block_on(async {
+            let config = Config::default();
+            let hub = Arc::new(SignalHub::new(config.clone()));
+            let (display_tx, display_rx) = mpsc::channel(32);
+            let (layout_tx, layout_rx) = mpsc::channel(32);
+            let (ui_tx, ui_rx) = mpsc::channel(32);
+            let (_system_tx, system_rx) = mpsc::channel(32);
+            let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManager);
+
+            let parent = ModuleId::new(1);
+            let fake_registry = FakeRegistry::default();
+            let requests = fake_registry.spawn_requests.clone();
+
+            let canvas_factory =
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
+            let services = StateServices::new(
+                hub,
+                surface_manager,
+                canvas_factory,
+                Arc::new(display_tx),
+                Arc::new(layout_tx),
+                Arc::new(ui_tx),
+            );
+            let channels = StateChannels::new(display_rx, layout_rx, ui_rx, system_rx);
+            let mut app =
+                CrankyApp::new(config, services, channels, Box::new(fake_registry)).unwrap();
+
+            let key = crate::shared::primitives::ModuleKey::new(
+                crate::shared::primitives::ModuleName::new("calendar"),
+                Some(crate::shared::primitives::ModuleInstanceId::new("cal-2")),
+            );
+            let options = crate::shared::primitives::ModuleOptions::new(HashMap::from([(
+                "format".to_string(),
+                crate::shared::primitives::DynamicValue::String("%A %d".to_string()),
+            )]));
+            let layouts = [crate::shared::primitives::ChildModuleLayout::new(
+                key.clone(),
+                crate::shared::primitives::ChildBounds::new(
+                    Rect::new(Position::new(0, 0), Size::new(50, 20)),
+                    crate::shared::primitives::SizeConstraint::none(),
+                ),
+                crate::shared::primitives::LayoutSurface::Popup,
+            )
+            .with_options(options.clone())];
+
+            app.handle_container_layouts(parent, &MonitorId::new("DP-1"), &layouts)
+                .await;
+
+            let requests = std::mem::take(&mut *requests.lock().unwrap());
+            let [site] = requests.as_slice() else {
+                panic!("expected one spawn, got {}", requests.len());
+            };
+            assert_eq!(site.parent(), parent);
+            assert_eq!(site.key(), &key);
+            assert_eq!(site.options(), &options);
+            assert_eq!(
+                site.surface(),
+                crate::shared::primitives::LayoutSurface::Popup
+            );
         });
     }
 

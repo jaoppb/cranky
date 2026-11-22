@@ -2,15 +2,15 @@
 //! and records any size change to report to the embedder.
 use super::context::{LayoutContext, PipelineDiff};
 use super::floating_phase::{
-    FloatingEngines, FloatingLayouts, FloatingPass, apply_gate, layout_floating,
+    FloatingEngine, FloatingEngines, FloatingLayouts, FloatingPass, apply_gate, layout_floating,
 };
 use super::measurer::ModuleSizeMeasurer;
-use super::outcome::SizeChange;
+use super::outcome::{EmbedReport, PipelineLayout, SizeChange};
 use super::pipeline::RenderPipeline;
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::shared::primitives::geometry::{Position, Size};
-use crate::shared::primitives::{ChildModuleLayout, MonitorId, SizeConstraint};
+use crate::shared::primitives::{ChildReport, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::rendering::ports::font::Font;
 
@@ -18,17 +18,13 @@ use crate::shared::rendering::ports::font::Font;
 /// if any: the unpinned size, not the pinned one (the embedder sizes the host
 /// from it, so it must not depend on the width it chose), plus the width the
 /// layout settled at.
-fn report_size<E: LayoutEnginePort>(
+fn report_size(
     pipeline: &mut RenderPipeline,
     monitor_id: &MonitorId,
-    engine: &E,
-    constraint: SizeConstraint,
-    render_node: &RenderNode,
+    report: ChildReport,
 ) -> Option<SizeChange> {
-    let size = engine
-        .intrinsic_size()
-        .unwrap_or_else(|| *render_node.rect().size());
-    let settled_width = constraint.width();
+    let size = *report.size();
+    let settled_width = report.settled_width();
     let old_size = pipeline
         .sizes()
         .get(monitor_id)
@@ -43,17 +39,46 @@ fn report_size<E: LayoutEnginePort>(
     Some(SizeChange::new(old_size, size).with_settled_width(settled_width))
 }
 
+/// Lays out the floating content open in `render_node`, each kind with its own engine and cache.
+fn floating_layouts<F: CanvasFactory, E: LayoutEnginePort>(
+    pipeline: &mut RenderPipeline,
+    render_node: &RenderNode,
+    ctx: &mut LayoutContext<'_, F, E>,
+) -> FloatingLayouts {
+    let caches = pipeline.floating_content_caches_mut();
+    let engines = FloatingEngines {
+        popup: FloatingEngine {
+            engine: ctx.popup_layout_engine,
+            cache: caches.popup,
+        },
+        panel: FloatingEngine {
+            engine: ctx.panel_layout_engine,
+            cache: caches.panel,
+        },
+        tooltip: FloatingEngine {
+            engine: ctx.tooltip_layout_engine,
+            cache: caches.tooltip,
+        },
+    };
+    layout_floating(
+        render_node,
+        engines,
+        &mut FloatingPass {
+            monitor_id: ctx.monitor_id,
+            canvas_factory: ctx.canvas_factory,
+            scale: ctx.scale,
+            current_child_sizes: ctx.current_child_sizes,
+            interaction: ctx.interaction_context.as_ref(),
+        },
+    )
+}
+
 pub(crate) fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
     pipeline: &mut RenderPipeline,
-    monitor_id: &MonitorId,
     diff: PipelineDiff,
     ctx: &mut LayoutContext<'_, F, E>,
-) -> Option<(
-    RenderNode,
-    Option<SizeChange>,
-    Vec<ChildModuleLayout>,
-    FloatingLayouts,
-)> {
+) -> Option<PipelineLayout> {
+    let monitor_id = ctx.monitor_id;
     let current_child_sizes_owned = ctx.current_child_sizes.cloned();
     let mut size_change = None;
     let mut child_layouts = Vec::new();
@@ -118,13 +143,12 @@ pub(crate) fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
             .render_trees_mut()
             .insert(monitor_id.clone(), render_node.clone());
 
-        size_change = report_size(
-            pipeline,
-            monitor_id,
-            ctx.layout_engine,
-            ctx.current_constraint,
-            &render_node,
-        );
+        let size = ctx
+            .layout_engine
+            .intrinsic_size()
+            .unwrap_or_else(|| *render_node.rect().size());
+        let report = ChildReport::new(size, ctx.current_constraint.width());
+        size_change = report_size(pipeline, monitor_id, report);
 
         render_node
     } else {
@@ -133,30 +157,15 @@ pub(crate) fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
 
     drop(diff);
 
-    let floating = layout_floating(
-        &render_node,
-        ctx.interaction_context.as_ref(),
-        pipeline.floating_content_caches_mut(),
-        FloatingEngines {
-            popup: ctx.popup_layout_engine,
-            panel: ctx.panel_layout_engine,
-            tooltip: ctx.tooltip_layout_engine,
-        },
-        &mut FloatingPass {
-            monitor_id,
-            canvas_factory: ctx.canvas_factory,
-            scale: ctx.scale,
-            current_child_sizes: ctx.current_child_sizes,
-        },
-        &mut child_layouts,
-    );
+    let floating = floating_layouts(pipeline, &render_node, ctx);
+    child_layouts.extend(floating.module_layouts());
 
-    let floating = apply_gate(
+    let rounds = pipeline.embed.gate_rounds_mut().entry(monitor_id.clone());
+    let floating = apply_gate(floating, ctx.current_child_sizes, rounds);
+
+    Some(PipelineLayout::new(
+        render_node,
         floating,
-        ctx.current_child_sizes,
-        pipeline.embed.gate_rounds_mut(),
-        monitor_id,
-    );
-
-    Some((render_node, size_change, child_layouts, floating))
+        EmbedReport::new(size_change, child_layouts),
+    ))
 }

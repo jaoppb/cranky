@@ -10,4 +10,6 @@ pub(crate) use identity::ModuleIdentity;
 pub(in crate::features::module_runtime) use pointer_handler::{PointerAction, PointerHandler};
 #[cfg(test)]
 pub(crate) use render_pipeline::{FloatingLayouts, SizeChange};
-pub(crate) use render_pipeline::{LayoutContext, PopupRenderLayout, RenderOutcome, RenderPipeline};
+pub(crate) use render_pipeline::{
+    LayoutContext, PopupRenderLayout, RenderOutcome, RenderPipeline, RenderServices,
+};

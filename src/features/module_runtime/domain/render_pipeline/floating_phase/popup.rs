@@ -1,5 +1,5 @@
 //! Layout of an anchored popup's content, kept with its anchor rectangle and requested offset.
-use super::content::{FloatingCache, FloatingPass, layout_floating_content_cached};
+use super::content::{FloatingEngine, FloatingPass, layout_floating_content_cached};
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::domain::popup::AnchoredPopup;
 use crate::features::layout_engine::ports::LayoutEnginePort;
@@ -52,11 +52,10 @@ impl PopupRenderLayout {
 /// and painting now read from.
 pub(super) fn layout_popup<F: CanvasFactory, E: LayoutEnginePort>(
     anchored: &AnchoredPopup<'_>,
-    cache: &mut FloatingCache,
-    layout_engine: &mut E,
+    engine: FloatingEngine<'_, E>,
     pass: &mut FloatingPass<'_, F>,
 ) -> Option<PopupRenderLayout> {
-    let node = layout_floating_content_cached(cache, layout_engine, pass, anchored.layout())?;
+    let node = layout_floating_content_cached(engine, pass, anchored.layout())?;
     Some(PopupRenderLayout {
         anchor_rect: *anchored.anchor_rect(),
         node,

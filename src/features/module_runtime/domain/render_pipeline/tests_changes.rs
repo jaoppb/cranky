@@ -3,7 +3,8 @@ mod tests {
     use crate::features::module_runtime::domain::render_pipeline::context::LayoutContext;
     use crate::features::module_runtime::domain::render_pipeline::pipeline::RenderPipeline;
     use crate::features::module_runtime::test_support::{
-        MockCanvasFactory, MockLayoutEngine, MockStyleResolver, MockVdomDiff, TestModulePort,
+        MockCanvasFactory, MockLayoutEngine, MockStyleResolver, MockVdomDiff, PipelineFixture,
+        TestModulePort, process_monitor,
     };
     use crate::features::vdom::domain::VNode;
     use crate::shared::primitives::MonitorId;
@@ -33,8 +34,8 @@ mod tests {
             ChildReport::new(Size::new(5, 5), None),
         );
 
-        let first = pipeline.diff(&mon, &port, &MockVdomDiff, None, None, None);
         let mut ctx = LayoutContext {
+            monitor_id: &mon,
             scale: Scale::new(1.0),
             style_resolver: &resolver,
             child_errors: &child_errors,
@@ -48,20 +49,21 @@ mod tests {
             panel_layout_engine: &mut panel_engine,
             tooltip_layout_engine: &mut tooltip_engine,
         };
-        assert!(pipeline.layout(&mon, first.unwrap(), &mut ctx).is_some());
+        let first = pipeline.diff(&port, ctx.diff_input(&MockVdomDiff));
+        assert!(pipeline.layout(first.unwrap(), &mut ctx).is_some());
 
+        ctx.current_child_sizes = Some(&sizes);
         let diff = pipeline
-            .diff(&mon, &port, &MockVdomDiff, None, Some(&sizes), None)
+            .diff(&port, ctx.diff_input(&MockVdomDiff))
             .expect("new child sizes are a change");
         assert!(!diff.vdom_dirty());
         assert!(!diff.bounds_changed());
         assert!(diff.child_sizes_changed());
 
-        ctx.current_child_sizes = Some(&sizes);
-        assert!(pipeline.layout(&mon, diff, &mut ctx).is_some());
+        assert!(pipeline.layout(diff, &mut ctx).is_some());
         assert!(
             pipeline
-                .diff(&mon, &port, &MockVdomDiff, None, Some(&sizes), None)
+                .diff(&port, ctx.diff_input(&MockVdomDiff))
                 .is_none()
         );
     }
@@ -80,6 +82,7 @@ mod tests {
         let mut tooltip_engine = MockLayoutEngine;
         let child_errors = HashMap::new();
         let ctx = LayoutContext {
+            monitor_id: &mon,
             scale: Scale::new(1.0),
             style_resolver: &resolver,
             child_errors: &child_errors,
@@ -93,15 +96,13 @@ mod tests {
             panel_layout_engine: &mut panel_engine,
             tooltip_layout_engine: &mut tooltip_engine,
         };
-        assert!(
-            pipeline
-                .process_monitor(&mon, &port, &MockVdomDiff, ctx)
-                .is_some()
-        );
+        assert!(process_monitor(&mut pipeline, &port, ctx).is_some());
 
-        let bounds = Rect::new(Position::new(0, 0), Size::new(10, 10));
+        let mut fixture = PipelineFixture::<MockLayoutEngine>::default();
+        let mut ctx = fixture.ctx(&mon);
+        ctx.current_bounds = Some(Rect::new(Position::new(0, 0), Size::new(10, 10)));
         let diff = pipeline
-            .diff(&mon, &port, &MockVdomDiff, Some(bounds), None, None)
+            .diff(&port, ctx.diff_input(&MockVdomDiff))
             .expect("new bounds are a change");
         assert!(!diff.vdom_dirty());
         assert!(diff.bounds_changed());

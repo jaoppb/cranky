@@ -1,7 +1,9 @@
 use crate::features::layout_engine::domain::{
     DisplayCommand, DisplayCommandSender, FloatingKind, PopupTarget, RenderNode, ShowFloating,
 };
-use crate::features::module_runtime::domain::render_pipeline::{FloatingHold, paint_pipeline};
+use crate::features::module_runtime::domain::render_pipeline::{
+    FloatingHold, ScaledCanvasFactory, paint_pipeline,
+};
 use crate::features::module_runtime::domain::{PopupRenderLayout, RenderOutcome};
 use crate::shared::primitives::geometry::{Rect, Scale};
 use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset};
@@ -25,6 +27,8 @@ struct FloatingRequest<'a> {
 /// one render.
 pub(super) struct FloatingDispatcher<'a, DS: DisplayCommandSender, F: CanvasFactory> {
     pub(super) display_sender: &'a DS,
+    /// The module whose popup and panel these are, which names their surfaces.
+    pub(super) module_id: ModuleId,
     pub(super) canvas_factory: &'a mut F,
     pub(super) scale: Scale,
     pub(super) monitor_id: &'a MonitorId,
@@ -75,9 +79,11 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
         }
 
         let logical_size = *node.rect().size();
-        let Some((buffer, _)) =
-            paint_pipeline(node, Some(node.rect()), self.scale, self.canvas_factory)
-        else {
+        let Some((buffer, _)) = paint_pipeline(
+            node,
+            Some(node.rect()),
+            ScaledCanvasFactory::new(self.canvas_factory, self.scale),
+        ) else {
             return;
         };
         self.display_sender
@@ -92,15 +98,10 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
             }));
     }
 
-    pub(super) fn popups(
-        &mut self,
-        trees: &mut FloatingTrees,
-        module_id: ModuleId,
-        outcome: &RenderOutcome,
-    ) {
+    pub(super) fn popups(&mut self, trees: &mut FloatingTrees, outcome: &RenderOutcome) {
         let popup_layout = outcome.popup_layout();
         let request = FloatingRequest {
-            kind: FloatingKind::Popup(PopupTarget::new(module_id, self.monitor_id.clone())),
+            kind: FloatingKind::Popup(PopupTarget::new(self.module_id, self.monitor_id.clone())),
             node: popup_layout.map(PopupRenderLayout::node),
             anchor_rect: popup_layout.map(PopupRenderLayout::anchor_rect),
             offset: popup_layout.and_then(PopupRenderLayout::offset),
@@ -109,14 +110,9 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
         self.dispatch(trees, request);
     }
 
-    pub(super) fn panels(
-        &mut self,
-        trees: &mut FloatingTrees,
-        module_id: ModuleId,
-        outcome: &RenderOutcome,
-    ) {
+    pub(super) fn panels(&mut self, trees: &mut FloatingTrees, outcome: &RenderOutcome) {
         let request = FloatingRequest {
-            kind: FloatingKind::Panel(PopupTarget::new(module_id, self.monitor_id.clone())),
+            kind: FloatingKind::Panel(PopupTarget::new(self.module_id, self.monitor_id.clone())),
             node: outcome.panel_layout(),
             anchor_rect: None,
             offset: None,

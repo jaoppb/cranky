@@ -299,9 +299,11 @@ impl ModuleRegistry {
         let handle = crate::features::module_runtime::application::ModuleActor::new(
             module,
             ctx,
-            deps.canvas_factory.clone(),
-            style_resolver,
-            vdom_diff,
+            crate::features::module_runtime::domain::RenderServices::new(
+                deps.canvas_factory.clone(),
+                style_resolver,
+                vdom_diff,
+            ),
         )
         .spawn();
         self.lazy_actor_handles.insert(id, handle);
@@ -345,11 +347,7 @@ impl ModuleRegistry {
 
         crate::features::module_runtime::application::ModuleContext::new(
             id,
-            deps.hub.clone(),
-            deps.surface_manager.clone(),
-            deps.layout_sender.clone(),
-            deps.display_sender.clone(),
-            deps.ui_sender.clone(),
+            deps.handles.clone(),
             layout_rx,
         )
         .with_parent(parent_id)
@@ -446,17 +444,20 @@ impl<
 
     fn spawn_module(
         &mut self,
-        parent: ModuleId,
-        key: &crate::shared::primitives::ModuleKey,
-        options: ModuleOptions,
-        surface: crate::shared::primitives::LayoutSurface,
-        config: &crate::shared::config::domain::Config,
-        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
+        site: crate::features::module_runtime::ports::LazySite,
+        setup: crate::features::module_runtime::ports::ModuleSetup<'_, Fact, LS, DS, US>,
     ) -> Result<
         crate::features::module_runtime::ports::SpawnedModule<WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
-        self.spawn_module_lazy(parent, key, options, surface, config, deps)
+        self.spawn_module_lazy(
+            site.parent(),
+            site.key(),
+            site.options().clone(),
+            site.surface(),
+            setup.config(),
+            setup.deps(),
+        )
     }
 
     fn load(
@@ -542,9 +543,11 @@ impl<
             crate::features::module_runtime::application::ModuleActor::new(
                 module,
                 ctx,
-                deps.canvas_factory.clone(),
-                style_resolver,
-                vdom_diff,
+                crate::features::module_runtime::domain::RenderServices::new(
+                    deps.canvas_factory.clone(),
+                    style_resolver,
+                    vdom_diff,
+                ),
             )
             .spawn();
         }
@@ -555,14 +558,15 @@ impl<
     fn reload_module(
         &mut self,
         name: &crate::shared::primitives::ModuleName,
-        config: &crate::shared::config::domain::Config,
-        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
+        setup: crate::features::module_runtime::ports::ModuleSetup<'_, Fact, LS, DS, US>,
     ) -> Result<
         std::collections::HashMap<ModuleId, WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
         use crate::app::builtins::BuiltinError;
         use crate::features::module_runtime::ports::RegistryLoadError;
+
+        let (config, deps) = (setup.config(), setup.deps());
 
         let mut new_senders: std::collections::HashMap<ModuleId, WatchLayoutSender> =
             std::collections::HashMap::new();
@@ -625,9 +629,11 @@ impl<
             crate::features::module_runtime::application::ModuleActor::new(
                 module,
                 ctx,
-                deps.canvas_factory.clone(),
-                style_resolver,
-                vdom_diff,
+                crate::features::module_runtime::domain::RenderServices::new(
+                    deps.canvas_factory.clone(),
+                    style_resolver,
+                    vdom_diff,
+                ),
             )
             .spawn();
         }
@@ -904,11 +910,15 @@ mod tests {
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                hub,
-                surface_manager,
-                layout_sender,
-                display_sender,
-                ui_sender,
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        layout_sender,
+                        display_sender,
+                        ui_sender,
+                    ),
+                ),
                 canvas_factory,
             );
 
@@ -959,11 +969,15 @@ mod tests {
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                hub,
-                surface_manager,
-                layout_sender,
-                display_sender,
-                ui_sender,
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        layout_sender,
+                        display_sender,
+                        ui_sender,
+                    ),
+                ),
                 canvas_factory,
             );
 
@@ -971,12 +985,9 @@ mod tests {
             let key = crate::shared::primitives::ModuleKey::from_name(name);
             let spawned = registry
                 .spawn_module(
-                    root_id,
-                    &key,
-                    crate::shared::primitives::ModuleOptions::default(),
-                    crate::shared::primitives::LayoutSurface::Popup,
-                    &config,
-                    &deps,
+                    crate::features::module_runtime::ports::LazySite::new(root_id, key.clone())
+                        .with_surface(crate::shared::primitives::LayoutSurface::Popup),
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
                 )
                 .unwrap();
             let id = spawned.id();
@@ -1023,23 +1034,23 @@ mod tests {
         let canvas_factory =
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
         let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            hub,
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
+            crate::features::module_runtime::ports::ModuleHandles::new(
+                hub,
+                surface_manager,
+                crate::features::module_runtime::ports::ModuleSenders::new(
+                    layout_sender,
+                    display_sender,
+                    ui_sender,
+                ),
+            ),
             canvas_factory,
         );
 
         let name = crate::shared::primitives::ModuleName::new("does-not-exist");
         let key = crate::shared::primitives::ModuleKey::from_name(name);
         let result = registry.spawn_module(
-            root_id,
-            &key,
-            crate::shared::primitives::ModuleOptions::default(),
-            crate::shared::primitives::LayoutSurface::Bar,
-            &config,
-            &deps,
+            crate::features::module_runtime::ports::LazySite::new(root_id, key),
+            crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
         );
         assert!(matches!(
             result,
@@ -1090,11 +1101,15 @@ mod tests {
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                hub,
-                surface_manager,
-                layout_sender,
-                display_sender,
-                ui_sender,
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        layout_sender,
+                        display_sender,
+                        ui_sender,
+                    ),
+                ),
                 canvas_factory,
             );
 
@@ -1105,12 +1120,9 @@ mod tests {
             let key = crate::shared::primitives::ModuleKey::from_name(name.clone());
             let spawned = registry
                 .spawn_module(
-                    root_id,
-                    &key,
-                    crate::shared::primitives::ModuleOptions::default(),
-                    crate::shared::primitives::LayoutSurface::Popup,
-                    &config,
-                    &deps,
+                    crate::features::module_runtime::ports::LazySite::new(root_id, key)
+                        .with_surface(crate::shared::primitives::LayoutSurface::Popup),
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
                 )
                 .unwrap();
             let id = spawned.id();
@@ -1121,7 +1133,12 @@ mod tests {
 
             // Trigger a reload for that module name — the same path a widget
             // script or config hot-reload drives.
-            registry.reload_module(&name, &config, &deps).unwrap();
+            registry
+                .reload_module(
+                    &name,
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
+                )
+                .unwrap();
 
             // The recorded site facts must survive the reload...
             assert_eq!(
@@ -1182,11 +1199,15 @@ mod tests {
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                hub,
-                surface_manager,
-                layout_sender,
-                display_sender,
-                ui_sender,
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        layout_sender,
+                        display_sender,
+                        ui_sender,
+                    ),
+                ),
                 canvas_factory,
             );
 
@@ -1194,12 +1215,9 @@ mod tests {
             let key = crate::shared::primitives::ModuleKey::from_name(name);
             let spawned = registry
                 .spawn_module(
-                    root_id,
-                    &key,
-                    crate::shared::primitives::ModuleOptions::default(),
-                    crate::shared::primitives::LayoutSurface::Popup,
-                    &config,
-                    &deps,
+                    crate::features::module_runtime::ports::LazySite::new(root_id, key.clone())
+                        .with_surface(crate::shared::primitives::LayoutSurface::Popup),
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
                 )
                 .unwrap();
             let id = spawned.id();
@@ -1230,6 +1248,82 @@ mod tests {
             assert!(
                 abort_handle.is_finished(),
                 "clear() must abort every lazily spawned actor, not just stop tracking it"
+            );
+        });
+    }
+
+    /// A lazy spawn keeps everything its site asked for: the options the module is
+    /// initialised with, its full key (instance id included), its parent and its surface.
+    #[test]
+    fn test_spawn_module_keeps_the_site_options_key_parent_and_surface() {
+        crate::test_utils::block_on(async {
+            let app_env = std::sync::Arc::new(crate::shared::env::domain::AppEnvironment::new(
+                crate::shared::env::domain::BaseDirectories::new(
+                    crate::shared::env::domain::HomeDir::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgCacheHome::new(std::path::PathBuf::from("/tmp")),
+                    crate::shared::env::domain::XdgRuntimeDir::new(std::path::PathBuf::from(
+                        "/tmp",
+                    )),
+                ),
+                crate::shared::env::domain::RustLog::new(String::new()),
+                None,
+            ));
+            let mut registry = ModuleRegistry::new(app_env);
+            let dto: ConfigDto = toml::from_str("[root]\nname = \"bar\"").unwrap();
+            let config = dto.into_domain(&MockValidator);
+            TestRegistryPort::load(&mut registry, &config).unwrap();
+            let root_id = TestRegistryPort::root_module(&registry).unwrap();
+            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    std::sync::Arc::new(SignalHub::new(config.clone())),
+                    std::sync::Arc::new(
+                        crate::features::module_runtime::test_support::MockSurfaceManager,
+                    ),
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockLayoutSender,
+                        ),
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockDisplaySender,
+                        ),
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockUiSender,
+                        ),
+                    ),
+                ),
+                crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
+            );
+            let key = crate::shared::primitives::ModuleKey::new(
+                crate::shared::primitives::ModuleName::new("calendar"),
+                Some(crate::shared::primitives::ModuleInstanceId::new("cal-2")),
+            );
+            let options = ModuleOptions::new(HashMap::from([(
+                "format".to_string(),
+                crate::shared::primitives::DynamicValue::String("%A %d".to_string()),
+            )]));
+
+            let id = registry
+                .spawn_module(
+                    crate::features::module_runtime::ports::LazySite::new(root_id, key.clone())
+                        .with_options(options.clone())
+                        .with_surface(crate::shared::primitives::LayoutSurface::Panel),
+                    crate::features::module_runtime::ports::ModuleSetup::new(&config, &deps),
+                )
+                .unwrap()
+                .id();
+
+            assert_eq!(
+                registry.module_configs.get(&id).map(ModuleConfig::options),
+                Some(&options)
+            );
+            assert_eq!(
+                TestRegistryPort::module_keys(&registry).get(&id),
+                Some(&key)
+            );
+            assert_eq!(TestRegistryPort::parent_of(&registry, id), Some(root_id));
+            assert_eq!(
+                registry.sites.get(&id).map(ModuleSiteInfo::surface),
+                Some(crate::shared::primitives::LayoutSurface::Panel)
             );
         });
     }

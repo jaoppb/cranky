@@ -46,11 +46,11 @@ mod tests {
     use crate::features::vdom::domain::NodeKey;
     use crate::shared::primitives::geometry::{Position, Rect, Size};
 
-    fn node(path: &[usize], key: Option<&str>, x: i32, children: Vec<RenderNode>) -> RenderNode {
+    fn node(path: &[usize], key: Option<&str>, children: Vec<RenderNode>) -> RenderNode {
         RenderNode::Flex {
             path: NodePath::new(SurfaceSpace::Bar, path.to_vec()),
             node_key: key.map(|name| NodeKey::new(name).unwrap()),
-            rect: Rect::new(Position::new(x, 0), Size::new(100, 10)),
+            rect: Rect::new(Position::new(0, 0), Size::new(100, 10)),
             children,
             style: ComputedStyle::default(),
             on_click: None,
@@ -61,12 +61,21 @@ mod tests {
         }
     }
 
+    /// `node`, moved right to `x`.
+    fn at_x(mut node: RenderNode, x: i32) -> RenderNode {
+        if let RenderNode::Flex { rect, .. } = &mut node {
+            *rect = Rect::new(Position::new(x, 0), *rect.size());
+        }
+        node
+    }
+
     #[test]
     fn test_capture_keeps_unkeyed_wrapper_position_in_anchor() {
         // root -> [list A (unkeyed) -> item "1", list B (unkeyed) -> item "1"]
-        let list_a = node(&[0], None, 0, vec![node(&[0, 0], Some("1"), 0, vec![])]);
-        let list_b = node(&[1], None, 100, vec![node(&[1, 0], Some("1"), 100, vec![])]);
-        let mut root = node(&[], None, 0, vec![list_a, list_b]);
+        let list_a = node(&[0], None, vec![node(&[0, 0], Some("1"), vec![])]);
+        let item_b = at_x(node(&[1, 0], Some("1"), vec![]), 100);
+        let list_b = at_x(node(&[1], None, vec![item_b]), 100);
+        let mut root = node(&[], None, vec![list_a, list_b]);
         if let RenderNode::Flex { rect, .. } = &mut root {
             *rect = Rect::new(Position::new(0, 0), Size::new(200, 10));
         }
@@ -87,11 +96,11 @@ mod tests {
     #[test]
     fn test_capture_splits_nested_keyed_levels_and_leaf_path() {
         // root -> outer "row" -> unkeyed wrapper -> item "b" -> unkeyed label
-        let label = node(&[0, 0, 0, 0], None, 0, vec![]);
-        let item = node(&[0, 0, 0], Some("b"), 0, vec![label]);
-        let wrapper = node(&[0, 0], None, 0, vec![item]);
-        let row = node(&[0], Some("row"), 0, vec![wrapper]);
-        let root = node(&[], None, 0, vec![row]);
+        let label = node(&[0, 0, 0, 0], None, vec![]);
+        let item = node(&[0, 0, 0], Some("b"), vec![label]);
+        let wrapper = node(&[0, 0], None, vec![item]);
+        let row = node(&[0], Some("row"), vec![wrapper]);
+        let root = node(&[], None, vec![row]);
 
         let hit = root.hit_test(Position::new(5, 5));
         let captured = capture_node_ref(&hit).unwrap();
@@ -114,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_capture_without_keys_uses_absolute_leaf_path() {
-        let root = node(&[], None, 0, vec![node(&[0], None, 0, vec![])]);
+        let root = node(&[], None, vec![node(&[0], None, vec![])]);
 
         let hit = root.hit_test(Position::new(5, 5));
         let captured = capture_node_ref(&hit).unwrap();

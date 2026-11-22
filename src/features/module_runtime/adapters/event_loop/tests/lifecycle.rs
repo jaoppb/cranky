@@ -1,6 +1,8 @@
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
+use crate::features::module_runtime::domain::RenderServices;
+use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
+use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
 use crate::features::module_runtime::test_support::{
     ChannelDisplaySender, MockCanvasFactory, MockLayoutSender, MockSurfaceManager, MockUiSender,
     TestModulePort,
@@ -34,11 +36,11 @@ pub(super) fn create_test_event_loop_and_channel() -> (
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         id,
-        hub,
-        surface_manager,
-        layout_sender,
-        display_sender,
-        ui_sender,
+        ModuleHandles::new(
+            hub,
+            surface_manager,
+            ModuleSenders::new(layout_sender, display_sender, ui_sender),
+        ),
         rx,
     );
 
@@ -47,11 +49,11 @@ pub(super) fn create_test_event_loop_and_channel() -> (
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
 
     (event_loop, id, display_rx)
@@ -101,13 +103,15 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
     let expected_anchor_rect = Rect::new(Position::new(0, 0), Size::new(50, 20));
     let popup_layout = PopupRenderLayout::new(expected_anchor_rect, popup_content.clone(), None);
     let outcome1 = crate::features::module_runtime::domain::RenderOutcome::new(
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::new(Some(popup_layout), None, None),
+            EmbedReport::new(None, vec![]),
+        ),
         None,
-        vec![],
-        make_test_rect_node(),
-        None,
-        FloatingLayouts::new(Some(popup_layout), None, None),
+        Scale::new(1.0),
     );
-    event_loop.dispatch_render_outcome(&mon, &outcome1, Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&mon, &outcome1);
 
     let cmd1 = display_rx
         .try_recv()
@@ -144,13 +148,15 @@ fn test_event_loop_popup_floating_surface_lifecycle() {
     }
 
     let outcome2 = crate::features::module_runtime::domain::RenderOutcome::new(
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::default(),
+            EmbedReport::new(None, vec![]),
+        ),
         None,
-        vec![],
-        make_test_rect_node(),
-        None,
-        FloatingLayouts::default(),
+        Scale::new(1.0),
     );
-    event_loop.dispatch_render_outcome(&mon, &outcome2, Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&mon, &outcome2);
 
     let cmd2 = display_rx
         .try_recv()

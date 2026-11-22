@@ -1,7 +1,7 @@
 use super::{FloatingHold, FloatingLayouts, PopupRenderLayout};
 use crate::features::layout_engine::domain::RenderNode;
 use crate::shared::primitives::{ChildSizesMap, MonitorId};
-use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 /// How many consecutive evaluations may hold a floating surface back before
 /// it is presented anyway. A count, not a timer, so behavior does not depend
@@ -41,29 +41,35 @@ fn hold_for(node: Option<&RenderNode>, sizes: Option<&ChildSizesMap>) -> Floatin
 /// After `MAX_HOLD_ROUNDS` consecutive holds the latest layout is presented
 /// with a warning: a CSS mistake that never converges must not make the
 /// popup silently vanish.
+///
+/// `rounds` is the monitor's entry in the count of consecutive holds.
 pub(in super::super) fn apply_gate(
     floating: FloatingLayouts,
     sizes: Option<&ChildSizesMap>,
-    rounds: &mut HashMap<MonitorId, u8>,
-    monitor_id: &MonitorId,
+    rounds: Entry<'_, MonitorId, u8>,
 ) -> FloatingLayouts {
     let popup = hold_for(floating.popup().map(PopupRenderLayout::node), sizes);
     let panel = hold_for(floating.panel(), sizes);
     let tooltip = hold_for(floating.tooltip(), sizes);
-    if ![popup, panel, tooltip].contains(&FloatingHold::Held) {
-        rounds.remove(monitor_id);
+    let held = [popup, panel, tooltip];
+    if !held.contains(&FloatingHold::Held) {
+        if let Entry::Occupied(counted) = rounds {
+            counted.remove();
+        }
         return floating;
     }
-    let held_rounds = rounds.entry(monitor_id.clone()).or_insert(0);
-    if *held_rounds >= MAX_HOLD_ROUNDS {
+    if let Entry::Occupied(counted) = &rounds
+        && *counted.get() >= MAX_HOLD_ROUNDS
+    {
         tracing::warn!(
-            monitor = %monitor_id,
+            monitor = %rounds.key(),
             "Embedded module did not settle on its host width; presenting the latest layout"
         );
         return floating;
     }
+    let held_rounds = rounds.or_insert(0);
     *held_rounds = held_rounds.saturating_add(1);
-    floating.with_held(popup, panel, tooltip)
+    floating.with_held(held)
 }
 
 #[cfg(test)]
@@ -74,6 +80,7 @@ mod tests {
     use crate::features::styling::domain::ComputedStyle;
     use crate::shared::primitives::geometry::{Position, Rect, Size};
     use crate::shared::primitives::{ChildReport, ModuleKey, ModuleName, ModuleOptions};
+    use std::collections::HashMap;
 
     fn calendar_key() -> ModuleKey {
         ModuleKey::from_name(ModuleName::new("calendar"))
@@ -114,13 +121,13 @@ mod tests {
         sizes: Option<&ChildSizesMap>,
         rounds: &mut HashMap<MonitorId, u8>,
     ) -> bool {
-        apply_gate(floating, sizes, rounds, &MonitorId::new("DP-1")).popup_hold()
+        apply_gate(floating, sizes, rounds.entry(MonitorId::new("DP-1"))).popup_hold()
             == FloatingHold::Held
     }
 
     /// Which of popup, panel and tooltip `floating` holds after the gate.
     fn held_kinds(floating: FloatingLayouts) -> (FloatingHold, FloatingHold, FloatingHold) {
-        let gated = apply_gate(floating, None, &mut HashMap::new(), &MonitorId::new("DP-1"));
+        let gated = apply_gate(floating, None, HashMap::new().entry(MonitorId::new("DP-1")));
         (gated.popup_hold(), gated.panel_hold(), gated.tooltip_hold())
     }
 

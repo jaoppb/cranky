@@ -1,6 +1,6 @@
 use super::runner::EventLoop;
 use crate::features::layout_engine::domain::DisplayCommandSender;
-use crate::features::module_runtime::domain::pointer_handler::PointerOutcome;
+use crate::features::module_runtime::domain::pointer_handler::{PointerOutcome, PointerTarget};
 use crate::features::module_runtime::domain::{PointerAction, PointerHandler};
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::vdom::domain::UiCommandSender;
@@ -45,7 +45,7 @@ impl<
         if let Some(render_tree) = target_tree {
             let outcome = self
                 .pointer_handler
-                .handle_event(event, monitor_id, render_tree);
+                .handle_event(event, PointerTarget::new(monitor_id, render_tree));
             self.execute_outcome(&outcome)
         } else {
             tracing::warn!(

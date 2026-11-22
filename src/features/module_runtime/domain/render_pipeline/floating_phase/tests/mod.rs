@@ -1,3 +1,4 @@
+mod child_layouts;
 mod layout_floating;
 mod tooltip;
 

@@ -3,7 +3,8 @@ use crate::features::module_runtime::adapters::event_loop::dispatch::{
 };
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
+use crate::features::module_runtime::domain::RenderServices;
+use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
 use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockDisplaySender, MockLayoutSender, MockSurfaceManager, MockUiSender,
     TestModulePort,
@@ -37,11 +38,11 @@ fn test_discover_monitors_reads_wayland_monitor_scales() {
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         id,
-        hub,
-        surface_manager,
-        layout_sender,
-        display_sender,
-        ui_sender,
+        ModuleHandles::new(
+            hub,
+            surface_manager,
+            ModuleSenders::new(layout_sender, display_sender, ui_sender),
+        ),
         rx,
     );
 
@@ -50,11 +51,11 @@ fn test_discover_monitors_reads_wayland_monitor_scales() {
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
 
     let discovered = event_loop
@@ -84,11 +85,11 @@ fn test_discover_monitors_ignores_module_sizes_cache() {
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         id,
-        hub,
-        surface_manager,
-        layout_sender,
-        display_sender,
-        ui_sender,
+        ModuleHandles::new(
+            hub,
+            surface_manager,
+            ModuleSenders::new(layout_sender, display_sender, ui_sender),
+        ),
         rx,
     );
 
@@ -97,11 +98,11 @@ fn test_discover_monitors_ignores_module_sizes_cache() {
             None, None, None, None, None,
         ))),
         ctx,
-        PointerHandler::new(),
-        RenderPipeline::new(),
-        MockCanvasFactory,
-        Arc::new(CompositeStyleResolver::new(vec![])),
-        Arc::new(DefaultVdomDiffAdapter::new()),
+        RenderServices::new(
+            MockCanvasFactory,
+            Arc::new(CompositeStyleResolver::new(vec![])),
+            Arc::new(DefaultVdomDiffAdapter::new()),
+        ),
     );
 
     let discovered = event_loop
@@ -126,7 +127,7 @@ fn test_discover_monitors_suspends_seen_monitor_with_no_live_layout() {
     let mut seen = std::collections::HashSet::new();
     seen.insert(MonitorId::new("DP-1"));
 
-    let discovered = discover_monitors(&hub, &layouts, &seen, Embedding::Embedded);
+    let discovered = discover_monitors(&hub, &layouts, Embedding::Embedded { seen: &seen });
     assert!(!discovered.contains(&MonitorId::new("DP-1")));
 }
 
@@ -143,13 +144,13 @@ fn test_discover_monitors_bootstraps_unseen_monitor_with_no_live_layout() {
     let layouts: HashMap<MonitorId, crate::shared::primitives::ChildBounds> = HashMap::new();
     let seen = std::collections::HashSet::new();
 
-    let discovered = discover_monitors(&hub, &layouts, &seen, Embedding::Embedded);
+    let discovered = discover_monitors(&hub, &layouts, Embedding::Embedded { seen: &seen });
     assert!(discovered.contains(&MonitorId::new("DP-1")));
 }
 
-/// A top-level actor has no embedding site to lose: it covers every monitor
-/// Wayland reports, even one it already rendered for and that no layout
-/// names, where an embedded actor stays suspended.
+/// A top-level actor has no embedding site to lose, so no rendered monitors
+/// to consult: it covers every monitor Wayland reports, even one no layout
+/// names.
 #[test]
 fn test_discover_monitors_top_level_covers_every_wayland_monitor() {
     let hub = SignalHub::new(Config::default());
@@ -159,10 +160,8 @@ fn test_discover_monitors_top_level_covers_every_wayland_monitor() {
     let _ = hub.monitor_scales_tx().send(scales);
 
     let layouts: HashMap<MonitorId, crate::shared::primitives::ChildBounds> = HashMap::new();
-    let mut seen = std::collections::HashSet::new();
-    seen.insert(MonitorId::new("DP-1"));
 
-    let mut discovered = discover_monitors(&hub, &layouts, &seen, Embedding::TopLevel);
+    let mut discovered = discover_monitors(&hub, &layouts, Embedding::TopLevel);
     discovered.sort_by(|left, right| left.as_str().cmp(right.as_str()));
     assert_eq!(
         discovered,
@@ -186,6 +185,6 @@ fn test_discover_monitors_embedded_keeps_seen_monitor_with_a_live_layout() {
     seen.insert(MonitorId::new("DP-1"));
     seen.insert(MonitorId::new("GHOST-1"));
 
-    let discovered = discover_monitors(&hub, &layouts, &seen, Embedding::Embedded);
+    let discovered = discover_monitors(&hub, &layouts, Embedding::Embedded { seen: &seen });
     assert_eq!(discovered, vec![MonitorId::new("DP-1")]);
 }

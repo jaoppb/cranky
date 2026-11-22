@@ -2,11 +2,9 @@
 //! and the channels it sends layout, display and UI commands through.
 use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::module_runtime::adapters::EventLoop;
-use crate::features::module_runtime::domain::{ModuleIdentity, PointerHandler, RenderPipeline};
-use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender};
-use crate::features::styling::ports::StyleResolverPort;
+use crate::features::module_runtime::domain::{ModuleIdentity, RenderServices};
+use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender, ModuleHandles};
 use crate::features::vdom::domain::UiCommandSender;
-use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::events::signals::SignalHub;
 #[cfg(test)]
 use crate::shared::primitives::ModuleInstanceId;
@@ -23,11 +21,7 @@ pub(crate) struct ModuleContext<
     US: UiCommandSender + 'static,
 > {
     identity: ModuleIdentity,
-    hub: Arc<SignalHub>,
-    surface_manager: DynSurfaceManager,
-    layout_sender: Arc<LS>,
-    display_sender: Arc<DS>,
-    ui_sender: Arc<US>,
+    handles: ModuleHandles<LS, DS, US>,
     layout_rx: watch::Receiver<HashMap<MonitorId, ChildBounds>>,
     pointer_rx: crate::shared::events::core::PointerReceiver,
 }
@@ -40,21 +34,13 @@ impl<
 {
     pub(crate) fn new(
         id: ModuleId,
-        hub: Arc<SignalHub>,
-        surface_manager: DynSurfaceManager,
-        layout_sender: Arc<LS>,
-        display_sender: Arc<DS>,
-        ui_sender: Arc<US>,
+        handles: ModuleHandles<LS, DS, US>,
         layout_rx: watch::Receiver<HashMap<MonitorId, ChildBounds>>,
     ) -> Self {
-        let pointer_rx = hub.pointer_rx();
+        let pointer_rx = handles.hub().pointer_rx();
         Self {
             identity: ModuleIdentity::new(id),
-            hub,
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
+            handles,
             layout_rx,
             pointer_rx,
         }
@@ -102,27 +88,27 @@ impl<
 
     #[must_use]
     pub(crate) const fn hub(&self) -> &Arc<SignalHub> {
-        &self.hub
+        self.handles.hub()
     }
 
     #[must_use]
     pub(crate) const fn surface_manager(&self) -> &DynSurfaceManager {
-        &self.surface_manager
+        self.handles.surface_manager()
     }
 
     #[must_use]
     pub(crate) fn layout_sender(&self) -> &LS {
-        self.layout_sender.as_ref()
+        self.handles.senders().layout_sender()
     }
 
     #[must_use]
     pub(crate) fn display_sender(&self) -> &DS {
-        self.display_sender.as_ref()
+        self.handles.senders().display_sender()
     }
 
     #[must_use]
     pub(crate) fn ui_sender(&self) -> &US {
-        self.ui_sender.as_ref()
+        self.handles.senders().ui_sender()
     }
 
     pub(crate) const fn rxs_mut(
@@ -143,9 +129,7 @@ pub(crate) struct ModuleActor<
 > {
     port: Box<dyn AnyModulePort>,
     ctx: ModuleContext<LS, DS, US>,
-    canvas_factory: F,
-    style_resolver: Arc<dyn StyleResolverPort>,
-    vdom_diff: Arc<dyn VdomDiffPort>,
+    services: RenderServices<F>,
 }
 
 impl<
@@ -156,19 +140,15 @@ impl<
 > ModuleActor<F, LS, DS, US>
 {
     #[must_use]
-    pub(crate) fn new(
+    pub(crate) const fn new(
         port: Box<dyn AnyModulePort>,
         ctx: ModuleContext<LS, DS, US>,
-        canvas_factory: F,
-        style_resolver: Arc<dyn StyleResolverPort>,
-        vdom_diff: Arc<dyn VdomDiffPort>,
+        services: RenderServices<F>,
     ) -> Self {
         Self {
             port,
             ctx,
-            canvas_factory,
-            style_resolver,
-            vdom_diff,
+            services,
         }
     }
 
@@ -177,15 +157,7 @@ impl<
     /// actor outside the normal config-driven lifecycle (a lazy spawn, see
     /// `ModuleRegistry::spawn_module_lazy`) can track and later abort it.
     pub(crate) fn spawn(self) -> tokio::task::JoinHandle<()> {
-        let event_loop = EventLoop::new(
-            self.port,
-            self.ctx,
-            PointerHandler::new(),
-            RenderPipeline::new(),
-            self.canvas_factory,
-            self.style_resolver,
-            self.vdom_diff,
-        );
+        let event_loop = EventLoop::new(self.port, self.ctx, self.services);
 
         tokio::spawn(async move {
             event_loop.run().await;
@@ -199,6 +171,7 @@ mod tests {
     use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
     use crate::features::layout_engine::domain::DisplayCommand;
     use crate::features::module_runtime::ports::LayoutEvent;
+    use crate::features::module_runtime::ports::ModuleSenders;
     use crate::features::module_runtime::test_support::{
         ChannelDisplaySender, ChannelLayoutSender, ChannelUiSender, MockCanvasFactory,
         MockDisplaySender, MockLayoutSender, MockSurfaceManager, MockUiSender, TestModulePort,
@@ -315,11 +288,11 @@ mod tests {
 
             let ctx = ModuleContext::new(
                 self.id,
-                hub.clone(),
-                surface_manager,
-                layout_sender,
-                display_sender,
-                ui_sender,
+                ModuleHandles::new(
+                    hub.clone(),
+                    surface_manager,
+                    ModuleSenders::new(layout_sender, display_sender, ui_sender),
+                ),
                 layout_rx,
             )
             .with_parent(self.parent_id);
@@ -332,11 +305,7 @@ mod tests {
             let event_loop = EventLoop::new(
                 port,
                 ctx,
-                PointerHandler::new(),
-                RenderPipeline::new(),
-                canvas_factory,
-                resolver,
-                diff_adapter,
+                RenderServices::new(canvas_factory, resolver, diff_adapter),
             );
 
             TestFixture {
@@ -362,11 +331,11 @@ mod tests {
 
         let mut ctx = ModuleContext::new(
             id,
-            hub.clone(),
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
+            ModuleHandles::new(
+                hub.clone(),
+                surface_manager,
+                ModuleSenders::new(layout_sender, display_sender, ui_sender),
+            ),
             layout_rx,
         )
         .with_parent(Some(ModuleId::new(99)))

@@ -2,6 +2,7 @@
 use super::super::measurer::ModuleSizeMeasurer;
 use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::layout_engine::ports::LayoutEnginePort;
+use crate::features::vdom::domain::InteractionContext;
 use crate::shared::primitives::geometry::{Position, Scale};
 use crate::shared::primitives::{ChildSizesMap, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
@@ -14,12 +15,22 @@ use std::collections::HashMap;
 /// so the same content under different reports is a different layout.
 pub(crate) type FloatingCache = HashMap<MonitorId, (StyledNode, Option<ChildSizesMap>, RenderNode)>;
 
+/// One floating kind's layout engine, with the cache of what it last laid out.
+///
+/// Each kind has its own of both, so laying out one never disturbs another's.
+pub(crate) struct FloatingEngine<'a, E: LayoutEnginePort> {
+    pub(crate) engine: &'a mut E,
+    pub(crate) cache: &'a mut FloatingCache,
+}
+
 /// What every floating kind is laid out with on one monitor during one render.
 pub(crate) struct FloatingPass<'a, F: CanvasFactory> {
     pub(crate) monitor_id: &'a MonitorId,
     pub(crate) canvas_factory: &'a mut F,
     pub(crate) scale: Scale,
     pub(crate) current_child_sizes: Option<&'a ChildSizesMap>,
+    /// The hovered, pressed and focused nodes on the monitor; the hovered one picks the tooltip.
+    pub(crate) interaction: Option<&'a InteractionContext>,
 }
 
 /// Lays out one piece of floating content (a popup's, panel's or tooltip's)
@@ -49,11 +60,14 @@ pub(super) fn layout_floating_content<F: CanvasFactory, E: LayoutEnginePort>(
 /// pays a full layout + clone on every render where anything else (a
 /// sibling module's size, say) is what's actually dirty.
 pub(super) fn layout_floating_content_cached<F: CanvasFactory, E: LayoutEnginePort>(
-    cache: &mut FloatingCache,
-    layout_engine: &mut E,
+    engine: FloatingEngine<'_, E>,
     pass: &mut FloatingPass<'_, F>,
     content: &StyledNode,
 ) -> Option<RenderNode> {
+    let FloatingEngine {
+        engine: layout_engine,
+        cache,
+    } = engine;
     if let Some((cached_content, cached_sizes, cached_node)) = cache.get(pass.monitor_id)
         && cached_content == content
         && cached_sizes.as_ref() == pass.current_child_sizes
@@ -125,6 +139,7 @@ mod tests {
             canvas_factory,
             scale: Scale::new(1.0),
             current_child_sizes,
+            interaction: None,
         }
     }
 
@@ -154,8 +169,10 @@ mod tests {
         let content = text_node("unchanged");
 
         layout_floating_content_cached(
-            &mut cache,
-            &mut engine,
+            FloatingEngine {
+                engine: &mut engine,
+                cache: &mut cache,
+            },
             &mut pass(&monitor_id, &mut canvas_factory, None),
             &content,
         );
@@ -169,8 +186,10 @@ mod tests {
         // with byte-identical content) — the floating content itself did
         // not, so this must be a cache hit, not a second taffy pass.
         layout_floating_content_cached(
-            &mut cache,
-            &mut engine,
+            FloatingEngine {
+                engine: &mut engine,
+                cache: &mut cache,
+            },
             &mut pass(&monitor_id, &mut canvas_factory, None),
             &content,
         );
@@ -199,8 +218,10 @@ mod tests {
         let content = text_node("popup with an embedded calendar");
 
         layout_floating_content_cached(
-            &mut cache,
-            &mut engine,
+            FloatingEngine {
+                engine: &mut engine,
+                cache: &mut cache,
+            },
             &mut pass(&monitor_id, &mut canvas_factory, None),
             &content,
         );
@@ -213,8 +234,10 @@ mod tests {
         );
         for _ in 0..2 {
             layout_floating_content_cached(
-                &mut cache,
-                &mut engine,
+                FloatingEngine {
+                    engine: &mut engine,
+                    cache: &mut cache,
+                },
                 &mut pass(&monitor_id, &mut canvas_factory, Some(&sizes)),
                 &content,
             );
@@ -237,16 +260,20 @@ mod tests {
         let monitor_id = MonitorId::new("DP-1");
 
         layout_floating_content_cached(
-            &mut cache,
-            &mut engine,
+            FloatingEngine {
+                engine: &mut engine,
+                cache: &mut cache,
+            },
             &mut pass(&monitor_id, &mut canvas_factory, None),
             &text_node("first"),
         );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
 
         layout_floating_content_cached(
-            &mut cache,
-            &mut engine,
+            FloatingEngine {
+                engine: &mut engine,
+                cache: &mut cache,
+            },
             &mut pass(&monitor_id, &mut canvas_factory, None),
             &text_node("second"),
         );

@@ -1,6 +1,7 @@
 use crate::features::layout_engine::domain::{NodePath, RenderNode, SurfaceSpace};
 use crate::features::module_runtime::domain::pointer_handler::action::PointerAction;
 use crate::features::module_runtime::domain::pointer_handler::handler::PointerHandler;
+use crate::features::module_runtime::domain::pointer_handler::target::PointerTarget;
 use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::{ClickHandlers, UiAction, UiCommand};
 use crate::shared::events::core::{PointerButton, PointerEvent, SurfaceKind};
@@ -36,8 +37,7 @@ fn test_click_hit_returns_send_command_single_shorthand() {
             button: PointerButton::Left,
             pos: Position::new(10, 10),
         },
-        &mon,
-        &tree,
+        PointerTarget::new(&mon, &tree),
     );
     assert_eq!(outcome.actions().len(), 1);
     assert_eq!(
@@ -52,8 +52,7 @@ fn test_click_hit_returns_send_command_single_shorthand() {
             button: PointerButton::Right,
             pos: Position::new(10, 10),
         },
-        &mon,
-        &tree,
+        PointerTarget::new(&mon, &tree),
     );
     assert_eq!(outcome_right.actions().len(), 1);
     assert_eq!(
@@ -79,8 +78,7 @@ fn test_click_hit_returns_distinct_button_actions() {
             button: PointerButton::Left,
             pos: Position::new(10, 10),
         },
-        &mon,
-        &tree,
+        PointerTarget::new(&mon, &tree),
     );
     assert_eq!(
         outcome_left.into_actions(),
@@ -95,8 +93,7 @@ fn test_click_hit_returns_distinct_button_actions() {
             button: PointerButton::Right,
             pos: Position::new(10, 10),
         },
-        &mon,
-        &tree,
+        PointerTarget::new(&mon, &tree),
     );
     assert_eq!(
         outcome_right.into_actions(),
@@ -121,8 +118,7 @@ fn test_click_script_call_returns_call_function() {
             button: PointerButton::Left,
             pos: Position::new(10, 10),
         },
-        &mon,
-        &tree,
+        PointerTarget::new(&mon, &tree),
     );
 
     assert_eq!(outcome.actions().len(), 1);

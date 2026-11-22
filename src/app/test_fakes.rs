@@ -3,8 +3,8 @@
 use crate::app::registry::WatchLayoutSender;
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, ShowFloating};
 use crate::features::module_runtime::ports::{
-    LayoutEvent, LayoutSender, ModuleRegistryPort, ModuleRuntimeDependencies, RegistryLoadError,
-    SpawnedModule,
+    LayoutEvent, LayoutSender, LazySite, ModuleRegistryPort, ModuleRuntimeDependencies,
+    ModuleSetup, RegistryLoadError, SpawnedModule,
 };
 use crate::features::styling::domain::StyleSheetName;
 use crate::features::systray::domain::{SystrayActionName, SystrayId};
@@ -14,18 +14,26 @@ use crate::shared::config::domain::Config;
 use crate::shared::dbus::subscription_manager::DbusSubscriptionManager;
 use crate::shared::events::signals::SignalKind;
 use crate::shared::primitives::geometry::Position;
-use crate::shared::primitives::{LayoutSurface, ModuleId, ModuleKey, ModuleName, ModuleOptions};
+use crate::shared::primitives::{ModuleId, ModuleKey, ModuleName};
 use crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory;
 use crate::shared::wayland::ports::{AppReadModel, DisplayServerError, DisplayServerPort};
 use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc::Sender;
 
 type Deps = ModuleRuntimeDependencies<
+    TinySkiaCanvasFactory,
+    Sender<LayoutEvent>,
+    Sender<DisplayCommand>,
+    Sender<UiCommand>,
+>;
+
+type Setup<'a> = ModuleSetup<
+    'a,
     TinySkiaCanvasFactory,
     Sender<LayoutEvent>,
     Sender<DisplayCommand>,
@@ -42,7 +50,7 @@ type ParentLookup = Box<dyn Fn(ModuleId) -> Option<ModuleId> + Send + Sync>;
 ///
 /// Nothing is loaded or spawned: `spawn_all` hands out `senders` once, and
 /// `spawn_module` always fails with `ModuleNotFound`, counting its calls in
-/// `spawn_module_calls`.
+/// `spawn_module_calls` and keeping what each received in `spawn_requests`.
 pub(super) struct FakeRegistry {
     pub(crate) root_module: Option<ModuleId>,
     pub(crate) module_ids: Vec<ModuleId>,
@@ -53,6 +61,7 @@ pub(super) struct FakeRegistry {
     pub(crate) resolve_site: SiteResolver,
     pub(crate) parent_of: ParentLookup,
     pub(crate) spawn_module_calls: Arc<AtomicUsize>,
+    pub(crate) spawn_requests: Arc<Mutex<Vec<LazySite>>>,
     active_signals: HashSet<SignalKind>,
 }
 
@@ -68,6 +77,7 @@ impl Default for FakeRegistry {
             resolve_site: Box::new(|_, _| None),
             parent_of: Box::new(|_| None),
             spawn_module_calls: Arc::new(AtomicUsize::new(0)),
+            spawn_requests: Arc::new(Mutex::new(Vec::new())),
             active_signals: HashSet::new(),
         }
     }
@@ -94,8 +104,7 @@ impl
     fn reload_module(
         &mut self,
         _name: &ModuleName,
-        _config: &Config,
-        _deps: &Deps,
+        _setup: Setup<'_>,
     ) -> Result<HashMap<ModuleId, WatchLayoutSender>, RegistryLoadError> {
         Ok(HashMap::new())
     }
@@ -130,15 +139,15 @@ impl
 
     fn spawn_module(
         &mut self,
-        _parent: ModuleId,
-        key: &ModuleKey,
-        _options: ModuleOptions,
-        _surface: LayoutSurface,
-        _config: &Config,
-        _deps: &Deps,
+        site: LazySite,
+        _setup: Setup<'_>,
     ) -> Result<SpawnedModule<WatchLayoutSender>, RegistryLoadError> {
         self.spawn_module_calls.fetch_add(1, Ordering::SeqCst);
-        Err(RegistryLoadError::ModuleNotFound(key.name().clone()))
+        let error = RegistryLoadError::ModuleNotFound(site.key().name().clone());
+        if let Ok(mut requests) = self.spawn_requests.lock() {
+            requests.push(site);
+        }
+        Err(error)
     }
 
     fn modules_using_style(&self, _sheet: &StyleSheetName) -> Vec<ModuleName> {

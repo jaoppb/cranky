@@ -1,9 +1,7 @@
-use super::content::{FloatingCache, FloatingPass, layout_floating_content_cached};
+use super::content::{FloatingEngine, FloatingPass, layout_floating_content_cached};
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
-use crate::features::vdom::domain::{
-    InteractionContext, NodePath, NodeRef, SurfaceSpace, resolve_segment,
-};
+use crate::features::vdom::domain::{NodePath, NodeRef, SurfaceSpace, resolve_segment};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
 /// The laid-out trees a hover can land on.
@@ -51,14 +49,12 @@ fn resolve_node_ref(root: &RenderNode, node_ref: &NodeRef) -> Option<NodePath> {
 /// never hit-tests.
 pub(super) fn layout_tooltip<F: CanvasFactory, E: LayoutEnginePort>(
     trees: HoverTrees<'_>,
-    interaction: Option<&InteractionContext>,
-    cache: &mut FloatingCache,
-    layout_engine: &mut E,
+    engine: FloatingEngine<'_, E>,
     pass: &mut FloatingPass<'_, F>,
 ) -> Option<RenderNode> {
-    let hovered_ref = interaction?.hovered()?;
+    let hovered_ref = pass.interaction?.hovered()?;
     let tree = trees.hovered(hovered_ref.relative_path().surface())?;
     let hovered_path = resolve_node_ref(tree, hovered_ref)?;
     let tooltip = tree.find_tooltip_along(&hovered_path)?;
-    layout_floating_content_cached(cache, layout_engine, pass, tooltip)
+    layout_floating_content_cached(engine, pass, tooltip)
 }
