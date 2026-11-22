@@ -19,13 +19,12 @@ enum LineOutcome {
     AppliedNeedsResync,
 }
 
-/// When `check_and_resync` refetches the whole state.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Resync {
-    /// Always: an event of the batch was too thin to apply.
-    Forced,
-    /// Only when the state turned out inconsistent.
-    IfInconsistent,
+/// The raw lines one batch read, kept to log why a resync ran, and the batch's outcome, which
+/// decides whether a resync must run regardless of the state.
+#[derive(Clone, PartialEq, Eq, Debug)]
+struct EventBatch {
+    events: Vec<String>,
+    outcome: LineOutcome,
 }
 
 fn process_line(
@@ -53,14 +52,16 @@ fn drain_batch<R: BufRead>(
     reader: &mut R,
     line_buf: &mut String,
     current_state: &mut HyprlandState,
-    batch_events: &mut Vec<String>,
-) -> LineOutcome {
-    let mut outcome = process_line(line_buf, current_state, batch_events);
+) -> EventBatch {
+    let mut batch_events = Vec::new();
+    let mut outcome = process_line(line_buf, current_state, &mut batch_events);
     loop {
         line_buf.clear();
         match reader.read_line(line_buf) {
             Ok(0) => break,
-            Ok(_) => outcome = outcome.max(process_line(line_buf, current_state, batch_events)),
+            Ok(_) => {
+                outcome = outcome.max(process_line(line_buf, current_state, &mut batch_events));
+            }
             Err(error)
                 if error.kind() == ErrorKind::WouldBlock || error.kind() == ErrorKind::TimedOut =>
             {
@@ -69,17 +70,20 @@ fn drain_batch<R: BufRead>(
             Err(_) => break,
         }
     }
-    outcome
+    EventBatch {
+        events: batch_events,
+        outcome,
+    }
 }
 
 fn check_and_resync<P: WindowManagerPort>(
     adapter: &P,
     current_state: &mut HyprlandState,
-    batch_events: &[String],
-    resync: Resync,
+    batch: &EventBatch,
 ) {
+    let batch_events = &batch.events;
     let inconsistencies = find_state_inconsistencies(current_state);
-    if resync == Resync::Forced || !inconsistencies.is_empty() {
+    if batch.outcome == LineOutcome::AppliedNeedsResync || !inconsistencies.is_empty() {
         if inconsistencies.is_empty() {
             tracing::debug!(
                 batch_events = ?batch_events,
@@ -146,23 +150,16 @@ fn process_event_stream<P: WindowManagerPort>(
                 break;
             }
             Ok(_) => {
-                let mut batch_events = Vec::new();
                 let _ = reader
                     .get_mut()
                     .set_read_timeout(Some(std::time::Duration::from_millis(2)));
 
-                let resync = match drain_batch(
-                    &mut reader,
-                    &mut line,
-                    &mut current_state,
-                    &mut batch_events,
-                ) {
-                    LineOutcome::Ignored => continue,
-                    LineOutcome::Applied => Resync::IfInconsistent,
-                    LineOutcome::AppliedNeedsResync => Resync::Forced,
-                };
+                let batch = drain_batch(&mut reader, &mut line, &mut current_state);
+                if batch.outcome == LineOutcome::Ignored {
+                    continue;
+                }
 
-                check_and_resync(adapter, &mut current_state, &batch_events, resync);
+                check_and_resync(adapter, &mut current_state, &batch);
                 if *hypr_tx.borrow() != current_state {
                     let _ = hypr_tx.send(current_state.clone());
                 }
@@ -239,13 +236,12 @@ mod tests {
         let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
         let mut line_buf = "workspacev2>>1,test_ws\n".to_string();
         let mut reader = Cursor::new(b"focusedmonv2>>DP-1,1\ninvalid>>data\n".to_vec());
-        let mut batch_events = Vec::new();
 
-        let outcome = drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+        let batch = drain_batch(&mut reader, &mut line_buf, &mut state);
 
-        assert_eq!(outcome, LineOutcome::Applied);
+        assert_eq!(batch.outcome, LineOutcome::Applied);
         assert_eq!(
-            batch_events,
+            batch.events,
             vec![
                 "workspacev2>>1,test_ws".to_string(),
                 "focusedmonv2>>DP-1,1".to_string(),
@@ -262,12 +258,11 @@ mod tests {
         let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
         let mut line_buf = "invalid>>data\n".to_string();
         let mut reader = Cursor::new(Vec::new());
-        let mut batch_events = Vec::new();
 
-        let outcome = drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+        let batch = drain_batch(&mut reader, &mut line_buf, &mut state);
 
-        assert_eq!(outcome, LineOutcome::Ignored);
-        assert_eq!(batch_events, vec!["invalid>>data".to_string()]);
+        assert_eq!(batch.outcome, LineOutcome::Ignored);
+        assert_eq!(batch.events, vec!["invalid>>data".to_string()]);
     }
 
     #[test]
@@ -281,11 +276,10 @@ mod tests {
         let mut line_buf =
             "monitorremovedv2>>1,HDMI-A-1,LG Electronics LG FULL HD 206AZQV5S860\n".to_string();
         let mut reader = Cursor::new(Vec::new());
-        let mut batch_events = Vec::new();
 
-        let outcome = drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+        let batch = drain_batch(&mut reader, &mut line_buf, &mut state);
 
-        assert_eq!(outcome, LineOutcome::Applied);
+        assert_eq!(batch.outcome, LineOutcome::Applied);
         assert!(!state.monitors().contains_key(&MonitorName::new("HDMI-A-1")));
     }
 
@@ -294,11 +288,10 @@ mod tests {
         let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
         let mut line_buf = "monitoraddedv2>>1,HDMI-A-1,LG Display\n".to_string();
         let mut reader = Cursor::new(Vec::new());
-        let mut batch_events = Vec::new();
 
-        let outcome = drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+        let batch = drain_batch(&mut reader, &mut line_buf, &mut state);
 
-        assert_eq!(outcome, LineOutcome::AppliedNeedsResync);
+        assert_eq!(batch.outcome, LineOutcome::AppliedNeedsResync);
         // No usable payload - applying it is a no-op; the resync is what fixes state up.
         assert!(state.monitors().is_empty());
     }
@@ -310,11 +303,10 @@ mod tests {
         let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
         let mut line_buf = "invalid>>data\n".to_string();
         let mut reader = Cursor::new(b"monitoraddedv2>>1,HDMI-A-1,x\n".to_vec());
-        let mut batch_events = Vec::new();
 
-        let outcome = drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+        let batch = drain_batch(&mut reader, &mut line_buf, &mut state);
 
-        assert_eq!(outcome, LineOutcome::AppliedNeedsResync);
+        assert_eq!(batch.outcome, LineOutcome::AppliedNeedsResync);
     }
 
     /// An applied first line does not mask the forced resync a later
@@ -324,11 +316,18 @@ mod tests {
         let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
         let mut line_buf = "workspacev2>>1,a\n".to_string();
         let mut reader = Cursor::new(b"monitoraddedv2>>1,HDMI-A-1,x\n".to_vec());
-        let mut batch_events = Vec::new();
 
-        let outcome = drain_batch(&mut reader, &mut line_buf, &mut state, &mut batch_events);
+        let batch = drain_batch(&mut reader, &mut line_buf, &mut state);
 
-        assert_eq!(outcome, LineOutcome::AppliedNeedsResync);
+        assert_eq!(batch.outcome, LineOutcome::AppliedNeedsResync);
+    }
+
+    /// A batch of `events` that applied without asking for a forced resync.
+    fn applied(events: &[&str]) -> EventBatch {
+        EventBatch {
+            events: events.iter().map(ToString::to_string).collect(),
+            outcome: LineOutcome::Applied,
+        }
     }
 
     fn inconsistent_state() -> HyprlandState {
@@ -369,12 +368,7 @@ mod tests {
             Some(MonitorName::new("eDP-1")),
         )));
 
-        check_and_resync(
-            &mock,
-            &mut state,
-            &["monitorremoved>>HDMI-A-1".to_string()],
-            Resync::IfInconsistent,
-        );
+        check_and_resync(&mock, &mut state, &applied(&["monitorremoved>>HDMI-A-1"]));
 
         assert_eq!(mock.queries(), 1);
 
@@ -412,7 +406,7 @@ mod tests {
 
         let mock = FakeWindowManager::new(None);
 
-        check_and_resync(&mock, &mut state, &[], Resync::IfInconsistent);
+        check_and_resync(&mock, &mut state, &applied(&[]));
 
         assert_eq!(mock.queries(), 0);
         assert_eq!(state, before);
@@ -443,12 +437,11 @@ mod tests {
         );
         let mock = FakeWindowManager::new(Some((BTreeMap::new(), new_monitors, None)));
 
-        check_and_resync(
-            &mock,
-            &mut state,
-            &["monitoraddedv2>>1,HDMI-A-1,x".to_string()],
-            Resync::Forced,
-        );
+        let batch = EventBatch {
+            events: vec!["monitoraddedv2>>1,HDMI-A-1,x".to_string()],
+            outcome: LineOutcome::AppliedNeedsResync,
+        };
+        check_and_resync(&mock, &mut state, &batch);
 
         assert_eq!(mock.queries(), 1);
 
@@ -529,7 +522,7 @@ mod tests {
 
         let mock = FakeWindowManager::new(None);
 
-        check_and_resync(&mock, &mut state, &[], Resync::IfInconsistent);
+        check_and_resync(&mock, &mut state, &applied(&[]));
 
         assert_eq!(mock.queries(), 1);
         assert_eq!(state, before);
