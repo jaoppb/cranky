@@ -36,7 +36,7 @@ where
 impl LayoutEventSender for tokio::sync::mpsc::Sender<LayoutEvent> {
     fn send_layout_event(&self, event: LayoutEvent) {
         if let Err(error) = self.try_send(event) {
-            tracing::error!(?error, "failed to send layout event via tokio channel");
+            log_tokio_send_failed(&error);
         }
     }
 }
@@ -44,9 +44,19 @@ impl LayoutEventSender for tokio::sync::mpsc::Sender<LayoutEvent> {
 impl LayoutEventSender for std::sync::mpsc::Sender<LayoutEvent> {
     fn send_layout_event(&self, event: LayoutEvent) {
         if let Err(error) = self.send(event) {
-            tracing::error!(?error, "failed to send layout event via std channel");
+            log_std_send_failed(&error);
         }
     }
+}
+
+/// Logs a layout event the tokio channel refused with `error`.
+fn log_tokio_send_failed(error: &tokio::sync::mpsc::error::TrySendError<LayoutEvent>) {
+    tracing::error!(?error, "failed to send layout event via tokio channel");
+}
+
+/// Logs a layout event the std channel refused with `error`.
+fn log_std_send_failed(error: &std::sync::mpsc::SendError<LayoutEvent>) {
+    tracing::error!(?error, "failed to send layout event via std channel");
 }
 
 /// Delivers the per-monitor bounds the app assigned to a module to that module's actor.
