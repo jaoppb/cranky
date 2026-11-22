@@ -191,10 +191,18 @@ mod tests {
             ));
         }
         // Never converged: present anyway rather than vanish silently.
-        assert!(!run(
-            popup_of(host(280)),
-            Some(&sizes(Some(240))),
-            &mut rounds
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            assert!(!run(
+                popup_of(host(280)),
+                Some(&sizes(Some(240))),
+                &mut rounds
+            ));
+        });
+        assert_eq!(rounds.get(&MonitorId::new("DP-1")), Some(&MAX_HOLD_ROUNDS));
+        assert!(logs.contains(
+            "WARN cranky::features::module_runtime::domain::render_pipeline::floating_phase::gate: \
+             Embedded module did not settle on its host width; presenting the latest layout \
+             monitor=DP-1"
         ));
     }
 

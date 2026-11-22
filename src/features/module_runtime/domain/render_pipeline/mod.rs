@@ -16,6 +16,8 @@ mod tests;
 mod tests_changes;
 #[cfg(test)]
 mod tests_inputs;
+#[cfg(test)]
+mod tests_layout;
 
 pub use context::*;
 pub use floating_phase::*;

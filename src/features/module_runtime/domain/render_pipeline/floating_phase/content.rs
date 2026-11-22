@@ -285,4 +285,41 @@ mod tests {
             "changed content must re-run layout"
         );
     }
+
+    /// A layout engine that always fails.
+    struct FailingEngine;
+
+    impl LayoutEnginePort for FailingEngine {
+        fn calculate_layout(
+            &mut self,
+            _root: LayoutRoot,
+            _measurer: &mut dyn TextMeasurer,
+        ) -> Result<RenderNode, LayoutError> {
+            Err(LayoutError::EngineError("no layout".to_string()))
+        }
+    }
+
+    /// A failed layout lays out nothing, caches nothing and is logged.
+    #[test]
+    fn test_failed_layout_is_logged_and_not_cached() {
+        let mut canvas_factory = MockCanvasFactory;
+        let mut cache = HashMap::new();
+        let monitor_id = MonitorId::new("DP-1");
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            let engine = FloatingEngine {
+                engine: &mut FailingEngine,
+                cache: &mut cache,
+            };
+            let mut pass = pass(&monitor_id, &mut canvas_factory, None);
+            assert_eq!(
+                layout_floating_content_cached(engine, &mut pass, &text_node("tip")),
+                None
+            );
+        });
+        assert!(cache.is_empty());
+        assert!(logs.contains(
+            "ERROR cranky::features::module_runtime::domain::render_pipeline::floating_phase::\
+             content: Floating content layout calculation failed err=EngineError(\"no layout\")"
+        ));
+    }
 }
