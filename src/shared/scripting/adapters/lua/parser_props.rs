@@ -2,7 +2,7 @@ pub(super) use super::parser_floating::{parse_panel_spec, parse_popup_spec};
 use super::vnode_parser::value_to_vnode;
 use crate::features::styling::domain::{ClassNameList, ElementId};
 use crate::features::vdom::domain::{
-    ClickHandlers, NodeKey, PanelSpec, PopupSpec, UiAction, VNode,
+    ClickHandlers, ElementSelectors, Interactions, NodeKey, PanelSpec, PopupSpec, UiAction, VNode,
 };
 use crate::shared::events::core::PointerButton;
 use crate::shared::primitives::geometry::Size;
@@ -108,16 +108,31 @@ fn parse_click_handlers(lua: &Lua, val: Option<mlua::Value>) -> Option<ClickHand
     parse_ui_action(lua, Some(mlua::Value::Table(table))).map(ClickHandlers::from_single)
 }
 
-type CommonProps = (
-    Option<ClassNameList>,
-    Option<ElementId>,
-    Option<ClickHandlers>,
-    Option<UiAction>,
-    Option<Box<VNode>>,
-    Option<PopupSpec>,
-    Option<PanelSpec>,
-    Option<NodeKey>,
-);
+/// What a script attaches to an element besides its kind, its selectors and its interactions:
+/// the popup and the panel it opens and its reconciliation key, each absent when not set.
+pub(super) struct NodeAttachments {
+    popup: Option<PopupSpec>,
+    panel: Option<PanelSpec>,
+    key: Option<NodeKey>,
+}
+
+impl NodeAttachments {
+    /// `node` with the popup, the panel and the key attached, each when set.
+    pub(super) fn attach_to(self, mut node: VNode) -> VNode {
+        if let Some(popup_spec) = self.popup {
+            node = node.with_popup(popup_spec);
+        }
+        if let Some(panel_spec) = self.panel {
+            node = node.with_panel(panel_spec);
+        }
+        if let Some(node_key) = self.key {
+            node = node.with_key(node_key);
+        }
+        node
+    }
+}
+
+type CommonProps = (ElementSelectors, Interactions, NodeAttachments);
 
 pub(super) fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result<CommonProps> {
     let class = table
@@ -141,5 +156,9 @@ pub(super) fn parse_common_props(lua: &Lua, table: &mlua::Table) -> mlua::Result
     let key = table
         .get::<Option<String>>("key")?
         .and_then(|raw_key| NodeKey::new(raw_key).ok());
-    Ok((class, id, on_click, on_hover, tooltip, popup, panel, key))
+    Ok((
+        ElementSelectors::new(class, id),
+        Interactions::new(on_click, on_hover, tooltip),
+        NodeAttachments { popup, panel, key },
+    ))
 }

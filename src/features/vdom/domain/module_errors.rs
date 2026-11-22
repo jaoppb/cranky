@@ -4,6 +4,7 @@ use super::kind::VNodeKind;
 use super::tag::TextContent;
 use super::vnode::VNode;
 use crate::features::styling::domain::{ClassName, ClassNameList};
+use crate::features::vdom::domain::{ElementSelectors, Interactions};
 use crate::shared::primitives::{ModuleKey, ModuleName};
 use std::collections::HashMap;
 
@@ -78,11 +79,11 @@ fn error_placeholder(original: &VNode, name: &ModuleName, reason: &str) -> VNode
 
     VNode::new_text(
         TextContent::new(format!("{name}: {reason}")),
-        Some(ClassNameList::new(classes)),
-        original.element_id().cloned(),
-        None,
-        None,
-        None,
+        ElementSelectors::new(
+            Some(ClassNameList::new(classes)),
+            original.element_id().cloned(),
+        ),
+        Interactions::default(),
     )
 }
 
@@ -99,17 +100,18 @@ mod tests {
                 None,
                 crate::shared::primitives::ModuleOptions::default(),
             ),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )
     }
 
     #[test]
     fn test_substitute_replaces_failed_module_with_error_text() {
-        let tree = VNode::new_flex(vec![module_node("calendar")], None, None, None, None, None);
+        let tree = VNode::new_flex(
+            vec![module_node("calendar")],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
         let mut errors = HashMap::new();
         errors.insert(
             ModuleKey::from_name(ModuleName::new("calendar")),
@@ -152,7 +154,12 @@ mod tests {
         let popup = crate::features::vdom::domain::floating::PopupSpec::new(Box::new(module_node(
             "calendar",
         )));
-        let tree = VNode::new_flex(Vec::new(), None, None, None, None, None).with_popup(popup);
+        let tree = VNode::new_flex(
+            Vec::new(),
+            ElementSelectors::default(),
+            Interactions::default(),
+        )
+        .with_popup(popup);
 
         let mut errors = HashMap::new();
         errors.insert(

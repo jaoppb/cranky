@@ -154,16 +154,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::vdom::domain::{NodeKey, TextContent};
+    use crate::features::vdom::domain::{ElementSelectors, Interactions, NodeKey, TextContent};
 
     fn text(content: &str) -> VNode {
         VNode::new_text(
             TextContent::new(content.to_string()),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         )
     }
 

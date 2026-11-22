@@ -1,190 +1,118 @@
 //! Constructors that build a `VNode` of each kind with a fresh `NodeId`, no key and no popup or
 //! panel.
-use super::action::{ClickHandlers, UiAction};
+pub mod attributes;
+
+pub use attributes::{ElementSelectors, Interactions};
+pub(crate) use attributes::{ImageContent, ProgressBar};
+
 use super::identifier::NodeId;
 use super::kind::{ModuleParams, VNodeKind};
 use super::tag::TextContent;
 use super::vnode::VNode;
-use crate::features::styling::domain::{ClassNameList, ElementId, Orientation, ProgressValue};
-use crate::shared::primitives::BinaryData;
-use crate::shared::primitives::geometry::Size;
 
 impl VNode {
+    /// A node of `kind` with `selectors` and `interactions`, a fresh `NodeId`, no key and no popup
+    /// or panel.
+    fn from_kind(kind: VNodeKind, selectors: ElementSelectors, interactions: Interactions) -> Self {
+        Self {
+            node_id: NodeId::new(),
+            key: None,
+            id: selectors.id,
+            class: selectors.class,
+            on_click: interactions.on_click,
+            on_hover: interactions.on_hover,
+            tooltip: interactions.tooltip,
+            popup: None,
+            panel: None,
+            kind,
+        }
+    }
+
     /// Builds a flex container node, with a fresh `NodeId`, no key and no popup or panel.
     #[must_use]
     pub fn new_flex(
         children: Vec<Self>,
-        class: Option<ClassNameList>,
-        id: Option<ElementId>,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
+        selectors: ElementSelectors,
+        interactions: Interactions,
     ) -> Self {
-        Self {
-            node_id: NodeId::new(),
-            key: None,
-            id,
-            class,
-            on_click,
-            on_hover,
-            tooltip,
-            popup: None,
-            panel: None,
-            kind: VNodeKind::Flex { children },
-        }
+        Self::from_kind(VNodeKind::Flex { children }, selectors, interactions)
     }
 
     #[must_use]
     pub(crate) fn new_grid(
         children: Vec<Self>,
-        class: Option<ClassNameList>,
-        id: Option<ElementId>,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
+        selectors: ElementSelectors,
+        interactions: Interactions,
     ) -> Self {
-        Self {
-            node_id: NodeId::new(),
-            key: None,
-            id,
-            class,
-            on_click,
-            on_hover,
-            tooltip,
-            popup: None,
-            panel: None,
-            kind: VNodeKind::Grid { children },
-        }
+        Self::from_kind(VNodeKind::Grid { children }, selectors, interactions)
     }
 
     /// Builds a text node, with a fresh `NodeId`, no key and no popup or panel.
     #[must_use]
     pub fn new_text(
         text: TextContent,
-        class: Option<ClassNameList>,
-        id: Option<ElementId>,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
+        selectors: ElementSelectors,
+        interactions: Interactions,
     ) -> Self {
-        Self {
-            node_id: NodeId::new(),
-            key: None,
-            id,
-            class,
-            on_click,
-            on_hover,
-            tooltip,
-            popup: None,
-            panel: None,
-            kind: VNodeKind::Text { text },
-        }
+        Self::from_kind(VNodeKind::Text { text }, selectors, interactions)
     }
 
     #[must_use]
     pub(crate) fn new_progress(
-        value: ProgressValue,
-        orientation: Orientation,
-        class: Option<ClassNameList>,
-        id: Option<ElementId>,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
+        bar: ProgressBar,
+        selectors: ElementSelectors,
+        interactions: Interactions,
     ) -> Self {
-        Self {
-            node_id: NodeId::new(),
-            key: None,
-            id,
-            class,
-            on_click,
-            on_hover,
-            tooltip,
-            popup: None,
-            panel: None,
-            kind: VNodeKind::Progress { value, orientation },
-        }
+        let kind = VNodeKind::Progress {
+            value: bar.value,
+            orientation: bar.orientation,
+        };
+        Self::from_kind(kind, selectors, interactions)
     }
 
     #[must_use]
-    pub(crate) fn new_rect(
-        class: Option<ClassNameList>,
-        id: Option<ElementId>,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
-    ) -> Self {
-        Self {
-            node_id: NodeId::new(),
-            key: None,
-            id,
-            class,
-            on_click,
-            on_hover,
-            tooltip,
-            popup: None,
-            panel: None,
-            kind: VNodeKind::Rect,
-        }
+    pub(crate) fn new_rect(selectors: ElementSelectors, interactions: Interactions) -> Self {
+        Self::from_kind(VNodeKind::Rect, selectors, interactions)
     }
 
+    /// An image reacts to no click or hover, so it takes only a tooltip.
     #[must_use]
     pub(crate) fn new_image(
-        data: impl Into<BinaryData>,
-        pixel_size: Size,
-        class: Option<ClassNameList>,
-        id: Option<ElementId>,
+        image: ImageContent,
+        selectors: ElementSelectors,
         tooltip: Option<Box<Self>>,
     ) -> Self {
-        Self {
-            node_id: NodeId::new(),
-            key: None,
-            id,
-            class,
-            on_click: None,
-            on_hover: None,
-            tooltip,
-            popup: None,
-            panel: None,
-            kind: VNodeKind::Image {
-                data: data.into(),
-                pixel_size,
-            },
-        }
+        let kind = VNodeKind::Image {
+            data: image.data,
+            pixel_size: image.pixel_size,
+        };
+        Self::from_kind(kind, selectors, Interactions::new(None, None, tooltip))
     }
 
     #[must_use]
     pub(crate) fn new_module(
         params: ModuleParams,
-        class: Option<ClassNameList>,
-        id: Option<ElementId>,
-        on_click: Option<ClickHandlers>,
-        on_hover: Option<UiAction>,
-        tooltip: Option<Box<Self>>,
+        selectors: ElementSelectors,
+        interactions: Interactions,
     ) -> Self {
         let (name, instance_id, options) = params.into_parts();
-        Self {
-            node_id: NodeId::new(),
-            key: None,
-            id,
-            class,
-            on_click,
-            on_hover,
-            tooltip,
-            popup: None,
-            panel: None,
-            kind: VNodeKind::Module {
-                name,
-                instance_id,
-                options,
-            },
-        }
+        let kind = VNodeKind::Module {
+            name,
+            instance_id,
+            options,
+        };
+        Self::from_kind(kind, selectors, interactions)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::styling::domain::{ClassNameList, ElementId, Orientation, ProgressValue};
+    use crate::features::vdom::domain::{ClickHandlers, UiAction};
     use crate::shared::events::core::PointerButton;
+    use crate::shared::primitives::BinaryData;
+    use crate::shared::primitives::geometry::Size;
     use crate::shared::primitives::{DynamicValue, ModuleInstanceId, ModuleName, ModuleOptions};
     use std::collections::HashMap;
 
@@ -212,11 +140,8 @@ mod tests {
     fn tooltip(label: &str) -> Box<VNode> {
         Box::new(VNode::new_text(
             TextContent::new(format!("{label}-tip")),
-            None,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::default(),
+            Interactions::default(),
         ))
     }
 
@@ -235,14 +160,15 @@ mod tests {
 
     #[test]
     fn test_container_constructors_keep_each_attribute_in_place() {
-        let child = VNode::new_rect(None, None, None, None, None);
+        let child = VNode::new_rect(ElementSelectors::default(), Interactions::default());
         let flex = VNode::new_flex(
             vec![child.clone()],
-            Some(class("flex")),
-            Some(element_id("flex")),
-            Some(on_click("flex")),
-            Some(on_hover("flex")),
-            Some(tooltip("flex")),
+            ElementSelectors::new(Some(class("flex")), Some(element_id("flex"))),
+            Interactions::new(
+                Some(on_click("flex")),
+                Some(on_hover("flex")),
+                Some(tooltip("flex")),
+            ),
         );
         assert_attributes(&flex, "flex", Some("flex"));
         assert_eq!(
@@ -254,11 +180,12 @@ mod tests {
 
         let grid = VNode::new_grid(
             vec![child.clone(), child],
-            Some(class("grid")),
-            Some(element_id("grid")),
-            Some(on_click("grid")),
-            Some(on_hover("grid")),
-            Some(tooltip("grid")),
+            ElementSelectors::new(Some(class("grid")), Some(element_id("grid"))),
+            Interactions::new(
+                Some(on_click("grid")),
+                Some(on_hover("grid")),
+                Some(tooltip("grid")),
+            ),
         );
         assert_attributes(&grid, "grid", Some("grid"));
         assert_eq!(grid.children().len(), 2);
@@ -269,11 +196,12 @@ mod tests {
     fn test_leaf_constructors_keep_each_attribute_in_place() {
         let text = VNode::new_text(
             TextContent::new("hello".to_string()),
-            Some(class("text")),
-            Some(element_id("text")),
-            Some(on_click("text")),
-            Some(on_hover("text")),
-            Some(tooltip("text")),
+            ElementSelectors::new(Some(class("text")), Some(element_id("text"))),
+            Interactions::new(
+                Some(on_click("text")),
+                Some(on_hover("text")),
+                Some(tooltip("text")),
+            ),
         );
         assert_attributes(&text, "text", Some("text"));
         assert_eq!(
@@ -284,13 +212,13 @@ mod tests {
         );
 
         let progress = VNode::new_progress(
-            ProgressValue::new(0.3).unwrap(),
-            Orientation::Vertical,
-            Some(class("bar")),
-            Some(element_id("bar")),
-            Some(on_click("bar")),
-            Some(on_hover("bar")),
-            Some(tooltip("bar")),
+            ProgressBar::new(ProgressValue::new(0.3).unwrap(), Orientation::Vertical),
+            ElementSelectors::new(Some(class("bar")), Some(element_id("bar"))),
+            Interactions::new(
+                Some(on_click("bar")),
+                Some(on_hover("bar")),
+                Some(tooltip("bar")),
+            ),
         );
         assert_attributes(&progress, "bar", Some("bar"));
         assert_eq!(
@@ -302,11 +230,12 @@ mod tests {
         );
 
         let rect = VNode::new_rect(
-            Some(class("rect")),
-            Some(element_id("rect")),
-            Some(on_click("rect")),
-            Some(on_hover("rect")),
-            Some(tooltip("rect")),
+            ElementSelectors::new(Some(class("rect")), Some(element_id("rect"))),
+            Interactions::new(
+                Some(on_click("rect")),
+                Some(on_hover("rect")),
+                Some(tooltip("rect")),
+            ),
         );
         assert_attributes(&rect, "rect", Some("rect"));
         assert_eq!(rect.kind(), &VNodeKind::Rect);
@@ -315,10 +244,8 @@ mod tests {
     #[test]
     fn test_image_and_module_constructors_keep_each_attribute_in_place() {
         let image = VNode::new_image(
-            vec![1, 2, 3, 4],
-            Size::new(1, 1),
-            Some(class("icon")),
-            Some(element_id("icon")),
+            ImageContent::new(vec![1, 2, 3, 4], Size::new(1, 1)),
+            ElementSelectors::new(Some(class("icon")), Some(element_id("icon"))),
             Some(tooltip("icon")),
         );
         assert_attributes(&image, "icon", None);
@@ -340,11 +267,12 @@ mod tests {
                 Some(ModuleInstanceId::new("left")),
                 options.clone(),
             ),
-            Some(class("clock")),
-            Some(element_id("clock")),
-            Some(on_click("clock")),
-            Some(on_hover("clock")),
-            Some(tooltip("clock")),
+            ElementSelectors::new(Some(class("clock")), Some(element_id("clock"))),
+            Interactions::new(
+                Some(on_click("clock")),
+                Some(on_hover("clock")),
+                Some(tooltip("clock")),
+            ),
         );
         assert_attributes(&module, "clock", Some("clock"));
         assert_eq!(

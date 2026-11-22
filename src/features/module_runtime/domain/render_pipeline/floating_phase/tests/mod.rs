@@ -8,6 +8,7 @@ use crate::features::layout_engine::domain::{
 };
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::domain::ComputedStyle;
+use crate::features::vdom::domain::{ElementSelectors, Interactions};
 use crate::features::vdom::domain::{
     NodeKey, NodePath, PanelAnchor, PanelLayer, PanelSpec, PanelSurface, SurfaceSpace, TextContent,
     VNode,
@@ -59,10 +60,13 @@ fn tooltip_content(text: &str) -> StyledNode {
 
 /// The surface of a panel on `layer` anchored to every edge, the rest left at its defaults.
 fn panel_on_every_edge(layer: PanelLayer) -> PanelSurface {
-    PanelSpec::new(Box::new(VNode::new_rect(None, None, None, None, None)))
-        .with_layer(layer)
-        .with_anchor(PanelAnchor::all())
-        .surface()
+    PanelSpec::new(Box::new(VNode::new_rect(
+        ElementSelectors::default(),
+        Interactions::default(),
+    )))
+    .with_layer(layer)
+    .with_anchor(PanelAnchor::all())
+    .surface()
 }
 
 /// Everything a test may want to set on a laid-out node; the rest is fixed.

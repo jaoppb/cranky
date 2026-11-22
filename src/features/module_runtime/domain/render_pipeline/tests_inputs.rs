@@ -8,6 +8,7 @@ use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::test_support::{
     MockLayoutEngine, MockVdomDiff, PipelineFixture, TestModulePort, process_monitor,
 };
+use crate::features::vdom::domain::{ElementSelectors, Interactions};
 use crate::features::vdom::domain::{
     InteractedNodes, InteractionContext, NodePath, NodeRef, SurfaceSpace, VNode,
 };
@@ -15,7 +16,7 @@ use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::{MonitorFocus, MonitorId};
 
 fn rect() -> VNode {
-    VNode::new_rect(None, None, None, None, None)
+    VNode::new_rect(ElementSelectors::default(), Interactions::default())
 }
 
 /// A new interaction alone dirties the tree (pseudo-classes restyle it) and nothing else.

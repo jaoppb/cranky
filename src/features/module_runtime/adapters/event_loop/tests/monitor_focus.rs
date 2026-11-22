@@ -10,7 +10,7 @@ use crate::features::module_runtime::test_support::{
 use crate::features::styling::domain::{ComputedStyle, ElementQuery, InheritedStyle, PseudoClass};
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
-use crate::features::vdom::domain::VNode;
+use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
 use crate::features::workspaces::domain::MonitorName;
 use crate::shared::config::domain::Config;
 use crate::shared::events::signals::{HyprlandState, SignalHub};
@@ -70,7 +70,8 @@ fn focused_elements(focused: &str) -> usize {
     );
     let mut event_loop = EventLoop::new(
         Box::new(TestModulePort::new(VNode::new_rect(
-            None, None, None, None, None,
+            ElementSelectors::default(),
+            Interactions::default(),
         ))),
         ctx,
         RenderServices::new(

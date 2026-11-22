@@ -9,7 +9,9 @@ use crate::features::styling::domain::{
     Orientation, ProgressValue, StyleSheetName,
 };
 use crate::features::styling::ports::CssParserPort;
-use crate::features::vdom::domain::{TextContent, VNode};
+use crate::features::vdom::domain::{
+    ElementSelectors, ImageContent, Interactions, ProgressBar, TextContent, VNode,
+};
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::rendering::ports::canvas::RecordingCanvas;
@@ -52,23 +54,16 @@ fn test_arbitrary_style_name_and_progress_rendering() {
 
     let clock_node = VNode::new_text(
         TextContent::new("12:00".to_string()),
-        Some(ClassNameList::parse("clock-label").unwrap()),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(Some(ClassNameList::parse("clock-label").unwrap()), None),
+        Interactions::default(),
     );
     let styled_clock = clock_node.resolve_styles(&resolver, None);
     assert!((styled_clock.style().font_size().unwrap().value() - 16.0).abs() < f32::EPSILON);
 
     let h_prog = VNode::new_progress(
-        ProgressValue::new(0.6).unwrap(),
-        Orientation::Horizontal,
-        Some(ClassNameList::parse("battery").unwrap()),
-        None,
-        None,
-        None,
-        None,
+        ProgressBar::new(ProgressValue::new(0.6).unwrap(), Orientation::Horizontal),
+        ElementSelectors::new(Some(ClassNameList::parse("battery").unwrap()), None),
+        Interactions::default(),
     );
     let styled_h = h_prog.resolve_styles(&resolver, None);
     let mut engine = TaffyLayoutAdapter::new();
@@ -99,10 +94,8 @@ fn test_width_height_parsing_and_layout() {
     let resolver = CompositeStyleResolver::new(vec![parsed]);
 
     let img_node = VNode::new_image(
-        vec![0; 400 * 4],
-        Size::new(48, 48),
-        Some(ClassNameList::parse("icon").unwrap()),
-        None,
+        ImageContent::new(vec![0; 400 * 4], Size::new(48, 48)),
+        ElementSelectors::new(Some(ClassNameList::parse("icon").unwrap()), None),
         None,
     );
 

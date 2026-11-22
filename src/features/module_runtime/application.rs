@@ -178,7 +178,7 @@ mod tests {
     };
     use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
     use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
-    use crate::features::vdom::domain::{UiCommand, VNode};
+    use crate::features::vdom::domain::{ElementSelectors, Interactions, UiCommand, VNode};
     use crate::shared::config::domain::Config;
     use crate::shared::events::signals::{HyprlandState, SignalKind};
     use crate::shared::primitives::SizeConstraint;
@@ -213,7 +213,7 @@ mod tests {
                 parent_id: None,
                 monitors: Vec::new(),
                 subs: Vec::new(),
-                vnode: VNode::new_rect(None, None, None, None, None),
+                vnode: VNode::new_rect(ElementSelectors::default(), Interactions::default()),
             }
         }
 
@@ -459,15 +459,16 @@ mod tests {
         crate::test_utils::block_on(async {
             let id = ModuleId::new(2);
             let click_node = VNode::new_rect(
-                None,
-                None,
-                Some(crate::features::vdom::domain::ClickHandlers::from_single(
-                    crate::features::vdom::domain::UiAction::Exec("render".to_string()),
-                )),
-                Some(crate::features::vdom::domain::UiAction::Exec(
-                    "hover".to_string(),
-                )),
-                None,
+                ElementSelectors::default(),
+                Interactions::new(
+                    Some(crate::features::vdom::domain::ClickHandlers::from_single(
+                        crate::features::vdom::domain::UiAction::Exec("render".to_string()),
+                    )),
+                    Some(crate::features::vdom::domain::UiAction::Exec(
+                        "hover".to_string(),
+                    )),
+                    None,
+                ),
             );
 
             let fixture = TestFixtureBuilder::new(id)
@@ -599,11 +600,8 @@ mod tests {
             let id = ModuleId::new(1);
             let node = VNode::new_text(
                 crate::features::vdom::domain::TextContent::new("unchanged".to_string()),
-                None,
-                None,
-                None,
-                None,
-                None,
+                ElementSelectors::default(),
+                Interactions::default(),
             );
 
             let fixture = TestFixtureBuilder::new(id)
@@ -656,13 +654,14 @@ mod tests {
                     None,
                     crate::shared::primitives::ModuleOptions::default(),
                 ),
-                None,
-                None,
-                None,
-                None,
-                None,
+                ElementSelectors::default(),
+                Interactions::default(),
             );
-            let root_node = VNode::new_flex(vec![child_node], None, None, None, None, None);
+            let root_node = VNode::new_flex(
+                vec![child_node],
+                ElementSelectors::default(),
+                Interactions::default(),
+            );
 
             let fixture = TestFixtureBuilder::new(id)
                 .with_monitors(&["DP-1"])

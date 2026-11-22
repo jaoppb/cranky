@@ -5,7 +5,7 @@ use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{ClassNameList, Opacity, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
-use crate::features::vdom::domain::VNode;
+use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
 
 /// The vdom bridge tells the cascade where each child sits among its siblings:
 /// `:first-child`, `:nth-child(2)` and `:last-child` style the first, second
@@ -24,20 +24,14 @@ fn test_structural_pseudo_classes_follow_the_vnode_sibling_position() {
     let child = || {
         VNode::new_flex(
             Vec::new(),
-            Some(ClassNameList::parse("x").unwrap()),
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::new(Some(ClassNameList::parse("x").unwrap()), None),
+            Interactions::default(),
         )
     };
     let parent = VNode::new_flex(
         vec![child(), child(), child()],
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
 
     let styled = parent.resolve_styles(&resolver, None);

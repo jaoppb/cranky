@@ -5,7 +5,7 @@ use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{ClassNameList, CssLength, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
-use crate::features::vdom::domain::VNode;
+use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::rendering::ports::text::TextFont;
@@ -51,11 +51,8 @@ fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
             None,
             crate::shared::primitives::ModuleOptions::default(),
         ),
-        Some(ClassNameList::parse("calendar").unwrap()),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(Some(ClassNameList::parse("calendar").unwrap()), None),
+        Interactions::default(),
     );
     let styled = embed.resolve_styles(&resolver, None);
     assert_eq!(styled.style().min_width(), Some(CssLength::Pixels(280.0)));

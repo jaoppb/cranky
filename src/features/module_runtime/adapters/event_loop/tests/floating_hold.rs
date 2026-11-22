@@ -5,6 +5,7 @@ use crate::features::module_runtime::domain::{LayoutContext, RenderOutcome, Rend
 use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockStyleResolver, TestModulePort, process_monitor,
 };
+use crate::features::vdom::domain::{ElementSelectors, Interactions};
 use crate::features::vdom::domain::{
     InteractedNodes, InteractionContext, ModuleParams, NodePath, NodeRef, PanelSpec, PopupSpec,
     SurfaceSpace, VNode,
@@ -46,7 +47,7 @@ fn render(bar: VNode, interaction: Option<InteractionContext>) -> RenderOutcome 
 }
 
 fn bar() -> VNode {
-    VNode::new_rect(None, None, None, None, None)
+    VNode::new_rect(ElementSelectors::default(), Interactions::default())
 }
 
 /// Floating content embedding a module that has not reported its size yet;
@@ -54,13 +55,14 @@ fn bar() -> VNode {
 fn unsettled() -> VNode {
     let child = VNode::new_module(
         ModuleParams::new(ModuleName::new("calendar"), None, ModuleOptions::default()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
-    VNode::new_flex(vec![child, bar()], None, None, None, None, None)
+    VNode::new_flex(
+        vec![child, bar()],
+        ElementSelectors::default(),
+        Interactions::default(),
+    )
 }
 
 fn render_with_popup(content: VNode) -> RenderOutcome {

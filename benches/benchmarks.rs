@@ -22,7 +22,7 @@ use cranky::features::styling::domain::{
 };
 use cranky::features::styling::ports::{CssParserPort, StyleResolverPort};
 use cranky::features::vdom::adapters::DefaultVdomDiffAdapter;
-use cranky::features::vdom::domain::{NodeKey, TextContent, VNode};
+use cranky::features::vdom::domain::{ElementSelectors, Interactions, NodeKey, TextContent, VNode};
 use cranky::features::vdom::ports::VdomDiffPort;
 use cranky::shared::config::domain::{AxisMargins, Config, FontFamily, FontSize, ModuleConfig};
 use cranky::shared::dbus::domain::DBusSubscription;
@@ -51,11 +51,8 @@ fn create_test_vnode_tree(depth: usize, branching: usize, prefix: &str) -> VNode
         let classes = class_name.map(|class| ClassNameList::new(vec![class]));
         let mut node = VNode::new_text(
             TextContent::new(format!("Text {prefix}")),
-            classes,
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::new(classes, None),
+            Interactions::default(),
         );
         if let Some(key) = node_key {
             node = node.with_key(key);
@@ -74,7 +71,11 @@ fn create_test_vnode_tree(depth: usize, branching: usize, prefix: &str) -> VNode
         let node_key = NodeKey::new(format!("{prefix}_flex")).ok();
         let class_name = ClassName::new("container-box").ok();
         let classes = class_name.map(|class| ClassNameList::new(vec![class]));
-        let mut node = VNode::new_flex(children, classes, None, None, None, None);
+        let mut node = VNode::new_flex(
+            children,
+            ElementSelectors::new(classes, None),
+            Interactions::default(),
+        );
         if let Some(key) = node_key {
             node = node.with_key(key);
         }

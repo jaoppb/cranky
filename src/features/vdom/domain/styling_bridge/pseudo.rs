@@ -35,14 +35,20 @@ pub(crate) fn compute_pseudo_classes(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::vdom::domain::{InteractedNodes, InteractionContext, NodeRef, VNode};
+    use crate::features::vdom::domain::{
+        ElementSelectors, InteractedNodes, InteractionContext, Interactions, NodeRef, VNode,
+    };
     use crate::shared::primitives::MonitorFocus;
 
     /// `ResolvedInteraction::resolve` only needs to walk the tree when an
     /// anchor is non-empty; every test here captures a keyless ref, so an
     /// empty tree is a sufficient stand-in for "some surface's own root".
     fn empty_root() -> VNode {
-        VNode::new_flex(Vec::new(), None, None, None, None, None)
+        VNode::new_flex(
+            Vec::new(),
+            ElementSelectors::default(),
+            Interactions::default(),
+        )
     }
 
     #[test]

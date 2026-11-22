@@ -6,7 +6,7 @@ use crate::features::styling::domain::{
     SiblingPosition, StyleSheetName,
 };
 use crate::features::styling::ports::CssParserPort;
-use crate::features::vdom::domain::VNode;
+use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
 use crate::shared::config::domain::BorderRadius;
 use crate::shared::primitives::color::{Color, DrawingColor};
 
@@ -162,11 +162,8 @@ fn test_empty_pseudo_class_follows_the_vnode_children() {
     let opacity = |children: Vec<VNode>| {
         let node = VNode::new_flex(
             children,
-            Some(ClassNameList::parse("x").unwrap()),
-            None,
-            None,
-            None,
-            None,
+            ElementSelectors::new(Some(ClassNameList::parse("x").unwrap()), None),
+            Interactions::default(),
         );
         node.resolve_styles(&resolver, None)
             .style()
@@ -174,6 +171,6 @@ fn test_empty_pseudo_class_follows_the_vnode_children() {
             .map(Opacity::value)
     };
     assert_eq!(opacity(Vec::new()), Some(0.5));
-    let child = VNode::new_rect(None, None, None, None, None);
+    let child = VNode::new_rect(ElementSelectors::default(), Interactions::default());
     assert_eq!(opacity(vec![child]), None);
 }

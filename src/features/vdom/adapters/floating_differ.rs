@@ -1,5 +1,5 @@
 use super::differ::DefaultVdomDiffAdapter;
-use crate::features::vdom::domain::{NodeId, Patch, VNode};
+use crate::features::vdom::domain::{ElementSelectors, Interactions, NodeId, Patch, VNode};
 
 impl DefaultVdomDiffAdapter {
     pub(super) fn diff_popup(&self, old_node: &VNode, new_node: &VNode) -> Option<Box<Patch>> {
@@ -92,7 +92,10 @@ impl DefaultVdomDiffAdapter {
             })),
             (Some(old), None) => Some(Box::new(Patch::Replace {
                 old_node_id: old.node_id(),
-                new_node: Box::new(VNode::new_rect(None, None, None, None, None)),
+                new_node: Box::new(VNode::new_rect(
+                    ElementSelectors::default(),
+                    Interactions::default(),
+                )),
             })),
         }
     }

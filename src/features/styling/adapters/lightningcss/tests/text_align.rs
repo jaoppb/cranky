@@ -6,7 +6,7 @@ use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{ClassNameList, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
-use crate::features::vdom::domain::{TextContent, VNode};
+use crate::features::vdom::domain::{ElementSelectors, Interactions, TextContent, VNode};
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{TextAlign, TextAlignment};
@@ -23,11 +23,11 @@ fn resolver(css: &str) -> CompositeStyleResolver {
 fn text(content: &str, class: Option<&str>) -> VNode {
     VNode::new_text(
         TextContent::new(content.to_string()),
-        class.map(|names| ClassNameList::parse(names).unwrap()),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(
+            class.map(|names| ClassNameList::parse(names).unwrap()),
+            None,
+        ),
+        Interactions::default(),
     )
 }
 
@@ -40,11 +40,11 @@ fn child_align(
 ) -> Option<TextAlign> {
     let root = VNode::new_flex(
         vec![text("hi", child_class)],
-        parent_class.map(|names| ClassNameList::parse(names).unwrap()),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(
+            parent_class.map(|names| ClassNameList::parse(names).unwrap()),
+            None,
+        ),
+        Interactions::default(),
     );
     let StyledNode::Flex { children, .. } = root.resolve_styles(&resolver(css), None) else {
         panic!("expected a Flex root");
@@ -115,28 +115,30 @@ fn paint_calendar() -> Vec<(String, TextAlignment)> {
             text("May 2026", Some("title")),
             text(">", Some("nav-btn")),
         ],
-        class("header"),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(class("header"), None),
+        Interactions::default(),
     );
     let days = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
         .iter()
         .map(|day| text(day, Some("weekday")))
         .collect();
-    let weekdays = VNode::new_grid(days, class("weekdays"), None, None, None, None);
+    let weekdays = VNode::new_grid(
+        days,
+        ElementSelectors::new(class("weekdays"), None),
+        Interactions::default(),
+    );
     let cells = (1..=7)
         .map(|day| text(&day.to_string(), Some("day")))
         .collect();
-    let grid = VNode::new_grid(cells, class("grid"), None, None, None, None);
+    let grid = VNode::new_grid(
+        cells,
+        ElementSelectors::new(class("grid"), None),
+        Interactions::default(),
+    );
     let root = VNode::new_flex(
         vec![header, weekdays, grid],
-        class("root"),
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::new(class("root"), None),
+        Interactions::default(),
     );
 
     let resolver = resolver(include_str!("../../../../../../assets/styles/calendar.css"));

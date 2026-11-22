@@ -1,6 +1,7 @@
 use crate::features::layout_engine::domain::StyledNode;
 use crate::features::styling::domain::{ElementQuery, InheritedStyle};
 use crate::features::styling::ports::StyleResolverPort;
+use crate::features::vdom::domain::{ElementSelectors, Interactions};
 use crate::features::vdom::domain::{
     InteractedNodes, InteractionContext, NodePath, NodeRef, SurfaceSpace, TextContent, VNode,
 };
@@ -27,21 +28,19 @@ impl StyleResolverPort for MockResolver {
 fn test_resolve_styles_interaction_propagation() {
     let child1 = VNode::new_text(
         TextContent::new("c1".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
     let child2 = VNode::new_text(
         TextContent::new("c2".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
-    let root = VNode::new_flex(vec![child1, child2], None, None, None, None, None);
+    let root = VNode::new_flex(
+        vec![child1, child2],
+        ElementSelectors::default(),
+        Interactions::default(),
+    );
 
     let resolver = MockResolver;
     let interaction = InteractionContext::new(
@@ -84,19 +83,13 @@ fn test_resolve_styles_interaction_propagation() {
 fn test_vnode_with_popup_and_style_resolution() {
     let popup_content = VNode::new_text(
         TextContent::new("popup body".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
     let button = VNode::new_text(
         TextContent::new("Open".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     )
     .with_popup(crate::features::vdom::domain::PopupSpec::new(Box::new(
         popup_content.clone(),
@@ -114,22 +107,20 @@ fn test_vnode_with_popup_and_style_resolution() {
 fn test_vnode_grid_creation_and_resolution() {
     let child1 = VNode::new_text(
         TextContent::new("Item 1".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
     let child2 = VNode::new_text(
         TextContent::new("Item 2".to_string()),
-        None,
-        None,
-        None,
-        None,
-        None,
+        ElementSelectors::default(),
+        Interactions::default(),
     );
 
-    let grid_node = VNode::new_grid(vec![child1, child2], None, None, None, None, None);
+    let grid_node = VNode::new_grid(
+        vec![child1, child2],
+        ElementSelectors::default(),
+        Interactions::default(),
+    );
     assert_eq!(
         grid_node.tag(),
         crate::features::vdom::domain::NodeTag::Grid

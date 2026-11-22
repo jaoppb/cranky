@@ -6,7 +6,7 @@ mod tests {
         MockCanvasFactory, MockLayoutEngine, MockStyleResolver, MockVdomDiff, PipelineFixture,
         TestModulePort, process_monitor,
     };
-    use crate::features::vdom::domain::VNode;
+    use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
     use crate::shared::primitives::MonitorId;
     use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
     use std::collections::HashMap;
@@ -20,7 +20,10 @@ mod tests {
 
         let mut pipeline = RenderPipeline::new();
         let mon = MonitorId::new("DP-1");
-        let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
+        let port = TestModulePort::new(VNode::new_rect(
+            ElementSelectors::default(),
+            Interactions::default(),
+        ));
         let resolver = MockStyleResolver;
         let mut factory = MockCanvasFactory;
         let mut engine = MockLayoutEngine;
@@ -73,7 +76,10 @@ mod tests {
     fn test_bounds_alone_are_a_bounds_change() {
         let mut pipeline = RenderPipeline::new();
         let mon = MonitorId::new("DP-1");
-        let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
+        let port = TestModulePort::new(VNode::new_rect(
+            ElementSelectors::default(),
+            Interactions::default(),
+        ));
         let resolver = MockStyleResolver;
         let mut factory = MockCanvasFactory;
         let mut engine = MockLayoutEngine;

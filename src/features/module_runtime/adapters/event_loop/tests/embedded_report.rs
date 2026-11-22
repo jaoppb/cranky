@@ -3,7 +3,7 @@ use crate::features::module_runtime::domain::{LayoutContext, RenderPipeline};
 use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockStyleResolver, TestModulePort, process_monitor,
 };
-use crate::features::vdom::domain::VNode;
+use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
 use crate::shared::primitives::geometry::{Scale, Size};
 use crate::shared::primitives::{MonitorId, SizeConstraint};
 use std::collections::HashMap;
@@ -16,7 +16,10 @@ use std::collections::HashMap;
 fn test_pinned_child_reports_intrinsic_size_and_settled_width() {
     let mut pipeline = RenderPipeline::new();
     let mon = MonitorId::new("DP-1");
-    let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
+    let port = TestModulePort::new(VNode::new_rect(
+        ElementSelectors::default(),
+        Interactions::default(),
+    ));
     let resolver = MockStyleResolver;
     let mut factory = MockCanvasFactory;
     let mut engine = TaffyLayoutAdapter::new();
