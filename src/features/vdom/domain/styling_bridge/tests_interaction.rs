@@ -96,7 +96,7 @@ mod tests {
         // Re-render with "a" removed: "b" is now at path [0].
         let root = VNode::new_flex(vec![item_b], None, None, None, None, None);
         let resolver = RecordingResolver::new();
-        let _ = root.resolve_styles(&resolver, Some(&interaction), None);
+        let _ = root.resolve_styles(&resolver, Some(&interaction));
 
         assert_eq!(
             resolver.pseudo_classes_of("item-b"),
@@ -156,7 +156,7 @@ mod tests {
         // Re-render with "a" removed: "b" is now at [0], its label at [0, 0].
         let root = VNode::new_flex(vec![item_b], None, None, None, None, None);
         let resolver = RecordingResolver::new();
-        let _ = root.resolve_styles(&resolver, Some(&interaction), None);
+        let _ = root.resolve_styles(&resolver, Some(&interaction));
 
         assert_eq!(
             resolver.pseudo_classes_of("item-b"),
@@ -224,7 +224,7 @@ mod tests {
         );
 
         let resolver = RecordingResolver::new();
-        let _ = root.resolve_styles(&resolver, Some(&interaction), None);
+        let _ = root.resolve_styles(&resolver, Some(&interaction));
 
         assert_eq!(
             resolver.pseudo_classes_of("list-a-item"),
@@ -273,7 +273,7 @@ mod tests {
         );
 
         let resolver = RecordingResolver::new();
-        let _ = root.resolve_styles(&resolver, Some(&interaction), None);
+        let _ = root.resolve_styles(&resolver, Some(&interaction));
 
         assert_eq!(resolver.pseudo_classes_of("a-item"), []);
         assert_eq!(
@@ -346,11 +346,7 @@ mod tests {
                 MonitorFocus::Unfocused,
             );
             let resolver = RecordingResolver::new();
-            let _ = button_with_every_floating_kind().resolve_styles(
-                &resolver,
-                Some(&interaction),
-                None,
-            );
+            let _ = button_with_every_floating_kind().resolve_styles(&resolver, Some(&interaction));
 
             for id in ["button", "tip", "pop", "pan"] {
                 let expected = if id == hovered_id {
@@ -378,7 +374,7 @@ mod tests {
         };
 
         let styled =
-            button_with_every_floating_kind().resolve_styles(&RecordingResolver::new(), None, None);
+            button_with_every_floating_kind().resolve_styles(&RecordingResolver::new(), None);
 
         let tooltip = styled.tooltip().unwrap();
         assert_eq!(*tooltip.path(), NodePath::root_in(SurfaceSpace::Tooltip));

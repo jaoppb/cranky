@@ -46,7 +46,7 @@ fn child_align(
         None,
         None,
     );
-    let StyledNode::Flex { children, .. } = root.resolve_styles(&resolver(css), None, None) else {
+    let StyledNode::Flex { children, .. } = root.resolve_styles(&resolver(css), None) else {
         panic!("expected a Flex root");
     };
     children
@@ -140,7 +140,7 @@ fn paint_calendar() -> Vec<(String, TextAlignment)> {
     );
 
     let resolver = resolver(include_str!("../../../../../../assets/styles/calendar.css"));
-    let styled = root.resolve_styles(&resolver, None, None);
+    let styled = root.resolve_styles(&resolver, None);
     let laid_out = TaffyLayoutAdapter::new()
         .calculate_layout(
             LayoutRoot::new(

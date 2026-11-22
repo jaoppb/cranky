@@ -62,7 +62,7 @@ fn test_resolve_styles_interaction_propagation() {
         MonitorFocus::Focused,
     );
 
-    let styled = root.resolve_styles(&resolver, Some(&interaction), None);
+    let styled = root.resolve_styles(&resolver, Some(&interaction));
     assert_eq!(styled.path(), &NodePath::root_in(SurfaceSpace::Bar));
 
     if let StyledNode::Flex { children, .. } = styled {
@@ -106,7 +106,7 @@ fn test_vnode_with_popup_and_style_resolution() {
     assert_eq!(button.popup().unwrap().content(), &popup_content);
 
     let resolver = MockResolver;
-    let styled = button.resolve_styles(&resolver, None, None);
+    let styled = button.resolve_styles(&resolver, None);
     assert!(styled.popup().is_some());
 }
 
@@ -138,7 +138,7 @@ fn test_vnode_grid_creation_and_resolution() {
     assert_eq!(grid_node.children().len(), 2);
 
     let resolver = MockResolver;
-    let styled = grid_node.resolve_styles(&resolver, None, None);
+    let styled = grid_node.resolve_styles(&resolver, None);
     if let StyledNode::Grid {
         children, style, ..
     } = styled

@@ -58,7 +58,7 @@ fn test_arbitrary_style_name_and_progress_rendering() {
         None,
         None,
     );
-    let styled_clock = clock_node.resolve_styles(&resolver, None, None);
+    let styled_clock = clock_node.resolve_styles(&resolver, None);
     assert!((styled_clock.style().font_size().unwrap().value() - 16.0).abs() < f32::EPSILON);
 
     let h_prog = VNode::new_progress(
@@ -70,7 +70,7 @@ fn test_arbitrary_style_name_and_progress_rendering() {
         None,
         None,
     );
-    let styled_h = h_prog.resolve_styles(&resolver, None, None);
+    let styled_h = h_prog.resolve_styles(&resolver, None);
     let mut engine = TaffyLayoutAdapter::new();
 
     let render_h = engine
@@ -106,7 +106,7 @@ fn test_width_height_parsing_and_layout() {
         None,
     );
 
-    let styled_img = img_node.resolve_styles(&resolver, None, None);
+    let styled_img = img_node.resolve_styles(&resolver, None);
     assert_eq!(styled_img.style().width(), Some(CssLength::Pixels(20.0)));
     assert_eq!(styled_img.style().height(), Some(CssLength::Pixels(20.0)));
 

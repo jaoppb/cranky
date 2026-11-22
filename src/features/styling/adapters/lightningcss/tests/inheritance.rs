@@ -32,7 +32,7 @@ fn test_color_inherits_through_vdom_tree() {
     );
     let root = VNode::new_flex(vec![child], None, None, None, None, None);
 
-    let styled = root.resolve_styles(&resolver, None, None);
+    let styled = root.resolve_styles(&resolver, None);
     let StyledNode::Flex { children, .. } = &styled else {
         panic!("expected a Flex root");
     };
@@ -66,7 +66,7 @@ fn test_own_declared_color_wins_over_inherited() {
     );
     let root = VNode::new_flex(vec![child], None, None, None, None, None);
 
-    let styled = root.resolve_styles(&resolver, None, None);
+    let styled = root.resolve_styles(&resolver, None);
     let StyledNode::Flex { children, .. } = &styled else {
         panic!("expected a Flex root");
     };
@@ -104,7 +104,7 @@ fn test_em_resolves_through_vdom_tree_not_hardcoded_16px() {
     );
     let root = VNode::new_flex(vec![child], None, None, None, None, None);
 
-    let styled = root.resolve_styles(&resolver, None, None);
+    let styled = root.resolve_styles(&resolver, None);
     let StyledNode::Flex { children, .. } = &styled else {
         panic!("expected a Flex root");
     };
@@ -139,7 +139,7 @@ fn test_custom_property_inherits_and_var_resolves_through_vdom_tree() {
     );
     let root = VNode::new_flex(vec![child], None, None, None, None, None);
 
-    let styled = root.resolve_styles(&resolver, None, None);
+    let styled = root.resolve_styles(&resolver, None);
     let StyledNode::Flex { children, .. } = &styled else {
         panic!("expected a Flex root");
     };

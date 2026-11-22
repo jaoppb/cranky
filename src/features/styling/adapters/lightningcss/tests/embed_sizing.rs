@@ -57,7 +57,7 @@ fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
         None,
         None,
     );
-    let styled = embed.resolve_styles(&resolver, None, None);
+    let styled = embed.resolve_styles(&resolver, None);
     assert_eq!(styled.style().min_width(), Some(CssLength::Pixels(280.0)));
 
     let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();

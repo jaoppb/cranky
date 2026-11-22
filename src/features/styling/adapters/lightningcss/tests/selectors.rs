@@ -168,7 +168,7 @@ fn test_empty_pseudo_class_follows_the_vnode_children() {
             None,
             None,
         );
-        node.resolve_styles(&resolver, None, None)
+        node.resolve_styles(&resolver, None)
             .style()
             .opacity()
             .map(Opacity::value)

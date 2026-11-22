@@ -3,16 +3,25 @@ use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::{NodePath, VNode, VNodeKind};
 use crate::shared::primitives::ModuleKey;
 
+/// What the styling pass resolved for one node, beside what the node itself carries: its computed
+/// style, its styled tooltip, popup and panel, and its styled children.
+pub(super) struct StyledParts {
+    pub(super) style: ComputedStyle,
+    pub(super) tooltip: Option<Box<StyledNode>>,
+    pub(super) popup: Option<StyledPopup>,
+    pub(super) panel: Option<StyledPanel>,
+    pub(super) children: Vec<StyledNode>,
+}
+
 #[must_use]
-pub(super) fn map_to_styled_node(
-    vnode: &VNode,
-    path: &NodePath,
-    style: ComputedStyle,
-    tooltip: Option<Box<StyledNode>>,
-    popup: Option<StyledPopup>,
-    panel: Option<StyledPanel>,
-    children: Vec<StyledNode>,
-) -> StyledNode {
+pub(super) fn map_to_styled_node(vnode: &VNode, path: &NodePath, parts: StyledParts) -> StyledNode {
+    let StyledParts {
+        style,
+        tooltip,
+        popup,
+        panel,
+        children,
+    } = parts;
     let on_click = vnode.on_click().cloned();
     let on_hover = vnode.on_hover().cloned();
     let node_key = vnode.key().cloned();

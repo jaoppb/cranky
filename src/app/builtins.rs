@@ -810,7 +810,7 @@ mod tests {
 
             let styled = cal
                 .render(&MonitorId::new("DP-1"))
-                .resolve_styles(&resolver, None, None);
+                .resolve_styles(&resolver, None);
             let mut engine = TaffyLayoutAdapter::new();
             let tree = engine
                 .calculate_layout(

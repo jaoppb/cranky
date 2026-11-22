@@ -40,7 +40,7 @@ fn test_structural_pseudo_classes_follow_the_vnode_sibling_position() {
         None,
     );
 
-    let styled = parent.resolve_styles(&resolver, None, None);
+    let styled = parent.resolve_styles(&resolver, None);
 
     let StyledNode::Flex { children, .. } = styled else {
         panic!("a flex resolves to a styled flex");

@@ -105,17 +105,14 @@ pub(crate) fn layout_pipeline<F: CanvasFactory, E: LayoutEnginePort>(
 
         tracing::trace!(monitor = %monitor_id, "Resolving styles for module VNode");
         let styled_node = if ctx.child_errors.is_empty() {
-            diff.new_vdom().resolve_styles(
-                ctx.style_resolver,
-                ctx.interaction_context.as_ref(),
-                None,
-            )
+            diff.new_vdom()
+                .resolve_styles(ctx.style_resolver, ctx.interaction_context.as_ref())
         } else {
             let substituted = crate::features::vdom::domain::substitute_failed_modules(
                 diff.new_vdom(),
                 ctx.child_errors,
             );
-            substituted.resolve_styles(ctx.style_resolver, ctx.interaction_context.as_ref(), None)
+            substituted.resolve_styles(ctx.style_resolver, ctx.interaction_context.as_ref())
         };
 
         let measurer_inner = ctx
