@@ -6,7 +6,8 @@ use super::copy_surface_data;
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::shared::events::core::SurfaceKind;
 use crate::shared::primitives::ModuleId;
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::primitives::geometry::Size;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::ports::DisplayServerError;
 use crate::shared::wayland::surface_parent::SurfaceParent;
 use std::collections::HashMap;
@@ -118,9 +119,12 @@ pub(super) fn handle_module_surface(
             set_empty_input_region(&compositor, &surface, queue_handle);
         }
 
-        let shm_buffer =
-            ShmBuffer::new(shm, width, height, queue_handle, xdg_runtime_dir.as_path())
-                .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
+        let shm_buffer = ShmBuffer::new(
+            ShmSource::new(shm, &xdg_runtime_dir),
+            Size::new(width, height),
+            queue_handle,
+        )
+        .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
 
         new_surface_to_register = Some(surface.clone());
         entry.insert(ModuleSurface {
@@ -148,9 +152,12 @@ pub(super) fn handle_module_surface(
     };
 
     if module_surface.size != *cmd.buffer().size() {
-        module_surface.shm_buffer =
-            ShmBuffer::new(shm, width, height, queue_handle, xdg_runtime_dir.as_path())
-                .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
+        module_surface.shm_buffer = ShmBuffer::new(
+            ShmSource::new(shm, &xdg_runtime_dir),
+            Size::new(width, height),
+            queue_handle,
+        )
+        .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
         module_surface.size = *cmd.buffer().size();
     }
 

@@ -1,14 +1,32 @@
 //! A two-slot shared-memory buffer, so one slot can be drawn while the compositor still reads the
 //! other.
 use super::slot::{BufferSlot, BufferUserData};
+use crate::shared::primitives::geometry::Size;
 use cranky_unsafe::SharedMapping;
 use std::io::Result;
 use std::os::fd::AsFd;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::protocol::wl_shm_pool::WlShmPool;
+
+/// Where shared-memory buffers come from: the compositor's `wl_shm` global and the directory
+/// their backing files are created in.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ShmSource<'a> {
+    shm: &'a WlShm,
+    runtime_dir: &'a Path,
+}
+
+impl<'a> ShmSource<'a> {
+    /// Allocates from the bound `shm` global, creating the backing files in `runtime_dir` (the
+    /// session's `XDG_RUNTIME_DIR` in the app).
+    pub(crate) const fn new(shm: &'a WlShm, runtime_dir: &'a Path) -> Self {
+        Self { shm, runtime_dir }
+    }
+}
 
 pub(crate) struct ShmBuffer {
     shm: SharedMapping,
@@ -20,27 +38,28 @@ pub(crate) struct ShmBuffer {
 }
 
 impl ShmBuffer {
+    /// Allocates two `size` slots from `source`.
+    ///
     /// # Errors
     ///
     /// Returns an I/O error if creating or mapping the SHM file fails.
     pub(crate) fn new<S>(
-        shm_proxy: &WlShm,
-        width: u32,
-        height: u32,
+        source: ShmSource<'_>,
+        size: Size,
         queue_handle: &QueueHandle<S>,
-        xdg_runtime_dir: &std::path::Path,
     ) -> Result<Self>
     where
         S: wayland_client::Dispatch<wayland_client::protocol::wl_shm_pool::WlShmPool, ()>
             + wayland_client::Dispatch<wayland_client::protocol::wl_buffer::WlBuffer, BufferUserData>
             + 'static,
     {
+        let (width, height) = (size.width(), size.height());
         let frame_size =
             usize::try_from(width.saturating_mul(height).saturating_mul(4)).unwrap_or_default();
         let total_size = frame_size.saturating_mul(2);
-        let (shm, file) = SharedMapping::create(total_size, xdg_runtime_dir)?;
+        let (shm, file) = SharedMapping::create(total_size, source.runtime_dir)?;
 
-        let pool = shm_proxy.create_pool(
+        let pool = source.shm.create_pool(
             file.as_fd(),
             i32::try_from(total_size).unwrap_or(i32::MAX),
             queue_handle,

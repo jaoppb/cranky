@@ -6,8 +6,9 @@ use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind};
 use crate::shared::env::domain::AppEnvironment;
 use crate::shared::events::core::SurfaceKind;
 use crate::shared::events::signals::SignalHub;
+use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{ModuleId, MonitorId};
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::composite::CompositeLayers;
 use crate::shared::wayland::composite::route::PointerTarget;
 use crate::shared::wayland::ports::DisplayServerError;
@@ -137,11 +138,9 @@ impl WaylandState {
         surface.commit();
 
         let shm_buffer = ShmBuffer::new(
-            shm,
-            1920,
-            bar_height.value(),
+            ShmSource::new(shm, self.app_env.xdg_runtime_dir().as_path()),
+            Size::new(1920, bar_height.value()),
             queue_handle,
-            self.app_env.xdg_runtime_dir().as_path(),
         )
         .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
 

@@ -4,7 +4,7 @@ use crate::shared::env::domain::{AppEnvironment, HomeDir, RustLog, XdgCacheHome,
 use crate::shared::events::signals::SignalHub;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::{ModuleId, MonitorId};
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::adapters::wayland::dispatch_pointer::handle_pointer_enter;
 use crate::shared::wayland::adapters::wayland::dispatch_pointer_button::PointerGrab;
 use crate::shared::wayland::adapters::wayland::floating_anchor::{
@@ -53,8 +53,12 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
     let popup_xdg_surface = xdg_wm_base.get_xdg_surface(&popup_surface, &queue_handle, ());
     let positioner = xdg_wm_base.create_positioner(&queue_handle, ());
     let popup_xdg_popup = popup_xdg_surface.get_popup(None, &positioner, &queue_handle, ());
-    let popup_shm_buffer =
-        ShmBuffer::new(&shm, 2, 2, &queue_handle, Path::new("/tmp")).expect("popup shm buffer");
+    let popup_shm_buffer = ShmBuffer::new(
+        ShmSource::new(&shm, Path::new("/tmp")),
+        Size::new(2, 2),
+        &queue_handle,
+    )
+    .expect("popup shm buffer");
 
     // The module embedded inside that popup's own content (decision 7, gap
     // 4): its own subsurface, parented to the popup's surface rather than
@@ -62,8 +66,12 @@ fn test_resolve_anchor_tooltip_finds_module_embedded_in_open_popup() {
     let module_surface = compositor.create_surface(&queue_handle, ());
     let module_subsurface =
         subcompositor.get_subsurface(&module_surface, &popup_surface, &queue_handle, ());
-    let module_shm_buffer =
-        ShmBuffer::new(&shm, 2, 2, &queue_handle, Path::new("/tmp")).expect("module shm buffer");
+    let module_shm_buffer = ShmBuffer::new(
+        ShmSource::new(&shm, Path::new("/tmp")),
+        Size::new(2, 2),
+        &queue_handle,
+    )
+    .expect("module shm buffer");
 
     let mut module_surfaces = HashMap::new();
     module_surfaces.insert(

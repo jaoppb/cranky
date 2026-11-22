@@ -1,5 +1,6 @@
 use super::state::WaylandState;
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::primitives::geometry::Size;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use tracing::debug;
 use wayland_client::protocol::wl_output::{self, WlOutput};
 use wayland_client::{Connection, Dispatch, QueueHandle};
@@ -84,11 +85,9 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
 
                         if let Some(shm) = state.shm.as_ref()
                             && let Ok(new_shm) = ShmBuffer::new(
-                                shm,
-                                width,
-                                height,
+                                ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path()),
+                                Size::new(width, height),
                                 queue_handle,
-                                state.app_env.xdg_runtime_dir().as_path(),
                             )
                         {
                             bar.shm_buffer = new_shm;

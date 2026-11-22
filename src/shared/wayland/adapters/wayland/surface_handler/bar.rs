@@ -2,7 +2,8 @@ use super::super::command::SurfaceCommand;
 use super::super::state::WaylandState;
 use super::copy_surface_data;
 use crate::shared::events::core::SurfaceKind;
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::primitives::geometry::Size;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
 use wayland_client::protocol::wl_shm::WlShm;
@@ -24,11 +25,9 @@ pub(super) fn handle_bar_surface(
 
     if bar.shm_buffer.width() != width || bar.shm_buffer.height() != height {
         bar.shm_buffer = ShmBuffer::new(
-            shm,
-            width,
-            height,
+            ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path()),
+            Size::new(width, height),
             queue_handle,
-            state.app_env.xdg_runtime_dir().as_path(),
         )
         .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
     }

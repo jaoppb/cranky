@@ -8,7 +8,7 @@ use crate::shared::events::core::SurfaceKind;
 use crate::shared::primitives::PopupOffset;
 use crate::shared::primitives::geometry::Size;
 use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::composite::PixelsMut;
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
@@ -50,11 +50,9 @@ pub(super) fn create_new_floating(
             reason: "SHM not bound".to_string(),
         })?;
     let shm_buffer = ShmBuffer::new(
-        shm,
-        placement.size.width(),
-        placement.size.height(),
+        ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path()),
+        placement.size,
         queue_handle,
-        state.app_env.xdg_runtime_dir().as_path(),
     )
     .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
 

@@ -6,7 +6,7 @@ use super::state::WaylandState;
 use super::types::FloatingSurface;
 use crate::features::layout_engine::domain::FloatingKind;
 use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::wayland::adapters::shm::ShmBuffer;
+use crate::shared::wayland::adapters::shm::{ShmBuffer, ShmSource};
 use crate::shared::wayland::ports::DisplayServerError;
 use wayland_client::QueueHandle;
 
@@ -51,11 +51,9 @@ pub(super) fn update_existing_floating(
             reason: "SHM not bound".to_string(),
         })?;
     let new_shm_buffer = ShmBuffer::new(
-        shm,
-        placement.size.width(),
-        placement.size.height(),
+        ShmSource::new(shm, state.app_env.xdg_runtime_dir().as_path()),
+        placement.size,
         queue_handle,
-        state.app_env.xdg_runtime_dir().as_path(),
     )
     .map_err(|error| DisplayServerError::Internal(error.to_string()))?;
 
