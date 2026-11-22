@@ -6,7 +6,8 @@ use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockStyleResolver, TestModulePort, process_monitor,
 };
 use crate::features::vdom::domain::{
-    InteractionContext, ModuleParams, NodePath, NodeRef, PanelSpec, PopupSpec, SurfaceSpace, VNode,
+    InteractedNodes, InteractionContext, ModuleParams, NodePath, NodeRef, PanelSpec, PopupSpec,
+    SurfaceSpace, VNode,
 };
 use crate::shared::primitives::geometry::Scale;
 use crate::shared::primitives::{
@@ -78,9 +79,7 @@ fn render_with_tooltip(content: VNode) -> RenderOutcome {
     render(
         hovered,
         Some(InteractionContext::new(
-            Some(on_bar),
-            None,
-            None,
+            InteractedNodes::new(Some(on_bar), None, None),
             MonitorFocus::Unfocused,
         )),
     )

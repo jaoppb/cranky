@@ -1,4 +1,4 @@
-use crate::features::vdom::domain::{InteractionContext, NodeRef};
+use crate::features::vdom::domain::{InteractedNodes, InteractionContext, NodeRef};
 use crate::shared::primitives::{MonitorFocus, MonitorId};
 use std::collections::{HashMap, HashSet};
 
@@ -40,9 +40,11 @@ impl PointerHandler {
         monitor_focus: MonitorFocus,
     ) -> InteractionContext {
         InteractionContext::new(
-            self.hovered.get(monitor_id).cloned(),
-            self.active.get(monitor_id).cloned(),
-            self.focused.get(monitor_id).cloned(),
+            InteractedNodes::new(
+                self.hovered.get(monitor_id).cloned(),
+                self.active.get(monitor_id).cloned(),
+                self.focused.get(monitor_id).cloned(),
+            ),
             monitor_focus,
         )
     }

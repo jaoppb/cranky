@@ -8,7 +8,9 @@ use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::test_support::{
     MockLayoutEngine, MockVdomDiff, PipelineFixture, TestModulePort, process_monitor,
 };
-use crate::features::vdom::domain::{InteractionContext, NodePath, NodeRef, SurfaceSpace, VNode};
+use crate::features::vdom::domain::{
+    InteractedNodes, InteractionContext, NodePath, NodeRef, SurfaceSpace, VNode,
+};
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::{MonitorFocus, MonitorId};
 
@@ -26,7 +28,10 @@ fn an_interaction_alone_dirties_the_tree_only() {
     assert!(process_monitor(&mut pipeline, &port, fixture.ctx(&mon)).is_some());
 
     let hovered = NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Bar));
-    let interaction = InteractionContext::new(Some(hovered), None, None, MonitorFocus::Focused);
+    let interaction = InteractionContext::new(
+        InteractedNodes::new(Some(hovered), None, None),
+        MonitorFocus::Focused,
+    );
     let mut ctx = fixture.ctx(&mon);
     ctx.interaction_context = Some(interaction);
     let diff = pipeline

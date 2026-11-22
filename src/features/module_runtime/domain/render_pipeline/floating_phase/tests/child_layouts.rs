@@ -8,7 +8,8 @@ use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::test_support::MockCanvasFactory;
 use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::{
-    AnchorDirection, InteractionContext, NodePath, NodeRef, PanelLayer, SurfaceSpace,
+    AnchorDirection, InteractedNodes, InteractionContext, NodePath, NodeRef, PanelLayer,
+    SurfaceSpace,
 };
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::{
@@ -85,7 +86,10 @@ fn floating_modules_are_listed_per_kind_and_each_kind_caches_its_own_content() {
     let panel = content(SurfaceSpace::Panel, "launcher panel", None);
     let tooltip = content(SurfaceSpace::Tooltip, "clock tooltip", None);
     let hovered = NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Bar));
-    let interaction = InteractionContext::new(Some(hovered), None, None, MonitorFocus::Focused);
+    let interaction = InteractionContext::new(
+        InteractedNodes::new(Some(hovered), None, None),
+        MonitorFocus::Focused,
+    );
     let monitor = MonitorId::new("HDMI-A-1");
     let (mut popup_cache, mut panel_cache, mut tooltip_cache) =
         (HashMap::new(), HashMap::new(), HashMap::new());

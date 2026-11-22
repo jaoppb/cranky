@@ -5,7 +5,8 @@ use super::{RecordingEngine, Spec, content, panel_on_every_edge, tooltip_content
 use crate::features::layout_engine::domain::{RenderNode, StyledNode, StyledPanel, StyledPopup};
 use crate::features::module_runtime::test_support::MockCanvasFactory;
 use crate::features::vdom::domain::{
-    AnchorDirection, InteractionContext, NodePath, NodeRef, PanelLayer, SurfaceSpace,
+    AnchorDirection, InteractedNodes, InteractionContext, NodePath, NodeRef, PanelLayer,
+    SurfaceSpace,
 };
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 use crate::shared::primitives::{MonitorFocus, MonitorId, PopupOffset};
@@ -89,7 +90,10 @@ fn each_open_floating_kind_is_laid_out_by_its_own_engine() {
     let bar = Spec::at_path(SurfaceSpace::Bar, &[]).flex(vec![button, launcher]);
     // The pointer is over the popup's content, which carries a tooltip.
     let hovered = NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Popup));
-    let interaction = InteractionContext::new(Some(hovered), None, None, MonitorFocus::Focused);
+    let interaction = InteractionContext::new(
+        InteractedNodes::new(Some(hovered), None, None),
+        MonitorFocus::Focused,
+    );
 
     let (layouts, engines) = run(&bar, Some(&interaction));
 

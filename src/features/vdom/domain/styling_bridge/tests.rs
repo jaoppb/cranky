@@ -2,7 +2,7 @@ use crate::features::layout_engine::domain::StyledNode;
 use crate::features::styling::domain::{ElementQuery, InheritedStyle};
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::{
-    InteractionContext, NodePath, NodeRef, SurfaceSpace, TextContent, VNode,
+    InteractedNodes, InteractionContext, NodePath, NodeRef, SurfaceSpace, TextContent, VNode,
 };
 use crate::shared::primitives::MonitorFocus;
 
@@ -45,18 +45,20 @@ fn test_resolve_styles_interaction_propagation() {
 
     let resolver = MockResolver;
     let interaction = InteractionContext::new(
-        Some(NodeRef::new(
-            Vec::new(),
-            NodePath::new(SurfaceSpace::Bar, vec![0]),
-        )),
-        Some(NodeRef::new(
-            Vec::new(),
-            NodePath::new(SurfaceSpace::Bar, vec![0]),
-        )),
-        Some(NodeRef::new(
-            Vec::new(),
-            NodePath::new(SurfaceSpace::Bar, vec![1]),
-        )),
+        InteractedNodes::new(
+            Some(NodeRef::new(
+                Vec::new(),
+                NodePath::new(SurfaceSpace::Bar, vec![0]),
+            )),
+            Some(NodeRef::new(
+                Vec::new(),
+                NodePath::new(SurfaceSpace::Bar, vec![0]),
+            )),
+            Some(NodeRef::new(
+                Vec::new(),
+                NodePath::new(SurfaceSpace::Bar, vec![1]),
+            )),
+        ),
         MonitorFocus::Focused,
     );
 
