@@ -6,9 +6,7 @@ mod tests {
     use crate::shared::primitives::{MonitorId, ScriptMonitorInfo};
     use crate::shared::scripting::adapters::rhai::RhaiModule;
 
-    #[test]
-    fn test_rhai_cranky_namespaces_and_aliases() {
-        let source = r#"
+    const NAMESPACES_SOURCE: &str = r#"
         fn init() {
             // cranky namespaces
             assert(cranky != ());
@@ -30,7 +28,10 @@ mod tests {
             return ui.flex([txt, btn]);
         }
     "#;
-        let mut module = RhaiModule::new("test_ns".into(), source).unwrap();
+
+    #[test]
+    fn test_rhai_cranky_namespaces_and_aliases() {
+        let mut module = RhaiModule::new("test_ns".into(), NAMESPACES_SOURCE).unwrap();
         let mod_config = crate::shared::config::domain::ModuleConfig::new(
             "test_ns".into(),
             crate::shared::primitives::ModuleOptions::default(),
@@ -42,9 +43,7 @@ mod tests {
         assert_eq!(node.children().len(), 2);
     }
 
-    #[test]
-    fn test_rhai_ui_actions() {
-        let source = r#"
+    const UI_ACTIONS_SOURCE: &str = r#"
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
@@ -61,7 +60,10 @@ mod tests {
             });
         }
     "#;
-        let module = RhaiModule::new("test_actions".into(), source).unwrap();
+
+    #[test]
+    fn test_rhai_ui_actions() {
+        let module = RhaiModule::new("test_actions".into(), UI_ACTIONS_SOURCE).unwrap();
         let node = module.render(&MonitorId::new("DP-1"));
         assert_eq!(node.children().len(), 3);
 
@@ -90,9 +92,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_rhai_rich_monitor_and_sys() {
-        let source = r#"
+    const RICH_MONITOR_SOURCE: &str = r#"
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
@@ -122,7 +122,10 @@ mod tests {
             return ui.text("Mon: " + monitor.name);
         }
     "#;
-        let mut module = RhaiModule::new("test_sys".into(), source).unwrap();
+
+    #[test]
+    fn test_rhai_rich_monitor_and_sys() {
+        let mut module = RhaiModule::new("test_sys".into(), RICH_MONITOR_SOURCE).unwrap();
         let test_mon = ScriptMonitorInfo::from_id(&MonitorId::new("DP-1"))
             .with_name("DP-1".to_string())
             .with_size(crate::shared::primitives::geometry::Size::new(1920, 1080))
@@ -160,9 +163,7 @@ mod tests {
         assert_eq!(render_node.children().len(), 2);
     }
 
-    #[test]
-    fn test_rhai_vnode_with_popup_and_panel() {
-        let source = r#"
+    const POPUP_AND_PANEL_SOURCE: &str = r#"
         fn init() {}
         fn refresh() {}
         fn render(monitor) {
@@ -189,7 +190,10 @@ mod tests {
             });
         }
     "#;
-        let module = RhaiModule::new("test_pop_pan".into(), source).unwrap();
+
+    #[test]
+    fn test_rhai_vnode_with_popup_and_panel() {
+        let module = RhaiModule::new("test_pop_pan".into(), POPUP_AND_PANEL_SOURCE).unwrap();
         let node = module.render(&MonitorId::new("DP-1"));
         assert!(node.popup().is_some());
         let popup = node.popup().unwrap();
@@ -197,8 +201,8 @@ mod tests {
             popup.anchor_direction(),
             crate::features::vdom::domain::AnchorDirection::Bottom
         );
-        assert_eq!(popup.offset().unwrap().dx(), 5);
-        assert_eq!(popup.offset().unwrap().dy(), 10);
+        let offset = popup.offset().unwrap();
+        assert_eq!((offset.dx(), offset.dy()), (5, 10));
 
         assert!(node.panel().is_some());
         let panel = node.panel().unwrap();
@@ -206,11 +210,13 @@ mod tests {
             panel.layer(),
             crate::features::vdom::domain::PanelLayer::Overlay
         );
-        assert!(panel.anchor().top());
-        assert!(panel.anchor().right());
-        assert!(!panel.anchor().bottom());
-        assert_eq!(panel.margin().top().value(), 15);
-        assert_eq!(panel.margin().right().value(), 25);
+        let anchor = panel.anchor();
+        assert_eq!(
+            (anchor.top(), anchor.right(), anchor.bottom()),
+            (true, true, false)
+        );
+        let margin = panel.margin();
+        assert_eq!((margin.top().value(), margin.right().value()), (15, 25));
     }
 
     #[test]

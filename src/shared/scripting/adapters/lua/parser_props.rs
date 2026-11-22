@@ -1,4 +1,5 @@
-pub(super) use super::parser_floating::{parse_panel_spec, parse_popup_spec};
+pub(super) use super::parser_floating::parse_popup_spec;
+pub(super) use super::parser_panel::parse_panel_spec;
 use super::vnode_parser::value_to_vnode;
 use crate::features::styling::domain::{ClassNameList, ElementId};
 use crate::features::vdom::domain::{
@@ -73,28 +74,7 @@ fn parse_click_handlers(lua: &Lua, val: Option<mlua::Value>) -> Option<ClickHand
     let mut handlers = ClickHandlers::new();
 
     for (key, value) in table.pairs::<mlua::Value, mlua::Value>().flatten() {
-        let button_opt = match key {
-            mlua::Value::String(lua_string) => lua_string
-                .to_str()
-                .ok()
-                .as_deref()
-                .and_then(PointerButton::from_name),
-            mlua::Value::Integer(integer) => {
-                u32::try_from(integer).ok().map(PointerButton::from_raw)
-            }
-            mlua::Value::Number(number) => {
-                if number >= 0.0 && number.fract() == 0.0 && number <= f64::from(u32::MAX) {
-                    Some(PointerButton::from_raw(crate::utils::f32_to_u32(
-                        crate::utils::f64_to_f32(number),
-                    )))
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        };
-
-        if let Some(btn) = button_opt
+        if let Some(btn) = pointer_button_of_key(&key)
             && let Some(cmd) = parse_ui_action(lua, Some(value))
         {
             handlers.insert(btn, cmd);
@@ -106,6 +86,31 @@ fn parse_click_handlers(lua: &Lua, val: Option<mlua::Value>) -> Option<ClickHand
     }
 
     parse_ui_action(lua, Some(mlua::Value::Table(table))).map(ClickHandlers::from_single)
+}
+
+/// The button an `on_click` key names: a button name or number as a string, or a number.
+fn pointer_button_of_key(key: &mlua::Value) -> Option<PointerButton> {
+    match key {
+        mlua::Value::String(lua_string) => lua_string
+            .to_str()
+            .ok()
+            .as_deref()
+            .and_then(PointerButton::from_name),
+        mlua::Value::Integer(integer) => u32::try_from(*integer).ok().map(PointerButton::from_raw),
+        mlua::Value::Number(number) => pointer_button_of_number(*number),
+        _ => None,
+    }
+}
+
+/// The button a whole, non-negative `number` within `u32` names.
+fn pointer_button_of_number(number: f64) -> Option<PointerButton> {
+    if number >= 0.0 && number.fract() == 0.0 && number <= f64::from(u32::MAX) {
+        Some(PointerButton::from_raw(crate::utils::f32_to_u32(
+            crate::utils::f64_to_f32(number),
+        )))
+    } else {
+        None
+    }
 }
 
 /// What a script attaches to an element besides its kind, its selectors and its interactions:
