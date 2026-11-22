@@ -1,24 +1,23 @@
 //! First pipeline phase: renders the script and decides whether anything changed enough to need a
 //! new layout.
-use super::context::PipelineDiff;
+use super::context::{DiffInput, PipelineDiff};
 use super::pipeline::RenderPipeline;
 use crate::features::module_runtime::domain::Change;
 use crate::features::module_runtime::ports::AnyModulePort;
-use crate::features::vdom::domain::InteractionContext;
-use crate::features::vdom::ports::VdomDiffPort;
-use crate::shared::primitives::geometry::Rect;
-use crate::shared::primitives::{ChildSizesMap, MonitorId};
 
 #[must_use]
 pub(crate) fn diff_pipeline(
     pipeline: &RenderPipeline,
-    monitor_id: &MonitorId,
     port: &dyn AnyModulePort,
-    vdom_diff: &dyn VdomDiffPort,
-    current_bounds: Option<Rect>,
-    current_child_sizes: Option<&ChildSizesMap>,
-    interaction: Option<&InteractionContext>,
+    input: DiffInput<'_>,
 ) -> Option<PipelineDiff> {
+    let DiffInput {
+        monitor_id,
+        vdom_diff,
+        bounds: current_bounds,
+        child_sizes: current_child_sizes,
+        interaction,
+    } = input;
     let new_vdom = port.render(monitor_id);
     let diff_result = vdom_diff.diff(pipeline.vdom_trees().get(monitor_id), &new_vdom);
 
@@ -49,10 +48,10 @@ pub(crate) fn diff_pipeline(
         || interaction_changed
         || !pipeline.render_trees().contains_key(monitor_id);
 
-    Some(PipelineDiff::new(
+    Some(PipelineDiff {
         new_vdom,
-        Change::from(vdom_dirty),
-        Change::from(bounds_changed),
-        Change::from(child_sizes_changed),
-    ))
+        vdom: Change::from(vdom_dirty),
+        bounds: Change::from(bounds_changed),
+        child_sizes: Change::from(child_sizes_changed),
+    })
 }

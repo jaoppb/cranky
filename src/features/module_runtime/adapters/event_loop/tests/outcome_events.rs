@@ -4,6 +4,7 @@ use super::lifecycle::make_test_rect_node;
 use super::outcome::event_loop;
 use crate::features::layout_engine::domain::{DisplayCommand, ShowFloating};
 use crate::features::module_runtime::application::ModuleContext;
+use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
 use crate::features::module_runtime::domain::{
     FloatingLayouts, PopupRenderLayout, RenderOutcome, SizeChange,
 };
@@ -53,23 +54,27 @@ fn layout_events_carry_the_module_monitor_children_and_settled_size() {
     let grown = SizeChange::new(Size::new(0, 0), Size::new(64, 22)).with_settled_width(Some(280));
 
     let with_child = RenderOutcome::new(
-        Some(grown),
-        vec![clock_layout()],
-        make_test_rect_node(),
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::default(),
+            EmbedReport::new(Some(grown), vec![clock_layout()]),
+        ),
         None,
-        FloatingLayouts::default(),
+        Scale::new(1.0),
     );
-    event_loop.dispatch_render_outcome(&monitor, &with_child, Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&monitor, &with_child);
     let empty = RenderOutcome::new(
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::default(),
+            EmbedReport::new(None, vec![]),
+        ),
         None,
-        vec![],
-        make_test_rect_node(),
-        None,
-        FloatingLayouts::default(),
+        Scale::new(1.0),
     );
-    event_loop.dispatch_render_outcome(&monitor, &empty, Scale::new(1.0));
-    event_loop.dispatch_render_outcome(&monitor, &empty, Scale::new(1.0));
-    event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &empty, Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&monitor, &empty);
+    event_loop.dispatch_render_outcome(&monitor, &empty);
+    event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &empty);
 
     assert_eq!(
         layout_rx.try_iter().collect::<Vec<_>>(),
@@ -114,13 +119,14 @@ fn floating_content_is_painted_at_the_render_scale() {
     event_loop(ctx).dispatch_render_outcome(
         &MonitorId::new("DP-1"),
         &RenderOutcome::new(
+            PipelineLayout::new(
+                make_test_rect_node(),
+                FloatingLayouts::new(Some(popup), None, None),
+                EmbedReport::new(None, vec![]),
+            ),
             None,
-            vec![],
-            make_test_rect_node(),
-            None,
-            FloatingLayouts::new(Some(popup), None, None),
+            Scale::new(2.0),
         ),
-        Scale::new(2.0),
     );
 
     let Ok(DisplayCommand::ShowFloatingSurface(ShowFloating {

@@ -5,7 +5,7 @@ use super::pipeline::RenderPipeline;
 use crate::features::layout_engine::domain::{LayoutError, RenderNode, StyledNode, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::test_support::{
-    MockLayoutEngine, MockVdomDiff, PipelineFixture, TestModulePort,
+    MockLayoutEngine, MockVdomDiff, PipelineFixture, TestModulePort, process_monitor,
 };
 use crate::features::vdom::domain::{InteractionContext, NodePath, NodeRef, SurfaceSpace, VNode};
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
@@ -22,16 +22,14 @@ fn an_interaction_alone_dirties_the_tree_only() {
     let mut fixture = PipelineFixture::<MockLayoutEngine>::default();
     let mon = MonitorId::new("DP-1");
     let port = TestModulePort::new(rect());
-    assert!(
-        pipeline
-            .process_monitor(&mon, &port, &MockVdomDiff, fixture.ctx())
-            .is_some()
-    );
+    assert!(process_monitor(&mut pipeline, &port, fixture.ctx(&mon)).is_some());
 
     let hovered = NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Bar));
     let interaction = InteractionContext::new(Some(hovered), None, None, MonitorFocus::Focused);
+    let mut ctx = fixture.ctx(&mon);
+    ctx.interaction_context = Some(interaction);
     let diff = pipeline
-        .diff(&mon, &port, &MockVdomDiff, None, None, Some(&interaction))
+        .diff(&port, ctx.diff_input(&MockVdomDiff))
         .expect("a new hover is a change");
     assert!(diff.vdom_dirty());
     assert!(!diff.bounds_changed());
@@ -47,15 +45,15 @@ fn each_monitor_is_diffed_and_sized_on_its_own() {
     let port = TestModulePort::new(rect());
     let grown = SizeChange::new(Size::new(0, 0), Size::new(10, 10));
 
-    let outcome = pipeline.process_monitor(&first, &port, &MockVdomDiff, fixture.ctx());
+    let outcome = process_monitor(&mut pipeline, &port, fixture.ctx(&first));
     assert_eq!(outcome.expect("first render").size_change(), Some(&grown));
     assert!(
         pipeline
-            .diff(&first, &port, &MockVdomDiff, None, None, None)
+            .diff(&port, fixture.ctx(&first).diff_input(&MockVdomDiff))
             .is_none()
     );
 
-    let outcome = pipeline.process_monitor(&second, &port, &MockVdomDiff, fixture.ctx());
+    let outcome = process_monitor(&mut pipeline, &port, fixture.ctx(&second));
     assert_eq!(outcome.expect("second monitor").size_change(), Some(&grown));
     assert!(pipeline.render_trees().contains_key(&second));
 }
@@ -66,33 +64,25 @@ fn paint_records_only_the_bounds_it_painted_at() {
     let mut pipeline = RenderPipeline::new();
     let mut fixture = PipelineFixture::<MockLayoutEngine>::default();
     let mon = MonitorId::new("DP-1");
-    let node = pipeline
-        .process_monitor(
-            &mon,
-            &TestModulePort::new(rect()),
-            &MockVdomDiff,
-            fixture.ctx(),
-        )
-        .expect("render outcome")
-        .render_tree()
-        .clone();
-    let ctx = fixture.ctx();
+    let node = process_monitor(
+        &mut pipeline,
+        &TestModulePort::new(rect()),
+        fixture.ctx(&mon),
+    )
+    .expect("render outcome")
+    .render_tree()
+    .clone();
+    let mut ctx = fixture.ctx(&mon);
+    ctx.scale = Scale::new(1.5);
 
-    let flat = Rect::new(Position::new(3, 4), Size::new(20, 0));
-    let painted = pipeline.paint(&mon, &node, Some(flat), Scale::new(1.5), ctx.canvas_factory);
+    ctx.current_bounds = Some(Rect::new(Position::new(3, 4), Size::new(20, 0)));
+    let painted = pipeline.paint(&node, &mut ctx);
     assert!(painted.is_none());
     assert!(pipeline.rendered_bounds().is_empty());
 
     let bounds = Rect::new(Position::new(3, 4), Size::new(20, 10));
-    let (buffer, position) = pipeline
-        .paint(
-            &mon,
-            &node,
-            Some(bounds),
-            Scale::new(1.5),
-            ctx.canvas_factory,
-        )
-        .expect("painted");
+    ctx.current_bounds = Some(bounds);
+    let (buffer, position) = pipeline.paint(&node, &mut ctx).expect("painted");
     assert_eq!((buffer.width(), buffer.height()), (30, 15));
     assert_eq!(position, Position::new(3, 4));
     assert_eq!(pipeline.rendered_bounds().get(&mon), Some(&bounds));
@@ -121,11 +111,10 @@ fn a_failed_layout_renders_nothing() {
     let mut fixture = PipelineFixture::<FailingEngine>::default();
     let mon = MonitorId::new("DP-1");
 
-    let outcome = pipeline.process_monitor(
-        &mon,
+    let outcome = process_monitor(
+        &mut pipeline,
         &TestModulePort::new(rect()),
-        &MockVdomDiff,
-        fixture.ctx(),
+        fixture.ctx(&mon),
     );
 
     assert!(outcome.is_none());

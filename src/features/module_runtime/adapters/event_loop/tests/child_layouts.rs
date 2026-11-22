@@ -3,7 +3,7 @@
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::module_runtime::domain::{RenderOutcome, RenderPipeline};
 use crate::features::module_runtime::test_support::{
-    MockVdomDiff, PipelineFixture, TestModulePort,
+    PipelineFixture, TestModulePort, process_monitor,
 };
 use crate::features::vdom::domain::{ModuleParams, PopupSpec, VNode};
 use crate::shared::primitives::{LayoutSurface, ModuleKey, ModuleName, ModuleOptions, MonitorId};
@@ -32,14 +32,12 @@ fn child_layouts_list_the_bar_modules_then_the_floating_ones() {
     let bar = VNode::new_flex(vec![module("clock"), rect()], None, None, None, None, None)
         .with_popup(PopupSpec::new(Box::new(module("calendar"))));
 
-    let outcome = pipeline
-        .process_monitor(
-            &MonitorId::new("DP-1"),
-            &TestModulePort::new(bar),
-            &MockVdomDiff,
-            fixture.ctx(),
-        )
-        .expect("render outcome");
+    let outcome = process_monitor(
+        &mut pipeline,
+        &TestModulePort::new(bar),
+        fixture.ctx(&MonitorId::new("DP-1")),
+    )
+    .expect("render outcome");
 
     let children: Vec<_> = outcome
         .child_layouts()
@@ -79,24 +77,21 @@ fn a_failed_child_is_laid_out_as_a_placeholder_instead_of_a_module() {
     let mon = MonitorId::new("DP-1");
 
     let mut fixture = PipelineFixture::<TaffyLayoutAdapter>::default();
-    let healthy = RenderPipeline::new()
-        .process_monitor(
-            &mon,
-            &TestModulePort::new(bar()),
-            &MockVdomDiff,
-            fixture.ctx(),
-        )
-        .expect("render outcome");
+    let healthy = process_monitor(
+        &mut RenderPipeline::new(),
+        &TestModulePort::new(bar()),
+        fixture.ctx(&mon),
+    )
+    .expect("render outcome");
     assert_eq!(names(healthy), ["calendar", "clock"]);
 
     let errors = HashMap::from([(
         ModuleKey::from_name(ModuleName::new("calendar")),
         "not found".to_string(),
     )]);
-    let mut ctx = fixture.ctx();
+    let mut ctx = fixture.ctx(&mon);
     ctx.child_errors = &errors;
-    let failed = RenderPipeline::new()
-        .process_monitor(&mon, &TestModulePort::new(bar()), &MockVdomDiff, ctx)
+    let failed = process_monitor(&mut RenderPipeline::new(), &TestModulePort::new(bar()), ctx)
         .expect("render outcome");
     assert_eq!(names(failed), ["clock"]);
 }

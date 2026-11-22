@@ -1,7 +1,9 @@
 use crate::features::layout_engine::domain::{
     DisplayCommand, DisplayCommandSender, FloatingKind, PopupTarget, RenderNode, ShowFloating,
 };
-use crate::features::module_runtime::domain::render_pipeline::{FloatingHold, paint_pipeline};
+use crate::features::module_runtime::domain::render_pipeline::{
+    FloatingHold, ScaledCanvasFactory, paint_pipeline,
+};
 use crate::features::module_runtime::domain::{PopupRenderLayout, RenderOutcome};
 use crate::shared::primitives::geometry::{Rect, Scale};
 use crate::shared::primitives::{ModuleId, MonitorId, PopupOffset};
@@ -75,9 +77,11 @@ impl<DS: DisplayCommandSender, F: CanvasFactory> FloatingDispatcher<'_, DS, F> {
         }
 
         let logical_size = *node.rect().size();
-        let Some((buffer, _)) =
-            paint_pipeline(node, Some(node.rect()), self.scale, self.canvas_factory)
-        else {
+        let Some((buffer, _)) = paint_pipeline(
+            node,
+            Some(node.rect()),
+            ScaledCanvasFactory::new(self.canvas_factory, self.scale),
+        ) else {
             return;
         };
         self.display_sender

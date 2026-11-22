@@ -2,115 +2,65 @@ use super::RenderPipeline;
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::domain::render_pipeline::context::{
-    LayoutContext, PipelineDiff,
+    DiffInput, LayoutContext, PipelineDiff,
 };
 use crate::features::module_runtime::domain::render_pipeline::diff_phase::diff_pipeline;
-use crate::features::module_runtime::domain::render_pipeline::floating_phase::FloatingLayouts;
 use crate::features::module_runtime::domain::render_pipeline::layout_phase::layout_pipeline;
 use crate::features::module_runtime::domain::render_pipeline::outcome::{
-    RenderOutcome, SizeChange,
+    PipelineLayout, RenderOutcome,
 };
-use crate::features::module_runtime::domain::render_pipeline::paint_phase::paint_pipeline;
+use crate::features::module_runtime::domain::render_pipeline::paint_phase::{
+    ScaledCanvasFactory, paint_pipeline,
+};
 use crate::features::module_runtime::ports::AnyModulePort;
-use crate::features::vdom::domain::InteractionContext;
-use crate::features::vdom::ports::VdomDiffPort;
-use crate::shared::primitives::geometry::{Position, Rect, Scale};
+use crate::shared::primitives::geometry::Position;
 use crate::shared::primitives::render::RenderBuffer;
-use crate::shared::primitives::{ChildModuleLayout, ChildSizesMap, MonitorId};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 
 impl RenderPipeline {
-    /// Renders the module for `monitor_id` and returns what changed, or `None` when the tree,
-    /// bounds, child sizes and interaction all match the last render on that monitor.
+    /// Renders the module for the input's monitor and returns what changed, or `None` when the
+    /// tree, bounds, child sizes and interaction all match the last render on that monitor.
     #[must_use]
-    pub fn diff(
-        &self,
-        monitor_id: &MonitorId,
-        port: &dyn AnyModulePort,
-        vdom_diff: &dyn VdomDiffPort,
-        current_bounds: Option<Rect>,
-        current_child_sizes: Option<&ChildSizesMap>,
-        interaction: Option<&InteractionContext>,
-    ) -> Option<PipelineDiff> {
-        diff_pipeline(
-            self,
-            monitor_id,
-            port,
-            vdom_diff,
-            current_bounds,
-            current_child_sizes,
-            interaction,
-        )
+    pub fn diff(&self, port: &dyn AnyModulePort, input: DiffInput<'_>) -> Option<PipelineDiff> {
+        diff_pipeline(self, port, input)
     }
 
-    /// Lays out the diffed tree and its floating content on `monitor_id`, returning the render
-    /// tree, any size change, child module layouts and floating layouts.
+    /// Lays out the diffed tree and its floating content on the context's monitor, returning the
+    /// render tree, the floating layouts and the size change and child module layouts to report.
     ///
     /// Returns `None` when the layout engine fails, or when nothing is dirty and no earlier tree
     /// exists.
     pub fn layout<F: CanvasFactory, E: LayoutEnginePort>(
         &mut self,
-        monitor_id: &MonitorId,
         diff: PipelineDiff,
         ctx: &mut LayoutContext<'_, F, E>,
-    ) -> Option<(
-        RenderNode,
-        Option<SizeChange>,
-        Vec<ChildModuleLayout>,
-        FloatingLayouts,
-    )> {
-        layout_pipeline(self, monitor_id, diff, ctx)
+    ) -> Option<PipelineLayout> {
+        layout_pipeline(self, diff, ctx)
     }
 
-    pub(crate) fn paint<F: CanvasFactory>(
+    pub(crate) fn paint<F: CanvasFactory, E: LayoutEnginePort>(
         &mut self,
-        monitor_id: &MonitorId,
         render_node: &RenderNode,
-        current_bounds: Option<Rect>,
-        scale: Scale,
-        canvas_factory: &mut F,
+        ctx: &mut LayoutContext<'_, F, E>,
     ) -> Option<(RenderBuffer, Position)> {
-        let res = paint_pipeline(render_node, current_bounds, scale, canvas_factory);
+        let current_bounds = ctx.current_bounds;
+        let canvases = ScaledCanvasFactory::new(ctx.canvas_factory, ctx.scale);
+        let res = paint_pipeline(render_node, current_bounds, canvases);
         if let Some(bounds) = current_bounds.filter(|rect| rect.width() > 0 && rect.height() > 0) {
-            self.rendered_bounds.insert(monitor_id.clone(), bounds);
+            self.rendered_bounds.insert(ctx.monitor_id.clone(), bounds);
         }
         res
     }
 
-    pub(crate) fn process_monitor<F: CanvasFactory, E: LayoutEnginePort>(
+    /// Lays out and paints what the diff phase found on the context's monitor, or `None` when the
+    /// layout phase produced nothing.
+    pub(crate) fn layout_and_paint<F: CanvasFactory, E: LayoutEnginePort>(
         &mut self,
-        monitor_id: &MonitorId,
-        port: &dyn AnyModulePort,
-        vdom_diff: &dyn VdomDiffPort,
+        diff: PipelineDiff,
         mut ctx: LayoutContext<'_, F, E>,
     ) -> Option<RenderOutcome> {
-        let diff = self.diff(
-            monitor_id,
-            port,
-            vdom_diff,
-            ctx.current_bounds,
-            ctx.current_child_sizes,
-            ctx.interaction_context.as_ref(),
-        )?;
-
-        let current_bounds = ctx.current_bounds;
-        let (render_node, size_change, child_layouts, floating) =
-            self.layout(monitor_id, diff, &mut ctx)?;
-
-        let buffer = self.paint(
-            monitor_id,
-            &render_node,
-            current_bounds,
-            ctx.scale,
-            ctx.canvas_factory,
-        );
-
-        Some(RenderOutcome::new(
-            size_change,
-            child_layouts,
-            render_node,
-            buffer,
-            floating,
-        ))
+        let layout = self.layout(diff, &mut ctx)?;
+        let buffer = self.paint(layout.render_tree(), &mut ctx);
+        Some(RenderOutcome::new(layout, buffer, ctx.scale))
     }
 }

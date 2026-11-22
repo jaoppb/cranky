@@ -10,7 +10,9 @@ use cranky::features::layout_engine::domain::{
     AlignItems, BoxMargin, FlexDirection, JustifyContent, NodePath, StyledNode, SurfaceSpace,
 };
 use cranky::features::layout_engine::ports::LayoutEnginePort;
-use cranky::features::module_runtime::domain::render_pipeline::{LayoutContext, RenderPipeline};
+use cranky::features::module_runtime::domain::render_pipeline::{
+    DiffInput, LayoutContext, RenderPipeline,
+};
 use cranky::features::module_runtime::ports::{AnyModulePort, ModuleInitError};
 use cranky::features::styling::adapters::lightningcss::{
     LightningCssAdapter, LightningPropertyReparser,
@@ -583,10 +585,17 @@ fn bench_pipeline(criterion: &mut Criterion) {
         bencher.iter(|| {
             let mut pipeline = RenderPipeline::new();
 
-            let diff_opt = pipeline.diff(&monitor_id, &module, &vdom_diff, None, None, None);
+            let input = DiffInput {
+                monitor_id: &monitor_id,
+                vdom_diff: &vdom_diff,
+                bounds: None,
+                child_sizes: None,
+                interaction: None,
+            };
 
-            if let Some(diff) = diff_opt {
+            if let Some(diff) = pipeline.diff(&module, input) {
                 let mut ctx = LayoutContext {
+                    monitor_id: &monitor_id,
                     scale: Scale::new(1.0),
                     style_resolver: &style_resolver,
                     child_errors: &child_errors,
@@ -600,7 +609,7 @@ fn bench_pipeline(criterion: &mut Criterion) {
                     panel_layout_engine: &mut panel_layout_engine,
                     tooltip_layout_engine: &mut tooltip_layout_engine,
                 };
-                let layout_res = pipeline.layout(&monitor_id, diff, &mut ctx);
+                let layout_res = pipeline.layout(diff, &mut ctx);
                 black_box(layout_res);
             }
         });

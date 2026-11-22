@@ -4,6 +4,7 @@ use super::lifecycle::make_test_rect_node;
 use crate::features::layout_engine::domain::{DisplayCommandSender, FloatingKind, PopupTarget};
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
+use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
 use crate::features::module_runtime::domain::{
     FloatingLayouts, PointerHandler, RenderOutcome, RenderPipeline,
 };
@@ -61,13 +62,14 @@ fn an_embedded_module_submits_its_buffer_under_its_site() {
     event_loop(ctx).dispatch_render_outcome(
         &monitor,
         &RenderOutcome::new(
-            None,
-            vec![],
-            make_test_rect_node(),
+            PipelineLayout::new(
+                make_test_rect_node(),
+                FloatingLayouts::default(),
+                EmbedReport::new(None, vec![]),
+            ),
             Some((buffer.clone(), Position::new(5, 3))),
-            FloatingLayouts::default(),
+            Scale::new(1.0),
         ),
-        Scale::new(1.0),
     );
 
     let frames = std::mem::take(&mut *surfaces.frames.lock().unwrap());
@@ -104,23 +106,27 @@ fn a_top_level_module_submits_its_buffer_with_no_parent_and_nothing_without_one(
     let monitor = MonitorId::new("DP-2");
 
     let empty = RenderOutcome::new(
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::default(),
+            EmbedReport::new(None, vec![]),
+        ),
         None,
-        vec![],
-        make_test_rect_node(),
-        None,
-        FloatingLayouts::default(),
+        Scale::new(1.0),
     );
-    event_loop.dispatch_render_outcome(&monitor, &empty, Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&monitor, &empty);
     assert!(surfaces.frames.lock().unwrap().is_empty());
 
     let painted = RenderOutcome::new(
-        None,
-        vec![],
-        make_test_rect_node(),
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::default(),
+            EmbedReport::new(None, vec![]),
+        ),
         Some((buffer, Position::new(0, 0))),
-        FloatingLayouts::default(),
+        Scale::new(1.0),
     );
-    event_loop.dispatch_render_outcome(&monitor, &painted, Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&monitor, &painted);
     let frames = std::mem::take(&mut *surfaces.frames.lock().unwrap());
     assert_eq!(frames.len(), 1);
     assert_eq!(frames[0].0.module_id(), ModuleId::new(3));

@@ -3,7 +3,8 @@ use super::outcome::SizeChange;
 use super::pipeline::RenderPipeline;
 use crate::features::layout_engine::domain::RenderNode;
 use crate::features::module_runtime::test_support::{
-    MockCanvasFactory, MockLayoutEngine, MockStyleResolver, MockVdomDiff, TestModulePort,
+    MockCanvasFactory, MockLayoutEngine, MockStyleResolver, MockVdomDiff, PipelineFixture,
+    TestModulePort, process_monitor,
 };
 use crate::features::vdom::domain::VNode;
 use crate::shared::primitives::MonitorId;
@@ -24,14 +25,8 @@ fn test_pipeline_diff_and_layout_phases() {
     let mut tooltip_engine = MockLayoutEngine;
     let child_errors = HashMap::new();
 
-    // 1. Diff Phase
-    let diff = pipeline.diff(&mon, &port, &diff_adapter, None, None, None);
-    assert!(diff.is_some());
-    let diff = diff.unwrap();
-    assert!(diff.vdom_dirty());
-
-    // 2. Layout Phase
     let mut ctx = LayoutContext {
+        monitor_id: &mon,
         scale: Scale::new(1.0),
         style_resolver: &resolver,
         child_errors: &child_errors,
@@ -45,25 +40,33 @@ fn test_pipeline_diff_and_layout_phases() {
         panel_layout_engine: &mut panel_engine,
         tooltip_layout_engine: &mut tooltip_engine,
     };
-    let layout_res = pipeline.layout(&mon, diff, &mut ctx);
+    // 1. Diff Phase
+    let diff = pipeline.diff(&port, ctx.diff_input(&diff_adapter));
+    assert!(diff.is_some());
+    let diff = diff.unwrap();
+    assert!(diff.vdom_dirty());
+
+    // 2. Layout Phase
+    let layout_res = pipeline.layout(diff, &mut ctx);
     assert!(layout_res.is_some());
-    let (node, size_change, child_layouts, floating) = layout_res.unwrap();
-    assert!(floating.popup().is_none());
-    assert!(floating.panel().is_none());
+    let layout = layout_res.unwrap();
+    let node = layout.render_tree();
+    assert!(layout.floating().popup().is_none());
+    assert!(layout.floating().panel().is_none());
     assert_eq!(
-        size_change,
-        Some(SizeChange::new(Size::new(0, 0), Size::new(10, 10)))
+        layout.report().size_change(),
+        Some(&SizeChange::new(Size::new(0, 0), Size::new(10, 10)))
     );
-    assert_eq!(child_layouts, []);
+    assert_eq!(layout.report().child_layouts(), []);
     assert_eq!(*node.rect().size(), Size::new(10, 10));
 
     // 3. Paint Phase without bounds returns None
-    let paint_res = pipeline.paint(&mon, &node, None, Scale::new(1.0), &mut factory);
+    let paint_res = pipeline.paint(node, &mut ctx);
     assert!(paint_res.is_none());
 
     // 4. Paint Phase with valid bounds returns buffer
-    let bounds = Rect::new(Position::new(0, 0), Size::new(10, 10));
-    let paint_res = pipeline.paint(&mon, &node, Some(bounds), Scale::new(1.0), &mut factory);
+    ctx.current_bounds = Some(Rect::new(Position::new(0, 0), Size::new(10, 10)));
+    let paint_res = pipeline.paint(node, &mut ctx);
     assert!(paint_res.is_some());
     let (_buf, pos) = paint_res.unwrap();
     assert_eq!(pos, Position::new(0, 0));
@@ -86,10 +89,11 @@ fn test_render_pipeline_hidpi_paint_allocates_scaled_buffer() {
         popup: None,
         panel: None,
     };
-    let mut factory = MockCanvasFactory;
-
-    let bounds = Rect::new(Position::new(10, 20), Size::new(100, 30));
-    let paint_res = pipeline.paint(&mon, &node, Some(bounds), Scale::new(2.0), &mut factory);
+    let mut fixture = PipelineFixture::<MockLayoutEngine>::default();
+    let mut ctx = fixture.ctx(&mon);
+    ctx.current_bounds = Some(Rect::new(Position::new(10, 20), Size::new(100, 30)));
+    ctx.scale = Scale::new(2.0);
+    let paint_res = pipeline.paint(&node, &mut ctx);
     assert!(paint_res.is_some());
     let (buf, pos) = paint_res.unwrap();
     assert_eq!(pos, Position::new(10, 20));
@@ -103,7 +107,6 @@ fn test_process_monitor_initial_render_and_size_change() {
     let mut pipeline = RenderPipeline::new();
     let mon = MonitorId::new("DP-1");
     let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
-    let diff = MockVdomDiff;
     let resolver = MockStyleResolver;
     let mut factory = MockCanvasFactory;
     let mut engine = MockLayoutEngine;
@@ -113,6 +116,7 @@ fn test_process_monitor_initial_render_and_size_change() {
     let child_errors = HashMap::new();
 
     let ctx = LayoutContext {
+        monitor_id: &mon,
         scale: Scale::new(1.0),
         style_resolver: &resolver,
         child_errors: &child_errors,
@@ -126,7 +130,7 @@ fn test_process_monitor_initial_render_and_size_change() {
         panel_layout_engine: &mut panel_engine,
         tooltip_layout_engine: &mut tooltip_engine,
     };
-    let outcome = pipeline.process_monitor(&mon, &port, &diff, ctx);
+    let outcome = process_monitor(&mut pipeline, &port, ctx);
 
     assert!(outcome.is_some());
     let outcome = outcome.unwrap();
@@ -144,7 +148,6 @@ fn test_process_monitor_unchanged_returns_none() {
     let mut pipeline = RenderPipeline::new();
     let mon = MonitorId::new("DP-1");
     let port = TestModulePort::new(VNode::new_rect(None, None, None, None, None));
-    let diff = MockVdomDiff;
     let resolver = MockStyleResolver;
     let mut factory = MockCanvasFactory;
     let mut engine = MockLayoutEngine;
@@ -154,6 +157,7 @@ fn test_process_monitor_unchanged_returns_none() {
     let child_errors = HashMap::new();
 
     let ctx1 = LayoutContext {
+        monitor_id: &mon,
         scale: Scale::new(1.0),
         style_resolver: &resolver,
         child_errors: &child_errors,
@@ -167,10 +171,11 @@ fn test_process_monitor_unchanged_returns_none() {
         panel_layout_engine: &mut panel_engine,
         tooltip_layout_engine: &mut tooltip_engine,
     };
-    let outcome1 = pipeline.process_monitor(&mon, &port, &diff, ctx1);
+    let outcome1 = process_monitor(&mut pipeline, &port, ctx1);
     assert!(outcome1.is_some());
 
     let ctx2 = LayoutContext {
+        monitor_id: &mon,
         scale: Scale::new(1.0),
         style_resolver: &resolver,
         child_errors: &child_errors,
@@ -184,6 +189,6 @@ fn test_process_monitor_unchanged_returns_none() {
         panel_layout_engine: &mut panel_engine,
         tooltip_layout_engine: &mut tooltip_engine,
     };
-    let outcome2 = pipeline.process_monitor(&mon, &port, &diff, ctx2);
+    let outcome2 = process_monitor(&mut pipeline, &port, ctx2);
     assert!(outcome2.is_none());
 }

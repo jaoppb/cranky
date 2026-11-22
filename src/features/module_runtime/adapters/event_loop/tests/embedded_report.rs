@@ -1,7 +1,7 @@
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::module_runtime::domain::{LayoutContext, RenderPipeline};
 use crate::features::module_runtime::test_support::{
-    MockCanvasFactory, MockStyleResolver, MockVdomDiff, TestModulePort,
+    MockCanvasFactory, MockStyleResolver, TestModulePort, process_monitor,
 };
 use crate::features::vdom::domain::VNode;
 use crate::shared::primitives::geometry::{Scale, Size};
@@ -26,6 +26,7 @@ fn test_pinned_child_reports_intrinsic_size_and_settled_width() {
     let child_errors = HashMap::new();
 
     let ctx = LayoutContext {
+        monitor_id: &mon,
         scale: Scale::new(1.0),
         style_resolver: &resolver,
         child_errors: &child_errors,
@@ -39,9 +40,7 @@ fn test_pinned_child_reports_intrinsic_size_and_settled_width() {
         panel_layout_engine: &mut panel_engine,
         tooltip_layout_engine: &mut tooltip_engine,
     };
-    let outcome = pipeline
-        .process_monitor(&mon, &port, &MockVdomDiff, ctx)
-        .expect("render outcome");
+    let outcome = process_monitor(&mut pipeline, &port, ctx).expect("render outcome");
 
     // Painted at the host width ...
     assert_eq!(outcome.render_tree().rect().width(), 280);

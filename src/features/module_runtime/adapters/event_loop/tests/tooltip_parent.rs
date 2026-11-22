@@ -2,6 +2,7 @@ use super::lifecycle::make_test_rect_node;
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, PopupTarget};
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
+use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
 use crate::features::module_runtime::domain::{FloatingLayouts, PointerHandler, RenderPipeline};
 use crate::features::module_runtime::test_support::{
     ChannelDisplaySender, MockCanvasFactory, MockLayoutSender, MockSurfaceManager, MockUiSender,
@@ -62,13 +63,15 @@ fn test_event_loop_tooltip_dispatch_carries_floating_parent_when_embedded() {
     );
 
     let outcome = crate::features::module_runtime::domain::RenderOutcome::new(
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::new(None, None, Some(make_test_rect_node())),
+            EmbedReport::new(None, vec![]),
+        ),
         None,
-        vec![],
-        make_test_rect_node(),
-        None,
-        FloatingLayouts::new(None, None, Some(make_test_rect_node())),
+        Scale::new(1.0),
     );
-    event_loop.dispatch_render_outcome(&mon, &outcome, Scale::new(1.0));
+    event_loop.dispatch_render_outcome(&mon, &outcome);
 
     let cmd = display_rx
         .try_recv()

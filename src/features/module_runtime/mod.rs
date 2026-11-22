@@ -266,11 +266,13 @@ pub mod test_support {
     }
 
     impl<E: crate::features::layout_engine::ports::LayoutEnginePort> PipelineFixture<E> {
-        pub(crate) fn ctx(
-            &mut self,
-        ) -> crate::features::module_runtime::domain::LayoutContext<'_, MockCanvasFactory, E>
+        pub(crate) fn ctx<'a>(
+            &'a mut self,
+            monitor_id: &'a MonitorId,
+        ) -> crate::features::module_runtime::domain::LayoutContext<'a, MockCanvasFactory, E>
         {
             crate::features::module_runtime::domain::LayoutContext {
+                monitor_id,
                 scale: Scale::new(1.0),
                 style_resolver: &self.resolver,
                 child_errors: &self.child_errors,
@@ -285,6 +287,20 @@ pub mod test_support {
                 tooltip_layout_engine: &mut self.tooltip_engine,
             }
         }
+    }
+
+    /// Runs every phase of one render on the context's monitor, as the event loop does, comparing
+    /// trees with `MockVdomDiff`.
+    pub(crate) fn process_monitor<F: CanvasFactory, E>(
+        pipeline: &mut crate::features::module_runtime::domain::RenderPipeline,
+        port: &dyn AnyModulePort,
+        ctx: crate::features::module_runtime::domain::LayoutContext<'_, F, E>,
+    ) -> Option<crate::features::module_runtime::domain::RenderOutcome>
+    where
+        E: crate::features::layout_engine::ports::LayoutEnginePort,
+    {
+        let diff = pipeline.diff(port, ctx.diff_input(&MockVdomDiff))?;
+        pipeline.layout_and_paint(diff, ctx)
     }
 
     #[derive(Debug, Default, Clone)]

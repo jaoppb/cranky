@@ -1,17 +1,22 @@
-//! The inputs of one pipeline run: the layout context the event loop hands in, and the diff
-//! result the diff phase passes to the layout phase.
+//! The inputs of one pipeline run: the layout context the event loop hands in, the view of it the
+//! diff phase compares, and the diff result the diff phase passes to the layout phase.
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::module_runtime::domain::Change;
 use crate::features::styling::ports::StyleResolverPort;
 use crate::features::vdom::domain::{InteractionContext, VNode};
+use crate::features::vdom::ports::VdomDiffPort;
 use crate::shared::primitives::geometry::{Rect, Scale};
-use crate::shared::primitives::{ChildSizesMap, ModuleKey, SizeConstraint};
+use crate::shared::primitives::{ChildSizesMap, ModuleKey, MonitorId, SizeConstraint};
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use std::collections::HashMap;
 
-/// Everything one module's layout phase needs on one monitor: the scale, the style resolver, the
-/// space it may take, child sizes, pointer state and the layout engines it lays out with.
+/// Everything one module's layout and paint phases need on one monitor.
+///
+/// The monitor and its scale, the style resolver, the space it may take, child sizes, pointer
+/// state and the layout engines it lays out with.
 pub struct LayoutContext<'a, F: CanvasFactory, E: LayoutEnginePort> {
+    /// The monitor this render is for, which keys every piece of state the pipeline keeps.
+    pub monitor_id: &'a MonitorId,
     /// The monitor's output scale, used to measure text and to size the painted buffer.
     pub scale: Scale,
     /// Resolves the module's stylesheets against each node of its tree.
@@ -55,6 +60,7 @@ impl<F: CanvasFactory, E: LayoutEnginePort> std::fmt::Debug for LayoutContext<'_
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("LayoutContext")
+            .field("monitor_id", &self.monitor_id)
             .field("scale", &self.scale)
             .field("current_bounds", &self.current_bounds)
             .field("current_constraint", &self.current_constraint)
@@ -65,32 +71,63 @@ impl<F: CanvasFactory, E: LayoutEnginePort> std::fmt::Debug for LayoutContext<'_
     }
 }
 
+impl<F: CanvasFactory, E: LayoutEnginePort> LayoutContext<'_, F, E> {
+    /// The monitor, bounds, child sizes and pointer state of this render, for the diff phase to
+    /// compare with `vdom_diff` against the last render on that monitor.
+    #[must_use]
+    pub(crate) fn diff_input<'b>(&'b self, vdom_diff: &'b dyn VdomDiffPort) -> DiffInput<'b> {
+        DiffInput {
+            monitor_id: self.monitor_id,
+            vdom_diff,
+            bounds: self.current_bounds,
+            child_sizes: self.current_child_sizes,
+            interaction: self.interaction_context.as_ref(),
+        }
+    }
+}
+
+/// What the diff phase compares with the last render on one monitor.
+///
+/// The bounds, child sizes and pointer state a render is made with, which are compared with those
+/// of the last render on that monitor, and the differ that compares the script's new tree with the
+/// last one.
+#[derive(Clone, Copy)]
+pub struct DiffInput<'a> {
+    /// The monitor whose last render the inputs are compared with.
+    pub monitor_id: &'a MonitorId,
+    /// Compares the script's new tree with the one it rendered last on this monitor.
+    pub vdom_diff: &'a dyn VdomDiffPort,
+    /// Where the module is placed on this monitor now, if anywhere.
+    pub bounds: Option<Rect>,
+    /// Sizes its embedded child modules reported on this monitor.
+    pub child_sizes: Option<&'a ChildSizesMap>,
+    /// The hovered, pressed and focused nodes on this monitor.
+    pub interaction: Option<&'a InteractionContext>,
+}
+
+impl std::fmt::Debug for DiffInput<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("DiffInput")
+            .field("monitor_id", &self.monitor_id)
+            .field("bounds", &self.bounds)
+            .field("child_sizes", &self.child_sizes)
+            .field("interaction", &self.interaction)
+            .finish_non_exhaustive()
+    }
+}
+
 /// What the diff phase found on one monitor: the script's new tree and which inputs changed, which
 /// decides whether the layout phase lays it out again or reuses the last tree.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PipelineDiff {
-    new_vdom: VNode,
-    vdom: Change,
-    bounds: Change,
-    child_sizes: Change,
+    pub(super) new_vdom: VNode,
+    pub(super) vdom: Change,
+    pub(super) bounds: Change,
+    pub(super) child_sizes: Change,
 }
 
 impl PipelineDiff {
-    #[must_use]
-    pub(crate) const fn new(
-        new_vdom: VNode,
-        vdom: Change,
-        bounds: Change,
-        child_sizes: Change,
-    ) -> Self {
-        Self {
-            new_vdom,
-            vdom,
-            bounds,
-            child_sizes,
-        }
-    }
-
     #[must_use]
     pub(crate) const fn new_vdom(&self) -> &VNode {
         &self.new_vdom

@@ -6,7 +6,6 @@ use crate::features::module_runtime::domain::RenderOutcome;
 use crate::features::module_runtime::ports::LayoutEventSender;
 use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::primitives::MonitorId;
-use crate::shared::primitives::geometry::Scale;
 use crate::shared::rendering::ports::canvas::CanvasFactory;
 use crate::shared::wayland::ports::SurfaceParent;
 
@@ -21,7 +20,6 @@ impl<
         &mut self,
         monitor_id: &MonitorId,
         outcome: &RenderOutcome,
-        scale: Scale,
     ) {
         dispatch_outcome_layouts(
             self.ctx.layout_sender(),
@@ -53,7 +51,7 @@ impl<
         let mut floating = FloatingDispatcher {
             display_sender: self.ctx.display_sender(),
             canvas_factory: &mut self.canvas_factory,
-            scale,
+            scale: outcome.scale(),
             monitor_id,
             parent: floating_parent,
         };

@@ -90,6 +90,7 @@ impl<
 
             let outcome = {
                 let layout_ctx = LayoutContext {
+                    monitor_id: &monitor_id,
                     scale,
                     style_resolver: self.style_resolver.as_ref(),
                     child_errors: &child_errors,
@@ -103,16 +104,14 @@ impl<
                     panel_layout_engine: &mut panel_engine,
                     tooltip_layout_engine: &mut tooltip_engine,
                 };
-                self.render_pipeline.process_monitor(
-                    &monitor_id,
-                    self.port.as_ref(),
-                    self.vdom_diff.as_ref(),
-                    layout_ctx,
-                )
+                let input = layout_ctx.diff_input(self.vdom_diff.as_ref());
+                self.render_pipeline
+                    .diff(self.port.as_ref(), input)
+                    .and_then(|diff| self.render_pipeline.layout_and_paint(diff, layout_ctx))
             };
 
             if let Some(outcome) = outcome {
-                self.dispatch_render_outcome(&monitor_id, &outcome, scale);
+                self.dispatch_render_outcome(&monitor_id, &outcome);
             }
         }
 

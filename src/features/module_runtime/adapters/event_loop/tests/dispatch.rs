@@ -1,5 +1,6 @@
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
+use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
 use crate::features::module_runtime::domain::{PointerHandler, RenderPipeline};
 use crate::features::module_runtime::ports::LayoutEvent;
 use crate::features::module_runtime::test_support::{
@@ -54,26 +55,31 @@ fn test_dispatch_render_outcome_emits_layout_events() {
         );
 
         let outcome = crate::features::module_runtime::domain::RenderOutcome::new(
-            Some(SizeChange::new(Size::new(0, 0), Size::new(50, 20))),
-            vec![],
-            crate::features::layout_engine::domain::RenderNode::Rect {
-                path: crate::features::layout_engine::domain::NodePath::root_in(
-                    crate::features::layout_engine::domain::SurfaceSpace::Bar,
+            PipelineLayout::new(
+                crate::features::layout_engine::domain::RenderNode::Rect {
+                    path: crate::features::layout_engine::domain::NodePath::root_in(
+                        crate::features::layout_engine::domain::SurfaceSpace::Bar,
+                    ),
+                    node_key: None,
+                    rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
+                    style: ComputedStyle::default(),
+                    on_click: None,
+                    on_hover: None,
+                    tooltip: None,
+                    popup: None,
+                    panel: None,
+                },
+                crate::features::module_runtime::domain::FloatingLayouts::default(),
+                EmbedReport::new(
+                    Some(SizeChange::new(Size::new(0, 0), Size::new(50, 20))),
+                    vec![],
                 ),
-                node_key: None,
-                rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
-                style: ComputedStyle::default(),
-                on_click: None,
-                on_hover: None,
-                tooltip: None,
-                popup: None,
-                panel: None,
-            },
+            ),
             None,
-            crate::features::module_runtime::domain::FloatingLayouts::default(),
+            Scale::new(1.0),
         );
 
-        event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &outcome, Scale::new(1.0));
+        event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &outcome);
 
         let received = layout_rx
             .try_recv()

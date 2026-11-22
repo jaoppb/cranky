@@ -6,8 +6,8 @@ use crate::features::layout_engine::domain::{DisplayCommand, ShowFloating};
 use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::RenderPipeline;
 use crate::features::module_runtime::test_support::{
-    ChannelDisplaySender, MockLayoutSender, MockUiSender, MockVdomDiff, PipelineFixture,
-    RecordingSurfaceManager, TestModulePort,
+    ChannelDisplaySender, MockLayoutSender, MockUiSender, PipelineFixture, RecordingSurfaceManager,
+    TestModulePort, process_monitor,
 };
 use crate::features::vdom::domain::{PopupSpec, TextContent, VNode};
 use crate::shared::config::domain::Config;
@@ -35,13 +35,12 @@ fn a_render_at_scale_two_paints_its_buffer_and_its_popup_at_that_scale() {
     let bar = text("bar").with_popup(PopupSpec::new(Box::new(text("calendar"))));
     let mut pipeline = RenderPipeline::new();
     let mut fixture = PipelineFixture::<TaffyLayoutAdapter>::default();
-    let mut ctx = fixture.ctx();
+    let mut ctx = fixture.ctx(&monitor);
     ctx.scale = Scale::new(2.0);
     ctx.current_bounds = Some(Rect::new(Position::new(0, 0), Size::new(10, 10)));
 
-    let outcome = pipeline
-        .process_monitor(&monitor, &TestModulePort::new(bar), &MockVdomDiff, ctx)
-        .expect("render outcome");
+    let outcome =
+        process_monitor(&mut pipeline, &TestModulePort::new(bar), ctx).expect("render outcome");
     let (buffer, _) = outcome.buffer().expect("painted buffer");
     assert_eq!((buffer.width(), buffer.height()), (20, 20));
 
@@ -56,7 +55,7 @@ fn a_render_at_scale_two_paints_its_buffer_and_its_popup_at_that_scale() {
         Arc::new(MockUiSender),
         rx,
     );
-    event_loop(ctx).dispatch_render_outcome(&monitor, &outcome, Scale::new(2.0));
+    event_loop(ctx).dispatch_render_outcome(&monitor, &outcome);
 
     let Ok(DisplayCommand::ShowFloatingSurface(ShowFloating {
         buffer,
