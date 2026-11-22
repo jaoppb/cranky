@@ -5,11 +5,9 @@ use crate::shared::primitives::{ChildBounds, ModuleId, MonitorId, SizeConstraint
 use crate::shared::wayland::ports::AppReadModel;
 use std::collections::HashMap;
 use tracing::{debug, info_span};
-use wayland_client::Connection;
 
 pub(super) fn render_outputs<Snd: LayoutSender>(
     state: &mut WaylandState,
-    connection: &Connection,
     read_model: &AppReadModel,
     layout_senders: &HashMap<ModuleId, Snd>,
 ) {
@@ -90,8 +88,6 @@ pub(super) fn render_outputs<Snd: LayoutSender>(
             sender.send_layout(rects.clone());
         }
     }
-
-    let _ = connection.flush();
 }
 
 #[cfg(test)]
@@ -136,16 +132,11 @@ mod tests {
         ];
         state.bars.push(bar);
         let root = ModuleId::new(1);
-        let read_model = AppReadModel::new(
-            Config::default(),
-            Some(root),
-            vec![root],
-            HashMap::new(),
-            HashMap::new(),
-        );
+        let mut read_model = AppReadModel::new(Config::default(), Some(root));
+        read_model.module_ids = vec![root];
         let senders = HashMap::from([(root, RecordingSender::default())]);
         fake.requests();
-        render_outputs(&mut state, fake.connection(), &read_model, &senders);
+        render_outputs(&mut state, &read_model, &senders);
         let to_bar = fake
             .requests()
             .iter()
@@ -176,13 +167,7 @@ mod tests {
                 config_rx,
             };
             fake.requests();
-            let read_model = AppReadModel::new(
-                Config::default(),
-                None,
-                Vec::new(),
-                HashMap::new(),
-                HashMap::new(),
-            );
+            let read_model = AppReadModel::new(Config::default(), None);
             let senders: HashMap<ModuleId, RecordingSender> = HashMap::new();
 
             adapter.render_all(&read_model, &senders).expect("rendered");

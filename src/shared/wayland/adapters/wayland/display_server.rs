@@ -108,12 +108,11 @@ impl DisplayServerPort for WaylandAdapter {
         read_model: &AppReadModel,
         layout_senders: &HashMap<ModuleId, Snd>,
     ) -> Result<(), DisplayServerError> {
-        render_outputs(
-            &mut self.state,
-            &self.connection,
-            read_model,
-            layout_senders,
-        );
+        render_outputs(&mut self.state, read_model, layout_senders);
+        // Without a bar nothing was rendered, and nothing is flushed.
+        if !self.state.bars.is_empty() {
+            let _ = self.connection.flush();
+        }
         Ok(())
     }
 

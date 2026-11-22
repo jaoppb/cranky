@@ -775,6 +775,7 @@ mod tests {
     use crate::app::test_fakes::{FakeDisplayServer, FakeRegistry, FakeSni};
     use crate::features::module_runtime::test_support::MockSurfaceManager;
     use crate::shared::primitives::geometry::{BarWidth, Position, Rect};
+    use crate::shared::wayland::ports::MonitorBar;
     use std::sync::Arc;
     use std::sync::atomic::Ordering;
     use tokio::sync::mpsc;
@@ -1041,8 +1042,10 @@ mod tests {
         let monitor_1 = MonitorId::new("DP-1");
 
         // 1. Calculate with focused config
-        let layouts_focused =
-            read_model.calculate_layout(&monitor_1, BarWidth::new(1920), config.root());
+        let layouts_focused = read_model.calculate_layout(
+            &MonitorBar::new(monitor_1.clone(), BarWidth::new(1920)),
+            config.root(),
+        );
         assert_eq!(layouts_focused.len(), 1);
         let focused_layout = &layouts_focused[0];
 
@@ -1051,8 +1054,10 @@ mod tests {
 
         // 2. Calculate with unfocused config
         let unfocused_root = config.root().as_unfocused();
-        let layouts_unfocused =
-            read_model.calculate_layout(&monitor_1, BarWidth::new(1920), &unfocused_root);
+        let layouts_unfocused = read_model.calculate_layout(
+            &MonitorBar::new(monitor_1, BarWidth::new(1920)),
+            &unfocused_root,
+        );
         assert_eq!(layouts_unfocused.len(), 1);
         let unfocused_layout = &layouts_unfocused[0];
 
@@ -1146,8 +1151,7 @@ mod tests {
             .insert(MonitorId::new("DP-1"), sizes);
 
         let layouts = read_model.calculate_layout(
-            &MonitorId::new("DP-1"),
-            BarWidth::new(1920),
+            &MonitorBar::new(MonitorId::new("DP-1"), BarWidth::new(1920)),
             config.root(),
         );
         assert_eq!(layouts.len(), 3);
