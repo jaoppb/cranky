@@ -21,9 +21,9 @@ fn sans() -> FontFamily {
     FontFamily::new("sans-serif".to_string())
 }
 
-/// The inked bounding box `[left, top, right, bottom]` of `text` drawn at `position` on a 200x80
-/// canvas whose default size is `default_size`, with an optional size override.
-fn ink_box(default_size: f32, size: Option<FontSize>, position: Position) -> [u32; 4] {
+/// A 200x80 pixmap with red "Hg" drawn at `position` by a canvas whose default size is
+/// `default_size`, with an optional size override.
+fn hg_drawn(default_size: f32, size: Option<FontSize>, position: Position) -> Pixmap {
     let mut pixmap = Pixmap::new(200, 80).unwrap();
     let mut fonts = FontCache::new();
     {
@@ -41,6 +41,13 @@ fn ink_box(default_size: f32, size: Option<FontSize>, position: Position) -> [u3
             TextPlacement::new(position, TextAlignment::default()),
         );
     }
+    pixmap
+}
+
+/// The inked bounding box `[left, top, right, bottom]` of `text` drawn at `position` on a 200x80
+/// canvas whose default size is `default_size`, with an optional size override.
+fn ink_box(default_size: f32, size: Option<FontSize>, position: Position) -> [u32; 4] {
+    let pixmap = hg_drawn(default_size, size, position);
     let inked: Vec<(u32, u32)> = (0..80u32)
         .flat_map(|y| (0..200u32).map(move |x| (x, y)))
         .filter(|&(x, y)| pixmap.pixel(x, y).is_some_and(|pixel| pixel.alpha() > 0))
@@ -157,20 +164,11 @@ fn canvas_over_a_buffer_of_the_wrong_size_draws_nothing() {
             Font::new(sans(), FontSize::new(14.0)),
         );
         let color = DrawingColor::Solid(Color::rgb(255, 0, 0));
-        canvas.draw_rect(
-            RoundedRect::new(
-                Rect::new(Position::new(0, 0), Size::new(10, 5)),
-                LogicalPx::new(0.0),
-            ),
-            color.clone(),
-        );
-        canvas.draw_border(
-            RoundedRect::new(
-                Rect::new(Position::new(0, 0), Size::new(10, 5)),
-                LogicalPx::new(0.0),
-            ),
-            BorderStroke::new(color.clone(), LogicalPx::new(1.0)),
-        );
+        let area = Rect::new(Position::new(0, 0), Size::new(10, 5));
+        let shape = || RoundedRect::new(area, LogicalPx::new(0.0));
+        let stroke = BorderStroke::new(color.clone(), LogicalPx::new(1.0));
+        canvas.draw_rect(shape(), color.clone());
+        canvas.draw_border(shape(), stroke);
         canvas.draw_text(
             TextRun::new("x", TextFont::new(None, None), color),
             TextPlacement::new(Position::new(0, 0), TextAlignment::default()),

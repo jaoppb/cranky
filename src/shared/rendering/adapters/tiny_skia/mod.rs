@@ -3,8 +3,11 @@ pub mod canvas;
 mod draw_rect;
 mod draw_text;
 mod factory;
+mod glyph;
 pub mod measurer;
 mod paint;
+mod physical_box;
+mod shaping;
 #[cfg(test)]
 mod tests;
 

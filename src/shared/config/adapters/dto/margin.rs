@@ -37,46 +37,13 @@ impl MarginConfigDto {
                 right,
                 horizontal,
                 vertical,
-            } => {
-                let top_offset = match top {
-                    Some(value) => value,
-                    None => match vertical {
-                        Some(value) => value,
-                        None => 0,
-                    },
-                };
-                let bottom_offset = match bottom {
-                    Some(value) => value,
-                    None => match vertical {
-                        Some(value) => value,
-                        None => 0,
-                    },
-                };
-                let left_offset = match left {
-                    Some(value) => value,
-                    None => match horizontal {
-                        Some(value) => value,
-                        None => 0,
-                    },
-                };
-                let right_offset = match right {
-                    Some(value) => value,
-                    None => match horizontal {
-                        Some(value) => value,
-                        None => 0,
-                    },
-                };
-                domain::MarginConfig::new(
-                    AxisMargins::new(
-                        MarginOffset::new(top_offset),
-                        MarginOffset::new(bottom_offset),
-                    ),
-                    AxisMargins::new(
-                        MarginOffset::new(left_offset),
-                        MarginOffset::new(right_offset),
-                    ),
-                )
-            }
+            } => domain::MarginConfig::new(
+                AxisMargins::new(side_offset(top, vertical), side_offset(bottom, vertical)),
+                AxisMargins::new(
+                    side_offset(left, horizontal),
+                    side_offset(right, horizontal),
+                ),
+            ),
         }
     }
 }
@@ -123,40 +90,32 @@ impl PartialMarginConfigDto {
                 right,
                 horizontal,
                 vertical,
-            } => {
-                let top_offset = match top {
-                    Some(value) => Some(MarginOffset::new(value)),
-                    None => match vertical {
-                        Some(value) => Some(MarginOffset::new(value)),
-                        None => None,
-                    },
-                };
-                let bottom_offset = match bottom {
-                    Some(value) => Some(MarginOffset::new(value)),
-                    None => match vertical {
-                        Some(value) => Some(MarginOffset::new(value)),
-                        None => None,
-                    },
-                };
-                let left_offset = match left {
-                    Some(value) => Some(MarginOffset::new(value)),
-                    None => match horizontal {
-                        Some(value) => Some(MarginOffset::new(value)),
-                        None => None,
-                    },
-                };
-                let right_offset = match right {
-                    Some(value) => Some(MarginOffset::new(value)),
-                    None => match horizontal {
-                        Some(value) => Some(MarginOffset::new(value)),
-                        None => None,
-                    },
-                };
-                domain::PartialMarginConfig::new(
-                    AxisMargins::new(top_offset, bottom_offset),
-                    AxisMargins::new(left_offset, right_offset),
-                )
-            }
+            } => domain::PartialMarginConfig::new(
+                AxisMargins::new(
+                    partial_side_offset(top, vertical),
+                    partial_side_offset(bottom, vertical),
+                ),
+                AxisMargins::new(
+                    partial_side_offset(left, horizontal),
+                    partial_side_offset(right, horizontal),
+                ),
+            ),
         }
+    }
+}
+
+/// A side's offset when only some sides are set: its own value, else its axis's, else unset.
+const fn partial_side_offset(side: Option<i32>, axis: Option<i32>) -> Option<MarginOffset> {
+    match (side, axis) {
+        (Some(value), _) | (None, Some(value)) => Some(MarginOffset::new(value)),
+        (None, None) => None,
+    }
+}
+
+/// A side's offset: its own value, else its axis's, else zero.
+const fn side_offset(side: Option<i32>, axis: Option<i32>) -> MarginOffset {
+    match partial_side_offset(side, axis) {
+        Some(offset) => offset,
+        None => MarginOffset::new(0),
     }
 }

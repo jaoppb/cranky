@@ -53,25 +53,26 @@ pub(super) struct TooltipConfigDto {
 impl TooltipConfigDto {
     #[must_use]
     pub(crate) fn into_domain(self) -> domain::TooltipConfig {
-        let mut config = domain::TooltipConfig::default();
-        if let Some(background) = self
-            .background
-            .and_then(|color| DrawingColor::parse(&color).ok())
-        {
+        let config = self.apply_colors(domain::TooltipConfig::default());
+        self.apply_font_and_box(config)
+    }
+
+    /// Sets each color that is given and parses; a color that does not parse keeps the default.
+    fn apply_colors(&self, mut config: domain::TooltipConfig) -> domain::TooltipConfig {
+        if let Some(background) = parse_color(self.background.as_deref()) {
             config = config.with_background(background);
         }
-        if let Some(border_color) = self
-            .border_color
-            .and_then(|color| DrawingColor::parse(&color).ok())
-        {
+        if let Some(border_color) = parse_color(self.border_color.as_deref()) {
             config = config.with_border_color(border_color);
         }
-        if let Some(text_color) = self
-            .text_color
-            .and_then(|color| DrawingColor::parse(&color).ok())
-        {
+        if let Some(text_color) = parse_color(self.text_color.as_deref()) {
             config = config.with_text_color(text_color);
         }
+        config
+    }
+
+    /// Sets the font, its size and the box metrics (radius, border width, padding) that are given.
+    fn apply_font_and_box(self, mut config: domain::TooltipConfig) -> domain::TooltipConfig {
         if let Some(font) = self.font {
             config = config.with_font(Some(FontFamily::new(font)));
         }
@@ -89,6 +90,11 @@ impl TooltipConfigDto {
         }
         config
     }
+}
+
+/// The color `text` names, or `None` when it is absent or does not parse.
+fn parse_color(text: Option<&str>) -> Option<DrawingColor> {
+    text.and_then(|color| DrawingColor::parse(color).ok())
 }
 
 #[derive(Debug, Deserialize, Default)]

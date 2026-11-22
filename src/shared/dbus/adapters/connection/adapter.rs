@@ -46,27 +46,37 @@ impl ZbusConnectionAdapter<Disconnected> {
     ///
     /// Never returns an error today: a bus that cannot be reached is logged and left unset, and
     /// calls on it fail later with `DbusConnectionError::NotInitialized`.
-    pub async fn connect(
-        mut self,
-    ) -> Result<ZbusConnectionAdapter<Connected>, DbusConnectionError> {
-        debug!("Connecting to DBus Session Bus...");
-        match Connection::session().await {
-            Ok(conn) => self.session_conn = Some(conn),
-            Err(error) => error!("Failed to connect to Session Bus: {error}"),
-        }
-
-        debug!("Connecting to DBus System Bus...");
-        match Connection::system().await {
-            Ok(conn) => self.system_conn = Some(conn),
-            Err(error) => error!("Failed to connect to System Bus: {error}"),
-        }
+    pub async fn connect(self) -> Result<ZbusConnectionAdapter<Connected>, DbusConnectionError> {
+        let session_conn = open_bus(BusType::Session).await.or(self.session_conn);
+        let system_conn = open_bus(BusType::System).await.or(self.system_conn);
 
         Ok(ZbusConnectionAdapter {
-            session_conn: self.session_conn,
-            system_conn: self.system_conn,
+            session_conn,
+            system_conn,
             _state: PhantomData,
         })
     }
+}
+
+/// Connects to `bus`, logging the attempt, and logging and returning `None` when it fails.
+async fn open_bus(bus: BusType) -> Option<Connection> {
+    let name = match bus {
+        BusType::Session => "Session",
+        BusType::System => "System",
+    };
+    log_connecting(name);
+    let connection = match bus {
+        BusType::Session => Connection::session().await,
+        BusType::System => Connection::system().await,
+    };
+    connection
+        .inspect_err(|error| error!("Failed to connect to {name} Bus: {error}"))
+        .ok()
+}
+
+/// Logs the attempt to connect to the bus called `name`.
+fn log_connecting(name: &str) {
+    debug!("Connecting to DBus {name} Bus...");
 }
 
 impl ZbusConnectionAdapter<Connected> {

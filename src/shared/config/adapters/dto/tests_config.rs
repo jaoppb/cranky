@@ -45,6 +45,22 @@ fn parse_config(toml_str: &str) -> Result<crate::shared::config::domain::Config,
     Ok(dto.into_domain(&AnyFamily))
 }
 
+/// The `[top, bottom, left, right]` offsets of `margin`.
+fn sides(margin: &crate::shared::config::domain::MarginConfig) -> [i32; 4] {
+    [margin.top(), margin.bottom(), margin.left(), margin.right()]
+        .map(crate::shared::config::domain::MarginOffset::value)
+}
+
+/// The module `name` of `config`, if it has one.
+fn module<'config>(
+    config: &'config crate::shared::config::domain::Config,
+    name: &str,
+) -> Option<&'config crate::shared::config::domain::ModuleConfig> {
+    config
+        .modules()
+        .get(&crate::shared::primitives::ModuleName::new(name))
+}
+
 #[test]
 fn config_dto_carries_every_table_into_the_domain() {
     let config = parse_config(FULL_CONFIG).unwrap();
@@ -56,32 +72,24 @@ fn config_dto_carries_every_table_into_the_domain() {
         root.vertical_alignment(),
         crate::shared::config::domain::VerticalAlignment::Bottom
     );
-    let margin = root.margin();
-    assert_eq!(
-        [margin.top(), margin.bottom(), margin.left(), margin.right()]
-            .map(crate::shared::config::domain::MarginOffset::value),
-        [1, 2, 3, 4]
-    );
+    assert_eq!(sides(root.margin()), [1, 2, 3, 4]);
     assert!(root.options().get("left").is_some());
+}
 
-    let unfocused = root.as_unfocused();
+#[test]
+fn config_dto_carries_the_unfocused_root_table_into_the_domain() {
+    let config = parse_config(FULL_CONFIG).unwrap();
+
+    let unfocused = config.root().as_unfocused();
     assert_eq!(unfocused.height().value(), 24);
-    let unfocused_margin = unfocused.margin();
-    assert_eq!(
-        [
-            unfocused_margin.top(),
-            unfocused_margin.bottom(),
-            unfocused_margin.left(),
-            unfocused_margin.right()
-        ]
-        .map(crate::shared::config::domain::MarginOffset::value),
-        [5, 6, 7, 8]
-    );
+    assert_eq!(sides(unfocused.margin()), [5, 6, 7, 8]);
+}
 
-    let clock = config
-        .modules()
-        .get(&crate::shared::primitives::ModuleName::new("clock"))
-        .unwrap();
+#[test]
+fn config_dto_carries_the_module_tables_into_the_domain() {
+    let config = parse_config(FULL_CONFIG).unwrap();
+
+    let clock = module(&config, "clock").unwrap();
     assert!(!clock.is_enabled());
     assert_eq!(
         clock
@@ -91,6 +99,11 @@ fn config_dto_carries_every_table_into_the_domain() {
         Some("rhai")
     );
     assert!(clock.options().get("format").is_some());
+}
+
+#[test]
+fn config_dto_carries_the_metrics_tooltip_and_popup_tables_into_the_domain() {
+    let config = parse_config(FULL_CONFIG).unwrap();
 
     assert_eq!(config.metrics().update_interval_ms().value(), 2500);
     assert_eq!(
@@ -116,25 +129,22 @@ fn config_dto_carries_the_rendering_table_into_the_domain() {
     );
 }
 
+/// One module whose `enable` is not a bool, and one with options only.
+const LOOSE_MODULES: &str = r#"
+    [modules.options_only]
+    enable = "yes"
+    format = "a"
+
+    [modules.detailed]
+    format = "b"
+"#;
+
 #[test]
 fn config_dto_enables_modules_on_the_auto_engine_unless_told_otherwise() {
-    let config = parse_config(
-        r#"
-        [modules.options_only]
-        enable = "yes"
-        format = "a"
-
-        [modules.detailed]
-        format = "b"
-    "#,
-    )
-    .unwrap();
+    let config = parse_config(LOOSE_MODULES).unwrap();
 
     for name in ["options_only", "detailed"] {
-        let module = config
-            .modules()
-            .get(&crate::shared::primitives::ModuleName::new(name))
-            .unwrap();
+        let module = module(&config, name).unwrap();
         assert!(module.is_enabled(), "{name} should be enabled");
         assert_eq!(
             module.engine(),
@@ -146,10 +156,7 @@ fn config_dto_enables_modules_on_the_auto_engine_unless_told_otherwise() {
             "{name} keeps its options"
         );
     }
-    let options_only = config
-        .modules()
-        .get(&crate::shared::primitives::ModuleName::new("options_only"))
-        .unwrap();
+    let options_only = module(&config, "options_only").unwrap();
     assert!(
         options_only.options().get("enable").is_some(),
         "a non-bool enable lands among the options"

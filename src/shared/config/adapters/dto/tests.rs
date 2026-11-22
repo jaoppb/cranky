@@ -77,33 +77,24 @@ fn test_json_value_to_dynamic_nested() {
     use serde_json::json;
 
     let json_value = json!({
-        "null": null,
-        "bool": true,
-        "num": 42.5,
-        "str": "hello",
-        "arr": [1, 2, "three"],
-        "nested": {
-            "inner": "val"
-        }
+        "null": null, "bool": true, "num": 42.5, "str": "hello", "arr": [1, 2, "three"],
+        "nested": { "inner": "val" }
     });
 
-    let dyn_val = helpers::json_value_to_dynamic(json_value);
-    if let DynamicValue::Map(map) = dyn_val {
-        assert_eq!(map.get("null"), Some(&DynamicValue::Null));
-        assert_eq!(map.get("bool"), Some(&DynamicValue::Bool(true)));
-        assert_eq!(map.get("num"), Some(&DynamicValue::Number(42.5)));
-        assert_eq!(
-            map.get("str"),
-            Some(&DynamicValue::String("hello".to_string()))
-        );
-        if let Some(DynamicValue::Array(arr)) = map.get("arr") {
-            assert_eq!(arr.len(), 3);
-        } else {
-            panic!("expected array");
-        }
-    } else {
+    let DynamicValue::Map(map) = helpers::json_value_to_dynamic(json_value) else {
         panic!("expected map");
-    }
+    };
+    assert_eq!(map.get("null"), Some(&DynamicValue::Null));
+    assert_eq!(map.get("bool"), Some(&DynamicValue::Bool(true)));
+    assert_eq!(map.get("num"), Some(&DynamicValue::Number(42.5)));
+    assert_eq!(
+        map.get("str"),
+        Some(&DynamicValue::String("hello".to_string()))
+    );
+    let Some(DynamicValue::Array(arr)) = map.get("arr") else {
+        panic!("expected array");
+    };
+    assert_eq!(arr.len(), 3);
 }
 
 #[test]

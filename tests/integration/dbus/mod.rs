@@ -11,7 +11,7 @@ use cranky::shared::dbus::domain::{
     NameChangedStream, NameOwnerChanged, Path, PropertyName, QualifiedMember,
 };
 use cranky::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
-use probe::ProbeService;
+use probe::{ProbeService, Stray};
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
 
@@ -25,6 +25,7 @@ pub(crate) fn cases() -> Vec<Case> {
         case!(dbus::streams_property_changes),
         case!(dbus::streams_name_owner_changes),
         case!(dbus::streams_a_signal_with_a_variant_body),
+        case!(dbus::skips_signals_that_differ_in_path_interface_or_member),
     ]
 }
 
@@ -227,19 +228,22 @@ async fn streams_name_owner_changes() -> Outcome {
     )
 }
 
+/// The probe's `Pinged` signal, narrowed by sender, path, interface and member.
+fn pinged_subscription() -> DBusSubscription {
+    DBusSubscription::new(BusType::Session)
+        .with_destination(Some(probe_destination()))
+        .with_path(Some(probe_path()))
+        .with_interface(Some(probe_interface()))
+        .with_member(Some(Member::new("Pinged")))
+}
+
 /// A signal is only delivered when its body is a single variant (#41), so
 /// that is what the probe emits.
 async fn streams_a_signal_with_a_variant_body() -> Outcome {
     let adapter = adapter().await?;
     let probe = ProbeService::start().await?;
     let mut signals = adapter
-        .subscribe_signal(
-            DBusSubscription::new(BusType::Session)
-                .with_destination(Some(probe_destination()))
-                .with_path(Some(probe_path()))
-                .with_interface(Some(probe_interface()))
-                .with_member(Some(Member::new("Pinged"))),
-        )
+        .subscribe_signal(pinged_subscription())
         .await
         .context("subscribe to Pinged")?;
     probe.ping("hello").await?;
@@ -250,6 +254,31 @@ async fn streams_a_signal_with_a_variant_body() -> Outcome {
     ensure_eq("signal member", &member, &Member::new("Pinged"))?;
     ensure_eq(
         "signal body",
+        &body,
+        &DBusValue::String("hello".to_string()),
+    )
+}
+
+/// Each part of the subscription narrows what it receives: the probe first
+/// sends signals that differ from `Pinged` in only the member, the interface
+/// or the path, then `Pinged` itself. The bus keeps one sender's signals in
+/// order, so `Pinged` arriving first means none of the others was delivered.
+async fn skips_signals_that_differ_in_path_interface_or_member() -> Outcome {
+    let adapter = adapter().await?;
+    let probe = ProbeService::start().await?;
+    let mut signals = adapter
+        .subscribe_signal(pinged_subscription())
+        .await
+        .context("subscribe to Pinged")?;
+    for stray in [Stray::Member, Stray::Interface, Stray::Path] {
+        probe.emit_stray(stray).await?;
+    }
+    probe.ping("hello").await?;
+    let (_, _, body) = within("the Pinged signal", signals.next())
+        .await?
+        .context("the signal stream ended")?;
+    ensure_eq(
+        "first signal body",
         &body,
         &DBusValue::String("hello".to_string()),
     )

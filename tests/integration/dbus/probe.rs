@@ -115,6 +115,22 @@ impl ProbeService {
             .context("probe: emit Pinged")
     }
 
+    /// Emits `stray` from the probe's connection, with a variant body naming
+    /// it, whether or not the probe declares a signal at that address.
+    pub(crate) async fn emit_stray(&self, stray: Stray) -> Outcome {
+        let (path, interface, member) = stray.address();
+        self.connection
+            .emit_signal(
+                None::<&str>,
+                path,
+                interface,
+                member,
+                &Variant::from(format!("{stray:?}")),
+            )
+            .await
+            .context(&format!("probe: emit the {stray:?} stray"))
+    }
+
     /// Changes `Label` and emits the matching `PropertiesChanged`.
     pub(crate) async fn relabel(&self, label: &str) -> Outcome {
         let interface = self.interface().await?;
@@ -124,5 +140,28 @@ impl ProbeService {
             .label_changed(interface.signal_emitter())
             .await
             .context("probe: emit PropertiesChanged")
+    }
+}
+
+/// A signal that differs from `Pinged` in exactly one part of its address,
+/// for cases that check a subscription does not receive it.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Stray {
+    /// Another member of the probe's interface, at the probe's path.
+    Member,
+    /// `Pinged` of another interface, at the probe's path.
+    Interface,
+    /// `Pinged` of the probe's interface, at another path.
+    Path,
+}
+
+impl Stray {
+    /// The path, interface and member the stray signal is sent with.
+    const fn address(self) -> (&'static str, &'static str, &'static str) {
+        match self {
+            Self::Member => (PATH, INTERFACE, "Ponged"),
+            Self::Interface => (PATH, "org.cranky.Elsewhere", "Pinged"),
+            Self::Path => ("/org/cranky/Elsewhere", INTERFACE, "Pinged"),
+        }
     }
 }

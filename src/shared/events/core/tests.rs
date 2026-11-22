@@ -14,50 +14,42 @@ fn test_window_title() {
 
 #[test]
 fn test_pointer_button_conversion() {
-    assert_eq!(PointerButton::from_raw(0x110), PointerButton::Left);
-    assert_eq!(PointerButton::from_raw(0x111), PointerButton::Right);
-    assert_eq!(PointerButton::from_raw(0x112), PointerButton::Middle);
-    assert_eq!(PointerButton::from_raw(0x113), PointerButton::Side);
-    assert_eq!(PointerButton::from_raw(0x114), PointerButton::Extra);
-    assert_eq!(PointerButton::from_raw(0x115), PointerButton::Forward);
-    assert_eq!(PointerButton::from_raw(0x116), PointerButton::Back);
-    assert_eq!(PointerButton::from_raw(999), PointerButton::Other(999));
+    for (raw, button) in [
+        (0x110, PointerButton::Left),
+        (0x111, PointerButton::Right),
+        (0x112, PointerButton::Middle),
+        (0x113, PointerButton::Side),
+        (0x114, PointerButton::Extra),
+        (0x115, PointerButton::Forward),
+        (0x116, PointerButton::Back),
+        (999, PointerButton::Other(999)),
+    ] {
+        assert_eq!(PointerButton::from_raw(raw), button, "from_raw({raw:#x})");
+        assert_eq!(button.to_raw(), raw, "{button:?}.to_raw()");
+    }
+}
 
-    assert_eq!(PointerButton::Left.to_raw(), 0x110);
-    assert_eq!(PointerButton::Right.to_raw(), 0x111);
-    assert_eq!(PointerButton::Middle.to_raw(), 0x112);
-    assert_eq!(PointerButton::Side.to_raw(), 0x113);
-    assert_eq!(PointerButton::Extra.to_raw(), 0x114);
-    assert_eq!(PointerButton::Forward.to_raw(), 0x115);
-    assert_eq!(PointerButton::Back.to_raw(), 0x116);
-    assert_eq!(PointerButton::Other(999).to_raw(), 999);
-
-    assert_eq!(PointerButton::from_name("left"), Some(PointerButton::Left));
-    assert_eq!(
-        PointerButton::from_name("RIGHT"),
-        Some(PointerButton::Right)
-    );
-    assert_eq!(
-        PointerButton::from_name("middle"),
-        Some(PointerButton::Middle)
-    );
-    assert_eq!(PointerButton::from_name("side"), Some(PointerButton::Side));
-    assert_eq!(
-        PointerButton::from_name("extra"),
-        Some(PointerButton::Extra)
-    );
-    assert_eq!(
-        PointerButton::from_name("forward"),
-        Some(PointerButton::Forward)
-    );
-    assert_eq!(PointerButton::from_name("back"), Some(PointerButton::Back));
-    assert_eq!(PointerButton::from_name("275"), Some(PointerButton::Side));
-    assert_eq!(PointerButton::from_name("0x113"), Some(PointerButton::Side));
-    assert_eq!(
-        PointerButton::from_name("999"),
-        Some(PointerButton::Other(999))
-    );
-    assert_eq!(PointerButton::from_name("unknown_btn"), None);
+#[test]
+fn test_pointer_button_from_name() {
+    for (name, button) in [
+        ("left", Some(PointerButton::Left)),
+        ("RIGHT", Some(PointerButton::Right)),
+        ("middle", Some(PointerButton::Middle)),
+        ("side", Some(PointerButton::Side)),
+        ("extra", Some(PointerButton::Extra)),
+        ("forward", Some(PointerButton::Forward)),
+        ("back", Some(PointerButton::Back)),
+        ("275", Some(PointerButton::Side)),
+        ("0x113", Some(PointerButton::Side)),
+        ("999", Some(PointerButton::Other(999))),
+        ("unknown_btn", None),
+    ] {
+        assert_eq!(
+            PointerButton::from_name(name),
+            button,
+            "from_name({name:?})"
+        );
+    }
 }
 
 #[test]

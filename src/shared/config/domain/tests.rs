@@ -122,26 +122,48 @@ fn test_module_config_engine() {
         Some("rhai")
     );
     assert!(!cfg.engine().is_auto());
+}
+
+#[test]
+fn test_module_config_starts_enabled_with_its_name_and_options() {
+    let explicit = EngineSelection::Explicit(EngineId::new("rhai"));
+    let cfg = ModuleConfig::new("clock".into(), ModuleOptions::default()).with_engine(explicit);
     assert_eq!(cfg.name(), "clock");
     assert!(cfg.is_enabled());
     assert!(cfg.options().is_empty());
+}
 
+#[test]
+fn test_engine_selection_defaults_to_auto() {
     let auto = EngineSelection::default();
     assert!(auto.is_auto());
     assert_eq!(auto.as_explicit(), None);
 }
 
+fn solid(red: u8, green: u8, blue: u8) -> crate::shared::primitives::DrawingColor {
+    crate::shared::primitives::DrawingColor::Solid(crate::shared::primitives::Color::rgb(
+        red, green, blue,
+    ))
+}
+
 #[test]
 fn test_tooltip_config_builder() {
-    let background = crate::shared::primitives::DrawingColor::Solid(
-        crate::shared::primitives::Color::rgb(10, 20, 30),
-    );
-    let border_color = crate::shared::primitives::DrawingColor::Solid(
-        crate::shared::primitives::Color::rgb(40, 50, 60),
-    );
-    let text_color = crate::shared::primitives::DrawingColor::Solid(
-        crate::shared::primitives::Color::rgb(70, 80, 90),
-    );
+    let background = solid(10, 20, 30);
+    let border_color = solid(40, 50, 60);
+    let text_color = solid(70, 80, 90);
+
+    let config = TooltipConfig::default()
+        .with_background(background.clone())
+        .with_border_color(border_color.clone())
+        .with_text_color(text_color.clone());
+
+    assert_eq!(config.background(), &background);
+    assert_eq!(config.border_color(), &border_color);
+    assert_eq!(config.text_color(), &text_color);
+}
+
+#[test]
+fn test_tooltip_config_builder_sets_the_font_and_box() {
     let font = Some(FontFamily::new("Roboto".to_string()));
     let size = Some(FontSize::new(14.0));
     let radius = BorderRadius::new(6.0);
@@ -149,18 +171,12 @@ fn test_tooltip_config_builder() {
     let padding = PaddingOffset::new(12);
 
     let config = TooltipConfig::default()
-        .with_background(background.clone())
-        .with_border_color(border_color.clone())
-        .with_text_color(text_color.clone())
         .with_font(font.clone())
         .with_size(size)
         .with_radius(radius)
         .with_border_width(border_width)
         .with_padding(padding);
 
-    assert_eq!(config.background(), &background);
-    assert_eq!(config.border_color(), &border_color);
-    assert_eq!(config.text_color(), &text_color);
     assert_eq!(config.font(), font.as_ref());
     assert_eq!(config.size(), size);
     assert_eq!(config.radius(), radius);

@@ -60,20 +60,26 @@ fn parse_rgb_hex(input: &str) -> Option<Color> {
 
 fn parse_hex(input: &str) -> Option<Color> {
     let hex = input.strip_prefix('#')?;
-    if hex.len() == 6 {
-        let red = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
-        let green = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
-        let blue = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
-        Some(Color::rgb(red, green, blue))
-    } else if hex.len() == 8 {
-        let red = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
-        let green = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
-        let blue = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
-        let alpha = u8::from_str_radix(hex.get(6..8)?, 16).ok()?;
-        Some(Color::rgb(red, green, blue).with_alpha(alpha))
-    } else {
-        None
+    match hex.len() {
+        6 => rgb_from_hex_digits(hex),
+        8 => rgba_from_hex_digits(hex),
+        _ => None,
     }
+}
+
+/// The opaque color whose red, green and blue are the hex pairs at the start of `hex`.
+fn rgb_from_hex_digits(hex: &str) -> Option<Color> {
+    let red = u8::from_str_radix(hex.get(0..2)?, 16).ok()?;
+    let green = u8::from_str_radix(hex.get(2..4)?, 16).ok()?;
+    let blue = u8::from_str_radix(hex.get(4..6)?, 16).ok()?;
+    Some(Color::rgb(red, green, blue))
+}
+
+/// The color whose red, green, blue and alpha are the hex pairs at the start of `hex`.
+fn rgba_from_hex_digits(hex: &str) -> Option<Color> {
+    let color = rgb_from_hex_digits(hex)?;
+    let alpha = u8::from_str_radix(hex.get(6..8)?, 16).ok()?;
+    Some(color.with_alpha(alpha))
 }
 
 fn parse_css_rgb(input: &str) -> Option<Color> {

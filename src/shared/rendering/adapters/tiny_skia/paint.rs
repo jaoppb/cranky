@@ -19,30 +19,8 @@ pub(super) fn get_paint(color: &DrawingColor, rect: Rect) -> Paint<'static> {
             paint.set_color(to_skia_color(*solid_color));
         }
         DrawingColor::Gradient(colors, angle) => {
-            let count = colors.len().saturating_sub(1).max(1);
-            let stops: Vec<GradientStop> = colors
-                .iter()
-                .enumerate()
-                .map(|(index, &stop_color)| {
-                    let i_f = f32::from(u16::try_from(index).unwrap_or(u16::MAX));
-                    let count_f = f32::from(u16::try_from(count).unwrap_or(1));
-                    let pos = i_f / count_f;
-                    GradientStop::new(pos, to_skia_color(stop_color))
-                })
-                .collect();
-
-            let angle_rad = angle.to_radians();
-            let center_x = rect.left() + rect.width() / 2.0;
-            let center_y = rect.top() + rect.height() / 2.0;
-
-            let distance = (rect.width() / 2.0 * angle_rad.cos()).abs()
-                + (rect.height() / 2.0 * angle_rad.sin()).abs();
-
-            let x_offset = angle_rad.cos() * distance;
-            let y_offset = angle_rad.sin() * distance;
-
-            let start = Point::from_xy(center_x - x_offset, center_y - y_offset);
-            let end = Point::from_xy(center_x + x_offset, center_y + y_offset);
+            let stops = gradient_stops(colors);
+            let (start, end) = gradient_line(rect, *angle);
 
             if let Some(shader) =
                 LinearGradient::new(start, end, stops, SpreadMode::Pad, Transform::identity())
@@ -54,6 +32,39 @@ pub(super) fn get_paint(color: &DrawingColor, rect: Rect) -> Paint<'static> {
         }
     }
     paint
+}
+
+/// One stop per color, spread evenly from the start of the gradient to its end.
+fn gradient_stops(colors: &[DomainColor]) -> Vec<GradientStop> {
+    let count = colors.len().saturating_sub(1).max(1);
+    colors
+        .iter()
+        .enumerate()
+        .map(|(index, &stop_color)| {
+            let i_f = f32::from(u16::try_from(index).unwrap_or(u16::MAX));
+            let count_f = f32::from(u16::try_from(count).unwrap_or(1));
+            let pos = i_f / count_f;
+            GradientStop::new(pos, to_skia_color(stop_color))
+        })
+        .collect()
+}
+
+/// The start and end points of a gradient at `angle` degrees through the centre of `rect`, far
+/// enough apart to span the whole rectangle in that direction.
+fn gradient_line(rect: Rect, angle: f32) -> (Point, Point) {
+    let angle_rad = angle.to_radians();
+    let center_x = rect.left() + rect.width() / 2.0;
+    let center_y = rect.top() + rect.height() / 2.0;
+
+    let distance = (rect.width() / 2.0 * angle_rad.cos()).abs()
+        + (rect.height() / 2.0 * angle_rad.sin()).abs();
+
+    let x_offset = angle_rad.cos() * distance;
+    let y_offset = angle_rad.sin() * distance;
+
+    let start = Point::from_xy(center_x - x_offset, center_y - y_offset);
+    let end = Point::from_xy(center_x + x_offset, center_y + y_offset);
+    (start, end)
 }
 
 #[must_use]
