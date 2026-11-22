@@ -193,3 +193,95 @@ fn setup_new_floating(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::shared::config::domain::PopupEmbed;
+    use crate::shared::events::core::PointerSerial;
+    use crate::shared::primitives::MonitorId;
+    use crate::shared::wayland::adapters::wayland::state::WaylandState;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::wire::id;
+    use crate::shared::wayland::adapters::wayland::tests::fixture::{
+        Fake, lose_runtime_dir, popup_kind, solid,
+    };
+
+    /// `xdg_popup.grab`.
+    const GRAB: u16 = 1;
+
+    fn anchor(fake: &Fake) -> AnchorInfo {
+        AnchorInfo {
+            bar_scale: 1,
+            parent_role: FloatingParentRole::Popup(fake.xdg_surface()),
+            anchor_x: 0,
+            anchor_y: 0,
+            anchor_w: 1,
+            anchor_h: 1,
+            target_monitor_id: MonitorId::new("DP-1"),
+        }
+    }
+
+    fn create(
+        fake: &Fake,
+        state: &mut WaylandState,
+        parent: Option<FloatingKind>,
+    ) -> Result<(), DisplayServerError> {
+        let placement = FloatingPlacement {
+            size: Size::new(2, 1),
+            text_w: 2,
+            text_h: 1,
+            offset: PopupOffset::default(),
+        };
+        create_new_floating(
+            state,
+            &fake.queue_handle,
+            popup_kind(),
+            &solid(2, 1, [1; 4]),
+            &anchor(fake),
+            &placement,
+            parent,
+        )
+    }
+
+    #[test]
+    fn create_new_floating_without_shm_or_its_memory_fails() {
+        let fake = Fake::new();
+        let unbinds: [fn(&mut WaylandState); 2] = [|state| state.shm = None, lose_runtime_dir];
+        for unbind in unbinds {
+            let mut state = fake.state(PopupEmbed::Composite);
+            unbind(&mut state);
+            assert!(create(&fake, &mut state, None).is_err());
+            assert!(state.floating_surfaces.is_empty());
+        }
+    }
+
+    #[test]
+    fn create_new_floating_records_its_parent() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let parent = FloatingKind::Tooltip;
+        create(&fake, &mut state, Some(parent.clone())).expect("created");
+        assert_eq!(state.floating_surfaces[&popup_kind()].parent, Some(parent));
+    }
+
+    #[test]
+    fn new_popup_grabs_the_seat_with_the_last_button_serial() {
+        let fake = Fake::new();
+        let mut state = fake.state(PopupEmbed::Composite);
+        let seat = fake.seat();
+        state.seat = Some(seat.clone());
+        state.last_button_serial = Some(PointerSerial::new(42));
+        fake.requests();
+
+        create(&fake, &mut state, None).expect("created");
+
+        let popup = id(&state.floating_surfaces[&popup_kind()].xdg_popup);
+        let grabs: Vec<[u32; 4]> = fake
+            .requests()
+            .into_iter()
+            .filter(|request| request.object == popup && request.opcode == GRAB)
+            .map(|request| request.args)
+            .collect();
+        assert_eq!(grabs, vec![[id(&seat), 42, 0, 0]]);
+    }
+}

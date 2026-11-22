@@ -230,6 +230,32 @@ mod tests {
     }
 
     #[test]
+    fn test_lost_keyboard_before_version_3_is_forgotten_without_release() {
+        let fake = Fake::new();
+        let registry = fake
+            .connection()
+            .display()
+            .get_registry(&fake.queue_handle, ());
+        let seat: WlSeat = registry.bind(6, 2, &fake.queue_handle, ());
+        let mut input = KeyboardInput::with_escape_code(ESC_EVDEV);
+        input.on_capability(&seat, KeyboardPresence::Present, &fake.queue_handle);
+        let device = input.device.clone().expect("keyboard bound");
+        fake.requests();
+
+        input.on_capability(&seat, KeyboardPresence::Absent, &fake.queue_handle);
+
+        assert!(input.device.is_none());
+        assert!(!input.is_escape(ESC_EVDEV));
+        // `wl_keyboard.release` is opcode 0 and only exists from version 3.
+        let to_device: Vec<_> = fake
+            .requests()
+            .into_iter()
+            .filter(|request| request.object == device.id().protocol_id())
+            .collect();
+        assert_eq!(to_device, Vec::new());
+    }
+
+    #[test]
     fn test_lost_capability_without_device_keeps_the_keymap() {
         let fake = Fake::new();
         let seat = fake.seat();

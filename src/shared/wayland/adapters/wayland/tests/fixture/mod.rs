@@ -3,8 +3,10 @@
 
 mod bar;
 pub(in crate::shared::wayland::adapters::wayland) mod pointer;
+pub(in crate::shared::wayland::adapters::wayland::tests) mod positioner;
 mod seat;
 mod state;
+pub(in crate::shared::wayland::adapters::wayland) use state::lose_runtime_dir;
 mod subsurface;
 pub mod wire;
 

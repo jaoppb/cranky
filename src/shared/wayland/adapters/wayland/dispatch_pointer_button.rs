@@ -393,4 +393,17 @@ mod tests {
         assert_eq!(state.last_button_serial, Some(PointerSerial::new(43)));
         assert_eq!(drain(&mut rx), vec![]);
     }
+
+    #[test]
+    fn dispatch_pointer_button_unknown_state_records_the_serial_only() {
+        let fake = Fake::new();
+        let (mut state, surface) = popup(&fake, 1);
+        let mut rx = state.hub.pointer_rx();
+        handle_pointer_enter(&mut state, &surface, 13.0, 5.0);
+        drain(&mut rx);
+        handle_pointer_button(&mut state, LEFT, WEnum::Unknown(7), 5);
+        assert_eq!(drain(&mut rx), Vec::new());
+        assert_eq!(state.last_button_serial, Some(PointerSerial::new(5)));
+        assert!(!state.pointer_grab.is_active());
+    }
 }

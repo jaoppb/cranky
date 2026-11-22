@@ -40,3 +40,38 @@ fn nested_popup_anchor_uses_composite_child_origin() {
     assert_eq!(bounds(Some(rect)), Some((32, 13, 5, 6)));
     assert_eq!(bounds(None), Some((30, 10, 4, 4)));
 }
+
+/// The anchor rect a top-level popup on DP-1 gets from `rect`, with the bar
+/// list `bars`.
+fn top_level_bounds(fake: &Fake, bars: &[&str], rect: Rect) -> Option<(i32, i32, i32, i32)> {
+    let mut state = fake.state(PopupEmbed::Composite);
+    state.bars.extend(bars.iter().map(|name| fake.bar(name, 2)));
+    resolve_anchor(&state, &popup_kind(), None, Some(rect), None).map(|anchor| {
+        assert_eq!(anchor.bar_scale, 2);
+        assert_eq!(anchor.target_monitor_id, MonitorId::new("DP-1"));
+        (
+            anchor.anchor_x,
+            anchor.anchor_y,
+            anchor.anchor_w,
+            anchor.anchor_h,
+        )
+    })
+}
+
+#[test]
+fn top_level_popup_anchors_to_the_whole_bar_column() {
+    let fake = Fake::new();
+    let rect = Rect::new(Position::new(2, 3), Size::new(5, 6));
+    // The fixture's bar is 1 pixel high.
+    assert_eq!(
+        top_level_bounds(&fake, &["HDMI-A-1", "DP-1"], rect),
+        Some((2, 0, 5, 1))
+    );
+}
+
+#[test]
+fn popup_on_a_monitor_without_a_bar_has_no_anchor() {
+    let fake = Fake::new();
+    let rect = Rect::new(Position::new(2, 3), Size::new(5, 6));
+    assert_eq!(top_level_bounds(&fake, &["HDMI-A-1"], rect), None);
+}

@@ -120,6 +120,7 @@ mod tests {
     fn child_before_popup_is_held_pending() {
         let fake = Fake::new();
         let mut state = fake.state(PopupEmbed::Composite);
+        state.bars.push(fake.bar("DP-1", 1));
         let kind = popup_kind();
 
         handle_composite_child(&mut state, 0, &kind, &child_cmd(&kind, Position::new(3, 4)));

@@ -100,10 +100,13 @@ mod tests {
     use crate::features::module_runtime::ports::LayoutSender;
     use crate::shared::config::domain::{Config, PopupEmbed};
     use crate::shared::primitives::{ChildBounds, ModuleId, MonitorId};
+    use crate::shared::wayland::adapters::wayland::adapter::{WaylandAdapter, readiness_socket};
     use crate::shared::wayland::adapters::wayland::tests::fixture::Fake;
     use crate::shared::wayland::adapters::wayland::types::ConfigureGate;
     use crate::shared::wayland::ports::AppReadModel;
+    use crate::shared::wayland::ports::DisplayServerPort;
     use std::collections::HashMap;
+    use std::sync::Arc;
     use std::sync::Mutex;
     use wayland_client::Proxy;
 
@@ -150,6 +153,42 @@ mod tests {
             .count();
         let layouts = senders[&root].sent.lock().unwrap().len();
         (layouts, to_bar)
+    }
+
+    /// `render_all` sends the bar's resize to the compositor itself: nothing
+    /// else flushes the connection before the next event wait.
+    #[test]
+    fn render_all_flushes_the_bar_resize() {
+        crate::test_utils::block_on(async {
+            let fake = Fake::new();
+            let mut state = fake.state(PopupEmbed::Composite);
+            state.bars.push(fake.bar("DP-1", 1));
+            let config_rx = state.hub.config_rx();
+            let connection = fake.connection().clone();
+            let (_notify_tx, notify_rx) = tokio::sync::mpsc::channel(1);
+            let mut adapter = WaylandAdapter {
+                socket: readiness_socket(&connection).expect("socket"),
+                event_queue: connection.new_event_queue(),
+                connection,
+                state,
+                pending_surfaces: Arc::new(Mutex::new(HashMap::new())),
+                notify_rx,
+                config_rx,
+            };
+            fake.requests();
+            let read_model = AppReadModel::new(
+                Config::default(),
+                None,
+                Vec::new(),
+                HashMap::new(),
+                HashMap::new(),
+            );
+            let senders: HashMap<ModuleId, RecordingSender> = HashMap::new();
+
+            adapter.render_all(&read_model, &senders).expect("rendered");
+
+            assert!(!fake.received().is_empty(), "nothing reached the socket");
+        });
     }
 
     #[test]
