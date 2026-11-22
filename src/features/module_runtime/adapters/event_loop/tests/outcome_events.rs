@@ -9,6 +9,7 @@ use crate::features::module_runtime::domain::{
     FloatingLayouts, PopupRenderLayout, RenderOutcome, SizeChange,
 };
 use crate::features::module_runtime::ports::LayoutEvent;
+use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
 use crate::features::module_runtime::test_support::{
     ChannelDisplaySender, ChannelLayoutSender, MockDisplaySender, MockLayoutSender, MockUiSender,
     RecordingSurfaceManager,
@@ -43,11 +44,15 @@ fn layout_events_carry_the_module_monitor_children_and_settled_size() {
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         ModuleId::new(42),
-        Arc::new(SignalHub::new(Config::default())),
-        Arc::new(RecordingSurfaceManager::default()),
-        Arc::new(ChannelLayoutSender::new(layout_tx)),
-        Arc::new(MockDisplaySender),
-        Arc::new(MockUiSender),
+        ModuleHandles::new(
+            Arc::new(SignalHub::new(Config::default())),
+            Arc::new(RecordingSurfaceManager::default()),
+            ModuleSenders::new(
+                Arc::new(ChannelLayoutSender::new(layout_tx)),
+                Arc::new(MockDisplaySender),
+                Arc::new(MockUiSender),
+            ),
+        ),
         rx,
     );
     let mut event_loop = event_loop(ctx);
@@ -106,11 +111,15 @@ fn floating_content_is_painted_at_the_render_scale() {
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         ModuleId::new(42),
-        Arc::new(SignalHub::new(Config::default())),
-        Arc::new(RecordingSurfaceManager::default()),
-        Arc::new(MockLayoutSender),
-        Arc::new(ChannelDisplaySender::new(display_tx)),
-        Arc::new(MockUiSender),
+        ModuleHandles::new(
+            Arc::new(SignalHub::new(Config::default())),
+            Arc::new(RecordingSurfaceManager::default()),
+            ModuleSenders::new(
+                Arc::new(MockLayoutSender),
+                Arc::new(ChannelDisplaySender::new(display_tx)),
+                Arc::new(MockUiSender),
+            ),
+        ),
         rx,
     );
     let anchor = Rect::new(Position::new(8, 0), Size::new(16, 20));

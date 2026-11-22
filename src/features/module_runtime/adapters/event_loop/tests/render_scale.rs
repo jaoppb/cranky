@@ -5,6 +5,7 @@ use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::{DisplayCommand, ShowFloating};
 use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::RenderPipeline;
+use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
 use crate::features::module_runtime::test_support::{
     ChannelDisplaySender, MockLayoutSender, MockUiSender, PipelineFixture, RecordingSurfaceManager,
     TestModulePort, process_monitor,
@@ -48,11 +49,15 @@ fn a_render_at_scale_two_paints_its_buffer_and_its_popup_at_that_scale() {
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         ModuleId::new(42),
-        Arc::new(SignalHub::new(Config::default())),
-        Arc::new(RecordingSurfaceManager::default()),
-        Arc::new(MockLayoutSender),
-        Arc::new(ChannelDisplaySender::new(display_tx)),
-        Arc::new(MockUiSender),
+        ModuleHandles::new(
+            Arc::new(SignalHub::new(Config::default())),
+            Arc::new(RecordingSurfaceManager::default()),
+            ModuleSenders::new(
+                Arc::new(MockLayoutSender),
+                Arc::new(ChannelDisplaySender::new(display_tx)),
+                Arc::new(MockUiSender),
+            ),
+        ),
         rx,
     );
     event_loop(ctx).dispatch_render_outcome(&monitor, &outcome);

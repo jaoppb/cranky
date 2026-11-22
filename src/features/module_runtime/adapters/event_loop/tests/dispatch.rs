@@ -3,6 +3,7 @@ use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::RenderServices;
 use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
 use crate::features::module_runtime::ports::LayoutEvent;
+use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
 use crate::features::module_runtime::test_support::{
     ChannelLayoutSender, MockCanvasFactory, MockDisplaySender, MockLayoutSender,
     MockSurfaceManager, MockUiSender, TestModulePort,
@@ -34,11 +35,11 @@ fn test_dispatch_render_outcome_emits_layout_events() {
         let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
         let ctx = ModuleContext::new(
             id,
-            hub,
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
+            ModuleHandles::new(
+                hub,
+                surface_manager,
+                ModuleSenders::new(layout_sender, display_sender, ui_sender),
+            ),
             rx,
         );
 
@@ -111,11 +112,11 @@ fn test_handle_pointer_event_no_tree_returns_false() {
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         id,
-        hub,
-        surface_manager,
-        layout_sender,
-        display_sender,
-        ui_sender,
+        ModuleHandles::new(
+            hub,
+            surface_manager,
+            ModuleSenders::new(layout_sender, display_sender, ui_sender),
+        ),
         rx,
     );
 
@@ -151,11 +152,11 @@ fn test_handle_lifecycle_event_popup_dismissed_returns_true() {
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         id,
-        hub,
-        surface_manager,
-        layout_sender,
-        display_sender,
-        ui_sender,
+        ModuleHandles::new(
+            hub,
+            surface_manager,
+            ModuleSenders::new(layout_sender, display_sender, ui_sender),
+        ),
         rx,
     );
 

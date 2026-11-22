@@ -2,6 +2,7 @@ use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::RenderServices;
 use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
+use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
 use crate::features::module_runtime::test_support::{
     ChannelDisplaySender, MockCanvasFactory, MockLayoutSender, MockSurfaceManager, MockUiSender,
     TestModulePort,
@@ -35,11 +36,11 @@ pub(super) fn create_test_event_loop_and_channel() -> (
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         id,
-        hub,
-        surface_manager,
-        layout_sender,
-        display_sender,
-        ui_sender,
+        ModuleHandles::new(
+            hub,
+            surface_manager,
+            ModuleSenders::new(layout_sender, display_sender, ui_sender),
+        ),
         rx,
     );
 

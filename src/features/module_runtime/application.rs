@@ -3,7 +3,7 @@
 use crate::features::layout_engine::domain::DisplayCommandSender;
 use crate::features::module_runtime::adapters::EventLoop;
 use crate::features::module_runtime::domain::{ModuleIdentity, RenderServices};
-use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender};
+use crate::features::module_runtime::ports::{AnyModulePort, LayoutEventSender, ModuleHandles};
 use crate::features::vdom::domain::UiCommandSender;
 use crate::shared::events::signals::SignalHub;
 #[cfg(test)]
@@ -21,11 +21,7 @@ pub(crate) struct ModuleContext<
     US: UiCommandSender + 'static,
 > {
     identity: ModuleIdentity,
-    hub: Arc<SignalHub>,
-    surface_manager: DynSurfaceManager,
-    layout_sender: Arc<LS>,
-    display_sender: Arc<DS>,
-    ui_sender: Arc<US>,
+    handles: ModuleHandles<LS, DS, US>,
     layout_rx: watch::Receiver<HashMap<MonitorId, ChildBounds>>,
     pointer_rx: crate::shared::events::core::PointerReceiver,
 }
@@ -38,21 +34,13 @@ impl<
 {
     pub(crate) fn new(
         id: ModuleId,
-        hub: Arc<SignalHub>,
-        surface_manager: DynSurfaceManager,
-        layout_sender: Arc<LS>,
-        display_sender: Arc<DS>,
-        ui_sender: Arc<US>,
+        handles: ModuleHandles<LS, DS, US>,
         layout_rx: watch::Receiver<HashMap<MonitorId, ChildBounds>>,
     ) -> Self {
-        let pointer_rx = hub.pointer_rx();
+        let pointer_rx = handles.hub().pointer_rx();
         Self {
             identity: ModuleIdentity::new(id),
-            hub,
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
+            handles,
             layout_rx,
             pointer_rx,
         }
@@ -100,27 +88,27 @@ impl<
 
     #[must_use]
     pub(crate) const fn hub(&self) -> &Arc<SignalHub> {
-        &self.hub
+        self.handles.hub()
     }
 
     #[must_use]
     pub(crate) const fn surface_manager(&self) -> &DynSurfaceManager {
-        &self.surface_manager
+        self.handles.surface_manager()
     }
 
     #[must_use]
     pub(crate) fn layout_sender(&self) -> &LS {
-        self.layout_sender.as_ref()
+        self.handles.senders().layout_sender()
     }
 
     #[must_use]
     pub(crate) fn display_sender(&self) -> &DS {
-        self.display_sender.as_ref()
+        self.handles.senders().display_sender()
     }
 
     #[must_use]
     pub(crate) fn ui_sender(&self) -> &US {
-        self.ui_sender.as_ref()
+        self.handles.senders().ui_sender()
     }
 
     pub(crate) const fn rxs_mut(
@@ -183,6 +171,7 @@ mod tests {
     use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
     use crate::features::layout_engine::domain::DisplayCommand;
     use crate::features::module_runtime::ports::LayoutEvent;
+    use crate::features::module_runtime::ports::ModuleSenders;
     use crate::features::module_runtime::test_support::{
         ChannelDisplaySender, ChannelLayoutSender, ChannelUiSender, MockCanvasFactory,
         MockDisplaySender, MockLayoutSender, MockSurfaceManager, MockUiSender, TestModulePort,
@@ -299,11 +288,11 @@ mod tests {
 
             let ctx = ModuleContext::new(
                 self.id,
-                hub.clone(),
-                surface_manager,
-                layout_sender,
-                display_sender,
-                ui_sender,
+                ModuleHandles::new(
+                    hub.clone(),
+                    surface_manager,
+                    ModuleSenders::new(layout_sender, display_sender, ui_sender),
+                ),
                 layout_rx,
             )
             .with_parent(self.parent_id);
@@ -342,11 +331,11 @@ mod tests {
 
         let mut ctx = ModuleContext::new(
             id,
-            hub.clone(),
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
+            ModuleHandles::new(
+                hub.clone(),
+                surface_manager,
+                ModuleSenders::new(layout_sender, display_sender, ui_sender),
+            ),
             layout_rx,
         )
         .with_parent(Some(ModuleId::new(99)))

@@ -140,16 +140,6 @@ impl<
         let module_names = registry.module_names();
         let name_to_ids = registry.name_to_ids().clone();
         let module_keys = registry.module_keys();
-        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            services.hub.clone(),
-            services.surface_manager.clone(),
-            services.layout_sender.clone(),
-            services.display_sender.clone(),
-            services.ui_sender.clone(),
-            services.canvas_factory.clone(),
-        );
-        let layout_senders = registry.spawn_all(&deps);
-
         let read_model = AppReadModel {
             config,
             root_module,
@@ -161,14 +151,14 @@ impl<
             computed_layouts: HashMap::new(),
         };
 
-        Ok(Self {
+        let mut app = Self {
             hub: services.hub,
             read_model,
             display_rx: channels.display,
             layout_rx: channels.layout,
             ui_rx: channels.interface,
             system_rx: channels.system,
-            layout_senders,
+            layout_senders: HashMap::new(),
             surface_manager: services.surface_manager,
             display_sender: services.display_sender,
             layout_sender: services.layout_sender,
@@ -176,7 +166,29 @@ impl<
             registry,
             canvas_factory: services.canvas_factory,
             adapter_supervisor: None,
-        })
+        };
+        let deps = app.module_runtime_dependencies();
+        app.layout_senders = app.registry.spawn_all(&deps);
+        Ok(app)
+    }
+
+    /// What every module actor this app spawns or reloads is built with: its handles to the hub,
+    /// the surface manager and the outbound channels, and a canvas factory of its own.
+    fn module_runtime_dependencies(
+        &self,
+    ) -> crate::features::module_runtime::ports::ModuleRuntimeDependencies<F, LS, DS, US> {
+        crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
+            crate::features::module_runtime::ports::ModuleHandles::new(
+                self.hub.clone(),
+                self.surface_manager.clone(),
+                crate::features::module_runtime::ports::ModuleSenders::new(
+                    self.layout_sender.clone(),
+                    self.display_sender.clone(),
+                    self.ui_sender.clone(),
+                ),
+            ),
+            self.canvas_factory.clone(),
+        )
     }
 
     /// Wires in the on-demand adapter starter (decision 3). Called from
@@ -369,14 +381,7 @@ impl<
             return;
         }
 
-        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            self.hub.clone(),
-            self.surface_manager.clone(),
-            self.layout_sender.clone(),
-            self.display_sender.clone(),
-            self.ui_sender.clone(),
-            self.canvas_factory.clone(),
-        );
+        let deps = self.module_runtime_dependencies();
 
         match self.registry.spawn_module(
             parent,
@@ -567,14 +572,7 @@ impl<
     ) {
         let mut needs_render = false;
         let mut cmd = initial;
-        let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            self.hub.clone(),
-            self.surface_manager.clone(),
-            self.layout_sender.clone(),
-            self.display_sender.clone(),
-            self.ui_sender.clone(),
-            self.canvas_factory.clone(),
-        );
+        let deps = self.module_runtime_dependencies();
         loop {
             match cmd {
                 SystemCommand::ReloadModule(name) => {
@@ -625,14 +623,7 @@ impl<
                 .name_to_ids
                 .clone_from(self.registry.name_to_ids());
             self.read_model.module_keys = self.registry.module_keys();
-            let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                self.hub.clone(),
-                self.surface_manager.clone(),
-                self.layout_sender.clone(),
-                self.display_sender.clone(),
-                self.ui_sender.clone(),
-                self.canvas_factory.clone(),
-            );
+            let deps = self.module_runtime_dependencies();
             self.layout_senders = self.registry.spawn_all(&deps);
         }
     }

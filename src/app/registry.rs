@@ -347,11 +347,7 @@ impl ModuleRegistry {
 
         crate::features::module_runtime::application::ModuleContext::new(
             id,
-            deps.hub.clone(),
-            deps.surface_manager.clone(),
-            deps.layout_sender.clone(),
-            deps.display_sender.clone(),
-            deps.ui_sender.clone(),
+            deps.handles.clone(),
             layout_rx,
         )
         .with_parent(parent_id)
@@ -910,11 +906,15 @@ mod tests {
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
 
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                hub,
-                surface_manager,
-                layout_sender,
-                display_sender,
-                ui_sender,
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        layout_sender,
+                        display_sender,
+                        ui_sender,
+                    ),
+                ),
                 canvas_factory,
             );
 
@@ -965,11 +965,15 @@ mod tests {
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                hub,
-                surface_manager,
-                layout_sender,
-                display_sender,
-                ui_sender,
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        layout_sender,
+                        display_sender,
+                        ui_sender,
+                    ),
+                ),
                 canvas_factory,
             );
 
@@ -1029,11 +1033,15 @@ mod tests {
         let canvas_factory =
             crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
         let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-            hub,
-            surface_manager,
-            layout_sender,
-            display_sender,
-            ui_sender,
+            crate::features::module_runtime::ports::ModuleHandles::new(
+                hub,
+                surface_manager,
+                crate::features::module_runtime::ports::ModuleSenders::new(
+                    layout_sender,
+                    display_sender,
+                    ui_sender,
+                ),
+            ),
             canvas_factory,
         );
 
@@ -1096,11 +1104,15 @@ mod tests {
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                hub,
-                surface_manager,
-                layout_sender,
-                display_sender,
-                ui_sender,
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        layout_sender,
+                        display_sender,
+                        ui_sender,
+                    ),
+                ),
                 canvas_factory,
             );
 
@@ -1188,11 +1200,15 @@ mod tests {
             let canvas_factory =
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new();
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                hub,
-                surface_manager,
-                layout_sender,
-                display_sender,
-                ui_sender,
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    hub,
+                    surface_manager,
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        layout_sender,
+                        display_sender,
+                        ui_sender,
+                    ),
+                ),
                 canvas_factory,
             );
 
@@ -1262,17 +1278,23 @@ mod tests {
             TestRegistryPort::load(&mut registry, &config).unwrap();
             let root_id = TestRegistryPort::root_module(&registry).unwrap();
             let deps = crate::features::module_runtime::ports::ModuleRuntimeDependencies::new(
-                std::sync::Arc::new(SignalHub::new(config.clone())),
-                std::sync::Arc::new(
-                    crate::features::module_runtime::test_support::MockSurfaceManager,
+                crate::features::module_runtime::ports::ModuleHandles::new(
+                    std::sync::Arc::new(SignalHub::new(config.clone())),
+                    std::sync::Arc::new(
+                        crate::features::module_runtime::test_support::MockSurfaceManager,
+                    ),
+                    crate::features::module_runtime::ports::ModuleSenders::new(
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockLayoutSender,
+                        ),
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockDisplaySender,
+                        ),
+                        std::sync::Arc::new(
+                            crate::features::module_runtime::test_support::MockUiSender,
+                        ),
+                    ),
                 ),
-                std::sync::Arc::new(
-                    crate::features::module_runtime::test_support::MockLayoutSender,
-                ),
-                std::sync::Arc::new(
-                    crate::features::module_runtime::test_support::MockDisplaySender,
-                ),
-                std::sync::Arc::new(crate::features::module_runtime::test_support::MockUiSender),
                 crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
             );
             let key = crate::shared::primitives::ModuleKey::new(

@@ -2,6 +2,7 @@ use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
 use crate::features::module_runtime::application::ModuleContext;
 use crate::features::module_runtime::domain::RenderServices;
+use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
 use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockDisplaySender, MockLayoutSender, MockSurfaceManager, MockUiSender,
     TestModulePort,
@@ -56,11 +57,15 @@ fn focused_elements(focused: &str) -> usize {
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         ModuleId::new(42),
-        hub,
-        Arc::new(MockSurfaceManager),
-        Arc::new(MockLayoutSender),
-        Arc::new(MockDisplaySender),
-        Arc::new(MockUiSender),
+        ModuleHandles::new(
+            hub,
+            Arc::new(MockSurfaceManager),
+            ModuleSenders::new(
+                Arc::new(MockLayoutSender),
+                Arc::new(MockDisplaySender),
+                Arc::new(MockUiSender),
+            ),
+        ),
         rx,
     );
     let mut event_loop = EventLoop::new(

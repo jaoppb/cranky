@@ -8,6 +8,7 @@ use crate::features::module_runtime::domain::RenderServices;
 use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
 use crate::features::module_runtime::domain::{FloatingLayouts, RenderOutcome};
 use crate::features::module_runtime::ports::LayoutEventSender;
+use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
 use crate::features::module_runtime::test_support::{
     MockCanvasFactory, MockDisplaySender, MockLayoutSender, MockUiSender, RecordingSurfaceManager,
     TestModulePort,
@@ -47,11 +48,15 @@ fn an_embedded_module_submits_its_buffer_under_its_site() {
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         ModuleId::new(42),
-        Arc::new(SignalHub::new(Config::default())),
-        surfaces.clone(),
-        Arc::new(MockLayoutSender),
-        Arc::new(MockDisplaySender),
-        Arc::new(MockUiSender),
+        ModuleHandles::new(
+            Arc::new(SignalHub::new(Config::default())),
+            surfaces.clone(),
+            ModuleSenders::new(
+                Arc::new(MockLayoutSender),
+                Arc::new(MockDisplaySender),
+                Arc::new(MockUiSender),
+            ),
+        ),
         rx,
     )
     .with_parent(Some(ModuleId::new(7)))
@@ -93,11 +98,15 @@ fn a_top_level_module_submits_its_buffer_with_no_parent_and_nothing_without_one(
     let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     let ctx = ModuleContext::new(
         ModuleId::new(3),
-        Arc::new(SignalHub::new(Config::default())),
-        surfaces.clone(),
-        Arc::new(MockLayoutSender),
-        Arc::new(MockDisplaySender),
-        Arc::new(MockUiSender),
+        ModuleHandles::new(
+            Arc::new(SignalHub::new(Config::default())),
+            surfaces.clone(),
+            ModuleSenders::new(
+                Arc::new(MockLayoutSender),
+                Arc::new(MockDisplaySender),
+                Arc::new(MockUiSender),
+            ),
+        ),
         rx,
     );
     let mut event_loop = event_loop(ctx);
