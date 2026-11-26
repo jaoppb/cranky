@@ -3,7 +3,7 @@
 use super::outcome::plain_event_loop;
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::{DisplayCommand, ShowFloating};
-use crate::features::module_runtime::domain::RenderPipeline;
+use crate::features::module_runtime::domain::{RenderOutcome, RenderPipeline};
 use crate::features::module_runtime::test_support::{
     PipelineFixture, TestModulePort, process_monitor,
 };
@@ -13,27 +13,32 @@ use crate::features::vdom::domain::{
 use crate::shared::primitives::MonitorId;
 use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
 
+/// A text node reading `label`, with no selectors or interactions.
+fn text(label: &str) -> VNode {
+    VNode::new_text(
+        TextContent::new(label.to_string()),
+        ElementSelectors::default(),
+        Interactions::default(),
+    )
+}
+
+/// Renders `bar` once on `monitor` at scale 2, in 10x10 bounds at the origin.
+fn render_at_scale_two(monitor: &MonitorId, bar: VNode) -> RenderOutcome {
+    let mut pipeline = RenderPipeline::new();
+    let mut fixture = PipelineFixture::<TaffyLayoutAdapter>::default();
+    let mut ctx = fixture.ctx(monitor);
+    ctx.scale = Scale::new(2.0);
+    ctx.current_bounds = Some(Rect::new(Position::new(0, 0), Size::new(10, 10)));
+    process_monitor(&mut pipeline, &TestModulePort::new(bar), ctx).expect("render outcome")
+}
+
 /// A render on a monitor at scale 2 paints the module's own buffer at that scale, and the event
 /// loop paints the floating content it opened at the same scale.
 #[test]
 fn a_render_at_scale_two_paints_its_buffer_and_its_popup_at_that_scale() {
     let monitor = MonitorId::new("DP-1");
-    let text = |label: &str| {
-        VNode::new_text(
-            TextContent::new(label.to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        )
-    };
     let bar = text("bar").with_popup(PopupSpec::new(Box::new(text("calendar"))));
-    let mut pipeline = RenderPipeline::new();
-    let mut fixture = PipelineFixture::<TaffyLayoutAdapter>::default();
-    let mut ctx = fixture.ctx(&monitor);
-    ctx.scale = Scale::new(2.0);
-    ctx.current_bounds = Some(Rect::new(Position::new(0, 0), Size::new(10, 10)));
-
-    let outcome =
-        process_monitor(&mut pipeline, &TestModulePort::new(bar), ctx).expect("render outcome");
+    let outcome = render_at_scale_two(&monitor, bar);
     let (buffer, _) = outcome.buffer().expect("painted buffer");
     assert_eq!((buffer.width(), buffer.height()), (20, 20));
 

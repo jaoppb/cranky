@@ -53,6 +53,12 @@ fn layout_events_carry_the_module_monitor_children_and_settled_size() {
     event_loop.dispatch_render_outcome(&monitor, &empty);
     event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &empty);
 
+    let sent: Vec<_> = wiring.sent.layout_events.try_iter().collect();
+    assert_eq!(sent, expected_layout_events(&monitor));
+}
+
+/// The clock's layout, the grown size and the empty layouts once the clock goes, on `monitor`.
+fn expected_layout_events(monitor: &MonitorId) -> Vec<LayoutEvent> {
     let children = |layouts| LayoutEvent::ContainerLayoutsCalculated {
         parent_id: MODULE,
         monitor_id: monitor.clone(),
@@ -64,11 +70,7 @@ fn layout_events_carry_the_module_monitor_children_and_settled_size() {
         size: Size::new(64, 22),
         settled_width: Some(280),
     };
-    let sent: Vec<_> = wiring.sent.layout_events.try_iter().collect();
-    assert_eq!(
-        sent,
-        vec![children(vec![clock_layout()]), size, children(vec![])]
-    );
+    vec![children(vec![clock_layout()]), size, children(vec![])]
 }
 
 /// Floating content is painted at the scale the outcome was dispatched with.

@@ -28,23 +28,13 @@ fn test_dispatch_render_outcome_emits_layout_events() {
 
     event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &outcome);
 
-    let received = wiring
-        .sent
-        .layout_events
-        .try_recv()
-        .expect("Should have sent ModuleSizeChanged");
-    let LayoutEvent::ModuleSizeChanged {
-        monitor_id,
-        module_id,
-        size,
-        ..
-    } = received
-    else {
-        panic!("Unexpected event");
+    let expected = LayoutEvent::ModuleSizeChanged {
+        monitor_id: MonitorId::new("DP-1"),
+        module_id: MODULE,
+        size: Size::new(50, 20),
+        settled_width: None,
     };
-    assert_eq!(monitor_id.as_str(), "DP-1");
-    assert_eq!(module_id, MODULE);
-    assert_eq!(size, Size::new(50, 20));
+    assert_eq!(wiring.sent.layout_events.try_recv(), Ok(expected));
 }
 
 #[test]
