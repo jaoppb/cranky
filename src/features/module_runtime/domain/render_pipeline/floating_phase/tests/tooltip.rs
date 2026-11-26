@@ -141,38 +141,44 @@ fn hover_on_a_surface_that_is_not_open_lays_out_nothing() {
     }
 }
 
-#[test]
-fn keyed_hover_follows_its_node_after_a_reorder() {
-    // Captured when "a" was the second child; it has since moved first.
-    let captured = NodeRef::new(
+/// A bar whose children are keyed `first` and "b", each carrying the tooltip "tip <key>".
+fn keyed_bar(first: &'static str) -> RenderNode {
+    let tip = format!("tip {first}");
+    root(
+        SurfaceSpace::Bar,
+        None,
+        vec![
+            child(0, Some(first), Some(&tip)),
+            child(1, Some("b"), Some("tip b")),
+        ],
+    )
+}
+
+/// A hover captured when the node keyed "a" was the bar's second child.
+fn hover_captured_on_a() -> InteractionContext {
+    hover(NodeRef::new(
         vec![AnchorSegment::new(
             NodePath::new(SurfaceSpace::Bar, vec![1]),
             NodeKey::new("a").unwrap(),
         )],
         NodePath::root_in(SurfaceSpace::Bar),
-    );
-    let bar = root(
-        SurfaceSpace::Bar,
-        None,
-        vec![
-            child(0, Some("a"), Some("tip a")),
-            child(1, Some("b"), Some("tip b")),
-        ],
-    );
+    ))
+}
+
+#[test]
+fn keyed_hover_follows_its_node_after_a_reorder() {
+    // Captured when "a" was the second child; it has since moved first.
+    let bar = keyed_bar("a");
     assert_eq!(
-        picked(bar_only(&bar), Some(&hover(captured.clone()))),
+        picked(bar_only(&bar), Some(&hover_captured_on_a())),
         vec![tooltip_content("tip a")]
     );
 
     // Once the keyed node is gone the hover resolves to nothing, rather
     // than to whichever node now sits at the captured position.
-    let without_a = root(
-        SurfaceSpace::Bar,
-        None,
-        vec![
-            child(0, Some("c"), Some("tip c")),
-            child(1, Some("b"), Some("tip b")),
-        ],
+    let without_a = keyed_bar("c");
+    assert_eq!(
+        picked(bar_only(&without_a), Some(&hover_captured_on_a())),
+        vec![]
     );
-    assert_eq!(picked(bar_only(&without_a), Some(&hover(captured))), vec![]);
 }
