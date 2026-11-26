@@ -22,6 +22,19 @@ fn make_test_tree(on_click: Option<ClickHandlers>) -> RenderNode {
     }
 }
 
+/// A click at (10, 10) on the bar with `button`.
+fn click(button: PointerButton) -> PointerEvent {
+    PointerEvent::Click {
+        surface: SurfaceKind::Bar,
+        button,
+        pos: Position::new(10, 10),
+    }
+}
+
+fn exec(command: &str) -> PointerAction {
+    PointerAction::SendUi(UiCommand::Exec(command.into()))
+}
+
 #[test]
 fn test_click_hit_returns_send_command_single_shorthand() {
     let mut handler = PointerHandler::new();
@@ -31,34 +44,18 @@ fn test_click_hit_returns_send_command_single_shorthand() {
     ))));
 
     // Left click
-    let outcome = handler.handle_event(
-        &PointerEvent::Click {
-            surface: SurfaceKind::Bar,
-            button: PointerButton::Left,
-            pos: Position::new(10, 10),
-        },
-        PointerTarget::new(&mon, &tree),
-    );
+    let outcome =
+        handler.handle_event(&click(PointerButton::Left), PointerTarget::new(&mon, &tree));
     assert_eq!(outcome.actions().len(), 1);
-    assert_eq!(
-        outcome.actions()[0],
-        PointerAction::SendUi(UiCommand::Exec("render".into()))
-    );
+    assert_eq!(outcome.actions()[0], exec("render"));
 
     // Right click also triggers on single action shorthand
     let outcome_right = handler.handle_event(
-        &PointerEvent::Click {
-            surface: SurfaceKind::Bar,
-            button: PointerButton::Right,
-            pos: Position::new(10, 10),
-        },
+        &click(PointerButton::Right),
         PointerTarget::new(&mon, &tree),
     );
     assert_eq!(outcome_right.actions().len(), 1);
-    assert_eq!(
-        outcome_right.actions()[0],
-        PointerAction::SendUi(UiCommand::Exec("render".into()))
-    );
+    assert_eq!(outcome_right.actions()[0], exec("render"));
 }
 
 #[test]
@@ -72,35 +69,15 @@ fn test_click_hit_returns_distinct_button_actions() {
 
     let tree = make_test_tree(Some(handlers));
 
-    let outcome_left = handler.handle_event(
-        &PointerEvent::Click {
-            surface: SurfaceKind::Bar,
-            button: PointerButton::Left,
-            pos: Position::new(10, 10),
-        },
-        PointerTarget::new(&mon, &tree),
-    );
-    assert_eq!(
-        outcome_left.into_actions(),
-        vec![PointerAction::SendUi(UiCommand::Exec(
-            "left_clicked".into()
-        ))]
-    );
+    let outcome_left =
+        handler.handle_event(&click(PointerButton::Left), PointerTarget::new(&mon, &tree));
+    assert_eq!(outcome_left.into_actions(), vec![exec("left_clicked")]);
 
     let outcome_right = handler.handle_event(
-        &PointerEvent::Click {
-            surface: SurfaceKind::Bar,
-            button: PointerButton::Right,
-            pos: Position::new(10, 10),
-        },
+        &click(PointerButton::Right),
         PointerTarget::new(&mon, &tree),
     );
-    assert_eq!(
-        outcome_right.into_actions(),
-        vec![PointerAction::SendUi(UiCommand::Exec(
-            "right_clicked".into()
-        ))]
-    );
+    assert_eq!(outcome_right.into_actions(), vec![exec("right_clicked")]);
 }
 
 #[test]
@@ -112,14 +89,8 @@ fn test_click_script_call_returns_call_function() {
         func_name.clone(),
     ))));
 
-    let outcome = handler.handle_event(
-        &PointerEvent::Click {
-            surface: SurfaceKind::Bar,
-            button: PointerButton::Left,
-            pos: Position::new(10, 10),
-        },
-        PointerTarget::new(&mon, &tree),
-    );
+    let outcome =
+        handler.handle_event(&click(PointerButton::Left), PointerTarget::new(&mon, &tree));
 
     assert_eq!(outcome.actions().len(), 1);
     assert_eq!(
