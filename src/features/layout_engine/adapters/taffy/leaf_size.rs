@@ -40,39 +40,48 @@ pub(super) fn apply_node_dimensions(
     measurer: &mut dyn TextMeasurer,
 ) {
     let computed = node.style();
+    // A module's reported size is the child's own outer box, so the
+    // embed node's padding is not added on top of it.
+    if let StyledNode::Module { key, .. } = node {
+        if let Some(size) = measurer.measure_module(key) {
+            apply_module_size(style, computed, size);
+        }
+        return;
+    }
+    if let Some(intrinsic) = leaf_intrinsic_size(node, measurer) {
+        apply_intrinsic(style, computed, intrinsic);
+    }
+}
+
+/// The content size of a leaf before padding: its measured text, or the default size of a
+/// progress bar, rect or image. Containers and modules have none.
+fn leaf_intrinsic_size(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Option<Size> {
     match node {
-        StyledNode::Flex { .. } | StyledNode::Grid { .. } => {}
+        StyledNode::Flex { .. } | StyledNode::Grid { .. } | StyledNode::Module { .. } => None,
         StyledNode::Text {
             text,
             style: text_style,
             ..
-        } => {
-            let text_size = measurer.measure(
-                text.as_str(),
-                TextFont::new(text_style.font_family(), text_style.font_size()),
-            );
-            apply_intrinsic(style, computed, text_size);
-        }
-        StyledNode::Progress { orientation, .. } => {
-            let default_size = match orientation {
-                Orientation::Horizontal => Size::new(40, 8),
-                Orientation::Vertical => Size::new(8, 40),
-            };
-            apply_intrinsic(style, computed, default_size);
-        }
-        StyledNode::Rect { .. } => apply_intrinsic(style, computed, Size::new(10, 10)),
-        StyledNode::Image { .. } => apply_intrinsic(style, computed, Size::new(24, 24)),
-        // A module's reported size is the child's own outer box, so the
-        // embed node's padding is not added on top of it.
-        StyledNode::Module { key, .. } => {
-            if let Some(size) = measurer.measure_module(key) {
-                if computed.width().is_none() {
-                    style.size.width = size_to_dimension(size.width());
-                }
-                if computed.height().is_none() {
-                    style.size.height = size_to_dimension(size.height());
-                }
-            }
-        }
+        } => Some(measurer.measure(
+            text.as_str(),
+            TextFont::new(text_style.font_family(), text_style.font_size()),
+        )),
+        StyledNode::Progress { orientation, .. } => Some(match orientation {
+            Orientation::Horizontal => Size::new(40, 8),
+            Orientation::Vertical => Size::new(8, 40),
+        }),
+        StyledNode::Rect { .. } => Some(Size::new(10, 10)),
+        StyledNode::Image { .. } => Some(Size::new(24, 24)),
+    }
+}
+
+/// Sizes an embedded module's node to the `size` the module reported, on each axis its style
+/// leaves unset.
+fn apply_module_size(style: &mut Style, computed: &ComputedStyle, size: Size) {
+    if computed.width().is_none() {
+        style.size.width = size_to_dimension(size.width());
+    }
+    if computed.height().is_none() {
+        style.size.height = size_to_dimension(size.height());
     }
 }
