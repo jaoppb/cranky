@@ -1,5 +1,14 @@
 //! Tests of the application actor.
 
+mod display;
+mod fakes;
+mod fixtures;
+mod interface;
+mod layout;
+mod lazy_spawn;
+mod reload;
+mod run_loop;
+
 use super::*;
 use crate::app::test_fakes::{FakeDisplayServer, FakeRegistry, FakeSni};
 use crate::features::module_runtime::ports::{
@@ -9,6 +18,7 @@ use crate::features::module_runtime::test_support::MockSurfaceManager;
 use crate::shared::primitives::geometry::{BarWidth, Position, Rect, Size};
 use crate::shared::wayland::ports::DynSurfaceManager;
 use crate::shared::wayland::ports::MonitorBar;
+use fixtures::{app_over, config_sampling_every_2500_ms};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use tokio::sync::mpsc;
@@ -1195,45 +1205,6 @@ fn test_prune_removed_monitors_drops_only_the_dead_monitor() {
         assert!(!after.contains_key(&dead_mon));
         assert!(after.contains_key(&live_mon));
     });
-}
-
-type TestApp = CrankyApp<
-    FakeRegistry,
-    crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory,
-    mpsc::Sender<LayoutEvent>,
-    mpsc::Sender<DisplayCommand>,
-    mpsc::Sender<UiCommand>,
-    crate::app::registry::WatchLayoutSender,
->;
-
-/// An app over `registry`, its hub started from `config`, on fresh channels.
-fn app_over(config: Config, registry: FakeRegistry) -> (TestApp, Arc<SignalHub>) {
-    let hub = Arc::new(SignalHub::new(config));
-    let (display_tx, display_rx) = mpsc::channel(32);
-    let (layout_tx, layout_rx) = mpsc::channel(32);
-    let (ui_tx, ui_rx) = mpsc::channel(32);
-    let (_system_tx, system_rx) = mpsc::channel(32);
-    let deps = ModuleRuntimeDependencies::new(
-        ModuleHandles::new(
-            hub.clone(),
-            Arc::new(MockSurfaceManager),
-            ModuleSenders::new(Arc::new(layout_tx), Arc::new(display_tx), Arc::new(ui_tx)),
-        ),
-        crate::shared::rendering::adapters::tiny_skia::TinySkiaCanvasFactory::new(),
-    );
-    let channels = StateChannels::new(
-        ModuleReceivers::new(layout_rx, display_rx, ui_rx),
-        system_rx,
-    );
-    let app = CrankyApp::new(deps, channels, Box::new(registry)).unwrap();
-    (app, hub)
-}
-
-/// A configuration whose `[metrics]` table samples every 2.5 s instead of every second.
-fn config_sampling_every_2500_ms() -> Config {
-    let metrics: crate::features::metrics::domain::MetricsConfig =
-        toml::from_str("update_interval_ms = 2500").unwrap();
-    Config::default().with_metrics(metrics)
 }
 
 /// The read model starts from the configuration the app is built with.

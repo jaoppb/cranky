@@ -52,6 +52,12 @@ type ParentLookup = Box<dyn Fn(ModuleId) -> Option<ModuleId> + Send + Sync>;
 /// received in `spawn_requests`. It fails with `ModuleNotFound` unless
 /// `spawned_id` is set, in which case it lists that id in `module_ids` and
 /// hands out a sender for it.
+///
+/// `load` fails when `load_failure` names a module; `reload_module` fails for
+/// the names in `failing_reloads` and otherwise hands out a fresh sender for
+/// every id `name_to_ids` lists under the name; `modules_using_style` answers
+/// from `style_users`. `calls` keeps every `clear`, `load`, `spawn_all` and
+/// `reload <name>` call, in order.
 pub(super) struct FakeRegistry {
     pub(crate) root_module: Option<ModuleId>,
     pub(crate) module_ids: Vec<ModuleId>,
@@ -64,6 +70,10 @@ pub(super) struct FakeRegistry {
     pub(crate) spawn_module_calls: Arc<AtomicUsize>,
     pub(crate) spawn_requests: Arc<Mutex<Vec<LazySite>>>,
     pub(crate) spawned_id: Option<ModuleId>,
+    pub(crate) load_failure: Option<ModuleName>,
+    pub(crate) failing_reloads: HashSet<ModuleName>,
+    pub(crate) style_users: HashMap<String, Vec<ModuleName>>,
+    pub(crate) calls: Arc<Mutex<Vec<String>>>,
     active_signals: HashSet<SignalKind>,
 }
 
@@ -81,7 +91,24 @@ impl Default for FakeRegistry {
             spawn_module_calls: Arc::new(AtomicUsize::new(0)),
             spawn_requests: Arc::new(Mutex::new(Vec::new())),
             spawned_id: None,
+            load_failure: None,
+            failing_reloads: HashSet::new(),
+            style_users: HashMap::new(),
+            calls: Arc::new(Mutex::new(Vec::new())),
             active_signals: HashSet::new(),
+        }
+    }
+}
+
+impl FakeRegistry {
+    /// Makes `active_signal_subscriptions` list `kind`.
+    pub(crate) fn subscribe_to(&mut self, kind: SignalKind) {
+        self.active_signals.insert(kind);
+    }
+
+    fn record(&self, call: String) {
+        if let Ok(mut calls) = self.calls.lock() {
+            calls.push(call);
         }
     }
 }
@@ -97,19 +124,34 @@ impl
     > for FakeRegistry
 {
     fn load(&mut self, _config: &Config) -> Result<(), RegistryLoadError> {
-        Ok(())
+        self.record("load".to_string());
+        self.load_failure
+            .clone()
+            .map_or(Ok(()), |name| Err(RegistryLoadError::ModuleNotFound(name)))
     }
 
     fn spawn_all(&mut self, _deps: &Deps) -> HashMap<ModuleId, WatchLayoutSender> {
+        self.record("spawn_all".to_string());
         std::mem::take(&mut self.senders)
     }
 
     fn reload_module(
         &mut self,
-        _name: &ModuleName,
+        name: &ModuleName,
         _setup: Setup<'_>,
     ) -> Result<HashMap<ModuleId, WatchLayoutSender>, RegistryLoadError> {
-        Ok(HashMap::new())
+        self.record(format!("reload {}", name.as_str()));
+        if self.failing_reloads.contains(name) {
+            return Err(RegistryLoadError::ModuleNotFound(name.clone()));
+        }
+        let ids = self.name_to_ids.get(name).cloned().unwrap_or_default();
+        Ok(ids
+            .into_iter()
+            .map(|id| {
+                let (layout_tx, _layout_rx) = tokio::sync::watch::channel(HashMap::new());
+                (id, WatchLayoutSender::new(layout_tx))
+            })
+            .collect())
     }
 
     fn root_module(&self) -> Option<ModuleId> {
@@ -156,11 +198,16 @@ impl
         Ok(SpawnedModule::new(id, WatchLayoutSender::new(layout_tx)))
     }
 
-    fn modules_using_style(&self, _sheet: &StyleSheetName) -> Vec<ModuleName> {
-        Vec::new()
+    fn modules_using_style(&self, sheet: &StyleSheetName) -> Vec<ModuleName> {
+        self.style_users
+            .get(sheet.as_str())
+            .cloned()
+            .unwrap_or_default()
     }
 
-    fn clear(&mut self) {}
+    fn clear(&mut self) {
+        self.record("clear".to_string());
+    }
 
     async fn register_dbus_subscriptions(&self, _dbus: &mut DbusSubscriptionManager) {}
 
