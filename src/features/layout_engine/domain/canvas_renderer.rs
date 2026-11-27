@@ -60,24 +60,25 @@ fn render_progress(canvas: &mut dyn Canvas, styled: StyledBox<'_>, fill: Progres
     };
 
     let radius = LogicalPx::new(style.border_radius().map_or(0.0, BorderRadius::value));
-    let clamped = fill.value.clamp(0.0, 1.0);
     let track = RoundedRect::new(*rect, radius);
+    if let Some(filled) = filled_part(track, fill) {
+        canvas.draw_rect(filled, fill_paint.clone());
+    }
+}
 
+/// The part of `track` that `fill` covers, its value clamped to 0..=1 and rounded to whole
+/// pixels: from the left when horizontal, from the bottom when vertical. `None` when it rounds to
+/// nothing.
+fn filled_part(track: RoundedRect, fill: ProgressFill) -> Option<RoundedRect> {
+    let clamped = fill.value.clamp(0.0, 1.0);
     match fill.orientation {
         Orientation::Horizontal => {
             let fill_w = (track.width().value() * clamped).round();
-            if fill_w > 0.0 {
-                canvas.draw_rect(track.with_width(LogicalPx::new(fill_w)), fill_paint.clone());
-            }
+            (fill_w > 0.0).then(|| track.with_width(LogicalPx::new(fill_w)))
         }
         Orientation::Vertical => {
             let fill_h = (track.height().value() * clamped).round();
-            if fill_h > 0.0 {
-                canvas.draw_rect(
-                    track.with_bottom_height(LogicalPx::new(fill_h)),
-                    fill_paint.clone(),
-                );
-            }
+            (fill_h > 0.0).then(|| track.with_bottom_height(LogicalPx::new(fill_h)))
         }
     }
 }
@@ -102,6 +103,14 @@ fn render_text(
     );
 }
 
+/// Paints a container's background and border, then each of its `children` over it, in order.
+fn render_container(canvas: &mut dyn Canvas, styled: StyledBox<'_>, children: &[RenderNode]) {
+    draw_bg_and_border(canvas, styled, None);
+    for child in children {
+        child.render_to_canvas(canvas);
+    }
+}
+
 impl RenderNode {
     pub(crate) fn render_to_canvas(&self, canvas: &mut dyn Canvas) {
         match self {
@@ -116,12 +125,15 @@ impl RenderNode {
                 children,
                 style,
                 ..
-            } => {
-                draw_bg_and_border(canvas, StyledBox::new(rect, style), None);
-                for child in children {
-                    child.render_to_canvas(canvas);
-                }
-            }
+            } => render_container(canvas, StyledBox::new(rect, style), children),
+            Self::Progress { .. } | Self::Text { .. } => self.render_content(canvas),
+            Self::Rect { .. } | Self::Module { .. } | Self::Image { .. } => self.render_box(canvas),
+        }
+    }
+
+    /// Paints a progress bar or a text node; nothing for any other node.
+    fn render_content(&self, canvas: &mut dyn Canvas) {
+        match self {
             Self::Progress {
                 rect,
                 value,
@@ -129,38 +141,37 @@ impl RenderNode {
                 style,
                 ..
             } => {
-                render_progress(
-                    canvas,
-                    StyledBox::new(rect, style),
-                    ProgressFill {
-                        value: value.value(),
-                        orientation: *orientation,
-                    },
-                );
-            }
-            Self::Rect { rect, style, .. } => {
-                draw_bg_and_border(
-                    canvas,
-                    StyledBox::new(rect, style),
-                    style.background().or_else(|| style.color()),
-                );
-            }
-            Self::Module { rect, style, .. } => {
-                draw_bg_and_border(canvas, StyledBox::new(rect, style), None);
+                let fill = ProgressFill {
+                    value: value.value(),
+                    orientation: *orientation,
+                };
+                render_progress(canvas, StyledBox::new(rect, style), fill);
             }
             Self::Text {
                 rect, text, style, ..
-            } => {
-                render_text(canvas, StyledBox::new(rect, style), text);
+            } => render_text(canvas, StyledBox::new(rect, style), text),
+            _ => {}
+        }
+    }
+
+    /// Paints a rect (filled with its background, else its color), a module's host box or an
+    /// image; nothing for any other node.
+    fn render_box(&self, canvas: &mut dyn Canvas) {
+        match self {
+            Self::Rect { rect, style, .. } => {
+                let fill = style.background().or_else(|| style.color());
+                draw_bg_and_border(canvas, StyledBox::new(rect, style), fill);
+            }
+            Self::Module { rect, style, .. } => {
+                draw_bg_and_border(canvas, StyledBox::new(rect, style), None);
             }
             Self::Image {
                 rect,
                 data,
                 pixel_size,
                 ..
-            } => {
-                canvas.draw_image(RgbaImage::new(data, *pixel_size), *rect);
-            }
+            } => canvas.draw_image(RgbaImage::new(data, *pixel_size), *rect),
+            _ => {}
         }
     }
 }

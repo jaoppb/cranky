@@ -3,8 +3,9 @@
 use super::popup::{ActivePanel, AnchoredPopup};
 use super::render_node::RenderNode;
 use super::styled_node::StyledNode;
+use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::{NodePath, SurfaceSpace};
-use crate::shared::primitives::geometry::Position;
+use crate::shared::primitives::geometry::{Position, Rect};
 use crate::shared::primitives::{ChildBounds, ChildModuleLayout, LayoutSurface, SizeConstraint};
 
 const fn layout_surface_of(surface: SurfaceSpace) -> LayoutSurface {
@@ -16,6 +17,18 @@ const fn layout_surface_of(surface: SurfaceSpace) -> LayoutSurface {
     }
 }
 
+/// The size an embedded module laid out in `rect` is pinned to. The host box is the parent's
+/// call (the Shadow DOM split): its resolved width — from the embedder's width, min-*, grow,
+/// stretch or percentages, in whatever units the CSS used — is the child's definite width, so the
+/// child fills it. A zero width is "nothing resolved yet", not a pin. Height is pinned only by an
+/// explicit CSS height, so the popup keeps following its content.
+fn module_constraint(rect: Rect, style: &ComputedStyle) -> SizeConstraint {
+    SizeConstraint::new(
+        (rect.width() > 0).then(|| rect.width()),
+        style.height().is_some().then(|| rect.height()),
+    )
+}
+
 impl RenderNode {
     #[must_use]
     pub(crate) fn collect_module_layouts(&self) -> Vec<ChildModuleLayout> {
@@ -25,42 +38,33 @@ impl RenderNode {
     }
 
     fn collect_module_layouts_recursive(&self, out: &mut Vec<ChildModuleLayout>) {
-        match self {
-            Self::Flex { children, .. } | Self::Grid { children, .. } => {
-                for child in children {
-                    child.collect_module_layouts_recursive(out);
-                }
-            }
-            Self::Module {
-                rect,
-                key,
-                options,
-                style,
-                path,
-                ..
-            } => {
-                // The host box is the parent's call (the Shadow DOM split):
-                // its resolved width — from the embedder's width, min-*,
-                // grow, stretch or percentages, in whatever units the CSS
-                // used — is the child's definite width, so the child fills
-                // it. A zero width is "nothing resolved yet", not a pin.
-                // Height is pinned only by an explicit CSS height, so the
-                // popup keeps following its content.
-                let constraint = SizeConstraint::new(
-                    (rect.width() > 0).then(|| rect.width()),
-                    style.height().is_some().then(|| rect.height()),
-                );
-                out.push(
-                    ChildModuleLayout::new(
-                        key.clone(),
-                        ChildBounds::new(*rect, constraint),
-                        layout_surface_of(path.surface()),
-                    )
-                    .with_options(options.clone()),
-                );
-            }
-            _ => {}
+        if let Some(layout) = self.module_layout() {
+            out.push(layout);
         }
+        for child in self.children() {
+            child.collect_module_layouts_recursive(out);
+        }
+    }
+
+    /// Where and how large the module this node embeds is laid out, when it embeds one.
+    fn module_layout(&self) -> Option<ChildModuleLayout> {
+        let Self::Module {
+            rect,
+            key,
+            options,
+            style,
+            path,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let layout = ChildModuleLayout::new(
+            key.clone(),
+            ChildBounds::new(*rect, module_constraint(*rect, style)),
+            layout_surface_of(path.surface()),
+        );
+        Some(layout.with_options(options.clone()))
     }
 
     #[must_use]
