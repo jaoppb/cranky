@@ -166,6 +166,7 @@ impl SysinfoSources {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::metrics::domain::TemperatureMode;
     use crate::shared::config::domain::Config;
 
     #[test]
@@ -201,6 +202,95 @@ mod tests {
         assert_eq!(state.network_rx().value(), 0);
         assert_eq!(state.disks(), []);
         assert_eq!(state.temperature(), None);
+    }
+
+    /// A config read from `json`.
+    fn config_from(json: serde_json::Value) -> MetricsConfig {
+        serde_json::from_value(json).unwrap()
+    }
+
+    /// The `(total, available, used)` bytes of `disk`, as scripts see them.
+    fn space_of(disk: &crate::features::metrics::domain::DiskMetric) -> (u64, u64, u64) {
+        let json = serde_json::to_value(disk).unwrap();
+        let bytes = |key: &str| json[key].as_u64().unwrap();
+        (
+            bytes("total_bytes"),
+            bytes("available_bytes"),
+            bytes("used_bytes"),
+        )
+    }
+
+    #[test]
+    fn test_gather_without_device_settings_reads_no_device() {
+        let config = MetricsConfig::default();
+        let state = SysinfoSources::new().gather(&config);
+
+        let readings = (state.network_tx.value(), state.network_rx.value());
+        assert_eq!(readings, (0, 0));
+        assert_eq!((state.disks.len(), state.temperature), (0, None));
+        assert_eq!(state.config, config);
+    }
+
+    #[test]
+    fn test_gather_reads_memory_and_swap_of_the_host() {
+        let mut host = System::new();
+        host.refresh_memory();
+        let state = SysinfoSources::new().gather(&MetricsConfig::default());
+
+        let totals = (state.memory_total.value(), state.swap_total.value());
+        assert_eq!(totals, (host.total_memory(), host.total_swap()));
+        assert!(state.memory_used.value() > 0);
+        assert!(state.memory_used.value() <= state.memory_total.value());
+        assert!(state.swap_used.value() <= state.swap_total.value());
+    }
+
+    #[test]
+    fn test_gather_scales_one_reading_per_core_with_the_configured_mode() {
+        let config = config_from(serde_json::json!({ "cpu": "disabled" }));
+        let mut sources = SysinfoSources::new();
+        let state = sources.gather(&config);
+        let cores = sources.sys.cpus().len();
+
+        let expected = vec![crate::features::metrics::domain::CpuUsage::new(0.0); cores];
+        assert!(cores > 0);
+        assert_eq!(state.per_core, expected);
+        assert_eq!(state.cpu_usage.value().to_bits(), 0.0_f32.to_bits());
+    }
+
+    #[test]
+    fn test_gather_reads_each_disk_when_disk_is_enabled() {
+        let state =
+            SysinfoSources::new().gather(&config_from(serde_json::json!({ "disk": "absolute" })));
+        let fresh = Disks::new_with_refreshed_list();
+
+        assert_eq!(state.disks.len(), fresh.list().len());
+        for (metric, disk) in state.disks.iter().zip(fresh.list()) {
+            let (total, available, used) = space_of(metric);
+            assert_eq!(metric.name().as_str(), disk.name().to_string_lossy());
+            assert_eq!(
+                metric.mount_point().as_str(),
+                disk.mount_point().to_string_lossy()
+            );
+            assert_eq!(
+                (total, used),
+                (disk.total_space(), total.saturating_sub(available))
+            );
+            let fresh_used = disk.total_space().saturating_sub(disk.available_space());
+            assert!(available.abs_diff(disk.available_space()) <= available.abs_diff(fresh_used));
+        }
+        assert_eq!((state.network_tx.value(), state.temperature), (0, None));
+    }
+
+    #[test]
+    fn test_gather_reads_the_sensors_when_temperature_is_enabled() {
+        let config = config_from(serde_json::json!({ "temperature": "celsius" }));
+        let state = SysinfoSources::new().gather(&config);
+        let fresh = Components::new_with_refreshed_list();
+        let readings = fresh.iter().map(sysinfo::Component::temperature);
+        let expected = Temperature::from_readings(readings, &TemperatureMode::Celsius);
+
+        assert_eq!(state.temperature.is_some(), expected.is_some());
+        assert_eq!(state.disks.len(), 0);
     }
 
     #[test]
