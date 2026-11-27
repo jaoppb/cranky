@@ -141,6 +141,7 @@ impl<'de> Deserialize<'de> for ClickHandlers {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::module_runtime::test_support::capture_logs;
 
     /// The `Exec` action running `command`.
     fn exec_action(command: &str) -> UiAction {
@@ -207,38 +208,6 @@ mod tests {
         UiCommand::Exec(command.to_string())
     }
 
-    /// A shared byte buffer a test subscriber writes its formatted events into.
-    #[derive(Clone, Default)]
-    struct LogBuffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
-
-    impl std::io::Write for LogBuffer {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            self.0
-                .lock()
-                .map_err(|_| std::io::Error::other("log buffer poisoned"))?
-                .extend_from_slice(bytes);
-            Ok(bytes.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    /// Everything logged while `action` runs, formatted without time or colour.
-    fn captured_logs(action: impl FnOnce()) -> String {
-        let buffer = LogBuffer::default();
-        let writer = buffer.clone();
-        let subscriber = tracing_subscriber::fmt()
-            .with_writer(move || writer.clone())
-            .with_ansi(false)
-            .without_time()
-            .finish();
-        tracing::subscriber::with_default(subscriber, action);
-        let bytes = buffer.0.lock().unwrap().clone();
-        String::from_utf8(bytes).unwrap()
-    }
-
     #[test]
     fn test_closure_sender_forwards_the_command() {
         let received = std::sync::Mutex::new(Vec::new());
@@ -250,7 +219,7 @@ mod tests {
     #[test]
     fn test_tokio_sender_delivers_without_logging() {
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-        let logs = captured_logs(|| tx.send_ui_command(exec("run")));
+        let logs = capture_logs(|| tx.send_ui_command(exec("run")));
         assert_eq!(
             (rx.try_recv().ok(), logs),
             (Some(exec("run")), String::new())
@@ -261,7 +230,7 @@ mod tests {
     fn test_tokio_sender_logs_and_drops_the_command_when_the_channel_is_full() {
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
         tx.send_ui_command(exec("first"));
-        let logs = captured_logs(|| tx.send_ui_command(exec("second")));
+        let logs = capture_logs(|| tx.send_ui_command(exec("second")));
         assert_eq!(
             logs,
             "ERROR cranky::features::vdom::domain::action: failed to send ui command via tokio \
@@ -274,7 +243,7 @@ mod tests {
     #[test]
     fn test_std_sender_delivers_without_logging() {
         let (tx, rx) = std::sync::mpsc::channel();
-        let logs = captured_logs(|| tx.send_ui_command(exec("run")));
+        let logs = capture_logs(|| tx.send_ui_command(exec("run")));
         assert_eq!(
             (rx.try_recv().ok(), logs),
             (Some(exec("run")), String::new())
@@ -285,7 +254,7 @@ mod tests {
     fn test_std_sender_logs_when_the_receiver_is_gone() {
         let (tx, rx) = std::sync::mpsc::channel();
         drop(rx);
-        let logs = captured_logs(|| tx.send_ui_command(exec("run")));
+        let logs = capture_logs(|| tx.send_ui_command(exec("run")));
         assert_eq!(
             logs,
             "ERROR cranky::features::vdom::domain::action: failed to send ui command via std \

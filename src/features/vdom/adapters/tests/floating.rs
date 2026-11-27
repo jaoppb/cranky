@@ -18,9 +18,9 @@ fn with_panel(panel: PanelSpec) -> VNode {
     text("button").with_panel(panel)
 }
 
-/// The node a `Replace` patch installs, after checking it replaces a fresh id rather than
-/// `previous`.
-fn replaced_under_fresh_id(patch: Option<Box<Patch>>, previous: NodeId) -> VNode {
+/// The node a `Replace` patch installs, after checking it replaces a fresh id rather than any of
+/// the `previous` ones (the content's and its owners').
+fn replaced_under_fresh_id(patch: Option<Box<Patch>>, previous: &[NodeId]) -> VNode {
     let Some(Patch::Replace {
         old_node_id,
         new_node,
@@ -28,7 +28,10 @@ fn replaced_under_fresh_id(patch: Option<Box<Patch>>, previous: NodeId) -> VNode
     else {
         panic!("expected a Replace patch");
     };
-    assert_ne!(old_node_id, previous);
+    assert!(
+        !previous.contains(&old_node_id),
+        "{old_node_id} is not fresh"
+    );
     *new_node
 }
 
@@ -62,8 +65,10 @@ fn popup_placement_change_with_same_content_replaces_the_content_under_a_fresh_i
         spec.clone().with_anchor(AnchorDirection::Top),
         spec.with_offset(Some(PopupOffset::new(1, 2))),
     ] {
-        let patch = adapter.diff_popup(&old, &with_popup(new_spec));
-        assert_eq!(replaced_under_fresh_id(patch, content.node_id()), content);
+        let new = with_popup(new_spec);
+        let patch = adapter.diff_popup(&old, &new);
+        let previous = [content.node_id(), old.node_id(), new.node_id()];
+        assert_eq!(replaced_under_fresh_id(patch, &previous), content);
     }
 }
 
@@ -84,8 +89,10 @@ fn popup_added_or_removed_is_replaced() {
     let adapter = DefaultVdomDiffAdapter::new();
     let content = text("pop");
     let node = with_popup(PopupSpec::new(Box::new(content.clone())));
-    let added = adapter.diff_popup(&text("button"), &node);
-    assert_eq!(replaced_under_fresh_id(added, content.node_id()), content);
+    let button = text("button");
+    let added = adapter.diff_popup(&button, &node);
+    let previous = [content.node_id(), button.node_id(), node.node_id()];
+    assert_eq!(replaced_under_fresh_id(added, &previous), content);
     let Some(Patch::Replace {
         old_node_id,
         new_node,
@@ -136,8 +143,10 @@ fn panel_placement_change_with_same_content_replaces_the_content_under_a_fresh_i
         spec.clone().with_exclusive_zone(ExclusiveZone::auto()),
         spec.with_keyboard(KeyboardInteractivity::Exclusive),
     ] {
-        let patch = adapter.diff_panel(&old, &with_panel(new_spec));
-        assert_eq!(replaced_under_fresh_id(patch, content.node_id()), content);
+        let new = with_panel(new_spec);
+        let patch = adapter.diff_panel(&old, &new);
+        let previous = [content.node_id(), old.node_id(), new.node_id()];
+        assert_eq!(replaced_under_fresh_id(patch, &previous), content);
     }
 }
 
@@ -158,8 +167,10 @@ fn panel_added_or_removed_is_replaced() {
     let adapter = DefaultVdomDiffAdapter::new();
     let content = text("panel");
     let node = with_panel(PanelSpec::new(Box::new(content.clone())));
-    let added = adapter.diff_panel(&text("button"), &node);
-    assert_eq!(replaced_under_fresh_id(added, content.node_id()), content);
+    let button = text("button");
+    let added = adapter.diff_panel(&button, &node);
+    let previous = [content.node_id(), button.node_id(), node.node_id()];
+    assert_eq!(replaced_under_fresh_id(added, &previous), content);
     let Some(Patch::Replace { old_node_id, .. }) = adapter
         .diff_panel(&node, &text("button"))
         .map(|boxed| *boxed)

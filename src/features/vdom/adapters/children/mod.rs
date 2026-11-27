@@ -234,6 +234,27 @@ mod tests {
     }
 
     #[test]
+    fn keyed_children_left_unmatched_are_removed_last_in_old_list_order() {
+        let (first, second, third) = (keyed("a", "1"), keyed("b", "2"), keyed("c", "3"));
+        let old = [first.clone(), second.clone(), third.clone()];
+
+        assert_eq!(
+            child_patches(&old, std::slice::from_ref(&second)),
+            vec![
+                move_op(&second, 1, 0),
+                ChildPatchOp::Remove {
+                    node_id: first.node_id(),
+                    index: 0,
+                },
+                ChildPatchOp::Remove {
+                    node_id: third.node_id(),
+                    index: 2,
+                },
+            ]
+        );
+    }
+
+    #[test]
     fn keyed_match_in_place_is_updated_against_its_old_node_without_a_move() {
         let old = [keyed("a", "1"), keyed("b", "2")];
         let changed = keyed("b", "two");

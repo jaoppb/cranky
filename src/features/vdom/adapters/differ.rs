@@ -422,7 +422,21 @@ mod tests {
         let new_list = flex(vec![keyed("a", "a"), keyed("b", "b")]);
 
         let res = adapter.diff(Some(&old_list), &new_list);
-        assert!(!res.is_unchanged());
+        let Patch::UpdateChildren { child_patches, .. } = res.patch() else {
+            panic!("expected UpdateChildren, got {:?}", res.patch());
+        };
+        let updated: Vec<_> = child_patches
+            .iter()
+            .map(|child_op| match child_op {
+                ChildPatchOp::Update { node_id, .. } => Some(*node_id),
+                _ => None,
+            })
+            .collect();
+        let positional = old_list
+            .children()
+            .iter()
+            .map(|child| Some(child.node_id()));
+        assert_eq!(updated, positional.collect::<Vec<_>>());
     }
 
     #[test]

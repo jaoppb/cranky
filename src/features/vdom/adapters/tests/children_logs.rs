@@ -30,13 +30,17 @@ fn a_moved_and_changed_keyed_child_is_moved_before_it_is_updated() {
 }
 
 #[test]
-fn a_mixed_or_duplicate_keyed_list_warns_once_with_the_parent_id() {
-    for children in [
-        vec![keyed("a", "1"), text("2")],
-        vec![keyed("a", "1"), keyed("a", "2")],
+fn a_mixed_or_duplicate_keyed_list_on_either_side_warns_once_with_the_parent_id() {
+    let (mixed, unkeyed) = (vec![keyed("a", "1"), text("2")], vec![text("1"), text("2")]);
+    let duplicate = vec![keyed("a", "1"), keyed("a", "2")];
+    let unique = vec![keyed("a", "1"), keyed("b", "2")];
+    for (old_children, new_children) in [
+        (mixed.clone(), unkeyed.clone()),
+        (duplicate, unkeyed.clone()),
+        (unique.clone(), mixed),
+        (unkeyed, unique),
     ] {
-        let old = flex(children);
-        let new = flex(vec![text("x"), text("y")]);
+        let (old, new) = (flex(old_children), flex(new_children));
         let logs = capture_logs(|| {
             diff(&old, &new);
         });

@@ -213,6 +213,33 @@ mod tests {
     }
 
     #[test]
+    fn test_floating_contents_of_a_child_with_an_inherited_style_inherit_nothing() {
+        let tooltip = Some(Box::new(text("tip", "t")));
+        let owner = VNode::new_text(
+            TextContent::new("o".to_string()),
+            selectors("owner"),
+            Interactions::new(None, None, tooltip),
+        )
+        .with_popup(PopupSpec::new(Box::new(text("pop", "p"))))
+        .with_panel(PanelSpec::new(Box::new(text("pan", "q"))));
+        let root = VNode::new_flex(vec![owner], selectors("root"), Interactions::default());
+        let resolver =
+            ProbeResolver::new(HashMap::from([("root".to_string(), colored("#ff0000"))]));
+        let _ = root.resolve_styles(&resolver, None);
+        let inherited = project(&resolver, |probe| probe.inherited_color.clone());
+        let expected: Vec<(String, Option<DrawingColor>)> = [
+            ("root", None),
+            ("owner", Some(color("#ff0000"))),
+            ("tip", None),
+            ("pop", None),
+            ("pan", None),
+        ]
+        .map(|(id, inherited)| (id.to_string(), inherited))
+        .into();
+        assert_eq!(inherited, expected);
+    }
+
+    #[test]
     fn test_the_query_carries_the_tag_classes_and_emptiness_of_the_node() {
         let resolver = resolve_fixture();
         let tags = project(&resolver, |probe| {

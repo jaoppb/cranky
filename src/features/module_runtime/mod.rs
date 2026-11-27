@@ -414,31 +414,58 @@ pub mod test_support {
         }
     }
 
-    /// Runs `action` with every `tracing` event, at any level, written without time or colour
-    /// to the returned text, one line each as `LEVEL target: message field=value`.
+    /// Runs `action` with every `tracing` event it logs on this thread, at any level, written
+    /// without time or colour to the returned text, one line each as
+    /// `LEVEL target: message field=value`.
+    ///
+    /// One process-wide subscriber is installed on first use and kept: a scoped
+    /// `tracing::subscriber::with_default` races, because a callsite first hit by a thread with
+    /// no subscriber while exactly one scoped dispatcher is live caches `Interest::never` for
+    /// every thread, and a concurrent capture then loses that line. The subscriber enables an
+    /// event only on a thread that is capturing, decided per event (a dynamic filter, so every
+    /// callsite's interest stays "sometimes" and none is cached as never or always): the other
+    /// threads still see logging disabled, which `BinaryData`'s `Debug` relies on.
     pub(crate) fn capture_logs(action: impl FnOnce()) -> String {
-        let buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let writer = buffer.clone();
-        let subscriber = tracing_subscriber::fmt()
-            .with_max_level(tracing::Level::TRACE)
-            .without_time()
-            .with_ansi(false)
-            .with_writer(move || LogBuffer(writer.clone()))
-            .finish();
-        tracing::subscriber::with_default(subscriber, action);
-        let bytes = buffer.lock().unwrap().clone();
+        GLOBAL_LOG_SUBSCRIBER.get_or_init(|| {
+            use tracing_subscriber::layer::SubscriberExt;
+            let capturing = tracing_subscriber::filter::dynamic_filter_fn(|_, _| {
+                CAPTURED_LOGS.with_borrow(Option::is_some)
+            });
+            let subscriber = tracing_subscriber::fmt()
+                .with_max_level(tracing::Level::TRACE)
+                .without_time()
+                .with_ansi(false)
+                .with_writer(|| ThreadCapture)
+                .finish()
+                .with(capturing);
+            tracing::subscriber::set_global_default(subscriber).unwrap();
+        });
+        CAPTURED_LOGS.with_borrow_mut(|captured| *captured = Some(Vec::new()));
+        action();
+        let bytes = CAPTURED_LOGS.with_borrow_mut(Option::take).unwrap();
         String::from_utf8(bytes).unwrap()
     }
 
-    /// Appends whatever the log subscriber writes to a shared buffer.
-    struct LogBuffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+    /// Set once the process-wide subscriber `capture_logs` relies on is installed.
+    static GLOBAL_LOG_SUBSCRIBER: std::sync::OnceLock<()> = std::sync::OnceLock::new();
 
-    impl std::io::Write for LogBuffer {
+    thread_local! {
+        /// The text this thread's events go to while it runs `capture_logs`, `None` otherwise.
+        static CAPTURED_LOGS: std::cell::RefCell<Option<Vec<u8>>> =
+            const { std::cell::RefCell::new(None) };
+    }
+
+    /// Appends what the subscriber writes to the current thread's capture (the filter lets
+    /// nothing through on a thread that is not capturing).
+    struct ThreadCapture;
+
+    impl std::io::Write for ThreadCapture {
         fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            self.0
-                .lock()
-                .map_err(|_| std::io::Error::other("log buffer poisoned"))?
-                .extend_from_slice(bytes);
+            CAPTURED_LOGS.with_borrow_mut(|captured| {
+                if let Some(buffer) = captured {
+                    buffer.extend_from_slice(bytes);
+                }
+            });
             Ok(bytes.len())
         }
 
