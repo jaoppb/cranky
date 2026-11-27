@@ -60,7 +60,7 @@ where
 impl DisplayCommandSender for tokio::sync::mpsc::Sender<DisplayCommand> {
     fn send_display_command(&self, cmd: DisplayCommand) {
         if let Err(error) = self.try_send(cmd) {
-            tracing::error!(?error, "failed to send display command via tokio channel");
+            log_tokio_send_failed(&error);
         }
     }
 }
@@ -68,9 +68,19 @@ impl DisplayCommandSender for tokio::sync::mpsc::Sender<DisplayCommand> {
 impl DisplayCommandSender for std::sync::mpsc::Sender<DisplayCommand> {
     fn send_display_command(&self, cmd: DisplayCommand) {
         if let Err(error) = self.send(cmd) {
-            tracing::error!(?error, "failed to send display command via std channel");
+            log_std_send_failed(&error);
         }
     }
+}
+
+/// Logs that the tokio channel refused a display command.
+fn log_tokio_send_failed(error: &tokio::sync::mpsc::error::TrySendError<DisplayCommand>) {
+    tracing::error!(?error, "failed to send display command via tokio channel");
+}
+
+/// Logs that the std channel refused a display command.
+fn log_std_send_failed(error: &std::sync::mpsc::SendError<DisplayCommand>) {
+    tracing::error!(?error, "failed to send display command via std channel");
 }
 
 #[cfg(test)]
