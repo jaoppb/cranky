@@ -105,4 +105,49 @@ mod tests {
         let image = border_image_source("bar { border-image-source: none; }");
         assert!(gradient_from_image(&image).is_none());
     }
+
+    #[test]
+    fn test_url_and_radial_images_are_not_gradients() {
+        let image = border_image_source("bar { border-image-source: url(edge.png); }");
+        assert!(gradient_from_image(&image).is_none());
+        let image =
+            border_image_source("bar { border-image-source: radial-gradient(#7aa2f7, #bb9af7); }");
+        assert!(gradient_from_image(&image).is_none());
+    }
+
+    #[test]
+    fn test_repeating_linear_gradient_skips_hints_and_converts_the_angle() {
+        let image = border_image_source(
+            "bar { border-image-source: \
+             repeating-linear-gradient(0.5turn, #010203, 40%, #040506 50%, #070809); }",
+        );
+        assert_eq!(
+            gradient_from_image(&image),
+            Some(DrawingColor::Gradient(
+                vec![
+                    crate::shared::primitives::color::Color::rgb(1, 2, 3),
+                    crate::shared::primitives::color::Color::rgb(4, 5, 6),
+                    crate::shared::primitives::color::Color::rgb(7, 8, 9),
+                ],
+                180.0
+            ))
+        );
+    }
+
+    #[test]
+    fn test_single_convertible_stop_is_a_solid_colour_and_none_is_nothing() {
+        let image = border_image_source(
+            "bar { border-image-source: linear-gradient(10deg, currentColor, #040506); }",
+        );
+        assert_eq!(
+            gradient_from_image(&image),
+            Some(DrawingColor::Solid(
+                crate::shared::primitives::color::Color::rgb(4, 5, 6)
+            ))
+        );
+        let image = border_image_source(
+            "bar { border-image-source: linear-gradient(10deg, currentColor, currentColor); }",
+        );
+        assert!(gradient_from_image(&image).is_none());
+    }
 }
