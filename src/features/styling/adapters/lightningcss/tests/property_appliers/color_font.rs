@@ -49,6 +49,19 @@ fn font_family_strips_either_kind_of_quote_from_the_first_family() {
 }
 
 #[test]
+fn background_layers_fall_back_to_the_first_layer_colour_only() {
+    let (style, handled) = applied(
+        apply_color_and_font,
+        "background: url(top.png), url(bottom.png) #0a0b0c;",
+    );
+    assert_eq!(handled, [true]);
+    assert_eq!(
+        style.background(),
+        Some(&DrawingColor::Solid(Color::rgb(0, 0, 0).with_alpha(0)))
+    );
+}
+
+#[test]
 fn text_align_keeps_only_the_three_painted_keywords() {
     for (keyword, expected) in [
         ("left", Some(TextAlign::Left)),
