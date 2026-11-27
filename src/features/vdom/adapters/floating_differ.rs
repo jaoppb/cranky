@@ -1,73 +1,49 @@
 use super::differ::DefaultVdomDiffAdapter;
-use crate::features::vdom::domain::{ElementSelectors, Interactions, NodeId, Patch, VNode};
+use crate::features::vdom::domain::{
+    AnchorDirection, ElementSelectors, Interactions, NodeId, PanelSpec, PanelSurface, Patch,
+    PopupOffset, PopupSpec, VNode,
+};
+
+/// Where a node's popup opens, compared to tell a placement change.
+fn popup_placement(node: &VNode) -> Option<(AnchorDirection, Option<PopupOffset>)> {
+    node.popup()
+        .map(|popup| (popup.anchor_direction(), popup.offset()))
+}
+
+/// Where a node's panel surface sits, compared to tell a placement change.
+fn panel_placement(node: &VNode) -> Option<PanelSurface> {
+    node.panel().map(PanelSpec::surface)
+}
+
+/// The new content of a popup or panel whose placement changed, replaced under a fresh id so the
+/// surface is rebuilt.
+fn rebuilt_content(content: &VNode) -> Patch {
+    Patch::Replace {
+        old_node_id: NodeId::new(),
+        new_node: Box::new(content.clone()),
+    }
+}
 
 impl DefaultVdomDiffAdapter {
     pub(super) fn diff_popup(&self, old_node: &VNode, new_node: &VNode) -> Option<Box<Patch>> {
-        let popup_props_changed = old_node
-            .popup()
-            .map(|popup| (popup.anchor_direction(), popup.offset()))
-            != new_node
-                .popup()
-                .map(|popup| (popup.anchor_direction(), popup.offset()));
-        let popup_content_patch = self.diff_optional_subnode(
-            old_node
-                .popup()
-                .map(crate::features::vdom::domain::PopupSpec::content),
-            new_node
-                .popup()
-                .map(crate::features::vdom::domain::PopupSpec::content),
-        );
-        if popup_props_changed {
-            popup_content_patch.or_else(|| {
-                new_node.popup().map(|popup| {
-                    Box::new(Patch::Replace {
-                        old_node_id: NodeId::new(),
-                        new_node: Box::new(popup.content().clone()),
-                    })
-                })
-            })
+        let new_content = new_node.popup().map(PopupSpec::content);
+        let content_patch =
+            self.diff_optional_subnode(old_node.popup().map(PopupSpec::content), new_content);
+        if popup_placement(old_node) == popup_placement(new_node) {
+            content_patch
         } else {
-            popup_content_patch
+            content_patch.or_else(|| new_content.map(|content| Box::new(rebuilt_content(content))))
         }
     }
 
     pub(super) fn diff_panel(&self, old_node: &VNode, new_node: &VNode) -> Option<Box<Patch>> {
-        let panel_props_changed = old_node.panel().map(|panel| {
-            (
-                panel.layer(),
-                panel.anchor(),
-                *panel.margin(),
-                panel.exclusive_zone(),
-                panel.keyboard(),
-            )
-        }) != new_node.panel().map(|panel| {
-            (
-                panel.layer(),
-                panel.anchor(),
-                *panel.margin(),
-                panel.exclusive_zone(),
-                panel.keyboard(),
-            )
-        });
-        let panel_content_patch = self.diff_optional_subnode(
-            old_node
-                .panel()
-                .map(crate::features::vdom::domain::PanelSpec::content),
-            new_node
-                .panel()
-                .map(crate::features::vdom::domain::PanelSpec::content),
-        );
-        if panel_props_changed {
-            panel_content_patch.or_else(|| {
-                new_node.panel().map(|panel| {
-                    Box::new(Patch::Replace {
-                        old_node_id: NodeId::new(),
-                        new_node: Box::new(panel.content().clone()),
-                    })
-                })
-            })
+        let new_content = new_node.panel().map(PanelSpec::content);
+        let content_patch =
+            self.diff_optional_subnode(old_node.panel().map(PanelSpec::content), new_content);
+        if panel_placement(old_node) == panel_placement(new_node) {
+            content_patch
         } else {
-            panel_content_patch
+            content_patch.or_else(|| new_content.map(|content| Box::new(rebuilt_content(content))))
         }
     }
 

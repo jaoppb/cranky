@@ -18,66 +18,103 @@ impl DefaultVdomDiffAdapter {
 
     pub(super) fn diff_nodes(&self, old_node: &VNode, new_node: &VNode) -> Patch {
         if old_node.tag() != new_node.tag() {
-            return Patch::Replace {
-                old_node_id: old_node.node_id(),
-                new_node: Box::new(new_node.clone()),
-            };
+            return replace_node(old_node, new_node);
         }
+        // The tooltip, popup and panel are diffed before the children, as they always were.
+        let attached = self.diff_attached(old_node, new_node);
+        let kind_patch = self.diff_kind(old_node, new_node);
+        let nodes = NodePair {
+            old: old_node,
+            new: new_node,
+        };
+        props_patch(nodes, attached, kind_patch)
+    }
 
-        let class_changed = old_node.class_names() != new_node.class_names();
-        let id_changed = old_node.element_id() != new_node.element_id();
-        // Key-only changes must still dirty the tree, or the stale keyless RenderNode is kept.
-        let key_changed = old_node.key() != new_node.key();
-        let handlers_changed = old_node.on_click() != new_node.on_click()
-            || old_node.on_hover() != new_node.on_hover();
-
-        let tooltip_patch = self.diff_optional_subnode(old_node.tooltip(), new_node.tooltip());
-        let popup_patch = self.diff_popup(old_node, new_node);
-        let panel_patch = self.diff_panel(old_node, new_node);
-
-        let kind_patch = diff_node_kinds(old_node.node_id(), old_node.kind(), new_node.kind())
-            .unwrap_or_else(|| {
-                if matches!(
-                    (old_node.kind(), new_node.kind()),
-                    (VNodeKind::Flex { .. }, VNodeKind::Flex { .. })
-                        | (VNodeKind::Grid { .. }, VNodeKind::Grid { .. })
-                ) {
-                    diff_children_with(
-                        old_node.node_id(),
-                        ChildLists::new(old_node.children(), new_node.children()),
-                        |old_child, new_child| self.diff_nodes(old_child, new_child),
-                    )
-                } else {
-                    Patch::Replace {
-                        old_node_id: old_node.node_id(),
-                        new_node: Box::new(new_node.clone()),
-                    }
-                }
-            });
-
-        let props_dirty = class_changed
-            || id_changed
-            || key_changed
-            || handlers_changed
-            || tooltip_patch.is_some()
-            || popup_patch.is_some()
-            || panel_patch.is_some();
-
-        if props_dirty {
-            Patch::UpdateProps {
-                node_id: old_node.node_id(),
-                class_changed,
-                id_changed,
-                handlers_changed,
-                tooltip_patch,
-                popup_patch,
-                panel_patch,
-                kind_patch: Box::new(kind_patch),
-            }
-        } else {
-            kind_patch
+    /// The patches of the tooltip, popup and panel the two nodes open, in that order.
+    fn diff_attached(&self, old_node: &VNode, new_node: &VNode) -> AttachedPatches {
+        AttachedPatches {
+            tooltip: self.diff_optional_subnode(old_node.tooltip(), new_node.tooltip()),
+            popup: self.diff_popup(old_node, new_node),
+            panel: self.diff_panel(old_node, new_node),
         }
     }
+
+    /// The patch for what the nodes hold: their content, or for two flex or two grid containers
+    /// their reconciled children.
+    fn diff_kind(&self, old_node: &VNode, new_node: &VNode) -> Patch {
+        diff_node_kinds(old_node.node_id(), old_node.kind(), new_node.kind()).unwrap_or_else(|| {
+            if matches!(
+                (old_node.kind(), new_node.kind()),
+                (VNodeKind::Flex { .. }, VNodeKind::Flex { .. })
+                    | (VNodeKind::Grid { .. }, VNodeKind::Grid { .. })
+            ) {
+                diff_children_with(
+                    old_node.node_id(),
+                    ChildLists::new(old_node.children(), new_node.children()),
+                    |old_child, new_child| self.diff_nodes(old_child, new_child),
+                )
+            } else {
+                replace_node(old_node, new_node)
+            }
+        })
+    }
+}
+
+/// Replaces `old_node` with a copy of `new_node`.
+fn replace_node(old_node: &VNode, new_node: &VNode) -> Patch {
+    Patch::Replace {
+        old_node_id: old_node.node_id(),
+        new_node: Box::new(new_node.clone()),
+    }
+}
+
+/// The previous and the new version of one node, of the same tag.
+#[derive(Clone, Copy)]
+struct NodePair<'a> {
+    old: &'a VNode,
+    new: &'a VNode,
+}
+
+/// The patches of the tooltip, popup and panel a node opens, each absent when unchanged.
+struct AttachedPatches {
+    tooltip: Option<Box<Patch>>,
+    popup: Option<Box<Patch>>,
+    panel: Option<Box<Patch>>,
+}
+
+impl AttachedPatches {
+    /// Whether the tooltip, popup or panel changed.
+    const fn any(&self) -> bool {
+        self.tooltip.is_some() || self.popup.is_some() || self.panel.is_some()
+    }
+}
+
+/// `kind_patch` alone when no prop of the node changed, else an `UpdateProps` that says which
+/// props changed and carries the attached patches around `kind_patch`.
+fn props_patch(nodes: NodePair<'_>, attached: AttachedPatches, kind_patch: Patch) -> Patch {
+    let class_changed = nodes.old.class_names() != nodes.new.class_names();
+    let id_changed = nodes.old.element_id() != nodes.new.element_id();
+    // Key-only changes must still dirty the tree, or the stale keyless RenderNode is kept.
+    let key_changed = nodes.old.key() != nodes.new.key();
+    let handlers_changed = handlers_changed(nodes);
+    if !(class_changed || id_changed || key_changed || handlers_changed || attached.any()) {
+        return kind_patch;
+    }
+    Patch::UpdateProps {
+        node_id: nodes.old.node_id(),
+        class_changed,
+        id_changed,
+        handlers_changed,
+        tooltip_patch: attached.tooltip,
+        popup_patch: attached.popup,
+        panel_patch: attached.panel,
+        kind_patch: Box::new(kind_patch),
+    }
+}
+
+/// Whether the node's click or hover action changed.
+fn handlers_changed(nodes: NodePair<'_>) -> bool {
+    nodes.old.on_click() != nodes.new.on_click() || nodes.old.on_hover() != nodes.new.on_hover()
 }
 
 impl VdomDiffPort for DefaultVdomDiffAdapter {
