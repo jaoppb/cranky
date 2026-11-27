@@ -107,9 +107,7 @@ impl FakeRegistry {
     }
 
     fn record(&self, call: String) {
-        if let Ok(mut calls) = self.calls.lock() {
-            calls.push(call);
-        }
+        self.calls.lock().unwrap().push(call);
     }
 }
 
