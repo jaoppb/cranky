@@ -158,22 +158,19 @@ impl ModuleRegistry {
         tracing::debug!(requested_styles = ?styles.iter().map(super::super::features::styling::domain::StyleSheetName::as_str).collect::<Vec<_>>(), "Creating composite style resolver for module");
 
         // 1. Always load base.css first if available
-        if let Ok(base_name) = StyleSheetName::new("base")
-            && let Ok(base_css) = loader.load_stylesheet(&base_name)
-            && let Ok(sheet) = parser.parse_stylesheet(base_name, &base_css)
-        {
-            parsed_sheets.push(sheet);
-        }
+        parsed_sheets.extend(
+            StyleSheetName::new("base")
+                .ok()
+                .and_then(|base_name| load_parsed_sheet(&loader, &parser, &base_name)),
+        );
 
         // 2. Load module stylesheets
-        for style_name in styles {
-            if style_name.as_str() != "base"
-                && let Ok(css) = loader.load_stylesheet(style_name)
-                && let Ok(sheet) = parser.parse_stylesheet(style_name.clone(), &css)
-            {
-                parsed_sheets.push(sheet);
-            }
-        }
+        parsed_sheets.extend(
+            styles
+                .iter()
+                .filter(|style_name| style_name.as_str() != "base")
+                .filter_map(|style_name| load_parsed_sheet(&loader, &parser, style_name)),
+        );
 
         std::sync::Arc::new(CompositeStyleResolver::new(parsed_sheets))
     }
@@ -189,59 +186,15 @@ impl ModuleRegistry {
         (ModuleId, Box<dyn AnyModulePort>),
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
-        use crate::app::builtins::BuiltinError;
-        use crate::features::module_runtime::ports::RegistryLoadError;
+        let id = self.mint_module_id();
+        let module = self.instantiate_module(config, full_config)?;
 
-        let id = ModuleId::new(self.next_module_id);
-        self.next_module_id = self.next_module_id.saturating_add(1);
-
-        let mut module =
-            builtins::BuiltinModules::find_module(config.name(), config.engine(), &self.app_env)
-                .map_err(|error| match error {
-                    BuiltinError::ModuleNotFound { module_name, .. } => {
-                        RegistryLoadError::ModuleNotFound(module_name)
-                    }
-                    BuiltinError::UnsupportedEngine {
-                        engine,
-                        module_name,
-                    } => RegistryLoadError::UnsupportedEngine {
-                        engine,
-                        module_name,
-                    },
-                    BuiltinError::Env(message) | BuiltinError::InputOutput(message) => {
-                        RegistryLoadError::Internal(message)
-                    }
-                })?;
-
-        module
-            .init(config, full_config)
-            .map_err(|error| RegistryLoadError::ModuleInit {
-                module_name: config.name().clone(),
-                source: error,
-            })?;
-
-        for sub in module.dbus_subscriptions() {
-            self.dbus_subscriptions.push(sub.clone());
-        }
-
-        for sub in module.subscriptions() {
-            self.active_signals.insert(*sub);
-        }
+        self.record_dbus_subscriptions(module.as_ref());
+        self.record_signal_subscriptions(module.as_ref());
 
         let mod_styles = module.styles();
-        tracing::debug!(
-            module = %config.name().as_str(),
-            id = %id,
-            styles = ?mod_styles.iter().map(super::super::features::styling::domain::StyleSheetName::as_str).collect::<Vec<_>>(),
-            "Registered module style dependencies"
-        );
-
-        for style_name in mod_styles {
-            self.style_to_modules
-                .entry(style_name.clone())
-                .or_default()
-                .insert(config.name().clone());
-        }
+        log_style_dependencies(config, id, mod_styles);
+        self.record_style_dependencies(config.name(), mod_styles);
 
         self.module_configs.insert(id, config.clone());
         self.name_to_ids
@@ -250,6 +203,64 @@ impl ModuleRegistry {
             .push(id);
 
         Ok((id, module))
+    }
+
+    /// Hands out the next `ModuleId`, never reused for the registry's
+    /// lifetime (until `clear`).
+    const fn mint_module_id(&mut self) -> ModuleId {
+        let id = ModuleId::new(self.next_module_id);
+        self.next_module_id = self.next_module_id.saturating_add(1);
+        id
+    }
+
+    /// Finds the script `config` names, for its engine, and initialises it
+    /// with `config` and the full configuration.
+    fn instantiate_module(
+        &self,
+        config: &ModuleConfig,
+        full_config: &crate::shared::config::domain::Config,
+    ) -> Result<Box<dyn AnyModulePort>, crate::features::module_runtime::ports::RegistryLoadError>
+    {
+        let mut module =
+            builtins::BuiltinModules::find_module(config.name(), config.engine(), &self.app_env)
+                .map_err(registry_load_error)?;
+
+        module.init(config, full_config).map_err(|error| {
+            crate::features::module_runtime::ports::RegistryLoadError::ModuleInit {
+                module_name: config.name().clone(),
+                source: error,
+            }
+        })?;
+        Ok(module)
+    }
+
+    /// Adds the D-Bus subscriptions `module` declares to the ones the
+    /// registry registers.
+    fn record_dbus_subscriptions(&mut self, module: &dyn AnyModulePort) {
+        for sub in module.dbus_subscriptions() {
+            self.dbus_subscriptions.push(sub.clone());
+        }
+    }
+
+    /// Marks the signals `module` subscribes to as active.
+    fn record_signal_subscriptions(&mut self, module: &dyn AnyModulePort) {
+        for sub in module.subscriptions() {
+            self.active_signals.insert(*sub);
+        }
+    }
+
+    /// Lists the module `name` among the users of each sheet in `styles`.
+    fn record_style_dependencies(
+        &mut self,
+        name: &crate::shared::primitives::ModuleName,
+        styles: &[StyleSheetName],
+    ) {
+        for style_name in styles {
+            self.style_to_modules
+                .entry(style_name.clone())
+                .or_default()
+                .insert(name.clone());
+        }
     }
 
     /// Records where the module `id` sits, and lists it among the modules
@@ -287,16 +298,38 @@ impl ModuleRegistry {
         let (key, options) = site.into_key_and_options();
         let cfg = ModuleConfig::new(key.name().clone(), options);
         let (id, module) = self.load_single_module(&cfg, setup.config())?;
+        let parent = Some(parent);
         self.record_site(
             id,
             ModuleSiteInfo {
                 key,
-                parent: Some(parent),
+                parent,
                 surface,
             },
         );
-        let deps = setup.deps();
 
+        let (sender, handle) = self.spawn_site_actor((id, module), setup.deps());
+        self.lazy_actor_handles.insert(id, handle);
+
+        Ok(crate::features::module_runtime::ports::SpawnedModule::new(
+            id, sender,
+        ))
+    }
+
+    /// Spawns the actor that runs the loaded module `id` at its recorded
+    /// site (see `build_site_context`), rendering with a style resolver
+    /// built from the sheets the module declares. Returns the sender its
+    /// layout goes through and the actor's task.
+    fn spawn_site_actor<
+        Fact: crate::shared::rendering::ports::canvas::CanvasFactory + 'static,
+        LS: crate::features::module_runtime::ports::LayoutEventSender + 'static,
+        DS: crate::features::layout_engine::domain::DisplayCommandSender + 'static,
+        US: crate::features::vdom::domain::UiCommandSender + 'static,
+    >(
+        &self,
+        (id, module): (ModuleId, Box<dyn AnyModulePort>),
+        deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
+    ) -> (WatchLayoutSender, tokio::task::JoinHandle<()>) {
         let (ctx, sender) = self.build_site_context(id, deps);
 
         let style_resolver = self.create_style_resolver_for_module(module.styles());
@@ -312,11 +345,7 @@ impl ModuleRegistry {
             ),
         )
         .spawn();
-        self.lazy_actor_handles.insert(id, handle);
-
-        Ok(crate::features::module_runtime::ports::SpawnedModule::new(
-            id, sender,
-        ))
+        (sender, handle)
     }
 
     /// Builds the `ModuleContext` for an existing site's actor from its
@@ -361,6 +390,152 @@ impl ModuleRegistry {
         .with_surface(surface);
         (ctx, WatchLayoutSender { tx: layout_tx })
     }
+
+    /// Loads the root module, configured under `[modules.<root>]` or else
+    /// from the `[root]` options, on the bar with no parent, and makes it
+    /// the registry's root.
+    fn load_root(
+        &mut self,
+        config: &crate::shared::config::domain::Config,
+    ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
+        let root_name = config.root().name();
+        let root_cfg = config.modules().get(root_name).cloned().unwrap_or_else(|| {
+            ModuleConfig::new(root_name.clone(), config.root().options().clone())
+        });
+        let (root_id, root_module) = self.load_single_module(&root_cfg, config)?;
+        self.record_site(
+            root_id,
+            ModuleSiteInfo::configured(root_cfg.name().clone(), None),
+        );
+        self.modules.insert(root_id, root_module);
+        self.root_module = Some(root_id);
+        Ok(())
+    }
+
+    /// Loads every enabled module configured under `[modules]`, except the
+    /// root, as a child of the root.
+    fn load_configured_children(
+        &mut self,
+        config: &crate::shared::config::domain::Config,
+    ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
+        let root_name = config.root().name();
+        for mod_cfg in config.modules().modules().values() {
+            if mod_cfg.is_enabled() && mod_cfg.name() != root_name {
+                self.load_child(mod_cfg, config)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Loads, with default options, every module the root's `left`,
+    /// `center` and `right` sections name that is not loaded yet, as a
+    /// child of the root.
+    fn load_section_modules(
+        &mut self,
+        config: &crate::shared::config::domain::Config,
+    ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
+        for mod_name in root_section_module_names(config) {
+            if !self.name_to_ids.contains_key(&mod_name) {
+                let auto_cfg = ModuleConfig::new(mod_name, ModuleOptions::default());
+                self.load_child(&auto_cfg, config)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Loads the module `cfg` names on the bar under the root `load_root`
+    /// set, into the pool `spawn_all` spawns.
+    fn load_child(
+        &mut self,
+        cfg: &ModuleConfig,
+        config: &crate::shared::config::domain::Config,
+    ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
+        let (id, module) = self.load_single_module(cfg, config)?;
+        self.record_site(
+            id,
+            ModuleSiteInfo::configured(cfg.name().clone(), self.root_module),
+        );
+        self.modules.insert(id, module);
+        Ok(())
+    }
+
+    /// Every site whose module is configured under `name`, with that
+    /// configuration.
+    fn configs_named(
+        &self,
+        name: &crate::shared::primitives::ModuleName,
+    ) -> Vec<(ModuleId, ModuleConfig)> {
+        self.module_configs
+            .iter()
+            .filter(|(_, cfg)| cfg.name() == name)
+            .map(|(id, cfg)| (*id, cfg.clone()))
+            .collect()
+    }
+}
+
+/// The sheet `name`, read by `loader` and parsed by `parser`, or `None` if
+/// either step fails.
+fn load_parsed_sheet(
+    loader: &FsStyleLoader,
+    parser: &LightningCssAdapter,
+    name: &StyleSheetName,
+) -> Option<Box<dyn ParsedStyleSheetPort>> {
+    let css = loader.load_stylesheet(name).ok()?;
+    parser.parse_stylesheet(name.clone(), &css).ok()
+}
+
+/// The registry error a failed script lookup stands for.
+fn registry_load_error(
+    error: crate::app::builtins::BuiltinError,
+) -> crate::features::module_runtime::ports::RegistryLoadError {
+    use crate::app::builtins::BuiltinError;
+    use crate::features::module_runtime::ports::RegistryLoadError;
+
+    match error {
+        BuiltinError::ModuleNotFound { module_name, .. } => {
+            RegistryLoadError::ModuleNotFound(module_name)
+        }
+        BuiltinError::UnsupportedEngine {
+            engine,
+            module_name,
+        } => RegistryLoadError::UnsupportedEngine {
+            engine,
+            module_name,
+        },
+        BuiltinError::Env(message) | BuiltinError::InputOutput(message) => {
+            RegistryLoadError::Internal(message)
+        }
+    }
+}
+
+/// Logs the sheets the module `config` names depends on, under its new `id`.
+fn log_style_dependencies(config: &ModuleConfig, id: ModuleId, mod_styles: &[StyleSheetName]) {
+    tracing::debug!(
+        module = %config.name().as_str(),
+        id = %id,
+        styles = ?mod_styles.iter().map(super::super::features::styling::domain::StyleSheetName::as_str).collect::<Vec<_>>(),
+        "Registered module style dependencies"
+    );
+}
+
+/// The module names, in order, listed in the root's `left`, `center` and
+/// `right` sections, skipping a section that is not a list and an item
+/// that is not a string.
+fn root_section_module_names(
+    config: &crate::shared::config::domain::Config,
+) -> impl Iterator<Item = crate::shared::primitives::ModuleName> + '_ {
+    let check_sections = ["left", "center", "right"];
+    check_sections
+        .into_iter()
+        .filter_map(|sec| match config.root().options().get(sec) {
+            Some(DynamicValue::Array(arr)) => Some(arr),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|item| {
+            item.as_str()
+                .map(crate::shared::primitives::ModuleName::new)
+        })
 }
 
 pub(super) struct WatchLayoutSender {
@@ -468,51 +643,11 @@ impl<
         self.clear();
 
         // 1. Load the root module (default "bar")
-        let root_name = config.root().name();
-        let root_cfg = config.modules().get(root_name).cloned().unwrap_or_else(|| {
-            ModuleConfig::new(root_name.clone(), config.root().options().clone())
-        });
-        let (root_id, root_module) = self.load_single_module(&root_cfg, config)?;
-        self.record_site(
-            root_id,
-            ModuleSiteInfo::configured(root_cfg.name().clone(), None),
-        );
-        self.modules.insert(root_id, root_module);
-        self.root_module = Some(root_id);
-
+        self.load_root(config)?;
         // 2. Load all configured child modules
-        for mod_cfg in config.modules().modules().values() {
-            if mod_cfg.is_enabled() && mod_cfg.name() != root_name {
-                let (id, module) = self.load_single_module(mod_cfg, config)?;
-                self.record_site(
-                    id,
-                    ModuleSiteInfo::configured(mod_cfg.name().clone(), Some(root_id)),
-                );
-                self.modules.insert(id, module);
-            }
-        }
-
+        self.load_configured_children(config)?;
         // 3. Also load any modules referenced in root options (left, center, right)
-        let check_sections = ["left", "center", "right"];
-        for sec in check_sections {
-            if let Some(DynamicValue::Array(arr)) = config.root().options().get(sec) {
-                for item in arr {
-                    if let Some(name_str) = item.as_str() {
-                        let mod_name = crate::shared::primitives::ModuleName::new(name_str);
-                        if !self.name_to_ids.contains_key(&mod_name) {
-                            let auto_cfg =
-                                ModuleConfig::new(mod_name.clone(), ModuleOptions::default());
-                            let (id, module) = self.load_single_module(&auto_cfg, config)?;
-                            self.record_site(
-                                id,
-                                ModuleSiteInfo::configured(mod_name, Some(root_id)),
-                            );
-                            self.modules.insert(id, module);
-                        }
-                    }
-                }
-            }
-        }
+        self.load_section_modules(config)?;
 
         Ok(())
     }
@@ -525,24 +660,8 @@ impl<
             std::collections::HashMap::new();
 
         for (id, module) in std::mem::take(&mut self.modules) {
-            let (ctx, sender) = self.build_site_context(id, deps);
+            let (sender, _) = self.spawn_site_actor((id, module), deps);
             layout_senders.insert(id, sender);
-
-            let style_resolver = self.create_style_resolver_for_module(module.styles());
-
-            let vdom_diff =
-                Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
-
-            crate::features::module_runtime::application::ModuleActor::new(
-                module,
-                ctx,
-                crate::features::module_runtime::domain::RenderServices::new(
-                    deps.canvas_factory.clone(),
-                    style_resolver,
-                    vdom_diff,
-                ),
-            )
-            .spawn();
         }
 
         layout_senders
@@ -556,77 +675,18 @@ impl<
         std::collections::HashMap<ModuleId, WatchLayoutSender>,
         crate::features::module_runtime::ports::RegistryLoadError,
     > {
-        use crate::app::builtins::BuiltinError;
-        use crate::features::module_runtime::ports::RegistryLoadError;
-
         let (config, deps) = (setup.config(), setup.deps());
 
         let mut new_senders: std::collections::HashMap<ModuleId, WatchLayoutSender> =
             std::collections::HashMap::new();
-        let target_ids: Vec<ModuleId> = self
-            .module_configs
-            .iter()
-            .filter(|(_, cfg)| cfg.name() == name)
-            .map(|(id, _)| *id)
-            .collect();
 
-        for id in target_ids {
-            let Some(cfg) = self.module_configs.get(&id) else {
-                continue;
-            };
-            let mut module =
-                builtins::BuiltinModules::find_module(cfg.name(), cfg.engine(), &self.app_env)
-                    .map_err(|error| match error {
-                        BuiltinError::ModuleNotFound { module_name, .. } => {
-                            RegistryLoadError::ModuleNotFound(module_name)
-                        }
-                        BuiltinError::UnsupportedEngine {
-                            engine,
-                            module_name,
-                        } => RegistryLoadError::UnsupportedEngine {
-                            engine,
-                            module_name,
-                        },
-                        BuiltinError::Env(message) | BuiltinError::InputOutput(message) => {
-                            RegistryLoadError::Internal(message)
-                        }
-                    })?;
+        for (id, cfg) in self.configs_named(name) {
+            let module = self.instantiate_module(&cfg, config)?;
+            self.record_style_dependencies(cfg.name(), module.styles());
+            self.record_signal_subscriptions(module.as_ref());
 
-            module
-                .init(cfg, config)
-                .map_err(|error| RegistryLoadError::ModuleInit {
-                    module_name: cfg.name().clone(),
-                    source: error,
-                })?;
-
-            for style_name in module.styles() {
-                self.style_to_modules
-                    .entry(style_name.clone())
-                    .or_default()
-                    .insert(cfg.name().clone());
-            }
-
-            for sub in module.subscriptions() {
-                self.active_signals.insert(*sub);
-            }
-
-            let (ctx, sender) = self.build_site_context(id, deps);
+            let (sender, _) = self.spawn_site_actor((id, module), deps);
             new_senders.insert(id, sender);
-
-            let style_resolver = self.create_style_resolver_for_module(module.styles());
-            let vdom_diff =
-                Arc::new(crate::features::vdom::adapters::DefaultVdomDiffAdapter::new());
-
-            crate::features::module_runtime::application::ModuleActor::new(
-                module,
-                ctx,
-                crate::features::module_runtime::domain::RenderServices::new(
-                    deps.canvas_factory.clone(),
-                    style_resolver,
-                    vdom_diff,
-                ),
-            )
-            .spawn();
         }
 
         Ok(new_senders)
