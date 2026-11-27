@@ -194,8 +194,36 @@ impl AnyModulePort for BenchMockModule {
 // 1. VDOM Benchmarks
 // ----------------------------------------------------------------------------
 
-/// The two trees one diff benchmark compares: the previous render and the new one.
-type TreePair<'a> = (&'a VNode, &'a VNode);
+/// One diff benchmark: the name criterion reports it under, the previous
+/// render and the new one.
+struct DiffCase<'a> {
+    name: &'a str,
+    previous: &'a VNode,
+    next: &'a VNode,
+}
+
+impl<'a> DiffCase<'a> {
+    const fn new(name: &'a str, previous: &'a VNode, next: &'a VNode) -> Self {
+        Self {
+            name,
+            previous,
+            next,
+        }
+    }
+}
+
+/// One benchmark over a single input: the name criterion reports it under and
+/// the input it times.
+struct BenchCase<'a, Input> {
+    name: &'a str,
+    input: &'a Input,
+}
+
+impl<'a, Input> BenchCase<'a, Input> {
+    const fn new(name: &'a str, input: &'a Input) -> Self {
+        Self { name, input }
+    }
+}
 
 fn bench_vdom(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("vdom");
@@ -209,10 +237,15 @@ fn bench_vdom(criterion: &mut Criterion) {
     // Large tree: depth 4, branching 3 (~120 nodes)
     let large = tree_pair(4, 3, "large");
 
-    bench_diff(&mut group, "diff_small_identical", (&small.0, &small.0));
-    bench_diff(&mut group, "diff_small_mutated", (&small.0, &small.1));
-    bench_diff(&mut group, "diff_medium_mutated", (&medium.0, &medium.1));
-    bench_diff(&mut group, "diff_large_mutated", (&large.0, &large.1));
+    let cases = [
+        DiffCase::new("diff_small_identical", &small.0, &small.0),
+        DiffCase::new("diff_small_mutated", &small.0, &small.1),
+        DiffCase::new("diff_medium_mutated", &medium.0, &medium.1),
+        DiffCase::new("diff_large_mutated", &large.0, &large.1),
+    ];
+    for case in &cases {
+        bench_diff(&mut group, case);
+    }
 
     group.finish();
 }
@@ -226,10 +259,14 @@ fn tree_pair(depth: usize, branching: usize, prefix: &str) -> (VNode, VNode) {
     )
 }
 
-/// Times one diff of `trees` with the default differ, built outside the timed loop.
-fn bench_diff(group: &mut BenchmarkGroup<'_, WallTime>, name: &str, trees: TreePair<'_>) {
+/// Times one diff of `case` with the default differ, built outside the timed loop.
+fn bench_diff(group: &mut BenchmarkGroup<'_, WallTime>, case: &DiffCase<'_>) {
     let differ = DefaultVdomDiffAdapter::new();
-    let (previous, next) = trees;
+    let DiffCase {
+        name,
+        previous,
+        next,
+    } = *case;
     group.bench_function(name, |bencher| {
         bencher.iter(|| {
             let res = differ.diff(black_box(Some(previous)), black_box(next));
@@ -330,20 +367,19 @@ fn bench_sample_queries(
         None,
     );
 
-    bench_resolve(group, sheet, ("resolve_style_simple_match", &query_simple));
-    bench_resolve(
-        group,
-        sheet,
-        ("resolve_style_pseudo_class_match", &query_hover),
-    );
+    let simple = BenchCase::new("resolve_style_simple_match", &query_simple);
+    let hover = BenchCase::new("resolve_style_pseudo_class_match", &query_hover);
+    bench_resolve(group, sheet, &simple);
+    bench_resolve(group, sheet, &hover);
 }
 
-/// Times resolving `sheet` for one named query with nothing inherited.
+/// Times resolving `sheet` for the query of `case` with nothing inherited.
 fn bench_resolve(
     group: &mut BenchmarkGroup<'_, WallTime>,
     sheet: &dyn ParsedStyleSheetPort,
-    (name, query): (&str, &ElementQuery<'_>),
+    case: &BenchCase<'_, ElementQuery<'_>>,
 ) {
+    let BenchCase { name, input: query } = *case;
     group.bench_function(name, |bencher| {
         bencher.iter(|| {
             let style =
@@ -376,8 +412,8 @@ fn bench_styling_rule_buckets(criterion: &mut Criterion) {
     let query_many_rules =
         ElementQuery::new(ElementIdentity::new("text", None, &classes_hot), &[], None);
 
-    let case = ("resolve_style_many_rules_one_match", &query_many_rules);
-    bench_resolve(&mut group, &*many_rules_sheet, case);
+    let case = BenchCase::new("resolve_style_many_rules_one_match", &query_many_rules);
+    bench_resolve(&mut group, &*many_rules_sheet, &case);
 
     group.finish();
 }
@@ -409,7 +445,7 @@ fn bench_layout(criterion: &mut Criterion) {
     let tree_large = create_styled_node_tree(4, 3);
 
     let mut bench_tree = |name: &str, tree: &StyledNode| {
-        bench_taffy_layout(&mut group, &mut canvas_factory, (name, tree));
+        bench_taffy_layout(&mut group, &mut canvas_factory, &BenchCase::new(name, tree));
     };
     bench_tree("taffy_layout_small_tree", &tree_small);
     bench_tree("taffy_layout_medium_tree", &tree_medium);
@@ -418,13 +454,14 @@ fn bench_layout(criterion: &mut Criterion) {
     group.finish();
 }
 
-/// Times laying out a clone of one named tree with a fresh text measurer each
-/// iteration, the layout engine built once outside the timed loop.
+/// Times laying out a clone of the tree of `case` with a fresh text measurer
+/// each iteration, the layout engine built once outside the timed loop.
 fn bench_taffy_layout(
     group: &mut BenchmarkGroup<'_, WallTime>,
     canvas_factory: &mut TinySkiaCanvasFactory,
-    (name, tree): (&str, &StyledNode),
+    case: &BenchCase<'_, StyledNode>,
 ) {
+    let BenchCase { name, input: tree } = *case;
     group.bench_function(name, |bencher| {
         let mut layout_engine = TaffyLayoutAdapter::default();
         bencher.iter(|| {
