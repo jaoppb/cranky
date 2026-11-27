@@ -8,3 +8,7 @@ mod resolver;
 mod tests;
 #[cfg(test)]
 mod tests_interaction;
+#[cfg(test)]
+mod tests_mapping;
+#[cfg(test)]
+mod tests_resolution;

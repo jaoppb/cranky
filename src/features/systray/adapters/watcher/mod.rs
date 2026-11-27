@@ -47,6 +47,31 @@ impl Watcher {
     }
 }
 
+/// Where a registering item lives. `service` is either an object path on the sender's
+/// connection, as most items send, or a bus name whose item sits at `/StatusNotifierItem`.
+fn item_address(service: &str, sender: Sender) -> SystrayAddress {
+    if service.starts_with('/') {
+        let destination = sender.0.unwrap_or_else(|| service.to_string());
+        SystrayAddress::new(Destination::new(destination), ObjectPath::new(service))
+    } else {
+        SystrayAddress::new(
+            Destination::new(service),
+            ObjectPath::new("/StatusNotifierItem"),
+        )
+    }
+}
+
+/// Tracks the item at `address`, logging instead of returning a failure: nobody awaits the task.
+async fn track_logged(conn: Connection, tray: TrayItems, address: SystrayAddress) {
+    if let Err(error) = Watcher::track_item(conn, tray, address).await {
+        log_track_failed(&error);
+    }
+}
+
+fn log_track_failed(error: &zbus::Error) {
+    error!("Failed to track SNI item: {error}");
+}
+
 #[interface(name = "org.kde.StatusNotifierWatcher")]
 impl Watcher {
     fn register_status_notifier_item(
@@ -55,30 +80,9 @@ impl Watcher {
         #[zbus(header)] header: zbus::message::Header<'_>,
     ) {
         debug!("Registered SNI item: {service}");
-
-        let full_path = if service.starts_with('/') {
-            service.to_string()
-        } else {
-            "/StatusNotifierItem".to_string()
-        };
-
-        let dbus_dest = if service.starts_with('/') {
-            Sender::from(header)
-                .0
-                .unwrap_or_else(|| service.to_string())
-        } else {
-            service.to_string()
-        };
-
-        let conn = self.conn.clone();
-        let tray = self.tray.clone();
-        let address = SystrayAddress::new(Destination::new(dbus_dest), ObjectPath::new(full_path));
-
-        self.runtime.spawn(async move {
-            if let Err(error) = Self::track_item(conn, tray, address).await {
-                error!("Failed to track SNI item: {error}");
-            }
-        });
+        let address = item_address(service, Sender::from(header));
+        self.runtime
+            .spawn(track_logged(self.conn.clone(), self.tray.clone(), address));
     }
 
     fn register_status_notifier_host(&self, service: &str) {
@@ -99,5 +103,41 @@ impl Watcher {
     #[zbus(property)]
     const fn protocol_version(&self) -> i32 {
         self.protocol_version
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Sender, item_address};
+
+    /// The destination and object path of the address `service` registers at, sent by `sender`.
+    fn registered_at(service: &str, sender: Option<&str>) -> (String, String) {
+        let address = item_address(service, Sender(sender.map(str::to_string)));
+        (
+            address.destination().as_str().to_string(),
+            address.path().as_str().to_string(),
+        )
+    }
+
+    #[test]
+    fn test_item_address_of_an_object_path_is_on_the_sender() {
+        let expected = (":1.7".to_string(), "/org/ayatana/item".to_string());
+        assert_eq!(registered_at("/org/ayatana/item", Some(":1.7")), expected);
+    }
+
+    #[test]
+    fn test_item_address_of_an_object_path_without_sender_uses_the_path_as_destination() {
+        let expected = ("/item".to_string(), "/item".to_string());
+        assert_eq!(registered_at("/item", None), expected);
+    }
+
+    #[test]
+    fn test_item_address_of_a_bus_name_is_at_the_default_path() {
+        let expected = (
+            "org.kde.StatusNotifierItem-42-1".to_string(),
+            "/StatusNotifierItem".to_string(),
+        );
+        let address = registered_at("org.kde.StatusNotifierItem-42-1", Some(":1.7"));
+        assert_eq!(address, expected);
     }
 }

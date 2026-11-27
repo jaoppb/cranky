@@ -128,52 +128,56 @@ mod tests {
         SystemMetrics, TemperatureMode,
     };
 
+    /// A disk `sda` mounted on `/home`: 500 bytes, 120 available, 380 used.
+    fn home_disk() -> DiskMetric {
+        let space = DiskSpace::new(
+            MemoryBytes::new(500),
+            MemoryBytes::new(120),
+            MemoryBytes::new(380),
+        );
+        DiskMetric::new(DiskName::new("sda"), MountPoint::new("/home"), space)
+    }
+
+    /// A command whose every reading holds a distinct value, carrying `disk` and `config`.
+    fn command_with(disk: DiskMetric, config: MetricsConfig) -> CreateMetricsCommand {
+        let cpu = CpuMetrics::new(
+            CpuUsage::new(12.5),
+            vec![CpuUsage::new(3.0), CpuUsage::new(7.0)],
+        );
+        let memory = MemoryMetrics::new(
+            MemoryUsage::new(MemoryBytes::new(100), MemoryBytes::new(400)),
+            MemoryUsage::new(MemoryBytes::new(30), MemoryBytes::new(90)),
+        );
+        let network = NetworkMetrics::new(NetworkSpeed::new(11), NetworkSpeed::new(22));
+        let temperature = Some(Temperature::new(41.0));
+        CreateMetricsCommand::new(
+            SystemMetrics::new(cpu, memory),
+            DeviceMetrics::new(vec![disk], network, temperature),
+            config,
+        )
+    }
+
     #[test]
     fn test_new_moves_every_reading_into_its_own_field() {
-        let disk = DiskMetric::new(
-            DiskName::new("sda"),
-            MountPoint::new("/home"),
-            DiskSpace::new(
-                MemoryBytes::new(500),
-                MemoryBytes::new(120),
-                MemoryBytes::new(380),
-            ),
-        );
         let config: MetricsConfig =
             serde_json::from_value(serde_json::json!({ "temperature": "fahrenheit" })).unwrap();
-        let state = MetricsState::new(CreateMetricsCommand::new(
-            SystemMetrics::new(
-                CpuMetrics::new(
-                    CpuUsage::new(12.5),
-                    vec![CpuUsage::new(3.0), CpuUsage::new(7.0)],
-                ),
-                MemoryMetrics::new(
-                    MemoryUsage::new(MemoryBytes::new(100), MemoryBytes::new(400)),
-                    MemoryUsage::new(MemoryBytes::new(30), MemoryBytes::new(90)),
-                ),
-            ),
-            DeviceMetrics::new(
-                vec![disk.clone()],
-                NetworkMetrics::new(NetworkSpeed::new(11), NetworkSpeed::new(22)),
-                Some(Temperature::new(41.0)),
-            ),
-            config.clone(),
-        ));
+        let state = MetricsState::new(command_with(home_disk(), config.clone()));
 
-        assert_eq!(state.cpu_usage, CpuUsage::new(12.5));
-        assert_eq!(state.per_core, vec![CpuUsage::new(3.0), CpuUsage::new(7.0)]);
-        assert_eq!(state.memory_used, MemoryBytes::new(100));
-        assert_eq!(state.memory_total, MemoryBytes::new(400));
-        assert_eq!(state.swap_used, MemoryBytes::new(30));
-        assert_eq!(state.swap_total, MemoryBytes::new(90));
-        assert_eq!(state.disks, vec![disk]);
-        assert_eq!(state.network_tx, NetworkSpeed::new(11));
-        assert_eq!(state.network_rx, NetworkSpeed::new(22));
-        assert_eq!(state.temperature, Some(Temperature::new(41.0)));
-        assert_eq!(
-            state.config.temperature(),
-            Some(&TemperatureMode::Fahrenheit)
-        );
-        assert_eq!(state.config, config);
+        let expected = MetricsState {
+            cpu_usage: CpuUsage::new(12.5),
+            per_core: vec![CpuUsage::new(3.0), CpuUsage::new(7.0)],
+            memory_used: MemoryBytes::new(100),
+            memory_total: MemoryBytes::new(400),
+            swap_used: MemoryBytes::new(30),
+            swap_total: MemoryBytes::new(90),
+            disks: vec![home_disk()],
+            network_tx: NetworkSpeed::new(11),
+            network_rx: NetworkSpeed::new(22),
+            temperature: Some(Temperature::new(41.0)),
+            config,
+        };
+        assert_eq!(state, expected);
+        let temperature = state.config.temperature();
+        assert_eq!(temperature, Some(&TemperatureMode::Fahrenheit));
     }
 }

@@ -49,17 +49,27 @@ where
 impl UiCommandSender for tokio::sync::mpsc::Sender<UiCommand> {
     fn send_ui_command(&self, cmd: UiCommand) {
         if let Err(error) = self.try_send(cmd) {
-            tracing::error!(?error, "failed to send ui command via tokio channel");
+            log_tokio_send_failed(&error);
         }
     }
+}
+
+/// Logs a command the tokio channel refused (full or closed).
+fn log_tokio_send_failed(error: &tokio::sync::mpsc::error::TrySendError<UiCommand>) {
+    tracing::error!(?error, "failed to send ui command via tokio channel");
 }
 
 impl UiCommandSender for std::sync::mpsc::Sender<UiCommand> {
     fn send_ui_command(&self, cmd: UiCommand) {
         if let Err(error) = self.send(cmd) {
-            tracing::error!(?error, "failed to send ui command via std channel");
+            log_std_send_failed(&error);
         }
     }
+}
+
+/// Logs a command the std channel refused because its receiver is gone.
+fn log_std_send_failed(error: &std::sync::mpsc::SendError<UiCommand>) {
+    tracing::error!(?error, "failed to send ui command via std channel");
 }
 
 /// The action bound to each pointer button on a node; a single action from a script binds left,
@@ -131,6 +141,12 @@ impl<'de> Deserialize<'de> for ClickHandlers {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::module_runtime::test_support::capture_logs;
+
+    /// The `Exec` action running `command`.
+    fn exec_action(command: &str) -> UiAction {
+        UiAction::Exec(command.to_string())
+    }
 
     #[test]
     fn test_click_handlers_operations() {
@@ -138,27 +154,21 @@ mod tests {
         assert!(handlers.is_empty());
         assert_eq!(handlers.get(PointerButton::Left), None);
 
-        handlers.insert(PointerButton::Left, UiAction::Exec("left_cmd".into()));
+        handlers.insert(PointerButton::Left, exec_action("left_cmd"));
         assert!(!handlers.is_empty());
-        assert_eq!(
-            handlers.get(PointerButton::Left),
-            Some(&UiAction::Exec("left_cmd".into()))
-        );
+        let left = handlers.get(PointerButton::Left);
+        assert_eq!(left, Some(&exec_action("left_cmd")));
         assert_eq!(handlers.get(PointerButton::Right), None);
 
-        let single = ClickHandlers::from_single(UiAction::Exec("single_cmd".into()));
-        assert_eq!(
-            single.get(PointerButton::Left),
-            Some(&UiAction::Exec("single_cmd".into()))
-        );
-        assert_eq!(
-            single.get(PointerButton::Middle),
-            Some(&UiAction::Exec("single_cmd".into()))
-        );
-        assert_eq!(
-            single.get(PointerButton::Right),
-            Some(&UiAction::Exec("single_cmd".into()))
-        );
+        let single = ClickHandlers::from_single(exec_action("single_cmd"));
+        let buttons = [
+            PointerButton::Left,
+            PointerButton::Middle,
+            PointerButton::Right,
+        ];
+        let bound = buttons.map(|button| single.get(button));
+        let cmd = exec_action("single_cmd");
+        assert_eq!(bound, [Some(&cmd), Some(&cmd), Some(&cmd)]);
         assert_eq!(single.get(PointerButton::Side), None);
     }
 
@@ -166,14 +176,10 @@ mod tests {
     fn test_click_handlers_deserialization() {
         let single_json = r#"{"Exec": "single_cmd"}"#;
         let single_handlers: ClickHandlers = serde_json::from_str(single_json).unwrap();
-        assert_eq!(
-            single_handlers.get(PointerButton::Left),
-            Some(&UiAction::Exec("single_cmd".into()))
-        );
-        assert_eq!(
-            single_handlers.get(PointerButton::Right),
-            Some(&UiAction::Exec("single_cmd".into()))
-        );
+        let single =
+            [PointerButton::Left, PointerButton::Right].map(|button| single_handlers.get(button));
+        let cmd = exec_action("single_cmd");
+        assert_eq!(single, [Some(&cmd), Some(&cmd)]);
 
         let map_json = r#"{
             "left": {"Exec": "left_cmd"},
@@ -183,25 +189,79 @@ mod tests {
             "276": {"Exec": "extra_cmd"}
         }"#;
         let map_handlers: ClickHandlers = serde_json::from_str(map_json).unwrap();
+        let buttons = [
+            PointerButton::Left,
+            PointerButton::Right,
+            PointerButton::Middle,
+            PointerButton::Side,
+            PointerButton::Extra,
+        ];
+        let bound = buttons.map(|button| map_handlers.get(button).cloned());
+        let commands = ["left_cmd", "right_cmd", "mid_cmd", "side_cmd", "extra_cmd"];
+        assert_eq!(bound, commands.map(|command| Some(exec_action(command))));
+    }
+
+    /// The `Exec` command for `command`, as a sender would receive it.
+    fn exec(command: &str) -> UiCommand {
+        UiCommand::Exec(command.to_string())
+    }
+
+    #[test]
+    fn test_closure_sender_forwards_the_command() {
+        let received = std::sync::Mutex::new(Vec::new());
+        let sender = |cmd: UiCommand| received.lock().unwrap().push(cmd);
+        sender.send_ui_command(exec("run"));
+        assert_eq!(received.into_inner().unwrap(), vec![exec("run")]);
+    }
+
+    #[test]
+    fn test_tokio_sender_delivers_without_logging() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        let logs = capture_logs(|| tx.send_ui_command(exec("run")));
+        assert_eq!(rx.try_recv().ok(), Some(exec("run")));
+        assert_eq!(logs, "");
+    }
+
+    #[test]
+    fn test_tokio_sender_logs_and_drops_the_command_when_the_channel_is_full() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        tx.send_ui_command(exec("first"));
+        let logs = capture_logs(|| tx.send_ui_command(exec("second")));
         assert_eq!(
-            map_handlers.get(PointerButton::Left),
-            Some(&UiAction::Exec("left_cmd".into()))
+            logs,
+            "ERROR cranky::features::vdom::domain::action: failed to send ui command via tokio \
+             channel error=\"Full(..)\"\n"
         );
+        assert_eq!(rx.try_recv().ok(), Some(exec("first")));
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn test_std_sender_delivers_without_logging() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let logs = capture_logs(|| tx.send_ui_command(exec("run")));
+        assert_eq!(rx.try_recv().ok(), Some(exec("run")));
+        assert_eq!(logs, "");
+    }
+
+    #[test]
+    fn test_std_sender_logs_when_the_receiver_is_gone() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        drop(rx);
+        let logs = capture_logs(|| tx.send_ui_command(exec("run")));
         assert_eq!(
-            map_handlers.get(PointerButton::Right),
-            Some(&UiAction::Exec("right_cmd".into()))
+            logs,
+            "ERROR cranky::features::vdom::domain::action: failed to send ui command via std \
+             channel error=SendError { .. }\n"
         );
-        assert_eq!(
-            map_handlers.get(PointerButton::Middle),
-            Some(&UiAction::Exec("mid_cmd".into()))
-        );
-        assert_eq!(
-            map_handlers.get(PointerButton::Side),
-            Some(&UiAction::Exec("side_cmd".into()))
-        );
-        assert_eq!(
-            map_handlers.get(PointerButton::Extra),
-            Some(&UiAction::Exec("extra_cmd".into()))
-        );
+    }
+
+    #[test]
+    fn test_click_handlers_deserialization_drops_unknown_button_names() {
+        let json = r#"{"left": {"Exec": "left_cmd"}, "wheel": {"Exec": "wheel_cmd"}}"#;
+        let handlers: ClickHandlers = serde_json::from_str(json).unwrap();
+        let mut expected = ClickHandlers::new();
+        expected.insert(PointerButton::Left, UiAction::Exec("left_cmd".into()));
+        assert_eq!(handlers, expected);
     }
 }

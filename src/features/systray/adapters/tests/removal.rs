@@ -14,52 +14,11 @@ use tokio::sync::RwLock;
 fn test_remove_by_destination_removes_matching_items() {
     crate::test_utils::block_on(async {
         let hub = Arc::new(SignalHub::new(Config::default()));
-        let mut map = BTreeMap::new();
-
-        let item1 = SystrayItem::new(CreateSystrayItemCommand::new(
-            SystrayItemParams::new(
-                SystrayId::new("app1"),
-                SystrayAddress::new(
-                    Destination::new(":1.42"),
-                    ObjectPath::new("/StatusNotifierItem"),
-                ),
-                Title::new("App 1"),
-            )
-            .with_status(SystrayStatus::Active)
-            .with_category(SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(ItemIsMenu::Activatable),
-        ));
-        let item2 = SystrayItem::new(CreateSystrayItemCommand::new(
-            SystrayItemParams::new(
-                SystrayId::new("app2"),
-                SystrayAddress::new(
-                    Destination::new(":1.42"),
-                    ObjectPath::new("/StatusNotifierItem2"),
-                ),
-                Title::new("App 1 secondary"),
-            )
-            .with_status(SystrayStatus::Active)
-            .with_category(SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(ItemIsMenu::Activatable),
-        ));
-        let item3 = SystrayItem::new(CreateSystrayItemCommand::new(
-            SystrayItemParams::new(
-                SystrayId::new("app3"),
-                SystrayAddress::new(
-                    Destination::new(":1.43"),
-                    ObjectPath::new("/StatusNotifierItem"),
-                ),
-                Title::new("App 2"),
-            )
-            .with_status(SystrayStatus::Active)
-            .with_category(SystrayCategory::ApplicationStatus)
-            .with_item_is_menu(ItemIsMenu::Activatable),
-        ));
-
-        map.insert(SystrayId::new("app1"), item1);
-        map.insert(SystrayId::new("app2"), item2);
-        map.insert(SystrayId::new("app3"), item3);
-
+        let map = BTreeMap::from([
+            (SystrayId::new("app1"), item("app1", ":1.42")),
+            (SystrayId::new("app2"), item("app2", ":1.42")),
+            (SystrayId::new("app3"), item("app3", ":1.43")),
+        ]);
         let items = Arc::new(RwLock::new(map));
 
         let removed =
@@ -67,16 +26,12 @@ fn test_remove_by_destination_removes_matching_items() {
                 .await;
         assert!(removed);
 
-        let lock = items.read().await;
-        assert_eq!(lock.len(), 1);
-        assert!(lock.contains_key(&SystrayId::new("app3")));
-        assert!(!lock.contains_key(&SystrayId::new("app1")));
-        assert!(!lock.contains_key(&SystrayId::new("app2")));
-        drop(lock);
+        let kept: Vec<SystrayId> = items.read().await.keys().cloned().collect();
+        assert_eq!(kept, [SystrayId::new("app3")]);
 
         let state = hub.systray_rx().borrow().clone();
-        assert_eq!(state.items().len(), 1);
-        assert!(state.items().contains_key(&SystrayId::new("app3")));
+        let published: Vec<&SystrayId> = state.items().keys().collect();
+        assert_eq!(published, [&SystrayId::new("app3")]);
     });
 }
 
@@ -110,4 +65,35 @@ fn test_remove_by_destination_no_match_returns_false() {
 
         assert_eq!(items.read().await.len(), 1);
     });
+}
+
+#[test]
+fn test_remove_by_destination_without_match_does_not_publish() {
+    crate::test_utils::block_on(async {
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let mut map = BTreeMap::new();
+        map.insert(SystrayId::new("app1"), item("app1", ":1.42"));
+        let tray = TrayItems::new(Arc::new(RwLock::new(map)), hub.clone());
+
+        assert!(!Watcher::remove_by_destination(&tray, ":1.99").await);
+        // A publish would have sent the one tracked item; the hub still holds the empty state.
+        assert!(hub.systray_rx().borrow().items().is_empty());
+    });
+}
+
+/// An active, activatable item `id` served by the bus name `destination`.
+fn item(id: &str, destination: &str) -> SystrayItem {
+    SystrayItem::new(CreateSystrayItemCommand::new(
+        SystrayItemParams::new(
+            SystrayId::new(id),
+            SystrayAddress::new(
+                Destination::new(destination),
+                ObjectPath::new("/StatusNotifierItem"),
+            ),
+            Title::new(id),
+        )
+        .with_status(SystrayStatus::Active)
+        .with_category(SystrayCategory::ApplicationStatus)
+        .with_item_is_menu(ItemIsMenu::Activatable),
+    ))
 }

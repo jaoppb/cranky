@@ -1,7 +1,10 @@
 //! Child-list diffing: keyed when every sibling on both sides carries a unique key, positional
 //! otherwise.
 use crate::features::vdom::domain::{ChildPatchOp, NodeId, Patch, VNode};
-use std::collections::{HashMap, HashSet};
+use keyed::keyed_patches;
+use std::collections::HashSet;
+
+mod keyed;
 
 /// Whether every child in `children` carries a key, with no duplicates.
 /// Vacuously true for an empty slice — callers must separately check that at
@@ -47,108 +50,95 @@ where
     let keyed = any_keyed && fully_keyed(lists.old) && fully_keyed(lists.new);
 
     if any_keyed && !keyed {
-        tracing::warn!(
-            parent_id = %parent_id,
-            "child list has a mix of keyed and unkeyed children, or a duplicate key; \
-             falling back to positional reconciliation for this render"
-        );
+        log_positional_fallback(parent_id);
     }
 
-    let mut child_patches = Vec::new();
-
-    if keyed {
-        let mut old_map: HashMap<&str, (usize, &VNode)> = HashMap::new();
-        for (idx, child) in lists.old.iter().enumerate() {
-            if let Some(key) = child.key() {
-                old_map.insert(key.as_str(), (idx, child));
-            }
-        }
-
-        let mut matched_old_indices = std::collections::HashSet::new();
-
-        for (new_idx, new_child) in lists.new.iter().enumerate() {
-            if let Some(key) = new_child.key() {
-                if let Some(&(old_idx, old_child)) = old_map.get(key.as_str()) {
-                    matched_old_indices.insert(old_idx);
-                    if old_idx != new_idx {
-                        child_patches.push(ChildPatchOp::Move {
-                            node_id: old_child.node_id(),
-                            source: old_idx,
-                            target: new_idx,
-                        });
-                    }
-                    let patch = diff_nodes_fn(old_child, new_child);
-                    if !patch.is_no_change() {
-                        child_patches.push(ChildPatchOp::Update {
-                            node_id: old_child.node_id(),
-                            patch: Box::new(patch),
-                        });
-                    }
-                } else {
-                    child_patches.push(ChildPatchOp::Insert {
-                        index: new_idx,
-                        node: Box::new(new_child.clone()),
-                    });
-                }
-            } else {
-                child_patches.push(ChildPatchOp::Insert {
-                    index: new_idx,
-                    node: Box::new(new_child.clone()),
-                });
-            }
-        }
-
-        for (idx, child) in lists.old.iter().enumerate() {
-            if !matched_old_indices.contains(&idx) {
-                child_patches.push(ChildPatchOp::Remove {
-                    node_id: child.node_id(),
-                    index: idx,
-                });
-            }
-        }
+    let child_patches = if keyed {
+        keyed_patches(lists, &diff_nodes_fn)
     } else {
-        let max_len = std::cmp::max(lists.old.len(), lists.new.len());
-        for index in 0..max_len {
-            match (lists.old.get(index), lists.new.get(index)) {
-                (Some(old_child), Some(new_child)) => {
-                    let patch = diff_nodes_fn(old_child, new_child);
-                    if !patch.is_no_change() {
-                        child_patches.push(ChildPatchOp::Update {
-                            node_id: old_child.node_id(),
-                            patch: Box::new(patch),
-                        });
-                    }
-                }
-                (None, Some(new_child)) => {
-                    child_patches.push(ChildPatchOp::Insert {
-                        index,
-                        node: Box::new(new_child.clone()),
-                    });
-                }
-                (Some(old_child), None) => {
-                    child_patches.push(ChildPatchOp::Remove {
-                        node_id: old_child.node_id(),
-                        index,
-                    });
-                }
-                (None, None) => {}
+        positional_patches(lists, &diff_nodes_fn)
+    };
+    children_patch(parent_id, child_patches)
+}
+
+/// Warns that a child list with a mix of keyed and unkeyed children, or a duplicate key, is
+/// reconciled by position this render.
+fn log_positional_fallback(parent_id: NodeId) {
+    tracing::warn!(
+        parent_id = %parent_id,
+        "child list has a mix of keyed and unkeyed children, or a duplicate key; \
+         falling back to positional reconciliation for this render"
+    );
+}
+
+/// Matches the children by position: shared positions are updated, the longer list's tail
+/// inserted or removed.
+fn positional_patches<F>(lists: ChildLists<'_>, diff_nodes_fn: &F) -> Vec<ChildPatchOp>
+where
+    F: Fn(&VNode, &VNode) -> Patch,
+{
+    let mut child_patches = Vec::new();
+    let max_len = std::cmp::max(lists.old.len(), lists.new.len());
+    for index in 0..max_len {
+        match (lists.old.get(index), lists.new.get(index)) {
+            (Some(old_child), Some(new_child)) => {
+                let patch = diff_nodes_fn(old_child, new_child);
+                push_update(&mut child_patches, old_child, patch);
             }
+            (None, Some(new_child)) => child_patches.push(insert_op(index, new_child)),
+            (Some(old_child), None) => child_patches.push(remove_op(old_child, index)),
+            (None, None) => {}
         }
     }
+    child_patches
+}
 
+/// Pushes an `Update` of `old_child` with `patch`, unless the patch is `NoChange`.
+fn push_update(child_patches: &mut Vec<ChildPatchOp>, old_child: &VNode, patch: Patch) {
+    if !patch.is_no_change() {
+        child_patches.push(ChildPatchOp::Update {
+            node_id: old_child.node_id(),
+            patch: Box::new(patch),
+        });
+    }
+}
+
+/// Inserts a copy of `new_child` at `index`.
+fn insert_op(index: usize, new_child: &VNode) -> ChildPatchOp {
+    ChildPatchOp::Insert {
+        index,
+        node: Box::new(new_child.clone()),
+    }
+}
+
+/// Removes `old_child` from `index`.
+const fn remove_op(old_child: &VNode, index: usize) -> ChildPatchOp {
+    ChildPatchOp::Remove {
+        node_id: old_child.node_id(),
+        index,
+    }
+}
+
+/// `NoChange` when no child changed, else the parent's `UpdateChildren`, traced with its count.
+fn children_patch(parent_id: NodeId, child_patches: Vec<ChildPatchOp>) -> Patch {
     if child_patches.is_empty() {
         Patch::NoChange
     } else {
-        tracing::trace!(
-            parent_id = %parent_id,
-            patch_count = child_patches.len(),
-            "Child reconciliation produced patches"
-        );
+        log_child_patches(parent_id, child_patches.len());
         Patch::UpdateChildren {
             node_id: parent_id,
             child_patches,
         }
     }
+}
+
+/// Traces how many child patches the reconciliation of `parent_id`'s children produced.
+fn log_child_patches(parent_id: NodeId, patch_count: usize) {
+    tracing::trace!(
+        parent_id = %parent_id,
+        patch_count,
+        "Child reconciliation produced patches"
+    );
 }
 
 #[cfg(test)]
@@ -178,6 +168,15 @@ mod tests {
                 old_node_id: old.node_id(),
                 new_node: Box::new(new.clone()),
             }
+        }
+    }
+
+    /// The `Move` of `node` from index `source` to index `target`.
+    fn move_op(node: &VNode, source: usize, target: usize) -> ChildPatchOp {
+        ChildPatchOp::Move {
+            node_id: node.node_id(),
+            source,
+            target,
         }
     }
 
@@ -220,16 +219,8 @@ mod tests {
         assert_eq!(
             child_patches(&old, &new),
             vec![
-                ChildPatchOp::Move {
-                    node_id: third.node_id(),
-                    source: 2,
-                    target: 0,
-                },
-                ChildPatchOp::Move {
-                    node_id: first.node_id(),
-                    source: 0,
-                    target: 1,
-                },
+                move_op(&third, 2, 0),
+                move_op(&first, 0, 1),
                 ChildPatchOp::Insert {
                     index: 2,
                     node: Box::new(fourth),
@@ -237,6 +228,27 @@ mod tests {
                 ChildPatchOp::Remove {
                     node_id: second.node_id(),
                     index: 1,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn keyed_children_left_unmatched_are_removed_last_in_old_list_order() {
+        let (first, second, third) = (keyed("a", "1"), keyed("b", "2"), keyed("c", "3"));
+        let old = [first.clone(), second.clone(), third.clone()];
+
+        assert_eq!(
+            child_patches(&old, std::slice::from_ref(&second)),
+            vec![
+                move_op(&second, 1, 0),
+                ChildPatchOp::Remove {
+                    node_id: first.node_id(),
+                    index: 0,
+                },
+                ChildPatchOp::Remove {
+                    node_id: third.node_id(),
+                    index: 2,
                 },
             ]
         );

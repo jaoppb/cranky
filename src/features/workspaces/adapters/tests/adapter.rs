@@ -6,11 +6,12 @@ use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// A Hyprland that answers both queries with fixed JSON, hands out `events`
-/// as its event socket once, and counts each kind of request.
-struct FakeHyprland {
-    workspaces: &'static str,
-    monitors: &'static str,
+/// A Hyprland that answers both queries with fixed JSON, or fails a query
+/// it has no answer for, hands out `events` as its event socket once, and
+/// counts each kind of request.
+pub(super) struct FakeHyprland {
+    workspaces: Option<&'static str>,
+    monitors: Option<&'static str>,
     events: Mutex<Option<UnixStream>>,
     workspace_queries: AtomicUsize,
     monitor_queries: AtomicUsize,
@@ -18,7 +19,15 @@ struct FakeHyprland {
 }
 
 impl FakeHyprland {
-    const fn new(workspaces: &'static str, monitors: &'static str) -> Self {
+    pub(super) const fn new(workspaces: &'static str, monitors: &'static str) -> Self {
+        Self::answering(Some(workspaces), Some(monitors))
+    }
+
+    /// A Hyprland that fails each query given no answer.
+    pub(super) const fn answering(
+        workspaces: Option<&'static str>,
+        monitors: Option<&'static str>,
+    ) -> Self {
         Self {
             workspaces,
             monitors,
@@ -43,7 +52,7 @@ impl FakeHyprland {
     }
 
     /// How often workspaces, monitors and the event socket were requested.
-    fn requests(&self) -> (usize, usize, usize) {
+    pub(super) fn requests(&self) -> (usize, usize, usize) {
         (
             self.workspace_queries.load(Ordering::SeqCst),
             self.monitor_queries.load(Ordering::SeqCst),
@@ -55,12 +64,16 @@ impl FakeHyprland {
 impl HyprlandProvider for FakeHyprland {
     fn query_monitors(&self) -> Result<String, HyprError> {
         self.monitor_queries.fetch_add(1, Ordering::SeqCst);
-        Ok(self.monitors.to_string())
+        self.monitors
+            .map(ToString::to_string)
+            .ok_or(HyprError::NoInstance)
     }
 
     fn query_workspaces(&self) -> Result<String, HyprError> {
         self.workspace_queries.fetch_add(1, Ordering::SeqCst);
-        Ok(self.workspaces.to_string())
+        self.workspaces
+            .map(ToString::to_string)
+            .ok_or(HyprError::NoInstance)
     }
 
     fn listen_events(&self) -> Result<UnixStream, HyprError> {

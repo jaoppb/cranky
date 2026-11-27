@@ -86,29 +86,28 @@ fn test_metrics_state_new() {
         MemoryUsage::new(MemoryBytes::new(100), MemoryBytes::new(200)),
         MemoryUsage::new(MemoryBytes::new(10), MemoryBytes::new(20)),
     );
-    assert_eq!(mem.used(), MemoryBytes::new(100));
-    assert_eq!(mem.total(), MemoryBytes::new(200));
-    assert_eq!(mem.swap_used(), MemoryBytes::new(10));
-    assert_eq!(mem.swap_total(), MemoryBytes::new(20));
+    let memory_bytes = [mem.used(), mem.total(), mem.swap_used(), mem.swap_total()];
+    assert_eq!(memory_bytes, [100, 200, 10, 20].map(MemoryBytes::new));
 
     let net = NetworkMetrics::new(NetworkSpeed::new(1), NetworkSpeed::new(2));
-    assert_eq!(net.tx(), NetworkSpeed::new(1));
-    assert_eq!(net.rx(), NetworkSpeed::new(2));
+    assert_eq!(
+        (net.tx(), net.rx()),
+        (NetworkSpeed::new(1), NetworkSpeed::new(2))
+    );
 
     let cmd = CreateMetricsCommand::new(
         SystemMetrics::new(CpuMetrics::new(CpuUsage::new(10.0), vec![]), mem.clone()),
         DeviceMetrics::new(vec![], net.clone(), Some(Temperature::new(40.0))),
         MetricsConfig::default(),
     );
-    assert_eq!(cmd.cpu_usage(), &CpuUsage::new(10.0));
-    assert_eq!(cmd.memory(), &mem);
-    assert_eq!(cmd.network(), &net);
-    assert_eq!(cmd.memory_used(), MemoryBytes::new(100));
-    assert_eq!(cmd.network_tx(), NetworkSpeed::new(1));
+    let parts = (cmd.cpu_usage(), cmd.memory(), cmd.network());
+    assert_eq!(parts, (&CpuUsage::new(10.0), &mem, &net));
+    let totals = (cmd.memory_used(), cmd.network_tx());
+    assert_eq!(totals, (MemoryBytes::new(100), NetworkSpeed::new(1)));
 
     let state = MetricsState::new(cmd);
-    assert_eq!(state.cpu_usage, CpuUsage::new(10.0));
-    assert_eq!(state.memory_used, MemoryBytes::new(100));
+    let fields = (state.cpu_usage, state.memory_used);
+    assert_eq!(fields, (CpuUsage::new(10.0), MemoryBytes::new(100)));
 }
 
 fn degrees(readings: &[Option<f32>], mode: &TemperatureMode) -> Option<f32> {

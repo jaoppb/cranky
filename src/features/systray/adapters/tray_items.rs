@@ -36,4 +36,22 @@ impl TrayItems {
         };
         let _ = self.hub.systray_tx().send(state);
     }
+
+    /// Stores `item` under `id`, then publishes the new state once the lock is released.
+    pub(super) async fn insert_and_publish(&self, id: SystrayId, item: SystrayItem) {
+        {
+            let mut lock = self.items.write().await;
+            lock.insert(id, item);
+        }
+        self.publish().await;
+    }
+
+    /// Drops the item under `id`, then publishes the new state once the lock is released.
+    pub(super) async fn remove_and_publish(&self, id: &SystrayId) {
+        {
+            let mut lock = self.items.write().await;
+            lock.remove(id);
+        }
+        self.publish().await;
+    }
 }

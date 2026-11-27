@@ -2,119 +2,114 @@ use crate::features::workspaces::adapters::event_parser::parse_event;
 use crate::features::workspaces::domain::{MonitorName, WorkspaceId, WorkspaceName};
 use crate::shared::events::core::{WindowAddress, WindowManagerEvent, WindowTitle};
 
+/// Checks that `line` parses into `expected`.
+pub(super) fn assert_parses(line: &str, expected: WindowManagerEvent) {
+    assert_eq!(parse_event(line), Some(expected), "{line}");
+}
+
 #[test]
 fn test_parse_event() {
     // workspacev2
-    let event = parse_event("workspacev2>>1,test_ws").unwrap();
-    assert_eq!(
-        event,
+    assert_parses(
+        "workspacev2>>1,test_ws",
         WindowManagerEvent::WorkspaceActivated {
             id: WorkspaceId::new(1),
             name: WorkspaceName::new("test_ws"),
-        }
+        },
     );
 
     // focusedmonv2
-    let event = parse_event("focusedmonv2>>DP-1,2").unwrap();
-    assert_eq!(
-        event,
+    assert_parses(
+        "focusedmonv2>>DP-1,2",
         WindowManagerEvent::MonitorFocused {
             monitor_name: MonitorName::new("DP-1"),
             workspace_id: WorkspaceId::new(2),
-        }
+        },
     );
 
     // createworkspacev2
-    let event = parse_event("createworkspacev2>>3,new_ws").unwrap();
-    assert_eq!(
-        event,
+    assert_parses(
+        "createworkspacev2>>3,new_ws",
         WindowManagerEvent::WorkspaceCreated {
             id: WorkspaceId::new(3),
             name: WorkspaceName::new("new_ws"),
-        }
+        },
     );
+}
 
+#[test]
+fn test_parse_event_destroyed_moved_and_renamed_workspaces() {
     // destroyworkspacev2
-    let event = parse_event("destroyworkspacev2>>4,old_ws").unwrap();
-    assert_eq!(
-        event,
+    assert_parses(
+        "destroyworkspacev2>>4,old_ws",
         WindowManagerEvent::WorkspaceDestroyed {
             id: WorkspaceId::new(4),
             name: WorkspaceName::new("old_ws"),
-        }
+        },
     );
 
     // moveworkspacev2
-    let event = parse_event("moveworkspacev2>>5,moved_ws,HDMI-1").unwrap();
-    assert_eq!(
-        event,
+    assert_parses(
+        "moveworkspacev2>>5,moved_ws,HDMI-1",
         WindowManagerEvent::WorkspaceMoved {
             id: WorkspaceId::new(5),
             name: WorkspaceName::new("moved_ws"),
             monitor_name: MonitorName::new("HDMI-1"),
-        }
+        },
     );
 
     // renameworkspace
-    let event = parse_event("renameworkspace>>6,renamed_ws").unwrap();
-    assert_eq!(
-        event,
+    assert_parses(
+        "renameworkspace>>6,renamed_ws",
         WindowManagerEvent::WorkspaceRenamed {
             id: WorkspaceId::new(6),
             new_name: WorkspaceName::new("renamed_ws"),
-        }
+        },
     );
+}
+
+#[test]
+fn test_parse_event_special_workspace() {
+    let special =
+        |id: Option<i32>, name: Option<&str>| WindowManagerEvent::SpecialWorkspaceActivated {
+            id: id.map(WorkspaceId::new),
+            name: name.map(WorkspaceName::new),
+            monitor_name: MonitorName::new("DP-2"),
+        };
 
     // activespecialv2
-    let event = parse_event("activespecialv2>>7,special,DP-2").unwrap();
-    assert_eq!(
-        event,
-        WindowManagerEvent::SpecialWorkspaceActivated {
-            id: Some(WorkspaceId::new(7)),
-            name: Some(WorkspaceName::new("special")),
-            monitor_name: MonitorName::new("DP-2"),
-        }
+    assert_parses(
+        "activespecialv2>>7,special,DP-2",
+        special(Some(7), Some("special")),
     );
 
     // activespecialv2 closed (0 ID)
-    let event = parse_event("activespecialv2>>0,,DP-2").unwrap();
-    assert_eq!(
-        event,
-        WindowManagerEvent::SpecialWorkspaceActivated {
-            id: None,
-            name: None,
-            monitor_name: MonitorName::new("DP-2"),
-        }
-    );
+    assert_parses("activespecialv2>>0,,DP-2", special(None, None));
 
     // activespecialv2 negative ID
-    let event = parse_event("activespecialv2>>-98,special:magic,DP-2").unwrap();
-    assert_eq!(
-        event,
-        WindowManagerEvent::SpecialWorkspaceActivated {
-            id: Some(WorkspaceId::new(-98)),
-            name: Some(WorkspaceName::new("special:magic")),
-            monitor_name: MonitorName::new("DP-2"),
-        }
+    assert_parses(
+        "activespecialv2>>-98,special:magic,DP-2",
+        special(Some(-98), Some("special:magic")),
     );
+}
 
+#[test]
+fn test_parse_event_windows_and_invalid_lines() {
     // activewindowv2
-    let event = parse_event("activewindowv2>>0x123").unwrap();
-    assert_eq!(
-        event,
+    assert_parses(
+        "activewindowv2>>0x123",
         WindowManagerEvent::ActiveWindowChanged {
             address: WindowAddress::new("0x123"),
-        }
+        },
     );
 
     // windowtitlev2
-    let event = parse_event("windowtitlev2>>0x456,Title").unwrap();
-    assert_eq!(
-        event,
+    assert_parses(
+        "windowtitlev2>>0x456,Title",
         WindowManagerEvent::WindowTitleChanged {
             address: WindowAddress::new("0x456"),
             title: WindowTitle::new("Title"),
-        }
+        },
     );
 
     // invalid
