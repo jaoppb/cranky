@@ -79,7 +79,8 @@ fn test_layout_keyed_children_reorder() {
 const MIXED_KEYS_WARNING: &str = "WARN cranky::features::layout_engine::adapters::taffy::diff::\
                                   children: container has a mix of keyed and unkeyed children, \
                                   or a duplicate key; falling back to positional layout \
-                                  reconciliation for this render path=NodePath { surface: Bar, indices: [] }";
+                                  reconciliation for this render \
+                                  path=NodePath { surface: Bar, indices: [] }";
 
 /// Lays `node` out with `adapter`, and returns the tree and what the pass logged.
 fn lay_out_logged(adapter: &mut TaffyLayoutAdapter, node: StyledNode) -> (RenderNode, String) {

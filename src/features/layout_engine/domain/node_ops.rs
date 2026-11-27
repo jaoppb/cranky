@@ -283,16 +283,17 @@ mod tests {
         assert_eq!(layouts[0].bounds().rect(), rect);
     }
 
-    /// An explicit CSS height pins the module's height to its slot's resolved height.
+    /// An explicit CSS height pins the module's height to its slot's resolved height, not to the
+    /// CSS value.
     #[test]
     fn test_collect_module_layouts_pins_an_explicit_height() {
-        let rect = Rect::new(Position::new(0, 0), Size::new(300, 40));
+        let rect = Rect::new(Position::new(0, 0), Size::new(300, 32));
         let mut style = ComputedStyle::default();
         style.set_height(crate::features::styling::domain::CssLength::Pixels(40.0));
         let root = flex(&[], vec![module_leaf(rect, style)], None);
 
         let layouts = root.collect_module_layouts();
-        assert_eq!(layouts[0].bounds().constraint().height(), Some(40));
+        assert_eq!(layouts[0].bounds().constraint().height(), Some(32));
     }
 
     #[test]

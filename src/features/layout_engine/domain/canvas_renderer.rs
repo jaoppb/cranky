@@ -253,9 +253,10 @@ mod tests {
             origin_box,
             styled(|style| style.set_background(solid(1, 1, 1))),
         );
-        if let RenderNode::Flex { children, .. } = &mut parent {
-            children.push(text_node(styled(|style| style.set_color(solid(0, 0, 0)))));
-        }
+        let RenderNode::Flex { children, .. } = &mut parent else {
+            panic!("flex_node builds a flex container");
+        };
+        children.push(text_node(styled(|style| style.set_color(solid(0, 0, 0)))));
         parent
     }
 
