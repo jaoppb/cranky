@@ -187,3 +187,158 @@ pub(super) async fn fetch_systray_item(conn: &Connection, address: SystrayAddres
 
     SystrayItem::new(cmd)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_menu_path, parse_status, parse_window_id, resolve_all_icons};
+    use crate::features::systray::adapters::tests::fixtures::{TempIconDir, first_pixel};
+    use crate::features::systray::domain::{IconImage, IconName, SystrayIcon, SystrayStatus};
+    use std::collections::HashMap;
+    use zbus::{ObjectPath as ZObjectPath, OwnedVariant, Variant};
+
+    /// The properties an item reported, from `(name, value)` pairs.
+    fn props<'a>(
+        pairs: impl IntoIterator<Item = (&'a str, Variant<'a>)>,
+    ) -> HashMap<String, OwnedVariant> {
+        pairs
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value.try_into().unwrap()))
+            .collect()
+    }
+
+    #[test]
+    fn test_parse_status_maps_the_sni_names() {
+        let parsed = ["Active", "Passive", "NeedsAttention", "active", ""].map(parse_status);
+        assert_eq!(
+            parsed,
+            [
+                SystrayStatus::Active,
+                SystrayStatus::Passive,
+                SystrayStatus::NeedsAttention,
+                SystrayStatus::Unknown,
+                SystrayStatus::Unknown,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_window_id_reads_a_u32_and_takes_the_property() {
+        let mut all_props = props([("WindowId", Variant::from(7_u32))]);
+        assert_eq!(parse_window_id(&mut all_props), Some(7));
+        assert!(all_props.is_empty());
+        assert_eq!(parse_window_id(&mut all_props), None);
+    }
+
+    #[test]
+    fn test_parse_window_id_drops_an_i32() {
+        // The first attempt already took the property, so the i32 fallback never sees it.
+        let mut all_props = props([("WindowId", Variant::from(7_i32))]);
+        assert_eq!(parse_window_id(&mut all_props), None);
+        assert!(all_props.is_empty());
+    }
+
+    #[test]
+    fn test_parse_menu_path_reads_a_string_and_takes_the_property() {
+        let mut all_props = props([("Menu", Variant::from("/menu"))]);
+        assert_eq!(parse_menu_path(&mut all_props), Some("/menu".to_string()));
+        assert!(all_props.is_empty());
+    }
+
+    #[test]
+    fn test_parse_menu_path_of_an_object_path() {
+        let path = ZObjectPath::try_from("/menu").unwrap();
+        let mut all_props = props([("Menu", Variant::from(path))]);
+        let parsed = parse_menu_path(&mut all_props);
+        assert!(all_props.is_empty());
+        assert_eq!(parsed, OBJECT_PATH_MENU);
+    }
+
+    /// What an object-path `Menu` parses to: the string conversion is tried first.
+    const OBJECT_PATH_MENU: Option<String> = None;
+
+    fn image(icon: Option<&SystrayIcon>) -> Option<&IconImage> {
+        icon.and_then(SystrayIcon::image)
+    }
+
+    #[test]
+    fn test_resolve_all_icons_reads_each_pixmap_for_its_own_icon() {
+        crate::test_utils::block_on(async {
+            let mut all_props = props([
+                (
+                    "IconPixmap",
+                    Variant::from(vec![(1, 1, vec![255_u8, 1, 1, 1])]),
+                ),
+                (
+                    "AttentionIconPixmap",
+                    Variant::from(vec![(1, 1, vec![255_u8, 2, 2, 2])]),
+                ),
+                (
+                    "OverlayIconPixmap",
+                    Variant::from(vec![(1, 1, vec![255_u8, 3, 3, 3])]),
+                ),
+            ]);
+            let (icon, attention, overlay) = resolve_all_icons(&mut all_props, None, None).await;
+            let data =
+                [&icon, &attention, &overlay].map(|icon| image(icon.as_ref()).map(IconImage::data));
+            assert_eq!(
+                data,
+                [
+                    Some(&[1, 1, 1, 255][..]),
+                    Some(&[2, 2, 2, 255][..]),
+                    Some(&[3, 3, 3, 255][..])
+                ]
+            );
+            assert!(all_props.is_empty());
+        });
+    }
+
+    #[test]
+    fn test_resolve_all_icons_looks_each_name_up_in_its_theme_path() {
+        crate::test_utils::block_on(async {
+            let main = TempIconDir::new("fetch-main-theme");
+            let attention_dir = TempIconDir::new("fetch-attention-theme");
+            main.svg("cranky-fetch-main", "#ff0000");
+            main.svg("cranky-fetch-overlay", "#0000ff");
+            attention_dir.svg("cranky-fetch-attention", "#00ff00");
+            let attention_theme = attention_dir.theme_path();
+            let mut all_props = props([
+                ("AttentionIconName", Variant::from("cranky-fetch-attention")),
+                (
+                    "AttentionIconThemePath",
+                    Variant::from(attention_theme.as_str()),
+                ),
+                ("OverlayIconName", Variant::from("cranky-fetch-overlay")),
+            ]);
+            let (icon, attention, overlay) = resolve_all_icons(
+                &mut all_props,
+                Some("cranky-fetch-main".to_string()),
+                Some(main.theme_path()),
+            )
+            .await;
+            let names = [&icon, &attention, &overlay].map(|icon| {
+                icon.as_ref()
+                    .and_then(SystrayIcon::name)
+                    .map(IconName::as_str)
+            });
+            assert_eq!(
+                names,
+                [
+                    Some("cranky-fetch-main"),
+                    Some("cranky-fetch-attention"),
+                    Some("cranky-fetch-overlay")
+                ]
+            );
+            let pixels =
+                [&icon, &attention, &overlay].map(|icon| image(icon.as_ref()).map(first_pixel));
+            assert_eq!(
+                pixels,
+                [
+                    Some(&[255, 0, 0, 255][..]),
+                    Some(&[0, 255, 0, 255][..]),
+                    Some(&[0, 0, 255, 255][..])
+                ]
+            );
+            assert!(all_props.is_empty());
+        });
+    }
+}
