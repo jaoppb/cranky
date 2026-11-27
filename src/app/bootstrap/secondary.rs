@@ -143,8 +143,9 @@ mod tests {
         });
     }
 
+    // Change detector: the supervisor records no start order, so this pins the list itself.
     #[test]
-    fn test_boot_supervises_mpris_metrics_hyprland_and_time_in_that_order() {
+    fn test_supervised_at_boot_lists_mpris_metrics_hyprland_time_in_order() {
         assert_eq!(
             SUPERVISED_AT_BOOT,
             [
