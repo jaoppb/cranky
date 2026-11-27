@@ -191,96 +191,76 @@ mod tests {
     use crate::shared::primitives::{TextAlign, TextAlignment};
     use crate::shared::rendering::ports::canvas::{CanvasCall, RecordingCanvas};
 
+    /// What painting `node` on a fresh canvas asked of it.
+    fn painted(node: &RenderNode) -> RecordingCanvas {
+        let mut canvas = RecordingCanvas::default();
+        node.render_to_canvas(&mut canvas);
+        canvas
+    }
+
+    /// A childless flex container laid out in `rect`.
+    fn flex_node(rect: Rect, style: ComputedStyle) -> RenderNode {
+        RenderNode::Flex {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            rect,
+            children: vec![],
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    /// An image of `pixel_size` pixels, `data` holding them, laid out in `rect`.
+    fn image_node(rect: Rect, data: Vec<u8>, pixel_size: Size) -> RenderNode {
+        RenderNode::Image {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            rect,
+            data: BinaryData::new(data),
+            pixel_size,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    /// The default style changed by `change`.
+    fn styled(change: impl FnOnce(&mut ComputedStyle)) -> ComputedStyle {
+        let mut style = ComputedStyle::default();
+        change(&mut style);
+        style
+    }
+
     #[test]
     fn test_render_to_canvas() {
-        let mut canvas = RecordingCanvas::default();
-
-        let mut rect_style = ComputedStyle::default();
-        rect_style.set_background(DrawingColor::Solid(Color::rgb(255, 255, 255)));
-        let rect = RenderNode::Rect {
-            path: NodePath::root_in(SurfaceSpace::Bar),
-            node_key: None,
-            rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
-            style: rect_style,
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-
-        rect.render_to_canvas(&mut canvas);
-        assert_eq!(canvas.kinds(), ["rect"]);
-
-        let mut canvas = RecordingCanvas::default();
-        let mut flex_style = ComputedStyle::default();
-        flex_style.set_background(DrawingColor::Solid(Color::rgb(0, 0, 0)));
-        let flex = RenderNode::Flex {
-            path: NodePath::root_in(SurfaceSpace::Bar),
-            node_key: None,
-            rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
-            children: vec![],
-            style: flex_style,
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-        flex.render_to_canvas(&mut canvas);
-        assert_eq!(canvas.kinds(), ["rect"]);
-
-        let mut canvas = RecordingCanvas::default();
-        let mut text_style = ComputedStyle::default();
-        text_style.set_color(DrawingColor::Solid(Color::rgb(0, 0, 0)));
-        let text = RenderNode::Text {
-            path: NodePath::root_in(SurfaceSpace::Bar),
-            node_key: None,
-            rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
-            text: TextContent::new("test".to_string()),
-            style: text_style,
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-        text.render_to_canvas(&mut canvas);
-        assert_eq!(canvas.kinds(), ["text"]);
-
-        let mut canvas = RecordingCanvas::default();
-        let mut prog_style = ComputedStyle::default();
-        prog_style.set_background(DrawingColor::Solid(Color::rgb(0, 0, 0)));
-        prog_style.set_accent_color(DrawingColor::Solid(Color::rgb(255, 0, 0)));
-        let progress = RenderNode::Progress {
-            path: NodePath::root_in(SurfaceSpace::Bar),
-            node_key: None,
-            rect: Rect::new(Position::new(0, 0), Size::new(100, 10)),
-            value: ProgressValue::new(0.5).unwrap(),
-            orientation: Orientation::Horizontal,
-            style: prog_style,
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-        progress.render_to_canvas(&mut canvas);
-        assert_eq!(canvas.kinds(), ["rect", "rect"]);
-
-        let mut canvas = RecordingCanvas::default();
-        let image = RenderNode::Image {
-            path: NodePath::root_in(SurfaceSpace::Bar),
-            node_key: None,
-            rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
-            data: BinaryData::new(vec![0, 0, 0, 0]),
-            pixel_size: Size::new(1, 1),
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-        image.render_to_canvas(&mut canvas);
-        assert_eq!(canvas.kinds(), ["image"]);
+        let origin_box = Rect::new(Position::new(0, 0), Size::new(10, 10));
+        let progress = styled(|style| {
+            style.set_background(solid(0, 0, 0));
+            style.set_accent_color(solid(255, 0, 0));
+        });
+        let white = styled(|style| style.set_background(solid(255, 255, 255)));
+        let black = styled(|style| style.set_background(solid(0, 0, 0)));
+        let dark_text = styled(|style| style.set_color(solid(0, 0, 0)));
+        let cases: [(RenderNode, &[&str]); 5] = [
+            (rect_node(white), &["rect"]),
+            (flex_node(origin_box, black), &["rect"]),
+            (text_node(dark_text), &["text"]),
+            (
+                progress_node(0.5, Orientation::Horizontal, progress),
+                &["rect", "rect"],
+            ),
+            (
+                image_node(origin_box, vec![0; 4], Size::new(1, 1)),
+                &["image"],
+            ),
+        ];
+        for (node, kinds) in cases {
+            assert_eq!(painted(&node).kinds(), kinds);
+        }
     }
 
     fn text_node(style: ComputedStyle) -> RenderNode {
@@ -386,22 +366,9 @@ mod tests {
         style.set_border_color(solid(40, 50, 60));
         style.set_border_radius(BorderRadius::new(4.0));
         style.set_border_size(BorderSize::new(2.0));
-        let node = RenderNode::Flex {
-            path: NodePath::root_in(SurfaceSpace::Bar),
-            node_key: None,
-            rect: Rect::new(Position::new(3, 5), Size::new(40, 20)),
-            children: vec![],
-            style,
-            on_click: None,
-            on_hover: None,
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-        let mut canvas = RecordingCanvas::default();
-        node.render_to_canvas(&mut canvas);
+        let node = flex_node(Rect::new(Position::new(3, 5), Size::new(40, 20)), style);
         assert_eq!(
-            canvas.calls,
+            painted(&node).calls,
             [
                 CanvasCall::Rect {
                     area: [3.0, 5.0, 40.0, 20.0],
@@ -487,9 +454,12 @@ mod tests {
                 alignment: TextAlignment::new(TextAlign::Left, 30),
             }]
         );
+    }
 
-        let mut canvas = RecordingCanvas::default();
-        text_node(ComputedStyle::default()).render_to_canvas(&mut canvas);
+    /// Text with no font or color of its own is drawn white in the default font.
+    #[test]
+    fn test_text_without_a_style_is_white_in_the_default_font() {
+        let canvas = painted(&text_node(ComputedStyle::default()));
         let [
             CanvasCall::Text {
                 font_family,
@@ -507,20 +477,10 @@ mod tests {
 
     #[test]
     fn test_image_is_drawn_at_its_rect_from_its_pixels() {
-        let image = RenderNode::Image {
-            path: NodePath::root_in(SurfaceSpace::Bar),
-            node_key: None,
-            rect: Rect::new(Position::new(6, 8), Size::new(30, 20)),
-            data: BinaryData::new(vec![0; 24]),
-            pixel_size: Size::new(3, 2),
-            tooltip: None,
-            popup: None,
-            panel: None,
-        };
-        let mut canvas = RecordingCanvas::default();
-        image.render_to_canvas(&mut canvas);
+        let rect = Rect::new(Position::new(6, 8), Size::new(30, 20));
+        let image = image_node(rect, vec![0; 24], Size::new(3, 2));
         assert_eq!(
-            canvas.calls,
+            painted(&image).calls,
             [CanvasCall::Image {
                 pixel_size: Size::new(3, 2),
                 logical_size: Size::new(30, 20),

@@ -153,6 +153,8 @@ mod tests {
     use crate::features::styling::domain::ComputedStyle;
     use crate::features::vdom::domain::{SurfaceSpace, TextContent};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
+    use crate::shared::primitives::{DynamicValue, ModuleOptions};
+    use std::collections::HashMap;
 
     fn leaf(path: &[usize], tooltip: Option<StyledNode>) -> RenderNode {
         RenderNode::Rect {
@@ -326,11 +328,8 @@ mod tests {
     #[test]
     fn test_collect_module_layouts_carries_key_options_and_surface() {
         let rect = Rect::new(Position::new(7, 11), Size::new(90, 30));
-        let options =
-            crate::shared::primitives::ModuleOptions::new(std::collections::HashMap::from([(
-                "format".to_string(),
-                crate::shared::primitives::DynamicValue::String("%H".to_string()),
-            )]));
+        let hour = || DynamicValue::String("%H".to_string());
+        let options = ModuleOptions::new(HashMap::from([("format".to_string(), hour())]));
         let mut node = module_leaf(rect, ComputedStyle::default());
         let RenderNode::Module {
             key,
@@ -347,15 +346,11 @@ mod tests {
         let root = flex(&[], vec![node], None);
 
         let layouts = root.collect_module_layouts();
-        assert_eq!(layouts.len(), 1);
-        assert_eq!(layouts[0].key(), &key);
-        assert_eq!(layouts[0].bounds().rect(), rect);
-        assert_eq!(
-            layouts[0].options().get("format"),
-            Some(&crate::shared::primitives::DynamicValue::String(
-                "%H".to_string()
-            ))
-        );
-        assert_eq!(layouts[0].surface(), LayoutSurface::Popup);
+        let [layout] = layouts.as_slice() else {
+            panic!("expected one module layout, got {layouts:?}");
+        };
+        assert_eq!((layout.key(), layout.bounds().rect()), (&key, rect));
+        assert_eq!(layout.options().get("format"), Some(&hour()));
+        assert_eq!(layout.surface(), LayoutSurface::Popup);
     }
 }
