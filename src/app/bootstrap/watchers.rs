@@ -99,6 +99,36 @@ mod tests {
         );
     }
 
+    /// Builtin sheets that cannot be deployed, because a regular file stands where their
+    /// directory goes, are logged as an error under the `cranky::app::bootstrap` target, and the
+    /// style directories are still watched.
+    #[test]
+    fn test_a_failed_style_deploy_is_logged_under_the_bootstrap_target() {
+        let home = crate::test_utils::TestHome::new("bootstrap-watchers");
+        let share = home.home().as_path().join(".local/share/cranky");
+        std::fs::create_dir_all(&share).unwrap();
+        std::fs::write(share.join("styles"), "not a directory").unwrap();
+        let (system_tx, _system_rx) = mpsc::channel(4);
+
+        let mut watcher = None;
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            watcher = watch_builtin_styles(&home.env(), system_tx);
+        });
+
+        let deploy_failures: Vec<&str> = logs
+            .lines()
+            .filter(|line| line.starts_with("ERROR"))
+            .collect();
+        assert_eq!(deploy_failures.len(), 1, "{logs}");
+        assert!(
+            deploy_failures[0].starts_with(
+                "ERROR cranky::app::bootstrap: Failed to deploy builtin styles: Style loader error: "
+            ),
+            "{logs}"
+        );
+        assert!(watcher.is_some());
+    }
+
     /// The watchers deploy the builtin sheets and turn an edited sheet into a style reload and an
     /// edited script into a module reload.
     #[test]

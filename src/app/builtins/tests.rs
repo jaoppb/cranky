@@ -652,6 +652,29 @@ fn test_watching_ignores_removals_and_creations() {
     assert_ne!(names, Vec::<String>::new());
 }
 
+/// A modified script is logged at debug level under the `cranky::app::builtins` target, then
+/// reloaded under its file stem.
+#[test]
+fn test_a_modified_script_is_logged_under_the_builtins_target() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    let sender = move |command: crate::app::commands::SystemCommand| {
+        let _ = tx.send(command);
+    };
+
+    let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+        reload_script(Path::new("/modules/clock.lua"), &sender);
+    });
+
+    assert_eq!(
+        logs,
+        "DEBUG cranky::app::builtins: Script modified: \"/modules/clock.lua\"\n"
+    );
+    assert_eq!(
+        rx.try_recv().unwrap(),
+        crate::app::commands::SystemCommand::ReloadModule("clock".into())
+    );
+}
+
 #[test]
 fn test_watching_starts_even_when_no_module_directory_exists() {
     let home = get_test_env();
