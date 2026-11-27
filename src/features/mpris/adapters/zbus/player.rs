@@ -4,8 +4,10 @@ use tokio_stream::StreamExt;
 use tracing::warn;
 
 use crate::features::mpris::domain::{MprisState, PlayerName, PlayerState};
-use crate::shared::dbus::domain::{BusObject, BusType, Destination, Interface, Path};
-use crate::shared::dbus::ports::DbusConnectionPort;
+use crate::shared::dbus::domain::{
+    BusObject, BusType, Destination, Interface, Path, PropertiesMap,
+};
+use crate::shared::dbus::ports::{DbusConnectionError, DbusConnectionPort};
 
 use super::props::update_state_from_props;
 
@@ -15,15 +17,8 @@ pub(super) async fn add_player(
     dest: Destination,
 ) {
     let object = BusObject::new(BusType::Session, dest, Path::new("/org/mpris/MediaPlayer2"));
-    let iface = Interface::new("org.mpris.MediaPlayer2.Player");
-
-    let props = match conn.get_all_properties(&object, &iface).await {
-        Ok(properties) => properties,
-        Err(error) => {
-            let dest = object.destination();
-            warn!("Failed to read MPRIS properties for {dest:?}: {error}");
-            return;
-        }
+    let Some(props) = read_player_properties(conn, &object).await else {
+        return;
     };
 
     let dest = object.destination().as_str();
@@ -34,6 +29,37 @@ pub(super) async fn add_player(
 
     spawn_property_listener(conn.clone(), mpris_tx.clone(), object);
 
+    publish_player(mpris_tx, &player_name, state);
+}
+
+/// Reads every property of `object`'s player interface, logging and giving up when the
+/// read fails.
+async fn read_player_properties(
+    conn: &Arc<dyn DbusConnectionPort>,
+    object: &BusObject,
+) -> Option<PropertiesMap> {
+    let iface = Interface::new("org.mpris.MediaPlayer2.Player");
+    match conn.get_all_properties(object, &iface).await {
+        Ok(properties) => Some(properties),
+        Err(error) => {
+            log_read_failed(object.destination(), &error);
+            None
+        }
+    }
+}
+
+/// Logs that the player at `dest` could not be read.
+fn log_read_failed(dest: &Destination, error: &DbusConnectionError) {
+    warn!("Failed to read MPRIS properties for {dest:?}: {error}");
+}
+
+/// Adds `state` under `player_name` to the published MPRIS state, making it the active
+/// player when none is, and publishes the result.
+fn publish_player(
+    mpris_tx: &watch::Sender<MprisState>,
+    player_name: &PlayerName,
+    state: PlayerState,
+) {
     let mut mpris_state = mpris_tx.borrow().clone();
     mpris_state
         .players
@@ -41,9 +67,13 @@ pub(super) async fn add_player(
     if mpris_state.active_player.is_none() {
         mpris_state.active_player = Some(player_name.clone());
     }
-    let name_str = player_name.as_str();
-    tracing::debug!("Found MPRIS player: {name_str}");
+    log_player_found(player_name.as_str());
     let _ = mpris_tx.send(mpris_state);
+}
+
+/// Logs that the player `name_str` was found.
+fn log_player_found(name_str: &str) {
+    tracing::debug!("Found MPRIS player: {name_str}");
 }
 
 fn spawn_property_listener(
