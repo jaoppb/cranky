@@ -1,8 +1,10 @@
-use super::super::reconciler::{ChildrenPatch, LayoutState, Patch};
+use super::super::reconciler::{ChildrenPatch, LayoutState, Patch, Update};
 use super::super::style_builder::node_to_style;
 use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
 use crate::features::vdom::domain::NodeKey;
 use std::collections::{HashMap, HashSet};
+use taffy::style::Style;
+use taffy::tree::NodeId;
 
 /// Whether every key in `keys` is present and unique. Vacuously true for an
 /// empty iterator, so callers must also check that at least one child was
@@ -57,13 +59,7 @@ fn diff_children_keyed<'a>(
     new_children: &'a [StyledNode],
     measurer: &mut dyn TextMeasurer,
 ) -> ChildrenPatch<'a> {
-    let mut old_by_key: HashMap<&str, &'a LayoutState> = HashMap::with_capacity(old_children.len());
-    for old_child in old_children {
-        if let Some(key) = old_child.layout.node_key() {
-            old_by_key.insert(key.as_str(), old_child);
-        }
-    }
-
+    let old_by_key = index_by_key(old_children);
     let mut matched_keys: HashSet<&str> = HashSet::with_capacity(new_children.len());
     let mut patches = Vec::with_capacity(new_children.len());
     for new_child in new_children {
@@ -84,8 +80,24 @@ fn diff_children_keyed<'a>(
             });
         }
     }
+    let removed = unmatched_nodes(old_children, &matched_keys);
+    ChildrenPatch { patches, removed }
+}
 
-    let removed = old_children
+/// The keyed children of `old_children`, by key.
+fn index_by_key(old_children: &[LayoutState]) -> HashMap<&str, &LayoutState> {
+    let mut old_by_key = HashMap::with_capacity(old_children.len());
+    for old_child in old_children {
+        if let Some(key) = old_child.layout.node_key() {
+            old_by_key.insert(key.as_str(), old_child);
+        }
+    }
+    old_by_key
+}
+
+/// The nodes of the `old_children` whose key no new child matched, or that had no key.
+fn unmatched_nodes(old_children: &[LayoutState], matched_keys: &HashSet<&str>) -> Vec<NodeId> {
+    old_children
         .iter()
         .filter(|old_child| {
             old_child
@@ -94,9 +106,7 @@ fn diff_children_keyed<'a>(
                 .is_none_or(|key| !matched_keys.contains(key.as_str()))
         })
         .map(|old_child| old_child.root_node)
-        .collect();
-
-    ChildrenPatch { patches, removed }
+        .collect()
 }
 
 pub(super) fn diff_container<'a>(
@@ -105,49 +115,64 @@ pub(super) fn diff_container<'a>(
     measurer: &mut dyn TextMeasurer,
 ) -> Patch<'a> {
     let new_children = new_layout.children();
-    let style = if old_state.layout.style() == new_layout.style() {
-        None
-    } else {
-        Some(node_to_style(new_layout, measurer))
-    };
-
+    let style = changed_style(old_state, new_layout, measurer);
     let old_children = old_state.children.as_slice();
-    let any_keyed = old_children
-        .iter()
-        .any(|old_child| old_child.layout.node_key().is_some())
-        || new_children
-            .iter()
-            .any(|new_child| new_child.node_key().is_some());
-    let keyed = any_keyed
-        && fully_keyed(
-            old_children
-                .iter()
-                .map(|old_child| old_child.layout.node_key().map(NodeKey::as_str)),
-        )
-        && fully_keyed(
-            new_children
-                .iter()
-                .map(|new_child| new_child.node_key().map(NodeKey::as_str)),
-        );
-
-    if any_keyed && !keyed {
-        tracing::warn!(
-            path = ?new_layout.path(),
-            "container has a mix of keyed and unkeyed children, or a duplicate key; \
-             falling back to positional layout reconciliation for this render"
-        );
-    }
-
+    let keyed = reconciles_by_key(old_children, new_layout);
     let children = if keyed {
         diff_children_keyed(old_children, new_children, measurer)
     } else {
         diff_children_positional(old_children, new_children, measurer)
     };
 
-    Patch::Update {
+    Patch::Update(Update {
         old_state,
         new_layout,
         style: Box::new(style),
         children: Some(children),
+    })
+}
+
+/// The new taffy style of `new_layout`, or `None` when its computed style did not change.
+fn changed_style(
+    old_state: &LayoutState,
+    new_layout: &StyledNode,
+    measurer: &mut dyn TextMeasurer,
+) -> Option<Style> {
+    if old_state.layout.style() == new_layout.style() {
+        None
+    } else {
+        Some(node_to_style(new_layout, measurer))
     }
+}
+
+/// Whether `new_layout`'s children are matched to `old_children` by key: when some child on
+/// either side is keyed and every child on both sides has a unique key. Some keys but not that
+/// is logged, and falls back to matching by position.
+fn reconciles_by_key(old_children: &[LayoutState], new_layout: &StyledNode) -> bool {
+    let new_children = new_layout.children();
+    let old_keys = || {
+        old_children
+            .iter()
+            .map(|old_child| old_child.layout.node_key().map(NodeKey::as_str))
+    };
+    let new_keys = || {
+        new_children
+            .iter()
+            .map(|new_child| new_child.node_key().map(NodeKey::as_str))
+    };
+    let any_keyed = old_keys().any(|key| key.is_some()) || new_keys().any(|key| key.is_some());
+    let keyed = any_keyed && fully_keyed(old_keys()) && fully_keyed(new_keys());
+    if any_keyed && !keyed {
+        log_mixed_keys(new_layout);
+    }
+    keyed
+}
+
+/// Logs that `new_layout`'s children mix keyed and unkeyed ones, or repeat a key.
+fn log_mixed_keys(new_layout: &StyledNode) {
+    tracing::warn!(
+        path = ?new_layout.path(),
+        "container has a mix of keyed and unkeyed children, or a duplicate key; \
+         falling back to positional layout reconciliation for this render"
+    );
 }
