@@ -174,7 +174,7 @@ fn rasterize_svg(path: &Path, target: u32) -> Option<(u32, u32, Vec<u8>)> {
     let svg_data = std::fs::read(path).ok()?;
     let tree = usvg::Tree::from_data(&svg_data, &usvg::Options::default()).ok()?;
     let pixmap = render_fitted(&tree, target)?;
-    Some((target, target, unpremultiplied_rgba(pixmap.data(), target)))
+    Some((target, target, unpremultiplied_rgba(pixmap.data())))
 }
 
 /// Renders `tree` scaled to fit a `target`-pixel square, centred in it.
@@ -196,11 +196,9 @@ fn render_fitted(tree: &usvg::Tree, target: u32) -> Option<tiny_skia::Pixmap> {
     Some(pixmap)
 }
 
-/// The premultiplied RGBA `data` of a `target`-pixel square, as straight RGBA.
-fn unpremultiplied_rgba(data: &[u8], target: u32) -> Vec<u8> {
-    let target_usize = usize::try_from(target).unwrap_or_default();
-    let cap = target_usize.saturating_mul(target_usize).saturating_mul(4);
-    let mut colors = Vec::with_capacity(cap);
+/// The premultiplied RGBA `data` as straight RGBA.
+fn unpremultiplied_rgba(data: &[u8]) -> Vec<u8> {
+    let mut colors = Vec::with_capacity(data.len());
     for &[
         premultiplied_red,
         premultiplied_green,
