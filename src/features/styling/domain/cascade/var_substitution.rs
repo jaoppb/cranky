@@ -28,6 +28,24 @@ pub(crate) fn substitute_vars<S: BuildHasher>(
     substitute_vars_inner(value, custom_properties, 0)
 }
 
+/// One `var(` occurrence, scanned from the text that starts with it.
+enum Occurrence<'text> {
+    /// A complete `var(...)`: what sits between its parentheses, and the text after its `)`.
+    Reference {
+        /// The name and optional fallback, `--name, fallback`, untrimmed.
+        inner: &'text str,
+        /// The text after the closing `)`, still to scan.
+        remainder: &'text str,
+    },
+    /// A `var(` with no matching `)`: the text from it to the end, kept verbatim.
+    Unbalanced(&'text str),
+    /// A boundary that would not slice, which `find` never produces: the scan stops there.
+    Unsliceable,
+}
+
+/// `substitute_vars` at nesting `depth`: past `MAX_SUBSTITUTION_DEPTH` the value is kept
+/// verbatim, otherwise every `var()` in it is replaced by its resolved value, or by nothing
+/// when neither the property nor a fallback exists.
 fn substitute_vars_inner<S: BuildHasher>(
     value: &str,
     custom_properties: &HashMap<String, String, S>,
@@ -43,45 +61,61 @@ fn substitute_vars_inner<S: BuildHasher>(
             break;
         };
         result.push_str(before);
-        let Some(after) = rest.get(start.saturating_add(4)..) else {
-            break;
-        };
-        let Some(end) = matching_close_paren(after) else {
-            // Unbalanced parens: nothing sane to do, keep the rest verbatim.
-            if let Some(tail) = rest.get(start..) {
-                result.push_str(tail);
+        match scan_occurrence(rest, start) {
+            Occurrence::Reference { inner, remainder } => {
+                let resolved = resolve_reference(inner, custom_properties, depth);
+                result.push_str(&resolved.unwrap_or_default());
+                rest = remainder;
             }
-            return result;
-        };
-        let Some(inner) = after.get(..end) else {
-            break;
-        };
-        let (name, fallback) = inner.split_once(',').map_or_else(
-            || (inner.trim(), None),
-            |(var_name, fallback_value)| (var_name.trim(), Some(fallback_value.trim())),
-        );
-
-        let resolved = custom_properties
-            .get(name)
-            .map(|property_value| {
-                substitute_vars_inner(property_value, custom_properties, depth.saturating_add(1))
-            })
-            .or_else(|| {
-                fallback.map(|fallback_value| {
-                    substitute_vars_inner(
-                        fallback_value,
-                        custom_properties,
-                        depth.saturating_add(1),
-                    )
-                })
-            });
-        if let Some(resolved) = resolved {
-            result.push_str(&resolved);
+            Occurrence::Unbalanced(tail) => {
+                result.push_str(tail);
+                return result;
+            }
+            Occurrence::Unsliceable => break,
         }
-        rest = after.get(end.saturating_add(1)..).unwrap_or("");
     }
     result.push_str(rest);
     result
+}
+
+/// Splits the `var(` that starts at `start` in `rest` into its contents and what follows it.
+fn scan_occurrence(rest: &str, start: usize) -> Occurrence<'_> {
+    let Some(after) = rest.get(start.saturating_add(4)..) else {
+        return Occurrence::Unsliceable;
+    };
+    let Some(end) = matching_close_paren(after) else {
+        // Unbalanced parens: nothing sane to do, keep the rest verbatim.
+        return Occurrence::Unbalanced(rest.get(start..).unwrap_or(""));
+    };
+    let Some(inner) = after.get(..end) else {
+        return Occurrence::Unsliceable;
+    };
+    Occurrence::Reference {
+        inner,
+        remainder: after.get(end.saturating_add(1)..).unwrap_or(""),
+    }
+}
+
+/// The value of the `var()` whose contents are `inner`: the named custom property, else the
+/// fallback, each with its own `var()` references substituted one level deeper.
+fn resolve_reference<S: BuildHasher>(
+    inner: &str,
+    custom_properties: &HashMap<String, String, S>,
+    depth: u8,
+) -> Option<String> {
+    let (name, fallback) = inner.split_once(',').map_or_else(
+        || (inner.trim(), None),
+        |(var_name, fallback_value)| (var_name.trim(), Some(fallback_value.trim())),
+    );
+    let deeper = depth.saturating_add(1);
+    custom_properties
+        .get(name)
+        .map(|property_value| substitute_vars_inner(property_value, custom_properties, deeper))
+        .or_else(|| {
+            fallback.map(|fallback_value| {
+                substitute_vars_inner(fallback_value, custom_properties, deeper)
+            })
+        })
 }
 
 /// Index of the `)` matching the implicit `(` already consumed before
