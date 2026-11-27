@@ -72,3 +72,54 @@ impl DisplayCommandSender for std::sync::mpsc::Sender<DisplayCommand> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::module_runtime::test_support::capture_logs;
+
+    const TARGET: &str = "cranky::features::layout_engine::domain::commands";
+
+    fn hide_tooltip() -> DisplayCommand {
+        DisplayCommand::HideFloatingSurface {
+            kind: FloatingKind::Tooltip,
+        }
+    }
+
+    /// A closure is handed every command.
+    #[test]
+    fn a_closure_receives_the_command() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let forward = move |cmd| sender.send(cmd).unwrap();
+        forward.send_display_command(hide_tooltip());
+        assert_eq!(receiver.try_recv(), Ok(hide_tooltip()));
+    }
+
+    /// A tokio channel delivers the command; one that is full drops it and logs why.
+    #[test]
+    fn a_tokio_channel_delivers_and_logs_a_full_channel() {
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+        let logs = capture_logs(|| {
+            sender.send_display_command(hide_tooltip());
+            sender.send_display_command(hide_tooltip());
+        });
+        assert_eq!(receiver.try_recv(), Ok(hide_tooltip()));
+        assert!(receiver.try_recv().is_err());
+        assert!(logs.contains(&format!(
+            "ERROR {TARGET}: failed to send display command via tokio channel error=\"Full(..)\""
+        )));
+    }
+
+    /// A std channel delivers the command; one whose receiver is gone drops it and logs why.
+    #[test]
+    fn a_std_channel_delivers_and_logs_a_closed_channel() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        sender.send_display_command(hide_tooltip());
+        assert_eq!(receiver.try_recv(), Ok(hide_tooltip()));
+        drop(receiver);
+        let logs = capture_logs(|| sender.send_display_command(hide_tooltip()));
+        assert!(logs.contains(&format!(
+            "ERROR {TARGET}: failed to send display command via std channel error=SendError {{ .. }}"
+        )));
+    }
+}

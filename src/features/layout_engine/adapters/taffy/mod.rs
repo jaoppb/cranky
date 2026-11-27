@@ -85,6 +85,11 @@ impl LayoutEnginePort for TaffyLayoutAdapter {
 
 #[cfg(test)]
 mod tests {
+    mod calc;
+    mod key_changes;
+    mod sizing;
+    mod style;
+
     use super::*;
     use crate::features::layout_engine::domain::{
         NodePath, StyledNode, SurfaceSpace, TextContent, TextMeasurer,
@@ -660,9 +665,16 @@ mod tests {
         assert_eq!(texts, vec!["c-content", "a-content", "b-content"]);
     }
 
+    /// The warning a container whose children mix keyed and unkeyed ones, or repeat a key,
+    /// logs.
+    const MIXED_KEYS_WARNING: &str = "WARN cranky::features::layout_engine::adapters::taffy::diff::\
+                                      children: container has a mix of keyed and unkeyed \
+                                      children, or a duplicate key; falling back to positional \
+                                      layout reconciliation for this render path=";
+
     /// A list where only some children carry a key (or where a key repeats)
     /// has no well-defined keyed match, so it must fall back to positional
-    /// reconciliation rather than panicking or mismatching identities.
+    /// reconciliation rather than panicking or mismatching identities, and say so.
     #[test]
     fn test_layout_mixed_keys_falls_back_to_positional_without_panicking() {
         let mut adapter = TaffyLayoutAdapter::new();
@@ -677,14 +689,20 @@ mod tests {
             .unwrap();
 
         let mixed_second = keyed_container(vec![text_child(0, "still-unkeyed")]);
-        let render_tree = adapter
-            .calculate_layout(unpinned(mixed_second), &mut measurer)
-            .unwrap();
+        let mut render_tree = None;
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            render_tree = Some(
+                adapter
+                    .calculate_layout(unpinned(mixed_second), &mut measurer)
+                    .unwrap(),
+            );
+        });
 
-        let RenderNode::Flex { children, .. } = render_tree else {
+        let Some(RenderNode::Flex { children, .. }) = render_tree else {
             panic!("Expected RenderNode::Flex");
         };
         assert_eq!(children.len(), 1);
+        assert!(logs.contains(MIXED_KEYS_WARNING), "{logs}");
 
         // Duplicate keys: same guard, exercised independently of the mixed
         // case above.
@@ -696,9 +714,12 @@ mod tests {
             .calculate_layout(unpinned(dup_first), &mut measurer)
             .unwrap();
         let dup_second = keyed_container(vec![keyed_text_child(0, "dup", "one")]);
-        adapter
-            .calculate_layout(unpinned(dup_second), &mut measurer)
-            .unwrap();
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            adapter
+                .calculate_layout(unpinned(dup_second), &mut measurer)
+                .unwrap();
+        });
+        assert!(logs.contains(MIXED_KEYS_WARNING), "{logs}");
     }
 
     #[test]
