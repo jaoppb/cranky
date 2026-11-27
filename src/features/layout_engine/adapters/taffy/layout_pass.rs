@@ -2,10 +2,12 @@ use super::TaffyLayoutAdapter;
 use super::calc_resolve::resolve_pending_calcs;
 use super::diff::diff;
 use super::leaf_size::size_to_dimension;
-use super::reconciler::{apply_patch, build_layout_state};
+use super::reconciler::{LayoutState, apply_patch, build_layout_state};
 use super::render_tree_builder::{TaffyNode, build_render_tree};
 use super::tree_builder::TaffyTreeBuilder;
-use crate::features::layout_engine::domain::{LayoutError, LayoutRoot, RenderNode, TextMeasurer};
+use crate::features::layout_engine::domain::{
+    LayoutError, LayoutRoot, RenderNode, StyledNode, TextMeasurer,
+};
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::Size;
 use crate::utils::f32_to_u32;
@@ -50,83 +52,106 @@ impl TaffyLayoutAdapter {
     ) -> Result<RenderNode, LayoutError> {
         let node = root.node();
         let constraint = root.constraint();
-        let mut builder = TaffyTreeBuilder::new(&mut self.taffy);
-        let new_state = if let Some(state) = &self.state {
-            let patch = diff(state, node, measurer);
-            apply_patch(&mut builder, patch, measurer)?
-        } else {
-            build_layout_state(&mut builder, node, measurer)?
-        };
-
+        let new_state = self.reconcile(node, measurer)?;
         let root_node_id = new_state.root_node;
-
         let available_space = taffy::geometry::Size {
             width: axis_available_space(constraint.width()),
             height: axis_available_space(constraint.height()),
         };
-
-        // A pinned root is laid out twice: unpinned first, whose size is
-        // what an embedder may measure it by, then pinned to the host box.
-        self.intrinsic = None;
-        let unpinned_root = if constraint.width().is_some() || constraint.height().is_some() {
-            self.taffy
-                .compute_layout(
-                    root_node_id,
-                    taffy::geometry::Size {
-                        width: axis_available_space(None),
-                        height: axis_available_space(None),
-                    },
-                )
-                .map_err(|error| LayoutError::EngineError(error.to_string()))?;
-            let size = self
-                .taffy
-                .layout(root_node_id)
-                .map_err(|error| LayoutError::EngineError(error.to_string()))?
-                .size;
-            self.intrinsic = Some(Size::new(f32_to_u32(size.width), f32_to_u32(size.height)));
-            Some(self.pin_root(root_node_id, constraint)?)
-        } else {
-            None
-        };
-
-        // Compute layout
-        self.taffy
-            .compute_layout(root_node_id, available_space)
-            .map_err(|error| LayoutError::EngineError(error.to_string()))?;
-
+        let unpinned_root = self.measure_and_pin(root_node_id, constraint)?;
+        self.compute(root_node_id, available_space)?;
         // A node styled with `calc(<percent>% + <px>px)` — e.g.
         // `width: calc(100% - 2rem)` — can't resolve its percent term
         // until its parent's size from this first pass is known. Patch any
         // such nodes with the now-concrete pixel value and lay out again;
         // ordinary trees (no calc()) never pay this cost.
         if resolve_pending_calcs(&mut self.taffy, &new_state) {
-            self.taffy
-                .compute_layout(root_node_id, available_space)
-                .map_err(|error| LayoutError::EngineError(error.to_string()))?;
+            self.compute(root_node_id, available_space)?;
         }
-
-        // Build RenderNode tree
         let render_tree = build_render_tree(
             TaffyNode::new(&self.taffy, root_node_id),
             node,
             root.origin(),
         )?;
+        self.restore_root(root_node_id, unpinned_root)?;
+        log_render_tree(&render_tree);
+        self.state = Some(new_state);
+        Ok(render_tree)
+    }
 
-        // The diff only patches nodes whose style changed, so the root must
-        // go back to its own style for the next pass to start clean.
+    /// Brings the taffy tree in line with `node`: patches the last layout's tree with the
+    /// difference, or builds a new one on the first pass.
+    fn reconcile(
+        &mut self,
+        node: &StyledNode,
+        measurer: &mut dyn TextMeasurer,
+    ) -> Result<LayoutState, LayoutError> {
+        let mut builder = TaffyTreeBuilder::new(&mut self.taffy);
+        if let Some(state) = &self.state {
+            let patch = diff(state, node, measurer);
+            apply_patch(&mut builder, patch, measurer)
+        } else {
+            build_layout_state(&mut builder, node, measurer)
+        }
+    }
+
+    /// A pinned root is laid out twice: unpinned first, whose size is what an embedder may
+    /// measure it by and becomes the intrinsic size, then pinned to the host box. Returns the
+    /// root's own style to restore after the pinned pass, or `None` when no axis is pinned.
+    fn measure_and_pin(
+        &mut self,
+        root_node_id: NodeId,
+        constraint: SizeConstraint,
+    ) -> Result<Option<Style>, LayoutError> {
+        self.intrinsic = None;
+        if constraint.width().is_none() && constraint.height().is_none() {
+            return Ok(None);
+        }
+        let unconstrained = taffy::geometry::Size {
+            width: axis_available_space(None),
+            height: axis_available_space(None),
+        };
+        self.compute(root_node_id, unconstrained)?;
+        let size = self
+            .taffy
+            .layout(root_node_id)
+            .map_err(|error| LayoutError::EngineError(error.to_string()))?
+            .size;
+        self.intrinsic = Some(Size::new(f32_to_u32(size.width), f32_to_u32(size.height)));
+        Ok(Some(self.pin_root(root_node_id, constraint)?))
+    }
+
+    /// Lays the tree under `root_node_id` out in `available_space`.
+    fn compute(
+        &mut self,
+        root_node_id: NodeId,
+        available_space: taffy::geometry::Size<taffy::style::AvailableSpace>,
+    ) -> Result<(), LayoutError> {
+        self.taffy
+            .compute_layout(root_node_id, available_space)
+            .map_err(|error| LayoutError::EngineError(error.to_string()))
+    }
+
+    /// The diff only patches nodes whose style changed, so a pinned root goes back to its own
+    /// style for the next pass to start clean.
+    fn restore_root(
+        &mut self,
+        root_node_id: NodeId,
+        unpinned_root: Option<Style>,
+    ) -> Result<(), LayoutError> {
         if let Some(original) = unpinned_root {
             self.taffy
                 .set_style(root_node_id, original)
                 .map_err(|error| LayoutError::EngineError(error.to_string()))?;
         }
-
-        tracing::trace!(
-            rect = ?render_tree.rect(),
-            "Calculated layout render tree"
-        );
-
-        self.state = Some(new_state);
-
-        Ok(render_tree)
+        Ok(())
     }
+}
+
+/// Traces the rect of the render tree a layout pass built.
+fn log_render_tree(render_tree: &RenderNode) {
+    tracing::trace!(
+        rect = ?render_tree.rect(),
+        "Calculated layout render tree"
+    );
 }

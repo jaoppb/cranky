@@ -72,37 +72,51 @@ pub(super) fn resolve_pending_calcs(taffy: &mut TaffyTree, root_state: &LayoutSt
 
     let mut patched = false;
     for calc in &pending {
-        let Some(parent_id) = taffy.parent(calc.node_id) else {
-            continue;
-        };
-        let Ok(parent_layout) = taffy.layout(parent_id) else {
-            continue;
-        };
-        let basis = match calc.field {
-            CalcField::Width | CalcField::MinWidth | CalcField::MaxWidth | CalcField::FlexBasis => {
-                parent_layout.size.width
-            }
-            CalcField::Height | CalcField::MinHeight | CalcField::MaxHeight => {
-                parent_layout.size.height
-            }
-        };
-        let resolved = (calc.percent / 100.0).mul_add(basis, calc.px);
-
-        let Ok(mut style) = taffy.style(calc.node_id).cloned() else {
-            continue;
-        };
-        match calc.field {
-            CalcField::Width => style.size.width = Dimension::length(resolved),
-            CalcField::Height => style.size.height = Dimension::length(resolved),
-            CalcField::MinWidth => style.min_size.width = Dimension::length(resolved),
-            CalcField::MinHeight => style.min_size.height = Dimension::length(resolved),
-            CalcField::MaxWidth => style.max_size.width = Dimension::length(resolved),
-            CalcField::MaxHeight => style.max_size.height = Dimension::length(resolved),
-            CalcField::FlexBasis => style.flex_basis = Dimension::length(resolved),
-        }
-        if taffy.set_style(calc.node_id, style).is_ok() {
+        if patch_calc(taffy, calc) {
             patched = true;
         }
     }
     patched
+}
+
+/// Writes `calc`'s value, resolved against its parent's first-pass size, into its node's style,
+/// and tells whether the style was set; a node without a parent, a parent without a layout or
+/// a node without a style is left alone.
+fn patch_calc(taffy: &mut TaffyTree, calc: &PendingCalc) -> bool {
+    let Some(parent_id) = taffy.parent(calc.node_id) else {
+        return false;
+    };
+    let Ok(parent_layout) = taffy.layout(parent_id) else {
+        return false;
+    };
+    let basis = calc.field.percentage_basis(parent_layout.size);
+    let resolved = (calc.percent / 100.0).mul_add(basis, calc.px);
+    let Ok(mut style) = taffy.style(calc.node_id).cloned() else {
+        return false;
+    };
+    calc.field.set(&mut style, Dimension::length(resolved));
+    taffy.set_style(calc.node_id, style).is_ok()
+}
+
+impl CalcField {
+    /// The side of the parent's size a percentage in this field is taken of.
+    const fn percentage_basis(self, parent: taffy::geometry::Size<f32>) -> f32 {
+        match self {
+            Self::Width | Self::MinWidth | Self::MaxWidth | Self::FlexBasis => parent.width,
+            Self::Height | Self::MinHeight | Self::MaxHeight => parent.height,
+        }
+    }
+
+    /// Sets this field of `style` to `value`.
+    const fn set(self, style: &mut taffy::style::Style, value: Dimension) {
+        match self {
+            Self::Width => style.size.width = value,
+            Self::Height => style.size.height = value,
+            Self::MinWidth => style.min_size.width = value,
+            Self::MinHeight => style.min_size.height = value,
+            Self::MaxWidth => style.max_size.width = value,
+            Self::MaxHeight => style.max_size.height = value,
+            Self::FlexBasis => style.flex_basis = value,
+        }
+    }
 }

@@ -1,5 +1,5 @@
 use super::diff;
-use crate::features::layout_engine::adapters::taffy::reconciler::{LayoutState, Patch};
+use crate::features::layout_engine::adapters::taffy::reconciler::{LayoutState, Patch, Update};
 use crate::features::layout_engine::domain::{NodePath, StyledNode, SurfaceSpace, TextMeasurer};
 use crate::features::styling::domain::{ComputedStyle, CssLength, Orientation, ProgressValue};
 use crate::features::vdom::domain::TextContent;
@@ -94,12 +94,12 @@ fn kept(old: &StyledNode, new: &StyledNode) -> Option<bool> {
             assert!(std::ptr::eq(kept_state, &raw const old_state));
             Some(true)
         }
-        Patch::Update {
+        Patch::Update(Update {
             old_state: updated,
             new_layout,
             style,
             children,
-        } => {
+        }) => {
             assert!(std::ptr::eq(updated, &raw const old_state));
             assert_eq!(new_layout, new);
             assert!(style.is_some());

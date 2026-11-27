@@ -3,8 +3,9 @@
 use super::popup::{ActivePanel, AnchoredPopup};
 use super::render_node::RenderNode;
 use super::styled_node::StyledNode;
+use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::{NodePath, SurfaceSpace};
-use crate::shared::primitives::geometry::Position;
+use crate::shared::primitives::geometry::{Position, Rect};
 use crate::shared::primitives::{ChildBounds, ChildModuleLayout, LayoutSurface, SizeConstraint};
 
 const fn layout_surface_of(surface: SurfaceSpace) -> LayoutSurface {
@@ -16,6 +17,18 @@ const fn layout_surface_of(surface: SurfaceSpace) -> LayoutSurface {
     }
 }
 
+/// The size an embedded module laid out in `rect` is pinned to. The host box is the parent's
+/// call (the Shadow DOM split): its resolved width — from the embedder's width, min-*, grow,
+/// stretch or percentages, in whatever units the CSS used — is the child's definite width, so the
+/// child fills it. A zero width is "nothing resolved yet", not a pin. Height is pinned only by an
+/// explicit CSS height, so the popup keeps following its content.
+fn module_constraint(rect: Rect, style: &ComputedStyle) -> SizeConstraint {
+    SizeConstraint::new(
+        (rect.width() > 0).then(|| rect.width()),
+        style.height().is_some().then(|| rect.height()),
+    )
+}
+
 impl RenderNode {
     #[must_use]
     pub(crate) fn collect_module_layouts(&self) -> Vec<ChildModuleLayout> {
@@ -25,42 +38,33 @@ impl RenderNode {
     }
 
     fn collect_module_layouts_recursive(&self, out: &mut Vec<ChildModuleLayout>) {
-        match self {
-            Self::Flex { children, .. } | Self::Grid { children, .. } => {
-                for child in children {
-                    child.collect_module_layouts_recursive(out);
-                }
-            }
-            Self::Module {
-                rect,
-                key,
-                options,
-                style,
-                path,
-                ..
-            } => {
-                // The host box is the parent's call (the Shadow DOM split):
-                // its resolved width — from the embedder's width, min-*,
-                // grow, stretch or percentages, in whatever units the CSS
-                // used — is the child's definite width, so the child fills
-                // it. A zero width is "nothing resolved yet", not a pin.
-                // Height is pinned only by an explicit CSS height, so the
-                // popup keeps following its content.
-                let constraint = SizeConstraint::new(
-                    (rect.width() > 0).then(|| rect.width()),
-                    style.height().is_some().then(|| rect.height()),
-                );
-                out.push(
-                    ChildModuleLayout::new(
-                        key.clone(),
-                        ChildBounds::new(*rect, constraint),
-                        layout_surface_of(path.surface()),
-                    )
-                    .with_options(options.clone()),
-                );
-            }
-            _ => {}
+        if let Some(layout) = self.module_layout() {
+            out.push(layout);
         }
+        for child in self.children() {
+            child.collect_module_layouts_recursive(out);
+        }
+    }
+
+    /// Where and how large the module this node embeds is laid out, when it embeds one.
+    fn module_layout(&self) -> Option<ChildModuleLayout> {
+        let Self::Module {
+            rect,
+            key,
+            options,
+            style,
+            path,
+            ..
+        } = self
+        else {
+            return None;
+        };
+        let layout = ChildModuleLayout::new(
+            key.clone(),
+            ChildBounds::new(*rect, module_constraint(*rect, style)),
+            layout_surface_of(path.surface()),
+        );
+        Some(layout.with_options(options.clone()))
     }
 
     #[must_use]
@@ -149,6 +153,8 @@ mod tests {
     use crate::features::styling::domain::ComputedStyle;
     use crate::features::vdom::domain::{SurfaceSpace, TextContent};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
+    use crate::shared::primitives::{DynamicValue, ModuleOptions};
+    use std::collections::HashMap;
 
     fn leaf(path: &[usize], tooltip: Option<StyledNode>) -> RenderNode {
         RenderNode::Rect {
@@ -277,6 +283,19 @@ mod tests {
         assert_eq!(layouts[0].bounds().rect(), rect);
     }
 
+    /// An explicit CSS height pins the module's height to its slot's resolved height, not to the
+    /// CSS value.
+    #[test]
+    fn test_collect_module_layouts_pins_an_explicit_height() {
+        let rect = Rect::new(Position::new(0, 0), Size::new(300, 32));
+        let mut style = ComputedStyle::default();
+        style.set_height(crate::features::styling::domain::CssLength::Pixels(40.0));
+        let root = flex(&[], vec![module_leaf(rect, style)], None);
+
+        let layouts = root.collect_module_layouts();
+        assert_eq!(layouts[0].bounds().constraint().height(), Some(32));
+    }
+
     #[test]
     fn test_collect_module_layouts_pin_reads_resolved_pixels() {
         // Whatever units the CSS was in (px, %, calc()), taffy already
@@ -322,11 +341,8 @@ mod tests {
     #[test]
     fn test_collect_module_layouts_carries_key_options_and_surface() {
         let rect = Rect::new(Position::new(7, 11), Size::new(90, 30));
-        let options =
-            crate::shared::primitives::ModuleOptions::new(std::collections::HashMap::from([(
-                "format".to_string(),
-                crate::shared::primitives::DynamicValue::String("%H".to_string()),
-            )]));
+        let hour = || DynamicValue::String("%H".to_string());
+        let options = ModuleOptions::new(HashMap::from([("format".to_string(), hour())]));
         let mut node = module_leaf(rect, ComputedStyle::default());
         let RenderNode::Module {
             key,
@@ -343,15 +359,11 @@ mod tests {
         let root = flex(&[], vec![node], None);
 
         let layouts = root.collect_module_layouts();
-        assert_eq!(layouts.len(), 1);
-        assert_eq!(layouts[0].key(), &key);
-        assert_eq!(layouts[0].bounds().rect(), rect);
-        assert_eq!(
-            layouts[0].options().get("format"),
-            Some(&crate::shared::primitives::DynamicValue::String(
-                "%H".to_string()
-            ))
-        );
-        assert_eq!(layouts[0].surface(), LayoutSurface::Popup);
+        let [layout] = layouts.as_slice() else {
+            panic!("expected one module layout, got {layouts:?}");
+        };
+        assert_eq!((layout.key(), layout.bounds().rect()), (&key, rect));
+        assert_eq!(layout.options().get("format"), Some(&hour()));
+        assert_eq!(layout.surface(), LayoutSurface::Popup);
     }
 }
