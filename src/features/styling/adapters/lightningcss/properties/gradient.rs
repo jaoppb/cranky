@@ -1,6 +1,6 @@
 //! Converts a `linear-gradient()` `border-image` source into a gradient drawing colour.
 use super::color_font::convert_color;
-use crate::shared::primitives::color::DrawingColor;
+use crate::shared::primitives::color::{Color, DrawingColor};
 use lightningcss::values::gradient::{Gradient, GradientItem, LineDirection, LinearGradient};
 use lightningcss::values::image::Image;
 
@@ -17,10 +17,7 @@ use lightningcss::values::image::Image;
 pub(crate) fn gradient_from_image(image: &Image<'_>) -> Option<DrawingColor> {
     let Image::Gradient(gradient) = image else {
         if !matches!(image, Image::None) {
-            tracing::warn!(
-                ?image,
-                "border-image only supports linear-gradient(); ignoring"
-            );
+            log_unsupported_image(image);
         }
         return None;
     };
@@ -29,35 +26,56 @@ pub(crate) fn gradient_from_image(image: &Image<'_>) -> Option<DrawingColor> {
             linear_gradient_colors(linear)
         }
         other => {
-            tracing::warn!(?other, "only linear-gradient() border images are supported");
+            log_unsupported_gradient(other);
             None
         }
     }
 }
 
+/// Warns that a `border-image` source other than a gradient is ignored.
+fn log_unsupported_image(image: &Image<'_>) {
+    tracing::warn!(
+        ?image,
+        "border-image only supports linear-gradient(); ignoring"
+    );
+}
+
+/// Warns that a gradient other than a linear one is ignored.
+fn log_unsupported_gradient(other: &Gradient) {
+    tracing::warn!(?other, "only linear-gradient() border images are supported");
+}
+
 fn linear_gradient_colors(gradient: &LinearGradient) -> Option<DrawingColor> {
     let LineDirection::Angle(angle) = &gradient.direction else {
-        tracing::warn!(
-            direction = ?gradient.direction,
-            "border-image linear-gradient() direction must be an angle; ignoring"
-        );
+        log_keyword_direction(&gradient.direction);
         return None;
     };
+    let colors = stop_colors(gradient);
+    match colors.len() {
+        0 => None,
+        1 => colors.into_iter().next().map(DrawingColor::Solid),
+        _ => Some(DrawingColor::Gradient(colors, angle.to_degrees())),
+    }
+}
 
-    let colors: Vec<_> = gradient
+/// Warns that a gradient whose direction is not an angle is ignored.
+fn log_keyword_direction(direction: &LineDirection) {
+    tracing::warn!(
+        ?direction,
+        "border-image linear-gradient() direction must be an angle; ignoring"
+    );
+}
+
+/// The colours of the gradient's stops that convert, in order, skipping its hints.
+fn stop_colors(gradient: &LinearGradient) -> Vec<Color> {
+    gradient
         .items
         .iter()
         .filter_map(|item| match item {
             GradientItem::ColorStop(stop) => convert_color(&stop.color),
             GradientItem::Hint(_) => None,
         })
-        .collect();
-
-    match colors.len() {
-        0 => None,
-        1 => colors.into_iter().next().map(DrawingColor::Solid),
-        _ => Some(DrawingColor::Gradient(colors, angle.to_degrees())),
-    }
+        .collect()
 }
 
 #[cfg(test)]

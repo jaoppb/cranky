@@ -6,8 +6,12 @@ use crate::features::styling::domain::{
 use crate::shared::config::domain::{FontFamily, FontSize};
 use crate::shared::primitives::TextAlign;
 use crate::shared::primitives::color::{Color, DrawingColor};
+use core::ops::Deref;
 use lightningcss::properties::Property;
-use lightningcss::properties::font::{AbsoluteFontSize, FontSize as LightningFontSize};
+use lightningcss::properties::background::Background;
+use lightningcss::properties::font::{
+    AbsoluteFontSize, FontFamily as LightningFontFamily, FontSize as LightningFontSize,
+};
 use lightningcss::properties::text::TextAlign as LightningTextAlign;
 use lightningcss::stylesheet::PrinterOptions;
 use lightningcss::traits::ToCss;
@@ -15,72 +19,86 @@ use lightningcss::values::color::CssColor as LightningCssColor;
 
 pub(crate) fn apply_color_and_font(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
     match prop {
-        Property::BackgroundColor(color) => {
-            if let Some(background_color) = convert_color(color) {
-                style.set_background(DrawingColor::Solid(background_color));
-            }
-            true
-        }
-        Property::Color(color) => {
-            if let Some(text_color) = convert_color(color) {
-                style.set_color(DrawingColor::Solid(text_color));
-            }
-            true
-        }
-        Property::AccentColor(color) => {
-            let css_text = color
-                .to_css_string(PrinterOptions::default())
-                .unwrap_or_default();
-            if let Ok(accent_color) = DrawingColor::parse(css_text.trim()) {
-                style.set_accent_color(accent_color);
-            }
-            true
-        }
-        Property::FontFamily(families) => {
-            if let Some(first) = families.first() {
-                let name = first
-                    .to_css_string(PrinterOptions::default())
-                    .unwrap_or_default();
-                let trimmed = name.trim_matches('"').trim_matches('\'').to_string();
-                style.set_font_family(FontFamily::new(trimmed));
-            }
-            true
-        }
-        Property::TextAlign(align) => {
-            if let Some(text_align) = convert_text_align(*align) {
-                style.set_text_align(text_align);
-            }
-            true
-        }
-        Property::FontSize(size) => {
-            apply_font_size(style, size);
-            true
-        }
-        Property::Background(bgs) => {
-            let css_text = bgs
-                .to_css_string(PrinterOptions::default())
-                .unwrap_or_default();
-            if let Ok(background) = DrawingColor::parse(css_text.trim()) {
-                style.set_background(background);
-            } else if let Some(first) = bgs.first()
-                && let Some(background_color) = convert_color(&first.color)
-            {
-                style.set_background(DrawingColor::Solid(background_color));
-            }
-            true
-        }
-        Property::Opacity(opacity) => {
-            let css_text = opacity
-                .to_css_string(PrinterOptions::default())
-                .unwrap_or_default();
-            if let Ok(amount) = css_text.parse::<f32>()
-                && let Ok(val) = Opacity::new(amount)
-            {
-                style.set_opacity(val);
-            }
-            true
-        }
-        _ => false,
+        Property::BackgroundColor(color) => set_solid(style, color, ComputedStyle::set_background),
+        Property::Color(color) => set_solid(style, color, ComputedStyle::set_color),
+        Property::AccentColor(color) => apply_accent_color(style, color),
+        Property::FontFamily(families) => apply_font_family(style, families),
+        Property::TextAlign(align) => apply_text_align(style, *align),
+        Property::FontSize(size) => apply_font_size(style, size),
+        Property::Background(backgrounds) => apply_background(style, backgrounds),
+        Property::Opacity(opacity) => apply_opacity(style, opacity),
+        _ => return false,
+    }
+    true
+}
+
+/// Writes `color` as a solid colour through `setter` when it converts, and leaves the field
+/// otherwise.
+fn set_solid(
+    style: &mut ComputedStyle,
+    color: &LightningCssColor,
+    setter: fn(&mut ComputedStyle, DrawingColor),
+) {
+    if let Some(solid) = convert_color(color) {
+        setter(style, DrawingColor::Solid(solid));
+    }
+}
+
+/// Sets `accent-color` from its serialized text, which may not parse (`auto`).
+fn apply_accent_color(style: &mut ComputedStyle, color: &impl ToCss) {
+    let css_text = color
+        .to_css_string(PrinterOptions::default())
+        .unwrap_or_default();
+    if let Ok(accent_color) = DrawingColor::parse(css_text.trim()) {
+        style.set_accent_color(accent_color);
+    }
+}
+
+/// Sets the first family of the list, without its quotes.
+fn apply_font_family(style: &mut ComputedStyle, families: &[LightningFontFamily<'_>]) {
+    if let Some(first) = families.first() {
+        let name = first
+            .to_css_string(PrinterOptions::default())
+            .unwrap_or_default();
+        let trimmed = name.trim_matches('"').trim_matches('\'').to_string();
+        style.set_font_family(FontFamily::new(trimmed));
+    }
+}
+
+/// Sets `text-align` when it is one of the keywords the painter honours.
+const fn apply_text_align(style: &mut ComputedStyle, align: LightningTextAlign) {
+    if let Some(text_align) = convert_text_align(align) {
+        style.set_text_align(text_align);
+    }
+}
+
+/// Sets the background from the whole shorthand when it reads as a drawing colour, else from the
+/// first layer's colour.
+fn apply_background<'i>(
+    style: &mut ComputedStyle,
+    backgrounds: &(impl ToCss + Deref<Target = [Background<'i>]>),
+) {
+    let css_text = backgrounds
+        .to_css_string(PrinterOptions::default())
+        .unwrap_or_default();
+    if let Ok(background) = DrawingColor::parse(css_text.trim()) {
+        style.set_background(background);
+    } else if let Some(first) = backgrounds.first()
+        && let Some(background_color) = convert_color(&first.color)
+    {
+        style.set_background(DrawingColor::Solid(background_color));
+    }
+}
+
+/// Sets the opacity when it serializes to a number in `0..=1`.
+fn apply_opacity(style: &mut ComputedStyle, opacity: &impl ToCss) {
+    let css_text = opacity
+        .to_css_string(PrinterOptions::default())
+        .unwrap_or_default();
+    if let Ok(amount) = css_text.parse::<f32>()
+        && let Ok(val) = Opacity::new(amount)
+    {
+        style.set_opacity(val);
     }
 }
 
