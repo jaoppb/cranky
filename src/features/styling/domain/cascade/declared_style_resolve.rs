@@ -1,9 +1,12 @@
 //! Helpers that turn a cascaded value and the inherited one into the final value, with
 //! `font-size` resolved against the parent's size.
+use super::super::computed_style::ComputedStyle;
 use super::declared_length::DeclaredLength;
 use super::inherited::{DEFAULT_FONT_SIZE, InheritedStyle};
 use super::value::{Cascade, CssWideKeyword};
 use crate::shared::config::domain::FontSize;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Small resolution helpers `DeclaredStyle::collapse` uses, split out to
 /// keep `declared_style.rs` under the 200 LOC production file limit.
@@ -23,6 +26,24 @@ pub(super) fn resolve<T: Clone>(cascade: Cascade<T>, inherited: Option<&T>) -> O
     }
 }
 
+/// `font-size`'s cascade for one rule, unless a CSS-wide keyword overrides it.
+///
+/// The ordinary (non-relative) property pipeline already resolved font-size into `computed` —
+/// assuming a fixed base if it happened to be em/rem. The font-relative declaration (`relative`)
+/// overrides that assumption with the real declaration whenever one was found.
+pub(super) fn font_size_cascade(
+    keyword: Option<CssWideKeyword>,
+    relative: Option<DeclaredLength>,
+    computed: &ComputedStyle,
+) -> Cascade<DeclaredLength> {
+    let declared = relative.or_else(|| {
+        computed
+            .font_size()
+            .map(|font_size| DeclaredLength::Pixels(font_size.value()))
+    });
+    cascade_from(keyword, declared)
+}
+
 /// `font-size` gets its own resolution instead of the generic `resolve`
 /// above.
 ///
@@ -33,44 +54,61 @@ pub(super) fn resolve_font_size(
     cascade: Cascade<DeclaredLength>,
     inherited: &InheritedStyle,
 ) -> Option<FontSize> {
-    let parent_or_default = || {
-        inherited
-            .font_size()
-            .copied()
-            .unwrap_or(FontSize::new(DEFAULT_FONT_SIZE))
-    };
     match cascade {
-        Cascade::Value(DeclaredLength::Pixels(pixels)) => Some(FontSize::new(pixels)),
-        Cascade::Value(DeclaredLength::Percent(percentage)) => Some(FontSize::new(
-            percentage / 100.0 * parent_or_default().value(),
-        )),
-        Cascade::Value(DeclaredLength::Ems(ems)) => {
-            Some(FontSize::new(ems * parent_or_default().value()))
-        }
-        Cascade::Value(DeclaredLength::Rem(root_ems)) => {
+        Cascade::Value(length) => font_size_from_length(length, inherited),
+        Cascade::NotDeclared | Cascade::Inherit => inherited.font_size().copied(),
+        Cascade::Initial => Some(FontSize::new(DEFAULT_FONT_SIZE)),
+    }
+}
+
+/// The font-size a declared length gives: `%` and `em` scale the parent's font-size (or the
+/// default when no ancestor has one), `rem` the root's, and `auto` keeps the parent's.
+fn font_size_from_length(length: DeclaredLength, inherited: &InheritedStyle) -> Option<FontSize> {
+    let parent = inherited
+        .font_size()
+        .copied()
+        .unwrap_or(FontSize::new(DEFAULT_FONT_SIZE))
+        .value();
+    match length {
+        DeclaredLength::Pixels(pixels) => Some(FontSize::new(pixels)),
+        DeclaredLength::Percent(percentage) => Some(FontSize::new(percentage / 100.0 * parent)),
+        DeclaredLength::Ems(ems) => Some(FontSize::new(ems * parent)),
+        DeclaredLength::Rem(root_ems) => {
             Some(FontSize::new(root_ems * inherited.root_font_size().value()))
         }
-        Cascade::Value(DeclaredLength::Calc {
+        DeclaredLength::Calc {
             percent,
             px,
             ems,
             rem,
-        }) => {
+        } => {
             // font-size is the one length where a calc() percent term is
             // resolvable at style time rather than needing the layout
             // engine's second pass: both `%` and `em` are defined as
             // relative to the *parent's* font-size, which is already known
             // here.
-            let parent = parent_or_default().value();
             let px_total = (percent / 100.0 + ems).mul_add(parent, px);
             Some(FontSize::new(
                 rem.mul_add(inherited.root_font_size().value(), px_total),
             ))
         }
-        Cascade::Value(DeclaredLength::Auto) | Cascade::NotDeclared | Cascade::Inherit => {
-            inherited.font_size().copied()
-        }
-        Cascade::Initial => Some(FontSize::new(DEFAULT_FONT_SIZE)),
+        DeclaredLength::Auto => inherited.font_size().copied(),
+    }
+}
+
+/// The custom properties this element's children resolve `var()` against: the parent's,
+/// overridden by whatever this element declared (`declared`) — cheap when it declared none
+/// (an `Arc` clone, no copy).
+pub(super) fn own_custom_properties(
+    declared: HashMap<String, String>,
+    inherited: &InheritedStyle,
+) -> Arc<HashMap<String, String>> {
+    if declared.is_empty() {
+        Arc::clone(inherited.custom_properties())
+    } else {
+        let mut merged = (**inherited.custom_properties()).clone();
+        merged.extend(declared);
+        Arc::new(merged)
     }
 }
 
