@@ -194,6 +194,10 @@ mod tests {
         }
     }
 
+    fn change(day: Day, time: i64) -> Change {
+        Change { day, time }
+    }
+
     fn weekday(month: i64, week: i64, weekday: i64) -> Day {
         Day::Weekday {
             month,
@@ -223,14 +227,8 @@ mod tests {
     fn daylight_time_is_one_hour_ahead_unless_given() {
         let lisbon = Daylight {
             kind: kind(3600, "WEST"),
-            start: Change {
-                day: weekday(3, 5, 0),
-                time: 3600,
-            },
-            end: Change {
-                day: weekday(10, 5, 0),
-                time: 7200,
-            },
+            start: change(weekday(3, 5, 0), 3600),
+            end: change(weekday(10, 5, 0), 7200),
         };
         assert_eq!(
             parse(b"WET0WEST,M3.5.0/1,M10.5.0"),
@@ -238,14 +236,8 @@ mod tests {
         );
         let lord_howe = Daylight {
             kind: kind(39_600, "+11"),
-            start: Change {
-                day: weekday(10, 1, 0),
-                time: 7200,
-            },
-            end: Change {
-                day: weekday(4, 1, 0),
-                time: 7200,
-            },
+            start: change(weekday(10, 1, 0), 7200),
+            end: change(weekday(4, 1, 0), 7200),
         };
         assert_eq!(
             parse(b"<+1030>-10:30<+11>-11,M10.1.0,M4.1.0"),
@@ -291,36 +283,39 @@ mod tests {
         );
     }
 
+    /// Texts that are not a whole, valid rule.
+    const NOT_RULES: &[&str] = &[
+        "",
+        "Nope/Bogus",
+        "America/Sao_Paulo",
+        "AB3",
+        "<-03",
+        "<>3",
+        "UTC",
+        "UTC25",
+        "UTC1:60",
+        "UTC12345",
+        "WET0WEST,M3.5.0",
+        "WET0WEST,M13.5.0,M10.5.0",
+        "WET0WEST,M3.6.0,M10.5.0",
+        "WET0WEST,M3.5.7,M10.5.0",
+        "WET0WEST,M3.5,M10.5.0",
+        "WET0WEST,M3,M10.5.0",
+        "WET0WEST,J0,J365",
+        "WET0WEST,0,366",
+        "WET0WEST,M3.5.0/168,M10.5.0",
+        "WET0WEST,M3.5.0,M10.5.0,",
+        "WET0WEST M3.5.0",
+        "<-03>3 ",
+        "<a b>3",
+        "AAA0<a b>,M3.2.0,M11.1.0",
+        "<\u{1b}[31mX>3",
+        "<abcdefghijklmnopqrstuvwxyz0123456>3",
+    ];
+
     #[test]
     fn anything_else_is_not_a_rule() {
-        for text in [
-            "",
-            "Nope/Bogus",
-            "America/Sao_Paulo",
-            "AB3",
-            "<-03",
-            "<>3",
-            "UTC",
-            "UTC25",
-            "UTC1:60",
-            "UTC12345",
-            "WET0WEST,M3.5.0",
-            "WET0WEST,M13.5.0,M10.5.0",
-            "WET0WEST,M3.6.0,M10.5.0",
-            "WET0WEST,M3.5.7,M10.5.0",
-            "WET0WEST,M3.5,M10.5.0",
-            "WET0WEST,M3,M10.5.0",
-            "WET0WEST,J0,J365",
-            "WET0WEST,0,366",
-            "WET0WEST,M3.5.0/168,M10.5.0",
-            "WET0WEST,M3.5.0,M10.5.0,",
-            "WET0WEST M3.5.0",
-            "<-03>3 ",
-            "<a b>3",
-            "AAA0<a b>,M3.2.0,M11.1.0",
-            "<\u{1b}[31mX>3",
-            "<abcdefghijklmnopqrstuvwxyz0123456>3",
-        ] {
+        for text in NOT_RULES {
             assert_eq!(parse(text.as_bytes()), None, "{text:?}");
         }
     }

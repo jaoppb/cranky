@@ -288,24 +288,22 @@ mod tests {
         assert_eq!(moment.leap_second, LeapSecond::Ordinary);
     }
 
-    #[test]
-    fn leap_seconds_are_taken_out_and_the_inserted_one_is_flagged() {
-        let leaps = vec![
-            Leap {
-                instant: 100,
-                total: 1,
-            },
-            Leap {
-                instant: 200,
-                total: 2,
-            },
-        ];
+    /// A zone of one kind whose leap second records are (instant, total).
+    fn with_leaps(leaps: &[(i64, i64)]) -> Zone {
         let table = Table {
             kinds: vec![kind(0, "X")],
             transitions: Vec::new(),
-            leaps,
+            leaps: leaps
+                .iter()
+                .map(|&(instant, total)| Leap { instant, total })
+                .collect(),
         };
-        let zone = Zone::new(table, None).unwrap();
+        Zone::new(table, None).unwrap()
+    }
+
+    #[test]
+    fn leap_seconds_are_taken_out_and_the_inserted_one_is_flagged() {
+        let zone = with_leaps(&[(100, 1), (200, 2)]);
         let seen = |instant| {
             let moment = zone.at_instant(instant);
             (moment.unix_seconds, moment.leap_second)
@@ -324,22 +322,7 @@ mod tests {
     #[test]
     fn a_repeated_leap_total_inserts_nothing() {
         // The last record of a file may only mark when the table expires.
-        let leaps = vec![
-            Leap {
-                instant: 100,
-                total: 1,
-            },
-            Leap {
-                instant: 200,
-                total: 1,
-            },
-        ];
-        let table = Table {
-            kinds: vec![kind(0, "X")],
-            transitions: Vec::new(),
-            leaps,
-        };
-        let zone = Zone::new(table, None).unwrap();
+        let zone = with_leaps(&[(100, 1), (200, 1)]);
         assert_eq!(zone.at_instant(200).unix_seconds, 199);
         assert_eq!(zone.at_instant(200).leap_second, LeapSecond::Ordinary);
     }
