@@ -157,6 +157,8 @@ fn test_resolve_icon_loads_an_absolute_icon_path() {
     crate::test_utils::block_on(async {
         let dir = TempIconDir::new("absolute");
         let path = dir.svg("cranky-absolute", "#ff0000");
+        // The freedesktop lookup would take the PNG next to it; the exact path wins.
+        dir.png("cranky-absolute", [0, 255, 0]);
         // The theme directory has no such file, so the name is tried as a path.
         let other = TempIconDir::new("absolute-theme");
         let image = resolve_icon(Some(path), Some(other.theme_path()), None)

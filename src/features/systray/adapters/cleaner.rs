@@ -5,28 +5,35 @@ use crate::features::systray::domain::{
 
 pub(super) type RawTooltip = (String, Vec<(i32, i32, Vec<u8>)>, String, String);
 
-#[must_use]
-pub(super) fn clean_sni_text(input: &str) -> String {
-    let text = input
+/// `input` with every `<br>` spelling turned into a newline.
+fn breaks_to_newlines(input: &str) -> String {
+    input
         .replace("<br>", "\n")
         .replace("<br/>", "\n")
         .replace("<br />", "\n")
         .replace("<BR>", "\n")
         .replace("<BR/>", "\n")
-        .replace("<BR />", "\n");
+        .replace("<BR />", "\n")
+}
+
+/// `text` without its markup: everything from a `<` to the next `>` goes, and so does a stray `>`.
+fn strip_tags(text: &str) -> String {
     let mut clean = String::with_capacity(text.len());
     let mut in_tag = false;
     for character in text.chars() {
-        if character == '<' {
-            in_tag = true;
-        } else if character == '>' {
-            in_tag = false;
-        } else if !in_tag {
-            clean.push(character);
+        match character {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => clean.push(character),
+            _ => {}
         }
     }
     clean
-        .replace("&amp;", "&")
+}
+
+/// `text` with its XML entities decoded, `&amp;` first, and trimmed.
+fn decode_entities(text: &str) -> String {
+    text.replace("&amp;", "&")
         .replace("&lt;", "<")
         .replace("&gt;", ">")
         .replace("&quot;", "\"")
@@ -34,6 +41,13 @@ pub(super) fn clean_sni_text(input: &str) -> String {
         .replace("&#10;", "\n")
         .trim()
         .to_string()
+}
+
+/// The plain text of an SNI title or description, which may carry a subset of HTML: line breaks
+/// kept, tags dropped, entities decoded, surrounding whitespace trimmed.
+#[must_use]
+pub(super) fn clean_sni_text(input: &str) -> String {
+    decode_entities(&strip_tags(&breaks_to_newlines(input)))
 }
 
 pub(super) fn parse_raw_tooltip(variant: zbus::OwnedVariant) -> Option<SystrayTooltip> {
