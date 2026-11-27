@@ -127,8 +127,7 @@ impl<'a> Sections<'a> {
         let indexes = reader.take(counts.transitions)?;
         let kinds = reader.take(counts.kinds.checked_mul(KIND_SIZE)?)?;
         let names = reader.take(counts.name_bytes)?;
-        let leap_size = width.checked_add(4)?;
-        let leaps = reader.take(counts.leaps.checked_mul(leap_size)?)?;
+        let leaps = reader.take(counts.leaps.checked_mul(leap_size(width)?)?)?;
         reader.take(counts.standard_flags)?;
         reader.take(counts.ut_flags)?;
         Some(Self {
@@ -168,7 +167,7 @@ fn read_transitions(instants: &[u8], indexes: &[u8], width: usize) -> Option<Vec
 /// The leap second records in `raw`, each an instant of `width` bytes and then
 /// a total of four.
 fn read_leaps(raw: &[u8], width: usize) -> Option<Vec<Leap>> {
-    raw.chunks_exact(width.checked_add(4)?)
+    raw.chunks_exact(leap_size(width)?)
         .map(|raw| {
             let (instant, total) = raw.split_at_checked(width)?;
             Some(Leap {
@@ -177,6 +176,12 @@ fn read_leaps(raw: &[u8], width: usize) -> Option<Vec<Leap>> {
             })
         })
         .collect()
+}
+
+/// The bytes of one leap second record whose instant is `width` bytes wide: the
+/// instant and then a total of four.
+const fn leap_size(width: usize) -> Option<usize> {
+    width.checked_add(4)
 }
 
 fn kind(raw: [u8; KIND_SIZE], names: &[u8]) -> Option<Kind> {
