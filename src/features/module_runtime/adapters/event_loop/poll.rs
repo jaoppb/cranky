@@ -95,3 +95,59 @@ fn log_input_lagged(ctx_id: ModuleId, count: u64) {
 fn log_input_closed(ctx_id: ModuleId) {
     tracing::debug!(module = %ctx_id, "ModuleActor input_rx closed");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{EventLoopEvent, Interaction, input_event};
+    use crate::features::module_runtime::test_support::capture_logs;
+    use crate::shared::events::core::{InteractionEvent, PointerEvent, SurfaceKind};
+    use crate::shared::primitives::geometry::Position;
+    use crate::shared::primitives::{ModuleId, MonitorId};
+    use tokio::sync::broadcast::error::RecvError;
+
+    const MODULE: ModuleId = ModuleId::new(42);
+    const TARGET: &str = "cranky::features::module_runtime::adapters::event_loop::poll";
+
+    /// A pointer motion on DP-1's bar, for module `id`.
+    fn motion_for(id: ModuleId) -> Interaction {
+        let event = InteractionEvent::Pointer(PointerEvent::PointerMotion {
+            surface: SurfaceKind::Bar,
+            pos: Position::new(3, 4),
+        });
+        (id, MonitorId::new("DP-1"), event)
+    }
+
+    /// The event `res` yields for module 42, and what it logged.
+    fn yielded(res: Result<Interaction, RecvError>) -> (EventLoopEvent, String) {
+        let mut event = None;
+        let logs = capture_logs(|| event = Some(input_event(MODULE, res)));
+        (event.expect("input_event ran"), logs)
+    }
+
+    #[test]
+    fn an_interaction_for_this_module_is_yielded_and_one_for_another_is_no_signal() {
+        let (_, monitor, event) = motion_for(MODULE);
+        let expected = EventLoopEvent::Interaction(monitor, event);
+        assert_eq!(yielded(Ok(motion_for(MODULE))).0, expected);
+        let other = yielded(Ok(motion_for(ModuleId::new(7))));
+        assert_eq!(other, (EventLoopEvent::Signals(Vec::new()), String::new()));
+    }
+
+    #[test]
+    fn skipped_interactions_are_logged_and_yield_no_signal() {
+        let (event, logs) = yielded(Err(RecvError::Lagged(3)));
+        assert_eq!(event, EventLoopEvent::Signals(Vec::new()));
+        let line = format!(
+            "WARN {TARGET}: ModuleActor input_rx lagged, skipped messages module=42 lagged=3\n"
+        );
+        assert_eq!(logs.trim_start(), line);
+    }
+
+    #[test]
+    fn a_closed_channel_is_logged_and_shuts_the_loop_down() {
+        let (event, logs) = yielded(Err(RecvError::Closed));
+        assert_eq!(event, EventLoopEvent::Shutdown);
+        let line = format!("DEBUG {TARGET}: ModuleActor input_rx closed module=42\n");
+        assert_eq!(logs, line);
+    }
+}
