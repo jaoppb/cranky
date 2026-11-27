@@ -95,19 +95,29 @@ pub(crate) fn i64_to_f64(val: i64) -> f64 {
 
 #[must_use]
 pub(crate) fn f64_to_f32(val: f64) -> f32 {
-    if !val.is_finite() {
-        if val.is_nan() {
-            return f32::NAN;
-        }
-        return if val.is_sign_negative() {
-            f32::NEG_INFINITY
-        } else {
-            f32::INFINITY
-        };
+    if val.is_nan() {
+        f32::NAN
+    } else if val.is_infinite() {
+        infinity_with_sign_of(val)
+    } else if val == 0.0 {
+        if val.is_sign_negative() { -0.0 } else { 0.0 }
+    } else {
+        narrow_finite_nonzero(val)
     }
-    if val == 0.0 {
-        return if val.is_sign_negative() { -0.0 } else { 0.0 };
+}
+
+/// The `f32` infinity with the sign of `val`.
+const fn infinity_with_sign_of(val: f64) -> f32 {
+    if val.is_sign_negative() {
+        f32::NEG_INFINITY
+    } else {
+        f32::INFINITY
     }
+}
+
+/// Re-encodes a finite, non-zero `f64` as an `f32`: infinity past the `f32` range, zero below
+/// its normal range, the mantissa truncated otherwise.
+fn narrow_finite_nonzero(val: f64) -> f32 {
     let bits = val.to_bits();
     let sign_bit = u32::try_from((bits >> 63) & 1).unwrap_or(0);
     let exp_val = i32::try_from((bits >> 52) & 0x7FF)
@@ -115,11 +125,7 @@ pub(crate) fn f64_to_f32(val: f64) -> f32 {
         .saturating_sub(1023);
     let new_exp = exp_val.saturating_add(127);
     if new_exp >= 255 {
-        return if sign_bit == 1 {
-            f32::NEG_INFINITY
-        } else {
-            f32::INFINITY
-        };
+        return infinity_with_sign_of(val);
     }
     if new_exp <= 0 {
         return 0.0;
@@ -137,90 +143,119 @@ pub(crate) fn load_icon_rgba(
     icon_size: u16,
     scale: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
+    let target = icon_side_px(icon_size, scale);
+    if is_svg(path) {
+        rasterize_svg(path, target)
+    } else {
+        decode_bitmap(path, target)
+    }
+}
+
+/// The side of the square icon in pixels: `icon_size` scaled by `scale` (never below 1),
+/// rounded up, and at least one pixel.
+fn icon_side_px(icon_size: u16, scale: f32) -> u32 {
     let icon_px = f32_to_u32(
         (f32::from(icon_size) * scale.max(1.0))
             .ceil()
             .max(f32::from(icon_size)),
     );
-    let target = icon_px.max(1);
+    icon_px.max(1)
+}
 
-    if path
-        .extension()
+/// Whether `path` names an SVG file, whatever the case of its extension.
+fn is_svg(path: &Path) -> bool {
+    path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
+}
+
+/// Rasterises the SVG at `path` into a `target`-pixel square as straight RGBA.
+fn rasterize_svg(path: &Path, target: u32) -> Option<(u32, u32, Vec<u8>)> {
+    let svg_data = std::fs::read(path).ok()?;
+    let tree = usvg::Tree::from_data(&svg_data, &usvg::Options::default()).ok()?;
+    let pixmap = render_fitted(&tree, target)?;
+    Some((target, target, unpremultiplied_rgba(pixmap.data(), target)))
+}
+
+/// Renders `tree` scaled to fit a `target`-pixel square, centred in it.
+fn render_fitted(tree: &usvg::Tree, target: u32) -> Option<tiny_skia::Pixmap> {
+    let tree_size = tree.size();
+    let target_f32 = f32::from(u16::try_from(target).unwrap_or(u16::MAX));
+    let horizontal_scale = target_f32 / tree_size.width();
+    let vertical_scale = target_f32 / tree_size.height();
+    let fit_scale = horizontal_scale.min(vertical_scale).max(0.001);
+    let render_w = tree_size.width() * fit_scale;
+    let render_h = tree_size.height() * fit_scale;
+    let dx = (target_f32 - render_w) / 2.0;
+    let dy = (target_f32 - render_h) / 2.0;
+
+    let mut pixmap = tiny_skia::Pixmap::new(target, target)?;
+    let transform = Transform::from_scale(fit_scale, fit_scale).post_translate(dx, dy);
+    let mut pixmap_mut = pixmap.as_mut();
+    resvg::render(tree, transform, &mut pixmap_mut);
+    Some(pixmap)
+}
+
+/// The premultiplied RGBA `data` of a `target`-pixel square, as straight RGBA.
+fn unpremultiplied_rgba(data: &[u8], target: u32) -> Vec<u8> {
+    let target_usize = usize::try_from(target).unwrap_or_default();
+    let cap = target_usize.saturating_mul(target_usize).saturating_mul(4);
+    let mut colors = Vec::with_capacity(cap);
+    for &[
+        premultiplied_red,
+        premultiplied_green,
+        premultiplied_blue,
+        alpha,
+    ] in data.as_chunks::<4>().0
     {
-        let svg_data = std::fs::read(path).ok()?;
-        let tree = usvg::Tree::from_data(&svg_data, &usvg::Options::default()).ok()?;
-        let tree_size = tree.size();
-        let target_f32 = f32::from(u16::try_from(target).unwrap_or(u16::MAX));
-        let horizontal_scale = target_f32 / tree_size.width();
-        let vertical_scale = target_f32 / tree_size.height();
-        let fit_scale = horizontal_scale.min(vertical_scale).max(0.001);
-        let render_w = tree_size.width() * fit_scale;
-        let render_h = tree_size.height() * fit_scale;
-        let dx = (target_f32 - render_w) / 2.0;
-        let dy = (target_f32 - render_h) / 2.0;
-
-        let mut pixmap = tiny_skia::Pixmap::new(target, target)?;
-        let transform = Transform::from_scale(fit_scale, fit_scale).post_translate(dx, dy);
-        let mut pixmap_mut = pixmap.as_mut();
-        resvg::render(&tree, transform, &mut pixmap_mut);
-
-        let target_usize = usize::try_from(target).unwrap_or_default();
-        let cap = target_usize.saturating_mul(target_usize).saturating_mul(4);
-        let mut colors = Vec::with_capacity(cap);
-        for &[
-            premultiplied_red,
-            premultiplied_green,
-            premultiplied_blue,
-            alpha,
-        ] in pixmap.data().as_chunks::<4>().0
-        {
-            let (red, green, blue) = if alpha == 0 {
-                (0, 0, 0)
-            } else {
-                let unpremul = |channel: u8| -> u8 {
-                    let c_u16 = u16::from(channel);
-                    let a_u16 = u16::from(alpha);
-                    let val = c_u16
-                        .saturating_mul(255)
-                        .saturating_add(a_u16 / 2)
-                        .checked_div(a_u16)
-                        .unwrap_or(0);
-                    u8::try_from(val.min(255)).unwrap_or(255)
-                };
-                (
-                    unpremul(premultiplied_red),
-                    unpremul(premultiplied_green),
-                    unpremul(premultiplied_blue),
-                )
-            };
-            colors.push(red);
-            colors.push(green);
-            colors.push(blue);
-            colors.push(alpha);
-        }
-
-        Some((target, target, colors))
-    } else {
-        let img = image::open(path).ok()?;
-        let resized =
-            image::imageops::resize(&img, target, target, image::imageops::FilterType::Lanczos3);
-
-        let width_usize = usize::try_from(resized.width()).unwrap_or_default();
-        let height_usize = usize::try_from(resized.height()).unwrap_or_default();
-        let cap = width_usize.saturating_mul(height_usize).saturating_mul(4);
-        let mut colors = Vec::with_capacity(cap);
-        for pixel in resized.pixels() {
-            let [red, green, blue, alpha] = pixel.0;
-            colors.push(red);
-            colors.push(green);
-            colors.push(blue);
-            colors.push(alpha);
-        }
-
-        Some((resized.width(), resized.height(), colors))
+        let (red, green, blue) = if alpha == 0 {
+            (0, 0, 0)
+        } else {
+            (
+                unpremultiply(premultiplied_red, alpha),
+                unpremultiply(premultiplied_green, alpha),
+                unpremultiply(premultiplied_blue, alpha),
+            )
+        };
+        colors.push(red);
+        colors.push(green);
+        colors.push(blue);
+        colors.push(alpha);
     }
+    colors
+}
+
+/// The straight value of `channel`, premultiplied by a non-zero `alpha`, rounded to nearest.
+fn unpremultiply(channel: u8, alpha: u8) -> u8 {
+    let c_u16 = u16::from(channel);
+    let a_u16 = u16::from(alpha);
+    let val = c_u16
+        .saturating_mul(255)
+        .saturating_add(a_u16 / 2)
+        .checked_div(a_u16)
+        .unwrap_or(0);
+    u8::try_from(val.min(255)).unwrap_or(255)
+}
+
+/// Decodes the bitmap at `path` and resizes it to a `target`-pixel square as RGBA.
+fn decode_bitmap(path: &Path, target: u32) -> Option<(u32, u32, Vec<u8>)> {
+    let img = image::open(path).ok()?;
+    let resized =
+        image::imageops::resize(&img, target, target, image::imageops::FilterType::Lanczos3);
+
+    let width_usize = usize::try_from(resized.width()).unwrap_or_default();
+    let height_usize = usize::try_from(resized.height()).unwrap_or_default();
+    let cap = width_usize.saturating_mul(height_usize).saturating_mul(4);
+    let mut colors = Vec::with_capacity(cap);
+    for pixel in resized.pixels() {
+        let [red, green, blue, alpha] = pixel.0;
+        colors.push(red);
+        colors.push(green);
+        colors.push(blue);
+        colors.push(alpha);
+    }
+
+    Some((resized.width(), resized.height(), colors))
 }
 
 #[cfg(test)]
@@ -391,20 +426,18 @@ mod tests {
 
     #[test]
     fn test_f64_to_f32_out_of_range() {
-        assert_eq!(f64_to_f32(1e300).to_bits(), f32::INFINITY.to_bits());
-        assert_eq!(f64_to_f32(-1e300).to_bits(), f32::NEG_INFINITY.to_bits());
-        assert_eq!(f64_to_f32(5.0e38).to_bits(), f32::INFINITY.to_bits());
-        assert_eq!(f64_to_f32(1e-300).to_bits(), 0.0f32.to_bits());
-        assert_eq!(f64_to_f32(-0.0).to_bits(), (-0.0f32).to_bits());
-        assert_eq!(f64_to_f32(-42.5).to_bits(), (-42.5f32).to_bits());
-        assert_eq!(
-            f64_to_f32(f64::from(f32::MAX)).to_bits(),
-            f32::MAX.to_bits()
-        );
-        assert_eq!(
-            f64_to_f32(f64::from(f32::MIN_POSITIVE)).to_bits(),
-            f32::MIN_POSITIVE.to_bits()
-        );
+        for (input, expected) in [
+            (1e300, f32::INFINITY),
+            (-1e300, f32::NEG_INFINITY),
+            (5.0e38, f32::INFINITY),
+            (1e-300, 0.0),
+            (-0.0, -0.0),
+            (-42.5, -42.5),
+            (f64::from(f32::MAX), f32::MAX),
+            (f64::from(f32::MIN_POSITIVE), f32::MIN_POSITIVE),
+        ] {
+            assert_eq!(f64_to_f32(input).to_bits(), expected.to_bits(), "{input}");
+        }
     }
 
     // Known bug: a negative value too small for an `f32` loses its sign (`-0.0` expected), and
@@ -412,7 +445,7 @@ mod tests {
     #[test]
     fn test_f64_to_f32_underflow_is_positive_zero() {
         assert_eq!(f64_to_f32(-1e-300).to_bits(), 0.0f32.to_bits());
-        let subnormal = f64::from(f32::MIN_POSITIVE) / 2.0;
+        let subnormal = f64::from(f32::MIN_POSITIVE) * 0.75;
         assert_eq!(f64_to_f32(subnormal).to_bits(), 0.0f32.to_bits());
     }
 
@@ -426,15 +459,19 @@ mod tests {
 
     #[test]
     fn test_f32_to_u32_cases() {
-        assert_eq!(f32_to_u32(-1.0), 0);
-        assert_eq!(f32_to_u32(0.0), 0);
-        assert_eq!(f32_to_u32(0.5), 0);
-        assert_eq!(f32_to_u32(1.0), 1);
-        assert_eq!(f32_to_u32(1.9), 1);
-        assert_eq!(f32_to_u32(42.0), 42);
-        assert_eq!(f32_to_u32(65535.0), 65535);
-        assert_eq!(f32_to_u32(f32::NAN), 0);
-        assert_eq!(f32_to_u32(f32::INFINITY), 0);
+        for (input, expected) in [
+            (-1.0, 0),
+            (0.0, 0),
+            (0.5, 0),
+            (1.0, 1),
+            (1.9, 1),
+            (42.0, 42),
+            (65535.0, 65535),
+            (f32::NAN, 0),
+            (f32::INFINITY, 0),
+        ] {
+            assert_eq!(f32_to_u32(input), expected, "{input}");
+        }
     }
 
     #[test]

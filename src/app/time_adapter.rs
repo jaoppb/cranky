@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use cranky_time::{Clock, Source};
+use cranky_time::{Clock, LocalTime, Source};
 
 use crate::shared::events::signals::SignalHub;
 
@@ -35,6 +35,19 @@ fn until_next_second(subsec_millis: u32) -> Duration {
     Duration::from_millis(1000_u64.saturating_sub(u64::from(subsec_millis)))
 }
 
+/// Logs the warning the time zone source of `now` calls for, if any (see
+/// [`warning_on_change`]), with that source as a field.
+fn warn_on_zone_change(previous: &mut Option<Source>, now: &LocalTime) {
+    if let Some(warning) = warning_on_change(previous, now.source()) {
+        log_zone_warning(now.source(), warning);
+    }
+}
+
+/// Logs `warning` about the time zone coming from `source`.
+fn log_zone_warning(source: Source, warning: &str) {
+    tracing::warn!(source = ?source, "{warning}");
+}
+
 /// Sends the local time to the hub at the start of every second, and warns
 /// each time the time zone starts coming from a fallback.
 pub(super) async fn run(hub: Arc<SignalHub>) {
@@ -42,9 +55,7 @@ pub(super) async fn run(hub: Arc<SignalHub>) {
     let mut now = clock.now();
     let mut source = None;
     loop {
-        if let Some(warning) = warning_on_change(&mut source, now.source()) {
-            tracing::warn!(source = ?now.source(), "{warning}");
-        }
+        warn_on_zone_change(&mut source, &now);
         tokio::time::sleep(until_next_second(now.subsec_millis())).await;
         now = clock.now();
         let _ = hub.time_tx().send(now.clone());
@@ -85,6 +96,21 @@ mod tests {
         .map(|source| warning_on_change(&mut previous, source).is_some())
         .collect();
         assert_eq!(warned, [true, false, false, false, true, true, false]);
+    }
+
+    /// A reading from a fallback zone logs its warning with the source, once while the zone
+    /// keeps coming from there.
+    #[test]
+    fn a_fallback_reading_is_logged_once_with_its_source() {
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            let mut previous = None;
+            warn_on_zone_change(&mut previous, &LocalTime::utc(0));
+            warn_on_zone_change(&mut previous, &LocalTime::utc(1));
+        });
+        assert_eq!(
+            logs,
+            " WARN cranky::app::time_adapter: no time zone could be read; showing UTC source=Utc\n"
+        );
     }
 
     #[test]

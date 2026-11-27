@@ -1,6 +1,6 @@
 use crate::features::module_runtime::ports::AnyModulePort;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -115,52 +115,11 @@ impl BuiltinModules {
     ) -> Result<Box<dyn AnyModulePort>, BuiltinError> {
         let _ = Self::ensure_builtins(app_env)?;
 
-        let home = app_env.home().as_path();
-        let user_dir = home.join(".config/cranky/modules");
-        let shadow_dir = home.join(".local/share/cranky/modules");
-
+        let dirs = module_dirs(app_env);
         let engines = Self::registered_engines();
+        let target_engines = select_engines(&engines, selection, name)?;
 
-        let target_engines: Vec<&dyn crate::shared::scripting::ports::ScriptEnginePort> =
-            match selection {
-                crate::shared::config::domain::EngineSelection::Auto => {
-                    engines.iter().map(AsRef::as_ref).collect()
-                }
-                crate::shared::config::domain::EngineSelection::Explicit(id) => {
-                    let matching: Vec<_> = engines
-                        .iter()
-                        .map(AsRef::as_ref)
-                        .filter(|engine| &engine.id() == id)
-                        .collect();
-                    if matching.is_empty() {
-                        return Err(BuiltinError::UnsupportedEngine {
-                            engine: id.as_str().to_string(),
-                            module_name: name.clone(),
-                        });
-                    }
-                    matching
-                }
-            };
-
-        for dir in [&user_dir, &shadow_dir] {
-            for engine in &target_engines {
-                let path = dir.join(format!("{name}.{}", engine.file_extension().as_str()));
-                if let Ok(source) = fs::read_to_string(&path)
-                    && let Ok(module) = engine.load_module(name.as_str(), &source)
-                {
-                    return Ok(module);
-                }
-            }
-        }
-
-        let engine_suffix = selection
-            .as_explicit()
-            .map_or_else(String::new, |id| format!(" (engine: {})", id.as_str()));
-
-        Err(BuiltinError::ModuleNotFound {
-            module_name: name.clone(),
-            engine_suffix,
-        })
+        load_first_found(&dirs, &target_engines, name).ok_or_else(|| not_found(name, selection))
     }
 
     /// Watches user and system module directories for changes and triggers reloads.
@@ -172,116 +131,236 @@ impl BuiltinModules {
         command_tx: std::sync::Arc<dyn crate::app::commands::SystemCommandSender>,
         app_env: &crate::shared::env::domain::AppEnvironment,
     ) -> Result<Box<dyn notify::Watcher>, BuiltinError> {
-        use notify::{Event, RecursiveMode, Watcher};
+        let [user_dir, shadow_dir] = module_dirs(app_env);
 
-        let home = app_env.home().as_path();
-        let user_dir = home.join(".config/cranky/modules");
-        let shadow_dir = home.join(".local/share/cranky/modules");
-
-        let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
-            if let Ok(event) = res
-                && event.kind.is_modify()
-            {
-                for path in event.paths {
-                    if let Some(stem) = path.file_stem().and_then(|file_stem| file_stem.to_str()) {
-                        tracing::debug!("Script modified: {path:?}");
-                        command_tx.send_system_command(
-                            crate::app::commands::SystemCommand::ReloadModule(
-                                crate::shared::primitives::ModuleName::new(stem),
-                            ),
-                        );
-                    }
-                }
-            }
+        let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
+            reload_modified_scripts(res, command_tx.as_ref());
         })
         .map_err(|error| BuiltinError::InputOutput(format!("Failed to create watcher: {error}")))?;
 
-        if user_dir.exists() {
-            let _ = watcher.watch(&user_dir, RecursiveMode::NonRecursive);
-        }
-        if shadow_dir.exists() {
-            let _ = watcher.watch(&shadow_dir, RecursiveMode::NonRecursive);
-        }
+        watch_if_present(&mut watcher, &user_dir);
+        watch_if_present(&mut watcher, &shadow_dir);
 
         Ok(Box::new(watcher))
+    }
+}
+
+/// The user module directory, then the directory the builtins are deployed to, under the home
+/// of `app_env`: the order modules are searched in.
+fn module_dirs(app_env: &crate::shared::env::domain::AppEnvironment) -> [PathBuf; 2] {
+    let home = app_env.home().as_path();
+    [
+        home.join(".config/cranky/modules"),
+        home.join(".local/share/cranky/modules"),
+    ]
+}
+
+/// The engines of `engines` that `selection` allows, in registration order.
+///
+/// # Errors
+///
+/// Returns [`BuiltinError::UnsupportedEngine`] if `selection` names an engine that is not
+/// registered.
+fn select_engines<'engines>(
+    engines: &'engines [Box<dyn crate::shared::scripting::ports::ScriptEnginePort>],
+    selection: &crate::shared::config::domain::EngineSelection,
+    name: &crate::shared::primitives::ModuleName,
+) -> Result<Vec<&'engines dyn crate::shared::scripting::ports::ScriptEnginePort>, BuiltinError> {
+    let registered = engines.iter().map(AsRef::as_ref);
+    match selection {
+        crate::shared::config::domain::EngineSelection::Auto => Ok(registered.collect()),
+        crate::shared::config::domain::EngineSelection::Explicit(id) => {
+            let matching: Vec<_> = registered.filter(|engine| &engine.id() == id).collect();
+            if matching.is_empty() {
+                return Err(BuiltinError::UnsupportedEngine {
+                    engine: id.as_str().to_string(),
+                    module_name: name.clone(),
+                });
+            }
+            Ok(matching)
+        }
+    }
+}
+
+/// The first module named `name` that loads, searching each of `dirs` in order with every one
+/// of `engines` in order; a script that is missing or fails to load is skipped.
+fn load_first_found(
+    dirs: &[PathBuf],
+    engines: &[&dyn crate::shared::scripting::ports::ScriptEnginePort],
+    name: &crate::shared::primitives::ModuleName,
+) -> Option<Box<dyn AnyModulePort>> {
+    for dir in dirs {
+        for engine in engines {
+            let path = dir.join(format!("{name}.{}", engine.file_extension().as_str()));
+            if let Ok(source) = fs::read_to_string(&path)
+                && let Ok(module) = engine.load_module(name.as_str(), &source)
+            {
+                return Some(module);
+            }
+        }
+    }
+    None
+}
+
+/// The error for a module `name` that no allowed engine found, naming the engine when
+/// `selection` pins one.
+fn not_found(
+    name: &crate::shared::primitives::ModuleName,
+    selection: &crate::shared::config::domain::EngineSelection,
+) -> BuiltinError {
+    let engine_suffix = selection
+        .as_explicit()
+        .map_or_else(String::new, |id| format!(" (engine: {})", id.as_str()));
+
+    BuiltinError::ModuleNotFound {
+        module_name: name.clone(),
+        engine_suffix,
+    }
+}
+
+/// Asks for a reload of every module whose script the watcher event `res` reports modified.
+fn reload_modified_scripts(
+    res: notify::Result<notify::Event>,
+    command_tx: &dyn crate::app::commands::SystemCommandSender,
+) {
+    if let Ok(event) = res
+        && event.kind.is_modify()
+    {
+        for path in event.paths {
+            reload_script(&path, command_tx);
+        }
+    }
+}
+
+/// Asks for a reload of the module the script at `path` defines, named after its file stem; a
+/// path with no readable stem is ignored.
+fn reload_script(path: &Path, command_tx: &dyn crate::app::commands::SystemCommandSender) {
+    if let Some(stem) = path.file_stem().and_then(|file_stem| file_stem.to_str()) {
+        log_script_modified(path);
+        command_tx.send_system_command(crate::app::commands::SystemCommand::ReloadModule(
+            crate::shared::primitives::ModuleName::new(stem),
+        ));
+    }
+}
+
+/// Logs that the script at `path` changed on disk.
+fn log_script_modified(path: &Path) {
+    tracing::debug!("Script modified: {path:?}");
+}
+
+/// Watches `dir`, without recursion, when it exists; a directory that cannot be watched is
+/// ignored.
+fn watch_if_present(watcher: &mut impl notify::Watcher, dir: &Path) {
+    if dir.exists() {
+        let _ = watcher.watch(dir, notify::RecursiveMode::NonRecursive);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::config::domain::{EngineId, EngineSelection};
+    use crate::features::vdom::domain::{NodeTag, VNode, VNodeKind};
+    use crate::shared::config::domain::{Config, EngineId, EngineSelection, ModuleConfig};
+    use crate::shared::events::signals::{SignalHub, SignalKind};
+    use crate::shared::primitives::{FunctionName, ModuleOptions, MonitorId};
+    use crate::test_utils::TestHome;
 
     fn get_test_env() -> crate::test_utils::TestHome {
         crate::test_utils::TestHome::new("builtins")
+    }
+
+    /// The built-in `name` that `find_module` finds for the engine `engine`.
+    fn find_builtin(env: &TestHome, name: &str, engine: &str) -> Box<dyn AnyModulePort> {
+        let selection = EngineSelection::Explicit(EngineId::new(engine));
+        BuiltinModules::find_module(
+            &crate::shared::primitives::ModuleName::new(name),
+            &selection,
+            env,
+        )
+        .unwrap_or_else(|_| panic!("Failed to find {name} for {engine}"))
+    }
+
+    /// The built-in `name` for the engine `engine`, initialised with `options`, pinned to that
+    /// engine, under the default configuration.
+    fn init_builtin(
+        env: &TestHome,
+        (name, engine): (&str, &str),
+        options: ModuleOptions,
+    ) -> Box<dyn AnyModulePort> {
+        let mut module = find_builtin(env, name, engine);
+        let config = ModuleConfig::new(crate::shared::primitives::ModuleName::new(name), options)
+            .with_engine(EngineSelection::Explicit(EngineId::new(engine)));
+        module.init(&config, &Config::default()).unwrap();
+        module
+    }
+
+    /// Refreshes the time signal of `module` from a hub whose time is `unix_seconds`, in UTC.
+    fn refresh_time(module: &mut dyn AnyModulePort, unix_seconds: i64) {
+        let hub = SignalHub::new(Config::default());
+        hub.time_tx()
+            .send(cranky_time::LocalTime::utc(unix_seconds))
+            .unwrap();
+        module.refresh(&hub, &[SignalKind::Time]);
+    }
+
+    /// What `module` renders on the monitor `monitor`.
+    fn render_on(module: &dyn AnyModulePort, monitor: &str) -> VNode {
+        module.render(&MonitorId::new(monitor))
     }
 
     #[test]
     fn test_ensure_builtins() {
         let env = get_test_env();
         let dir = BuiltinModules::ensure_builtins(&env).expect("ensure_builtins failed");
-        assert!(dir.join("clock.rhai").exists());
-        assert!(dir.join("clock.lua").exists());
-        assert!(dir.join("calendar.rhai").exists());
-        assert!(dir.join("calendar.lua").exists());
-        assert!(dir.join("workspace.rhai").exists());
-        assert!(dir.join("workspace.lua").exists());
-        assert!(dir.join("systray.lua").exists());
-        assert!(dir.join("systray.rhai").exists());
-        assert!(dir.join("metrics.lua").exists());
-        assert!(dir.join("metrics.rhai").exists());
+        for file in [
+            "clock.rhai",
+            "clock.lua",
+            "calendar.rhai",
+            "calendar.lua",
+            "workspace.rhai",
+            "workspace.lua",
+            "systray.lua",
+            "systray.rhai",
+            "metrics.lua",
+            "metrics.rhai",
+        ] {
+            assert!(dir.join(file).exists(), "{file}");
+        }
+    }
+
+    /// Metrics at 50% CPU, 1 KiB of 2 KiB of memory used, no swap, disk or traffic, and 45 °C.
+    fn sample_metrics_state() -> crate::features::metrics::domain::MetricsState {
+        use crate::features::metrics::domain::{
+            CpuMetrics, CpuUsage, CreateMetricsCommand, DeviceMetrics, MemoryBytes, MemoryMetrics,
+            MemoryUsage, MetricsConfig, MetricsState, NetworkMetrics, NetworkSpeed, SystemMetrics,
+            Temperature,
+        };
+        let memory = MemoryMetrics::new(
+            MemoryUsage::new(MemoryBytes::new(1024), MemoryBytes::new(2048)),
+            MemoryUsage::new(MemoryBytes::new(0), MemoryBytes::new(0)),
+        );
+        let system = SystemMetrics::new(CpuMetrics::new(CpuUsage::new(50.0), vec![]), memory);
+        let network = NetworkMetrics::new(NetworkSpeed::new(0), NetworkSpeed::new(0));
+        let devices = DeviceMetrics::new(vec![], network, Some(Temperature::new(45.0)));
+        MetricsState::new(CreateMetricsCommand::new(
+            system,
+            devices,
+            MetricsConfig::default(),
+        ))
     }
 
     #[test]
     fn test_find_module_systray_and_metrics_rhai() {
-        use crate::shared::primitives::ModuleName;
         let env = get_test_env();
-        let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let systray_mod =
-            BuiltinModules::find_module(&ModuleName::new("systray"), &selection, &env).unwrap();
-        let mut metrics_mod =
-            BuiltinModules::find_module(&ModuleName::new("metrics"), &selection, &env).unwrap();
-        let hub = crate::shared::events::signals::SignalHub::new(
-            crate::shared::config::domain::Config::default(),
-        );
-        let metrics_state = crate::features::metrics::domain::MetricsState::new(
-            crate::features::metrics::domain::CreateMetricsCommand::new(
-                crate::features::metrics::domain::SystemMetrics::new(
-                    crate::features::metrics::domain::CpuMetrics::new(
-                        crate::features::metrics::domain::CpuUsage::new(50.0),
-                        vec![],
-                    ),
-                    crate::features::metrics::domain::MemoryMetrics::new(
-                        crate::features::metrics::domain::MemoryUsage::new(
-                            crate::features::metrics::domain::MemoryBytes::new(1024),
-                            crate::features::metrics::domain::MemoryBytes::new(2048),
-                        ),
-                        crate::features::metrics::domain::MemoryUsage::new(
-                            crate::features::metrics::domain::MemoryBytes::new(0),
-                            crate::features::metrics::domain::MemoryBytes::new(0),
-                        ),
-                    ),
-                ),
-                crate::features::metrics::domain::DeviceMetrics::new(
-                    vec![],
-                    crate::features::metrics::domain::NetworkMetrics::new(
-                        crate::features::metrics::domain::NetworkSpeed::new(0),
-                        crate::features::metrics::domain::NetworkSpeed::new(0),
-                    ),
-                    Some(crate::features::metrics::domain::Temperature::new(45.0)),
-                ),
-                crate::features::metrics::domain::MetricsConfig::default(),
-            ),
-        );
-        hub.metrics_tx().send(metrics_state).unwrap();
-        metrics_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Metrics]);
+        let systray_mod = find_builtin(&env, "systray", "rhai");
+        let mut metrics_mod = find_builtin(&env, "metrics", "rhai");
+        let hub = SignalHub::new(Config::default());
+        hub.metrics_tx().send(sample_metrics_state()).unwrap();
+        metrics_mod.refresh(&hub, &[SignalKind::Metrics]);
 
-        let _ = systray_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-        let metrics_node = metrics_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-        assert_eq!(
-            metrics_node.tag(),
-            crate::features::vdom::domain::NodeTag::Flex
-        );
+        let _ = render_on(systray_mod.as_ref(), "DP-1");
+        let metrics_node = render_on(metrics_mod.as_ref(), "DP-1");
+        assert_eq!(metrics_node.tag(), NodeTag::Flex);
     }
 
     fn collect_texts(node: &crate::features::vdom::domain::VNode, texts: &mut Vec<String>) {
@@ -299,37 +378,22 @@ mod tests {
         engine: &str,
         temperature: Option<crate::features::metrics::domain::Temperature>,
     ) -> Vec<String> {
-        use crate::shared::primitives::ModuleName;
+        use crate::features::metrics::domain::{MetricsConfig, MetricsState};
         let env = get_test_env();
-        let selection = EngineSelection::Explicit(EngineId::new(engine));
-        let mut metrics_mod =
-            BuiltinModules::find_module(&ModuleName::new("metrics"), &selection, &env).unwrap();
-        metrics_mod
-            .init(
-                &crate::shared::config::domain::ModuleConfig::new(
-                    ModuleName::new("metrics"),
-                    crate::shared::primitives::ModuleOptions::default(),
-                )
-                .with_engine(selection.clone()),
-                &crate::shared::config::domain::Config::default(),
-            )
-            .unwrap();
-        let hub = crate::shared::events::signals::SignalHub::new(
-            crate::shared::config::domain::Config::default(),
-        );
-        let config: crate::features::metrics::domain::MetricsConfig =
+        let mut metrics_mod = init_builtin(&env, ("metrics", engine), ModuleOptions::default());
+        let hub = SignalHub::new(Config::default());
+        let config: MetricsConfig =
             serde_json::from_value(serde_json::json!({ "temperature": "celsius" })).unwrap();
-        let metrics_state = crate::features::metrics::domain::MetricsState {
+        let metrics_state = MetricsState {
             temperature,
             config,
-            ..crate::features::metrics::domain::MetricsState::default()
+            ..MetricsState::default()
         };
         hub.metrics_tx().send(metrics_state).unwrap();
-        metrics_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Metrics]);
+        metrics_mod.refresh(&hub, &[SignalKind::Metrics]);
 
-        let node = metrics_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
         let mut texts = Vec::new();
-        collect_texts(&node, &mut texts);
+        collect_texts(&render_on(metrics_mod.as_ref(), "DP-1"), &mut texts);
         texts
     }
 
@@ -356,37 +420,17 @@ mod tests {
 
     #[test]
     fn test_find_module_clock_rhai_format() {
-        use crate::shared::primitives::ModuleName;
         let env = get_test_env();
-        let selection = EngineSelection::Explicit(EngineId::new("rhai"));
-        let mut clock_mod =
-            BuiltinModules::find_module(&ModuleName::new("clock"), &selection, &env).unwrap();
-        let mut options_map = std::collections::HashMap::new();
-        options_map.insert(
+        let options = ModuleOptions::new(std::collections::HashMap::from([(
             "format".to_string(),
             crate::shared::primitives::DynamicValue::String("%H:%M".to_string()),
-        );
-        let options = crate::shared::primitives::ModuleOptions::new(options_map);
-        clock_mod
-            .init(
-                &crate::shared::config::domain::ModuleConfig::new(
-                    ModuleName::new("clock"),
-                    options,
-                )
-                .with_engine(selection.clone()),
-                &crate::shared::config::domain::Config::default(),
-            )
-            .unwrap();
-        let hub = crate::shared::events::signals::SignalHub::new(
-            crate::shared::config::domain::Config::default(),
-        );
+        )]));
+        let mut clock_mod = init_builtin(&env, ("clock", "rhai"), options);
         // 2026-07-28T14:30:45Z
-        let test_time = cranky_time::LocalTime::utc(1_785_249_045);
-        hub.time_tx().send(test_time).unwrap();
-        clock_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
-        let node = clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-        assert_eq!(node.tag(), crate::features::vdom::domain::NodeTag::Text);
-        if let crate::features::vdom::domain::VNodeKind::Text { text } = node.kind() {
+        refresh_time(clock_mod.as_mut(), 1_785_249_045);
+        let node = render_on(clock_mod.as_ref(), "DP-1");
+        assert_eq!(node.tag(), NodeTag::Text);
+        if let VNodeKind::Text { text } = node.kind() {
             assert_eq!(text.as_str(), "14:30");
         } else {
             panic!("Expected Text node");
@@ -422,222 +466,193 @@ mod tests {
 
     #[test]
     fn test_find_module_calendar_lua_and_rhai() {
-        use crate::shared::primitives::{FunctionName, ModuleName};
         let env = get_test_env();
 
         for engine_name in ["lua", "rhai"] {
-            let selection = EngineSelection::Explicit(EngineId::new(engine_name));
             let mut cal_mod =
-                BuiltinModules::find_module(&ModuleName::new("calendar"), &selection, &env)
-                    .unwrap_or_else(|_| panic!("Failed to find calendar for {engine_name}"));
-
-            cal_mod
-                .init(
-                    &crate::shared::config::domain::ModuleConfig::new(
-                        ModuleName::new("calendar"),
-                        crate::shared::primitives::ModuleOptions::default(),
-                    )
-                    .with_engine(selection.clone()),
-                    &crate::shared::config::domain::Config::default(),
-                )
-                .unwrap();
-
-            let hub = crate::shared::events::signals::SignalHub::new(
-                crate::shared::config::domain::Config::default(),
-            );
+                init_builtin(&env, ("calendar", engine_name), ModuleOptions::default());
             // 2026-09-01T12:00:00Z
-            let test_time = cranky_time::LocalTime::utc(1_788_264_000);
-            hub.time_tx().send(test_time).unwrap();
-            cal_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
+            refresh_time(cal_mod.as_mut(), 1_788_264_000);
 
-            let root = cal_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-            assert_eq!(
-                root.tag(),
-                crate::features::vdom::domain::NodeTag::Flex,
-                "Root should be Flex for {engine_name}"
-            );
-            assert_eq!(
-                root.children().len(),
-                3,
-                "Root should have 3 children (Header, Weekdays, Grid) for {engine_name}"
-            );
-
-            let header = &root.children()[0];
-            assert_eq!(header.children().len(), 3, "Header has prev, title, next");
-
-            let weekdays = &root.children()[1];
-            assert_eq!(
-                weekdays.tag(),
-                crate::features::vdom::domain::NodeTag::Grid,
-                "Weekdays should be Grid for {engine_name}"
-            );
-            assert_eq!(weekdays.children().len(), 7, "Weekdays has 7 items");
-
-            let days_grid = &root.children()[2];
-            assert_eq!(
-                days_grid.tag(),
-                crate::features::vdom::domain::NodeTag::Grid,
-                "Days should be Grid for {engine_name}"
-            );
-            assert_eq!(days_grid.children().len(), 42, "Days grid has 42 cells");
-
-            // Test navigation function calls
-            assert!(
-                cal_mod
-                    .call_function(&FunctionName::new("prev_month"))
-                    .is_ok()
-            );
-            let prev_root = cal_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-            assert_eq!(prev_root.children().len(), 3);
-
-            assert!(
-                cal_mod
-                    .call_function(&FunctionName::new("next_month"))
-                    .is_ok()
-            );
-            assert!(
-                cal_mod
-                    .call_function(&FunctionName::new("reset_today"))
-                    .is_ok()
-            );
+            assert_calendar_shape(&render_on(cal_mod.as_ref(), "DP-1"), engine_name);
+            assert_calendar_navigates(cal_mod.as_mut());
         }
+    }
+
+    /// Checks the calendar `root` rendered with `engine_name`: a flex of a header (prev, title,
+    /// next), a seven-item weekday grid and a 42-cell day grid.
+    fn assert_calendar_shape(root: &VNode, engine_name: &str) {
+        assert_eq!(
+            root.tag(),
+            NodeTag::Flex,
+            "Root should be Flex for {engine_name}"
+        );
+        assert_eq!(
+            root.children().len(),
+            3,
+            "Root should have 3 children (Header, Weekdays, Grid) for {engine_name}"
+        );
+
+        let header = &root.children()[0];
+        assert_eq!(header.children().len(), 3, "Header has prev, title, next");
+
+        assert_calendar_grids(root, engine_name);
+    }
+
+    /// Checks the weekday and day grids of the calendar `root` rendered with `engine_name`.
+    fn assert_calendar_grids(root: &VNode, engine_name: &str) {
+        let weekdays = &root.children()[1];
+        assert_eq!(
+            weekdays.tag(),
+            NodeTag::Grid,
+            "Weekdays should be Grid for {engine_name}"
+        );
+        assert_eq!(weekdays.children().len(), 7, "Weekdays has 7 items");
+
+        let days_grid = &root.children()[2];
+        assert_eq!(
+            days_grid.tag(),
+            NodeTag::Grid,
+            "Days should be Grid for {engine_name}"
+        );
+        assert_eq!(days_grid.children().len(), 42, "Days grid has 42 cells");
+    }
+
+    /// Checks the calendar's navigation functions: previous month (still rendering its three
+    /// parts), next month and back to today.
+    fn assert_calendar_navigates(cal_mod: &mut dyn AnyModulePort) {
+        // Test navigation function calls
+        assert!(
+            cal_mod
+                .call_function(&FunctionName::new("prev_month"))
+                .is_ok()
+        );
+        let prev_root = render_on(cal_mod, "DP-1");
+        assert_eq!(prev_root.children().len(), 3);
+
+        assert!(
+            cal_mod
+                .call_function(&FunctionName::new("next_month"))
+                .is_ok()
+        );
+        assert!(
+            cal_mod
+                .call_function(&FunctionName::new("reset_today"))
+                .is_ok()
+        );
+    }
+
+    /// The built-in clock for `engine_name`, initialised and refreshed to 2026-09-01T12:00:00Z.
+    fn noon_clock(env: &TestHome, engine_name: &str) -> Box<dyn AnyModulePort> {
+        let mut clock_mod = init_builtin(env, ("clock", engine_name), ModuleOptions::default());
+        // 2026-09-01T12:00:00Z
+        refresh_time(clock_mod.as_mut(), 1_788_264_000);
+        clock_mod
+    }
+
+    /// Calls `function` of `module`, failing the test with `failure` when the call errors.
+    fn call(module: &mut dyn AnyModulePort, function: &str, failure: &str) {
+        module
+            .call_function(&FunctionName::new(function))
+            .expect(failure);
     }
 
     #[test]
     fn test_clock_popup_toggle_lua_and_rhai() {
-        use crate::shared::primitives::{FunctionName, ModuleName};
         let env = get_test_env();
 
         for engine_name in ["lua", "rhai"] {
-            let selection = EngineSelection::Explicit(EngineId::new(engine_name));
-            let mut clock_mod =
-                BuiltinModules::find_module(&ModuleName::new("clock"), &selection, &env)
-                    .unwrap_or_else(|_| panic!("Failed to find clock for {engine_name}"));
-
-            clock_mod
-                .init(
-                    &crate::shared::config::domain::ModuleConfig::new(
-                        ModuleName::new("clock"),
-                        crate::shared::primitives::ModuleOptions::default(),
-                    )
-                    .with_engine(selection.clone()),
-                    &crate::shared::config::domain::Config::default(),
-                )
-                .unwrap();
-
-            let hub = crate::shared::events::signals::SignalHub::new(
-                crate::shared::config::domain::Config::default(),
-            );
-            // 2026-09-01T12:00:00Z
-            let test_time = cranky_time::LocalTime::utc(1_788_264_000);
-            hub.time_tx().send(test_time).unwrap();
-            clock_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
+            let mut clock_mod = noon_clock(&env, engine_name);
 
             // Initial state: popup is None
-            let node_before = clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            let node_before = render_on(clock_mod.as_ref(), "DP-1");
             assert!(
                 node_before.popup().is_none(),
                 "Popup should initially be None for {engine_name}"
             );
 
-            // Toggle popup on
-            clock_mod
-                .call_function(&FunctionName::new("toggle_popup"))
-                .expect("Failed to call toggle_popup");
-            let node_after_toggle_on =
-                clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-            assert!(
-                node_after_toggle_on.popup().is_some(),
-                "Popup should be Some after toggle_popup on {engine_name}"
-            );
-            let popup = node_after_toggle_on.popup().unwrap();
+            assert_toggle_opens_the_calendar(clock_mod.as_mut(), engine_name);
+            assert_dismiss_reopen_and_close(clock_mod.as_mut(), engine_name);
+        }
+    }
+
+    /// Checks that toggling the popup of `clock_mod` opens one embedding the calendar module.
+    fn assert_toggle_opens_the_calendar(clock_mod: &mut dyn AnyModulePort, engine_name: &str) {
+        // Toggle popup on
+        call(clock_mod, "toggle_popup", "Failed to call toggle_popup");
+        let node_after_toggle_on = render_on(clock_mod, "DP-1");
+        assert!(
+            node_after_toggle_on.popup().is_some(),
+            "Popup should be Some after toggle_popup on {engine_name}"
+        );
+        let popup = node_after_toggle_on.popup().unwrap();
+        assert_eq!(
+            popup.content().tag(),
+            NodeTag::Module,
+            "Popup content should be a Module node for {engine_name}"
+        );
+        let VNodeKind::Module { name, .. } = popup.content().kind() else {
+            panic!("Popup content should be a Module node for {engine_name}");
+        };
+        assert_eq!(
+            name.as_str(),
+            "calendar",
+            "Popup should embed the calendar module for {engine_name}"
+        );
+    }
+
+    /// The calls that close, reopen and close again an open clock popup: the function, the
+    /// failure message, whether the popup is open afterwards, and that state in words.
+    const DISMISS_REOPEN_CLOSE: [(&str, &str, bool, &str); 3] = [
+        // Dismiss popup via on_popup_dismiss
+        (
+            "on_popup_dismiss",
+            "Failed to call on_popup_dismiss",
+            false,
+            "None after on_popup_dismiss",
+        ),
+        // Re-open popup
+        (
+            "toggle_popup",
+            "Failed to call toggle_popup after dismiss",
+            true,
+            "Some after re-opening",
+        ),
+        // Toggle popup off
+        (
+            "toggle_popup",
+            "Failed to call toggle_popup second time",
+            false,
+            "None after toggle_popup off",
+        ),
+    ];
+
+    /// Checks that the open popup of `clock_mod` closes on dismiss, reopens on toggle and
+    /// closes on a second toggle.
+    fn assert_dismiss_reopen_and_close(clock_mod: &mut dyn AnyModulePort, engine_name: &str) {
+        for (function, failure, open, state) in DISMISS_REOPEN_CLOSE {
+            call(clock_mod, function, failure);
             assert_eq!(
-                popup.content().tag(),
-                crate::features::vdom::domain::NodeTag::Module,
-                "Popup content should be a Module node for {engine_name}"
-            );
-            let crate::features::vdom::domain::VNodeKind::Module { name, .. } =
-                popup.content().kind()
-            else {
-                panic!("Popup content should be a Module node for {engine_name}");
-            };
-            assert_eq!(
-                name.as_str(),
-                "calendar",
-                "Popup should embed the calendar module for {engine_name}"
-            );
-
-            // Dismiss popup via on_popup_dismiss
-            clock_mod
-                .call_function(&FunctionName::new("on_popup_dismiss"))
-                .expect("Failed to call on_popup_dismiss");
-            let node_after_dismiss =
-                clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-            assert!(
-                node_after_dismiss.popup().is_none(),
-                "Popup should be None after on_popup_dismiss on {engine_name}"
-            );
-
-            // Re-open popup
-            clock_mod
-                .call_function(&FunctionName::new("toggle_popup"))
-                .expect("Failed to call toggle_popup after dismiss");
-            let node_reopened =
-                clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-            assert!(
-                node_reopened.popup().is_some(),
-                "Popup should be Some after re-opening on {engine_name}"
-            );
-
-            // Toggle popup off
-            clock_mod
-                .call_function(&FunctionName::new("toggle_popup"))
-                .expect("Failed to call toggle_popup second time");
-            let node_after_toggle_off =
-                clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-            assert!(
-                node_after_toggle_off.popup().is_none(),
-                "Popup should be None after toggle_popup off on {engine_name}"
+                render_on(clock_mod, "DP-1").popup().is_some(),
+                open,
+                "Popup should be {state} on {engine_name}"
             );
         }
     }
 
     #[test]
     fn test_clock_popup_multi_monitor_isolation() {
-        use crate::shared::primitives::{FunctionName, ModuleName};
         let env = get_test_env();
 
         for engine_name in ["lua", "rhai"] {
-            let selection = EngineSelection::Explicit(EngineId::new(engine_name));
-            let mut clock_mod =
-                BuiltinModules::find_module(&ModuleName::new("clock"), &selection, &env)
-                    .unwrap_or_else(|_| panic!("Failed to find clock for {engine_name}"));
-
-            clock_mod
-                .init(
-                    &crate::shared::config::domain::ModuleConfig::new(
-                        ModuleName::new("clock"),
-                        crate::shared::primitives::ModuleOptions::default(),
-                    )
-                    .with_engine(selection.clone()),
-                    &crate::shared::config::domain::Config::default(),
-                )
-                .unwrap();
-
-            let hub = crate::shared::events::signals::SignalHub::new(
-                crate::shared::config::domain::Config::default(),
-            );
-            // 2026-09-01T12:00:00Z
-            let test_time = cranky_time::LocalTime::utc(1_788_264_000);
-            hub.time_tx().send(test_time).unwrap();
-            clock_mod.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
+            let mut clock_mod = noon_clock(&env, engine_name);
 
             // Multi-monitor per-monitor popup test
             clock_mod
                 .call_function_with_args(&FunctionName::new("toggle_popup"), &["DP-1"])
                 .expect("Failed to call toggle_popup for DP-1");
-            let node_dp1 = clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
-            let node_dp2 = clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-2"));
+            let node_dp1 = render_on(clock_mod.as_ref(), "DP-1");
+            let node_dp2 = render_on(clock_mod.as_ref(), "DP-2");
             assert!(
                 node_dp1.popup().is_some(),
                 "DP-1 should have popup on {engine_name}"
@@ -651,8 +666,7 @@ mod tests {
             clock_mod
                 .call_function_with_args(&FunctionName::new("on_popup_dismiss"), &["DP-1"])
                 .expect("Failed to call on_popup_dismiss for DP-1");
-            let node_dp1_dismissed =
-                clock_mod.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+            let node_dp1_dismissed = render_on(clock_mod.as_ref(), "DP-1");
             assert!(
                 node_dp1_dismissed.popup().is_none(),
                 "DP-1 popup should be None after dismiss on {engine_name}"
@@ -903,28 +917,30 @@ mod tests {
         let _started = watch(&home);
     }
 
-    /// Issue #9, end to end on the shipped assets: the calendar laid out at
-    /// the 280px host its embedder resolved, for both script engines.
-    #[test]
-    fn test_calendar_fills_its_host_lua_and_rhai() {
-        use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
-        use crate::features::layout_engine::domain::LayoutRoot;
-        use crate::features::layout_engine::domain::{RenderNode, TextMeasurer};
-        use crate::features::layout_engine::ports::LayoutEnginePort;
-        use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
+    /// A text measurer that gives every character 7px and every line 16px.
+    struct Glyphs;
+
+    impl crate::features::layout_engine::domain::TextMeasurer for Glyphs {
+        fn measure(
+            &mut self,
+            text: &str,
+            _font: crate::shared::rendering::ports::text::TextFont<'_>,
+        ) -> crate::shared::primitives::geometry::Size {
+            crate::shared::primitives::geometry::Size::new(
+                u32::try_from(text.chars().count())
+                    .unwrap_or(0)
+                    .saturating_mul(7),
+                16,
+            )
+        }
+    }
+
+    /// Resolves styles from the shipped base and calendar sheets.
+    fn calendar_style_resolver()
+    -> crate::features::styling::adapters::fs_loader::CompositeStyleResolver {
         use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
         use crate::features::styling::domain::StyleSheetName;
         use crate::features::styling::ports::CssParserPort;
-        use crate::shared::primitives::geometry::{Position, Size};
-        use crate::shared::primitives::{ModuleName, MonitorId, SizeConstraint};
-        use crate::shared::rendering::ports::text::TextFont;
-
-        struct Glyphs;
-        impl TextMeasurer for Glyphs {
-            fn measure(&mut self, text: &str, _font: TextFont<'_>) -> Size {
-                Size::new(u32::try_from(text.chars().count()).unwrap_or(0) * 7, 16)
-            }
-        }
 
         let parser = LightningCssAdapter::new();
         let sheets = [
@@ -938,46 +954,84 @@ mod tests {
                 .unwrap()
         })
         .collect();
-        let resolver = CompositeStyleResolver::new(sheets);
+        crate::features::styling::adapters::fs_loader::CompositeStyleResolver::new(sheets)
+    }
+
+    /// The built-in calendar of `engine_name`, refreshed to 2026-10-15T12:00:00Z, styled by
+    /// `resolver` and laid out in a 280px-wide host.
+    fn lay_out_calendar(
+        env: &TestHome,
+        engine_name: &str,
+        resolver: &crate::features::styling::adapters::fs_loader::CompositeStyleResolver,
+    ) -> crate::features::layout_engine::domain::RenderNode {
+        use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
+        use crate::features::layout_engine::domain::LayoutRoot;
+        use crate::features::layout_engine::ports::LayoutEnginePort;
+        use crate::shared::primitives::SizeConstraint;
+        use crate::shared::primitives::geometry::Position;
+
+        let mut cal = init_builtin(env, ("calendar", engine_name), ModuleOptions::default());
+        // 2026-10-15T12:00:00Z
+        refresh_time(cal.as_mut(), 1_792_065_600);
+
+        let styled = render_on(cal.as_ref(), "DP-1").resolve_styles(resolver, None);
+        let mut engine = TaffyLayoutAdapter::new();
+        engine
+            .calculate_layout(
+                LayoutRoot::new(
+                    styled,
+                    Position::new(0, 0),
+                    SizeConstraint::new(Some(280), None),
+                ),
+                &mut Glyphs,
+            )
+            .unwrap()
+    }
+
+    /// The x of the first seven day cells, one week, of the laid-out calendar `tree`.
+    fn first_week_columns(
+        tree: &crate::features::layout_engine::domain::RenderNode,
+        engine_name: &str,
+    ) -> Vec<i32> {
+        use crate::features::layout_engine::domain::RenderNode;
+        let RenderNode::Flex { children, .. } = tree else {
+            panic!("{engine_name}: flex root")
+        };
+        let RenderNode::Grid { children: days, .. } = &children[2] else {
+            panic!("{engine_name}: day grid")
+        };
+        days.iter().take(7).map(|day| day.rect().x()).collect()
+    }
+
+    /// Checks that the columns at `column_positions` spread more than 30px apart at an even
+    /// step.
+    fn assert_even_columns(column_positions: &[i32], engine_name: &str) {
+        let step = column_positions[1]
+            .checked_sub(column_positions[0])
+            .unwrap();
+        assert!(
+            step > 30,
+            "{engine_name}: columns should spread, got {column_positions:?}"
+        );
+        assert!(
+            column_positions.windows(2).all(|pair| {
+                let gap = pair[1].checked_sub(pair[0]).unwrap();
+                gap.checked_sub(step).unwrap().abs() <= 1
+            }),
+            "{engine_name}: even columns {column_positions:?}"
+        );
+    }
+
+    /// Issue #9, end to end on the shipped assets: the calendar laid out at
+    /// the 280px host its embedder resolved, for both script engines.
+    #[test]
+    fn test_calendar_fills_its_host_lua_and_rhai() {
+        let resolver = calendar_style_resolver();
         let env = get_test_env();
         let mut laid_out = Vec::new();
 
         for engine_name in ["lua", "rhai"] {
-            let selection = EngineSelection::Explicit(EngineId::new(engine_name));
-            let mut cal =
-                BuiltinModules::find_module(&ModuleName::new("calendar"), &selection, &env)
-                    .unwrap();
-            cal.init(
-                &crate::shared::config::domain::ModuleConfig::new(
-                    ModuleName::new("calendar"),
-                    crate::shared::primitives::ModuleOptions::default(),
-                )
-                .with_engine(selection.clone()),
-                &crate::shared::config::domain::Config::default(),
-            )
-            .unwrap();
-            let hub = crate::shared::events::signals::SignalHub::new(
-                crate::shared::config::domain::Config::default(),
-            );
-            // 2026-10-15T12:00:00Z
-            let now = cranky_time::LocalTime::utc(1_792_065_600);
-            hub.time_tx().send(now).unwrap();
-            cal.refresh(&hub, &[crate::shared::events::signals::SignalKind::Time]);
-
-            let styled = cal
-                .render(&MonitorId::new("DP-1"))
-                .resolve_styles(&resolver, None);
-            let mut engine = TaffyLayoutAdapter::new();
-            let tree = engine
-                .calculate_layout(
-                    LayoutRoot::new(
-                        styled,
-                        Position::new(0, 0),
-                        SizeConstraint::new(Some(280), None),
-                    ),
-                    &mut Glyphs,
-                )
-                .unwrap();
+            let tree = lay_out_calendar(&env, engine_name, &resolver);
 
             // The root fills the 280px host; the 260px min-height is gone,
             // so the popup follows the content.
@@ -988,26 +1042,9 @@ mod tests {
                 tree.rect().height()
             );
 
-            let RenderNode::Flex { children, .. } = &tree else {
-                panic!("{engine_name}: flex root")
-            };
-            let RenderNode::Grid { children: days, .. } = &children[2] else {
-                panic!("{engine_name}: day grid")
-            };
             // 7 equal columns spanning the padded root (280 - 2*12 - 2*1 border).
-            let column_positions: Vec<i32> =
-                days.iter().take(7).map(|day| day.rect().x()).collect();
-            let step = column_positions[1] - column_positions[0];
-            assert!(
-                step > 30,
-                "{engine_name}: columns should spread, got {column_positions:?}"
-            );
-            assert!(
-                column_positions
-                    .windows(2)
-                    .all(|pair| (pair[1] - pair[0] - step).abs() <= 1),
-                "{engine_name}: even columns {column_positions:?}"
-            );
+            let column_positions = first_week_columns(&tree, engine_name);
+            assert_even_columns(&column_positions, engine_name);
             laid_out.push((tree.rect().height(), column_positions));
         }
         assert_eq!(
