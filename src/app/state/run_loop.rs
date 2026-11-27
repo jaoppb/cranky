@@ -175,3 +175,25 @@ impl<
             })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SignalReceivers;
+    use crate::shared::config::domain::Config;
+    use crate::shared::events::signals::SignalHub;
+
+    /// With every signal sender gone, waiting for a signal change never resolves (rather than
+    /// panicking on a `select!` with every branch disabled), so the run loop keeps waiting on
+    /// its other wakeups.
+    #[test]
+    fn test_signal_receivers_wait_forever_once_the_hub_is_gone() {
+        crate::test_utils::block_on(async {
+            let hub = SignalHub::new(Config::default());
+            let mut signals = SignalReceivers::new(&hub);
+            drop(hub);
+
+            let change = futures_util::FutureExt::now_or_never(signals.next_change());
+            assert!(change.is_none());
+        });
+    }
+}
