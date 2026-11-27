@@ -9,7 +9,8 @@ use crate::features::metrics::domain::{
 };
 use crate::shared::events::signals::SignalHub;
 use readings::{
-    cpu_metrics, disk_enabled, network_enabled, network_metrics, temperature, temperature_enabled,
+    average_temperature, cpu_metrics, disk_enabled, network_enabled, network_metrics,
+    temperature_enabled,
 };
 use std::sync::Arc;
 use sysinfo::{Components, Disks, Networks, System};
@@ -132,7 +133,7 @@ impl SysinfoSources {
     /// not configured or nothing could be read.
     fn temperature(&self, config: &MetricsConfig) -> Option<Temperature> {
         let readings = self.components.iter().map(sysinfo::Component::temperature);
-        temperature(config, readings)
+        average_temperature(config, readings)
     }
 
     /// The used and total RAM and swap.

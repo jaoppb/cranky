@@ -143,6 +143,7 @@ fn test_hyprland_adapter_run_retries_a_refused_event_socket() {
     // The runtime waits for the reconnect thread, which ends on the retry.
     crate::test_utils::block_on(adapter.run(hub));
     assert!(started.elapsed() >= RECONNECT_PAUSE);
+    // Pins the pause itself: the elapsed check alone would also pass for a zero pause.
     assert_eq!(RECONNECT_PAUSE, std::time::Duration::from_secs(1));
     assert_eq!(provider.event_listens.load(Ordering::SeqCst), 2);
 }

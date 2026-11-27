@@ -441,6 +441,10 @@ pub mod test_support {
             tracing::subscriber::set_global_default(subscriber).unwrap();
         });
         CAPTURED_LOGS.with_borrow_mut(|captured| *captured = Some(Vec::new()));
+        // A thread that registered a callsite before the global was installed may store `never`
+        // for it after any rebuild that ran during the install; rebuilding on every capture,
+        // after the global is stored, repairs such a stale `never` before this action logs.
+        tracing::callsite::rebuild_interest_cache();
         action();
         let bytes = CAPTURED_LOGS.with_borrow_mut(Option::take).unwrap();
         String::from_utf8(bytes).unwrap()

@@ -56,7 +56,7 @@ pub(super) fn network_metrics(
 
 /// The average of the sensor `readings` (degrees Celsius) in the scale `config` sets, absent
 /// when temperature is not configured, is `disabled`, or no reading is usable.
-pub(super) fn temperature(
+pub(super) fn average_temperature(
     config: &MetricsConfig,
     readings: impl IntoIterator<Item = Option<f32>>,
 ) -> Option<Temperature> {
@@ -143,7 +143,7 @@ mod tests {
 
     /// The `temperature` of `readings` under `config`.
     fn degrees(config: &MetricsConfig, readings: &[Option<f32>]) -> Option<Temperature> {
-        temperature(config, readings.iter().copied())
+        average_temperature(config, readings.iter().copied())
     }
 
     #[test]
