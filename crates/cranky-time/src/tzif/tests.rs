@@ -364,3 +364,99 @@ fn malformed_files_are_refused() {
     second_header_wrong[second] = b'X';
     assert_eq!(parse(&second_header_wrong), None);
 }
+
+/// The bytes of a header: magic, version, reserved bytes and six counts.
+const HEADER_SIZE: usize = 44;
+
+/// Reads the data of a block written by `file_part`, past its header.
+fn read_block(part: &[u8], width: usize) -> Option<Table> {
+    let mut reader = Reader { rest: part };
+    let Some((_, counts)) = header(&mut reader) else {
+        panic!("the header of a block written by file_part is read");
+    };
+    assert_eq!(reader.rest.len(), part.len().saturating_sub(HEADER_SIZE));
+    block(&mut reader, &counts, width)
+}
+
+#[test]
+fn a_block_reads_its_kinds_transitions_and_leaps_in_order() {
+    let data = Block {
+        transitions: &[(-1000, 1), (1000, 0)],
+        kinds: KINDS,
+        names: NAMES,
+        leaps: &[(1500, 1), (2500, -1)],
+    };
+    let expected = Table {
+        kinds: vec![
+            Kind {
+                offset: -3600,
+                abbreviation: "OLD".to_string(),
+            },
+            Kind {
+                offset: 7200,
+                abbreviation: "NEW".to_string(),
+            },
+        ],
+        transitions: vec![
+            Transition {
+                instant: -1000,
+                kind: 1,
+            },
+            Transition {
+                instant: 1000,
+                kind: 0,
+            },
+        ],
+        leaps: vec![
+            Leap {
+                instant: 1500,
+                total: 1,
+            },
+            Leap {
+                instant: 2500,
+                total: -1,
+            },
+        ],
+    };
+    for (width, bytes) in [(Width::Narrow, 4), (Width::Wide, 8)] {
+        let part = file_part(0, width, &data);
+        assert_eq!(
+            read_block(&part, bytes),
+            Some(expected.clone()),
+            "{width:?}"
+        );
+    }
+}
+
+#[test]
+fn a_transition_instant_of_another_width_is_refused() {
+    let data = Block {
+        transitions: &[(1000, 0)],
+        kinds: KINDS,
+        names: NAMES,
+        leaps: &[],
+    };
+    let part = file_part(0, Width::Narrow, &data);
+    // Dropping the first byte of the instant leaves a block of 3-byte instants.
+    let mut odd = part.clone();
+    odd.remove(HEADER_SIZE);
+    assert!(read_block(&part, 4).is_some());
+    assert_eq!(read_block(&odd, 3), None);
+}
+
+#[test]
+fn a_leap_instant_of_another_width_is_refused() {
+    let data = Block {
+        transitions: &[],
+        kinds: KINDS,
+        names: NAMES,
+        leaps: &[(1500, 1)],
+    };
+    let part = file_part(0, Width::Narrow, &data);
+    // Dropping the first byte of the leap instant leaves a 3-byte instant
+    // before the 4-byte total.
+    let mut odd = part.clone();
+    odd.remove(part.len().saturating_sub(8));
+    assert!(read_block(&part, 4).is_some());
+    assert_eq!(read_block(&odd, 3), None);
+}
