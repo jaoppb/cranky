@@ -1,6 +1,6 @@
 //! The layout pass and per-monitor cache shared by all three floating kinds.
 use super::super::measurer::ModuleSizeMeasurer;
-use crate::features::layout_engine::domain::LayoutRoot;
+use crate::features::layout_engine::domain::{LayoutError, LayoutRoot};
 use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::vdom::domain::InteractionContext;
@@ -23,6 +23,13 @@ pub(crate) type FloatingCache = HashMap<MonitorId, (StyledNode, Option<ChildSize
 pub(crate) struct FloatingEngine<'a, E: LayoutEnginePort> {
     pub(crate) engine: &'a mut E,
     pub(crate) cache: &'a mut FloatingCache,
+}
+
+impl<'a, E: LayoutEnginePort> FloatingEngine<'a, E> {
+    /// `engine` laying out one floating kind, with that kind's `cache`.
+    pub(crate) const fn new(engine: &'a mut E, cache: &'a mut FloatingCache) -> Self {
+        Self { engine, cache }
+    }
 }
 
 /// What every floating kind is laid out with on one monitor during one render.
@@ -53,10 +60,15 @@ pub(super) fn layout_floating_content<F: CanvasFactory, E: LayoutEnginePort>(
     ) {
         Ok(node) => Some(node),
         Err(error) => {
-            tracing::error!(err = ?error, "Floating content layout calculation failed");
+            log_layout_failed(&error);
             None
         }
     }
+}
+
+/// Logs a floating layout pass that failed with `error`.
+fn log_layout_failed(error: &LayoutError) {
+    tracing::error!(err = ?error, "Floating content layout calculation failed");
 }
 
 /// `layout_floating_content`, but skips the taffy pass entirely when
@@ -94,9 +106,7 @@ pub(super) fn layout_floating_content_cached<F: CanvasFactory, E: LayoutEnginePo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::layout_engine::domain::{
-        LayoutError, NodePath, SurfaceSpace, TextMeasurer,
-    };
+    use crate::features::layout_engine::domain::{NodePath, SurfaceSpace, TextMeasurer};
     use crate::features::module_runtime::test_support::MockCanvasFactory;
     use crate::features::styling::domain::ComputedStyle;
     use crate::shared::primitives::geometry::{Rect, Size};
@@ -159,27 +169,47 @@ mod tests {
         }
     }
 
+    /// A counting engine and its cache, laying content out on DP-1.
+    struct CachedLayouts {
+        calls: Arc<AtomicUsize>,
+        engine: CountingEngine,
+        cache: FloatingCache,
+    }
+
+    impl CachedLayouts {
+        fn new() -> Self {
+            let calls = Arc::new(AtomicUsize::new(0));
+            let engine = CountingEngine {
+                calls: calls.clone(),
+            };
+            Self {
+                calls,
+                engine,
+                cache: HashMap::new(),
+            }
+        }
+
+        /// Lays `content` out under the child `sizes`, and returns how many layout passes ran
+        /// so far.
+        fn lay_out(&mut self, content: &StyledNode, sizes: Option<&ChildSizesMap>) -> usize {
+            let monitor_id = MonitorId::new("DP-1");
+            let mut canvas_factory = MockCanvasFactory;
+            layout_floating_content_cached(
+                FloatingEngine::new(&mut self.engine, &mut self.cache),
+                &mut pass(&monitor_id, &mut canvas_factory, sizes),
+                content,
+            );
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
     #[test]
     fn test_cached_layout_skips_recompute_for_unchanged_content() {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let mut engine = CountingEngine {
-            calls: calls.clone(),
-        };
-        let mut canvas_factory = MockCanvasFactory;
-        let mut cache = HashMap::new();
-        let monitor_id = MonitorId::new("DP-1");
+        let mut layouts = CachedLayouts::new();
         let content = text_node("unchanged");
 
-        layout_floating_content_cached(
-            FloatingEngine {
-                engine: &mut engine,
-                cache: &mut cache,
-            },
-            &mut pass(&monitor_id, &mut canvas_factory, None),
-            &content,
-        );
         assert_eq!(
-            calls.load(Ordering::SeqCst),
+            layouts.lay_out(&content, None),
             1,
             "first call must run a real layout pass"
         );
@@ -187,16 +217,8 @@ mod tests {
         // Something else on the render changed (simulated by re-invoking
         // with byte-identical content) — the floating content itself did
         // not, so this must be a cache hit, not a second taffy pass.
-        layout_floating_content_cached(
-            FloatingEngine {
-                engine: &mut engine,
-                cache: &mut cache,
-            },
-            &mut pass(&monitor_id, &mut canvas_factory, None),
-            &content,
-        );
         assert_eq!(
-            calls.load(Ordering::SeqCst),
+            layouts.lay_out(&content, None),
             1,
             "unchanged content must not re-run layout"
         );
@@ -208,44 +230,20 @@ mod tests {
     /// forever, so the gate never opened and the popup never appeared.
     #[test]
     fn test_cached_layout_recomputes_when_child_sizes_change() {
-        use crate::shared::primitives::{ChildReport, ChildSizesMap, ModuleKey, ModuleName};
+        use crate::shared::primitives::{ChildReport, ModuleKey, ModuleName};
 
-        let calls = Arc::new(AtomicUsize::new(0));
-        let mut engine = CountingEngine {
-            calls: calls.clone(),
-        };
-        let mut canvas_factory = MockCanvasFactory;
-        let mut cache = HashMap::new();
-        let monitor_id = MonitorId::new("DP-1");
+        let mut layouts = CachedLayouts::new();
         let content = text_node("popup with an embedded calendar");
-
-        layout_floating_content_cached(
-            FloatingEngine {
-                engine: &mut engine,
-                cache: &mut cache,
-            },
-            &mut pass(&monitor_id, &mut canvas_factory, None),
-            &content,
-        );
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(layouts.lay_out(&content, None), 1);
 
         let mut sizes = ChildSizesMap::new();
         sizes.insert_report(
             ModuleKey::from_name(ModuleName::new("calendar")),
             ChildReport::new(Size::new(240, 215), Some(280)),
         );
-        for _ in 0..2 {
-            layout_floating_content_cached(
-                FloatingEngine {
-                    engine: &mut engine,
-                    cache: &mut cache,
-                },
-                &mut pass(&monitor_id, &mut canvas_factory, Some(&sizes)),
-                &content,
-            );
-        }
+        layouts.lay_out(&content, Some(&sizes));
         assert_eq!(
-            calls.load(Ordering::SeqCst),
+            layouts.lay_out(&content, Some(&sizes)),
             2,
             "a new child report must re-run layout once, then hit the cache"
         );
@@ -253,36 +251,49 @@ mod tests {
 
     #[test]
     fn test_cached_layout_recomputes_for_changed_content() {
-        let calls = Arc::new(AtomicUsize::new(0));
-        let mut engine = CountingEngine {
-            calls: calls.clone(),
-        };
-        let mut canvas_factory = MockCanvasFactory;
-        let mut cache = HashMap::new();
-        let monitor_id = MonitorId::new("DP-1");
-
-        layout_floating_content_cached(
-            FloatingEngine {
-                engine: &mut engine,
-                cache: &mut cache,
-            },
-            &mut pass(&monitor_id, &mut canvas_factory, None),
-            &text_node("first"),
-        );
-        assert_eq!(calls.load(Ordering::SeqCst), 1);
-
-        layout_floating_content_cached(
-            FloatingEngine {
-                engine: &mut engine,
-                cache: &mut cache,
-            },
-            &mut pass(&monitor_id, &mut canvas_factory, None),
-            &text_node("second"),
-        );
+        let mut layouts = CachedLayouts::new();
+        assert_eq!(layouts.lay_out(&text_node("first"), None), 1);
         assert_eq!(
-            calls.load(Ordering::SeqCst),
+            layouts.lay_out(&text_node("second"), None),
             2,
             "changed content must re-run layout"
         );
+    }
+
+    /// A layout engine that always fails.
+    struct FailingEngine;
+
+    impl LayoutEnginePort for FailingEngine {
+        fn calculate_layout(
+            &mut self,
+            _root: LayoutRoot,
+            _measurer: &mut dyn TextMeasurer,
+        ) -> Result<RenderNode, LayoutError> {
+            Err(LayoutError::EngineError("no layout".to_string()))
+        }
+    }
+
+    /// A failed layout lays out nothing, caches nothing and is logged.
+    #[test]
+    fn test_failed_layout_is_logged_and_not_cached() {
+        let mut canvas_factory = MockCanvasFactory;
+        let mut cache = HashMap::new();
+        let monitor_id = MonitorId::new("DP-1");
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            let engine = FloatingEngine {
+                engine: &mut FailingEngine,
+                cache: &mut cache,
+            };
+            let mut pass = pass(&monitor_id, &mut canvas_factory, None);
+            assert_eq!(
+                layout_floating_content_cached(engine, &mut pass, &text_node("tip")),
+                None
+            );
+        });
+        assert!(cache.is_empty());
+        assert!(logs.contains(
+            "ERROR cranky::features::module_runtime::domain::render_pipeline::floating_phase::\
+             content: Floating content layout calculation failed err=EngineError(\"no layout\")"
+        ));
     }
 }

@@ -30,52 +30,65 @@ mod tests {
         NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Bar))
     }
 
+    fn motion(x: i32) -> PointerEvent {
+        PointerEvent::PointerMotion {
+            surface: SurfaceKind::Bar,
+            pos: Position::new(x, 10),
+        }
+    }
+
+    fn press() -> PointerEvent {
+        PointerEvent::ButtonPress {
+            surface: SurfaceKind::Bar,
+            button: PointerButton::Left,
+            pos: Position::new(10, 10),
+        }
+    }
+
+    /// Handles `event` on DP-1's test tree and tells whether the pointer state changed.
+    fn changed(handler: &mut PointerHandler, event: &PointerEvent) -> bool {
+        let mon = MonitorId::new("DP-1");
+        let tree = make_test_tree();
+        handler
+            .handle_event(event, PointerTarget::new(&mon, &tree))
+            .has_state_changed()
+    }
+
+    /// Moving onto the node hovers it, and pressing it makes it active.
     #[test]
     fn test_interaction_state_lifecycle() {
         let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
-        let tree = make_test_tree();
 
-        let outcome_motion = handler.handle_event(
-            &PointerEvent::PointerMotion {
-                surface: SurfaceKind::Bar,
-                pos: Position::new(10, 10),
-            },
-            PointerTarget::new(&mon, &tree),
-        );
-        assert!(outcome_motion.has_state_changed());
+        assert!(changed(&mut handler, &motion(10)));
         assert_eq!(handler.hovered_node(&mon), Some(&root_ref()));
 
-        let outcome_press = handler.handle_event(
-            &PointerEvent::ButtonPress {
-                surface: SurfaceKind::Bar,
-                button: PointerButton::Left,
-                pos: Position::new(10, 10),
-            },
-            PointerTarget::new(&mon, &tree),
-        );
-        assert!(outcome_press.has_state_changed());
+        assert!(changed(&mut handler, &press()));
         assert_eq!(handler.active_node(&mon), Some(&root_ref()));
+    }
 
-        let outcome_release = handler.handle_event(
-            &PointerEvent::ButtonRelease {
-                surface: SurfaceKind::Bar,
-                button: PointerButton::Left,
-                pos: Position::new(10, 10),
-            },
-            PointerTarget::new(&mon, &tree),
-        );
-        assert!(outcome_release.has_state_changed());
+    /// Releasing the pressed node moves it from active to focused, and leaving drops the hover
+    /// but keeps the focus.
+    #[test]
+    fn test_interaction_state_lifecycle_release_and_leave() {
+        let mut handler = PointerHandler::new();
+        let mon = MonitorId::new("DP-1");
+        changed(&mut handler, &motion(10));
+        changed(&mut handler, &press());
+
+        let release = PointerEvent::ButtonRelease {
+            surface: SurfaceKind::Bar,
+            button: PointerButton::Left,
+            pos: Position::new(10, 10),
+        };
+        assert!(changed(&mut handler, &release));
         assert_eq!(handler.active_node(&mon), None);
         assert_eq!(handler.focused_node(&mon), Some(&root_ref()));
 
-        let outcome_leave = handler.handle_event(
-            &PointerEvent::PointerLeave {
-                surface: SurfaceKind::Bar,
-            },
-            PointerTarget::new(&mon, &tree),
-        );
-        assert!(outcome_leave.has_state_changed());
+        let leave = PointerEvent::PointerLeave {
+            surface: SurfaceKind::Bar,
+        };
+        assert!(changed(&mut handler, &leave));
         assert_eq!(handler.hovered_node(&mon), None);
         assert_eq!(handler.focused_node(&mon), Some(&root_ref()));
     }
@@ -86,32 +99,16 @@ mod tests {
     fn test_click_and_motion_within_the_hovered_node_leave_state_unchanged() {
         let mut handler = PointerHandler::new();
         let mon = MonitorId::new("DP-1");
-        let tree = make_test_tree();
-        let motion = |x| PointerEvent::PointerMotion {
+
+        assert!(changed(&mut handler, &motion(10)));
+        assert!(!changed(&mut handler, &motion(20)));
+
+        let click = PointerEvent::Click {
             surface: SurfaceKind::Bar,
-            pos: Position::new(x, 10),
+            button: PointerButton::Left,
+            pos: Position::new(10, 10),
         };
-
-        assert!(
-            handler
-                .handle_event(&motion(10), PointerTarget::new(&mon, &tree))
-                .has_state_changed()
-        );
-        assert!(
-            !handler
-                .handle_event(&motion(20), PointerTarget::new(&mon, &tree))
-                .has_state_changed()
-        );
-
-        let click = handler.handle_event(
-            &PointerEvent::Click {
-                surface: SurfaceKind::Bar,
-                button: PointerButton::Left,
-                pos: Position::new(10, 10),
-            },
-            PointerTarget::new(&mon, &tree),
-        );
-        assert!(!click.has_state_changed());
+        assert!(!changed(&mut handler, &click));
         assert_eq!(handler.hovered_node(&mon), Some(&root_ref()));
     }
 

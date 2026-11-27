@@ -21,22 +21,16 @@ struct Engines {
 
 fn run(bar: &RenderNode, interaction: Option<&InteractionContext>) -> (FloatingLayouts, Engines) {
     let mut engines = Engines::default();
+    let (mut popup_cache, mut panel_cache, mut tooltip_cache) =
+        (HashMap::new(), HashMap::new(), HashMap::new());
+    let floating_engines = FloatingEngines {
+        popup: FloatingEngine::new(&mut engines.popup, &mut popup_cache),
+        panel: FloatingEngine::new(&mut engines.panel, &mut panel_cache),
+        tooltip: FloatingEngine::new(&mut engines.tooltip, &mut tooltip_cache),
+    };
     let layouts = layout_floating(
         bar,
-        FloatingEngines {
-            popup: FloatingEngine {
-                engine: &mut engines.popup,
-                cache: &mut HashMap::new(),
-            },
-            panel: FloatingEngine {
-                engine: &mut engines.panel,
-                cache: &mut HashMap::new(),
-            },
-            tooltip: FloatingEngine {
-                engine: &mut engines.tooltip,
-                cache: &mut HashMap::new(),
-            },
-        },
+        floating_engines,
         &mut FloatingPass {
             monitor_id: &MonitorId::new("DP-1"),
             canvas_factory: &mut MockCanvasFactory,
@@ -61,17 +55,13 @@ fn bar_with_nothing_open_lays_out_no_floating_content() {
     assert_eq!(engines.tooltip.laid_out, Vec::<StyledNode>::new());
 }
 
-#[test]
-fn each_open_floating_kind_is_laid_out_by_its_own_engine() {
-    let popup_tip = tooltip_content("popup tip");
-    let popup_content = content(SurfaceSpace::Popup, "popup", Some(popup_tip.clone()));
-    let panel_content = content(SurfaceSpace::Panel, "panel", None);
-    let button_rect = Rect::new(Position::new(10, 2), Size::new(30, 20));
-
+/// A bar whose first child (at `button_rect`) opens `popup` with offset (3, 4), and whose second
+/// opens `panel` on the overlay layer.
+fn bar_opening(popup: &StyledNode, panel: &StyledNode, button_rect: Rect) -> RenderNode {
     let button = Spec {
         rect: button_rect,
         popup: Some(StyledPopup::new(
-            Box::new(popup_content.clone()),
+            Box::new(popup.clone()),
             AnchorDirection::Bottom,
             Some(PopupOffset::new(3, 4)),
         )),
@@ -81,30 +71,66 @@ fn each_open_floating_kind_is_laid_out_by_its_own_engine() {
     let launcher = Spec {
         rect: Rect::new(Position::new(60, 2), Size::new(15, 20)),
         panel: Some(StyledPanel::new(
-            Box::new(panel_content.clone()),
+            Box::new(panel.clone()),
             panel_on_every_edge(PanelLayer::Overlay),
         )),
         ..Spec::at_path(SurfaceSpace::Bar, &[1])
     }
     .leaf();
-    let bar = Spec::at_path(SurfaceSpace::Bar, &[]).flex(vec![button, launcher]);
+    Spec::at_path(SurfaceSpace::Bar, &[]).flex(vec![button, launcher])
+}
+
+const BUTTON: Rect = Rect::new(Position::new(10, 2), Size::new(30, 20));
+
+/// What laying out a bar that opens a popup (whose content carries a tooltip) and a panel, with
+/// the pointer over the popup's content, produced, with the contents it was given.
+struct Opened {
+    popup_tip: StyledNode,
+    popup_content: StyledNode,
+    panel_content: StyledNode,
+    layouts: FloatingLayouts,
+    engines: Engines,
+}
+
+fn open_popup_panel_and_tooltip() -> Opened {
+    let popup_tip = tooltip_content("popup tip");
+    let popup_content = content(SurfaceSpace::Popup, "popup", Some(popup_tip.clone()));
+    let panel_content = content(SurfaceSpace::Panel, "panel", None);
+    let bar = bar_opening(&popup_content, &panel_content, BUTTON);
     // The pointer is over the popup's content, which carries a tooltip.
     let hovered = NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Popup));
     let interaction = InteractionContext::new(
         InteractedNodes::new(Some(hovered), None, None),
         MonitorFocus::Focused,
     );
-
     let (layouts, engines) = run(&bar, Some(&interaction));
+    Opened {
+        popup_tip,
+        popup_content,
+        panel_content,
+        layouts,
+        engines,
+    }
+}
 
-    assert_eq!(engines.popup.laid_out, vec![popup_content]);
-    assert_eq!(engines.panel.laid_out, vec![panel_content]);
+#[test]
+fn each_open_floating_kind_is_laid_out_by_its_own_engine() {
+    let opened = open_popup_panel_and_tooltip();
+    let engines = &opened.engines;
+    assert_eq!(engines.popup.laid_out, vec![opened.popup_content]);
+    assert_eq!(engines.panel.laid_out, vec![opened.panel_content]);
     // The tooltip is found on the popup tree laid out in this same pass.
-    assert_eq!(engines.tooltip.laid_out, vec![popup_tip]);
+    assert_eq!(engines.tooltip.laid_out, vec![opened.popup_tip]);
+}
 
+/// The popup is anchored where its owner is, with its offset, and each kind's layout is on its
+/// own surface.
+#[test]
+fn each_open_floating_kind_is_anchored_and_on_its_own_surface() {
+    let layouts = open_popup_panel_and_tooltip().layouts;
     let popup = layouts.popup().unwrap();
     // Anchored to the node that owns the popup, not to the panel's owner.
-    assert_eq!(popup.anchor_rect(), button_rect);
+    assert_eq!(popup.anchor_rect(), BUTTON);
     assert_eq!(popup.offset(), Some(PopupOffset::new(3, 4)));
     assert_eq!(popup.node().path().surface(), SurfaceSpace::Popup);
     assert_eq!(

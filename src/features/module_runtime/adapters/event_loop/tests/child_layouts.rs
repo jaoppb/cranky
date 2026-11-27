@@ -23,17 +23,30 @@ fn module(name: &str) -> VNode {
     )
 }
 
+fn flex(children: Vec<VNode>) -> VNode {
+    VNode::new_flex(
+        children,
+        ElementSelectors::default(),
+        Interactions::default(),
+    )
+}
+
+/// The name and surface of each child layout `outcome` reports, in order.
+fn children(outcome: &RenderOutcome) -> Vec<(&str, LayoutSurface)> {
+    outcome
+        .child_layouts()
+        .iter()
+        .map(|layout| (layout.key().name().as_str(), layout.surface()))
+        .collect()
+}
+
 /// Modules embedded in the bar come first, then those in its open popup.
 #[test]
 fn child_layouts_list_the_bar_modules_then_the_floating_ones() {
     let mut pipeline = RenderPipeline::new();
     let mut fixture = PipelineFixture::<TaffyLayoutAdapter>::default();
-    let bar = VNode::new_flex(
-        vec![module("clock"), rect()],
-        ElementSelectors::default(),
-        Interactions::default(),
-    )
-    .with_popup(PopupSpec::new(Box::new(module("calendar"))));
+    let bar = flex(vec![module("clock"), rect()])
+        .with_popup(PopupSpec::new(Box::new(module("calendar"))));
 
     let outcome = process_monitor(
         &mut pipeline,
@@ -42,13 +55,8 @@ fn child_layouts_list_the_bar_modules_then_the_floating_ones() {
     )
     .expect("render outcome");
 
-    let children: Vec<_> = outcome
-        .child_layouts()
-        .iter()
-        .map(|layout| (layout.key().name().as_str(), layout.surface()))
-        .collect();
     assert_eq!(
-        children,
+        children(&outcome),
         vec![
             ("clock", LayoutSurface::Bar),
             ("calendar", LayoutSurface::Popup)
@@ -60,30 +68,16 @@ fn child_layouts_list_the_bar_modules_then_the_floating_ones() {
 /// reported as an embedded module; its siblings still are.
 #[test]
 fn a_failed_child_is_laid_out_as_a_placeholder_instead_of_a_module() {
-    let bar = || {
-        VNode::new_flex(
-            vec![module("calendar"), module("clock")],
-            ElementSelectors::default(),
-            Interactions::default(),
-        )
-    };
-    let names = |outcome: RenderOutcome| -> Vec<String> {
-        outcome
-            .child_layouts()
-            .iter()
-            .map(|layout| layout.key().name().as_str().to_string())
-            .collect()
-    };
+    let port = TestModulePort::new(flex(vec![module("calendar"), module("clock")]));
     let mon = MonitorId::new("DP-1");
-
     let mut fixture = PipelineFixture::<TaffyLayoutAdapter>::default();
-    let healthy = process_monitor(
-        &mut RenderPipeline::new(),
-        &TestModulePort::new(bar()),
-        fixture.ctx(&mon),
-    )
-    .expect("render outcome");
-    assert_eq!(names(healthy), ["calendar", "clock"]);
+    let healthy = process_monitor(&mut RenderPipeline::new(), &port, fixture.ctx(&mon))
+        .expect("render outcome");
+    let names: Vec<_> = children(&healthy)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(names, ["calendar", "clock"]);
 
     let errors = HashMap::from([(
         ModuleKey::from_name(ModuleName::new("calendar")),
@@ -91,7 +85,10 @@ fn a_failed_child_is_laid_out_as_a_placeholder_instead_of_a_module() {
     )]);
     let mut ctx = fixture.ctx(&mon);
     ctx.child_errors = &errors;
-    let failed = process_monitor(&mut RenderPipeline::new(), &TestModulePort::new(bar()), ctx)
-        .expect("render outcome");
-    assert_eq!(names(failed), ["clock"]);
+    let failed = process_monitor(&mut RenderPipeline::new(), &port, ctx).expect("render outcome");
+    let names: Vec<_> = children(&failed)
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(names, ["clock"]);
 }

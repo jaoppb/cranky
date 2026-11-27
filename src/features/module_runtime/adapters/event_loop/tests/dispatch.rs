@@ -1,142 +1,48 @@
-use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
-use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::RenderServices;
+use super::fixture::MODULE;
+use super::lifecycle::make_test_rect_node;
+use super::outcome::plain_event_loop;
 use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
+use crate::features::module_runtime::domain::{FloatingLayouts, RenderOutcome, SizeChange};
 use crate::features::module_runtime::ports::LayoutEvent;
-use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
-use crate::features::module_runtime::test_support::{
-    ChannelLayoutSender, MockCanvasFactory, MockDisplaySender, MockLayoutSender,
-    MockSurfaceManager, MockUiSender, TestModulePort,
+use crate::shared::events::core::{
+    PointerButton, PointerEvent, SurfaceKind, SurfaceLifecycleEvent,
 };
-use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
-use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
-use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
-use crate::shared::config::domain::Config;
-use crate::shared::events::signals::SignalHub;
-use crate::shared::primitives::ModuleId;
 use crate::shared::primitives::MonitorId;
-use crate::shared::primitives::geometry::{Position, Rect, Scale, Size};
-use std::collections::HashMap;
-use std::sync::Arc;
+use crate::shared::primitives::geometry::{Position, Scale, Size};
 
 #[test]
 fn test_dispatch_render_outcome_emits_layout_events() {
-    crate::test_utils::block_on(async {
-        use crate::features::module_runtime::domain::SizeChange;
-        use crate::features::styling::domain::ComputedStyle;
-
-        let id = ModuleId::new(1);
-        let hub = Arc::new(SignalHub::new(Config::default()));
-        let surface_manager = Arc::new(MockSurfaceManager);
-        let (layout_tx, layout_rx) = std::sync::mpsc::channel();
-        let layout_sender = Arc::new(ChannelLayoutSender::new(layout_tx));
-        let display_sender = Arc::new(MockDisplaySender);
-        let ui_sender = Arc::new(MockUiSender);
-        let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-        let ctx = ModuleContext::new(
-            id,
-            ModuleHandles::new(
-                hub,
-                surface_manager,
-                ModuleSenders::new(layout_sender, display_sender, ui_sender),
+    let (mut event_loop, wiring) = plain_event_loop();
+    let outcome = RenderOutcome::new(
+        PipelineLayout::new(
+            make_test_rect_node(),
+            FloatingLayouts::default(),
+            EmbedReport::new(
+                Some(SizeChange::new(Size::new(0, 0), Size::new(50, 20))),
+                vec![],
             ),
-            rx,
-        );
+        ),
+        None,
+        Scale::new(1.0),
+    );
 
-        let mut event_loop = EventLoop::new(
-            Box::new(TestModulePort::new(VNode::new_rect(
-                ElementSelectors::default(),
-                Interactions::default(),
-            ))),
-            ctx,
-            RenderServices::new(
-                MockCanvasFactory,
-                Arc::new(CompositeStyleResolver::new(vec![])),
-                Arc::new(DefaultVdomDiffAdapter::new()),
-            ),
-        );
+    event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &outcome);
 
-        let outcome = crate::features::module_runtime::domain::RenderOutcome::new(
-            PipelineLayout::new(
-                crate::features::layout_engine::domain::RenderNode::Rect {
-                    path: crate::features::layout_engine::domain::NodePath::root_in(
-                        crate::features::layout_engine::domain::SurfaceSpace::Bar,
-                    ),
-                    node_key: None,
-                    rect: Rect::new(Position::new(0, 0), Size::new(50, 20)),
-                    style: ComputedStyle::default(),
-                    on_click: None,
-                    on_hover: None,
-                    tooltip: None,
-                    popup: None,
-                    panel: None,
-                },
-                crate::features::module_runtime::domain::FloatingLayouts::default(),
-                EmbedReport::new(
-                    Some(SizeChange::new(Size::new(0, 0), Size::new(50, 20))),
-                    vec![],
-                ),
-            ),
-            None,
-            Scale::new(1.0),
-        );
-
-        event_loop.dispatch_render_outcome(&MonitorId::new("DP-1"), &outcome);
-
-        let received = layout_rx
-            .try_recv()
-            .expect("Should have sent ModuleSizeChanged");
-        match received {
-            LayoutEvent::ModuleSizeChanged {
-                monitor_id,
-                module_id,
-                size,
-                ..
-            } => {
-                assert_eq!(monitor_id.as_str(), "DP-1");
-                assert_eq!(module_id, id);
-                assert_eq!(size, Size::new(50, 20));
-            }
-            LayoutEvent::ContainerLayoutsCalculated { .. } => panic!("Unexpected event"),
-        }
-    });
+    let expected = LayoutEvent::ModuleSizeChanged {
+        monitor_id: MonitorId::new("DP-1"),
+        module_id: MODULE,
+        size: Size::new(50, 20),
+        settled_width: None,
+    };
+    assert_eq!(wiring.sent.layout_events.try_recv(), Ok(expected));
 }
 
 #[test]
 fn test_handle_pointer_event_no_tree_returns_false() {
-    let id = ModuleId::new(1);
-    let hub = Arc::new(SignalHub::new(Config::default()));
-    let surface_manager = Arc::new(MockSurfaceManager);
-    let layout_sender = Arc::new(MockLayoutSender);
-    let display_sender = Arc::new(MockDisplaySender);
-    let ui_sender = Arc::new(MockUiSender);
-    let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-    let ctx = ModuleContext::new(
-        id,
-        ModuleHandles::new(
-            hub,
-            surface_manager,
-            ModuleSenders::new(layout_sender, display_sender, ui_sender),
-        ),
-        rx,
-    );
-
-    let mut event_loop = EventLoop::new(
-        Box::new(TestModulePort::new(VNode::new_rect(
-            ElementSelectors::default(),
-            Interactions::default(),
-        ))),
-        ctx,
-        RenderServices::new(
-            MockCanvasFactory,
-            Arc::new(CompositeStyleResolver::new(vec![])),
-            Arc::new(DefaultVdomDiffAdapter::new()),
-        ),
-    );
-
-    let event = crate::shared::events::core::PointerEvent::Click {
-        surface: crate::shared::events::core::SurfaceKind::Bar,
-        button: crate::shared::events::core::PointerButton::Left,
+    let (mut event_loop, _wiring) = plain_event_loop();
+    let event = PointerEvent::Click {
+        surface: SurfaceKind::Bar,
+        button: PointerButton::Left,
         pos: Position::new(10, 10),
     };
     let changed = event_loop.handle_pointer_event(&MonitorId::new("DP-1"), &event);
@@ -145,39 +51,10 @@ fn test_handle_pointer_event_no_tree_returns_false() {
 
 #[test]
 fn test_handle_lifecycle_event_popup_dismissed_returns_true() {
-    let id = ModuleId::new(1);
-    let hub = Arc::new(SignalHub::new(Config::default()));
-    let surface_manager = Arc::new(MockSurfaceManager);
-    let layout_sender = Arc::new(MockLayoutSender);
-    let display_sender = Arc::new(MockDisplaySender);
-    let ui_sender = Arc::new(MockUiSender);
-    let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
-    let ctx = ModuleContext::new(
-        id,
-        ModuleHandles::new(
-            hub,
-            surface_manager,
-            ModuleSenders::new(layout_sender, display_sender, ui_sender),
-        ),
-        rx,
-    );
-
-    let mut event_loop = EventLoop::new(
-        Box::new(TestModulePort::new(VNode::new_rect(
-            ElementSelectors::default(),
-            Interactions::default(),
-        ))),
-        ctx,
-        RenderServices::new(
-            MockCanvasFactory,
-            Arc::new(CompositeStyleResolver::new(vec![])),
-            Arc::new(DefaultVdomDiffAdapter::new()),
-        ),
-    );
-
+    let (mut event_loop, _wiring) = plain_event_loop();
     let changed = event_loop.handle_lifecycle_event(
         &MonitorId::new("DP-1"),
-        crate::shared::events::core::SurfaceLifecycleEvent::PopupDismissed,
+        SurfaceLifecycleEvent::PopupDismissed,
     );
     assert!(changed);
 }

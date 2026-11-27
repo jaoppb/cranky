@@ -328,4 +328,122 @@ pub mod test_support {
             })
         }
     }
+
+    /// What a `RecordingModulePort` was asked to do, in order.
+    #[derive(Debug, Default, PartialEq, Eq)]
+    pub(crate) struct PortLog {
+        /// The signals of each `refresh`.
+        pub(crate) refreshes: Vec<Vec<SignalKind>>,
+        /// Each function called, with its arguments.
+        pub(crate) calls: Vec<(String, Vec<String>)>,
+        /// How many trees were rendered.
+        pub(crate) renders: usize,
+    }
+
+    /// A module port that renders `node`, subscribes to `subs` and records every refresh, render
+    /// and function call in its shared log; its calls fail once `failing_calls` was called.
+    pub(crate) struct RecordingModulePort {
+        node: VNode,
+        subs: Vec<SignalKind>,
+        log: std::sync::Arc<std::sync::Mutex<PortLog>>,
+        call_error: Option<String>,
+    }
+
+    impl RecordingModulePort {
+        pub(crate) fn new(node: VNode, subs: Vec<SignalKind>) -> Self {
+            Self {
+                node,
+                subs,
+                log: std::sync::Arc::default(),
+                call_error: None,
+            }
+        }
+
+        /// Makes every function call fail with a script error reading `message`.
+        pub(crate) fn failing_calls(mut self, message: &str) -> Self {
+            self.call_error = Some(message.to_string());
+            self
+        }
+
+        /// The log the port keeps recording into after it is moved into an event loop.
+        pub(crate) fn log(&self) -> std::sync::Arc<std::sync::Mutex<PortLog>> {
+            self.log.clone()
+        }
+    }
+
+    impl AnyModulePort for RecordingModulePort {
+        fn init(
+            &mut self,
+            _config: &ModuleConfig,
+            _full_config: &Config,
+        ) -> Result<(), ModuleInitError> {
+            Ok(())
+        }
+
+        fn subscriptions(&self) -> &[SignalKind] {
+            &self.subs
+        }
+
+        fn styles(&self) -> &[crate::features::styling::domain::StyleSheetName] {
+            &[]
+        }
+
+        fn refresh(&mut self, _hub: &SignalHub, signals: &[SignalKind]) {
+            self.log.lock().unwrap().refreshes.push(signals.to_vec());
+        }
+
+        fn render(&self, _monitor: &MonitorId) -> VNode {
+            let mut log = self.log.lock().unwrap();
+            log.renders = log.renders.saturating_add(1);
+            drop(log);
+            self.node.clone()
+        }
+
+        fn call_function_with_args(
+            &mut self,
+            name: &FunctionName,
+            args: &[&str],
+        ) -> Result<(), ModuleInitError> {
+            let args = args.iter().map(ToString::to_string).collect();
+            if let Ok(mut log) = self.log.lock() {
+                log.calls.push((name.as_str().to_string(), args));
+            }
+            self.call_error
+                .clone()
+                .map_or(Ok(()), |message| Err(ModuleInitError::ScriptError(message)))
+        }
+    }
+
+    /// Runs `action` with every `tracing` event, at any level, written without time or colour
+    /// to the returned text, one line each as `LEVEL target: message field=value`.
+    pub(crate) fn capture_logs(action: impl FnOnce()) -> String {
+        let buffer = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let writer = buffer.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .without_time()
+            .with_ansi(false)
+            .with_writer(move || LogBuffer(writer.clone()))
+            .finish();
+        tracing::subscriber::with_default(subscriber, action);
+        let bytes = buffer.lock().unwrap().clone();
+        String::from_utf8(bytes).unwrap()
+    }
+
+    /// Appends whatever the log subscriber writes to a shared buffer.
+    struct LogBuffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for LogBuffer {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .lock()
+                .map_err(|_| std::io::Error::other("log buffer poisoned"))?
+                .extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
 }

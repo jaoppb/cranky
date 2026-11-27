@@ -2,7 +2,6 @@ use super::action::PointerAction;
 use super::handler::PointerHandler;
 use super::hit_ref::capture_node_ref;
 use super::target::PointerTarget;
-use crate::features::vdom::domain::{UiAction, UiCommand};
 use crate::shared::events::core::PointerButton;
 use crate::shared::primitives::geometry::Position;
 
@@ -54,32 +53,11 @@ impl PointerHandler {
     ) -> Vec<PointerAction> {
         let monitor_id = target.monitor_id();
         let hit = target.tree().hit_test(pos);
-        let hit_cmd = hit
-            .iter()
+        hit.iter()
             .rev()
-            .find_map(|node| node.on_click().and_then(|handlers| handlers.get(button)));
-
-        let mut actions = Vec::new();
-        if let Some(cmd) = hit_cmd {
-            match cmd {
-                UiAction::ScriptCall(func_name) => {
-                    actions.push(PointerAction::CallFunction(
-                        func_name.clone(),
-                        Some(monitor_id.clone()),
-                    ));
-                }
-                UiAction::SystrayAction { id, action, .. } => {
-                    actions.push(PointerAction::SendUi(UiCommand::SystrayAction {
-                        id: id.clone(),
-                        action: action.clone(),
-                        pos: Some(pos),
-                    }));
-                }
-                UiAction::Exec(cmd_str) => {
-                    actions.push(PointerAction::SendUi(UiCommand::Exec(cmd_str.clone())));
-                }
-            }
-        }
-        actions
+            .find_map(|node| node.on_click().and_then(|handlers| handlers.get(button)))
+            .map(|cmd| PointerAction::for_ui_action(cmd, monitor_id, pos))
+            .into_iter()
+            .collect()
     }
 }

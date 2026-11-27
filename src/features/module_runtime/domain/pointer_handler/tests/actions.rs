@@ -89,6 +89,15 @@ fn hovering_a_node_runs_its_hover_action_for_this_monitor() {
     );
 }
 
+/// The tray action `name` of nm-applet, sent with the pointer at `pos`.
+fn tray_sent(name: &str, pos: Position) -> PointerAction {
+    PointerAction::SendUi(UiCommand::SystrayAction {
+        id: SystrayId::new("nm-applet"),
+        action: SystrayActionName::parse_str(name),
+        pos: Some(pos),
+    })
+}
+
 /// A tray action is sent with the pointer position of the event, not the one in the script.
 #[test]
 fn tray_hover_and_click_carry_the_pointer_position() {
@@ -98,29 +107,20 @@ fn tray_hover_and_click_carry_the_pointer_position() {
         PointerHandler::new().handle_event(&motion(40, 11), PointerTarget::new(&mon, &hover));
     assert_eq!(
         outcome.into_actions(),
-        vec![PointerAction::SendUi(UiCommand::SystrayAction {
-            id: SystrayId::new("nm-applet"),
-            action: SystrayActionName::parse_str("Activate"),
-            pos: Some(Position::new(40, 11)),
-        })]
+        vec![tray_sent("Activate", Position::new(40, 11))]
     );
 
     let click = tree(None, Some(ClickHandlers::from_single(tray("ContextMenu"))));
-    let outcome = PointerHandler::new().handle_event(
-        &PointerEvent::Click {
-            surface: SurfaceKind::Bar,
-            button: PointerButton::Right,
-            pos: Position::new(73, 19),
-        },
-        PointerTarget::new(&mon, &click),
-    );
+    let right_click = PointerEvent::Click {
+        surface: SurfaceKind::Bar,
+        button: PointerButton::Right,
+        pos: Position::new(73, 19),
+    };
+    let outcome =
+        PointerHandler::new().handle_event(&right_click, PointerTarget::new(&mon, &click));
     assert_eq!(
         outcome.into_actions(),
-        vec![PointerAction::SendUi(UiCommand::SystrayAction {
-            id: SystrayId::new("nm-applet"),
-            action: SystrayActionName::parse_str("ContextMenu"),
-            pos: Some(Position::new(73, 19)),
-        })]
+        vec![tray_sent("ContextMenu", Position::new(73, 19))]
     );
 }
 

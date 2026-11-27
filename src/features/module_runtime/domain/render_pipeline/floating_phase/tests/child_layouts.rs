@@ -1,4 +1,7 @@
-use super::super::{FloatingEngine, FloatingEngines, FloatingPass, layout_floating};
+use super::super::{
+    FloatingCache, FloatingContentCaches, FloatingEngine, FloatingEngines, FloatingLayouts,
+    FloatingPass, layout_floating,
+};
 use super::{Spec, content, panel_on_every_edge};
 use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{
@@ -78,47 +81,67 @@ fn names(layouts: &[ChildModuleLayout]) -> Vec<(&str, LayoutSurface)> {
         .collect()
 }
 
-/// The modules embedded in the popup, the panel and the tooltip are reported in that order, and
-/// each kind caches its own content under the monitor it was laid out for.
-#[test]
-fn floating_modules_are_listed_per_kind_and_each_kind_caches_its_own_content() {
-    let popup = content(SurfaceSpace::Popup, "calendar popup", None);
-    let panel = content(SurfaceSpace::Panel, "launcher panel", None);
-    let tooltip = content(SurfaceSpace::Tooltip, "clock tooltip", None);
+const MONITOR: &str = "HDMI-A-1";
+
+/// The popup, panel and tooltip contents the tests open.
+fn contents() -> [StyledNode; 3] {
+    [
+        content(SurfaceSpace::Popup, "calendar popup", None),
+        content(SurfaceSpace::Panel, "launcher panel", None),
+        content(SurfaceSpace::Tooltip, "clock tooltip", None),
+    ]
+}
+
+/// The bar's root hovered on a focused monitor.
+fn bar_hovered() -> InteractionContext {
     let hovered = NodeRef::new(Vec::new(), NodePath::root_in(SurfaceSpace::Bar));
-    let interaction = InteractionContext::new(
+    InteractionContext::new(
         InteractedNodes::new(Some(hovered), None, None),
         MonitorFocus::Focused,
+    )
+}
+
+/// Lays out the floating content `bar` opens on `MONITOR`, with the bar hovered, by engines that
+/// lay any content out as the module calendar (popup), launcher (panel) or weather (tooltip).
+fn lay_out(bar: &RenderNode, caches: FloatingContentCaches<'_>) -> FloatingLayouts {
+    let interaction = bar_hovered();
+    let (mut calendar, mut launcher, mut weather) = (
+        ModuleEngine { name: "calendar" },
+        ModuleEngine { name: "launcher" },
+        ModuleEngine { name: "weather" },
     );
-    let monitor = MonitorId::new("HDMI-A-1");
+    let FloatingContentCaches {
+        popup,
+        panel,
+        tooltip,
+    } = caches;
+    let engines = FloatingEngines {
+        popup: FloatingEngine::new(&mut calendar, popup),
+        panel: FloatingEngine::new(&mut launcher, panel),
+        tooltip: FloatingEngine::new(&mut weather, tooltip),
+    };
+    let mut pass = FloatingPass {
+        monitor_id: &MonitorId::new(MONITOR),
+        canvas_factory: &mut MockCanvasFactory,
+        scale: Scale::new(1.0),
+        current_child_sizes: None,
+        interaction: Some(&interaction),
+    };
+    layout_floating(bar, engines, &mut pass)
+}
+
+/// The modules embedded in the popup, the panel and the tooltip are reported in that order.
+#[test]
+fn floating_modules_are_listed_per_kind() {
+    let [popup, panel, tooltip] = contents();
     let (mut popup_cache, mut panel_cache, mut tooltip_cache) =
         (HashMap::new(), HashMap::new(), HashMap::new());
-
-    let layouts = layout_floating(
-        &bar(&popup, &panel, &tooltip),
-        FloatingEngines {
-            popup: FloatingEngine {
-                engine: &mut ModuleEngine { name: "calendar" },
-                cache: &mut popup_cache,
-            },
-            panel: FloatingEngine {
-                engine: &mut ModuleEngine { name: "launcher" },
-                cache: &mut panel_cache,
-            },
-            tooltip: FloatingEngine {
-                engine: &mut ModuleEngine { name: "weather" },
-                cache: &mut tooltip_cache,
-            },
-        },
-        &mut FloatingPass {
-            monitor_id: &monitor,
-            canvas_factory: &mut MockCanvasFactory,
-            scale: Scale::new(1.0),
-            current_child_sizes: None,
-            interaction: Some(&interaction),
-        },
-    );
-
+    let caches = FloatingContentCaches {
+        popup: &mut popup_cache,
+        panel: &mut panel_cache,
+        tooltip: &mut tooltip_cache,
+    };
+    let layouts = lay_out(&bar(&popup, &panel, &tooltip), caches);
     assert_eq!(
         names(&layouts.module_layouts().collect::<Vec<_>>()),
         vec![
@@ -127,16 +150,23 @@ fn floating_modules_are_listed_per_kind_and_each_kind_caches_its_own_content() {
             ("weather", LayoutSurface::Tooltip),
         ]
     );
-    assert_eq!(
-        popup_cache.get(&monitor).map(|entry| &entry.0),
-        Some(&popup)
-    );
-    assert_eq!(
-        panel_cache.get(&monitor).map(|entry| &entry.0),
-        Some(&panel)
-    );
-    assert_eq!(
-        tooltip_cache.get(&monitor).map(|entry| &entry.0),
-        Some(&tooltip)
-    );
+}
+
+/// Each kind caches its own content under the monitor it was laid out for.
+#[test]
+fn each_floating_kind_caches_its_own_content() {
+    let [popup, panel, tooltip] = contents();
+    let (mut popup_cache, mut panel_cache, mut tooltip_cache) =
+        (HashMap::new(), HashMap::new(), HashMap::new());
+    let caches = FloatingContentCaches {
+        popup: &mut popup_cache,
+        panel: &mut panel_cache,
+        tooltip: &mut tooltip_cache,
+    };
+    lay_out(&bar(&popup, &panel, &tooltip), caches);
+    let monitor = MonitorId::new(MONITOR);
+    let content_of = |cache: &FloatingCache| cache.get(&monitor).map(|entry| entry.0.clone());
+    assert_eq!(content_of(&popup_cache), Some(popup));
+    assert_eq!(content_of(&panel_cache), Some(panel));
+    assert_eq!(content_of(&tooltip_cache), Some(tooltip));
 }

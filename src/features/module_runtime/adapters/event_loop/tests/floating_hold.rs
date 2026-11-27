@@ -1,49 +1,25 @@
 use super::lifecycle::create_test_event_loop_and_channel;
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, ShowFloating};
-use crate::features::module_runtime::domain::{LayoutContext, RenderOutcome, RenderPipeline};
+use crate::features::module_runtime::domain::{RenderOutcome, RenderPipeline};
 use crate::features::module_runtime::test_support::{
-    MockCanvasFactory, MockStyleResolver, TestModulePort, process_monitor,
+    PipelineFixture, TestModulePort, process_monitor,
 };
 use crate::features::vdom::domain::{ElementSelectors, Interactions};
 use crate::features::vdom::domain::{
     InteractedNodes, InteractionContext, ModuleParams, NodePath, NodeRef, PanelSpec, PopupSpec,
     SurfaceSpace, VNode,
 };
-use crate::shared::primitives::geometry::Scale;
-use crate::shared::primitives::{
-    ModuleName, ModuleOptions, MonitorFocus, MonitorId, SizeConstraint,
-};
-use std::collections::HashMap;
+use crate::shared::primitives::{ModuleName, ModuleOptions, MonitorFocus, MonitorId};
 
 /// Renders `bar` with no child size reported, under `interaction`.
 fn render(bar: VNode, interaction: Option<InteractionContext>) -> RenderOutcome {
-    let mut pipeline = RenderPipeline::new();
-    let port = TestModulePort::new(bar);
-    let resolver = MockStyleResolver;
-    let mut factory = MockCanvasFactory;
-    let mut engine = TaffyLayoutAdapter::new();
-    let mut popup_engine = TaffyLayoutAdapter::new();
-    let mut panel_engine = TaffyLayoutAdapter::new();
-    let mut tooltip_engine = TaffyLayoutAdapter::new();
-    let child_errors = HashMap::new();
+    let mut fixture = PipelineFixture::<TaffyLayoutAdapter>::default();
     let monitor = MonitorId::new("DP-1");
-    let ctx = LayoutContext {
-        monitor_id: &monitor,
-        scale: Scale::new(1.0),
-        style_resolver: &resolver,
-        child_errors: &child_errors,
-        current_bounds: None,
-        current_constraint: SizeConstraint::none(),
-        current_child_sizes: None,
-        interaction_context: interaction,
-        canvas_factory: &mut factory,
-        layout_engine: &mut engine,
-        popup_layout_engine: &mut popup_engine,
-        panel_layout_engine: &mut panel_engine,
-        tooltip_layout_engine: &mut tooltip_engine,
-    };
-    process_monitor(&mut pipeline, &port, ctx).expect("render outcome")
+    let mut ctx = fixture.ctx(&monitor);
+    ctx.interaction_context = interaction;
+    let port = TestModulePort::new(bar);
+    process_monitor(&mut RenderPipeline::new(), &port, ctx).expect("render outcome")
 }
 
 fn bar() -> VNode {
@@ -131,4 +107,18 @@ fn test_event_loop_does_not_show_a_held_panel() {
 #[test]
 fn test_event_loop_does_not_show_a_held_tooltip() {
     assert_held_then_shown(render_with_tooltip, &FloatingKind::Tooltip);
+}
+
+/// A held popup leaves the surface showing what it showed, sending nothing, and keeps it as what
+/// is shown: the same plain popup afterwards is not sent again.
+#[test]
+fn a_held_popup_keeps_what_it_showed() {
+    let (mut event_loop, _id, display_rx) = create_test_event_loop_and_channel();
+    let mon = MonitorId::new("DP-1");
+    event_loop.dispatch_render_outcome(&mon, &render_with_popup(bar()));
+    assert_eq!(display_rx.try_iter().count(), 1);
+
+    event_loop.dispatch_render_outcome(&mon, &render_with_popup(unsettled()));
+    event_loop.dispatch_render_outcome(&mon, &render_with_popup(bar()));
+    assert!(display_rx.try_recv().is_err());
 }

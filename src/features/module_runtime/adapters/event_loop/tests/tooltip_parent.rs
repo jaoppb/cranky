@@ -1,24 +1,13 @@
+use super::fixture::{PARENT, embed};
 use super::lifecycle::make_test_rect_node;
-use crate::features::layout_engine::domain::{DisplayCommand, FloatingKind, PopupTarget};
-use crate::features::module_runtime::adapters::event_loop::runner::EventLoop;
-use crate::features::module_runtime::application::ModuleContext;
-use crate::features::module_runtime::domain::FloatingLayouts;
-use crate::features::module_runtime::domain::RenderServices;
-use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
-use crate::features::module_runtime::ports::{ModuleHandles, ModuleSenders};
-use crate::features::module_runtime::test_support::{
-    ChannelDisplaySender, MockCanvasFactory, MockLayoutSender, MockSurfaceManager, MockUiSender,
-    TestModulePort,
+use super::outcome::plain_event_loop;
+use crate::features::layout_engine::domain::{
+    DisplayCommand, FloatingKind, PopupTarget, ShowFloating,
 };
-use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
-use crate::features::vdom::adapters::DefaultVdomDiffAdapter;
-use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
-use crate::shared::config::domain::Config;
-use crate::shared::events::signals::SignalHub;
+use crate::features::module_runtime::domain::render_pipeline::{EmbedReport, PipelineLayout};
+use crate::features::module_runtime::domain::{FloatingLayouts, RenderOutcome};
 use crate::shared::primitives::geometry::Scale;
-use crate::shared::primitives::{LayoutSurface, ModuleId, MonitorId};
-use std::collections::HashMap;
-use std::sync::Arc;
+use crate::shared::primitives::{LayoutSurface, MonitorId};
 
 /// Regression test for Gap B: a module embedded inside an open popup that
 /// itself shows a tooltip must dispatch that tooltip with the real floating
@@ -27,45 +16,15 @@ use std::sync::Arc;
 /// compute via `surface_parent_for` for this module's own floating content.
 #[test]
 fn test_event_loop_tooltip_dispatch_carries_floating_parent_when_embedded() {
-    let id = ModuleId::new(42);
-    let parent_id = ModuleId::new(7);
+    let parent_id = PARENT;
     let mon = MonitorId::new("DP-1");
 
-    let hub = Arc::new(SignalHub::new(Config::default()));
-    let surface_manager = Arc::new(MockSurfaceManager);
-    let layout_sender = Arc::new(MockLayoutSender);
-    let (display_tx, display_rx) = std::sync::mpsc::channel();
-    let display_sender = Arc::new(ChannelDisplaySender::new(display_tx));
-    let ui_sender = Arc::new(MockUiSender);
-    let (_tx, rx) = tokio::sync::watch::channel(HashMap::new());
     // This module is itself embedded (via `ui.module()`) inside module
     // `parent_id`'s open popup — exactly the "module-in-popup" case.
-    let ctx = ModuleContext::new(
-        id,
-        ModuleHandles::new(
-            hub,
-            surface_manager,
-            ModuleSenders::new(layout_sender, display_sender, ui_sender),
-        ),
-        rx,
-    )
-    .with_parent(Some(parent_id))
-    .with_surface(LayoutSurface::Popup);
+    let (event_loop, wiring) = plain_event_loop();
+    let mut event_loop = embed(event_loop, LayoutSurface::Popup);
 
-    let mut event_loop = EventLoop::new(
-        Box::new(TestModulePort::new(VNode::new_rect(
-            ElementSelectors::default(),
-            Interactions::default(),
-        ))),
-        ctx,
-        RenderServices::new(
-            MockCanvasFactory,
-            Arc::new(CompositeStyleResolver::new(vec![])),
-            Arc::new(DefaultVdomDiffAdapter::new()),
-        ),
-    );
-
-    let outcome = crate::features::module_runtime::domain::RenderOutcome::new(
+    let outcome = RenderOutcome::new(
         PipelineLayout::new(
             make_test_rect_node(),
             FloatingLayouts::new(None, None, Some(make_test_rect_node())),
@@ -76,19 +35,11 @@ fn test_event_loop_tooltip_dispatch_carries_floating_parent_when_embedded() {
     );
     event_loop.dispatch_render_outcome(&mon, &outcome);
 
-    let cmd = display_rx
-        .try_recv()
-        .expect("Should have sent ShowFloatingSurface for the tooltip");
-    match cmd {
-        DisplayCommand::ShowFloatingSurface(
-            crate::features::layout_engine::domain::ShowFloating { kind, parent, .. },
-        ) => {
-            assert_eq!(kind, FloatingKind::Tooltip);
-            assert_eq!(
-                parent,
-                Some(FloatingKind::Popup(PopupTarget::new(parent_id, mon)))
-            );
-        }
-        _ => panic!("Expected ShowFloatingSurface, got {cmd:?}"),
-    }
+    let cmd = wiring.sent.display.try_recv();
+    let Ok(DisplayCommand::ShowFloatingSurface(ShowFloating { kind, parent, .. })) = cmd else {
+        panic!("Expected ShowFloatingSurface for the tooltip, got {cmd:?}");
+    };
+    assert_eq!(kind, FloatingKind::Tooltip);
+    let popup = FloatingKind::Popup(PopupTarget::new(parent_id, mon));
+    assert_eq!(parent, Some(popup));
 }

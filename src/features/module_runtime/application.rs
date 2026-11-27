@@ -184,11 +184,16 @@ mod tests {
     use crate::shared::primitives::SizeConstraint;
     use crate::shared::primitives::geometry::{Position, Rect, Size};
 
+    /// What a test fixture's event loop sends, kept so the channels stay open.
+    struct Receivers {
+        layout: std::sync::mpsc::Receiver<LayoutEvent>,
+        _display: std::sync::mpsc::Receiver<DisplayCommand>,
+        _ui: std::sync::mpsc::Receiver<UiCommand>,
+    }
+
     struct TestFixture {
         pub(crate) hub: Arc<SignalHub>,
-        pub(crate) layout_rx: std::sync::mpsc::Receiver<LayoutEvent>,
-        _display_rx: std::sync::mpsc::Receiver<DisplayCommand>,
-        _ui_rx: std::sync::mpsc::Receiver<UiCommand>,
+        pub(crate) sent: Receivers,
         pub(crate) layout_tx: watch::Sender<HashMap<MonitorId, ChildBounds>>,
         pub(crate) event_loop: EventLoop<
             MockCanvasFactory,
@@ -204,6 +209,70 @@ mod tests {
         monitors: Vec<&'static str>,
         subs: Vec<SignalKind>,
         vnode: VNode,
+    }
+
+    /// Hyprland's view of `monitors`, all on workspace 1, the first one focused.
+    fn hyprland_with(monitors: &[&'static str]) -> HyprlandState {
+        let mut monitors_map = std::collections::BTreeMap::new();
+        for monitor in monitors {
+            let name = crate::features::workspaces::domain::MonitorName::new(*monitor);
+            monitors_map.insert(
+                name.clone(),
+                crate::features::workspaces::domain::Monitor::new(
+                    name,
+                    crate::features::workspaces::domain::WorkspaceId::new(1),
+                    None,
+                ),
+            );
+        }
+        let focused = monitors
+            .first()
+            .map(|monitor| crate::features::workspaces::domain::MonitorName::new(*monitor));
+        HyprlandState::new(std::collections::BTreeMap::new(), monitors_map, focused)
+    }
+
+    /// A hub on which Hyprland and Wayland both report `monitors`, if there are any.
+    fn hub_with(monitors: &[&'static str]) -> Arc<SignalHub> {
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        if !monitors.is_empty() {
+            hub.hyprland_tx().send(hyprland_with(monitors)).unwrap();
+
+            // Wayland is the actual discovery source - mirror it here so
+            // a monitor set up via `with_monitors` is one `EventLoop`
+            // will actually render for.
+            let mut scales = hub.monitor_scales_rx().borrow().clone();
+            for monitor in monitors {
+                scales.insert(
+                    MonitorId::new(*monitor),
+                    crate::shared::primitives::geometry::Scale::new(1.0),
+                );
+            }
+            hub.monitor_scales_tx().send(scales).unwrap();
+        }
+        hub
+    }
+
+    /// Senders writing to channels, with the receiving ends.
+    fn channel_senders() -> (
+        ModuleSenders<ChannelLayoutSender, ChannelDisplaySender, ChannelUiSender>,
+        Receivers,
+    ) {
+        let (layout_event_tx, layout) = std::sync::mpsc::channel();
+        let (display_tx, display) = std::sync::mpsc::channel();
+        let (ui_tx, ui_rx) = std::sync::mpsc::channel();
+        let senders = ModuleSenders::new(
+            Arc::new(ChannelLayoutSender {
+                tx: layout_event_tx,
+            }),
+            Arc::new(ChannelDisplaySender { tx: display_tx }),
+            Arc::new(ChannelUiSender { tx: ui_tx }),
+        );
+        let receivers = Receivers {
+            layout,
+            _display: display,
+            _ui: ui_rx,
+        };
+        (senders, receivers)
     }
 
     impl TestFixtureBuilder {
@@ -238,83 +307,21 @@ mod tests {
         }
 
         fn build(self) -> TestFixture {
-            let hub = Arc::new(SignalHub::new(Config::default()));
-
-            if !self.monitors.is_empty() {
-                let mut monitors_map = std::collections::BTreeMap::new();
-                for monitor in &self.monitors {
-                    let name = crate::features::workspaces::domain::MonitorName::new(*monitor);
-                    monitors_map.insert(
-                        name.clone(),
-                        crate::features::workspaces::domain::Monitor::new(
-                            name,
-                            crate::features::workspaces::domain::WorkspaceId::new(1),
-                            None,
-                        ),
-                    );
-                }
-                let focused = self
-                    .monitors
-                    .first()
-                    .map(|monitor| crate::features::workspaces::domain::MonitorName::new(*monitor));
-                let h_state =
-                    HyprlandState::new(std::collections::BTreeMap::new(), monitors_map, focused);
-                hub.hyprland_tx().send(h_state).unwrap();
-
-                // Wayland is the actual discovery source - mirror it here so
-                // a monitor set up via `with_monitors` is one `EventLoop`
-                // will actually render for.
-                let mut scales = hub.monitor_scales_rx().borrow().clone();
-                for monitor in &self.monitors {
-                    scales.insert(
-                        MonitorId::new(*monitor),
-                        crate::shared::primitives::geometry::Scale::new(1.0),
-                    );
-                }
-                hub.monitor_scales_tx().send(scales).unwrap();
-            }
-
+            let hub = hub_with(&self.monitors);
             let surface_manager: DynSurfaceManager = Arc::new(MockSurfaceManager);
-            let (layout_event_tx, layout_event_rx) = std::sync::mpsc::channel();
-            let (display_tx, display_rx) = std::sync::mpsc::channel();
-            let (ui_tx, ui_rx) = std::sync::mpsc::channel();
-
-            let layout_sender = Arc::new(ChannelLayoutSender {
-                tx: layout_event_tx,
-            });
-            let display_sender = Arc::new(ChannelDisplaySender { tx: display_tx });
-            let ui_sender = Arc::new(ChannelUiSender { tx: ui_tx });
+            let (senders, sent) = channel_senders();
             let (layout_tx, layout_rx) = watch::channel(HashMap::new());
-
-            let ctx = ModuleContext::new(
-                self.id,
-                ModuleHandles::new(
-                    hub.clone(),
-                    surface_manager,
-                    ModuleSenders::new(layout_sender, display_sender, ui_sender),
-                ),
-                layout_rx,
-            )
-            .with_parent(self.parent_id);
+            let handles = ModuleHandles::new(hub.clone(), surface_manager, senders);
+            let ctx = ModuleContext::new(self.id, handles, layout_rx).with_parent(self.parent_id);
             let port = Box::new(TestModulePort::with_subs(self.vnode, self.subs));
-
             let resolver = Arc::new(CompositeStyleResolver::new(vec![]));
             let diff_adapter = Arc::new(DefaultVdomDiffAdapter::new());
-            let canvas_factory = MockCanvasFactory;
-
-            let event_loop = EventLoop::new(
-                port,
-                ctx,
-                RenderServices::new(canvas_factory, resolver, diff_adapter),
-            );
-
+            let services = RenderServices::new(MockCanvasFactory, resolver, diff_adapter);
             TestFixture {
                 hub,
-                layout_rx: layout_event_rx,
-                _display_rx: display_rx,
-                _ui_rx: ui_rx,
+                sent,
                 layout_tx,
-                event_loop,
+                event_loop: EventLoop::new(port, ctx, services),
             }
         }
     }
@@ -350,55 +357,60 @@ mod tests {
         let _ = rx1.borrow();
     }
 
+    const ALL_SUBS: [SignalKind; 4] = [
+        SignalKind::Time,
+        SignalKind::Hyprland,
+        SignalKind::Systray,
+        SignalKind::Metrics,
+    ];
+
+    /// Bounds of `width` x `height` at the origin of `monitor`, with no constraint.
+    fn bounds_on(monitor: &str, width: u32, height: u32) -> HashMap<MonitorId, ChildBounds> {
+        let rect = Rect::new(Position::new(0, 0), Size::new(width, height));
+        HashMap::from([(
+            MonitorId::new(monitor),
+            ChildBounds::new(rect, SizeConstraint::none()),
+        )])
+    }
+
+    /// The monitor, module and size of `event`, which must be a size change.
+    fn size_change(event: LayoutEvent) -> (MonitorId, ModuleId, Size) {
+        let LayoutEvent::ModuleSizeChanged {
+            monitor_id,
+            module_id,
+            size,
+            ..
+        } = event
+        else {
+            panic!("Unexpected event");
+        };
+        (monitor_id, module_id, size)
+    }
+
     #[test]
     fn test_module_actor_measure_and_render_all() {
         crate::test_utils::block_on(async {
             let id = ModuleId::new(1);
             let fixture = TestFixtureBuilder::new(id)
                 .with_monitors(&["DP-1"])
-                .with_subs(vec![
-                    SignalKind::Time,
-                    SignalKind::Hyprland,
-                    SignalKind::Systray,
-                    SignalKind::Metrics,
-                ])
+                .with_subs(ALL_SUBS.to_vec())
                 .build();
 
             let mut event_loop = fixture.event_loop;
             let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
             event_loop.render_all_monitors(&mut layout_engines);
 
-            let event = fixture
-                .layout_rx
-                .try_recv()
-                .expect("Should send size changed command");
-            match event {
-                LayoutEvent::ModuleSizeChanged {
-                    monitor_id,
-                    module_id,
-                    size,
-                    ..
-                } => {
-                    assert_eq!(monitor_id.as_str(), "DP-1");
-                    assert_eq!(module_id, id);
-                    assert_eq!(size.width(), 10);
-                    assert_eq!(size.height(), 10);
-                }
-                LayoutEvent::ContainerLayoutsCalculated { .. } => panic!("Unexpected event"),
-            }
+            let event = fixture.sent.layout.try_recv();
+            let (monitor_id, module_id, size) =
+                size_change(event.expect("Should send size changed command"));
+            assert_eq!(monitor_id.as_str(), "DP-1");
+            assert_eq!(module_id, id);
+            assert_eq!(size.width(), 10);
+            assert_eq!(size.height(), 10);
 
-            let mut layouts = HashMap::new();
-            layouts.insert(
-                MonitorId::new("DP-1"),
-                ChildBounds::new(
-                    Rect::new(Position::new(0, 0), Size::new(10, 10)),
-                    SizeConstraint::none(),
-                ),
-            );
-            fixture.layout_tx.send(layouts).unwrap();
-
+            fixture.layout_tx.send(bounds_on("DP-1", 10, 10)).unwrap();
             event_loop.render_all_monitors(&mut layout_engines);
-            assert!(fixture.layout_rx.try_recv().is_err());
+            assert!(fixture.sent.layout.try_recv().is_err());
         });
     }
 
@@ -412,27 +424,22 @@ mod tests {
             // embedding site (a popup, say) closes. A top-level actor (no
             // parent) has no site to lose and is exempt from this — see
             // `test_module_actor_skips_pipeline_when_vdom_unchanged`.
-            let id = ModuleId::new(1);
-            let parent = ModuleId::new(99);
-            let fixture = TestFixtureBuilder::new(id)
-                .with_parent(parent)
+            let fixture = TestFixtureBuilder::new(ModuleId::new(1))
+                .with_parent(ModuleId::new(99))
                 .with_monitors(&["DP-1"])
                 .build();
-
+            let dp1 = MonitorId::new("DP-1");
             let mut event_loop = fixture.event_loop;
             let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
 
             // First render: DP-1 has never been rendered before, so the
             // Hyprland-sourced bootstrap path discovers and renders it.
             event_loop.render_all_monitors(&mut layout_engines);
+            let render_trees = event_loop.render_pipeline().render_trees();
+            assert!(render_trees.contains_key(&dp1));
+            let first = fixture.sent.layout.try_recv();
             assert!(
-                event_loop
-                    .render_pipeline()
-                    .render_trees()
-                    .contains_key(&MonitorId::new("DP-1"))
-            );
-            assert!(
-                fixture.layout_rx.try_recv().is_ok(),
+                first.is_ok(),
                 "first render should report an intrinsic size"
             );
 
@@ -442,7 +449,7 @@ mod tests {
             let discovered =
                 event_loop.discover_monitors(&HashMap::<MonitorId, ChildBounds>::new());
             assert!(
-                !discovered.contains(&MonitorId::new("DP-1")),
+                !discovered.contains(&dp1),
                 "a previously-rendered monitor with no current rect must stay suspended"
             );
 
@@ -450,63 +457,52 @@ mod tests {
             // signal tick) must therefore do nothing for DP-1 — no refresh, no
             // diff, no submit — so `try_recv` sees nothing new.
             event_loop.render_all_monitors(&mut layout_engines);
-            assert!(fixture.layout_rx.try_recv().is_err());
+            assert!(fixture.sent.layout.try_recv().is_err());
         });
+    }
+
+    /// A rect clicking which runs `render` and hovering which runs `hover`.
+    fn click_node() -> VNode {
+        let exec =
+            |command: &str| crate::features::vdom::domain::UiAction::Exec(command.to_string());
+        let click = crate::features::vdom::domain::ClickHandlers::from_single(exec("render"));
+        VNode::new_rect(
+            ElementSelectors::default(),
+            Interactions::new(Some(click), Some(exec("hover")), None),
+        )
+    }
+
+    /// A left click at (5, 5) on the bar of DP-1.
+    fn bar_click() -> crate::shared::events::core::InteractionEvent {
+        crate::shared::events::core::InteractionEvent::Pointer(
+            crate::shared::events::core::PointerEvent::Click {
+                surface: crate::shared::events::core::SurfaceKind::Bar,
+                button: crate::shared::events::core::PointerButton::Left,
+                pos: crate::shared::primitives::geometry::Position::new(5, 5),
+            },
+        )
     }
 
     #[test]
     fn test_module_actor_lifecycle() {
         crate::test_utils::block_on(async {
             let id = ModuleId::new(2);
-            let click_node = VNode::new_rect(
-                ElementSelectors::default(),
-                Interactions::new(
-                    Some(crate::features::vdom::domain::ClickHandlers::from_single(
-                        crate::features::vdom::domain::UiAction::Exec("render".to_string()),
-                    )),
-                    Some(crate::features::vdom::domain::UiAction::Exec(
-                        "hover".to_string(),
-                    )),
-                    None,
-                ),
-            );
-
             let fixture = TestFixtureBuilder::new(id)
                 .with_monitors(&["DP-1"])
-                .with_subs(vec![
-                    SignalKind::Time,
-                    SignalKind::Hyprland,
-                    SignalKind::Systray,
-                    SignalKind::Metrics,
-                ])
-                .with_vnode(click_node)
+                .with_subs(ALL_SUBS.to_vec())
+                .with_vnode(click_node())
                 .build();
 
             let actor = fixture.event_loop.into_actor();
             actor.spawn();
 
-            fixture
-                .hub
-                .time_tx()
-                .send(cranky_time::LocalTime::utc(0))
-                .unwrap();
-            fixture
-                .hub
-                .systray_tx()
-                .send(crate::features::systray::domain::SystrayState::default())
-                .unwrap();
-
-            let _ = fixture.hub.pointer_tx().send((
-                id,
-                MonitorId::new("DP-1"),
-                crate::shared::events::core::InteractionEvent::Pointer(
-                    crate::shared::events::core::PointerEvent::Click {
-                        surface: crate::shared::events::core::SurfaceKind::Bar,
-                        button: crate::shared::events::core::PointerButton::Left,
-                        pos: crate::shared::primitives::geometry::Position::new(5, 5),
-                    },
-                ),
-            ));
+            let hub = &fixture.hub;
+            hub.time_tx().send(cranky_time::LocalTime::utc(0)).unwrap();
+            let systray = crate::features::systray::domain::SystrayState::default();
+            hub.systray_tx().send(systray).unwrap();
+            let _ = hub
+                .pointer_tx()
+                .send((id, MonitorId::new("DP-1"), bar_click()));
 
             tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
@@ -531,38 +527,18 @@ mod tests {
                 crate::shared::primitives::geometry::Scale::new(1.0),
             );
             fixture.hub.monitor_scales_tx().send(scales).unwrap();
-
-            let mut layouts = HashMap::new();
-            layouts.insert(
-                MonitorId::new("DP-2"),
-                ChildBounds::new(
-                    Rect::new(Position::new(0, 0), Size::new(10, 10)),
-                    SizeConstraint::none(),
-                ),
-            );
-            fixture.layout_tx.send(layouts).unwrap();
+            fixture.layout_tx.send(bounds_on("DP-2", 10, 10)).unwrap();
 
             let mut event_loop = fixture.event_loop;
             let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
             event_loop.render_all_monitors(&mut layout_engines);
 
-            let event = fixture
-                .layout_rx
-                .try_recv()
-                .expect("Should send size changed command for DP-2");
-            match event {
-                LayoutEvent::ModuleSizeChanged {
-                    monitor_id,
-                    module_id,
-                    size,
-                    ..
-                } => {
-                    assert_eq!(monitor_id.as_str(), "DP-2");
-                    assert_eq!(module_id, id);
-                    assert_eq!(size.width(), 10);
-                }
-                LayoutEvent::ContainerLayoutsCalculated { .. } => panic!("Unexpected event"),
-            }
+            let event = fixture.sent.layout.try_recv();
+            let (monitor_id, module_id, size) =
+                size_change(event.expect("Should send size changed command for DP-2"));
+            assert_eq!(monitor_id.as_str(), "DP-2");
+            assert_eq!(module_id, id);
+            assert_eq!(size.width(), 10);
         });
     }
 
@@ -573,148 +549,123 @@ mod tests {
             // layout watch (no monitor_scales entry) is not rendered for.
             // Layout is a consequence of Wayland surfaces existing, not a
             // discovery source in its own right.
-            let id = ModuleId::new(1);
-            let fixture = TestFixtureBuilder::new(id).build();
-
-            let mut layouts = HashMap::new();
-            layouts.insert(
-                MonitorId::new("DP-2"),
-                ChildBounds::new(
-                    Rect::new(Position::new(0, 0), Size::new(10, 10)),
-                    SizeConstraint::none(),
-                ),
-            );
-            fixture.layout_tx.send(layouts).unwrap();
+            let fixture = TestFixtureBuilder::new(ModuleId::new(1)).build();
+            fixture.layout_tx.send(bounds_on("DP-2", 10, 10)).unwrap();
 
             let mut event_loop = fixture.event_loop;
             let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
             event_loop.render_all_monitors(&mut layout_engines);
 
-            assert!(fixture.layout_rx.try_recv().is_err());
+            assert!(fixture.sent.layout.try_recv().is_err());
         });
     }
 
     #[test]
     fn test_module_actor_skips_pipeline_when_vdom_unchanged() {
         crate::test_utils::block_on(async {
-            let id = ModuleId::new(1);
             let node = VNode::new_text(
                 crate::features::vdom::domain::TextContent::new("unchanged".to_string()),
                 ElementSelectors::default(),
                 Interactions::default(),
             );
-
-            let fixture = TestFixtureBuilder::new(id)
+            let fixture = TestFixtureBuilder::new(ModuleId::new(1))
                 .with_monitors(&["DP-1"])
                 .with_vnode(node)
                 .build();
-
+            let dp1 = MonitorId::new("DP-1");
             let mut event_loop = fixture.event_loop;
             let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
             event_loop.render_all_monitors(&mut layout_engines);
 
-            assert!(
-                event_loop
-                    .render_pipeline()
-                    .vdom_trees()
-                    .contains_key(&MonitorId::new("DP-1"))
-            );
-            assert!(
-                event_loop
-                    .render_pipeline()
-                    .render_trees()
-                    .contains_key(&MonitorId::new("DP-1"))
-            );
+            let pipeline = event_loop.render_pipeline();
+            assert!(pipeline.vdom_trees().contains_key(&dp1));
+            assert!(pipeline.render_trees().contains_key(&dp1));
 
             // Second run with identical VDOM triggers early continue
             event_loop.render_all_monitors(&mut layout_engines);
 
-            assert!(
-                event_loop
-                    .render_pipeline()
-                    .vdom_trees()
-                    .contains_key(&MonitorId::new("DP-1"))
-            );
-            assert!(
-                event_loop
-                    .render_pipeline()
-                    .render_trees()
-                    .contains_key(&MonitorId::new("DP-1"))
-            );
+            let pipeline = event_loop.render_pipeline();
+            assert!(pipeline.vdom_trees().contains_key(&dp1));
+            assert!(pipeline.render_trees().contains_key(&dp1));
         });
+    }
+
+    /// A flex embedding the `clock` module.
+    fn clock_container() -> VNode {
+        let child_node = VNode::new_module(
+            crate::features::vdom::domain::ModuleParams::new(
+                crate::shared::primitives::ModuleName::new("clock"),
+                None,
+                crate::shared::primitives::ModuleOptions::default(),
+            ),
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
+        VNode::new_flex(
+            vec![child_node],
+            ElementSelectors::default(),
+            Interactions::default(),
+        )
+    }
+
+    /// Child sizes in which `clock` reported 80x24 on DP-1.
+    fn clock_sizes() -> HashMap<MonitorId, crate::shared::primitives::ChildSizesMap> {
+        let mut mon_map = crate::shared::primitives::ChildSizesMap::new();
+        mon_map.insert(
+            crate::shared::primitives::ModuleKey::from_name(
+                crate::shared::primitives::ModuleName::new("clock"),
+            ),
+            Size::new(80, 24),
+        );
+        HashMap::from([(MonitorId::new("DP-1"), mon_map)])
+    }
+
+    /// The parent, monitor and child layouts of the first `ContainerLayoutsCalculated` sent.
+    fn container_layouts(
+        sent: &std::sync::mpsc::Receiver<LayoutEvent>,
+    ) -> Option<(
+        ModuleId,
+        MonitorId,
+        Vec<crate::shared::primitives::ChildModuleLayout>,
+    )> {
+        sent.try_iter().find_map(|event| {
+            if let LayoutEvent::ContainerLayoutsCalculated {
+                parent_id,
+                monitor_id,
+                layouts,
+            } = event
+            {
+                Some((parent_id, monitor_id, layouts))
+            } else {
+                None
+            }
+        })
     }
 
     #[test]
     fn test_container_module_emits_container_layouts_calculated() {
         crate::test_utils::block_on(async {
             let id = ModuleId::new(0);
-            let child_node = VNode::new_module(
-                crate::features::vdom::domain::ModuleParams::new(
-                    crate::shared::primitives::ModuleName::new("clock"),
-                    None,
-                    crate::shared::primitives::ModuleOptions::default(),
-                ),
-                ElementSelectors::default(),
-                Interactions::default(),
-            );
-            let root_node = VNode::new_flex(
-                vec![child_node],
-                ElementSelectors::default(),
-                Interactions::default(),
-            );
-
             let fixture = TestFixtureBuilder::new(id)
                 .with_monitors(&["DP-1"])
-                .with_vnode(root_node)
+                .with_vnode(clock_container())
                 .build();
-
             // Report child module size in hub
-            let mut sizes_map = HashMap::new();
-            let mut mon_map = crate::shared::primitives::ChildSizesMap::new();
-            mon_map.insert(
-                crate::shared::primitives::ModuleKey::from_name(
-                    crate::shared::primitives::ModuleName::new("clock"),
-                ),
-                Size::new(80, 24),
-            );
-            sizes_map.insert(MonitorId::new("DP-1"), mon_map);
-            fixture.hub.module_sizes_tx().send(sizes_map).unwrap();
-
-            let mut layouts = HashMap::new();
-            layouts.insert(
-                MonitorId::new("DP-1"),
-                ChildBounds::new(
-                    Rect::new(Position::new(0, 0), Size::new(1920, 30)),
-                    SizeConstraint::none(),
-                ),
-            );
-            fixture.layout_tx.send(layouts).unwrap();
+            fixture.hub.module_sizes_tx().send(clock_sizes()).unwrap();
+            fixture.layout_tx.send(bounds_on("DP-1", 1920, 30)).unwrap();
 
             let mut event_loop = fixture.event_loop;
             let mut layout_engines: HashMap<MonitorId, TaffyLayoutAdapter> = HashMap::new();
             event_loop.render_all_monitors(&mut layout_engines);
 
-            let mut found_container_layouts = false;
-            while let Ok(event) = fixture.layout_rx.try_recv() {
-                if let LayoutEvent::ContainerLayoutsCalculated {
-                    parent_id,
-                    monitor_id,
-                    layouts,
-                } = event
-                {
-                    assert_eq!(parent_id, id);
-                    assert_eq!(monitor_id.as_str(), "DP-1");
-                    assert_eq!(layouts.len(), 1);
-                    assert_eq!(layouts[0].key().name().as_str(), "clock");
-                    assert_eq!(layouts[0].bounds().rect().width(), 80);
-                    assert_eq!(layouts[0].bounds().rect().height(), 24);
-                    found_container_layouts = true;
-                }
-            }
-            assert!(
-                found_container_layouts,
-                "Should emit ContainerLayoutsCalculated"
-            );
+            let (parent_id, monitor_id, layouts) = container_layouts(&fixture.sent.layout)
+                .expect("Should emit ContainerLayoutsCalculated");
+            assert_eq!(parent_id, id);
+            assert_eq!(monitor_id.as_str(), "DP-1");
+            assert_eq!(layouts.len(), 1);
+            assert_eq!(layouts[0].key().name().as_str(), "clock");
+            assert_eq!(layouts[0].bounds().rect().width(), 80);
+            assert_eq!(layouts[0].bounds().rect().height(), 24);
         });
     }
 }
