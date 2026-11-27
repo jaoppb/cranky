@@ -72,6 +72,17 @@ fn test_hyprland_adapter_get_state_fails_on_invalid_json() {
     assert_eq!((error, requests), expected);
 }
 
+/// Workspaces are parsed before monitors: when both replies are invalid, the
+/// workspaces' parse error is the one reported.
+#[test]
+fn test_hyprland_adapter_get_state_parses_workspaces_first() {
+    let parse_error = serde_json::from_str::<Vec<u8>>("nope")
+        .unwrap_err()
+        .to_string();
+    let (error, _, _) = failed_state(FakeHyprland::answering(Some("nope"), Some("[1]")));
+    assert_eq!(error, format!("Window manager IPC error: {parse_error}"));
+}
+
 /// When several monitors claim focus, the last one in Hyprland's reply wins.
 #[test]
 fn test_hyprland_adapter_get_state_takes_the_last_focused_monitor() {

@@ -114,7 +114,10 @@ mod tests {
     use super::batch::drain_batch;
     use super::resync::{check_and_resync, fetch_initial_state};
     use super::*;
-    use crate::features::workspaces::domain::{Monitor, MonitorName, WorkspaceId, WorkspaceName};
+    use crate::features::workspaces::adapters::tests::fixtures::{self, monitor, workspace};
+    use crate::features::workspaces::domain::{
+        Monitor, MonitorName, Workspace, WorkspaceId, WorkspaceName,
+    };
     use crate::features::workspaces::ports::{WindowManagerError, WindowManagerState};
     use std::collections::BTreeMap;
     use std::io::{Cursor, ErrorKind};
@@ -263,46 +266,39 @@ mod tests {
         HyprlandState::new(workspaces, BTreeMap::new(), None)
     }
 
+    /// What a window manager whose state is `state` reports.
+    fn reported(state: &HyprlandState) -> WindowManagerState {
+        (
+            state.workspaces().clone(),
+            state.monitors().clone(),
+            state.focused_monitor().cloned(),
+        )
+    }
+
     #[test]
     fn test_check_and_resync_replaces_state_when_inconsistent() {
         let mut state = inconsistent_state();
-
-        let mut new_workspaces = BTreeMap::new();
-        new_workspaces.insert(
-            WorkspaceId::new(4),
-            crate::features::workspaces::domain::Workspace::new(
-                WorkspaceId::new(4),
-                WorkspaceName::new("4"),
-                Some(MonitorName::new("eDP-1")),
-            ),
-        );
-        let mut new_monitors = BTreeMap::new();
-        new_monitors.insert(
-            MonitorName::new("eDP-1"),
-            Monitor::new(MonitorName::new("eDP-1"), WorkspaceId::new(4), None),
-        );
-
-        let mock = FakeWindowManager::new(Some((
-            new_workspaces,
-            new_monitors,
-            Some(MonitorName::new("eDP-1")),
-        )));
+        let mock = FakeWindowManager::new(Some(reported(&fixtures::state(
+            vec![workspace(4, "4", Some("eDP-1"))],
+            vec![monitor("eDP-1", 4, None)],
+            Some("eDP-1"),
+        ))));
 
         check_and_resync(&mock, &mut state, &applied(&["monitorremoved>>HDMI-A-1"]));
 
-        assert_eq!(mock.queries(), 1);
-
-        assert!(state.workspaces().contains_key(&WorkspaceId::new(4)));
+        let workspace_4 = state.workspaces().get(&WorkspaceId::new(4));
         assert_eq!(
-            state
-                .workspaces()
-                .get(&WorkspaceId::new(4))
-                .unwrap()
-                .monitor(),
-            Some(&MonitorName::new("eDP-1"))
+            (
+                mock.queries(),
+                workspace_4.and_then(Workspace::monitor),
+                state.monitors().keys().collect::<Vec<_>>()
+            ),
+            (
+                1,
+                Some(&MonitorName::new("eDP-1")),
+                vec![&MonitorName::new("eDP-1")]
+            )
         );
-        assert!(state.monitors().contains_key(&MonitorName::new("eDP-1")));
-        assert!(!state.monitors().contains_key(&MonitorName::new("HDMI-A-1")));
     }
 
     #[test]
@@ -334,28 +330,13 @@ mod tests {
 
     #[test]
     fn test_check_and_resync_forces_resync_on_consistent_state_when_flagged() {
-        let mut workspaces = BTreeMap::new();
-        workspaces.insert(
-            WorkspaceId::new(1),
-            crate::features::workspaces::domain::Workspace::new(
-                WorkspaceId::new(1),
-                WorkspaceName::new("1"),
-                Some(MonitorName::new("DP-1")),
-            ),
+        let mut state = fixtures::state(
+            vec![workspace(1, "1", Some("DP-1"))],
+            vec![monitor("DP-1", 1, None)],
+            Some("DP-1"),
         );
-        let mut monitors = BTreeMap::new();
-        monitors.insert(
-            MonitorName::new("DP-1"),
-            Monitor::new(MonitorName::new("DP-1"), WorkspaceId::new(1), None),
-        );
-        let mut state = HyprlandState::new(workspaces, monitors, Some(MonitorName::new("DP-1")));
-
-        let mut new_monitors = BTreeMap::new();
-        new_monitors.insert(
-            MonitorName::new("HDMI-A-1"),
-            Monitor::new(MonitorName::new("HDMI-A-1"), WorkspaceId::new(2), None),
-        );
-        let mock = FakeWindowManager::new(Some((BTreeMap::new(), new_monitors, None)));
+        let new_monitors = fixtures::state(vec![], vec![monitor("HDMI-A-1", 2, None)], None);
+        let mock = FakeWindowManager::new(Some(reported(&new_monitors)));
 
         let batch = EventBatch {
             events: vec!["monitoraddedv2>>1,HDMI-A-1,x".to_string()],
@@ -363,10 +344,10 @@ mod tests {
         };
         check_and_resync(&mock, &mut state, &batch);
 
-        assert_eq!(mock.queries(), 1);
-
-        assert!(state.monitors().contains_key(&MonitorName::new("HDMI-A-1")));
-        assert!(!state.monitors().contains_key(&MonitorName::new("DP-1")));
+        assert_eq!(
+            (mock.queries(), state.monitors().keys().collect::<Vec<_>>()),
+            (1, vec![&MonitorName::new("HDMI-A-1")])
+        );
     }
 
     /// Runs one event stream to its end with `lines` already written, and

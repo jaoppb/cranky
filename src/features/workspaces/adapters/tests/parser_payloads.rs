@@ -1,4 +1,5 @@
 //! How the event parser splits and rejects payloads.
+use super::parser::assert_parses;
 use crate::features::workspaces::adapters::event_parser::parse_event;
 use crate::features::workspaces::domain::{MonitorName, WorkspaceId, WorkspaceName};
 use crate::shared::events::core::{WindowAddress, WindowManagerEvent, WindowTitle};
@@ -34,61 +35,65 @@ fn test_parse_event_rejects_a_malformed_payload() {
 /// before it is split.
 #[test]
 fn test_parse_event_keeps_commas_in_the_last_field() {
-    let id = WorkspaceId::new;
-    let workspace_name = WorkspaceName::new;
-    for (line, expected) in [
-        (
-            " workspacev2>>1,a,b\n",
-            WindowManagerEvent::WorkspaceActivated {
-                id: id(1),
-                name: workspace_name("a,b"),
-            },
-        ),
-        (
-            "createworkspacev2>>3,a,b",
-            WindowManagerEvent::WorkspaceCreated {
-                id: id(3),
-                name: workspace_name("a,b"),
-            },
-        ),
-        (
-            "destroyworkspacev2>>4,a,b",
-            WindowManagerEvent::WorkspaceDestroyed {
-                id: id(4),
-                name: workspace_name("a,b"),
-            },
-        ),
-        (
-            "moveworkspacev2>>5,a,DP-1,x",
-            WindowManagerEvent::WorkspaceMoved {
-                id: id(5),
-                name: workspace_name("a"),
-                monitor_name: MonitorName::new("DP-1,x"),
-            },
-        ),
-        (
-            "renameworkspace>>6,a,b",
-            WindowManagerEvent::WorkspaceRenamed {
-                id: id(6),
-                new_name: workspace_name("a,b"),
-            },
-        ),
-        (
-            "activewindowv2>>0x1,x",
-            WindowManagerEvent::ActiveWindowChanged {
-                address: WindowAddress::new("0x1,x"),
-            },
-        ),
-        (
-            "windowtitlev2>>0x1,a, b",
-            WindowManagerEvent::WindowTitleChanged {
-                address: WindowAddress::new("0x1"),
-                title: WindowTitle::new("a, b"),
-            },
-        ),
-    ] {
-        assert_eq!(parse_event(line), Some(expected), "{line}");
-    }
+    assert_parses(
+        " workspacev2>>1,a,b\n",
+        WindowManagerEvent::WorkspaceActivated {
+            id: WorkspaceId::new(1),
+            name: WorkspaceName::new("a,b"),
+        },
+    );
+    assert_parses(
+        "createworkspacev2>>3,a,b",
+        WindowManagerEvent::WorkspaceCreated {
+            id: WorkspaceId::new(3),
+            name: WorkspaceName::new("a,b"),
+        },
+    );
+    assert_parses(
+        "destroyworkspacev2>>4,a,b",
+        WindowManagerEvent::WorkspaceDestroyed {
+            id: WorkspaceId::new(4),
+            name: WorkspaceName::new("a,b"),
+        },
+    );
+}
+
+/// A moved workspace's monitor and a renamed workspace's new name keep their commas too.
+#[test]
+fn test_parse_event_keeps_commas_in_a_move_and_a_rename() {
+    assert_parses(
+        "moveworkspacev2>>5,a,DP-1,x",
+        WindowManagerEvent::WorkspaceMoved {
+            id: WorkspaceId::new(5),
+            name: WorkspaceName::new("a"),
+            monitor_name: MonitorName::new("DP-1,x"),
+        },
+    );
+    assert_parses(
+        "renameworkspace>>6,a,b",
+        WindowManagerEvent::WorkspaceRenamed {
+            id: WorkspaceId::new(6),
+            new_name: WorkspaceName::new("a,b"),
+        },
+    );
+}
+
+/// A window's address, when it is the whole payload, and its title keep their commas too.
+#[test]
+fn test_parse_event_keeps_commas_in_window_events() {
+    assert_parses(
+        "activewindowv2>>0x1,x",
+        WindowManagerEvent::ActiveWindowChanged {
+            address: WindowAddress::new("0x1,x"),
+        },
+    );
+    assert_parses(
+        "windowtitlev2>>0x1,a, b",
+        WindowManagerEvent::WindowTitleChanged {
+            address: WindowAddress::new("0x1"),
+            title: WindowTitle::new("a, b"),
+        },
+    );
 }
 
 /// A special workspace id that is zero or not a number closes the special
