@@ -3,51 +3,28 @@ use super::grid_converter::{
     grid_track_to_track_sizing_function,
 };
 use super::leaf_size::apply_node_dimensions;
-use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
+use crate::features::layout_engine::domain::{Gap, StyledNode, TextMeasurer};
 use crate::features::styling::domain::{ComputedStyle, DisplayMode};
 use crate::utils::f64_to_f32;
 use taffy::geometry::Size as TaffySize;
 use taffy::style::{LengthPercentage, Style};
 
-fn apply_display_mode(style: &mut Style, computed: &ComputedStyle, node: &StyledNode) {
-    let display_mode = match (computed.display(), node) {
+/// The display mode `node` is laid out in: its style's, else grid for a grid node and flex for
+/// any other.
+const fn display_mode_of(computed: &ComputedStyle, node: &StyledNode) -> DisplayMode {
+    match (computed.display(), node) {
         (Some(mode), _) => mode,
         (None, StyledNode::Grid { .. }) => DisplayMode::Grid,
         (None, _) => DisplayMode::Flex,
-    };
+    }
+}
 
-    match display_mode {
+fn apply_display_mode(style: &mut Style, computed: &ComputedStyle, node: &StyledNode) {
+    match display_mode_of(computed, node) {
         DisplayMode::Grid => {
             style.display = taffy::style::Display::Grid;
-            if let Some(cols) = computed.grid_template_columns() {
-                style.grid_template_columns =
-                    cols.iter().map(grid_track_to_template_component).collect();
-            }
-            if let Some(rows) = computed.grid_template_rows() {
-                style.grid_template_rows =
-                    rows.iter().map(grid_track_to_template_component).collect();
-            }
-            if let Some(auto_cols) = computed.grid_auto_columns() {
-                style.grid_auto_columns = auto_cols
-                    .iter()
-                    .map(grid_track_to_track_sizing_function)
-                    .collect();
-            }
-            if let Some(auto_rows) = computed.grid_auto_rows() {
-                style.grid_auto_rows = auto_rows
-                    .iter()
-                    .map(grid_track_to_track_sizing_function)
-                    .collect();
-            }
-            if let Some(flow) = computed.grid_auto_flow() {
-                style.grid_auto_flow = grid_auto_flow_to_taffy(flow);
-            }
-            if let Some(justify_items) = computed.justify_items() {
-                style.justify_items = Some(justify_items.into());
-            }
-            if let Some(align_content) = computed.align_content() {
-                style.align_content = Some(align_content.into());
-            }
+            apply_grid_tracks(style, computed);
+            apply_grid_flow_and_alignment(style, computed);
         }
         DisplayMode::Flex => {
             style.display = taffy::style::Display::Flex;
@@ -59,7 +36,50 @@ fn apply_display_mode(style: &mut Style, computed: &ComputedStyle, node: &Styled
     }
 }
 
+/// Sets the grid container's explicit and implicit row and column tracks the style declares.
+fn apply_grid_tracks(style: &mut Style, computed: &ComputedStyle) {
+    if let Some(cols) = computed.grid_template_columns() {
+        style.grid_template_columns = cols.iter().map(grid_track_to_template_component).collect();
+    }
+    if let Some(rows) = computed.grid_template_rows() {
+        style.grid_template_rows = rows.iter().map(grid_track_to_template_component).collect();
+    }
+    if let Some(auto_cols) = computed.grid_auto_columns() {
+        style.grid_auto_columns = auto_cols
+            .iter()
+            .map(grid_track_to_track_sizing_function)
+            .collect();
+    }
+    if let Some(auto_rows) = computed.grid_auto_rows() {
+        style.grid_auto_rows = auto_rows
+            .iter()
+            .map(grid_track_to_track_sizing_function)
+            .collect();
+    }
+}
+
+/// Sets the grid container's auto-placement flow and item and content alignment the style
+/// declares.
+fn apply_grid_flow_and_alignment(style: &mut Style, computed: &ComputedStyle) {
+    if let Some(flow) = computed.grid_auto_flow() {
+        style.grid_auto_flow = grid_auto_flow_to_taffy(flow);
+    }
+    if let Some(justify_items) = computed.justify_items() {
+        style.justify_items = Some(justify_items.into());
+    }
+    if let Some(align_content) = computed.align_content() {
+        style.align_content = Some(align_content.into());
+    }
+}
+
 fn apply_sizing_and_flex(style: &mut Style, computed: &ComputedStyle) {
+    apply_grid_placement(style, computed);
+    apply_size_bounds(style, computed);
+    apply_flex_item(style, computed);
+}
+
+/// Places the node in its grid parent's lines and justifies it there, as the style declares.
+fn apply_grid_placement(style: &mut Style, computed: &ComputedStyle) {
     if let Some(col) = computed.grid_column() {
         style.grid_column = grid_line_placement_to_taffy(*col);
     }
@@ -69,7 +89,10 @@ fn apply_sizing_and_flex(style: &mut Style, computed: &ComputedStyle) {
     if let Some(justify_self) = computed.justify_self() {
         style.justify_self = Some(justify_self.into());
     }
+}
 
+/// Sets the width and height the style declares, and their minimum and maximum.
+fn apply_size_bounds(style: &mut Style, computed: &ComputedStyle) {
     if let Some(width) = computed.width() {
         style.size.width = width.into();
     }
@@ -88,6 +111,11 @@ fn apply_sizing_and_flex(style: &mut Style, computed: &ComputedStyle) {
     if let Some(max_height) = computed.max_height() {
         style.max_size.height = max_height.into();
     }
+}
+
+/// Sets how the node grows, shrinks, starts and aligns itself as a flex item, as the style
+/// declares.
+fn apply_flex_item(style: &mut Style, computed: &ComputedStyle) {
     if let Some(flex_grow) = computed.flex_grow() {
         style.flex_grow = flex_grow.value();
     }
@@ -102,21 +130,23 @@ fn apply_sizing_and_flex(style: &mut Style, computed: &ComputedStyle) {
     }
 }
 
+/// The gap between columns and between rows: each axis's own gap, else the shorthand, else none.
+fn gaps_of(computed: &ComputedStyle) -> TaffySize<LengthPercentage> {
+    let length = |gap: Option<&Gap>| {
+        gap.map_or_else(
+            || LengthPercentage::length(0.0),
+            |gap| LengthPercentage::length(f64_to_f32(gap.value())),
+        )
+    };
+    TaffySize {
+        width: length(computed.column_gap().or_else(|| computed.gap())),
+        height: length(computed.row_gap().or_else(|| computed.gap())),
+    }
+}
+
 #[must_use]
 pub(super) fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Style {
     let computed = node.style();
-    let col_gap = computed
-        .column_gap()
-        .or_else(|| computed.gap())
-        .map_or_else(
-            || LengthPercentage::length(0.0),
-            |gap| LengthPercentage::length(f64_to_f32(gap.value())),
-        );
-    let row_gap = computed.row_gap().or_else(|| computed.gap()).map_or_else(
-        || LengthPercentage::length(0.0),
-        |gap| LengthPercentage::length(f64_to_f32(gap.value())),
-    );
-
     let mut style = Style {
         position: computed.position().unwrap_or_default().into(),
         padding: computed
@@ -125,10 +155,7 @@ pub(super) fn node_to_style(node: &StyledNode, measurer: &mut dyn TextMeasurer) 
         margin: computed
             .margin()
             .map_or_else(taffy::geometry::Rect::zero, Into::into),
-        gap: TaffySize {
-            width: col_gap,
-            height: row_gap,
-        },
+        gap: gaps_of(computed),
         justify_content: computed.justify_content().map(Into::into),
         align_items: computed.align_items().map(Into::into),
         ..Default::default()
