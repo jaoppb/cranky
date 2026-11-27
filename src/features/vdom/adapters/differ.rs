@@ -148,8 +148,9 @@ impl VdomDiffPort for DefaultVdomDiffAdapter {
 mod tests {
     use super::*;
     use crate::features::styling::domain::ClassNameList;
+    use crate::features::vdom::adapters::tests::{flex, keyed, text};
     use crate::features::vdom::domain::{
-        ChildPatchOp, ElementSelectors, Interactions, NodeKey, TextContent,
+        ChildPatchOp, ElementSelectors, Interactions, PopupSpec, TextContent,
     };
     use std::collections::HashMap;
 
@@ -245,32 +246,11 @@ mod tests {
     #[test]
     fn test_diff_keyed_children_reordering() {
         let adapter = DefaultVdomDiffAdapter::new();
-        let first_key = NodeKey::new("k1").unwrap();
-        let second_key = NodeKey::new("k2").unwrap();
+        let child1 = keyed("k1", "1");
+        let child2 = keyed("k2", "2");
 
-        let child1 = VNode::new_text(
-            TextContent::new("1".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        )
-        .with_key(first_key);
-        let child2 = VNode::new_text(
-            TextContent::new("2".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        )
-        .with_key(second_key);
-
-        let old_tree = VNode::new_flex(
-            vec![child1.clone(), child2.clone()],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        let new_tree = VNode::new_flex(
-            vec![child2, child1],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let old_tree = flex(vec![child1.clone(), child2.clone()]);
+        let new_tree = flex(vec![child2, child1]);
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
         assert!(!res.is_unchanged());
@@ -293,33 +273,13 @@ mod tests {
     #[test]
     fn test_diff_duplicate_keys_falls_back_to_positional() {
         let adapter = DefaultVdomDiffAdapter::new();
-        let dup = NodeKey::new("dup").unwrap();
+        let child1 = keyed("dup", "1");
+        let child2 = keyed("dup", "2");
 
-        let child1 = VNode::new_text(
-            TextContent::new("1".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        )
-        .with_key(dup.clone());
-        let child2 = VNode::new_text(
-            TextContent::new("2".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        )
-        .with_key(dup);
-
-        let old_tree = VNode::new_flex(
-            vec![child1.clone(), child2.clone()],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let old_tree = flex(vec![child1.clone(), child2.clone()]);
         // Same two nodes, same duplicate key, but their text content swapped
         // position — a keyed diff would (wrongly) call this unchanged.
-        let new_tree = VNode::new_flex(
-            vec![child2, child1],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let new_tree = flex(vec![child2, child1]);
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
         match res.patch() {
@@ -340,28 +300,11 @@ mod tests {
     #[test]
     fn test_diff_mixed_keyed_and_unkeyed_falls_back_to_positional() {
         let adapter = DefaultVdomDiffAdapter::new();
-        let keyed_child = VNode::new_text(
-            TextContent::new("1".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        )
-        .with_key(NodeKey::new("k1").unwrap());
-        let unkeyed_child = VNode::new_text(
-            TextContent::new("2".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let keyed_child = keyed("k1", "1");
+        let unkeyed_child = text("2");
 
-        let old_tree = VNode::new_flex(
-            vec![keyed_child.clone(), unkeyed_child.clone()],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        let new_tree = VNode::new_flex(
-            vec![unkeyed_child, keyed_child],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let old_tree = flex(vec![keyed_child.clone(), unkeyed_child.clone()]);
+        let new_tree = flex(vec![unkeyed_child, keyed_child]);
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
         match res.patch() {
@@ -380,32 +323,10 @@ mod tests {
     #[test]
     fn test_diff_positional_children() {
         let adapter = DefaultVdomDiffAdapter::new();
-        let child1 = VNode::new_text(
-            TextContent::new("1".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        let child2 = VNode::new_text(
-            TextContent::new("2".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        let child3 = VNode::new_text(
-            TextContent::new("3".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let (child1, child2, child3) = (text("1"), text("2"), text("3"));
 
-        let old_tree = VNode::new_flex(
-            vec![child1.clone(), child2.clone()],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        let new_tree = VNode::new_flex(
-            vec![child1, child2, child3],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let old_tree = flex(vec![child1.clone(), child2.clone()]);
+        let new_tree = flex(vec![child1, child2, child3]);
 
         let res = adapter.diff(Some(&old_tree), &new_tree);
         assert!(!res.is_unchanged());
@@ -424,29 +345,16 @@ mod tests {
     #[test]
     fn test_diff_module_node_change() {
         use crate::features::vdom::domain::ModuleParams;
-        use crate::shared::primitives::{DynamicValue, ModuleOptions};
+        use crate::shared::primitives::{DynamicValue, ModuleName, ModuleOptions};
 
         let adapter = DefaultVdomDiffAdapter::new();
-        let plain_module = VNode::new_module(
-            ModuleParams::new(
-                crate::shared::primitives::ModuleName::new("clock"),
-                None,
-                ModuleOptions::default(),
-            ),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        let mut opts_map = HashMap::new();
-        opts_map.insert("format".to_string(), DynamicValue::from("%H:%M"));
-        let formatted_module = VNode::new_module(
-            ModuleParams::new(
-                crate::shared::primitives::ModuleName::new("clock"),
-                None,
-                ModuleOptions::new(opts_map),
-            ),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let clock = |options| {
+            let params = ModuleParams::new(ModuleName::new("clock"), None, options);
+            VNode::new_module(params, ElementSelectors::default(), Interactions::default())
+        };
+        let plain_module = clock(ModuleOptions::default());
+        let opts_map = HashMap::from([("format".to_string(), DynamicValue::from("%H:%M"))]);
+        let formatted_module = clock(ModuleOptions::new(opts_map));
 
         let unchanged = adapter.diff(Some(&plain_module), &plain_module);
         assert!(unchanged.is_unchanged());
@@ -459,68 +367,42 @@ mod tests {
     #[test]
     fn test_diff_popup_node_change() {
         let adapter = DefaultVdomDiffAdapter::new();
-        let base = VNode::new_text(
-            TextContent::new("btn".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let base = text("btn");
 
-        let popup1 = VNode::new_text(
-            TextContent::new("pop1".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        let with_pop1 = base
-            .clone()
-            .with_popup(crate::features::vdom::domain::PopupSpec::new(Box::new(
-                popup1,
-            )));
+        let popup1 = text("pop1");
+        let with_pop1 = base.clone().with_popup(PopupSpec::new(Box::new(popup1)));
 
         // 1. None -> Some(popup)
         let diff1 = adapter.diff(Some(&base), &with_pop1);
         assert!(!diff1.is_unchanged());
-        match diff1.patch() {
-            Patch::UpdateProps { popup_patch, .. } => {
-                assert!(popup_patch.is_some());
-            }
-            _ => panic!("Expected UpdateProps with popup_patch"),
-        }
+        let Patch::UpdateProps { popup_patch, .. } = diff1.patch() else {
+            panic!("Expected UpdateProps with popup_patch");
+        };
+        assert!(popup_patch.is_some());
 
         // 2. Some(popup) -> None
         let diff2 = adapter.diff(Some(&with_pop1), &base);
         assert!(!diff2.is_unchanged());
-        match diff2.patch() {
-            Patch::UpdateProps { popup_patch, .. } => {
-                assert!(popup_patch.is_some());
-            }
-            _ => panic!("Expected UpdateProps with popup_patch"),
-        }
+        let Patch::UpdateProps { popup_patch, .. } = diff2.patch() else {
+            panic!("Expected UpdateProps with popup_patch");
+        };
+        assert!(popup_patch.is_some());
     }
 
     #[test]
     fn test_diff_grid_children() {
         let adapter = DefaultVdomDiffAdapter::new();
-        let child1 = VNode::new_text(
-            TextContent::new("A".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        let child2 = VNode::new_text(
-            TextContent::new("B".to_string()),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let (child1, child2) = (text("A"), text("B"));
+        let grid = |children| {
+            VNode::new_grid(
+                children,
+                ElementSelectors::default(),
+                Interactions::default(),
+            )
+        };
 
-        let grid1 = VNode::new_grid(
-            vec![child1.clone()],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        let grid2 = VNode::new_grid(
-            vec![child1, child2],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let grid1 = grid(vec![child1.clone()]);
+        let grid2 = grid(vec![child1, child2]);
 
         let unchanged = adapter.diff(Some(&grid1), &grid1);
         assert!(unchanged.is_unchanged());
@@ -536,26 +418,8 @@ mod tests {
         // reconciliation (the old side isn't fully keyed); the per-node diff
         // must still see the key change or the pipeline skips the rebuild.
         let adapter = DefaultVdomDiffAdapter::new();
-        let item = |text: &str| {
-            VNode::new_text(
-                TextContent::new(text.to_string()),
-                ElementSelectors::default(),
-                Interactions::default(),
-            )
-        };
-        let old_list = VNode::new_flex(
-            vec![item("a"), item("b")],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        let new_list = VNode::new_flex(
-            vec![
-                item("a").with_key(NodeKey::new("a").unwrap()),
-                item("b").with_key(NodeKey::new("b").unwrap()),
-            ],
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
+        let old_list = flex(vec![text("a"), text("b")]);
+        let new_list = flex(vec![keyed("a", "a"), keyed("b", "b")]);
 
         let res = adapter.diff(Some(&old_list), &new_list);
         assert!(!res.is_unchanged());
@@ -564,14 +428,7 @@ mod tests {
     #[test]
     fn test_diff_key_value_change_is_not_unchanged() {
         let adapter = DefaultVdomDiffAdapter::new();
-        let make = |key: &str| {
-            VNode::new_text(
-                TextContent::new("same".to_string()),
-                ElementSelectors::default(),
-                Interactions::default(),
-            )
-            .with_key(NodeKey::new(key).unwrap())
-        };
+        let make = |key: &str| keyed(key, "same");
 
         let res = adapter.diff(Some(&make("old")), &make("new"));
         assert!(!res.is_unchanged());

@@ -171,6 +171,15 @@ mod tests {
         }
     }
 
+    /// The `Move` of `node` from index `source` to index `target`.
+    fn move_op(node: &VNode, source: usize, target: usize) -> ChildPatchOp {
+        ChildPatchOp::Move {
+            node_id: node.node_id(),
+            source,
+            target,
+        }
+    }
+
     fn child_patches(old: &[VNode], new: &[VNode]) -> Vec<ChildPatchOp> {
         let parent = text("parent").node_id();
         match diff_children_with(parent, ChildLists::new(old, new), replace_if_different) {
@@ -210,16 +219,8 @@ mod tests {
         assert_eq!(
             child_patches(&old, &new),
             vec![
-                ChildPatchOp::Move {
-                    node_id: third.node_id(),
-                    source: 2,
-                    target: 0,
-                },
-                ChildPatchOp::Move {
-                    node_id: first.node_id(),
-                    source: 0,
-                    target: 1,
-                },
+                move_op(&third, 2, 0),
+                move_op(&first, 0, 1),
                 ChildPatchOp::Insert {
                     index: 2,
                     node: Box::new(fourth),

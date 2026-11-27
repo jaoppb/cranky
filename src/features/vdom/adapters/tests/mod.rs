@@ -12,7 +12,7 @@ use crate::features::vdom::domain::{
 };
 
 /// A plain text node showing `content`, with no class, id, handler or tooltip.
-fn text(content: &str) -> VNode {
+pub(super) fn text(content: &str) -> VNode {
     VNode::new_text(
         TextContent::new(content.to_string()),
         ElementSelectors::default(),
@@ -21,12 +21,12 @@ fn text(content: &str) -> VNode {
 }
 
 /// A text node showing `content`, keyed by `key`.
-fn keyed(key: &str, content: &str) -> VNode {
+pub(super) fn keyed(key: &str, content: &str) -> VNode {
     text(content).with_key(NodeKey::new(key).unwrap())
 }
 
 /// A flex container holding `children`.
-fn flex(children: Vec<VNode>) -> VNode {
+pub(super) fn flex(children: Vec<VNode>) -> VNode {
     VNode::new_flex(
         children,
         ElementSelectors::default(),
