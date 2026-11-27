@@ -1,7 +1,7 @@
 //! A started tray adapter with one fake item registered on it.
 
 use super::item::{Call, ItemService};
-use crate::support::{Context, Failure, Outcome, ensure, ensure_eq, within};
+use crate::support::{Context, Outcome, ensure, ensure_eq, within};
 use cranky::features::systray::adapters::SniAdapter;
 use cranky::features::systray::domain::{
     SystrayActionCall, SystrayActionName, SystrayId, SystrayState,
@@ -232,7 +232,7 @@ async fn owner_left(
             && args.name() == name
             && args.new_owner().is_none()
         {
-            return Ok::<_, Failure>(());
+            return Ok(());
         }
     }
 }
