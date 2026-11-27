@@ -49,17 +49,27 @@ where
 impl UiCommandSender for tokio::sync::mpsc::Sender<UiCommand> {
     fn send_ui_command(&self, cmd: UiCommand) {
         if let Err(error) = self.try_send(cmd) {
-            tracing::error!(?error, "failed to send ui command via tokio channel");
+            log_tokio_send_failed(&error);
         }
     }
+}
+
+/// Logs a command the tokio channel refused (full or closed).
+fn log_tokio_send_failed(error: &tokio::sync::mpsc::error::TrySendError<UiCommand>) {
+    tracing::error!(?error, "failed to send ui command via tokio channel");
 }
 
 impl UiCommandSender for std::sync::mpsc::Sender<UiCommand> {
     fn send_ui_command(&self, cmd: UiCommand) {
         if let Err(error) = self.send(cmd) {
-            tracing::error!(?error, "failed to send ui command via std channel");
+            log_std_send_failed(&error);
         }
     }
+}
+
+/// Logs a command the std channel refused because its receiver is gone.
+fn log_std_send_failed(error: &std::sync::mpsc::SendError<UiCommand>) {
+    tracing::error!(?error, "failed to send ui command via std channel");
 }
 
 /// The action bound to each pointer button on a node; a single action from a script binds left,

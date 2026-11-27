@@ -22,51 +22,81 @@ pub(crate) fn substitute_failed_modules<S: std::hash::BuildHasher>(
     vnode: &VNode,
     errors: &HashMap<ModuleKey, String, S>,
 ) -> VNode {
-    if let VNodeKind::Module {
-        name, instance_id, ..
-    } = &vnode.kind
-    {
-        let key = ModuleKey::new(name.clone(), instance_id.clone());
-        if let Some(reason) = errors.get(&key) {
-            return error_placeholder(vnode, name, reason);
-        }
+    if let Some(placeholder) = placeholder_if_failed(vnode, errors) {
+        return placeholder;
     }
 
     let mut result = vnode.clone();
-    match &mut result.kind {
-        VNodeKind::Flex { children } | VNodeKind::Grid { children } => {
-            for child in children.iter_mut() {
-                *child = substitute_failed_modules(child, errors);
-            }
-        }
-        _ => {}
-    }
-
-    if let Some(tooltip) = result.tooltip.as_deref() {
-        let substituted = substitute_failed_modules(tooltip, errors);
-        result.tooltip = Some(Box::new(substituted));
-    }
-    if let Some(popup) = result.popup.as_ref() {
-        let content = substitute_failed_modules(popup.content(), errors);
-        result.popup = Some(
-            PopupSpec::new(Box::new(content))
-                .with_anchor(popup.anchor_direction())
-                .with_offset(popup.offset()),
-        );
-    }
-    if let Some(panel) = result.panel.as_ref() {
-        let content = substitute_failed_modules(panel.content(), errors);
-        result.panel = Some(
-            PanelSpec::new(Box::new(content))
-                .with_layer(panel.layer())
-                .with_anchor(panel.anchor())
-                .with_margin(*panel.margin())
-                .with_exclusive_zone(panel.exclusive_zone())
-                .with_keyboard(panel.keyboard()),
-        );
-    }
-
+    substitute_in_children(&mut result.kind, errors);
+    result.tooltip = result
+        .tooltip
+        .as_deref()
+        .map(|tooltip| Box::new(substitute_failed_modules(tooltip, errors)));
+    result.popup = result
+        .popup
+        .as_ref()
+        .map(|popup| substitute_in_popup(popup, errors));
+    result.panel = result
+        .panel
+        .as_ref()
+        .map(|panel| substitute_in_panel(panel, errors));
     result
+}
+
+/// The error placeholder for `vnode` when it is a `Module` node whose site has a recorded
+/// failure, `None` otherwise.
+fn placeholder_if_failed<S: std::hash::BuildHasher>(
+    vnode: &VNode,
+    errors: &HashMap<ModuleKey, String, S>,
+) -> Option<VNode> {
+    let VNodeKind::Module {
+        name, instance_id, ..
+    } = &vnode.kind
+    else {
+        return None;
+    };
+    let key = ModuleKey::new(name.clone(), instance_id.clone());
+    errors
+        .get(&key)
+        .map(|reason| error_placeholder(vnode, name, reason))
+}
+
+/// Substitutes inside each child of a flex or grid `kind`; other kinds have no children.
+fn substitute_in_children<S: std::hash::BuildHasher>(
+    kind: &mut VNodeKind,
+    errors: &HashMap<ModuleKey, String, S>,
+) {
+    if let VNodeKind::Flex { children } | VNodeKind::Grid { children } = kind {
+        for child in children.iter_mut() {
+            *child = substitute_failed_modules(child, errors);
+        }
+    }
+}
+
+/// `popup` with its content substituted, keeping its anchor and offset.
+fn substitute_in_popup<S: std::hash::BuildHasher>(
+    popup: &PopupSpec,
+    errors: &HashMap<ModuleKey, String, S>,
+) -> PopupSpec {
+    let content = substitute_failed_modules(popup.content(), errors);
+    PopupSpec::new(Box::new(content))
+        .with_anchor(popup.anchor_direction())
+        .with_offset(popup.offset())
+}
+
+/// `panel` with its content substituted, keeping its layer, anchor, margin, exclusive zone and
+/// keyboard interactivity.
+fn substitute_in_panel<S: std::hash::BuildHasher>(
+    panel: &PanelSpec,
+    errors: &HashMap<ModuleKey, String, S>,
+) -> PanelSpec {
+    let content = substitute_failed_modules(panel.content(), errors);
+    PanelSpec::new(Box::new(content))
+        .with_layer(panel.layer())
+        .with_anchor(panel.anchor())
+        .with_margin(*panel.margin())
+        .with_exclusive_zone(panel.exclusive_zone())
+        .with_keyboard(panel.keyboard())
 }
 
 fn error_placeholder(original: &VNode, name: &ModuleName, reason: &str) -> VNode {

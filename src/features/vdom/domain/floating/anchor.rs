@@ -56,6 +56,14 @@ fn parse_anchor_str(name: &str) -> u8 {
     }
 }
 
+/// The union of the flags whose edge is anchored, from `(anchored, flag)` pairs.
+fn set_edge_flags(edges: &[(bool, u8)]) -> u8 {
+    edges
+        .iter()
+        .filter(|(anchored, _)| *anchored)
+        .fold(0, |acc, (_, flag)| acc | flag)
+}
+
 impl From<PanelAnchorHelper> for PanelAnchor {
     fn from(helper: PanelAnchorHelper) -> Self {
         match helper {
@@ -64,20 +72,12 @@ impl From<PanelAnchorHelper> for PanelAnchor {
                 bottom,
                 left,
                 right,
-            } => {
-                let edges = [
-                    (top, TOP_FLAG),
-                    (bottom, BOTTOM_FLAG),
-                    (left, LEFT_FLAG),
-                    (right, RIGHT_FLAG),
-                ];
-                Self::from_flags(
-                    edges
-                        .iter()
-                        .filter(|(anchored, _)| *anchored)
-                        .fold(0, |acc, (_, flag)| acc | flag),
-                )
-            }
+            } => Self::from_flags(set_edge_flags(&[
+                (top, TOP_FLAG),
+                (bottom, BOTTOM_FLAG),
+                (left, LEFT_FLAG),
+                (right, RIGHT_FLAG),
+            ])),
             PanelAnchorHelper::List(list) => Self::from_flags(
                 list.iter()
                     .fold(0, |acc, item| acc | parse_anchor_str(item)),
