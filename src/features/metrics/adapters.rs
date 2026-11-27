@@ -1,8 +1,9 @@
 //! The `sysinfo`-backed sampler that gathers a `MetricsState` every update interval and
 //! sends it on the hub's metrics channel.
 use crate::features::metrics::domain::{
-    CpuSample, CreateMetricsCommand, DeviceMetrics, DiskMetric, DiskSpace, MemoryBytes,
-    MemoryMetrics, MemoryUsage, MetricsConfig, MetricsState, SystemMetrics, Temperature,
+    CpuMetrics, CpuSample, CreateMetricsCommand, DeviceMetrics, DiskMetric, DiskMode, DiskName,
+    DiskSpace, MemoryBytes, MemoryMetrics, MemoryUsage, MetricsConfig, MetricsState, MountPoint,
+    NetworkMetrics, NetworkMode, NetworkSpeed, SystemMetrics, Temperature, TemperatureMode,
 };
 use crate::shared::events::signals::SignalHub;
 use std::sync::Arc;
@@ -67,106 +68,131 @@ impl SysinfoSources {
     /// Refreshes what `config` enables and reads it into one snapshot.
     #[must_use]
     fn gather(&mut self, config: &MetricsConfig) -> MetricsState {
-        let Self {
-            sys,
-            networks,
-            disks,
-            components,
-        } = self;
-        sys.refresh_cpu_usage();
-        sys.refresh_memory();
-        if config.network().is_some()
-            && config.network() != Some(&crate::features::metrics::domain::NetworkMode::Disabled)
-        {
-            networks.refresh(true);
-        }
-        if config.disk().is_some()
-            && config.disk() != Some(&crate::features::metrics::domain::DiskMode::Disabled)
-        {
-            disks.refresh(true);
-        }
-        if config.temperature().is_some()
-            && config.temperature()
-                != Some(&crate::features::metrics::domain::TemperatureMode::Disabled)
-        {
-            components.refresh(true);
-        }
+        self.refresh(config);
+        let cpu = self.cpu(config);
+        let network = self.network(config);
+        let disks = self.disk_metrics(config);
+        let temperature = self.temperature(config);
+        MetricsState::new(CreateMetricsCommand::new(
+            SystemMetrics::new(cpu, self.memory()),
+            DeviceMetrics::new(disks, network, temperature),
+            config.clone(),
+        ))
+    }
 
-        // CPU
-        let nproc = f32::from(u16::try_from(sys.cpus().len()).unwrap_or(1));
-        let global_cpu = sys.global_cpu_usage();
+    /// Refreshes the CPU and memory readings, then each device list `config` enables.
+    fn refresh(&mut self, config: &MetricsConfig) {
+        self.sys.refresh_cpu_usage();
+        self.sys.refresh_memory();
+        if network_enabled(config) {
+            self.networks.refresh(true);
+        }
+        if disk_enabled(config) {
+            self.disks.refresh(true);
+        }
+        if temperature_enabled(config) {
+            self.components.refresh(true);
+        }
+    }
 
-        let per_core_raw: Vec<f32> = sys.cpus().iter().map(sysinfo::Cpu::cpu_usage).collect();
-        let cpu = CpuSample::new(global_cpu, nproc, per_core_raw).normalize(config.cpu());
+    /// The overall and per-core CPU usage, scaled as `config` asks.
+    fn cpu(&self, config: &MetricsConfig) -> CpuMetrics {
+        let nproc = f32::from(u16::try_from(self.sys.cpus().len()).unwrap_or(1));
+        let global_cpu = self.sys.global_cpu_usage();
+        let per_core_raw: Vec<f32> = self
+            .sys
+            .cpus()
+            .iter()
+            .map(sysinfo::Cpu::cpu_usage)
+            .collect();
+        CpuSample::new(global_cpu, nproc, per_core_raw).normalize(config.cpu())
+    }
 
-        // Network
+    /// The bytes every interface sent and received, or zero both ways when network is off.
+    fn network(&self, config: &MetricsConfig) -> NetworkMetrics {
         let mut network_tx: u64 = 0;
         let mut network_rx: u64 = 0;
-        if config.network().is_some()
-            && config.network() != Some(&crate::features::metrics::domain::NetworkMode::Disabled)
-        {
-            for data in networks.values() {
+        if network_enabled(config) {
+            for data in self.networks.values() {
                 network_tx = network_tx.saturating_add(data.transmitted());
                 network_rx = network_rx.saturating_add(data.received());
             }
         }
-
-        // Disks
-        let mut disk_metrics = Vec::new();
-        if config.disk().is_some()
-            && config.disk() != Some(&crate::features::metrics::domain::DiskMode::Disabled)
-        {
-            for disk in disks.iter() {
-                disk_metrics.push(DiskMetric::new(
-                    crate::features::metrics::domain::DiskName::new(disk.name().to_string_lossy()),
-                    crate::features::metrics::domain::MountPoint::new(
-                        disk.mount_point().to_string_lossy(),
-                    ),
-                    DiskSpace::new(
-                        MemoryBytes::new(disk.total_space()),
-                        MemoryBytes::new(disk.available_space()),
-                        MemoryBytes::new(disk.total_space().saturating_sub(disk.available_space())),
-                    ),
-                ));
-            }
-        }
-
-        // Temperature
-        let temperature = config.temperature().and_then(|mode| {
-            Temperature::from_readings(components.iter().map(sysinfo::Component::temperature), mode)
-        });
-
-        MetricsState::new(CreateMetricsCommand::new(
-            SystemMetrics::new(
-                cpu,
-                MemoryMetrics::new(
-                    MemoryUsage::new(
-                        MemoryBytes::new(sys.used_memory()),
-                        MemoryBytes::new(sys.total_memory()),
-                    ),
-                    MemoryUsage::new(
-                        MemoryBytes::new(sys.used_swap()),
-                        MemoryBytes::new(sys.total_swap()),
-                    ),
-                ),
-            ),
-            DeviceMetrics::new(
-                disk_metrics,
-                crate::features::metrics::domain::NetworkMetrics::new(
-                    crate::features::metrics::domain::NetworkSpeed::new(network_tx),
-                    crate::features::metrics::domain::NetworkSpeed::new(network_rx),
-                ),
-                temperature,
-            ),
-            config.clone(),
-        ))
+        NetworkMetrics::new(NetworkSpeed::new(network_tx), NetworkSpeed::new(network_rx))
     }
+
+    /// One reading per disk, or none when disk is off.
+    fn disk_metrics(&self, config: &MetricsConfig) -> Vec<DiskMetric> {
+        if !disk_enabled(config) {
+            return Vec::new();
+        }
+        self.disks.iter().map(disk_metric).collect()
+    }
+
+    /// The average sensor temperature in the configured unit, absent when temperature is
+    /// not configured or nothing could be read.
+    fn temperature(&self, config: &MetricsConfig) -> Option<Temperature> {
+        config.temperature().and_then(|mode| {
+            Temperature::from_readings(
+                self.components.iter().map(sysinfo::Component::temperature),
+                mode,
+            )
+        })
+    }
+
+    /// The used and total RAM and swap.
+    fn memory(&self) -> MemoryMetrics {
+        let sys = &self.sys;
+        MemoryMetrics::new(
+            MemoryUsage::new(
+                MemoryBytes::new(sys.used_memory()),
+                MemoryBytes::new(sys.total_memory()),
+            ),
+            MemoryUsage::new(
+                MemoryBytes::new(sys.used_swap()),
+                MemoryBytes::new(sys.total_swap()),
+            ),
+        )
+    }
+}
+
+/// The name, mount point and space of `disk`, its used bytes being total minus available.
+fn disk_metric(disk: &sysinfo::Disk) -> DiskMetric {
+    DiskMetric::new(
+        DiskName::new(disk.name().to_string_lossy()),
+        MountPoint::new(disk.mount_point().to_string_lossy()),
+        DiskSpace::new(
+            MemoryBytes::new(disk.total_space()),
+            MemoryBytes::new(disk.available_space()),
+            MemoryBytes::new(disk.total_space().saturating_sub(disk.available_space())),
+        ),
+    )
+}
+
+/// Whether `config` sets a network mode other than `disabled`.
+fn network_enabled(config: &MetricsConfig) -> bool {
+    config
+        .network()
+        .is_some_and(|mode| *mode != NetworkMode::Disabled)
+}
+
+/// Whether `config` sets a disk mode other than `disabled`.
+fn disk_enabled(config: &MetricsConfig) -> bool {
+    config
+        .disk()
+        .is_some_and(|mode| *mode != DiskMode::Disabled)
+}
+
+/// Whether `config` sets a temperature mode other than `disabled`.
+fn temperature_enabled(config: &MetricsConfig) -> bool {
+    config
+        .temperature()
+        .is_some_and(|mode| *mode != TemperatureMode::Disabled)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::metrics::domain::TemperatureMode;
     use crate::shared::config::domain::Config;
 
     #[test]
