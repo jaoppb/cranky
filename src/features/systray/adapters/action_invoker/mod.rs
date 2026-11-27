@@ -26,9 +26,41 @@ fn log_failed(call: ItemCall, error: &zbus::Error) {
     error!("trigger_action: {call} failed: {error}");
 }
 
-fn log_falling_back(failed: (ItemCall, &zbus::Error), fallback: ItemCall) {
-    let (call, error) = failed;
+/// A call the item rejected, and the error it answered with.
+struct FailedCall<'error> {
+    /// The rejected call.
+    call: ItemCall,
+    /// What the item answered.
+    error: &'error zbus::Error,
+}
+
+fn log_falling_back(failed: &FailedCall<'_>, fallback: ItemCall) {
+    let FailedCall { call, error } = failed;
     warn!("trigger_action: {call} failed: {error}, attempting {fallback}");
+}
+
+/// The errors of a `ContextMenu` and of its `SecondaryActivate` fallback, before the last
+/// fallback, `Activate`, is tried.
+struct EarlierFailures {
+    /// What `ContextMenu` failed with.
+    context_menu: zbus::Error,
+    /// What the `SecondaryActivate` fallback failed with.
+    secondary: zbus::Error,
+}
+
+impl EarlierFailures {
+    /// Every failure of the chain, once `Activate` failed with `activate` too.
+    fn and_activate(self, activate: zbus::Error) -> ContextMenuFailures {
+        let Self {
+            context_menu,
+            secondary,
+        } = self;
+        ContextMenuFailures {
+            context_menu,
+            secondary,
+            activate,
+        }
+    }
 }
 
 /// The three errors of a `ContextMenu` whose two fallbacks failed too.
@@ -76,7 +108,13 @@ async fn call_with_fallback(item: &impl ItemMethods, call: ItemCall, fallback: I
     match item.call(call).await {
         Ok(()) => log_succeeded(call),
         Err(error) => {
-            log_falling_back((call, &error), fallback);
+            log_falling_back(
+                &FailedCall {
+                    call,
+                    error: &error,
+                },
+                fallback,
+            );
             report(fallback, &item.call(fallback).await);
         }
     }
@@ -117,35 +155,30 @@ async fn context_menu_fallbacks(
     context_menu: zbus::Error,
 ) {
     let secondary_call = ItemCall::SecondaryActivate(position);
-    log_falling_back(
-        (ItemCall::ContextMenu(position), &context_menu),
-        secondary_call,
-    );
+    let failed = FailedCall {
+        call: ItemCall::ContextMenu(position),
+        error: &context_menu,
+    };
+    log_falling_back(&failed, secondary_call);
     match item.call(secondary_call).await {
         Ok(()) => log_succeeded(secondary_call),
-        Err(secondary) => activate_last(item, position, (context_menu, secondary)).await,
+        Err(secondary) => {
+            let earlier = EarlierFailures {
+                context_menu,
+                secondary,
+            };
+            activate_last(item, position, earlier).await;
+        }
     }
 }
 
 /// The last fallback of a `ContextMenu`, `Activate`; only when it fails too is the whole chain
-/// logged as an error. `failed` holds what `ContextMenu` and `SecondaryActivate` failed with.
-async fn activate_last(
-    item: &impl ItemMethods,
-    position: Position,
-    failed: (zbus::Error, zbus::Error),
-) {
+/// logged as an error.
+async fn activate_last(item: &impl ItemMethods, position: Position, earlier: EarlierFailures) {
     let call = ItemCall::Activate(position);
     match item.call(call).await {
         Ok(()) => log_succeeded(call),
-        Err(activate) => {
-            let (context_menu, secondary) = failed;
-            let failures = ContextMenuFailures {
-                context_menu,
-                secondary,
-                activate,
-            };
-            log_context_menu_failed(position, &failures);
-        }
+        Err(activate) => log_context_menu_failed(position, &earlier.and_activate(activate)),
     }
 }
 

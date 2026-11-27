@@ -34,7 +34,7 @@ impl Watcher {
         address: SystrayAddress,
     ) -> zbus::Result<()> {
         let id = address.id();
-        let proxy = item_proxy(&conn, &address).await?;
+        let proxy = signal_proxy(&conn, &address).await?;
         let item = fetch_systray_item(&conn, address).await;
         tray.insert_and_publish(id.clone(), item).await;
         log_following(&id);
@@ -60,7 +60,7 @@ impl Watcher {
 }
 
 /// A proxy on the item's `org.kde.StatusNotifierItem` interface, for its signals.
-async fn item_proxy(
+async fn signal_proxy(
     conn: &Connection,
     address: &SystrayAddress,
 ) -> zbus::Result<StatusNotifierItemProxy<'static>> {

@@ -9,16 +9,18 @@ use crate::features::systray::domain::SystrayId;
 use std::ops::ControlFlow;
 use tokio_stream::{Stream, StreamExt};
 
-/// The first four change signals of an item, in the order they are subscribed.
-struct MainSignals {
+/// The change signals of an item's title, icon, status and icon theme path, subscribed in that
+/// order.
+struct TitleIconStatusSignals {
     title: NewTitleStream,
     icon: NewIconStream,
     status: NewStatusStream,
     theme_path: NewIconThemePathStream,
 }
 
-/// The last four change signals of an item, in the order they are subscribed.
-struct ExtraSignals {
+/// The change signals of an item's attention icon, overlay icon, tool tip and menu, subscribed in
+/// that order, after [`TitleIconStatusSignals`].
+struct AttentionOverlayTipMenuSignals {
     attention_icon: NewAttentionIconStream,
     overlay_icon: NewOverlayIconStream,
     tool_tip: NewToolTipStream,
@@ -34,7 +36,7 @@ fn subscribed<T>(subscription: zbus::Result<T>, signal: &str, id: &str) -> Optio
     Some(stream)
 }
 
-impl MainSignals {
+impl TitleIconStatusSignals {
     /// Subscribes to each signal in turn, stopping at the first that fails.
     async fn subscribe(proxy: &StatusNotifierItemProxy<'static>, id: &str) -> Option<Self> {
         let title = subscribed(proxy.receive_new_title().await, "new_title", id)?;
@@ -51,7 +53,7 @@ impl MainSignals {
     }
 }
 
-impl ExtraSignals {
+impl AttentionOverlayTipMenuSignals {
     /// Subscribes to each signal in turn, stopping at the first that fails.
     async fn subscribe(proxy: &StatusNotifierItemProxy<'static>, id: &str) -> Option<Self> {
         let attention_icon = proxy.receive_new_attention_icon().await;
@@ -71,22 +73,32 @@ impl ExtraSignals {
 
 /// One stream of the events every signal stands for, in arrival order.
 fn sni_events(
-    main: MainSignals,
-    extra: ExtraSignals,
+    TitleIconStatusSignals {
+        title,
+        icon,
+        status,
+        theme_path,
+    }: TitleIconStatusSignals,
+    AttentionOverlayTipMenuSignals {
+        attention_icon,
+        overlay_icon,
+        tool_tip,
+        menu,
+    }: AttentionOverlayTipMenuSignals,
 ) -> impl Stream<Item = SniEvent> + Unpin + Send {
-    main.title
+    title
         .map(|_| SniEvent::Title)
         .merge(
-            main.status.map(|sig| {
+            status.map(|sig| {
                 SniEvent::Status(sig.args().map_or_default(|args| args.status().clone()))
             }),
         )
-        .merge(main.icon.map(|_| SniEvent::Icon))
-        .merge(main.theme_path.map(|_| SniEvent::ThemePath))
-        .merge(extra.attention_icon.map(|_| SniEvent::AttentionIcon))
-        .merge(extra.overlay_icon.map(|_| SniEvent::OverlayIcon))
-        .merge(extra.tool_tip.map(|_| SniEvent::ToolTip))
-        .merge(extra.menu.map(|_| SniEvent::Menu))
+        .merge(icon.map(|_| SniEvent::Icon))
+        .merge(theme_path.map(|_| SniEvent::ThemePath))
+        .merge(attention_icon.map(|_| SniEvent::AttentionIcon))
+        .merge(overlay_icon.map(|_| SniEvent::OverlayIcon))
+        .merge(tool_tip.map(|_| SniEvent::ToolTip))
+        .merge(menu.map(|_| SniEvent::Menu))
 }
 
 /// Keeps one tracked item up to date with its signals.
@@ -149,13 +161,15 @@ pub(super) async fn run_signal_loop(
     tray: TrayItems,
     id: String,
 ) {
-    let Some(main) = MainSignals::subscribe(&proxy, &id).await else {
+    let Some(title_icon_status) = TitleIconStatusSignals::subscribe(&proxy, &id).await else {
         return;
     };
-    let Some(extra) = ExtraSignals::subscribe(&proxy, &id).await else {
+    let Some(attention_overlay_tip_menu) =
+        AttentionOverlayTipMenuSignals::subscribe(&proxy, &id).await
+    else {
         return;
     };
     log_subscribed(&id);
     let follower = ItemFollower { proxy, tray, id };
-    tokio::spawn(follower.follow(sni_events(main, extra)));
+    tokio::spawn(follower.follow(sni_events(title_icon_status, attention_overlay_tip_menu)));
 }

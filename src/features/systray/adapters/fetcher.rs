@@ -15,7 +15,7 @@ use zbus::{ObjectPath as ZObjectPath, OwnedVariant, Variant};
 type AllProps = HashMap<String, OwnedVariant>;
 
 /// Takes `key` out of the properties as a `T`; a missing or mistyped property is `None`.
-fn take<T: TryFrom<OwnedVariant>>(all_props: &mut AllProps, key: &str) -> Option<T> {
+fn take_prop<T: TryFrom<OwnedVariant>>(all_props: &mut AllProps, key: &str) -> Option<T> {
     all_props
         .remove(key)
         .and_then(|variant| variant.try_into().ok())
@@ -40,28 +40,28 @@ async fn resolve_all_icons(
     Option<SystrayIcon>,
     Option<SystrayIcon>,
 ) {
-    let icon_pixmap = take(all_props, "IconPixmap");
+    let icon_pixmap = take_prop(all_props, "IconPixmap");
     let icon = resolve_systray_icon(icon_name, theme_path.clone(), icon_pixmap).await;
 
-    let att_name = take(all_props, "AttentionIconName");
-    let att_theme = take(all_props, "AttentionIconThemePath");
-    let att_pixmap = take(all_props, "AttentionIconPixmap");
+    let att_name = take_prop(all_props, "AttentionIconName");
+    let att_theme = take_prop(all_props, "AttentionIconThemePath");
+    let att_pixmap = take_prop(all_props, "AttentionIconPixmap");
     let attention_icon = resolve_systray_icon(att_name, att_theme, att_pixmap).await;
 
-    let ovr_name = take(all_props, "OverlayIconName");
-    let ovr_pixmap = take(all_props, "OverlayIconPixmap");
+    let ovr_name = take_prop(all_props, "OverlayIconName");
+    let ovr_pixmap = take_prop(all_props, "OverlayIconPixmap");
     let overlay_icon = resolve_systray_icon(ovr_name, theme_path, ovr_pixmap).await;
 
     (icon, attention_icon, overlay_icon)
 }
 
 fn parse_window_id(all_props: &mut AllProps) -> Option<u32> {
-    take(all_props, "WindowId")
-        .or_else(|| take(all_props, "WindowId").and_then(|id: i32| u32::try_from(id).ok()))
+    take_prop(all_props, "WindowId")
+        .or_else(|| take_prop(all_props, "WindowId").and_then(|id: i32| u32::try_from(id).ok()))
 }
 
 fn parse_menu_path(all_props: &mut AllProps) -> Option<String> {
-    take(all_props, "Menu").or_else(|| {
+    take_prop(all_props, "Menu").or_else(|| {
         all_props.remove("Menu").and_then(|variant| {
             if let Variant::ObjectPath(object_path) = &*variant {
                 Some(object_path.as_str().to_string())
@@ -123,15 +123,15 @@ impl ItemProps {
     /// Takes the plain properties out, each defaulting when missing or mistyped.
     fn take(all_props: &mut AllProps) -> Self {
         Self {
-            title: take(all_props, "Title").unwrap_or_default(),
-            status_str: take(all_props, "Status").unwrap_or_default(),
-            icon_name: take(all_props, "IconName"),
-            icon_theme_path: take(all_props, "IconThemePath"),
-            category_str: take(all_props, "Category").unwrap_or_default(),
-            item_id: take(all_props, "Id"),
+            title: take_prop(all_props, "Title").unwrap_or_default(),
+            status_str: take_prop(all_props, "Status").unwrap_or_default(),
+            icon_name: take_prop(all_props, "IconName"),
+            icon_theme_path: take_prop(all_props, "IconThemePath"),
+            category_str: take_prop(all_props, "Category").unwrap_or_default(),
+            item_id: take_prop(all_props, "Id"),
             window_id: parse_window_id(all_props),
             item_is_menu: ItemIsMenu::from(
-                take::<bool>(all_props, "ItemIsMenu").unwrap_or_default(),
+                take_prop::<bool>(all_props, "ItemIsMenu").unwrap_or_default(),
             ),
             menu_path_str: parse_menu_path(all_props),
         }
