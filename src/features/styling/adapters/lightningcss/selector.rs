@@ -20,31 +20,27 @@ pub(crate) fn compile_nth_data(
     nth_data: &parcel_selectors::parser::NthSelectorData,
     step: &mut SelectorStep,
 ) {
+    if let Some(pseudo_class) = nth_pseudo_class(nth_data) {
+        step.pseudo_classes.push(pseudo_class);
+    }
+}
+
+/// The structural pseudo-class an `:nth-*` component stands for, or `None` for the
+/// type-based forms the matcher does not support.
+fn nth_pseudo_class(nth_data: &parcel_selectors::parser::NthSelectorData) -> Option<PseudoClass> {
     match nth_data.ty {
-        NthType::Child => {
-            if nth_data.is_function() {
-                step.pseudo_classes.push(PseudoClass::NthChild {
-                    step_size: nth_data.a,
-                    offset: nth_data.b,
-                });
-            } else {
-                step.pseudo_classes.push(PseudoClass::FirstChild);
-            }
-        }
-        NthType::LastChild => {
-            if nth_data.is_function() {
-                step.pseudo_classes.push(PseudoClass::NthLastChild {
-                    step_size: nth_data.a,
-                    offset: nth_data.b,
-                });
-            } else {
-                step.pseudo_classes.push(PseudoClass::LastChild);
-            }
-        }
-        NthType::OnlyChild => {
-            step.pseudo_classes.push(PseudoClass::OnlyChild);
-        }
-        _ => {}
+        NthType::Child if nth_data.is_function() => Some(PseudoClass::NthChild {
+            step_size: nth_data.a,
+            offset: nth_data.b,
+        }),
+        NthType::Child => Some(PseudoClass::FirstChild),
+        NthType::LastChild if nth_data.is_function() => Some(PseudoClass::NthLastChild {
+            step_size: nth_data.a,
+            offset: nth_data.b,
+        }),
+        NthType::LastChild => Some(PseudoClass::LastChild),
+        NthType::OnlyChild => Some(PseudoClass::OnlyChild),
+        _ => None,
     }
 }
 
@@ -68,40 +64,35 @@ pub(crate) fn compile_selector(selector: &Selector<'_>) -> CompiledSelector {
     let mut current_step = SelectorStep::default();
 
     for component in selector.iter_raw_match_order() {
-        match component {
-            Component::LocalName(local_name) => {
-                current_step.tag = Some(local_name.name.as_ref().to_lowercase());
-            }
-            Component::ID(id) => {
-                current_step.id = Some(id.as_ref().to_string());
-            }
-            Component::Class(class) => {
-                current_step.classes.push(class.as_ref().to_string());
-            }
-            Component::Nth(nth_data) => compile_nth_data(nth_data, &mut current_step),
-            Component::NthOf(nth_of_data) => {
-                compile_nth_data(nth_of_data.nth_data(), &mut current_step);
-            }
-            Component::Empty => {
-                current_step.pseudo_classes.push(PseudoClass::Empty);
-            }
-            Component::Negation(selectors) => {
-                for inner_sel in selectors.as_ref() {
-                    current_step.negations.push(compile_selector(inner_sel));
-                }
-            }
-            Component::NonTSPseudoClass(pseudo) => {
-                compile_pseudo_class(pseudo, &mut current_step);
-            }
-            Component::Combinator(comb) => {
-                current_step.combinator = convert_combinator(*comb);
-                steps.push(current_step);
-                current_step = SelectorStep::default();
-            }
-            _ => {}
+        if let Component::Combinator(comb) = component {
+            current_step.combinator = convert_combinator(*comb);
+            steps.push(std::mem::take(&mut current_step));
+        } else {
+            compile_component(component, &mut current_step);
         }
     }
     steps.push(current_step);
 
     CompiledSelector { steps }
+}
+
+/// Adds what one component other than a combinator requires to `step`; components the
+/// matcher does not support are ignored.
+fn compile_component(component: &Component<'_>, step: &mut SelectorStep) {
+    match component {
+        Component::LocalName(local_name) => {
+            step.tag = Some(local_name.name.as_ref().to_lowercase());
+        }
+        Component::ID(id) => step.id = Some(id.as_ref().to_string()),
+        Component::Class(class) => step.classes.push(class.as_ref().to_string()),
+        Component::Nth(nth_data) => compile_nth_data(nth_data, step),
+        Component::NthOf(nth_of_data) => compile_nth_data(nth_of_data.nth_data(), step),
+        Component::Empty => step.pseudo_classes.push(PseudoClass::Empty),
+        Component::Negation(selectors) => {
+            step.negations
+                .extend(selectors.as_ref().iter().map(compile_selector));
+        }
+        Component::NonTSPseudoClass(pseudo) => compile_pseudo_class(pseudo, step),
+        _ => {}
+    }
 }
