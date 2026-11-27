@@ -35,26 +35,7 @@ pub(crate) fn parse(text: &[u8]) -> Option<Rule> {
         return Some(Rule::new(standard, None));
     }
 
-    let name = cursor.name()?;
-    let offset = if matches!(cursor.peek(), None | Some(b',')) {
-        standard_offset.saturating_add(SECONDS_PER_HOUR)
-    } else {
-        cursor.clock(MAX_OFFSET_HOURS)?.saturating_neg()
-    };
-    let (start, end) = if cursor.rest.is_empty() {
-        let at_two = |day| Change {
-            day,
-            time: DEFAULT_CHANGE_TIME,
-        };
-        (at_two(DEFAULT_START), at_two(DEFAULT_END))
-    } else {
-        (cursor.change()?, cursor.change()?)
-    };
-    let daylight = Daylight {
-        kind: Kind::new(offset, name)?,
-        start,
-        end,
-    };
+    let daylight = cursor.daylight(standard_offset)?;
     cursor
         .rest
         .is_empty()
@@ -142,6 +123,36 @@ impl<'a> Cursor<'a> {
         } else {
             seconds
         })
+    }
+
+    /// `name[offset][,start,end]`: daylight time after standard time at
+    /// `standard_offset`, one hour ahead of it and changing on the default
+    /// days unless the text says otherwise.
+    fn daylight(&mut self, standard_offset: i64) -> Option<Daylight> {
+        let name = self.name()?;
+        let offset = if matches!(self.peek(), None | Some(b',')) {
+            standard_offset.saturating_add(SECONDS_PER_HOUR)
+        } else {
+            self.clock(MAX_OFFSET_HOURS)?.saturating_neg()
+        };
+        let (start, end) = self.changes()?;
+        Some(Daylight {
+            kind: Kind::new(offset, name)?,
+            start,
+            end,
+        })
+    }
+
+    /// `,start,end`, or the default changes at the end of the text.
+    fn changes(&mut self) -> Option<(Change, Change)> {
+        if self.rest.is_empty() {
+            let at_two = |day| Change {
+                day,
+                time: DEFAULT_CHANGE_TIME,
+            };
+            return Some((at_two(DEFAULT_START), at_two(DEFAULT_END)));
+        }
+        Some((self.change()?, self.change()?))
     }
 
     /// `,day[/time]`.

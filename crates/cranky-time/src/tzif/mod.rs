@@ -102,22 +102,58 @@ fn block(reader: &mut Reader<'_>, counts: &Counts, width: usize) -> Option<Table
     if counts.kinds > MAX_KINDS {
         return None;
     }
-    let instants = reader.take(counts.transitions.checked_mul(width)?)?;
-    let indexes = reader.take(counts.transitions)?;
-    let kinds = reader.take(counts.kinds.checked_mul(KIND_SIZE)?)?;
-    let names = reader.take(counts.name_bytes)?;
-    let leap_size = width.checked_add(4)?;
-    let leaps = reader.take(counts.leaps.checked_mul(leap_size)?)?;
-    reader.take(counts.standard_flags)?;
-    reader.take(counts.ut_flags)?;
+    let sections = Sections::take(reader, counts, width)?;
+    Some(Table {
+        kinds: read_kinds(sections.kinds, sections.names)?,
+        transitions: read_transitions(sections.instants, sections.indexes, width)?,
+        leaps: read_leaps(sections.leaps, width)?,
+    })
+}
 
-    let kinds = kinds
-        .as_chunks::<KIND_SIZE>()
+/// The bytes of each sort of record in a block, in the order the block holds
+/// them; the flags that end it are skipped.
+struct Sections<'a> {
+    instants: &'a [u8],
+    indexes: &'a [u8],
+    kinds: &'a [u8],
+    names: &'a [u8],
+    leaps: &'a [u8],
+}
+
+impl<'a> Sections<'a> {
+    /// Takes a whole block whose instants are `width` bytes wide.
+    fn take(reader: &mut Reader<'a>, counts: &Counts, width: usize) -> Option<Self> {
+        let instants = reader.take(counts.transitions.checked_mul(width)?)?;
+        let indexes = reader.take(counts.transitions)?;
+        let kinds = reader.take(counts.kinds.checked_mul(KIND_SIZE)?)?;
+        let names = reader.take(counts.name_bytes)?;
+        let leap_size = width.checked_add(4)?;
+        let leaps = reader.take(counts.leaps.checked_mul(leap_size)?)?;
+        reader.take(counts.standard_flags)?;
+        reader.take(counts.ut_flags)?;
+        Some(Self {
+            instants,
+            indexes,
+            kinds,
+            names,
+            leaps,
+        })
+    }
+}
+
+/// The kinds of local time in `raw`, their names read from `names`.
+fn read_kinds(raw: &[u8], names: &[u8]) -> Option<Vec<Kind>> {
+    raw.as_chunks::<KIND_SIZE>()
         .0
         .iter()
         .map(|&raw| kind(raw, names))
-        .collect::<Option<Vec<_>>>()?;
-    let transitions = instants
+        .collect()
+}
+
+/// The transitions whose instants, `width` bytes each, are in `instants` and
+/// whose kinds are in `indexes`, in the same order.
+fn read_transitions(instants: &[u8], indexes: &[u8], width: usize) -> Option<Vec<Transition>> {
+    instants
         .chunks_exact(width)
         .zip(indexes)
         .map(|(raw, &index)| {
@@ -126,9 +162,13 @@ fn block(reader: &mut Reader<'_>, counts: &Counts, width: usize) -> Option<Table
                 kind: usize::from(index),
             })
         })
-        .collect::<Option<Vec<_>>>()?;
-    let leaps = leaps
-        .chunks_exact(leap_size)
+        .collect()
+}
+
+/// The leap second records in `raw`, each an instant of `width` bytes and then
+/// a total of four.
+fn read_leaps(raw: &[u8], width: usize) -> Option<Vec<Leap>> {
+    raw.chunks_exact(width.checked_add(4)?)
         .map(|raw| {
             let (instant, total) = raw.split_at_checked(width)?;
             Some(Leap {
@@ -136,12 +176,7 @@ fn block(reader: &mut Reader<'_>, counts: &Counts, width: usize) -> Option<Table
                 total: integer(total)?,
             })
         })
-        .collect::<Option<Vec<_>>>()?;
-    Some(Table {
-        kinds,
-        transitions,
-        leaps,
-    })
+        .collect()
 }
 
 fn kind(raw: [u8; KIND_SIZE], names: &[u8]) -> Option<Kind> {
