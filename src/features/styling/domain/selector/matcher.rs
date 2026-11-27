@@ -146,3 +146,182 @@ pub(crate) fn nth_matches(step_size: i32, offset: i32, index_1based: usize) -> b
         diff <= 0 && diff.checked_rem(step_size) == Some(0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::styling::domain::{ClassName, ElementId, ElementIdentity};
+
+    fn step(tag: &str, combinator: Option<Combinator>) -> SelectorStep {
+        SelectorStep {
+            tag: Some(tag.to_string()),
+            combinator,
+            ..SelectorStep::default()
+        }
+    }
+
+    /// A selector from its steps, subject first, each carrying the combinator to the next.
+    fn selector(steps: Vec<SelectorStep>) -> CompiledSelector {
+        CompiledSelector { steps }
+    }
+
+    /// Runs `check` against the leaf of the tree `bar > flex#main.wide.dark > Text`.
+    fn with_leaf(check: impl FnOnce(&ElementQuery<'_>)) {
+        let id = ElementId::new("main").unwrap();
+        let classes = [
+            ClassName::new("wide").unwrap(),
+            ClassName::new("dark").unwrap(),
+        ];
+        let root = ElementQuery::new(ElementIdentity::new("bar", None, &[]), &[], None);
+        let middle = ElementQuery::new(
+            ElementIdentity::new("flex", Some(&id), &classes),
+            &[PseudoClass::Hover],
+            Some(&root),
+        );
+        let leaf = ElementQuery::new(ElementIdentity::new("Text", None, &[]), &[], Some(&middle));
+        check(&leaf);
+    }
+
+    fn leaf_matches(steps: Vec<SelectorStep>) -> bool {
+        let compiled = selector(steps);
+        let mut matched = false;
+        with_leaf(|leaf| matched = matches_selector(&compiled, leaf));
+        matched
+    }
+
+    /// Whether `step` matches the `flex#main.wide.dark:hover` element.
+    fn middle_matches(step: &SelectorStep) -> bool {
+        let mut matched = false;
+        with_leaf(|leaf| matched = step_matches(step, leaf.parent().unwrap()));
+        matched
+    }
+
+    #[test]
+    fn test_empty_selector_matches_nothing() {
+        assert!(!leaf_matches(vec![]));
+    }
+
+    #[test]
+    fn test_subject_tag_is_compared_with_the_lowercased_element_tag() {
+        assert!(leaf_matches(vec![step("text", None)]));
+        assert!(leaf_matches(vec![step("*", None)]));
+        assert!(!leaf_matches(vec![step("TEXT", None)]));
+        assert!(!leaf_matches(vec![step("flex", None)]));
+    }
+
+    #[test]
+    fn test_child_combinator_needs_the_direct_parent() {
+        let child = Some(Combinator::Child);
+        assert!(leaf_matches(vec![step("text", child), step("flex", None)]));
+        assert!(!leaf_matches(vec![step("text", child), step("bar", None)]));
+        assert!(leaf_matches(vec![
+            step("text", child),
+            step("flex", child),
+            step("bar", None)
+        ]));
+        assert!(!leaf_matches(vec![
+            step("text", child),
+            step("flex", child),
+            step("bar", child),
+            step("*", None)
+        ]));
+    }
+
+    #[test]
+    fn test_descendant_combinator_finds_any_ancestor_once() {
+        let descendant = Some(Combinator::Descendant);
+        assert!(leaf_matches(vec![
+            step("text", descendant),
+            step("bar", None)
+        ]));
+        assert!(leaf_matches(vec![step("text", None), step("bar", None)]));
+        assert!(!leaf_matches(vec![step("text", None), step("popup", None)]));
+        assert!(leaf_matches(vec![
+            step("text", None),
+            step("flex", None),
+            step("bar", None)
+        ]));
+        assert!(!leaf_matches(vec![
+            step("text", None),
+            step("bar", None),
+            step("flex", None)
+        ]));
+        assert!(!leaf_matches(vec![
+            step("text", None),
+            step("flex", None),
+            step("flex", None)
+        ]));
+    }
+
+    #[test]
+    fn test_descendant_then_child_walks_on_from_the_matched_ancestor() {
+        let child = Some(Combinator::Child);
+        assert!(leaf_matches(vec![
+            step("text", None),
+            step("flex", child),
+            step("bar", None)
+        ]));
+        assert!(!leaf_matches(vec![
+            step("text", None),
+            step("bar", child),
+            step("flex", None)
+        ]));
+    }
+
+    #[test]
+    fn test_sibling_combinators_never_match() {
+        for combinator in [Combinator::NextSibling, Combinator::LaterSibling] {
+            assert!(!leaf_matches(vec![
+                step("text", Some(combinator)),
+                step("flex", None)
+            ]));
+        }
+    }
+
+    /// Whether the `flex` step, edited by `edit`, matches the `flex#main.wide.dark:hover` element.
+    fn edited_flex_matches(edit: fn(&mut SelectorStep)) -> bool {
+        let mut probe = step("flex", None);
+        edit(&mut probe);
+        middle_matches(&probe)
+    }
+
+    #[test]
+    fn test_step_checks_id_and_classes() {
+        assert!(edited_flex_matches(|_| {}));
+        assert!(edited_flex_matches(
+            |probe| probe.id = Some("main".to_string())
+        ));
+        assert!(!edited_flex_matches(
+            |probe| probe.id = Some("other".to_string())
+        ));
+        assert!(edited_flex_matches(
+            |probe| probe.classes = vec!["dark".into(), "wide".into()]
+        ));
+        assert!(!edited_flex_matches(
+            |probe| probe.classes = vec!["wide".into(), "light".into()]
+        ));
+    }
+
+    #[test]
+    fn test_step_checks_pseudo_classes_and_negations() {
+        let not = |tag: &str| vec![selector(vec![step(tag, None)])];
+        assert!(edited_flex_matches(
+            |probe| probe.pseudo_classes = vec![PseudoClass::Hover]
+        ));
+        assert!(!edited_flex_matches(
+            |probe| probe.pseudo_classes = vec![PseudoClass::Active]
+        ));
+        let mut probe = step("flex", None);
+        probe.negations = not("bar");
+        assert!(middle_matches(&probe));
+        probe.negations = not("flex");
+        assert!(!middle_matches(&probe));
+    }
+
+    #[test]
+    fn test_id_step_rejects_an_element_without_an_id() {
+        let mut probe = step("text", None);
+        probe.id = Some("main".to_string());
+        assert!(!leaf_matches(vec![probe]));
+    }
+}

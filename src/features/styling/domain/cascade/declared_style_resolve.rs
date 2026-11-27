@@ -73,3 +73,106 @@ pub(super) fn resolve_font_size(
         Cascade::Initial => Some(FontSize::new(DEFAULT_FONT_SIZE)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::features::styling::domain::ComputedStyle;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    /// What a child of an element whose computed font-size is `parent` inherits.
+    fn under_parent(parent: Option<f32>) -> InheritedStyle {
+        let mut style = ComputedStyle::default();
+        if let Some(size) = parent {
+            style.set_font_size(FontSize::new(size));
+        }
+        InheritedStyle::default().descend(&style, Arc::new(HashMap::new()))
+    }
+
+    fn font_size(cascade: Cascade<DeclaredLength>, parent: Option<f32>) -> Option<f32> {
+        resolve_font_size(cascade, &under_parent(parent)).map(FontSize::value)
+    }
+
+    #[test]
+    fn test_pixels_ignore_the_parent() {
+        let declared = Cascade::Value(DeclaredLength::Pixels(9.0));
+        assert_eq!(font_size(declared, Some(20.0)), Some(9.0));
+    }
+
+    #[test]
+    fn test_percent_scales_the_parent_or_the_default() {
+        let declared = Cascade::Value(DeclaredLength::Percent(150.0));
+        assert_eq!(font_size(declared, Some(20.0)), Some(30.0));
+        assert_eq!(font_size(declared, None), Some(21.0));
+    }
+
+    #[test]
+    fn test_ems_scale_the_parent_or_the_default() {
+        let declared = Cascade::Value(DeclaredLength::Ems(2.0));
+        assert_eq!(font_size(declared, Some(20.0)), Some(40.0));
+        assert_eq!(font_size(declared, None), Some(28.0));
+    }
+
+    #[test]
+    fn test_rem_scales_the_root_not_the_parent() {
+        let declared = Cascade::Value(DeclaredLength::Rem(2.0));
+        assert_eq!(font_size(declared, Some(20.0)), Some(28.0));
+    }
+
+    #[test]
+    fn test_calc_sums_percent_and_ems_of_the_parent_pixels_and_rem_of_the_root() {
+        let declared = Cascade::Value(DeclaredLength::Calc {
+            percent: 50.0,
+            px: 2.0,
+            ems: 0.25,
+            rem: 1.0,
+        });
+        // (50% + 0.25em) of 20 = 15, + 2px, + 1rem of 14.
+        assert_eq!(font_size(declared, Some(20.0)), Some(31.0));
+        // Without a parent both relative terms use the default 14: 10.5 + 2 + 14.
+        assert_eq!(font_size(declared, None), Some(26.5));
+    }
+
+    #[test]
+    fn test_auto_not_declared_and_inherit_take_the_parent_size() {
+        for cascade in [
+            Cascade::Value(DeclaredLength::Auto),
+            Cascade::NotDeclared,
+            Cascade::Inherit,
+        ] {
+            assert_eq!(font_size(cascade, Some(20.0)), Some(20.0));
+            assert_eq!(font_size(cascade, None), None);
+        }
+    }
+
+    #[test]
+    fn test_initial_resets_to_the_default_size() {
+        assert_eq!(
+            font_size(Cascade::Initial, Some(20.0)),
+            Some(DEFAULT_FONT_SIZE)
+        );
+    }
+
+    #[test]
+    fn test_cascade_from_prefers_the_keyword_over_the_value() {
+        assert_eq!(
+            cascade_from(Some(CssWideKeyword::Inherit), Some(1)),
+            Cascade::Inherit
+        );
+        assert_eq!(
+            cascade_from(Some(CssWideKeyword::Initial), Some(1)),
+            Cascade::Initial
+        );
+        assert_eq!(cascade_from(None, Some(1)), Cascade::Value(1));
+        assert_eq!(cascade_from::<i32>(None, None), Cascade::NotDeclared);
+    }
+
+    #[test]
+    fn test_resolve_takes_the_value_then_the_parent_and_initial_clears() {
+        assert_eq!(resolve(Cascade::Value(1), Some(&2)), Some(1));
+        assert_eq!(resolve(Cascade::NotDeclared, Some(&2)), Some(2));
+        assert_eq!(resolve(Cascade::Inherit, Some(&2)), Some(2));
+        assert_eq!(resolve(Cascade::Initial, Some(&2)), None);
+    }
+}

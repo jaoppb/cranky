@@ -129,4 +129,113 @@ mod tests {
             Some(crate::features::styling::domain::CssLength::Pixels(20.0))
         );
     }
+
+    /// The twenty fields in declaration order, to compare two `DeclaredLengths` whole.
+    fn fields(lengths: &DeclaredLengths) -> [Cascade<DeclaredLength>; 20] {
+        [
+            lengths.width,
+            lengths.height,
+            lengths.min_width,
+            lengths.min_height,
+            lengths.max_width,
+            lengths.max_height,
+            lengths.flex_basis,
+            lengths.border_size,
+            lengths.border_radius,
+            lengths.gap,
+            lengths.column_gap,
+            lengths.row_gap,
+            lengths.padding_top,
+            lengths.padding_right,
+            lengths.padding_bottom,
+            lengths.padding_left,
+            lengths.margin_top,
+            lengths.margin_right,
+            lengths.margin_bottom,
+            lengths.margin_left,
+        ]
+    }
+
+    /// The twenty setters, in declaration order.
+    fn setters() -> [fn(&mut DeclaredLengths, DeclaredLength); 20] {
+        [
+            DeclaredLengths::set_width,
+            DeclaredLengths::set_height,
+            DeclaredLengths::set_min_width,
+            DeclaredLengths::set_min_height,
+            DeclaredLengths::set_max_width,
+            DeclaredLengths::set_max_height,
+            DeclaredLengths::set_flex_basis,
+            DeclaredLengths::set_border_size,
+            DeclaredLengths::set_border_radius,
+            DeclaredLengths::set_gap,
+            DeclaredLengths::set_column_gap,
+            DeclaredLengths::set_row_gap,
+            DeclaredLengths::set_padding_top,
+            DeclaredLengths::set_padding_right,
+            DeclaredLengths::set_padding_bottom,
+            DeclaredLengths::set_padding_left,
+            DeclaredLengths::set_margin_top,
+            DeclaredLengths::set_margin_right,
+            DeclaredLengths::set_margin_bottom,
+            DeclaredLengths::set_margin_left,
+        ]
+    }
+
+    /// Every field declared through its own setter, each to `seed` plus its position, so no two
+    /// fields hold the same length.
+    fn every_length(seed: f32) -> DeclaredLengths {
+        let mut lengths = DeclaredLengths::default();
+        let mut value = seed;
+        for setter in setters() {
+            value += 1.0;
+            setter(&mut lengths, DeclaredLength::Pixels(value));
+        }
+        lengths
+    }
+
+    #[test]
+    fn test_merge_carries_every_declared_length() {
+        let later = every_length(0.0);
+        let mut base = DeclaredLengths::default();
+
+        base.merge_with(&later);
+
+        assert_eq!(fields(&base), fields(&later));
+    }
+
+    #[test]
+    fn test_merge_keeps_every_length_the_later_rule_does_not_declare() {
+        let mut base = every_length(0.0);
+
+        base.merge_with(&DeclaredLengths::default());
+
+        assert_eq!(fields(&base), fields(&every_length(0.0)));
+    }
+
+    #[test]
+    fn test_merge_lets_the_later_rule_win_on_every_length() {
+        let later = every_length(100.0);
+        let mut base = every_length(0.0);
+
+        base.merge_with(&later);
+
+        assert_eq!(fields(&base), fields(&later));
+    }
+
+    #[test]
+    fn test_merge_takes_a_later_css_wide_keyword_over_a_declared_length() {
+        let mut base = every_length(0.0);
+        let later = DeclaredLengths {
+            width: Cascade::Initial,
+            margin_left: Cascade::Inherit,
+            ..DeclaredLengths::default()
+        };
+
+        base.merge_with(&later);
+
+        assert_eq!(base.width, Cascade::Initial);
+        assert_eq!(base.margin_left, Cascade::Inherit);
+        assert_eq!(base.height, Cascade::Value(DeclaredLength::Pixels(2.0)));
+    }
 }

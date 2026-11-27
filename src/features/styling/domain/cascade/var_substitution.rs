@@ -163,4 +163,55 @@ mod tests {
         // Must not hang or overflow the stack; exact output isn't load-bearing.
         let _ = substitute_vars("var(--loop)", &custom);
     }
+
+    #[test]
+    fn test_unbalanced_reference_keeps_the_rest_verbatim() {
+        let custom = vars(&[("--gap", "8px")]);
+        assert_eq!(
+            substitute_vars("var(--gap) 0 var(--gap 1", &custom),
+            "8px 0 var(--gap 1"
+        );
+    }
+
+    #[test]
+    fn test_defined_value_wins_over_the_fallback() {
+        let custom = vars(&[("--bg", "#111111")]);
+        assert_eq!(substitute_vars("var(--bg, #000000)", &custom), "#111111");
+    }
+
+    #[test]
+    fn test_name_and_fallback_are_trimmed() {
+        let custom = vars(&[("--bg", "#111111")]);
+        assert_eq!(substitute_vars("var( --bg )", &custom), "#111111");
+        assert_eq!(substitute_vars("var(--none,  red )", &custom), "red");
+    }
+
+    #[test]
+    fn test_var_inside_a_fallback_is_substituted() {
+        let custom = vars(&[("--bg", "#111111")]);
+        assert_eq!(
+            substitute_vars("var(--missing, var(--bg))", &custom),
+            "#111111"
+        );
+    }
+
+    #[test]
+    fn test_text_after_the_last_reference_is_kept() {
+        let custom = vars(&[("--gap", "8px")]);
+        assert_eq!(substitute_vars("a var(--gap) b", &custom), "a 8px b");
+    }
+
+    #[test]
+    fn test_chain_stops_after_eight_lookups() {
+        let names: Vec<String> = (0..=8).map(|index| format!("--v{index}")).collect();
+        let mut custom = HashMap::new();
+        for pair in names.windows(2) {
+            custom.insert(pair[0].clone(), format!("var({})", pair[1]));
+        }
+        custom.insert("--v8".to_string(), "end".to_string());
+        // `--v7`'s value is read at depth 8, where substitution stops and keeps it verbatim.
+        assert_eq!(substitute_vars("var(--v0)", &custom), "var(--v8)");
+        // One link shorter, the chain resolves to the end.
+        assert_eq!(substitute_vars("var(--v1)", &custom), "end");
+    }
 }
