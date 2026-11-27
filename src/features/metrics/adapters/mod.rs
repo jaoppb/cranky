@@ -1,11 +1,16 @@
 //! The `sysinfo`-backed sampler that gathers a `MetricsState` every update interval and
 //! sends it on the hub's metrics channel.
+mod readings;
+
 use crate::features::metrics::domain::{
-    CpuMetrics, CpuSample, CreateMetricsCommand, DeviceMetrics, DiskMetric, DiskMode, DiskName,
-    DiskSpace, MemoryBytes, MemoryMetrics, MemoryUsage, MetricsConfig, MetricsState, MountPoint,
-    NetworkMetrics, NetworkMode, NetworkSpeed, SystemMetrics, Temperature, TemperatureMode,
+    CpuMetrics, CreateMetricsCommand, DeviceMetrics, DiskMetric, DiskName, DiskSpace, MemoryBytes,
+    MemoryMetrics, MemoryUsage, MetricsConfig, MetricsState, MountPoint, NetworkMetrics,
+    SystemMetrics, Temperature,
 };
 use crate::shared::events::signals::SignalHub;
+use readings::{
+    cpu_metrics, disk_enabled, network_enabled, network_metrics, temperature, temperature_enabled,
+};
 use std::sync::Arc;
 use sysinfo::{Components, Disks, Networks, System};
 
@@ -97,28 +102,22 @@ impl SysinfoSources {
 
     /// The overall and per-core CPU usage, scaled as `config` asks.
     fn cpu(&self, config: &MetricsConfig) -> CpuMetrics {
-        let nproc = f32::from(u16::try_from(self.sys.cpus().len()).unwrap_or(1));
-        let global_cpu = self.sys.global_cpu_usage();
-        let per_core_raw: Vec<f32> = self
+        let per_core = self
             .sys
             .cpus()
             .iter()
             .map(sysinfo::Cpu::cpu_usage)
             .collect();
-        CpuSample::new(global_cpu, nproc, per_core_raw).normalize(config.cpu())
+        cpu_metrics(self.sys.global_cpu_usage(), per_core, config.cpu())
     }
 
     /// The bytes every interface sent and received, or zero both ways when network is off.
     fn network(&self, config: &MetricsConfig) -> NetworkMetrics {
-        let mut network_tx: u64 = 0;
-        let mut network_rx: u64 = 0;
-        if network_enabled(config) {
-            for data in self.networks.values() {
-                network_tx = network_tx.saturating_add(data.transmitted());
-                network_rx = network_rx.saturating_add(data.received());
-            }
-        }
-        NetworkMetrics::new(NetworkSpeed::new(network_tx), NetworkSpeed::new(network_rx))
+        let pairs = self
+            .networks
+            .values()
+            .map(|data| (data.transmitted(), data.received()));
+        network_metrics(config, pairs)
     }
 
     /// One reading per disk, or none when disk is off.
@@ -132,12 +131,8 @@ impl SysinfoSources {
     /// The average sensor temperature in the configured unit, absent when temperature is
     /// not configured or nothing could be read.
     fn temperature(&self, config: &MetricsConfig) -> Option<Temperature> {
-        config.temperature().and_then(|mode| {
-            Temperature::from_readings(
-                self.components.iter().map(sysinfo::Component::temperature),
-                mode,
-            )
-        })
+        let readings = self.components.iter().map(sysinfo::Component::temperature);
+        temperature(config, readings)
     }
 
     /// The used and total RAM and swap.
@@ -169,30 +164,10 @@ fn disk_metric(disk: &sysinfo::Disk) -> DiskMetric {
     )
 }
 
-/// Whether `config` sets a network mode other than `disabled`.
-fn network_enabled(config: &MetricsConfig) -> bool {
-    config
-        .network()
-        .is_some_and(|mode| *mode != NetworkMode::Disabled)
-}
-
-/// Whether `config` sets a disk mode other than `disabled`.
-fn disk_enabled(config: &MetricsConfig) -> bool {
-    config
-        .disk()
-        .is_some_and(|mode| *mode != DiskMode::Disabled)
-}
-
-/// Whether `config` sets a temperature mode other than `disabled`.
-fn temperature_enabled(config: &MetricsConfig) -> bool {
-    config
-        .temperature()
-        .is_some_and(|mode| *mode != TemperatureMode::Disabled)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::metrics::domain::TemperatureMode;
     use crate::shared::config::domain::Config;
 
     #[test]
