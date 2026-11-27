@@ -5,12 +5,14 @@ use super::hyprland_provider::{HyprlandProvider, RealHyprlandProvider};
 #[cfg(test)]
 use super::inconsistency::{StateInconsistency, find_state_inconsistencies};
 use super::signal_loop::run_event_loop;
+use crate::features::workspaces::domain::{Monitor, MonitorName, Workspace, WorkspaceId};
 use crate::features::workspaces::ports::{
     WindowManagerError, WindowManagerPort, WindowManagerState,
 };
 #[cfg(test)]
 use crate::shared::events::signals::HyprlandState;
 use crate::shared::events::signals::SignalHub;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -54,6 +56,14 @@ impl WindowManagerPort for HyprlandAdapter {
 
 impl HyprlandAdapter {
     fn query_state(&self) -> Result<WindowManagerState, WindowManagerError> {
+        let (ws_json, mon_json) = self.query_json()?;
+        let workspaces = parse_workspaces(&ws_json)?;
+        let (monitors, focused_monitor) = parse_monitors(&mon_json)?;
+        Ok((workspaces, monitors, focused_monitor))
+    }
+
+    /// Queries Hyprland's workspaces, then its monitors, as raw JSON.
+    fn query_json(&self) -> Result<(String, String), WindowManagerError> {
         let ws_json =
             self.provider
                 .query_workspaces()
@@ -66,35 +76,42 @@ impl HyprlandAdapter {
                 .map_err(|error| WindowManagerError::IpcError {
                     reason: format!("Failed to get monitors: {error}"),
                 })?;
-
-        let workspaces: std::collections::BTreeMap<_, _> =
-            serde_json::from_str::<Vec<HyprWorkspaceDto>>(&ws_json)
-                .map_err(|error| WindowManagerError::IpcError {
-                    reason: error.to_string(),
-                })?
-                .into_iter()
-                .map(|dto| {
-                    let workspace = dto.into_domain();
-                    (workspace.id().clone(), workspace)
-                })
-                .collect();
-
-        let mut focused_monitor = None;
-        let monitors: std::collections::BTreeMap<_, _> =
-            serde_json::from_str::<Vec<HyprMonitorDto>>(&mon_json)
-                .map_err(|error| WindowManagerError::IpcError {
-                    reason: error.to_string(),
-                })?
-                .into_iter()
-                .map(|dto| {
-                    let (mon, focus) = dto.into_domain();
-                    if focus.is_focused() {
-                        focused_monitor = Some(mon.name().clone());
-                    }
-                    (mon.name().clone(), mon)
-                })
-                .collect();
-
-        Ok((workspaces, monitors, focused_monitor))
+        Ok((ws_json, mon_json))
     }
+}
+
+/// The monitors keyed by name, and the name of the focused one.
+type FocusedMonitors = (BTreeMap<MonitorName, Monitor>, Option<MonitorName>);
+
+/// Parses Hyprland's workspaces JSON into workspaces keyed by id.
+fn parse_workspaces(ws_json: &str) -> Result<BTreeMap<WorkspaceId, Workspace>, WindowManagerError> {
+    Ok(serde_json::from_str::<Vec<HyprWorkspaceDto>>(ws_json)
+        .map_err(|error| WindowManagerError::IpcError {
+            reason: error.to_string(),
+        })?
+        .into_iter()
+        .map(|dto| {
+            let workspace = dto.into_domain();
+            (workspace.id().clone(), workspace)
+        })
+        .collect())
+}
+
+/// Parses Hyprland's monitors JSON into monitors keyed by name, and the last one it marks focused.
+fn parse_monitors(mon_json: &str) -> Result<FocusedMonitors, WindowManagerError> {
+    let mut focused_monitor = None;
+    let monitors = serde_json::from_str::<Vec<HyprMonitorDto>>(mon_json)
+        .map_err(|error| WindowManagerError::IpcError {
+            reason: error.to_string(),
+        })?
+        .into_iter()
+        .map(|dto| {
+            let (mon, focus) = dto.into_domain();
+            if focus.is_focused() {
+                focused_monitor = Some(mon.name().clone());
+            }
+            (mon.name().clone(), mon)
+        })
+        .collect();
+    Ok((monitors, focused_monitor))
 }
