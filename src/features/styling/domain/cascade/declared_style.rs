@@ -5,7 +5,9 @@ use super::declared_length::DeclaredLength;
 use super::declared_lengths::DeclaredLengths;
 use super::declared_lengths_apply::FontSizeBases;
 use super::declared_parts::{DeclaredValues, FontRelativeLengths, VarDeclarations};
-use super::declared_style_resolve::{cascade_from, resolve, resolve_font_size};
+use super::declared_style_resolve::{
+    cascade_from, font_size_cascade, own_custom_properties, resolve, resolve_font_size,
+};
 use super::inherited::{DEFAULT_FONT_SIZE, InheritedStyle};
 use super::value::{Cascade, CssWideKeyword};
 use super::var_substitution::substitute_vars;
@@ -74,55 +76,32 @@ impl DeclaredStyle {
         let (computed, keywords) = values.into_parts();
         let (font_size_declared, lengths) = relative.into_parts();
         let (custom_properties, pending_vars) = vars.into_parts();
-        let color = cascade_from(keywords.color, computed.color().cloned());
-        let accent_color = cascade_from(keywords.accent_color, computed.accent_color().cloned());
-        let font_family = cascade_from(
-            keywords.font_family,
-            computed
-                .font_family()
-                .map(|family| Arc::from(family.as_str())),
-        );
-        // The ordinary (non-relative) property pipeline already resolved
-        // font-size — assuming a fixed base if it happened to be em/rem.
-        // `font_size_declared` overrides that assumption with the real
-        // declaration whenever one was found.
-        let font_size_value = font_size_declared.or_else(|| {
-            computed
-                .font_size()
-                .map(|font_size| DeclaredLength::Pixels(font_size.value()))
-        });
-        let font_size = cascade_from(keywords.font_size, font_size_value);
-        let text_align = cascade_from(keywords.text_align, computed.text_align());
+        let font_family = computed
+            .font_family()
+            .map(|family| Arc::from(family.as_str()));
         Self {
+            color: cascade_from(keywords.color, computed.color().cloned()),
+            accent_color: cascade_from(keywords.accent_color, computed.accent_color().cloned()),
+            font_family: cascade_from(keywords.font_family, font_family),
+            font_size: font_size_cascade(keywords.font_size, font_size_declared, &computed),
+            text_align: cascade_from(keywords.text_align, computed.text_align()),
             rest: computed,
-            color,
-            accent_color,
-            font_family,
-            font_size,
-            text_align,
             lengths,
             custom_properties,
             pending_vars,
         }
     }
 
+    /// Overlays a later rule's declarations on this one: each property `other` declared, by
+    /// value or CSS-wide keyword, replaces this one, and its custom properties and `var()` uses
+    /// are added over these.
     pub(crate) fn merge_with(&mut self, other: &Self) {
         self.rest.merge_with(&other.rest);
-        if !matches!(other.color, Cascade::NotDeclared) {
-            self.color = other.color.clone();
-        }
-        if !matches!(other.accent_color, Cascade::NotDeclared) {
-            self.accent_color = other.accent_color.clone();
-        }
-        if !matches!(other.font_family, Cascade::NotDeclared) {
-            self.font_family = other.font_family.clone();
-        }
-        if !matches!(other.font_size, Cascade::NotDeclared) {
-            self.font_size = other.font_size;
-        }
-        if !matches!(other.text_align, Cascade::NotDeclared) {
-            self.text_align = other.text_align;
-        }
+        self.color.override_with(&other.color);
+        self.accent_color.override_with(&other.accent_color);
+        self.font_family.override_with(&other.font_family);
+        self.font_size.override_with(&other.font_size);
+        self.text_align.override_with(&other.text_align);
         self.lengths.merge_with(&other.lengths);
         self.custom_properties
             .extend(other.custom_properties.clone());
@@ -141,57 +120,60 @@ impl DeclaredStyle {
     /// value is out of scope here).
     #[must_use]
     pub(crate) fn collapse(
-        self,
+        mut self,
         inherited: &InheritedStyle,
         reparser: &dyn PropertyReparser,
     ) -> (ComputedStyle, InheritedStyle) {
-        let mut computed = self.rest;
-        if let Some(color) = resolve(self.color, inherited.color()) {
-            computed.set_color(color);
-        }
-        if let Some(accent) = resolve(self.accent_color, inherited.accent_color()) {
-            computed.set_accent_color(accent);
-        }
-        if let Some(family) = resolve(self.font_family, inherited.font_family()) {
-            computed.set_font_family(FontFamily::new(family.to_string()));
-        }
-
-        if let Some(align) = resolve(self.text_align, inherited.text_align().as_ref()) {
-            computed.set_text_align(align);
-        }
-
-        let own_font_size = resolve_font_size(self.font_size, inherited);
-        if let Some(size) = own_font_size {
-            computed.set_font_size(size);
-        }
-        // Every other length's `em` base: this element's own font-size when
-        // resolved, else the same fallback the renderer already uses when
-        // painting an element with no font-size anywhere in its ancestry.
-        let em_base = own_font_size.unwrap_or(FontSize::new(DEFAULT_FONT_SIZE));
-        self.lengths.apply(
-            &mut computed,
-            FontSizeBases::new(em_base, inherited.root_font_size()),
-        );
-
-        // What this element's own children resolve var() against: the
-        // parent's custom properties, overridden by whatever this element
-        // declared — cheap when it declared none (an Arc clone, no copy).
-        let own_custom = if self.custom_properties.is_empty() {
-            Arc::clone(inherited.custom_properties())
-        } else {
-            let mut merged = (**inherited.custom_properties()).clone();
-            merged.extend(self.custom_properties);
-            Arc::new(merged)
-        };
-
+        let mut computed = std::mem::take(&mut self.rest);
+        self.resolve_inheritable(&mut computed, inherited);
+        self.resolve_font_relative(&mut computed, inherited);
+        let own_custom = own_custom_properties(self.custom_properties, inherited);
         for (name, raw_value) in &self.pending_vars {
             let substituted = substitute_vars(raw_value, &own_custom);
             let reparsed = reparser.reparse(name, &substituted);
             computed.merge_with(&reparsed);
         }
-
         let next_inherited = inherited.descend(&computed, own_custom);
         (computed, next_inherited)
+    }
+
+    /// Sets color, accent color, font family and text alignment on `computed`, in that order,
+    /// each from this rule's cascade (moved out, as `collapse` consumes the style) or else the
+    /// parent's value; one that resolves to nothing leaves `computed`'s own value alone.
+    fn resolve_inheritable(&mut self, computed: &mut ComputedStyle, inherited: &InheritedStyle) {
+        if let Some(color) = resolve(std::mem::take(&mut self.color), inherited.color()) {
+            computed.set_color(color);
+        }
+        if let Some(accent) = resolve(
+            std::mem::take(&mut self.accent_color),
+            inherited.accent_color(),
+        ) {
+            computed.set_accent_color(accent);
+        }
+        if let Some(family) = resolve(
+            std::mem::take(&mut self.font_family),
+            inherited.font_family(),
+        ) {
+            computed.set_font_family(FontFamily::new(family.to_string()));
+        }
+        if let Some(align) = resolve(self.text_align, inherited.text_align().as_ref()) {
+            computed.set_text_align(align);
+        }
+    }
+
+    /// Resolves this element's own font-size onto `computed`, then every other length against
+    /// it: the `em` base is that font-size when resolved, else the same fallback the renderer
+    /// uses when painting an element with no font-size anywhere in its ancestry.
+    fn resolve_font_relative(&self, computed: &mut ComputedStyle, inherited: &InheritedStyle) {
+        let own_font_size = resolve_font_size(self.font_size, inherited);
+        if let Some(size) = own_font_size {
+            computed.set_font_size(size);
+        }
+        let em_base = own_font_size.unwrap_or(FontSize::new(DEFAULT_FONT_SIZE));
+        self.lengths.apply(
+            computed,
+            FontSizeBases::new(em_base, inherited.root_font_size()),
+        );
     }
 }
 
@@ -203,6 +185,19 @@ mod tests {
     impl PropertyReparser for NoopReparser {
         fn reparse(&self, _name: &str, _value: &str) -> ComputedStyle {
             ComputedStyle::default()
+        }
+    }
+
+    /// A reparser that reads only `background-color`, as a color, and ignores every other
+    /// property.
+    struct BackgroundReparser;
+    impl PropertyReparser for BackgroundReparser {
+        fn reparse(&self, name: &str, value: &str) -> ComputedStyle {
+            let mut style = ComputedStyle::default();
+            if name == "background-color" {
+                style.set_background(DrawingColor::parse(value.trim()).unwrap());
+            }
+            style
         }
     }
 
@@ -371,17 +366,6 @@ mod tests {
 
     #[test]
     fn test_pending_var_is_substituted_and_reparsed() {
-        struct BackgroundReparser;
-        impl PropertyReparser for BackgroundReparser {
-            fn reparse(&self, name: &str, value: &str) -> ComputedStyle {
-                let mut style = ComputedStyle::default();
-                if name == "background-color" {
-                    style.set_background(DrawingColor::parse(value.trim()).unwrap());
-                }
-                style
-            }
-        }
-
         let mut custom = HashMap::new();
         custom.insert("--bg".to_string(), "#7aa2f7".to_string());
         let mut pending = HashMap::new();

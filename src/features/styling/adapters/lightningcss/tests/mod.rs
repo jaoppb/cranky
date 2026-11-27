@@ -4,12 +4,16 @@ mod embed_sizing;
 mod grid_selectors;
 mod inheritance;
 mod layout_integration;
+mod property_appliers;
 mod property_box_model;
 mod property_color_font;
 mod property_flex;
 mod property_grid_container;
 mod property_grid_item;
+mod rule_entries;
+mod selector_compilation;
 mod selectors;
+mod support;
 mod text_align;
 mod vdom_bridge;
 

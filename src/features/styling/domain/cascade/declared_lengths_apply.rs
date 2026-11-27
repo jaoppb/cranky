@@ -169,10 +169,7 @@ mod tests {
         lengths.set_padding_top(DeclaredLength::Ems(2.0));
 
         let mut computed = ComputedStyle::default();
-        lengths.apply(
-            &mut computed,
-            FontSizeBases::new(FontSize::new(8.0), FontSize::new(14.0)),
-        );
+        lengths.apply(&mut computed, em8_rem14());
 
         assert_eq!(computed.padding().map(BoxMargin::top), Some(16.0));
     }
@@ -191,6 +188,11 @@ mod tests {
         assert_eq!(computed.border_size().map(BorderSize::value), Some(3.0));
     }
 
+    /// The bases most tests resolve against: an 8px element font size and a 14px root one.
+    fn em8_rem14() -> FontSizeBases {
+        FontSizeBases::new(FontSize::new(8.0), FontSize::new(14.0))
+    }
+
     const fn px(value: f32) -> crate::features::styling::domain::CssLength {
         crate::features::styling::domain::CssLength::Pixels(value)
     }
@@ -207,10 +209,7 @@ mod tests {
         lengths.set_flex_basis(DeclaredLength::Ems(0.5));
 
         let mut computed = ComputedStyle::default();
-        lengths.apply(
-            &mut computed,
-            FontSizeBases::new(FontSize::new(8.0), FontSize::new(14.0)),
-        );
+        lengths.apply(&mut computed, em8_rem14());
 
         assert_eq!(computed.width(), Some(px(16.0)));
         assert_eq!(computed.height(), Some(px(28.0)));
@@ -231,10 +230,7 @@ mod tests {
         lengths.set_row_gap(DeclaredLength::Ems(3.0));
 
         let mut computed = ComputedStyle::default();
-        lengths.apply(
-            &mut computed,
-            FontSizeBases::new(FontSize::new(8.0), FontSize::new(14.0)),
-        );
+        lengths.apply(&mut computed, em8_rem14());
 
         assert_eq!(computed.border_size().map(BorderSize::value), Some(2.0));
         assert_eq!(computed.border_radius().map(BorderRadius::value), Some(7.0));
@@ -254,10 +250,7 @@ mod tests {
             AxisMargins::new(1.0, 2.0),
             AxisMargins::new(3.0, 4.0),
         ));
-        lengths.apply(
-            &mut computed,
-            FontSizeBases::new(FontSize::new(8.0), FontSize::new(14.0)),
-        );
+        lengths.apply(&mut computed, em8_rem14());
 
         assert_eq!(
             computed.padding(),
@@ -279,10 +272,7 @@ mod tests {
             AxisMargins::new(5.0, 6.0),
             AxisMargins::new(1.0, 9.0),
         ));
-        lengths.apply(
-            &mut computed,
-            FontSizeBases::new(FontSize::new(8.0), FontSize::new(14.0)),
-        );
+        lengths.apply(&mut computed, em8_rem14());
 
         assert_eq!(
             computed.margin(),
@@ -293,10 +283,7 @@ mod tests {
         );
 
         let mut bare = ComputedStyle::default();
-        lengths.apply(
-            &mut bare,
-            FontSizeBases::new(FontSize::new(8.0), FontSize::new(14.0)),
-        );
+        lengths.apply(&mut bare, em8_rem14());
         assert_eq!(
             bare.margin(),
             Some(&BoxMargin::new(

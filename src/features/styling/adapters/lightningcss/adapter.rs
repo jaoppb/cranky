@@ -12,7 +12,10 @@ use crate::features::styling::domain::{
     InheritableKeywords, RuleEntry, StyleSheetName, StylingError, VarDeclarations,
 };
 use crate::features::styling::ports::{CssParserPort, ParsedStyleSheetPort};
+use lightningcss::error::{Error, ParserError};
+use lightningcss::properties::Property;
 use lightningcss::rules::CssRule;
+use lightningcss::rules::style::StyleRule;
 use lightningcss::stylesheet::{ParserOptions, StyleSheet};
 use std::collections::HashMap;
 
@@ -63,82 +66,86 @@ impl CssParserPort for LightningCssAdapter {
         name: StyleSheetName,
         css_source: &str,
     ) -> Result<Box<dyn ParsedStyleSheetPort>, StylingError> {
-        tracing::debug!(stylesheet = %name.as_str(), len = css_source.len(), "Parsing CSS stylesheet");
-        let stylesheet = StyleSheet::parse(css_source, ParserOptions::default()).map_err(|error| {
-            tracing::error!(stylesheet = %name.as_str(), error = ?error, "Failed to parse CSS stylesheet");
-            StylingError::ParserError(error.to_string())
-        })?;
+        log_parsing(&name, css_source);
+        let stylesheet = StyleSheet::parse(css_source, ParserOptions::default())
+            .map_err(|error| parse_failure(&name, &error))?;
 
         let mut rule_entries = Vec::new();
-
         for rule in &stylesheet.rules.0 {
             if let CssRule::Style(style_rule) = rule {
-                let mut selectors = Vec::new();
-                for sel in &style_rule.selectors.0 {
-                    selectors.push(compile_selector(sel));
-                }
-
-                // Normal and !important declarations are cascaded separately
-                // (importance outranks specificity), so they become distinct
-                // rule entries sharing the same selectors.
-                let normal_style = parse_property_list(&style_rule.declarations.declarations);
-                let normal_keywords =
-                    detect_inheritable_keywords(&style_rule.declarations.declarations);
-                let normal_font_size =
-                    detect_relative_font_size(&style_rule.declarations.declarations);
-                let normal_lengths = detect_relative_lengths(&style_rule.declarations.declarations);
-                let normal_custom =
-                    detect_custom_property_declarations(&style_rule.declarations.declarations);
-                let normal_pending_vars =
-                    detect_pending_var_properties(&style_rule.declarations.declarations);
-
-                let important_style =
-                    parse_property_list(&style_rule.declarations.important_declarations);
-                let important_keywords =
-                    detect_inheritable_keywords(&style_rule.declarations.important_declarations);
-                let important_font_size =
-                    detect_relative_font_size(&style_rule.declarations.important_declarations);
-                let important_lengths =
-                    detect_relative_lengths(&style_rule.declarations.important_declarations);
-                let important_custom = detect_custom_property_declarations(
-                    &style_rule.declarations.important_declarations,
-                );
-                let important_pending_vars =
-                    detect_pending_var_properties(&style_rule.declarations.important_declarations);
-
-                if important_style != ComputedStyle::default()
-                    || has_keyword(important_keywords)
-                    || has_custom_or_pending(&important_custom, &important_pending_vars)
-                {
-                    rule_entries.push(RuleEntry {
-                        selectors: selectors.clone(),
-                        style: DeclaredStyle::from_parts(
-                            DeclaredValues::new(important_style, important_keywords),
-                            FontRelativeLengths::new(important_font_size, important_lengths),
-                            VarDeclarations::new(important_custom, important_pending_vars),
-                        ),
-                        importance: Importance::Important,
-                    });
-                }
-                if normal_style != ComputedStyle::default()
-                    || has_keyword(normal_keywords)
-                    || has_custom_or_pending(&normal_custom, &normal_pending_vars)
-                {
-                    rule_entries.push(RuleEntry {
-                        selectors,
-                        style: DeclaredStyle::from_parts(
-                            DeclaredValues::new(normal_style, normal_keywords),
-                            FontRelativeLengths::new(normal_font_size, normal_lengths),
-                            VarDeclarations::new(normal_custom, normal_pending_vars),
-                        ),
-                        importance: Importance::Normal,
-                    });
-                }
+                push_rule_entries(style_rule, &mut rule_entries);
             }
         }
 
-        tracing::debug!(stylesheet = %name.as_str(), rule_count = rule_entries.len(), "CSS stylesheet parsed successfully");
-
+        log_parsed(&name, rule_entries.len());
         Ok(Box::new(LightningParsedStyleSheet::new(name, rule_entries)))
     }
+}
+
+/// Appends the entries of one style rule: its `!important` half, then its normal half, each
+/// only if it declares something.
+fn push_rule_entries(style_rule: &StyleRule<'_>, rule_entries: &mut Vec<RuleEntry>) {
+    let selectors: Vec<_> = style_rule
+        .selectors
+        .0
+        .iter()
+        .map(compile_selector)
+        .collect();
+    // Normal and !important declarations are cascaded separately
+    // (importance outranks specificity), so they become distinct
+    // rule entries sharing the same selectors. The normal half is read
+    // first, as it always was, and entered last.
+    let normal = declared_style(&style_rule.declarations.declarations);
+    let important = declared_style(&style_rule.declarations.important_declarations);
+    if let Some(style) = important {
+        rule_entries.push(RuleEntry {
+            selectors: selectors.clone(),
+            style,
+            importance: Importance::Important,
+        });
+    }
+    if let Some(style) = normal {
+        rule_entries.push(RuleEntry {
+            selectors,
+            style,
+            importance: Importance::Normal,
+        });
+    }
+}
+
+/// What one half of a rule declares, or `None` when it declares no value, no CSS-wide keyword,
+/// no custom property and no `var()` use.
+fn declared_style(declarations: &[Property<'_>]) -> Option<DeclaredStyle> {
+    let style = parse_property_list(declarations);
+    let keywords = detect_inheritable_keywords(declarations);
+    let font_size = detect_relative_font_size(declarations);
+    let lengths = detect_relative_lengths(declarations);
+    let custom = detect_custom_property_declarations(declarations);
+    let pending_vars = detect_pending_var_properties(declarations);
+    let declares_something = style != ComputedStyle::default()
+        || has_keyword(keywords)
+        || has_custom_or_pending(&custom, &pending_vars);
+    declares_something.then(|| {
+        DeclaredStyle::from_parts(
+            DeclaredValues::new(style, keywords),
+            FontRelativeLengths::new(font_size, lengths),
+            VarDeclarations::new(custom, pending_vars),
+        )
+    })
+}
+
+/// Logs that the sheet `name` is about to be parsed from `css_source`.
+fn log_parsing(name: &StyleSheetName, css_source: &str) {
+    tracing::debug!(stylesheet = %name.as_str(), len = css_source.len(), "Parsing CSS stylesheet");
+}
+
+/// Logs that lightningcss rejected the sheet `name` and turns its `error` into a parser error.
+fn parse_failure(name: &StyleSheetName, error: &Error<ParserError<'_>>) -> StylingError {
+    tracing::error!(stylesheet = %name.as_str(), error = ?error, "Failed to parse CSS stylesheet");
+    StylingError::ParserError(error.to_string())
+}
+
+/// Logs that the sheet `name` parsed into `rule_count` rule entries.
+fn log_parsed(name: &StyleSheetName, rule_count: usize) {
+    tracing::debug!(stylesheet = %name.as_str(), rule_count = rule_count, "CSS stylesheet parsed successfully");
 }

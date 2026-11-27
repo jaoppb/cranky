@@ -40,37 +40,22 @@ fn grid_line_shorthand_reads_start_and_end() {
 
 #[test]
 fn grid_line_longhand_keeps_the_other_end() {
-    let column = declared("grid-column: 2 / 5; grid-column-start: span 2;");
+    use GridPlacement::{Line, Span};
+    let placements = [
+        declared("grid-column: 2 / 5; grid-column-start: span 2;").grid_column(),
+        declared("grid-column: 2 / 5; grid-column-end: 7;").grid_column(),
+        declared("grid-row: 2 / 5; grid-row-start: 3;").grid_row(),
+        declared("grid-row: 2 / 5; grid-row-end: span 4;").grid_row(),
+    ]
+    .map(Option::<&GridLinePlacement>::copied);
     assert_eq!(
-        column.grid_column(),
-        Some(&GridLinePlacement::new(
-            GridPlacement::Span(2),
-            GridPlacement::Line(5)
-        ))
-    );
-    let column = declared("grid-column: 2 / 5; grid-column-end: 7;");
-    assert_eq!(
-        column.grid_column(),
-        Some(&GridLinePlacement::new(
-            GridPlacement::Line(2),
-            GridPlacement::Line(7)
-        ))
-    );
-    let row = declared("grid-row: 2 / 5; grid-row-start: 3;");
-    assert_eq!(
-        row.grid_row(),
-        Some(&GridLinePlacement::new(
-            GridPlacement::Line(3),
-            GridPlacement::Line(5)
-        ))
-    );
-    let row = declared("grid-row: 2 / 5; grid-row-end: span 4;");
-    assert_eq!(
-        row.grid_row(),
-        Some(&GridLinePlacement::new(
-            GridPlacement::Line(2),
-            GridPlacement::Span(4)
-        ))
+        placements,
+        [
+            Some(GridLinePlacement::new(Span(2), Line(5))),
+            Some(GridLinePlacement::new(Line(2), Line(7))),
+            Some(GridLinePlacement::new(Line(3), Line(5))),
+            Some(GridLinePlacement::new(Line(2), Span(4))),
+        ]
     );
 }
 

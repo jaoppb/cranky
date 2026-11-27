@@ -1,15 +1,12 @@
+use super::support::{class_style, parse};
 use crate::features::layout_engine::domain::{AlignItems, Gap, JustifyContent};
-use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
 use crate::features::styling::domain::{
-    ClassName, DisplayMode, ElementIdentity, ElementQuery, GridAutoFlow, GridLinePlacement,
-    GridPlacement, GridTrack, InheritedStyle, StyleSheetName,
+    DisplayMode, GridAutoFlow, GridLinePlacement, GridPlacement, GridTrack,
 };
-use crate::features::styling::ports::CssParserPort;
 
-#[test]
-fn test_grid_properties_parsing() {
-    let parser = LightningCssAdapter::new();
-    let css = r"
+/// The sheet the grid tests read: a grid container with every grid property
+/// it sets and an item placed in it.
+const GRID_CSS: &str = r"
         grid.container {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -26,52 +23,48 @@ fn test_grid_properties_parsing() {
             justify-self: end;
         }
     ";
-    let parsed = parser
-        .parse_stylesheet(StyleSheetName::new("test_grid").unwrap(), css)
-        .unwrap();
 
-    let class_container = ClassName::new("container").unwrap();
-    let query_grid = ElementQuery::new(
-        ElementIdentity::new("grid", None, std::slice::from_ref(&class_container)),
-        &[],
-        None,
-    );
-    let (style_grid, _) = parsed.resolve_style(&query_grid, &InheritedStyle::default());
+/// The row tracks `grid-template-rows: 50px auto minmax(20px, 1fr)` reads as.
+fn expected_rows() -> Vec<GridTrack> {
+    vec![
+        GridTrack::Pixels(50.0),
+        GridTrack::Auto,
+        GridTrack::MinMax(
+            Box::new(GridTrack::Pixels(20.0)),
+            Box::new(GridTrack::Fraction(1.0)),
+        ),
+    ]
+}
+
+#[test]
+fn test_grid_properties_parsing() {
+    let parsed = parse("test_grid", GRID_CSS);
+    let style_grid = class_style(&*parsed, "grid", "container");
 
     assert_eq!(style_grid.display(), Some(DisplayMode::Grid));
     assert_eq!(
         style_grid.grid_template_columns(),
         Some(&[GridTrack::Repeat(3, vec![GridTrack::Fraction(1.0)])][..])
     );
-    assert_eq!(
-        style_grid.grid_template_rows(),
-        Some(
-            &[
-                GridTrack::Pixels(50.0),
-                GridTrack::Auto,
-                GridTrack::MinMax(
-                    Box::new(GridTrack::Pixels(20.0)),
-                    Box::new(GridTrack::Fraction(1.0))
-                ),
-            ][..]
-        )
-    );
+    assert_eq!(style_grid.grid_template_rows(), Some(&expected_rows()[..]));
     assert_eq!(style_grid.grid_auto_flow(), Some(GridAutoFlow::ColumnDense));
-    assert_eq!(style_grid.column_gap().map(Gap::value), Some(12.0));
-    assert_eq!(style_grid.row_gap().map(Gap::value), Some(8.0));
+    let gaps = (
+        style_grid.column_gap().map(Gap::value),
+        style_grid.row_gap().map(Gap::value),
+    );
+    assert_eq!(gaps, (Some(12.0), Some(8.0)));
     assert_eq!(style_grid.justify_items(), Some(AlignItems::Center));
     assert_eq!(
         style_grid.align_content(),
         Some(JustifyContent::SpaceBetween)
     );
+}
 
-    let class_item = ClassName::new("item").unwrap();
-    let query_item = ElementQuery::new(
-        ElementIdentity::new("flex", None, std::slice::from_ref(&class_item)),
-        &[],
-        None,
-    );
-    let (style_item, _) = parsed.resolve_style(&query_item, &InheritedStyle::default());
+/// The `.item` half of the same sheet: its line placements and its own justification.
+#[test]
+fn test_grid_item_properties_parsing() {
+    let parsed = parse("test_grid", GRID_CSS);
+    let style_item = class_style(&*parsed, "flex", "item");
 
     assert_eq!(
         style_item.grid_column(),

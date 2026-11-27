@@ -14,6 +14,9 @@ pub mod specificity;
 pub mod value;
 pub mod var_substitution;
 
+#[cfg(test)]
+mod tests_declared_style;
+
 pub(crate) use declared_length::*;
 pub(crate) use declared_lengths::*;
 pub(crate) use declared_parts::*;

@@ -10,21 +10,20 @@ use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::rendering::ports::text::TextFont;
 
-#[test]
-fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
-    // Issue #9: the popup measured ~240 wide even though `clock.css` sets
-    // `.calendar { min-width: 280px }` on the embed node. Resolve the real
-    // shipped sheets against a real Module node and lay it out with the
-    // child reporting its own 240 default.
-    struct CalendarMeasurer;
-    impl TextMeasurer for CalendarMeasurer {
-        fn measure(&mut self, _t: &str, _font: TextFont<'_>) -> Size {
-            Size::new(0, 0)
-        }
-        fn measure_module(&self, _key: &crate::shared::primitives::ModuleKey) -> Option<Size> {
-            Some(Size::new(240, 190))
-        }
+/// A measurer whose embedded child reports the calendar's own 240x190 default and whose text
+/// takes no room.
+struct CalendarMeasurer;
+impl TextMeasurer for CalendarMeasurer {
+    fn measure(&mut self, _t: &str, _font: TextFont<'_>) -> Size {
+        Size::new(0, 0)
     }
+    fn measure_module(&self, _key: &crate::shared::primitives::ModuleKey) -> Option<Size> {
+        Some(Size::new(240, 190))
+    }
+}
+
+/// A resolver over the shipped `base.css` and `clock.css`, in that order.
+fn shipped_clock_resolver() -> CompositeStyleResolver {
     let parser = LightningCssAdapter::new();
     let sheets = [
         (
@@ -43,9 +42,12 @@ fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
             .unwrap()
     })
     .collect();
-    let resolver = CompositeStyleResolver::new(sheets);
+    CompositeStyleResolver::new(sheets)
+}
 
-    let embed = VNode::new_module(
+/// The module node the clock popup embeds the calendar through, with the `calendar` class.
+fn calendar_embed() -> VNode {
+    VNode::new_module(
         crate::features::vdom::domain::ModuleParams::new(
             crate::shared::primitives::ModuleName::new("calendar".to_string()),
             None,
@@ -53,8 +55,17 @@ fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
         ),
         ElementSelectors::new(Some(ClassNameList::parse("calendar").unwrap()), None),
         Interactions::default(),
-    );
-    let styled = embed.resolve_styles(&resolver, None);
+    )
+}
+
+#[test]
+fn test_shipped_clock_css_gives_the_calendar_embed_a_280_wide_host() {
+    // Issue #9: the popup measured ~240 wide even though `clock.css` sets
+    // `.calendar { min-width: 280px }` on the embed node. Resolve the real
+    // shipped sheets against a real Module node and lay it out with the
+    // child reporting its own 240 default.
+    let resolver = shipped_clock_resolver();
+    let styled = calendar_embed().resolve_styles(&resolver, None);
     assert_eq!(styled.style().min_width(), Some(CssLength::Pixels(280.0)));
 
     let mut engine = crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter::new();

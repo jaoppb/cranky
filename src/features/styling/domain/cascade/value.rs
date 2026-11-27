@@ -12,6 +12,16 @@ pub(crate) enum Cascade<T> {
     Initial,
 }
 
+impl<T: Clone> Cascade<T> {
+    /// Takes `later`'s state unless `later` never declared the property: a later rule's value or
+    /// CSS-wide keyword replaces this one, a property it leaves out keeps this one.
+    pub(crate) fn override_with(&mut self, later: &Self) {
+        if !matches!(later, Self::NotDeclared) {
+            self.clone_from(later);
+        }
+    }
+}
+
 /// A CSS-wide keyword (<https://drafts.csswg.org/css-cascade-5/#defaulting-keywords>)
 /// detected in place of a property's normal value grammar.
 ///
