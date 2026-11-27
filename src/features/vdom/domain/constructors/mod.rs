@@ -162,11 +162,10 @@ mod tests {
     /// Asserts `node` carries the class, id and tooltip made from `label`, and its click and
     /// hover handlers when `handlers` names it.
     fn assert_attributes(node: &VNode, label: &str, handlers: Option<&str>) {
-        let expected_selectors = (Some(&class(label)), Some(&element_id(label)));
-        assert_eq!((node.class_names(), node.element_id()), expected_selectors);
-        let expected_handlers = (handlers.map(on_click), handlers.map(on_hover));
-        let actual_handlers = (node.on_click().cloned(), node.on_hover().cloned());
-        assert_eq!(actual_handlers, expected_handlers);
+        assert_eq!(node.class_names(), Some(&class(label)));
+        assert_eq!(node.element_id(), Some(&element_id(label)));
+        assert_eq!(node.on_click().cloned(), handlers.map(on_click));
+        assert_eq!(node.on_hover().cloned(), handlers.map(on_hover));
         assert_eq!(node.tooltip().map(VNode::kind), Some(tooltip(label).kind()));
         assert_eq!((node.key(), node.popup(), node.panel()), (None, None, None));
     }

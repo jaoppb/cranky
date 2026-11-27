@@ -151,16 +151,14 @@ mod tests {
     #[test]
     fn test_click_handlers_operations() {
         let mut handlers = ClickHandlers::new();
-        let left = handlers.get(PointerButton::Left);
-        assert_eq!((handlers.is_empty(), left), (true, None));
+        assert!(handlers.is_empty());
+        assert_eq!(handlers.get(PointerButton::Left), None);
 
         handlers.insert(PointerButton::Left, exec_action("left_cmd"));
-        let (left, right) = (
-            handlers.get(PointerButton::Left),
-            handlers.get(PointerButton::Right),
-        );
-        let expected = (false, Some(&exec_action("left_cmd")), None);
-        assert_eq!((handlers.is_empty(), left, right), expected);
+        assert!(!handlers.is_empty());
+        let left = handlers.get(PointerButton::Left);
+        assert_eq!(left, Some(&exec_action("left_cmd")));
+        assert_eq!(handlers.get(PointerButton::Right), None);
 
         let single = ClickHandlers::from_single(exec_action("single_cmd"));
         let buttons = [
@@ -220,10 +218,8 @@ mod tests {
     fn test_tokio_sender_delivers_without_logging() {
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);
         let logs = capture_logs(|| tx.send_ui_command(exec("run")));
-        assert_eq!(
-            (rx.try_recv().ok(), logs),
-            (Some(exec("run")), String::new())
-        );
+        assert_eq!(rx.try_recv().ok(), Some(exec("run")));
+        assert_eq!(logs, "");
     }
 
     #[test]
@@ -244,10 +240,8 @@ mod tests {
     fn test_std_sender_delivers_without_logging() {
         let (tx, rx) = std::sync::mpsc::channel();
         let logs = capture_logs(|| tx.send_ui_command(exec("run")));
-        assert_eq!(
-            (rx.try_recv().ok(), logs),
-            (Some(exec("run")), String::new())
-        );
+        assert_eq!(rx.try_recv().ok(), Some(exec("run")));
+        assert_eq!(logs, "");
     }
 
     #[test]

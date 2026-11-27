@@ -148,7 +148,8 @@ mod tests {
         let VNodeKind::Flex { children } = result.kind() else {
             panic!("expected flex root to survive substitution");
         };
-        assert_eq!((children.len(), children[0].tag()), (1, NodeTag::Text));
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].tag(), NodeTag::Text);
         assert_eq!(text_of(&children[0]), Some("calendar: not found"));
         assert!(children[0].class_names().is_some_and(|class_list| {
             class_list

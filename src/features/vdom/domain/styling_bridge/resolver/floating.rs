@@ -7,30 +7,11 @@ use crate::features::vdom::domain::styling_bridge::anchor::ResolvedInteraction;
 use crate::features::vdom::domain::styling_bridge::mapper::StyledFloating;
 use crate::features::vdom::domain::{NodePath, SurfaceSpace, VNode};
 
-/// What a node hands the popup and panel contents it owns: its query, as their parent, and the
-/// fresh style they inherit.
-struct FloatingOwner<'a> {
-    query: &'a ElementQuery<'a>,
-    inherited: &'a InheritedStyle,
-}
-
-impl<'a> FloatingOwner<'a> {
-    /// The root of `surface`'s own tree, under this owner.
-    const fn root_of(&self, surface: SurfaceSpace) -> SurfaceRoot<'a> {
-        SurfaceRoot {
-            surface,
-            parent: Some(self.query),
-            inherited: self.inherited,
-        }
-    }
-}
-
-/// The root of a floating surface's own tree: which surface, the parent query its selectors see
-/// (if any) and the style it inherits.
+/// The root of a floating surface's own tree: which surface, and the parent query its
+/// selectors see (if any). A root inherits nothing: its style starts fresh.
 struct SurfaceRoot<'a> {
     surface: SurfaceSpace,
     parent: Option<&'a ElementQuery<'a>>,
-    inherited: &'a InheritedStyle,
 }
 
 impl VNode {
@@ -44,55 +25,53 @@ impl VNode {
         pass: SurfacePass<'_>,
         query: &ElementQuery<'_>,
     ) -> StyledFloating {
-        let detached_inherited = InheritedStyle::default();
-        let owner = FloatingOwner {
-            query,
-            inherited: &detached_inherited,
-        };
         StyledFloating {
-            tooltip: self.resolve_tooltip(pass, &detached_inherited),
-            popup: self.resolve_popup(pass, &owner),
-            panel: self.resolve_panel(pass, &owner),
+            tooltip: self.resolve_tooltip(pass),
+            popup: self.resolve_popup(pass, query),
+            panel: self.resolve_panel(pass, query),
         }
     }
 
     /// The tooltip content, a root for selector matching with no parent query.
-    fn resolve_tooltip(
-        &self,
-        pass: SurfacePass<'_>,
-        inherited: &InheritedStyle,
-    ) -> Option<Box<StyledNode>> {
+    fn resolve_tooltip(&self, pass: SurfacePass<'_>) -> Option<Box<StyledNode>> {
         self.tooltip().map(|tooltip_node| {
             let root = SurfaceRoot {
                 surface: SurfaceSpace::Tooltip,
                 parent: None,
-                inherited,
             };
             Box::new(tooltip_node.resolve_as_surface_root(pass, &root))
         })
     }
 
-    /// The popup content, matched with the owner as its parent, and the popup's placement.
+    /// The popup content, matched with its owner's `query` as its parent, and the popup's
+    /// placement.
     fn resolve_popup(
         &self,
         pass: SurfacePass<'_>,
-        owner: &FloatingOwner<'_>,
+        query: &ElementQuery<'_>,
     ) -> Option<StyledPopup> {
         self.popup().map(|popup_spec| {
-            let root = owner.root_of(SurfaceSpace::Popup);
+            let root = SurfaceRoot {
+                surface: SurfaceSpace::Popup,
+                parent: Some(query),
+            };
             let content = Box::new(popup_spec.content().resolve_as_surface_root(pass, &root));
             StyledPopup::new(content, popup_spec.anchor_direction(), popup_spec.offset())
         })
     }
 
-    /// The panel content, matched with the owner as its parent, and the panel's surface.
+    /// The panel content, matched with its owner's `query` as its parent, and the panel's
+    /// surface.
     fn resolve_panel(
         &self,
         pass: SurfacePass<'_>,
-        owner: &FloatingOwner<'_>,
+        query: &ElementQuery<'_>,
     ) -> Option<StyledPanel> {
         self.panel().map(|panel_spec| {
-            let root = owner.root_of(SurfaceSpace::Panel);
+            let root = SurfaceRoot {
+                surface: SurfaceSpace::Panel,
+                parent: Some(query),
+            };
             let content = Box::new(panel_spec.content().resolve_as_surface_root(pass, &root));
             StyledPanel::new(content, panel_spec.surface())
         })
@@ -110,7 +89,7 @@ impl VNode {
                 path: &NodePath::root_in(root.surface),
                 position: SiblingPosition::root(),
                 parent: root.parent,
-                inherited: root.inherited,
+                inherited: &InheritedStyle::default(),
             },
         )
     }

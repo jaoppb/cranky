@@ -98,22 +98,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_node_path_operations() {
+    fn test_node_path_root_and_child() {
         let root = NodePath::root_in(SurfaceSpace::Bar);
         let empty: &[usize] = &[];
-        assert_eq!((root.is_root(), root.as_slice()), (true, empty));
+        assert!(root.is_root());
+        assert_eq!(root.as_slice(), empty);
 
         let child0 = root.child(0);
-        let child0_state = (
-            child0.is_root(),
-            child0.as_slice(),
-            child0.starts_with(&root),
-        );
-        assert_eq!(child0_state, (false, &[0][..], true));
+        assert!(!child0.is_root());
+        assert_eq!(child0.as_slice(), &[0]);
+        assert!(child0.starts_with(&root));
+    }
 
+    #[test]
+    fn test_node_path_descendants_start_with_their_ancestors_only() {
+        let root = NodePath::root_in(SurfaceSpace::Bar);
+        let child0 = root.child(0);
         let child0_1 = child0.child(1);
-        let ancestry = (child0_1.starts_with(&child0), child0_1.starts_with(&root));
-        assert_eq!((child0_1.as_slice(), ancestry), (&[0, 1][..], (true, true)));
+        assert_eq!(child0_1.as_slice(), &[0, 1]);
+        assert!(child0_1.starts_with(&child0));
+        assert!(child0_1.starts_with(&root));
 
         let child1 = root.child(1);
         assert!(!child0_1.starts_with(&child1));

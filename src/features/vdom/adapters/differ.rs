@@ -20,7 +20,6 @@ impl DefaultVdomDiffAdapter {
         if old_node.tag() != new_node.tag() {
             return replace_node(old_node, new_node);
         }
-        // The tooltip, popup and panel are diffed before the children, as they always were.
         let attached = self.diff_attached(old_node, new_node);
         let kind_patch = self.diff_kind(old_node, new_node);
         let nodes = NodePair {
