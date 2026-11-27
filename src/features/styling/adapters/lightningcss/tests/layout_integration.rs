@@ -1,14 +1,10 @@
+use super::support::{class_style, parse};
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::LayoutRoot;
-use crate::features::layout_engine::domain::{AlignItems, TextMeasurer};
+use crate::features::layout_engine::domain::{AlignItems, RenderNode, StyledNode, TextMeasurer};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
-use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
-use crate::features::styling::domain::{
-    ClassName, ClassNameList, CssLength, ElementIdentity, ElementQuery, InheritedStyle,
-    Orientation, ProgressValue, StyleSheetName,
-};
-use crate::features::styling::ports::CssParserPort;
+use crate::features::styling::domain::{ClassNameList, CssLength, Orientation, ProgressValue};
 use crate::features::vdom::domain::{
     ElementSelectors, ImageContent, Interactions, ProgressBar, TextContent, VNode,
 };
@@ -32,10 +28,18 @@ impl TextMeasurer for FixedDummyMeasurer {
     }
 }
 
-#[test]
-fn test_arbitrary_style_name_and_progress_rendering() {
-    let parser = LightningCssAdapter::new();
-    let theme_css = r"
+/// `styled` laid out by a fresh taffy engine at the origin with no size constraint.
+fn lay_out(styled: StyledNode, measurer: &mut dyn TextMeasurer) -> RenderNode {
+    TaffyLayoutAdapter::new()
+        .calculate_layout(
+            LayoutRoot::new(styled, Position::new(0, 0), SizeConstraint::none()),
+            measurer,
+        )
+        .unwrap()
+}
+
+/// A theme under an arbitrary sheet name: a clock label and a battery progress bar.
+const THEME_CSS: &str = r"
         .clock-label {
             color: #ff5555;
             font-size: 16px;
@@ -47,10 +51,9 @@ fn test_arbitrary_style_name_and_progress_rendering() {
         }
     ";
 
-    let parsed = parser
-        .parse_stylesheet(StyleSheetName::new("random").unwrap(), theme_css)
-        .unwrap();
-    let resolver = CompositeStyleResolver::new(vec![parsed]);
+#[test]
+fn test_arbitrary_style_name_and_progress_rendering() {
+    let resolver = CompositeStyleResolver::new(vec![parse("random", THEME_CSS)]);
 
     let clock_node = VNode::new_text(
         TextContent::new("12:00".to_string()),
@@ -66,14 +69,8 @@ fn test_arbitrary_style_name_and_progress_rendering() {
         Interactions::default(),
     );
     let styled_h = h_prog.resolve_styles(&resolver, None);
-    let mut engine = TaffyLayoutAdapter::new();
 
-    let render_h = engine
-        .calculate_layout(
-            LayoutRoot::new(styled_h, Position::new(0, 0), SizeConstraint::none()),
-            &mut DummyMeasurer,
-        )
-        .unwrap();
+    let render_h = lay_out(styled_h, &mut DummyMeasurer);
     let mut canvas = RecordingCanvas::default();
     render_h.render_to_canvas(&mut canvas);
     assert_eq!(canvas.kinds(), ["rect", "rect"]);
@@ -81,17 +78,13 @@ fn test_arbitrary_style_name_and_progress_rendering() {
 
 #[test]
 fn test_width_height_parsing_and_layout() {
-    let parser = LightningCssAdapter::new();
     let css = r"
         .icon {
             width: 20px;
             height: 20px;
         }
     ";
-    let parsed = parser
-        .parse_stylesheet(StyleSheetName::new("systray").unwrap(), css)
-        .unwrap();
-    let resolver = CompositeStyleResolver::new(vec![parsed]);
+    let resolver = CompositeStyleResolver::new(vec![parse("systray", css)]);
 
     let img_node = VNode::new_image(
         ImageContent::new(vec![0; 400 * 4], Size::new(48, 48)),
@@ -103,13 +96,7 @@ fn test_width_height_parsing_and_layout() {
     assert_eq!(styled_img.style().width(), Some(CssLength::Pixels(20.0)));
     assert_eq!(styled_img.style().height(), Some(CssLength::Pixels(20.0)));
 
-    let mut engine = TaffyLayoutAdapter::new();
-    let render_node = engine
-        .calculate_layout(
-            LayoutRoot::new(styled_img, Position::new(0, 0), SizeConstraint::none()),
-            &mut FixedDummyMeasurer,
-        )
-        .unwrap();
+    let render_node = lay_out(styled_img, &mut FixedDummyMeasurer);
 
     assert_eq!(render_node.rect().width(), 20);
     assert_eq!(render_node.rect().height(), 20);
@@ -117,7 +104,6 @@ fn test_width_height_parsing_and_layout() {
 
 #[test]
 fn test_advanced_css_properties_parsing_and_layout() {
-    let parser = LightningCssAdapter::new();
     let css = r"
         .box {
             background: #1e1e2e;
@@ -129,18 +115,7 @@ fn test_advanced_css_properties_parsing_and_layout() {
             border: 2px solid #7aa2f7;
         }
     ";
-    let parsed = parser
-        .parse_stylesheet(StyleSheetName::new("box").unwrap(), css)
-        .unwrap();
-
-    let class = ClassName::new("box").unwrap();
-    let query = ElementQuery::new(
-        ElementIdentity::new("flex", None, std::slice::from_ref(&class)),
-        &[],
-        None,
-    );
-
-    let (style, _) = parsed.resolve_style(&query, &InheritedStyle::default());
+    let style = class_style(&*parse("box", css), "flex", "box");
     assert!(style.background().is_some());
     assert!((style.flex_grow().unwrap().value() - 1.0).abs() < f32::EPSILON);
     assert!((style.flex_shrink().unwrap().value() - 0.0).abs() < f32::EPSILON);

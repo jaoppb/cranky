@@ -1,24 +1,17 @@
 use crate::features::layout_engine::domain::StyledNode;
 use crate::features::styling::adapters::fs_loader::CompositeStyleResolver;
 use crate::features::styling::adapters::lightningcss::LightningCssAdapter;
-use crate::features::styling::domain::{CssLength, StyleSheetName};
+use crate::features::styling::domain::{ComputedStyle, CssLength, StyleSheetName};
 use crate::features::styling::ports::CssParserPort;
 use crate::features::vdom::domain::{ElementSelectors, Interactions, TextContent, VNode};
 use crate::shared::config::domain::FontSize;
 use crate::shared::primitives::color::DrawingColor;
 
-#[test]
-fn test_color_inherits_through_vdom_tree() {
-    // The bug this stage fixes: `bar { color: ... }` in base.css never used
-    // to reach a child text node, because resolution had no notion of
-    // inheritance at all. Here `flex` stands in for the root (VNode's tag is
-    // fixed per node kind, not customizable to "bar" in a unit test).
-    let parser = LightningCssAdapter::new();
-    let sheet = parser
-        .parse_stylesheet(
-            StyleSheetName::new("test").unwrap(),
-            "flex { color: #7aa2f7; }",
-        )
+/// The style the sheet `css` gives the text child of a `flex` root, both without selectors,
+/// so the child sees whatever the root passes on.
+fn text_child_style(css: &str) -> ComputedStyle {
+    let sheet = LightningCssAdapter::new()
+        .parse_stylesheet(StyleSheetName::new("test").unwrap(), css)
         .unwrap();
     let resolver = CompositeStyleResolver::new(vec![sheet]);
 
@@ -40,6 +33,16 @@ fn test_color_inherits_through_vdom_tree() {
     let StyledNode::Text { style, .. } = &children[0] else {
         panic!("expected a Text child");
     };
+    style.clone()
+}
+
+#[test]
+fn test_color_inherits_through_vdom_tree() {
+    // The bug this stage fixes: `bar { color: ... }` in base.css never used
+    // to reach a child text node, because resolution had no notion of
+    // inheritance at all. Here `flex` stands in for the root (VNode's tag is
+    // fixed per node kind, not customizable to "bar" in a unit test).
+    let style = text_child_style("flex { color: #7aa2f7; }");
     assert_eq!(
         style.color(),
         Some(&DrawingColor::parse("#7aa2f7").unwrap())
@@ -48,33 +51,7 @@ fn test_color_inherits_through_vdom_tree() {
 
 #[test]
 fn test_own_declared_color_wins_over_inherited() {
-    let parser = LightningCssAdapter::new();
-    let sheet = parser
-        .parse_stylesheet(
-            StyleSheetName::new("test").unwrap(),
-            "flex { color: #7aa2f7; } text { color: #ffffff; }",
-        )
-        .unwrap();
-    let resolver = CompositeStyleResolver::new(vec![sheet]);
-
-    let child = VNode::new_text(
-        TextContent::new("hi".to_string()),
-        ElementSelectors::default(),
-        Interactions::default(),
-    );
-    let root = VNode::new_flex(
-        vec![child],
-        ElementSelectors::default(),
-        Interactions::default(),
-    );
-
-    let styled = root.resolve_styles(&resolver, None);
-    let StyledNode::Flex { children, .. } = &styled else {
-        panic!("expected a Flex root");
-    };
-    let StyledNode::Text { style, .. } = &children[0] else {
-        panic!("expected a Text child");
-    };
+    let style = text_child_style("flex { color: #7aa2f7; } text { color: #ffffff; }");
     assert_eq!(
         style.color(),
         Some(&DrawingColor::parse("#ffffff").unwrap())
@@ -87,33 +64,8 @@ fn test_em_resolves_through_vdom_tree_not_hardcoded_16px() {
     // (flex's 20px), giving text a resolved font-size of 30px. text's own
     // width is then relative to *its own* resolved font-size (30px), not
     // flex's — 2em -> 60px, not the old hardcoded-16 guess of 32px.
-    let parser = LightningCssAdapter::new();
-    let sheet = parser
-        .parse_stylesheet(
-            StyleSheetName::new("test").unwrap(),
-            "flex { font-size: 20px; } text { font-size: 1.5em; width: 2em; }",
-        )
-        .unwrap();
-    let resolver = CompositeStyleResolver::new(vec![sheet]);
-
-    let child = VNode::new_text(
-        TextContent::new("hi".to_string()),
-        ElementSelectors::default(),
-        Interactions::default(),
-    );
-    let root = VNode::new_flex(
-        vec![child],
-        ElementSelectors::default(),
-        Interactions::default(),
-    );
-
-    let styled = root.resolve_styles(&resolver, None);
-    let StyledNode::Flex { children, .. } = &styled else {
-        panic!("expected a Flex root");
-    };
-    let StyledNode::Text { style, .. } = &children[0] else {
-        panic!("expected a Text child");
-    };
+    let style =
+        text_child_style("flex { font-size: 20px; } text { font-size: 1.5em; width: 2em; }");
     assert_eq!(style.font_size().map(FontSize::value), Some(30.0));
     assert_eq!(style.width(), Some(CssLength::Pixels(60.0)));
 }
@@ -123,33 +75,7 @@ fn test_custom_property_inherits_and_var_resolves_through_vdom_tree() {
     // --bg is declared on the root only; the child never redeclares it, so
     // this proves inheritance (not just substitution) actually works
     // end-to-end, not merely within one element's own declarations.
-    let parser = LightningCssAdapter::new();
-    let sheet = parser
-        .parse_stylesheet(
-            StyleSheetName::new("test").unwrap(),
-            "flex { --bg: #7aa2f7; } text { background-color: var(--bg); }",
-        )
-        .unwrap();
-    let resolver = CompositeStyleResolver::new(vec![sheet]);
-
-    let child = VNode::new_text(
-        TextContent::new("hi".to_string()),
-        ElementSelectors::default(),
-        Interactions::default(),
-    );
-    let root = VNode::new_flex(
-        vec![child],
-        ElementSelectors::default(),
-        Interactions::default(),
-    );
-
-    let styled = root.resolve_styles(&resolver, None);
-    let StyledNode::Flex { children, .. } = &styled else {
-        panic!("expected a Flex root");
-    };
-    let StyledNode::Text { style, .. } = &children[0] else {
-        panic!("expected a Text child");
-    };
+    let style = text_child_style("flex { --bg: #7aa2f7; } text { background-color: var(--bg); }");
     assert_eq!(
         style.background(),
         Some(&DrawingColor::parse("#7aa2f7").unwrap())

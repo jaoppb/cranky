@@ -76,14 +76,11 @@ mod tests {
 
     #[test]
     fn test_flex_vos_validation() {
-        assert!(FlexGrow::new(0.0).is_ok());
-        assert!(FlexGrow::new(1.5).is_ok());
-        assert!(FlexGrow::new(-1.0).is_err());
-        assert!(FlexGrow::new(f32::NAN).is_err());
+        let grow_accepted = [0.0, 1.5, -1.0, f32::NAN].map(|grow| FlexGrow::new(grow).is_ok());
+        assert_eq!(grow_accepted, [true, true, false, false]);
 
-        assert!(FlexShrink::new(0.0).is_ok());
-        assert!(FlexShrink::new(2.0).is_ok());
-        assert!(FlexShrink::new(-0.5).is_err());
-        assert!(FlexShrink::new(f32::NAN).is_err());
+        let shrink_accepted =
+            [0.0, 2.0, -0.5, f32::NAN].map(|shrink| FlexShrink::new(shrink).is_ok());
+        assert_eq!(shrink_accepted, [true, true, false, false]);
     }
 }

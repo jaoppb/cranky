@@ -188,6 +188,19 @@ mod tests {
         }
     }
 
+    /// A reparser that reads only `background-color`, as a color, and ignores every other
+    /// property.
+    struct BackgroundReparser;
+    impl PropertyReparser for BackgroundReparser {
+        fn reparse(&self, name: &str, value: &str) -> ComputedStyle {
+            let mut style = ComputedStyle::default();
+            if name == "background-color" {
+                style.set_background(DrawingColor::parse(value.trim()).unwrap());
+            }
+            style
+        }
+    }
+
     fn color(hex: &str) -> DrawingColor {
         DrawingColor::parse(hex).unwrap()
     }
@@ -353,17 +366,6 @@ mod tests {
 
     #[test]
     fn test_pending_var_is_substituted_and_reparsed() {
-        struct BackgroundReparser;
-        impl PropertyReparser for BackgroundReparser {
-            fn reparse(&self, name: &str, value: &str) -> ComputedStyle {
-                let mut style = ComputedStyle::default();
-                if name == "background-color" {
-                    style.set_background(DrawingColor::parse(value.trim()).unwrap());
-                }
-                style
-            }
-        }
-
         let mut custom = HashMap::new();
         custom.insert("--bg".to_string(), "#7aa2f7".to_string());
         let mut pending = HashMap::new();

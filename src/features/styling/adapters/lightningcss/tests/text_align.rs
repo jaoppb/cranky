@@ -1,3 +1,4 @@
+use super::support::painted_texts;
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::LayoutRoot;
 use crate::features::layout_engine::domain::{StyledNode, TextMeasurer};
@@ -10,7 +11,6 @@ use crate::features::vdom::domain::{ElementSelectors, Interactions, TextContent,
 use crate::shared::primitives::SizeConstraint;
 use crate::shared::primitives::geometry::{Position, Size};
 use crate::shared::primitives::{TextAlign, TextAlignment};
-use crate::shared::rendering::ports::canvas::{CanvasCall, RecordingCanvas};
 use crate::shared::rendering::ports::text::TextFont;
 
 fn resolver(css: &str) -> CompositeStyleResolver {
@@ -105,44 +105,47 @@ impl TextMeasurer for EightPerChar {
     }
 }
 
-/// Lays out a calendar-shaped tree under the shipped `calendar.css` and
-/// returns every `draw_text` call as `(text, alignment)` in paint order.
-fn paint_calendar() -> Vec<(String, TextAlignment)> {
-    let class = |names: &str| Some(ClassNameList::parse(names).unwrap());
-    let header = VNode::new_flex(
+/// The selectors of a calendar container carrying the classes `names`.
+fn classed(names: &str) -> ElementSelectors {
+    ElementSelectors::new(Some(ClassNameList::parse(names).unwrap()), None)
+}
+
+/// The calendar header: the title between its previous and next nav buttons.
+fn calendar_header() -> VNode {
+    VNode::new_flex(
         vec![
             text("<", Some("nav-btn")),
             text("May 2026", Some("title")),
             text(">", Some("nav-btn")),
         ],
-        ElementSelectors::new(class("header"), None),
+        classed("header"),
         Interactions::default(),
-    );
+    )
+}
+
+/// A calendar-shaped tree: the header, the weekday row and a week of day cells.
+fn calendar_tree() -> VNode {
     let days = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]
         .iter()
         .map(|day| text(day, Some("weekday")))
         .collect();
-    let weekdays = VNode::new_grid(
-        days,
-        ElementSelectors::new(class("weekdays"), None),
-        Interactions::default(),
-    );
+    let weekdays = VNode::new_grid(days, classed("weekdays"), Interactions::default());
     let cells = (1..=7)
         .map(|day| text(&day.to_string(), Some("day")))
         .collect();
-    let grid = VNode::new_grid(
-        cells,
-        ElementSelectors::new(class("grid"), None),
+    let grid = VNode::new_grid(cells, classed("grid"), Interactions::default());
+    VNode::new_flex(
+        vec![calendar_header(), weekdays, grid],
+        classed("root"),
         Interactions::default(),
-    );
-    let root = VNode::new_flex(
-        vec![header, weekdays, grid],
-        ElementSelectors::new(class("root"), None),
-        Interactions::default(),
-    );
+    )
+}
 
+/// Lays out a calendar-shaped tree under the shipped `calendar.css` and
+/// returns every `draw_text` call as `(text, alignment)` in paint order.
+fn paint_calendar() -> Vec<(String, TextAlignment)> {
     let resolver = resolver(include_str!("../../../../../../assets/styles/calendar.css"));
-    let styled = root.resolve_styles(&resolver, None);
+    let styled = calendar_tree().resolve_styles(&resolver, None);
     let laid_out = TaffyLayoutAdapter::new()
         .calculate_layout(
             LayoutRoot::new(
@@ -153,19 +156,7 @@ fn paint_calendar() -> Vec<(String, TextAlignment)> {
             &mut EightPerChar,
         )
         .unwrap();
-
-    let mut canvas = RecordingCanvas::default();
-    laid_out.render_to_canvas(&mut canvas);
-    canvas
-        .calls
-        .into_iter()
-        .filter_map(|call| match call {
-            CanvasCall::Text {
-                text, alignment, ..
-            } => Some((text, alignment)),
-            CanvasCall::Rect { .. } | CanvasCall::Border { .. } | CanvasCall::Image { .. } => None,
-        })
-        .collect()
+    painted_texts(&laid_out)
 }
 
 #[test]
