@@ -283,6 +283,147 @@ mod tests {
         assert_eq!(data.len(), 32 * 32 * 4);
     }
 
+    /// Writes `svg` to a fresh temporary `.svg` file and loads it as a 16px icon at scale 1.
+    fn load_svg_icon(svg: &str) -> (u32, u32, Vec<u8>) {
+        let path = temp_svg_path();
+        fs::write(&path, svg).unwrap();
+        let loaded = load_icon_rgba(&path, 16, 1.0).unwrap();
+        let _ = fs::remove_file(&path);
+        loaded
+    }
+
+    /// The RGBA bytes of the pixel at `(x, y)` in a `width`-pixel-wide RGBA buffer.
+    fn pixel_at(data: &[u8], width: u32, (x, y): (u32, u32)) -> [u8; 4] {
+        let row_bytes = usize::try_from(width).unwrap().checked_mul(4).unwrap();
+        let row = data
+            .chunks_exact(row_bytes)
+            .nth(usize::try_from(y).unwrap())
+            .unwrap();
+        row.as_chunks::<4>().0[usize::try_from(x).unwrap()]
+    }
+
+    #[test]
+    fn test_svg_icon_is_straight_rgba_in_channel_order() {
+        let (width, _, data) = load_svg_icon(
+            r##"<svg width="10" height="10"><rect width="10" height="10" fill="#ff8000"/></svg>"##,
+        );
+        assert_eq!(pixel_at(&data, width, (0, 0)), [255, 128, 0, 255]);
+        assert_eq!(pixel_at(&data, width, (15, 15)), [255, 128, 0, 255]);
+    }
+
+    /// A half-transparent fill comes back un-premultiplied: the colour at full strength and the
+    /// alpha at half.
+    #[test]
+    fn test_svg_icon_is_unpremultiplied() {
+        let (width, _, data) = load_svg_icon(
+            r#"<svg width="10" height="10"><rect width="10" height="10" fill="red" fill-opacity="0.5"/></svg>"#,
+        );
+        assert_eq!(pixel_at(&data, width, (8, 8)), [255, 0, 0, 128]);
+    }
+
+    /// A wide SVG is scaled to fit the square and centred vertically, leaving transparent
+    /// bands above and below.
+    #[test]
+    fn test_svg_icon_is_fitted_and_centred() {
+        let (width, height, data) = load_svg_icon(
+            r#"<svg width="20" height="10"><rect width="20" height="10" fill="red"/></svg>"#,
+        );
+        assert_eq!((width, height), (16, 16));
+        assert_eq!(pixel_at(&data, width, (8, 0)), [0, 0, 0, 0]);
+        assert_eq!(pixel_at(&data, width, (8, 3)), [0, 0, 0, 0]);
+        assert_eq!(pixel_at(&data, width, (8, 4)), [255, 0, 0, 255]);
+        assert_eq!(pixel_at(&data, width, (8, 11)), [255, 0, 0, 255]);
+        assert_eq!(pixel_at(&data, width, (8, 12)), [0, 0, 0, 0]);
+        assert_eq!(pixel_at(&data, width, (8, 15)), [0, 0, 0, 0]);
+    }
+
+    /// The icon is never smaller than its nominal size, and a fractional scale rounds up.
+    #[test]
+    fn test_icon_size_scales_up_and_rounds_up() {
+        let path = temp_svg_path();
+        fs::write(
+            &path,
+            r#"<svg width="10" height="10"><rect width="10" height="10" fill="red"/></svg>"#,
+        )
+        .unwrap();
+        let side = |scale: f32| load_icon_rgba(&path, 16, scale).unwrap().0;
+        assert_eq!(side(0.5), 16);
+        assert_eq!(side(1.5), 24);
+        assert_eq!(side(1.01), 17);
+        let _ = fs::remove_file(&path);
+    }
+
+    /// The extension test ignores case: an `.SVG` file is rasterised, not decoded as a bitmap.
+    #[test]
+    fn test_svg_extension_is_case_insensitive() {
+        let path = temp_svg_path().with_extension("SVG");
+        fs::write(
+            &path,
+            r#"<svg width="10" height="10"><rect width="10" height="10" fill="red"/></svg>"#,
+        )
+        .unwrap();
+        let loaded = load_icon_rgba(&path, 16, 1.0);
+        let _ = fs::remove_file(&path);
+        let (width, height, data) = loaded.unwrap();
+        assert_eq!((width, height), (16, 16));
+        assert_eq!(pixel_at(&data, width, (0, 0)), [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn test_bitmap_icon_keeps_its_channel_order() {
+        let path = temp_svg_path().with_extension("png");
+        image::RgbaImage::from_pixel(8, 8, image::Rgba([10, 20, 30, 255]))
+            .save(&path)
+            .unwrap();
+        let loaded = load_icon_rgba(&path, 4, 1.0);
+        let _ = fs::remove_file(&path);
+        let (width, height, data) = loaded.unwrap();
+        assert_eq!((width, height), (4, 4));
+        assert_eq!(pixel_at(&data, width, (0, 0)), [10, 20, 30, 255]);
+        assert_eq!(pixel_at(&data, width, (3, 3)), [10, 20, 30, 255]);
+    }
+
+    #[test]
+    fn test_bitmap_icon_missing_file() {
+        let missing = std::env::temp_dir().join("definitely-missing-cranky.png");
+        assert!(load_icon_rgba(&missing, 16, 1.0).is_none());
+    }
+
+    #[test]
+    fn test_f64_to_f32_out_of_range() {
+        assert_eq!(f64_to_f32(1e300).to_bits(), f32::INFINITY.to_bits());
+        assert_eq!(f64_to_f32(-1e300).to_bits(), f32::NEG_INFINITY.to_bits());
+        assert_eq!(f64_to_f32(5.0e38).to_bits(), f32::INFINITY.to_bits());
+        assert_eq!(f64_to_f32(1e-300).to_bits(), 0.0f32.to_bits());
+        assert_eq!(f64_to_f32(-0.0).to_bits(), (-0.0f32).to_bits());
+        assert_eq!(f64_to_f32(-42.5).to_bits(), (-42.5f32).to_bits());
+        assert_eq!(
+            f64_to_f32(f64::from(f32::MAX)).to_bits(),
+            f32::MAX.to_bits()
+        );
+        assert_eq!(
+            f64_to_f32(f64::from(f32::MIN_POSITIVE)).to_bits(),
+            f32::MIN_POSITIVE.to_bits()
+        );
+    }
+
+    // Known bug: a negative value too small for an `f32` loses its sign (`-0.0` expected), and
+    // the subnormal `f32` range is flushed to zero.
+    #[test]
+    fn test_f64_to_f32_underflow_is_positive_zero() {
+        assert_eq!(f64_to_f32(-1e-300).to_bits(), 0.0f32.to_bits());
+        let subnormal = f64::from(f32::MIN_POSITIVE) / 2.0;
+        assert_eq!(f64_to_f32(subnormal).to_bits(), 0.0f32.to_bits());
+    }
+
+    // Known bug: the mantissa is truncated, not rounded to nearest, so 0.1 lands one ulp below
+    // `0.1_f32`.
+    #[test]
+    fn test_f64_to_f32_truncates_the_mantissa() {
+        assert_eq!(0.1f32.to_bits(), 0x3DCC_CCCD);
+        assert_eq!(f64_to_f32(0.1).to_bits(), 0x3DCC_CCCC);
+    }
+
     #[test]
     fn test_f32_to_u32_cases() {
         assert_eq!(f32_to_u32(-1.0), 0);

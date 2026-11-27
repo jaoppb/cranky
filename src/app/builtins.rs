@@ -747,6 +747,162 @@ mod tests {
         );
     }
 
+    /// Writes `source` as the module script `file` in the user module directory of `home`.
+    fn write_user_module(home: &crate::test_utils::TestHome, file: &str, source: &str) {
+        let dir = home.home().as_path().join(".config/cranky/modules");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(file), source).unwrap();
+    }
+
+    /// A Lua module script that renders `text`.
+    fn lua_text_module(text: &str) -> String {
+        format!("function render(monitor) return ui.text(\"{text}\") end")
+    }
+
+    /// A Rhai module script that renders `text`.
+    fn rhai_text_module(text: &str) -> String {
+        format!("fn render(monitor) {{ ui.text(\"{text}\") }}")
+    }
+
+    /// The text rendered on DP-1 by the module `name` that `find_module` picks for `selection`.
+    fn found_text(
+        home: &crate::test_utils::TestHome,
+        name: &str,
+        selection: &EngineSelection,
+    ) -> String {
+        use crate::shared::primitives::ModuleName;
+        let mut module = BuiltinModules::find_module(&ModuleName::new(name), selection, home)
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
+        module
+            .init(
+                &crate::shared::config::domain::ModuleConfig::new(
+                    ModuleName::new(name),
+                    crate::shared::primitives::ModuleOptions::default(),
+                ),
+                &crate::shared::config::domain::Config::default(),
+            )
+            .unwrap();
+        let node = module.render(&crate::shared::primitives::MonitorId::new("DP-1"));
+        let crate::features::vdom::domain::VNodeKind::Text { text } = node.kind() else {
+            panic!("{name}: expected a text node, got {:?}", node.kind());
+        };
+        text.as_str().to_string()
+    }
+
+    #[test]
+    fn test_find_module_auto_prefers_lua_over_rhai() {
+        let home = get_test_env();
+        write_user_module(&home, "pick.lua", &lua_text_module("lua"));
+        write_user_module(&home, "pick.rhai", &rhai_text_module("rhai"));
+
+        assert_eq!(found_text(&home, "pick", &EngineSelection::Auto), "lua");
+    }
+
+    #[test]
+    fn test_find_module_explicit_engine_skips_the_other_engine() {
+        let home = get_test_env();
+        write_user_module(&home, "pick.lua", &lua_text_module("lua"));
+        write_user_module(&home, "pick.rhai", &rhai_text_module("rhai"));
+
+        let rhai = EngineSelection::Explicit(EngineId::new("rhai"));
+        assert_eq!(found_text(&home, "pick", &rhai), "rhai");
+    }
+
+    /// The user directory is searched with every engine before the deployed builtins: a user
+    /// Rhai clock wins over the deployed Lua one even though Lua comes first.
+    #[test]
+    fn test_find_module_user_script_of_any_engine_beats_a_deployed_builtin() {
+        let home = get_test_env();
+        write_user_module(&home, "clock.rhai", &rhai_text_module("user clock"));
+
+        assert_eq!(
+            found_text(&home, "clock", &EngineSelection::Auto),
+            "user clock"
+        );
+    }
+
+    /// A script that fails to load is skipped for the next candidate. Rhai compiles when the
+    /// module loads (a Lua chunk only runs at `init`, so a broken Lua script is still found).
+    #[test]
+    fn test_find_module_falls_through_a_script_that_fails_to_load() {
+        let home = get_test_env();
+        write_user_module(&home, "pick.rhai", "fn render(monitor) {");
+        let shadow = BuiltinModules::ensure_builtins(&home).unwrap();
+        fs::write(shadow.join("pick.lua"), lua_text_module("deployed lua")).unwrap();
+
+        assert_eq!(
+            found_text(&home, "pick", &EngineSelection::Auto),
+            "deployed lua"
+        );
+    }
+
+    /// Starts watching the module directories of `home`, returning the watcher and the commands
+    /// it sends.
+    fn watch(
+        home: &crate::test_utils::TestHome,
+    ) -> (
+        Box<dyn notify::Watcher>,
+        std::sync::mpsc::Receiver<crate::app::commands::SystemCommand>,
+    ) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let sender = move |command: crate::app::commands::SystemCommand| {
+            let _ = tx.send(command);
+        };
+        let watcher = BuiltinModules::watch_scripts(std::sync::Arc::new(sender), home).unwrap();
+        (watcher, rx)
+    }
+
+    /// Every module asked to reload until no command arrives for two seconds, in order.
+    fn reloads(rx: &std::sync::mpsc::Receiver<crate::app::commands::SystemCommand>) -> Vec<String> {
+        let mut names = Vec::new();
+        while let Ok(command) = rx.recv_timeout(std::time::Duration::from_secs(2)) {
+            let crate::app::commands::SystemCommand::ReloadModule(name) = command else {
+                panic!("expected a module reload, got {command:?}");
+            };
+            names.push(name.as_str().to_owned());
+        }
+        names
+    }
+
+    #[test]
+    fn test_watching_reloads_a_script_modified_in_either_module_directory() {
+        let home = get_test_env();
+        let shadow = BuiltinModules::ensure_builtins(&home).unwrap();
+        write_user_module(&home, "mine.lua", &lua_text_module("before"));
+        let (_watcher, rx) = watch(&home);
+
+        write_user_module(&home, "mine.lua", &lua_text_module("after"));
+        fs::write(shadow.join("clock.lua"), lua_text_module("edited")).unwrap();
+
+        let names = reloads(&rx);
+        assert!(names.contains(&"mine".to_owned()), "{names:?}");
+        assert!(names.contains(&"clock".to_owned()), "{names:?}");
+    }
+
+    #[test]
+    fn test_watching_ignores_removals_and_creations() {
+        let home = get_test_env();
+        write_user_module(&home, "gone.lua", &lua_text_module("gone"));
+        let user = home.home().as_path().join(".config/cranky/modules");
+        let (_watcher, rx) = watch(&home);
+
+        fs::remove_file(user.join("gone.lua")).unwrap();
+        // Created but never written: a create event, no modification.
+        fs::File::create(user.join("touched.lua")).unwrap();
+        write_user_module(&home, "kept.lua", &lua_text_module("kept"));
+
+        let names = reloads(&rx);
+        assert!(names.iter().all(|name| name == "kept"), "{names:?}");
+        assert_ne!(names, Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_watching_starts_even_when_no_module_directory_exists() {
+        let home = get_test_env();
+        // `watch` fails the test when `watch_scripts` returns an error.
+        let _started = watch(&home);
+    }
+
     /// Issue #9, end to end on the shipped assets: the calendar laid out at
     /// the 280px host its embedder resolved, for both script engines.
     #[test]
