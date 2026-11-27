@@ -819,6 +819,10 @@ impl<
     }
 }
 
+// Each tracing macro adds to the cognitive complexity of the function that calls it, so the
+// handlers log through these wrappers. They stay in this file so that every event keeps the
+// `cranky::app::state` target.
+
 /// Logs that a floating surface is about to be shown, with where and how.
 fn log_show_requested(floating: &ShowFloating) {
     tracing::debug!(
