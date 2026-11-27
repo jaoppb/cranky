@@ -356,6 +356,16 @@ mod tests {
         assert_eq!(pixel_at(&data, width, (8, 8)), [255, 0, 0, 128]);
     }
 
+    /// Un-premultiplying rounds to nearest: mid grey at half opacity is stored as 64 over 128,
+    /// which comes back as 128, where truncating would give 127.
+    #[test]
+    fn test_svg_icon_unpremultiplies_to_the_nearest_value() {
+        let (width, _, data) = load_svg_icon(
+            r##"<svg width="10" height="10"><rect width="10" height="10" fill="#808080" fill-opacity="0.5"/></svg>"##,
+        );
+        assert_eq!(pixel_at(&data, width, (8, 8)), [128, 128, 128, 128]);
+    }
+
     /// A wide SVG is scaled to fit the square and centred vertically, leaving transparent
     /// bands above and below.
     #[test]
