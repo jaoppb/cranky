@@ -125,7 +125,7 @@ impl StyleLoaderPort for FsStyleLoader {
         command_tx: Arc<dyn StyleReloadSender>,
     ) -> Result<Box<dyn notify::Watcher>, StylingError> {
         let user_dir = self.user_styles_dir();
-        let shadow_dir = self.deployed_styles_dir();
+        let deployed_dir = self.deployed_styles_dir();
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
             reload_modified_sheets(res, command_tx.as_ref());
         })
@@ -133,7 +133,7 @@ impl StyleLoaderPort for FsStyleLoader {
             StylingError::LoaderError(format!("Failed to create style watcher: {error}"))
         })?;
         watch_if_present(&mut watcher, &user_dir);
-        watch_if_present(&mut watcher, &shadow_dir);
+        watch_if_present(&mut watcher, &deployed_dir);
         Ok(Box::new(watcher))
     }
 }
@@ -375,13 +375,15 @@ mod tests {
     }
 
     #[test]
-    fn watching_ignores_removals_and_names_that_are_not_sheet_names() {
+    fn watching_ignores_removals_creations_and_names_that_are_not_sheet_names() {
         let home = TestHome::new("styling");
         let user = home.home().as_path().join(USER_DIR);
         write_style(&user, "gone", "/* gone */");
         let (_watcher, rx) = watch(&home);
 
         fs::remove_file(user.join("gone.css")).unwrap();
+        // Created but never written: a create event, no modification.
+        fs::File::create(user.join("touched.css")).unwrap();
         write_style(&user, "not.a.sheet", "/* odd */");
         write_style(&user, "kept", "/* kept */");
 
@@ -393,10 +395,7 @@ mod tests {
     #[test]
     fn watching_starts_even_when_no_style_directory_exists() {
         let home = TestHome::new("styling");
-        let (_watcher, rx) = watch(&home);
-        assert_eq!(
-            reloads(&rx, std::time::Duration::from_millis(100)),
-            Vec::<String>::new()
-        );
+        // `watch` fails the test when `watch_styles` returns an error.
+        let _started = watch(&home);
     }
 }

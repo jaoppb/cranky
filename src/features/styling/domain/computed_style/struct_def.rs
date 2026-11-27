@@ -86,75 +86,79 @@ impl ComputedStyle {
 
     /// Merges the colors, the font and text alignment, and the border.
     fn merge_text_and_border(&mut self, other: &Self) {
-        take_if_set(&mut self.background, other.background.as_ref());
-        take_if_set(&mut self.color, other.color.as_ref());
-        take_if_set(&mut self.accent_color, other.accent_color.as_ref());
-        take_if_set(&mut self.font_family, other.font_family.as_ref());
-        take_if_set(&mut self.font_size, other.font_size.as_ref());
-        take_if_set(&mut self.text_align, other.text_align.as_ref());
-        take_if_set(&mut self.border_size, other.border_size.as_ref());
-        take_if_set(&mut self.border_color, other.border_color.as_ref());
-        take_if_set(&mut self.border_radius, other.border_radius.as_ref());
+        override_if_set(&mut self.background, other.background.as_ref());
+        override_if_set(&mut self.color, other.color.as_ref());
+        override_if_set(&mut self.accent_color, other.accent_color.as_ref());
+        override_if_set(&mut self.font_family, other.font_family.as_ref());
+        override_if_set(&mut self.font_size, other.font_size.as_ref());
+        override_if_set(&mut self.text_align, other.text_align.as_ref());
+        override_if_set(&mut self.border_size, other.border_size.as_ref());
+        override_if_set(&mut self.border_color, other.border_color.as_ref());
+        override_if_set(&mut self.border_radius, other.border_radius.as_ref());
     }
 
     /// Merges the width and height with their bounds, the padding and margin, and the gaps.
     fn merge_sizes_and_spacing(&mut self, other: &Self) {
-        take_if_set(&mut self.width, other.width.as_ref());
-        take_if_set(&mut self.height, other.height.as_ref());
-        take_if_set(&mut self.min_width, other.min_width.as_ref());
-        take_if_set(&mut self.min_height, other.min_height.as_ref());
-        take_if_set(&mut self.max_width, other.max_width.as_ref());
-        take_if_set(&mut self.max_height, other.max_height.as_ref());
-        take_if_set(&mut self.padding, other.padding.as_ref());
-        take_if_set(&mut self.margin, other.margin.as_ref());
-        take_if_set(&mut self.gap, other.gap.as_ref());
-        take_if_set(&mut self.column_gap, other.column_gap.as_ref());
-        take_if_set(&mut self.row_gap, other.row_gap.as_ref());
+        override_if_set(&mut self.width, other.width.as_ref());
+        override_if_set(&mut self.height, other.height.as_ref());
+        override_if_set(&mut self.min_width, other.min_width.as_ref());
+        override_if_set(&mut self.min_height, other.min_height.as_ref());
+        override_if_set(&mut self.max_width, other.max_width.as_ref());
+        override_if_set(&mut self.max_height, other.max_height.as_ref());
+        override_if_set(&mut self.padding, other.padding.as_ref());
+        override_if_set(&mut self.margin, other.margin.as_ref());
+        override_if_set(&mut self.gap, other.gap.as_ref());
+        override_if_set(&mut self.column_gap, other.column_gap.as_ref());
+        override_if_set(&mut self.row_gap, other.row_gap.as_ref());
     }
 
     /// Merges how the element lays out its children: display, flex direction, alignment, grid.
     fn merge_container_layout(&mut self, other: &Self) {
-        take_if_set(&mut self.display, other.display.as_ref());
-        take_if_set(&mut self.flex_direction, other.flex_direction.as_ref());
-        take_if_set(&mut self.justify_content, other.justify_content.as_ref());
-        take_if_set(&mut self.align_items, other.align_items.as_ref());
-        take_if_set(&mut self.justify_items, other.justify_items.as_ref());
-        take_if_set(&mut self.justify_self, other.justify_self.as_ref());
-        take_if_set(&mut self.align_content, other.align_content.as_ref());
-        take_if_set(
+        override_if_set(&mut self.display, other.display.as_ref());
+        override_if_set(&mut self.flex_direction, other.flex_direction.as_ref());
+        override_if_set(&mut self.justify_content, other.justify_content.as_ref());
+        override_if_set(&mut self.align_items, other.align_items.as_ref());
+        override_if_set(&mut self.justify_items, other.justify_items.as_ref());
+        override_if_set(&mut self.justify_self, other.justify_self.as_ref());
+        override_if_set(&mut self.align_content, other.align_content.as_ref());
+        override_if_set(
             &mut self.grid_template_columns,
             other.grid_template_columns.as_ref(),
         );
-        take_if_set(
+        override_if_set(
             &mut self.grid_template_rows,
             other.grid_template_rows.as_ref(),
         );
-        take_if_set(
+        override_if_set(
             &mut self.grid_auto_columns,
             other.grid_auto_columns.as_ref(),
         );
-        take_if_set(&mut self.grid_auto_rows, other.grid_auto_rows.as_ref());
-        take_if_set(&mut self.grid_auto_flow, other.grid_auto_flow.as_ref());
-        take_if_set(&mut self.grid_column, other.grid_column.as_ref());
-        take_if_set(&mut self.grid_row, other.grid_row.as_ref());
+        override_if_set(&mut self.grid_auto_rows, other.grid_auto_rows.as_ref());
+        override_if_set(&mut self.grid_auto_flow, other.grid_auto_flow.as_ref());
+        override_if_set(&mut self.grid_column, other.grid_column.as_ref());
+        override_if_set(&mut self.grid_row, other.grid_row.as_ref());
     }
 
     /// Merges the positioning, the opacity, and how the element sizes and aligns as a flex item.
     fn merge_position_opacity_and_flex_item(&mut self, other: &Self) {
-        take_if_set(&mut self.position, other.position.as_ref());
-        take_if_set(&mut self.opacity, other.opacity.as_ref());
-        take_if_set(&mut self.flex_grow, other.flex_grow.as_ref());
-        take_if_set(&mut self.flex_shrink, other.flex_shrink.as_ref());
-        take_if_set(&mut self.flex_basis, other.flex_basis.as_ref());
-        take_if_set(&mut self.align_self, other.align_self.as_ref());
+        override_if_set(&mut self.position, other.position.as_ref());
+        override_if_set(&mut self.opacity, other.opacity.as_ref());
+        override_if_set(&mut self.flex_grow, other.flex_grow.as_ref());
+        override_if_set(&mut self.flex_shrink, other.flex_shrink.as_ref());
+        override_if_set(&mut self.flex_basis, other.flex_basis.as_ref());
+        override_if_set(&mut self.align_self, other.align_self.as_ref());
     }
 }
 
 /// Replaces `target` with `later` when `later` is set, so a later rule's declaration wins and a
-/// property it leaves out keeps the earlier value.
-fn take_if_set<T: Clone>(target: &mut Option<T>, later: Option<&T>) {
-    if let Some(value) = later {
-        *target = Some(value.clone());
+/// property it leaves out keeps the earlier value; `clone_from` reuses `target`'s buffers.
+fn override_if_set<T: Clone>(target: &mut Option<T>, later: Option<&T>) {
+    let Some(value) = later else {
+        return;
+    };
+    match target {
+        Some(current) => current.clone_from(value),
+        None => *target = Some(value.clone()),
     }
 }
 

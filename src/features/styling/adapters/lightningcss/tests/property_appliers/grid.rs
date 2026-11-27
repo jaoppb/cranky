@@ -68,6 +68,8 @@ fn each_track_property_is_handled_into_its_own_field() {
 fn grid_auto_flow_maps_dense_only_when_spelled_with_its_direction() {
     for (keyword, expected) in [
         ("dense", GridAutoFlow::Row),
+        // lightningcss writes this back as `column dense`, so it reaches the `column dense` arm;
+        // the applier's own `dense column` and `dense row` arms are unreachable through it.
         ("dense column", GridAutoFlow::ColumnDense),
         ("column dense", GridAutoFlow::ColumnDense),
         ("column", GridAutoFlow::Column),
