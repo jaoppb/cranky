@@ -1,5 +1,4 @@
 use super::StyledNode;
-#[cfg(test)]
 use crate::features::layout_engine::domain::popup::{StyledPanel, StyledPopup};
 use crate::features::styling::domain::ComputedStyle;
 use crate::features::vdom::domain::{NodeKey, NodePath};
@@ -61,7 +60,6 @@ impl StyledNode {
         }
     }
 
-    #[cfg(test)]
     #[must_use]
     pub(crate) fn tooltip(&self) -> Option<&Self> {
         match self {
@@ -75,7 +73,6 @@ impl StyledNode {
         }
     }
 
-    #[cfg(test)]
     #[must_use]
     pub(crate) const fn popup(&self) -> Option<&StyledPopup> {
         match self {
@@ -89,7 +86,6 @@ impl StyledNode {
         }
     }
 
-    #[cfg(test)]
     #[must_use]
     pub(crate) const fn panel(&self) -> Option<&StyledPanel> {
         match self {

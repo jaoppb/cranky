@@ -1,127 +1,165 @@
-use crate::features::layout_engine::domain::{RenderNode, StyledNode};
+use crate::features::layout_engine::domain::{RenderNode, StyledNode, StyledPanel, StyledPopup};
+use crate::features::vdom::domain::{NodeKey, NodePath};
 use crate::shared::primitives::geometry::Rect;
 
-fn build_content_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
-    match node {
-        StyledNode::Text {
-            path,
-            node_key,
-            text,
-            style,
-            on_click,
-            on_hover,
-            tooltip,
-            popup,
-            panel,
-        } => Some(RenderNode::Text {
-            path: path.clone(),
-            node_key: node_key.clone(),
-            rect,
-            text: text.clone(),
-            style: style.clone(),
-            on_click: on_click.clone(),
-            on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        StyledNode::Progress {
-            path,
-            node_key,
-            value,
-            orientation,
-            style,
-            on_click,
-            on_hover,
-            tooltip,
-            popup,
-            panel,
-        } => Some(RenderNode::Progress {
-            path: path.clone(),
-            node_key: node_key.clone(),
-            rect,
-            value: *value,
-            orientation: *orientation,
-            style: style.clone(),
-            on_click: on_click.clone(),
-            on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        _ => None,
+/// What every laid-out node carries over unchanged from its styled node, whatever its kind: its
+/// identity and the floating content it opens.
+pub(super) struct Carried {
+    pub(super) path: NodePath,
+    pub(super) node_key: Option<NodeKey>,
+    pub(super) tooltip: Option<Box<StyledNode>>,
+    pub(super) popup: Option<StyledPopup>,
+    pub(super) panel: Option<StyledPanel>,
+}
+
+impl Carried {
+    /// Clones what `node` carries over.
+    pub(super) fn from_node(node: &StyledNode) -> Self {
+        Self {
+            path: node.path().clone(),
+            node_key: node.node_key().cloned(),
+            tooltip: node.tooltip().cloned().map(Box::new),
+            popup: node.popup().cloned(),
+            panel: node.panel().cloned(),
+        }
     }
 }
 
-fn build_atomic_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
-    match node {
-        StyledNode::Rect {
-            path,
-            node_key,
-            style,
-            on_click,
-            on_hover,
-            tooltip,
-            popup,
-            panel,
-        } => Some(RenderNode::Rect {
-            path: path.clone(),
-            node_key: node_key.clone(),
-            rect,
-            style: style.clone(),
-            on_click: on_click.clone(),
-            on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        StyledNode::Image {
-            path,
-            node_key,
-            data,
-            pixel_size,
-            tooltip,
-            popup,
-            panel,
-            ..
-        } => Some(RenderNode::Image {
-            path: path.clone(),
-            node_key: node_key.clone(),
-            rect,
-            data: data.clone(),
-            pixel_size: *pixel_size,
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        StyledNode::Module {
-            path,
-            node_key,
-            key,
-            options,
-            style,
-            on_click,
-            on_hover,
-            tooltip,
-            popup,
-            panel,
-        } => Some(RenderNode::Module {
-            path: path.clone(),
-            node_key: node_key.clone(),
-            rect,
-            key: key.clone(),
-            options: options.clone(),
-            style: style.clone(),
-            on_click: on_click.clone(),
-            on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        _ => None,
-    }
+/// `node` laid out at `rect` when it is text.
+fn text_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
+    let StyledNode::Text {
+        text,
+        style,
+        on_click,
+        on_hover,
+        ..
+    } = node
+    else {
+        return None;
+    };
+    let carried = Carried::from_node(node);
+    Some(RenderNode::Text {
+        path: carried.path,
+        node_key: carried.node_key,
+        rect,
+        text: text.clone(),
+        style: style.clone(),
+        on_click: on_click.clone(),
+        on_hover: on_hover.clone(),
+        tooltip: carried.tooltip,
+        popup: carried.popup,
+        panel: carried.panel,
+    })
+}
+
+/// `node` laid out at `rect` when it is a progress bar.
+fn progress_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
+    let StyledNode::Progress {
+        value,
+        orientation,
+        style,
+        on_click,
+        on_hover,
+        ..
+    } = node
+    else {
+        return None;
+    };
+    let carried = Carried::from_node(node);
+    Some(RenderNode::Progress {
+        path: carried.path,
+        node_key: carried.node_key,
+        rect,
+        value: *value,
+        orientation: *orientation,
+        style: style.clone(),
+        on_click: on_click.clone(),
+        on_hover: on_hover.clone(),
+        tooltip: carried.tooltip,
+        popup: carried.popup,
+        panel: carried.panel,
+    })
+}
+
+/// `node` laid out at `rect` when it is a rect.
+fn rect_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
+    let StyledNode::Rect {
+        style,
+        on_click,
+        on_hover,
+        ..
+    } = node
+    else {
+        return None;
+    };
+    let carried = Carried::from_node(node);
+    Some(RenderNode::Rect {
+        path: carried.path,
+        node_key: carried.node_key,
+        rect,
+        style: style.clone(),
+        on_click: on_click.clone(),
+        on_hover: on_hover.clone(),
+        tooltip: carried.tooltip,
+        popup: carried.popup,
+        panel: carried.panel,
+    })
+}
+
+/// `node` laid out at `rect` when it is an image.
+fn image_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
+    let StyledNode::Image {
+        data, pixel_size, ..
+    } = node
+    else {
+        return None;
+    };
+    let carried = Carried::from_node(node);
+    Some(RenderNode::Image {
+        path: carried.path,
+        node_key: carried.node_key,
+        rect,
+        data: data.clone(),
+        pixel_size: *pixel_size,
+        tooltip: carried.tooltip,
+        popup: carried.popup,
+        panel: carried.panel,
+    })
+}
+
+/// `node` laid out at `rect` when it embeds a module.
+fn module_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
+    let StyledNode::Module {
+        key,
+        options,
+        style,
+        on_click,
+        on_hover,
+        ..
+    } = node
+    else {
+        return None;
+    };
+    let carried = Carried::from_node(node);
+    Some(RenderNode::Module {
+        path: carried.path,
+        node_key: carried.node_key,
+        rect,
+        key: key.clone(),
+        options: options.clone(),
+        style: style.clone(),
+        on_click: on_click.clone(),
+        on_hover: on_hover.clone(),
+        tooltip: carried.tooltip,
+        popup: carried.popup,
+        panel: carried.panel,
+    })
 }
 
 pub(super) fn build_leaf_render_node(node: &StyledNode, rect: Rect) -> Option<RenderNode> {
-    build_content_node(node, rect).or_else(|| build_atomic_node(node, rect))
+    text_node(node, rect)
+        .or_else(|| progress_node(node, rect))
+        .or_else(|| rect_node(node, rect))
+        .or_else(|| image_node(node, rect))
+        .or_else(|| module_node(node, rect))
 }

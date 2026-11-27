@@ -3,7 +3,7 @@ use crate::shared::primitives::geometry::{Position, Rect, Size};
 use taffy::TaffyTree;
 use taffy::tree::NodeId;
 
-use super::render_leaf_builder::build_leaf_render_node;
+use super::render_leaf_builder::{Carried, build_leaf_render_node};
 use crate::utils::{f32_to_i32, f32_to_u32};
 
 /// One node of a computed taffy tree: the tree, and the id of the node in it.
@@ -44,72 +44,97 @@ pub(super) fn build_render_tree(
     node: &StyledNode,
     offset: Position,
 ) -> Result<RenderNode, LayoutError> {
+    let rect = laid_out_rect(laid_out, offset)?;
+    if let Some(leaf) = build_leaf_render_node(node, rect) {
+        return Ok(leaf);
+    }
+    container_node(laid_out, node, rect)
+}
+
+/// The box taffy laid `laid_out` out in, moved by `offset`.
+fn laid_out_rect(laid_out: TaffyNode<'_>, offset: Position) -> Result<Rect, LayoutError> {
     let layout = laid_out
         .tree
         .layout(laid_out.id)
         .map_err(|error| LayoutError::EngineError(error.to_string()))?;
-
     let abs_x = offset.x().saturating_add(f32_to_i32(layout.location.x));
     let abs_y = offset.y().saturating_add(f32_to_i32(layout.location.y));
-    let rect = Rect::new(
+    Ok(Rect::new(
         Position::new(abs_x, abs_y),
         Size::new(
             f32_to_u32(layout.size.width),
             f32_to_u32(layout.size.height),
         ),
-    );
+    ))
+}
 
-    if let Some(leaf) = build_leaf_render_node(node, rect) {
-        return Ok(leaf);
+/// `node` laid out at `rect` with its children, which are placed from `rect`'s position; an
+/// error when `node` is not a flex or grid container.
+fn container_node(
+    laid_out: TaffyNode<'_>,
+    node: &StyledNode,
+    rect: Rect,
+) -> Result<RenderNode, LayoutError> {
+    let unexpected = || LayoutError::EngineError("Unexpected container node".to_string());
+    if !matches!(node, StyledNode::Flex { .. } | StyledNode::Grid { .. }) {
+        return Err(unexpected());
     }
-
+    let children = build_children(laid_out, node.children(), Position::new(rect.x(), rect.y()))?;
     match node {
-        StyledNode::Flex {
-            path,
-            node_key,
-            children,
-            style,
-            on_click,
-            on_hover,
-            tooltip,
-            popup,
-            panel,
-        } => Ok(RenderNode::Flex {
-            path: path.clone(),
-            node_key: node_key.clone(),
-            rect,
-            children: build_children(laid_out, children, Position::new(abs_x, abs_y))?,
-            style: style.clone(),
-            on_click: on_click.clone(),
-            on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        StyledNode::Grid {
-            path,
-            node_key,
-            children,
-            style,
-            on_click,
-            on_hover,
-            tooltip,
-            popup,
-            panel,
-        } => Ok(RenderNode::Grid {
-            path: path.clone(),
-            node_key: node_key.clone(),
-            rect,
-            children: build_children(laid_out, children, Position::new(abs_x, abs_y))?,
-            style: style.clone(),
-            on_click: on_click.clone(),
-            on_hover: on_hover.clone(),
-            tooltip: tooltip.clone(),
-            popup: popup.clone(),
-            panel: panel.clone(),
-        }),
-        _ => Err(LayoutError::EngineError(
-            "Unexpected container node".to_string(),
-        )),
+        StyledNode::Flex { .. } => flex_node(node, rect, children),
+        _ => grid_node(node, rect, children),
     }
+    .ok_or_else(unexpected)
+}
+
+/// `node` laid out at `rect` over `children` when it is a flex container.
+fn flex_node(node: &StyledNode, rect: Rect, children: Vec<RenderNode>) -> Option<RenderNode> {
+    let StyledNode::Flex {
+        style,
+        on_click,
+        on_hover,
+        ..
+    } = node
+    else {
+        return None;
+    };
+    let carried = Carried::from_node(node);
+    Some(RenderNode::Flex {
+        path: carried.path,
+        node_key: carried.node_key,
+        rect,
+        children,
+        style: style.clone(),
+        on_click: on_click.clone(),
+        on_hover: on_hover.clone(),
+        tooltip: carried.tooltip,
+        popup: carried.popup,
+        panel: carried.panel,
+    })
+}
+
+/// `node` laid out at `rect` over `children` when it is a grid container.
+fn grid_node(node: &StyledNode, rect: Rect, children: Vec<RenderNode>) -> Option<RenderNode> {
+    let StyledNode::Grid {
+        style,
+        on_click,
+        on_hover,
+        ..
+    } = node
+    else {
+        return None;
+    };
+    let carried = Carried::from_node(node);
+    Some(RenderNode::Grid {
+        path: carried.path,
+        node_key: carried.node_key,
+        rect,
+        children,
+        style: style.clone(),
+        on_click: on_click.clone(),
+        on_hover: on_hover.clone(),
+        tooltip: carried.tooltip,
+        popup: carried.popup,
+        panel: carried.panel,
+    })
 }
