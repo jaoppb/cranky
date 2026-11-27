@@ -10,6 +10,8 @@ mod property_color_font;
 mod property_flex;
 mod property_grid_container;
 mod property_grid_item;
+mod rule_entries;
+mod selector_compilation;
 mod selectors;
 mod text_align;
 mod vdom_bridge;

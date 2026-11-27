@@ -279,4 +279,140 @@ mod tests {
             assert_eq!(on_disk, *content, "{name}");
         }
     }
+
+    #[test]
+    fn ensure_builtin_styles_leaves_up_to_date_copies_untouched() {
+        let home = TestHome::new("styling");
+        let loader = FsStyleLoader::new(home.env());
+        loader.ensure_builtin_styles().unwrap();
+        let base = home.home().as_path().join(SHARE_DIR).join("base.css");
+        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000);
+        fs::File::options()
+            .write(true)
+            .open(&base)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+
+        loader.ensure_builtin_styles().unwrap();
+
+        assert_eq!(fs::metadata(&base).unwrap().modified().unwrap(), old);
+    }
+
+    #[test]
+    fn ensure_builtin_styles_skips_a_copy_it_cannot_write_and_deploys_the_rest() {
+        let home = TestHome::new("styling");
+        let deployed = home.home().as_path().join(SHARE_DIR);
+        fs::create_dir_all(deployed.join("base.css")).unwrap();
+
+        assert!(
+            FsStyleLoader::new(home.env())
+                .ensure_builtin_styles()
+                .is_ok()
+        );
+
+        assert!(deployed.join("base.css").is_dir());
+        let mpris = fs::read_to_string(deployed.join("mpris.css")).unwrap();
+        assert_eq!(
+            Some(mpris.as_str()),
+            FsStyleLoader::builtin_content("mpris")
+        );
+    }
+
+    #[test]
+    fn ensure_builtin_styles_reports_a_directory_it_cannot_create() {
+        let home = TestHome::new("styling");
+        let share = home.home().as_path().join(".local/share");
+        fs::create_dir_all(&share).unwrap();
+        fs::write(share.join("cranky"), "not a directory").unwrap();
+
+        assert!(matches!(
+            FsStyleLoader::new(home.env()).ensure_builtin_styles(),
+            Err(StylingError::LoaderError(_))
+        ));
+    }
+
+    #[test]
+    fn deployed_stylesheet_wins_over_the_embedded_one() {
+        let home = TestHome::new("styling");
+        write_style(&home.home().as_path().join(SHARE_DIR), "bar", "/* share */");
+        assert_eq!(load(&home, "bar").unwrap(), "/* share */");
+        assert_eq!(
+            load(&home, "clock").unwrap(),
+            FsStyleLoader::builtin_content("clock").unwrap()
+        );
+    }
+
+    /// Starts watching `home`'s style directories, returning the watcher and the sheet names
+    /// it asks to reload.
+    fn watch(
+        home: &TestHome,
+    ) -> (
+        Box<dyn notify::Watcher>,
+        std::sync::mpsc::Receiver<StyleSheetName>,
+    ) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let sender = move |name: StyleSheetName| {
+            let _ = tx.send(name);
+        };
+        let watcher = FsStyleLoader::new(home.env())
+            .watch_styles(Arc::new(sender))
+            .unwrap();
+        (watcher, rx)
+    }
+
+    /// Every sheet name received until none arrives for `wait`, in order.
+    fn reloads(
+        rx: &std::sync::mpsc::Receiver<StyleSheetName>,
+        wait: std::time::Duration,
+    ) -> Vec<String> {
+        let mut names = Vec::new();
+        while let Ok(name) = rx.recv_timeout(wait) {
+            names.push(name.as_str().to_owned());
+        }
+        names
+    }
+
+    #[test]
+    fn watching_reloads_a_sheet_modified_in_either_style_directory() {
+        let home = TestHome::new("styling");
+        let user = home.home().as_path().join(USER_DIR);
+        let share = home.home().as_path().join(SHARE_DIR);
+        fs::create_dir_all(&user).unwrap();
+        fs::create_dir_all(&share).unwrap();
+        let (_watcher, rx) = watch(&home);
+
+        write_style(&user, "clock", "/* user */");
+        write_style(&share, "metrics", "/* share */");
+
+        let names = reloads(&rx, std::time::Duration::from_secs(2));
+        assert!(names.contains(&"clock".to_owned()), "{names:?}");
+        assert!(names.contains(&"metrics".to_owned()), "{names:?}");
+    }
+
+    #[test]
+    fn watching_ignores_removals_and_names_that_are_not_sheet_names() {
+        let home = TestHome::new("styling");
+        let user = home.home().as_path().join(USER_DIR);
+        write_style(&user, "gone", "/* gone */");
+        let (_watcher, rx) = watch(&home);
+
+        fs::remove_file(user.join("gone.css")).unwrap();
+        write_style(&user, "not.a.sheet", "/* odd */");
+        write_style(&user, "kept", "/* kept */");
+
+        let names = reloads(&rx, std::time::Duration::from_secs(2));
+        assert!(names.iter().all(|name| name == "kept"), "{names:?}");
+        assert_ne!(names, Vec::<String>::new());
+    }
+
+    #[test]
+    fn watching_starts_even_when_no_style_directory_exists() {
+        let home = TestHome::new("styling");
+        let (_watcher, rx) = watch(&home);
+        assert_eq!(
+            reloads(&rx, std::time::Duration::from_millis(100)),
+            Vec::<String>::new()
+        );
+    }
 }
