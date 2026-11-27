@@ -19,7 +19,7 @@ impl<
 {
     /// Handles one interaction on `monitor_id` and tells whether the module must be rendered
     /// again.
-    pub(crate) fn handle_interaction(
+    pub(super) fn handle_interaction(
         &mut self,
         monitor_id: &MonitorId,
         interaction: InteractionEvent,
@@ -34,7 +34,7 @@ impl<
         }
     }
 
-    pub(crate) fn handle_pointer_event(
+    pub(super) fn handle_pointer_event(
         &mut self,
         monitor_id: &MonitorId,
         event: &PointerEvent,
@@ -47,7 +47,7 @@ impl<
             "Received pointer event in module actor"
         );
 
-        let Some(outcome) = self.hit_test(monitor_id, event) else {
+        let Some(outcome) = self.pointer_outcome(monitor_id, event) else {
             log_no_render_tree(ctx_id, monitor_id);
             return false;
         };
@@ -56,7 +56,11 @@ impl<
 
     /// Handles `event` against the tree of the surface it happened on, on `monitor_id`; `None`
     /// when that surface has no tree there.
-    fn hit_test(&mut self, monitor_id: &MonitorId, event: &PointerEvent) -> Option<PointerOutcome> {
+    fn pointer_outcome(
+        &mut self,
+        monitor_id: &MonitorId,
+        event: &PointerEvent,
+    ) -> Option<PointerOutcome> {
         let render_tree = match event.surface() {
             SurfaceKind::Bar => self.render_pipeline.render_trees().get(monitor_id),
             SurfaceKind::Popup => self
@@ -72,7 +76,7 @@ impl<
         Some(self.pointer_handler.handle_event(event, target))
     }
 
-    pub(crate) fn handle_lifecycle_event(
+    pub(super) fn handle_lifecycle_event(
         &mut self,
         monitor_id: &MonitorId,
         event: SurfaceLifecycleEvent,
