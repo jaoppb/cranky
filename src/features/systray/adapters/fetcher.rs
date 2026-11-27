@@ -246,7 +246,9 @@ mod tests {
 
     #[test]
     fn test_parse_window_id_drops_an_i32() {
-        // The first attempt already took the property, so the i32 fallback never sees it.
+        // Known bug, kept by this behaviour-preserving refactor and left for a follow-up fix: the
+        // first attempt already took the property, so the i32 fallback never sees it and an
+        // i32 `WindowId` is lost.
         let mut all_props = props([("WindowId", Variant::from(7_i32))]);
         assert_eq!(parse_window_id(&mut all_props), None);
         assert!(all_props.is_empty());
@@ -265,11 +267,11 @@ mod tests {
         let mut all_props = props([("Menu", Variant::from(path))]);
         let parsed = parse_menu_path(&mut all_props);
         assert!(all_props.is_empty());
-        assert_eq!(parsed, OBJECT_PATH_MENU);
+        // Known bug, kept by this behaviour-preserving refactor and left for a follow-up fix: the
+        // string conversion takes the property first, so the object-path fallback never sees it
+        // and a `Menu` sent as an object path is lost.
+        assert_eq!(parsed, None);
     }
-
-    /// What an object-path `Menu` parses to: the string conversion is tried first.
-    const OBJECT_PATH_MENU: Option<String> = None;
 
     /// The three icons `resolve_all_icons` returns.
     type Icons = (

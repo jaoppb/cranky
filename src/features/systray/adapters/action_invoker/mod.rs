@@ -168,12 +168,16 @@ pub(super) async fn invoke_action(
 #[cfg(test)]
 mod tests {
     use super::{ItemCall, ItemMethods, invoke_action};
+    use crate::features::module_runtime::test_support::capture_logs;
     use crate::features::systray::domain::{
         CreateSystrayItemCommand, Destination, ItemIsMenu, ObjectPath, SystrayActionCall,
         SystrayActionName, SystrayAddress, SystrayId, SystrayItem, SystrayItemParams, Title,
     };
     use crate::shared::primitives::geometry::Position;
     use std::sync::Mutex;
+
+    /// The target every line of the invoker is logged under.
+    const TARGET: &str = "cranky::features::systray::adapters::action_invoker";
 
     /// An item that records every call it receives and rejects the methods it is told to.
     struct FakeItem {
@@ -198,6 +202,15 @@ mod tests {
     /// The calls an item with `item_is_menu`, rejecting the `rejects` methods, receives when
     /// `trigger` fires.
     fn calls(trigger: Trigger, item_is_menu: ItemIsMenu, rejects: &[&'static str]) -> Vec<String> {
+        calls_and_logs(trigger, item_is_menu, rejects).0
+    }
+
+    /// The calls, as `calls` returns them, and the lines logged while they were made.
+    fn calls_and_logs(
+        trigger: Trigger,
+        item_is_menu: ItemIsMenu,
+        rejects: &[&'static str],
+    ) -> (Vec<String>, String) {
         let fake = FakeItem {
             rejects: rejects.to_vec(),
             calls: Mutex::new(Vec::new()),
@@ -212,8 +225,10 @@ mod tests {
         ));
         let Trigger(name, position) = trigger;
         let call = SystrayActionCall::new(name, position);
-        crate::test_utils::block_on(invoke_action(&fake, &item, &call));
-        fake.calls.into_inner().unwrap()
+        let logs = capture_logs(|| {
+            crate::test_utils::block_on(invoke_action(&fake, &item, &call));
+        });
+        (fake.calls.into_inner().unwrap(), logs)
     }
 
     /// The calls a plain (activatable) item receives for `name` at (3, 4).
@@ -300,5 +315,39 @@ mod tests {
     fn test_invoke_action_ignores_an_unrecognized_action() {
         let name = SystrayActionName::Other("Bogus".to_string());
         assert_eq!(plain(name, &[]), Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_invoke_action_logs_a_context_menu_whose_fallbacks_all_failed() {
+        let trigger = Trigger(SystrayActionName::ContextMenu, Some(Position::new(3, 4)));
+        let rejects = ["ContextMenu", "SecondaryActivate", "Activate"];
+        let (_, logs) = calls_and_logs(trigger, ItemIsMenu::Activatable, &rejects);
+        assert_eq!(
+            logs,
+            format!(
+                "DEBUG {TARGET}: trigger_action: Calling ContextMenu(3, 4) on D-Bus\n \
+                 WARN {TARGET}: trigger_action: ContextMenu(3, 4) failed: ContextMenu rejected, \
+                 attempting SecondaryActivate(3, 4)\n\
+                 ERROR {TARGET}: trigger_action: ContextMenu(3, 4) failed: ContextMenu rejected \
+                 (fallback SecondaryActivate: SecondaryActivate rejected, Activate: Activate \
+                 rejected)\n"
+            )
+        );
+    }
+
+    #[test]
+    fn test_invoke_action_logs_a_primary_falling_back_to_secondary_activate() {
+        let trigger = Trigger(SystrayActionName::Primary, Some(Position::new(3, 4)));
+        let (_, logs) = calls_and_logs(trigger, ItemIsMenu::Activatable, &["Activate"]);
+        assert_eq!(
+            logs,
+            format!(
+                "DEBUG {TARGET}: trigger_action: item_is_menu=false, calling Activate(3, 4) on \
+                 D-Bus\n \
+                 WARN {TARGET}: trigger_action: Activate(3, 4) failed: Activate rejected, \
+                 attempting SecondaryActivate(3, 4)\n\
+                 DEBUG {TARGET}: trigger_action: SecondaryActivate(3, 4) succeeded\n"
+            )
+        );
     }
 }

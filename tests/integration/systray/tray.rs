@@ -102,6 +102,25 @@ impl Tray {
         ensure_eq("call received by the item", &call, &expected)
     }
 
+    /// Each of `expected`, in order, must be the next method the tray
+    /// called, and no other call may follow: `trigger` returns once the item
+    /// answered every call, so a call still to come would already be here.
+    pub(crate) async fn expect_only_calls(&mut self, expected: Vec<Call>) -> Outcome {
+        for call in expected {
+            self.expect_call(call).await?;
+        }
+        ensure_eq(
+            "call after the expected ones",
+            &self.item.pending_call(),
+            &None,
+        )
+    }
+
+    /// Makes the item reject each of `methods` from now on.
+    pub(crate) async fn reject(&self, methods: &[&'static str]) -> Outcome {
+        self.item.reject(methods).await
+    }
+
     /// Takes the item off the bus, as an application that quit, and waits
     /// until the tray no longer tracks it.
     pub(crate) async fn until_item_left(self) -> Outcome {

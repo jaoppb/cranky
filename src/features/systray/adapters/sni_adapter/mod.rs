@@ -176,3 +176,36 @@ fn log_unknown_item(id: &SystrayId, call: &SystrayActionCall) {
         call.name().as_str()
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SniAdapter;
+    use crate::features::module_runtime::test_support::capture_logs;
+    use crate::features::systray::domain::{SystrayActionCall, SystrayActionName, SystrayId};
+    use crate::features::systray::ports::SniPort;
+    use crate::shared::config::domain::Config;
+    use crate::shared::events::signals::SignalHub;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_trigger_action_logs_a_missing_connection_and_an_unknown_item() {
+        let adapter = SniAdapter::new(Arc::new(SignalHub::new(Config::default())));
+        let call = SystrayActionCall::new(SystrayActionName::Activate, None);
+        let logs = capture_logs(|| {
+            let id = SystrayId::new("ghost");
+            let result = crate::test_utils::block_on(adapter.trigger_action(&id, &call));
+            assert!(result.is_ok());
+        });
+        let span = "trigger_action{id=SystrayId(\"ghost\") action=Activate pos=None}";
+        let target = "cranky::features::systray::adapters::sni_adapter";
+        assert_eq!(
+            logs,
+            format!(
+                "ERROR {span}: {target}: trigger_action: No D-Bus connection available when \
+                 trying to trigger action 'Activate' on ghost\n\
+                 ERROR {span}: {target}: trigger_action: Systray item ID 'ghost' not found in \
+                 registry when trying to trigger action 'Activate'\n"
+            )
+        );
+    }
+}
