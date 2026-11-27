@@ -1,11 +1,20 @@
-use super::event_parser::parse_event;
-use super::hyprland_provider::HyprlandProvider;
-use super::inconsistency::find_state_inconsistencies;
-use crate::features::workspaces::ports::WindowManagerPort;
-use crate::shared::events::core::WindowManagerEvent;
+//! Follows Hyprland's event socket on a blocking thread: each batch of lines is applied to the
+//! state, a full resync runs when the batch asks for one or leaves the state inconsistent, and
+//! a changed state is published to the hub.
+//!
+//! Every log of the loop is written from this module, so they all keep its target.
+mod batch;
+mod resync;
+mod stream;
+
+use super::hyprland_provider::{HyprError, HyprlandProvider};
+use super::inconsistency::StateInconsistency;
+use crate::features::workspaces::ports::{WindowManagerError, WindowManagerPort};
 use crate::shared::events::signals::{HyprlandState, SignalHub};
-use std::io::{BufRead, ErrorKind};
 use std::sync::Arc;
+use std::time::Duration;
+use stream::process_event_stream;
+use tokio::sync::watch;
 
 /// Outcome of processing one raw event line, ordered from the least to the
 /// most a batch must do afterwards, so a batch's outcome is its lines' maximum.
@@ -27,151 +36,6 @@ struct EventBatch {
     outcome: LineOutcome,
 }
 
-fn process_line(
-    line: &str,
-    current_state: &mut HyprlandState,
-    batch_events: &mut Vec<String>,
-) -> LineOutcome {
-    let trimmed = line.trim();
-    if !trimmed.is_empty() {
-        tracing::trace!(event = trimmed, "Hyprland event received");
-        batch_events.push(trimmed.to_string());
-    }
-    let Some(event) = parse_event(line) else {
-        return LineOutcome::Ignored;
-    };
-    current_state.apply_event(&event);
-    if matches!(event, WindowManagerEvent::MonitorAdded { .. }) {
-        LineOutcome::AppliedNeedsResync
-    } else {
-        LineOutcome::Applied
-    }
-}
-
-fn drain_batch<R: BufRead>(
-    reader: &mut R,
-    line_buf: &mut String,
-    current_state: &mut HyprlandState,
-) -> EventBatch {
-    let mut batch_events = Vec::new();
-    let mut outcome = process_line(line_buf, current_state, &mut batch_events);
-    loop {
-        line_buf.clear();
-        match reader.read_line(line_buf) {
-            Ok(0) => break,
-            Ok(_) => {
-                outcome = outcome.max(process_line(line_buf, current_state, &mut batch_events));
-            }
-            Err(error)
-                if error.kind() == ErrorKind::WouldBlock || error.kind() == ErrorKind::TimedOut =>
-            {
-                break;
-            }
-            Err(_) => break,
-        }
-    }
-    EventBatch {
-        events: batch_events,
-        outcome,
-    }
-}
-
-fn check_and_resync<P: WindowManagerPort>(
-    adapter: &P,
-    current_state: &mut HyprlandState,
-    batch: &EventBatch,
-) {
-    let batch_events = &batch.events;
-    let inconsistencies = find_state_inconsistencies(current_state);
-    if batch.outcome == LineOutcome::AppliedNeedsResync || !inconsistencies.is_empty() {
-        if inconsistencies.is_empty() {
-            tracing::debug!(
-                batch_events = ?batch_events,
-                "Monitor added with no usable payload, forcing full resync"
-            );
-        } else {
-            tracing::warn!(
-                reasons = ?inconsistencies,
-                batch_events = ?batch_events,
-                "Hyprland state inconsistent after event batch, forcing full resync"
-            );
-        }
-        match adapter.get_state() {
-            Ok((workspaces, monitors, focused)) => {
-                *current_state = HyprlandState::new(workspaces, monitors, focused);
-            }
-            Err(error) => {
-                tracing::error!("Failed to resync Hyprland state after inconsistency: {error}");
-            }
-        }
-    }
-}
-
-fn fetch_initial_state<P: WindowManagerPort>(
-    adapter: &P,
-    hypr_tx: &tokio::sync::watch::Sender<HyprlandState>,
-) -> HyprlandState {
-    match adapter.get_state() {
-        Ok((workspaces, monitors, focused)) => {
-            let state = HyprlandState::new(workspaces, monitors, focused);
-            if *hypr_tx.borrow() != state {
-                let _ = hypr_tx.send(state.clone());
-            }
-            state
-        }
-        Err(error) => {
-            tracing::error!("Hyprland adapter error on initial fetch: {error}");
-            HyprlandState::new(
-                std::collections::BTreeMap::new(),
-                std::collections::BTreeMap::new(),
-                None,
-            )
-        }
-    }
-}
-
-fn process_event_stream<P: WindowManagerPort>(
-    stream: std::os::unix::net::UnixStream,
-    adapter: &P,
-    hypr_tx: &tokio::sync::watch::Sender<HyprlandState>,
-) {
-    let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(2)));
-    let mut reader = std::io::BufReader::new(stream);
-    let mut current_state = fetch_initial_state(adapter, hypr_tx);
-
-    let mut line = String::new();
-    loop {
-        line.clear();
-        let _ = reader.get_mut().set_read_timeout(None);
-
-        match reader.read_line(&mut line) {
-            Ok(0) => {
-                tracing::info!("Hyprland event socket closed, reconnecting...");
-                break;
-            }
-            Ok(_) => {
-                let _ = reader
-                    .get_mut()
-                    .set_read_timeout(Some(std::time::Duration::from_millis(2)));
-
-                let batch = drain_batch(&mut reader, &mut line, &mut current_state);
-                if batch.outcome == LineOutcome::Ignored {
-                    continue;
-                }
-
-                check_and_resync(adapter, &mut current_state, &batch);
-                if *hypr_tx.borrow() != current_state {
-                    let _ = hypr_tx.send(current_state.clone());
-                }
-            }
-            Err(error) => {
-                tracing::error!("Hyprland event socket read error: {error}");
-                break;
-            }
-        }
-    }
-}
-
 pub(super) async fn run_event_loop<P: WindowManagerPort + 'static>(
     adapter: P,
     provider: Arc<dyn HyprlandProvider>,
@@ -180,24 +44,80 @@ pub(super) async fn run_event_loop<P: WindowManagerPort + 'static>(
     tokio::task::spawn_blocking(move || {
         let hypr_tx = hub.hyprland_tx();
         loop {
-            match provider.listen_events() {
-                Ok(stream) => process_event_stream(stream, &adapter, &hypr_tx),
-                Err(error) => {
-                    tracing::error!("Failed to connect to Hyprland event socket: {error}");
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            follow_event_socket(provider.as_ref(), &adapter, &hypr_tx);
+            std::thread::sleep(Duration::from_secs(1));
         }
     });
 }
 
+/// Connects to the event socket and follows it until it ends, or logs why it could not connect.
+fn follow_event_socket<P: WindowManagerPort>(
+    provider: &dyn HyprlandProvider,
+    adapter: &P,
+    hypr_tx: &watch::Sender<HyprlandState>,
+) {
+    match provider.listen_events() {
+        Ok(stream) => process_event_stream(stream, adapter, hypr_tx),
+        Err(error) => log_connect_failed(&error),
+    }
+}
+
+/// Logs one raw event line as it arrives.
+fn log_event_received(event: &str) {
+    tracing::trace!(event, "Hyprland event received");
+}
+
+/// Logs a resync forced by a monitor added, on a state with no inconsistency.
+fn log_forced_resync(batch_events: &[String]) {
+    tracing::debug!(
+        batch_events = ?batch_events,
+        "Monitor added with no usable payload, forcing full resync"
+    );
+}
+
+/// Logs a resync forced by the inconsistencies a batch left.
+fn log_inconsistent_state(inconsistencies: &[StateInconsistency], batch_events: &[String]) {
+    tracing::warn!(
+        reasons = ?inconsistencies,
+        batch_events = ?batch_events,
+        "Hyprland state inconsistent after event batch, forcing full resync"
+    );
+}
+
+/// Logs a resync whose state query failed.
+fn log_resync_failed(error: &WindowManagerError) {
+    tracing::error!("Failed to resync Hyprland state after inconsistency: {error}");
+}
+
+/// Logs an initial state query that failed.
+fn log_initial_fetch_failed(error: &WindowManagerError) {
+    tracing::error!("Hyprland adapter error on initial fetch: {error}");
+}
+
+/// Logs the event socket closing.
+fn log_socket_closed() {
+    tracing::info!("Hyprland event socket closed, reconnecting...");
+}
+
+/// Logs a failed read on the event socket.
+fn log_read_failed(error: &std::io::Error) {
+    tracing::error!("Hyprland event socket read error: {error}");
+}
+
+/// Logs a failed connection to the event socket.
+fn log_connect_failed(error: &HyprError) {
+    tracing::error!("Failed to connect to Hyprland event socket: {error}");
+}
+
 #[cfg(test)]
 mod tests {
+    use super::batch::drain_batch;
+    use super::resync::{check_and_resync, fetch_initial_state};
     use super::*;
     use crate::features::workspaces::domain::{Monitor, MonitorName, WorkspaceId, WorkspaceName};
     use crate::features::workspaces::ports::{WindowManagerError, WindowManagerState};
     use std::collections::BTreeMap;
-    use std::io::Cursor;
+    use std::io::{Cursor, ErrorKind};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     /// A window manager that reports `state`, or an IPC error when it has
