@@ -22,10 +22,11 @@ max-struct-bools = 0
 # named after what it carries, and a function whose arguments show two jobs is
 # split.
 too-many-arguments-threshold = 3
-# Function length and complexity (`clippy::too_many_lines`,
-# `clippy::cognitive_complexity`, forbidden in `Cargo.toml`): no function body
-# runs past 25 lines or scores over 8, in tests too; a longer or more tangled
-# function is split into helpers named after the one job each does.
+# Function length and complexity (`clippy::too_many_lines`, denied with the
+# `pedantic` group, and `clippy::cognitive_complexity`, forbidden in
+# `Cargo.toml`): no function body runs past 25 lines or scores over 8, in tests
+# too; a longer or more tangled function is split into helpers named after the
+# one job each does.
 too-many-lines-threshold = 25
 cognitive-complexity-threshold = 8
 # Older versions that only a dependency can drop, for `clippy::multiple_crate_versions`.
