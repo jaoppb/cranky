@@ -25,7 +25,7 @@ enum Answer {
 /// What a `RecordingDisplay` was asked, in order.
 pub(super) type CallLog = Arc<Mutex<Vec<String>>>;
 
-/// A display server that writes down every floating-surface request, dispatch and render it
+/// A display server that writes down every floating-surface request, flush, dispatch and render it
 /// gets, in order. Its `wait_for_events` fails once the loop has been idle for `IDLE`, which
 /// ends `CrankyApp::run`; built `failing`, its floating-surface requests and its dispatch fail,
 /// and its `wait_for_events` wakes at once so that the dispatch is reached.
@@ -85,6 +85,7 @@ impl DisplayServerPort for RecordingDisplay {
     }
 
     fn flush(&mut self) -> Result<(), DisplayServerError> {
+        self.record("flush".to_string());
         Ok(())
     }
 

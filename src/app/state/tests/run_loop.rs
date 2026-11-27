@@ -116,8 +116,8 @@ fn test_run_routes_a_layout_event_to_the_read_model() {
     });
 }
 
-/// After the display wakes the loop, its pending events are dispatched, and a dispatch failure
-/// ends the loop with that error.
+/// Each turn of the loop flushes the display before waiting on it; after the display wakes the
+/// loop, its pending events are dispatched, and a dispatch failure ends the loop with that error.
 #[test]
 fn test_run_ends_with_the_error_of_a_failed_dispatch() {
     crate::test_utils::block_on(async {
@@ -130,6 +130,6 @@ fn test_run_ends_with_the_error_of_a_failed_dispatch() {
 
         let message = "Internal error: no compositor";
         assert!(matches!(result, Err(AppError::Internal { message: got }) if got == message));
-        assert_eq!(drain(&calls), ["dispatch"]);
+        assert_eq!(drain(&calls), ["flush", "dispatch"]);
     });
 }
