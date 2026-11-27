@@ -3,6 +3,13 @@ use super::support::{container, flex_children, keyed_text_child, lay_out, text_c
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
 use crate::features::layout_engine::domain::{RenderNode, StyledNode};
 use crate::features::module_runtime::test_support::capture_logs;
+use taffy::tree::NodeId;
+
+/// The taffy node of each child of the root `adapter` laid out last, in order.
+pub(super) fn child_node_ids(adapter: &TaffyLayoutAdapter) -> Vec<NodeId> {
+    let state = adapter.state.as_ref().expect("a layout ran");
+    state.children.iter().map(|child| child.root_node).collect()
+}
 
 /// Removing a middle keyed child must not disturb the taffy nodes of the
 /// siblings that come after it. Positional matching would diff
@@ -20,6 +27,9 @@ fn test_layout_keyed_children_removes_middle_without_touching_siblings() {
     ]);
     let first_children = flex_children(lay_out(&mut adapter, first));
     assert_eq!(first_children.len(), 3);
+    let [a_id, _, c_id] = child_node_ids(&adapter)[..] else {
+        panic!("three children");
+    };
 
     // Remove "b" — "a" and "c" keep their keys and content.
     let second = container(vec![
@@ -32,6 +42,8 @@ fn test_layout_keyed_children_removes_middle_without_touching_siblings() {
     // than by the old index each survivor used to occupy.
     assert_eq!(text_of(&second_children[0]), "a-content");
     assert_eq!(text_of(&second_children[1]), "c-content");
+    // Both survivors keep the taffy node they had.
+    assert_eq!(child_node_ids(&adapter), [a_id, c_id]);
 }
 
 /// A container reordering its keyed children (no insertions or
@@ -47,6 +59,9 @@ fn test_layout_keyed_children_reorder() {
         keyed_text_child(2, "c", "c-content"),
     ]);
     lay_out(&mut adapter, first);
+    let [a_id, b_id, c_id] = child_node_ids(&adapter)[..] else {
+        panic!("three children");
+    };
 
     let reordered = container(vec![
         keyed_text_child(0, "c", "c-content"),
@@ -57,13 +72,14 @@ fn test_layout_keyed_children_reorder() {
     assert_eq!(children.len(), 3);
     let texts: Vec<&str> = children.iter().map(text_of).collect();
     assert_eq!(texts, vec!["c-content", "a-content", "b-content"]);
+    assert_eq!(child_node_ids(&adapter), [c_id, a_id, b_id]);
 }
 
 /// The warning a container whose children mix keyed and unkeyed ones, or repeat a key, logs.
 const MIXED_KEYS_WARNING: &str = "WARN cranky::features::layout_engine::adapters::taffy::diff::\
                                   children: container has a mix of keyed and unkeyed children, \
                                   or a duplicate key; falling back to positional layout \
-                                  reconciliation for this render path=";
+                                  reconciliation for this render path=NodePath { surface: Bar, indices: [] }";
 
 /// Lays `node` out with `adapter`, and returns the tree and what the pass logged.
 fn lay_out_logged(adapter: &mut TaffyLayoutAdapter, node: StyledNode) -> (RenderNode, String) {

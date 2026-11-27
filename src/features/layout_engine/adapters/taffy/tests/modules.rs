@@ -89,3 +89,17 @@ fn test_embedder_min_width_overrides_the_childs_reported_width() {
     assert_eq!(tree.rect().width(), 280);
     assert_eq!(tree.rect().height(), 190);
 }
+
+/// A module laid out again with a new style is restyled in place, not kept as it was.
+#[test]
+fn a_module_laid_out_again_with_a_new_style_takes_it() {
+    let mut adapter = TaffyLayoutAdapter::new();
+    let sized = |width: f32| {
+        let mut style = ComputedStyle::default();
+        style.set_width(CssLength::Pixels(width));
+        module_node(root_path(), "custom_mod", style)
+    };
+    lay_out(&mut adapter, sized(120.0));
+    let again = lay_out(&mut adapter, sized(70.0));
+    assert_eq!(again.rect().width(), 70);
+}

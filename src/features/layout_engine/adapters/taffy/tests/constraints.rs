@@ -4,10 +4,11 @@ use super::support::{
     text_node, unpinned,
 };
 use crate::features::layout_engine::adapters::taffy::TaffyLayoutAdapter;
-use crate::features::layout_engine::domain::StyledNode;
+use crate::features::layout_engine::domain::{LayoutRoot, StyledNode};
 use crate::features::layout_engine::ports::LayoutEnginePort;
 use crate::features::styling::domain::{ComputedStyle, CssLength, GridTrack};
-use crate::shared::primitives::geometry::Size;
+use crate::shared::primitives::SizeConstraint;
+use crate::shared::primitives::geometry::{Position, Size};
 
 #[test]
 fn test_size_constraint_pins_one_axis_and_leaves_the_other_intrinsic() {
@@ -37,6 +38,23 @@ fn test_size_constraint_pins_one_axis_and_leaves_the_other_intrinsic() {
     let unconstrained = lay_out(&mut TaffyLayoutAdapter::new(), node());
     assert_eq!(unconstrained.rect().width(), 0);
     assert_eq!(unconstrained.rect().height(), 20);
+}
+
+/// A pinned height alone is laid out unpinned first, then fills the pin, as a pinned width
+/// does.
+#[test]
+fn a_pinned_height_alone_is_measured_unpinned_then_filled() {
+    let mut style = ComputedStyle::default();
+    style.set_height(CssLength::Percent(100.0));
+    let root = LayoutRoot::new(
+        text_leaf("hello", style),
+        Position::new(0, 0),
+        SizeConstraint::new(None, Some(40)),
+    );
+    let mut adapter = TaffyLayoutAdapter::new();
+    let pinned = lay_out_root(&mut adapter, root);
+    assert_eq!(*pinned.rect().size(), Size::new(50, 40));
+    assert_eq!(adapter.intrinsic_size(), Some(Size::new(50, 0)));
 }
 
 /// A root grid of one `1fr` column holding the text `ab`.

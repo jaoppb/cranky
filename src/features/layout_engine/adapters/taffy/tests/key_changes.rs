@@ -1,5 +1,6 @@
 //! Keyed children: a key the last layout did not have is created in its place.
 use super::super::TaffyLayoutAdapter;
+use super::keyed::child_node_ids;
 use crate::features::layout_engine::domain::{
     LayoutRoot, NodePath, RenderNode, StyledNode, SurfaceSpace, TextContent, TextMeasurer,
 };
@@ -66,6 +67,7 @@ fn a_new_key_between_kept_ones_is_laid_out_in_its_place() {
     adapter
         .calculate_layout(row(first), &mut ByteWidths)
         .unwrap();
+    let kept = child_node_ids(&adapter);
 
     let second = vec![
         text(0, Some("a"), "a"),
@@ -76,4 +78,8 @@ fn a_new_key_between_kept_ones_is_laid_out_in_its_place() {
         .calculate_layout(row(second), &mut ByteWidths)
         .unwrap();
     assert_eq!(spans(&tree), [(0, 10), (10, 20), (30, 30)]);
+    // The kept keys keep their taffy nodes around the new one.
+    let ids = child_node_ids(&adapter);
+    assert_eq!((ids[0], ids[2]), (kept[0], kept[1]));
+    assert!(!kept.contains(&ids[1]));
 }

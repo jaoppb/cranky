@@ -43,22 +43,21 @@ fn a_flex_item_takes_its_grow_shrink_basis_and_self_alignment() {
 /// Each axis takes its own gap over the shorthand, and no gap at all is zero.
 #[test]
 fn each_gap_axis_takes_its_own_gap_else_the_shorthand() {
-    let mut style = ComputedStyle::default();
-    style.set_gap(Gap::new(6.0));
-    style.set_column_gap(Gap::new(4.0));
-    let gaps = taffy_style(&rect(style)).gap;
+    let gaps = |own: fn(&mut ComputedStyle, Gap)| {
+        let mut style = ComputedStyle::default();
+        style.set_gap(Gap::new(6.0));
+        own(&mut style, Gap::new(4.0));
+        let gap = taffy_style(&rect(style)).gap;
+        (gap.width, gap.height)
+    };
+    let length = LengthPercentage::length;
     assert_eq!(
-        (gaps.width, gaps.height),
-        (LengthPercentage::length(4.0), LengthPercentage::length(6.0))
+        gaps(ComputedStyle::set_column_gap),
+        (length(4.0), length(6.0))
     );
-
-    let mut rows_only = ComputedStyle::default();
-    rows_only.set_row_gap(Gap::new(5.0));
-    let gaps = taffy_style(&rect(rows_only)).gap;
-    assert_eq!(
-        (gaps.width, gaps.height),
-        (LengthPercentage::length(0.0), LengthPercentage::length(5.0))
-    );
+    assert_eq!(gaps(ComputedStyle::set_row_gap), (length(6.0), length(4.0)));
+    let none = taffy_style(&rect(ComputedStyle::default())).gap;
+    assert_eq!((none.width, none.height), (length(0.0), length(0.0)));
 }
 
 /// A module embedded with `style`.

@@ -188,6 +188,7 @@ mod tests {
     use crate::shared::primitives::BinaryData;
     use crate::shared::primitives::color::{Color, DrawingColor};
     use crate::shared::primitives::geometry::{Position, Rect, Size};
+    use crate::shared::primitives::{ModuleKey, ModuleName, ModuleOptions};
     use crate::shared::primitives::{TextAlign, TextAlignment};
     use crate::shared::rendering::ports::canvas::{CanvasCall, RecordingCanvas};
 
@@ -228,6 +229,36 @@ mod tests {
         }
     }
 
+    /// An embedded module's host box.
+    fn module_node(style: ComputedStyle) -> RenderNode {
+        RenderNode::Module {
+            path: NodePath::root_in(SurfaceSpace::Bar),
+            node_key: None,
+            rect: Rect::new(Position::new(0, 0), Size::new(10, 10)),
+            key: ModuleKey::from_name(ModuleName::new("clock")),
+            options: ModuleOptions::default(),
+            style,
+            on_click: None,
+            on_hover: None,
+            tooltip: None,
+            popup: None,
+            panel: None,
+        }
+    }
+
+    /// A container with a background holding one text child, painted below the child.
+    fn parent_of_text() -> RenderNode {
+        let origin_box = Rect::new(Position::new(0, 0), Size::new(10, 10));
+        let mut parent = flex_node(
+            origin_box,
+            styled(|style| style.set_background(solid(1, 1, 1))),
+        );
+        if let RenderNode::Flex { children, .. } = &mut parent {
+            children.push(text_node(styled(|style| style.set_color(solid(0, 0, 0)))));
+        }
+        parent
+    }
+
     /// The default style changed by `change`.
     fn styled(change: impl FnOnce(&mut ComputedStyle)) -> ComputedStyle {
         let mut style = ComputedStyle::default();
@@ -243,11 +274,9 @@ mod tests {
             style.set_accent_color(solid(255, 0, 0));
         });
         let white = styled(|style| style.set_background(solid(255, 255, 255)));
-        let black = styled(|style| style.set_background(solid(0, 0, 0)));
         let dark_text = styled(|style| style.set_color(solid(0, 0, 0)));
-        let cases: [(RenderNode, &[&str]); 5] = [
+        let cases: [(RenderNode, &[&str]); 4] = [
             (rect_node(white), &["rect"]),
-            (flex_node(origin_box, black), &["rect"]),
             (text_node(dark_text), &["text"]),
             (
                 progress_node(0.5, Orientation::Horizontal, progress),
@@ -257,6 +286,22 @@ mod tests {
                 image_node(origin_box, vec![0; 4], Size::new(1, 1)),
                 &["image"],
             ),
+        ];
+        for (node, kinds) in cases {
+            assert_eq!(painted(&node).kinds(), kinds);
+        }
+    }
+
+    /// A container paints its box below its children, and a module host paints its box.
+    #[test]
+    fn test_boxes_paint_below_their_children() {
+        let origin_box = Rect::new(Position::new(0, 0), Size::new(10, 10));
+        let black = styled(|style| style.set_background(solid(0, 0, 0)));
+        let module_host = styled(|style| style.set_background(solid(9, 9, 9)));
+        let cases: [(RenderNode, &[&str]); 3] = [
+            (flex_node(origin_box, black), &["rect"]),
+            (module_node(module_host), &["rect"]),
+            (parent_of_text(), &["rect", "text"]),
         ];
         for (node, kinds) in cases {
             assert_eq!(painted(&node).kinds(), kinds);
