@@ -1,5 +1,6 @@
 //! How `add_player` reads, publishes and then follows one MPRIS player.
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::sync::watch;
 
@@ -47,6 +48,20 @@ async fn added(bus: FakeBus, names: &[&str]) -> Added {
     }
     let_tasks_run().await;
     Added { bus, tx, rx }
+}
+
+/// Waits up to five seconds for every property listener, each holding a clone of `bus`, to
+/// end. A listener ends only once its change stream is closed and drained, so every change
+/// sent before the close has then been handled.
+async fn listeners_end(bus: &Arc<FakeBus>) -> bool {
+    let wait = async {
+        while Arc::strong_count(bus) > 1 {
+            tokio::task::yield_now().await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(5), wait)
+        .await
+        .is_ok()
 }
 
 #[test]
@@ -156,13 +171,14 @@ fn test_changes_for_a_player_no_longer_published_are_dropped() {
     crate::test_utils::block_on(async {
         let mut bus = FakeBus::default();
         let changes = bus.with_player(&mpris_name("vlc"), playing("Song"));
-        let Added { tx, rx: _rx, .. } = added(bus, &[&mpris_name("vlc")]).await;
+        let Added { bus, tx, rx: _rx } = added(bus, &[&mpris_name("vlc")]).await;
         tx.send(MprisState::default()).unwrap();
 
         let player = Interface::new("org.mpris.MediaPlayer2.Player");
         changes.send((player, playing("Back"))).unwrap();
-        let_tasks_run().await;
+        drop(changes);
 
+        assert!(listeners_end(&bus).await);
         assert_eq!(*tx.borrow(), MprisState::default());
     });
 }
