@@ -142,33 +142,34 @@ impl<'de> Deserialize<'de> for ClickHandlers {
 mod tests {
     use super::*;
 
+    /// The `Exec` action running `command`.
+    fn exec_action(command: &str) -> UiAction {
+        UiAction::Exec(command.to_string())
+    }
+
     #[test]
     fn test_click_handlers_operations() {
         let mut handlers = ClickHandlers::new();
-        assert!(handlers.is_empty());
-        assert_eq!(handlers.get(PointerButton::Left), None);
+        let left = handlers.get(PointerButton::Left);
+        assert_eq!((handlers.is_empty(), left), (true, None));
 
-        handlers.insert(PointerButton::Left, UiAction::Exec("left_cmd".into()));
-        assert!(!handlers.is_empty());
-        assert_eq!(
+        handlers.insert(PointerButton::Left, exec_action("left_cmd"));
+        let (left, right) = (
             handlers.get(PointerButton::Left),
-            Some(&UiAction::Exec("left_cmd".into()))
+            handlers.get(PointerButton::Right),
         );
-        assert_eq!(handlers.get(PointerButton::Right), None);
+        let expected = (false, Some(&exec_action("left_cmd")), None);
+        assert_eq!((handlers.is_empty(), left, right), expected);
 
-        let single = ClickHandlers::from_single(UiAction::Exec("single_cmd".into()));
-        assert_eq!(
-            single.get(PointerButton::Left),
-            Some(&UiAction::Exec("single_cmd".into()))
-        );
-        assert_eq!(
-            single.get(PointerButton::Middle),
-            Some(&UiAction::Exec("single_cmd".into()))
-        );
-        assert_eq!(
-            single.get(PointerButton::Right),
-            Some(&UiAction::Exec("single_cmd".into()))
-        );
+        let single = ClickHandlers::from_single(exec_action("single_cmd"));
+        let buttons = [
+            PointerButton::Left,
+            PointerButton::Middle,
+            PointerButton::Right,
+        ];
+        let bound = buttons.map(|button| single.get(button));
+        let cmd = exec_action("single_cmd");
+        assert_eq!(bound, [Some(&cmd), Some(&cmd), Some(&cmd)]);
         assert_eq!(single.get(PointerButton::Side), None);
     }
 
@@ -176,14 +177,10 @@ mod tests {
     fn test_click_handlers_deserialization() {
         let single_json = r#"{"Exec": "single_cmd"}"#;
         let single_handlers: ClickHandlers = serde_json::from_str(single_json).unwrap();
-        assert_eq!(
-            single_handlers.get(PointerButton::Left),
-            Some(&UiAction::Exec("single_cmd".into()))
-        );
-        assert_eq!(
-            single_handlers.get(PointerButton::Right),
-            Some(&UiAction::Exec("single_cmd".into()))
-        );
+        let single =
+            [PointerButton::Left, PointerButton::Right].map(|button| single_handlers.get(button));
+        let cmd = exec_action("single_cmd");
+        assert_eq!(single, [Some(&cmd), Some(&cmd)]);
 
         let map_json = r#"{
             "left": {"Exec": "left_cmd"},
@@ -193,26 +190,16 @@ mod tests {
             "276": {"Exec": "extra_cmd"}
         }"#;
         let map_handlers: ClickHandlers = serde_json::from_str(map_json).unwrap();
-        assert_eq!(
-            map_handlers.get(PointerButton::Left),
-            Some(&UiAction::Exec("left_cmd".into()))
-        );
-        assert_eq!(
-            map_handlers.get(PointerButton::Right),
-            Some(&UiAction::Exec("right_cmd".into()))
-        );
-        assert_eq!(
-            map_handlers.get(PointerButton::Middle),
-            Some(&UiAction::Exec("mid_cmd".into()))
-        );
-        assert_eq!(
-            map_handlers.get(PointerButton::Side),
-            Some(&UiAction::Exec("side_cmd".into()))
-        );
-        assert_eq!(
-            map_handlers.get(PointerButton::Extra),
-            Some(&UiAction::Exec("extra_cmd".into()))
-        );
+        let buttons = [
+            PointerButton::Left,
+            PointerButton::Right,
+            PointerButton::Middle,
+            PointerButton::Side,
+            PointerButton::Extra,
+        ];
+        let bound = buttons.map(|button| map_handlers.get(button).cloned());
+        let commands = ["left_cmd", "right_cmd", "mid_cmd", "side_cmd", "extra_cmd"];
+        assert_eq!(bound, commands.map(|command| Some(exec_action(command))));
     }
 
     /// The `Exec` command for `command`, as a sender would receive it.

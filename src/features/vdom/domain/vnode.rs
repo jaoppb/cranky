@@ -210,55 +210,44 @@ mod tests {
         assert_ne!(node.node_id().to_string(), fake_uuid);
     }
 
-    #[test]
-    fn test_vnode_module_serde_and_constructor() {
-        let mut opts_map = HashMap::new();
-        opts_map.insert(
+    /// A `clock` module node built with the constructor, instance `h1`, formatting `%H:%M`.
+    fn clock_module_node() -> VNode {
+        let opts = ModuleOptions::new(HashMap::from([(
             "format".to_string(),
             crate::shared::primitives::DynamicValue::from("%H:%M"),
+        )]));
+        let params = crate::features::vdom::domain::ModuleParams::new(
+            ModuleName::new("clock"),
+            Some(ModuleInstanceId::new("h1")),
+            opts,
         );
-        let opts = ModuleOptions::new(opts_map);
-        let module_node = VNode::new_module(
-            crate::features::vdom::domain::ModuleParams::new(
-                ModuleName::new("clock"),
-                Some(ModuleInstanceId::new("h1")),
-                opts,
-            ),
-            ElementSelectors::default(),
-            Interactions::default(),
-        );
-        assert_eq!(module_node.tag(), NodeTag::Module);
+        VNode::new_module(params, ElementSelectors::default(), Interactions::default())
+    }
+
+    #[test]
+    fn test_vnode_module_serde_and_constructor() {
+        assert_eq!(clock_module_node().tag(), NodeTag::Module);
 
         let json = r#"{
-            "type": "module",
-            "name": "clock",
-            "instance_id": "h1",
-            "options": {
-                "format": "%H:%M:%S"
-            }
+            "type": "module", "name": "clock", "instance_id": "h1",
+            "options": { "format": "%H:%M:%S" }
         }"#;
         let deserialized: VNode = serde_json::from_str(json).expect("Deserialization failed");
         assert_eq!(deserialized.tag(), NodeTag::Module);
-        if let VNodeKind::Module {
+        let VNodeKind::Module {
             name,
             instance_id,
             options,
         } = deserialized.kind()
-        {
-            assert_eq!(name.as_str(), "clock");
-            assert_eq!(
-                instance_id
-                    .as_ref()
-                    .map(crate::shared::primitives::ModuleInstanceId::as_str),
-                Some("h1")
-            );
-            assert_eq!(
-                options.get("format").and_then(|value| value.as_str()),
-                Some("%H:%M:%S")
-            );
-        } else {
+        else {
             panic!("Expected VNodeKind::Module");
-        }
+        };
+        let instance = instance_id.as_ref().map(ModuleInstanceId::as_str);
+        let format = options.get("format").and_then(|value| value.as_str());
+        assert_eq!(
+            (name.as_str(), instance, format),
+            ("clock", Some("h1"), Some("%H:%M:%S"))
+        );
     }
 
     #[test]

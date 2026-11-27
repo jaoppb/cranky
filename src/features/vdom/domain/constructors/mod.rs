@@ -145,31 +145,36 @@ mod tests {
         ))
     }
 
+    /// The class and id made from `label`.
+    fn selectors(label: &str) -> ElementSelectors {
+        ElementSelectors::new(Some(class(label)), Some(element_id(label)))
+    }
+
+    /// The click, hover and tooltip made from `label`.
+    fn interactions(label: &str) -> Interactions {
+        Interactions::new(
+            Some(on_click(label)),
+            Some(on_hover(label)),
+            Some(tooltip(label)),
+        )
+    }
+
     /// Asserts `node` carries the class, id and tooltip made from `label`, and its click and
     /// hover handlers when `handlers` names it.
     fn assert_attributes(node: &VNode, label: &str, handlers: Option<&str>) {
-        assert_eq!(node.class_names(), Some(&class(label)));
-        assert_eq!(node.element_id(), Some(&element_id(label)));
-        assert_eq!(node.on_click(), handlers.map(on_click).as_ref());
-        assert_eq!(node.on_hover(), handlers.map(on_hover).as_ref());
+        let expected_selectors = (Some(&class(label)), Some(&element_id(label)));
+        assert_eq!((node.class_names(), node.element_id()), expected_selectors);
+        let expected_handlers = (handlers.map(on_click), handlers.map(on_hover));
+        let actual_handlers = (node.on_click().cloned(), node.on_hover().cloned());
+        assert_eq!(actual_handlers, expected_handlers);
         assert_eq!(node.tooltip().map(VNode::kind), Some(tooltip(label).kind()));
-        assert_eq!(node.key(), None);
-        assert_eq!(node.popup(), None);
-        assert_eq!(node.panel(), None);
+        assert_eq!((node.key(), node.popup(), node.panel()), (None, None, None));
     }
 
     #[test]
     fn test_container_constructors_keep_each_attribute_in_place() {
         let child = VNode::new_rect(ElementSelectors::default(), Interactions::default());
-        let flex = VNode::new_flex(
-            vec![child.clone()],
-            ElementSelectors::new(Some(class("flex")), Some(element_id("flex"))),
-            Interactions::new(
-                Some(on_click("flex")),
-                Some(on_hover("flex")),
-                Some(tooltip("flex")),
-            ),
-        );
+        let flex = VNode::new_flex(vec![child.clone()], selectors("flex"), interactions("flex"));
         assert_attributes(&flex, "flex", Some("flex"));
         assert_eq!(
             flex.kind(),
@@ -180,12 +185,8 @@ mod tests {
 
         let grid = VNode::new_grid(
             vec![child.clone(), child],
-            ElementSelectors::new(Some(class("grid")), Some(element_id("grid"))),
-            Interactions::new(
-                Some(on_click("grid")),
-                Some(on_hover("grid")),
-                Some(tooltip("grid")),
-            ),
+            selectors("grid"),
+            interactions("grid"),
         );
         assert_attributes(&grid, "grid", Some("grid"));
         assert_eq!(grid.children().len(), 2);
@@ -194,94 +195,48 @@ mod tests {
 
     #[test]
     fn test_leaf_constructors_keep_each_attribute_in_place() {
-        let text = VNode::new_text(
-            TextContent::new("hello".to_string()),
-            ElementSelectors::new(Some(class("text")), Some(element_id("text"))),
-            Interactions::new(
-                Some(on_click("text")),
-                Some(on_hover("text")),
-                Some(tooltip("text")),
-            ),
-        );
+        let hello = TextContent::new("hello".to_string());
+        let text = VNode::new_text(hello.clone(), selectors("text"), interactions("text"));
         assert_attributes(&text, "text", Some("text"));
-        assert_eq!(
-            text.kind(),
-            &VNodeKind::Text {
-                text: TextContent::new("hello".to_string())
-            }
-        );
+        assert_eq!(text.kind(), &VNodeKind::Text { text: hello });
 
-        let progress = VNode::new_progress(
-            ProgressBar::new(ProgressValue::new(0.3).unwrap(), Orientation::Vertical),
-            ElementSelectors::new(Some(class("bar")), Some(element_id("bar"))),
-            Interactions::new(
-                Some(on_click("bar")),
-                Some(on_hover("bar")),
-                Some(tooltip("bar")),
-            ),
-        );
+        let value = ProgressValue::new(0.3).unwrap();
+        let bar = ProgressBar::new(value, Orientation::Vertical);
+        let progress = VNode::new_progress(bar, selectors("bar"), interactions("bar"));
         assert_attributes(&progress, "bar", Some("bar"));
-        assert_eq!(
-            progress.kind(),
-            &VNodeKind::Progress {
-                value: ProgressValue::new(0.3).unwrap(),
-                orientation: Orientation::Vertical,
-            }
-        );
+        let orientation = Orientation::Vertical;
+        assert_eq!(progress.kind(), &VNodeKind::Progress { value, orientation });
 
-        let rect = VNode::new_rect(
-            ElementSelectors::new(Some(class("rect")), Some(element_id("rect"))),
-            Interactions::new(
-                Some(on_click("rect")),
-                Some(on_hover("rect")),
-                Some(tooltip("rect")),
-            ),
-        );
+        let rect = VNode::new_rect(selectors("rect"), interactions("rect"));
         assert_attributes(&rect, "rect", Some("rect"));
         assert_eq!(rect.kind(), &VNodeKind::Rect);
     }
 
     #[test]
     fn test_image_and_module_constructors_keep_each_attribute_in_place() {
-        let image = VNode::new_image(
-            ImageContent::new(vec![1, 2, 3, 4], Size::new(1, 1)),
-            ElementSelectors::new(Some(class("icon")), Some(element_id("icon"))),
-            Some(tooltip("icon")),
-        );
+        let image_content = ImageContent::new(vec![1, 2, 3, 4], Size::new(1, 1));
+        let image = VNode::new_image(image_content, selectors("icon"), Some(tooltip("icon")));
         assert_attributes(&image, "icon", None);
-        assert_eq!(
-            image.kind(),
-            &VNodeKind::Image {
-                data: BinaryData::new(vec![1, 2, 3, 4]),
-                pixel_size: Size::new(1, 1),
-            }
-        );
+        let data = BinaryData::new(vec![1, 2, 3, 4]);
+        let pixel_size = Size::new(1, 1);
+        assert_eq!(image.kind(), &VNodeKind::Image { data, pixel_size });
 
         let options = ModuleOptions::new(HashMap::from([(
             "format".to_string(),
             DynamicValue::String("%H".to_string()),
         )]));
-        let module = VNode::new_module(
-            ModuleParams::new(
-                ModuleName::new("clock"),
-                Some(ModuleInstanceId::new("left")),
-                options.clone(),
-            ),
-            ElementSelectors::new(Some(class("clock")), Some(element_id("clock"))),
-            Interactions::new(
-                Some(on_click("clock")),
-                Some(on_hover("clock")),
-                Some(tooltip("clock")),
-            ),
+        let (name, instance_id) = (
+            ModuleName::new("clock"),
+            Some(ModuleInstanceId::new("left")),
         );
+        let params = ModuleParams::new(name.clone(), instance_id.clone(), options.clone());
+        let module = VNode::new_module(params, selectors("clock"), interactions("clock"));
         assert_attributes(&module, "clock", Some("clock"));
-        assert_eq!(
-            module.kind(),
-            &VNodeKind::Module {
-                name: ModuleName::new("clock"),
-                instance_id: Some(ModuleInstanceId::new("left")),
-                options,
-            }
-        );
+        let expected = VNodeKind::Module {
+            name,
+            instance_id,
+            options,
+        };
+        assert_eq!(module.kind(), &expected);
     }
 }

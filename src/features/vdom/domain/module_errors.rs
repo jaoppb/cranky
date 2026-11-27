@@ -142,22 +142,14 @@ mod tests {
             ElementSelectors::default(),
             Interactions::default(),
         );
-        let mut errors = HashMap::new();
-        errors.insert(
-            ModuleKey::from_name(ModuleName::new("calendar")),
-            "not found".to_string(),
-        );
+        let errors = calendar_not_found();
 
         let result = substitute_failed_modules(&tree, &errors);
         let VNodeKind::Flex { children } = result.kind() else {
             panic!("expected flex root to survive substitution");
         };
-        assert_eq!(children.len(), 1);
-        assert_eq!(children[0].tag(), NodeTag::Text);
-        let VNodeKind::Text { text } = children[0].kind() else {
-            panic!("expected substituted child to be text");
-        };
-        assert_eq!(text.as_str(), "calendar: not found");
+        assert_eq!((children.len(), children[0].tag()), (1, NodeTag::Text));
+        assert_eq!(text_of(&children[0]), Some("calendar: not found"));
         assert!(children[0].class_names().is_some_and(|class_list| {
             class_list
                 .as_slice()

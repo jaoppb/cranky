@@ -24,20 +24,23 @@ impl StyleResolverPort for MockResolver {
     }
 }
 
+fn text(content: &str) -> VNode {
+    VNode::new_text(
+        TextContent::new(content.to_string()),
+        ElementSelectors::default(),
+        Interactions::default(),
+    )
+}
+
+/// A ref to the bar node at `indices`, with no keyed anchor.
+fn bar_ref(indices: Vec<usize>) -> NodeRef {
+    NodeRef::new(Vec::new(), NodePath::new(SurfaceSpace::Bar, indices))
+}
+
 #[test]
 fn test_resolve_styles_interaction_propagation() {
-    let child1 = VNode::new_text(
-        TextContent::new("c1".to_string()),
-        ElementSelectors::default(),
-        Interactions::default(),
-    );
-    let child2 = VNode::new_text(
-        TextContent::new("c2".to_string()),
-        ElementSelectors::default(),
-        Interactions::default(),
-    );
     let root = VNode::new_flex(
-        vec![child1, child2],
+        vec![text("c1"), text("c2")],
         ElementSelectors::default(),
         Interactions::default(),
     );
@@ -45,18 +48,9 @@ fn test_resolve_styles_interaction_propagation() {
     let resolver = MockResolver;
     let interaction = InteractionContext::new(
         InteractedNodes::new(
-            Some(NodeRef::new(
-                Vec::new(),
-                NodePath::new(SurfaceSpace::Bar, vec![0]),
-            )),
-            Some(NodeRef::new(
-                Vec::new(),
-                NodePath::new(SurfaceSpace::Bar, vec![0]),
-            )),
-            Some(NodeRef::new(
-                Vec::new(),
-                NodePath::new(SurfaceSpace::Bar, vec![1]),
-            )),
+            Some(bar_ref(vec![0])),
+            Some(bar_ref(vec![0])),
+            Some(bar_ref(vec![1])),
         ),
         MonitorFocus::Focused,
     );
@@ -64,19 +58,12 @@ fn test_resolve_styles_interaction_propagation() {
     let styled = root.resolve_styles(&resolver, Some(&interaction));
     assert_eq!(styled.path(), &NodePath::root_in(SurfaceSpace::Bar));
 
-    if let StyledNode::Flex { children, .. } = styled {
-        assert_eq!(children.len(), 2);
-        assert_eq!(
-            children[0].path(),
-            &NodePath::new(SurfaceSpace::Bar, vec![0])
-        );
-        assert_eq!(
-            children[1].path(),
-            &NodePath::new(SurfaceSpace::Bar, vec![1])
-        );
-    } else {
+    let StyledNode::Flex { children, .. } = styled else {
         panic!("Expected StyledNode::Flex");
-    }
+    };
+    let paths: Vec<&NodePath> = children.iter().map(StyledNode::path).collect();
+    let expected = [vec![0], vec![1]].map(|indices| NodePath::new(SurfaceSpace::Bar, indices));
+    assert_eq!(paths, expected.iter().collect::<Vec<_>>());
 }
 
 #[test]
@@ -105,45 +92,28 @@ fn test_vnode_with_popup_and_style_resolution() {
 
 #[test]
 fn test_vnode_grid_creation_and_resolution() {
-    let child1 = VNode::new_text(
-        TextContent::new("Item 1".to_string()),
-        ElementSelectors::default(),
-        Interactions::default(),
-    );
-    let child2 = VNode::new_text(
-        TextContent::new("Item 2".to_string()),
-        ElementSelectors::default(),
-        Interactions::default(),
-    );
-
+    use crate::features::styling::domain::{DisplayMode, GridAutoFlow};
     let grid_node = VNode::new_grid(
-        vec![child1, child2],
+        vec![text("Item 1"), text("Item 2")],
         ElementSelectors::default(),
         Interactions::default(),
     );
+    let tag = grid_node.tag();
+    let shape = (tag, tag.is_container(), grid_node.children().len());
     assert_eq!(
-        grid_node.tag(),
-        crate::features::vdom::domain::NodeTag::Grid
+        shape,
+        (crate::features::vdom::domain::NodeTag::Grid, true, 2)
     );
-    assert!(grid_node.tag().is_container());
-    assert_eq!(grid_node.children().len(), 2);
 
     let resolver = MockResolver;
     let styled = grid_node.resolve_styles(&resolver, None);
-    if let StyledNode::Grid {
+    let StyledNode::Grid {
         children, style, ..
     } = styled
-    {
-        assert_eq!(children.len(), 2);
-        assert_eq!(
-            style.display(),
-            Some(crate::features::styling::domain::DisplayMode::Grid)
-        );
-        assert_eq!(
-            style.grid_auto_flow(),
-            Some(crate::features::styling::domain::GridAutoFlow::Row)
-        );
-    } else {
+    else {
         panic!("Expected StyledNode::Grid");
-    }
+    };
+    let layout = (children.len(), style.display(), style.grid_auto_flow());
+    let expected = (2, Some(DisplayMode::Grid), Some(GridAutoFlow::Row));
+    assert_eq!(layout, expected);
 }
