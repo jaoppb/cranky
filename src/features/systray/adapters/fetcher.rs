@@ -271,50 +271,64 @@ mod tests {
     /// What an object-path `Menu` parses to: the string conversion is tried first.
     const OBJECT_PATH_MENU: Option<String> = None;
 
-    fn image(icon: Option<&SystrayIcon>) -> Option<&IconImage> {
-        icon.and_then(SystrayIcon::image)
+    /// The three icons `resolve_all_icons` returns.
+    type Icons = (
+        Option<SystrayIcon>,
+        Option<SystrayIcon>,
+        Option<SystrayIcon>,
+    );
+
+    /// The image of each of the three icons.
+    fn images(icons: &Icons) -> [Option<&IconImage>; 3] {
+        let (icon, attention, overlay) = icons;
+        [icon, attention, overlay].map(|icon| icon.as_ref().and_then(SystrayIcon::image))
+    }
+
+    /// The name of each of the three icons.
+    fn names(icons: &Icons) -> [Option<&str>; 3] {
+        let (icon, attention, overlay) = icons;
+        [icon, attention, overlay].map(|icon| {
+            let name = icon.as_ref().and_then(SystrayIcon::name);
+            name.map(IconName::as_str)
+        })
+    }
+
+    /// A one-pixel pixmap of grey `level`, as an item sends it.
+    fn grey_pixmap(level: u8) -> Variant<'static> {
+        Variant::from(vec![(1, 1, vec![255_u8, level, level, level])])
     }
 
     #[test]
     fn test_resolve_all_icons_reads_each_pixmap_for_its_own_icon() {
         crate::test_utils::block_on(async {
             let mut all_props = props([
-                (
-                    "IconPixmap",
-                    Variant::from(vec![(1, 1, vec![255_u8, 1, 1, 1])]),
-                ),
-                (
-                    "AttentionIconPixmap",
-                    Variant::from(vec![(1, 1, vec![255_u8, 2, 2, 2])]),
-                ),
-                (
-                    "OverlayIconPixmap",
-                    Variant::from(vec![(1, 1, vec![255_u8, 3, 3, 3])]),
-                ),
+                ("IconPixmap", grey_pixmap(1)),
+                ("AttentionIconPixmap", grey_pixmap(2)),
+                ("OverlayIconPixmap", grey_pixmap(3)),
             ]);
-            let (icon, attention, overlay) = resolve_all_icons(&mut all_props, None, None).await;
-            let data =
-                [&icon, &attention, &overlay].map(|icon| image(icon.as_ref()).map(IconImage::data));
-            assert_eq!(
-                data,
-                [
-                    Some(&[1, 1, 1, 255][..]),
-                    Some(&[2, 2, 2, 255][..]),
-                    Some(&[3, 3, 3, 255][..])
-                ]
-            );
+            let icons = resolve_all_icons(&mut all_props, None, None).await;
+            let data = images(&icons).map(|image| image.map(IconImage::data));
+            let expected: [&[u8]; 3] = [&[1, 1, 1, 255], &[2, 2, 2, 255], &[3, 3, 3, 255]];
+            assert_eq!(data, expected.map(Some));
             assert!(all_props.is_empty());
         });
+    }
+
+    /// Theme directories: the main one holds the main and overlay icons, the other the
+    /// attention icon.
+    fn theme_dirs() -> (TempIconDir, TempIconDir) {
+        let main = TempIconDir::new("fetch-main-theme");
+        let attention_dir = TempIconDir::new("fetch-attention-theme");
+        main.svg("cranky-fetch-main", "#ff0000");
+        main.svg("cranky-fetch-overlay", "#0000ff");
+        attention_dir.svg("cranky-fetch-attention", "#00ff00");
+        (main, attention_dir)
     }
 
     #[test]
     fn test_resolve_all_icons_looks_each_name_up_in_its_theme_path() {
         crate::test_utils::block_on(async {
-            let main = TempIconDir::new("fetch-main-theme");
-            let attention_dir = TempIconDir::new("fetch-attention-theme");
-            main.svg("cranky-fetch-main", "#ff0000");
-            main.svg("cranky-fetch-overlay", "#0000ff");
-            attention_dir.svg("cranky-fetch-attention", "#00ff00");
+            let (main, attention_dir) = theme_dirs();
             let attention_theme = attention_dir.theme_path();
             let mut all_props = props([
                 ("AttentionIconName", Variant::from("cranky-fetch-attention")),
@@ -324,35 +338,17 @@ mod tests {
                 ),
                 ("OverlayIconName", Variant::from("cranky-fetch-overlay")),
             ]);
-            let (icon, attention, overlay) = resolve_all_icons(
-                &mut all_props,
-                Some("cranky-fetch-main".to_string()),
-                Some(main.theme_path()),
-            )
-            .await;
-            let names = [&icon, &attention, &overlay].map(|icon| {
-                icon.as_ref()
-                    .and_then(SystrayIcon::name)
-                    .map(IconName::as_str)
-            });
-            assert_eq!(
-                names,
-                [
-                    Some("cranky-fetch-main"),
-                    Some("cranky-fetch-attention"),
-                    Some("cranky-fetch-overlay")
-                ]
-            );
-            let pixels =
-                [&icon, &attention, &overlay].map(|icon| image(icon.as_ref()).map(first_pixel));
-            assert_eq!(
-                pixels,
-                [
-                    Some(&[255, 0, 0, 255][..]),
-                    Some(&[0, 255, 0, 255][..]),
-                    Some(&[0, 0, 255, 255][..])
-                ]
-            );
+            let main_name = Some("cranky-fetch-main".to_string());
+            let icons = resolve_all_icons(&mut all_props, main_name, Some(main.theme_path())).await;
+            let expected = [
+                "cranky-fetch-main",
+                "cranky-fetch-attention",
+                "cranky-fetch-overlay",
+            ];
+            assert_eq!(names(&icons), expected.map(Some));
+            let pixels = images(&icons).map(|image| image.map(first_pixel));
+            let expected: [&[u8]; 3] = [&[255, 0, 0, 255], &[0, 255, 0, 255], &[0, 0, 255, 255]];
+            assert_eq!(pixels, expected.map(Some));
             assert!(all_props.is_empty());
         });
     }
