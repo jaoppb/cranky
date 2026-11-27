@@ -527,4 +527,243 @@ mod tests {
         assert_eq!(mock.queries(), 1);
         assert_eq!(state, before);
     }
+
+    /// The tracing target of every log this loop writes.
+    const TARGET: &str = "cranky::features::workspaces::adapters::signal_loop";
+
+    /// A reader that hands out `chunks` one read at a time, then the end of the stream.
+    struct ScriptedReader {
+        chunks: std::collections::VecDeque<std::io::Result<&'static [u8]>>,
+    }
+
+    impl std::io::Read for ScriptedReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let Some(chunk) = self.chunks.pop_front() else {
+                return Ok(0);
+            };
+            let bytes = chunk?;
+            buf[..bytes.len()].copy_from_slice(bytes);
+            Ok(bytes.len())
+        }
+    }
+
+    /// Drains one batch that starts with `workspacev2>>1,a` from a reader that
+    /// answers `chunks`, and returns the batch and the state it left.
+    fn drain_scripted(chunks: Vec<std::io::Result<&'static [u8]>>) -> (EventBatch, HyprlandState) {
+        let mut state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
+        let mut line_buf = "workspacev2>>1,a\n".to_string();
+        let mut reader = std::io::BufReader::new(ScriptedReader {
+            chunks: chunks.into(),
+        });
+        let batch = drain_batch(&mut reader, &mut line_buf, &mut state);
+        (batch, state)
+    }
+
+    #[test]
+    fn test_drain_batch_leaves_blank_lines_out_of_the_events() {
+        let (batch, _) = drain_scripted(vec![Ok(b"\n   \nfocusedmonv2>>DP-1,1\n")]);
+        assert_eq!(
+            (batch.events, batch.outcome),
+            (
+                vec![
+                    "workspacev2>>1,a".to_string(),
+                    "focusedmonv2>>DP-1,1".to_string()
+                ],
+                LineOutcome::Applied
+            )
+        );
+    }
+
+    #[test]
+    fn test_drain_batch_stops_at_a_timeout() {
+        let timeout = std::io::Error::from(ErrorKind::TimedOut);
+        let (batch, state) = drain_scripted(vec![
+            Ok(b"workspacev2>>2,b\n"),
+            Err(timeout),
+            Ok(b"workspacev2>>3,c\n"),
+        ]);
+        assert_eq!(batch.events.len(), 2);
+        assert!(!state.workspaces().contains_key(&WorkspaceId::new(3)));
+    }
+
+    #[test]
+    fn test_drain_batch_stops_when_the_read_would_block() {
+        let would_block = std::io::Error::from(ErrorKind::WouldBlock);
+        let (batch, state) = drain_scripted(vec![Err(would_block), Ok(b"workspacev2>>3,c\n")]);
+        assert_eq!(batch.events, vec!["workspacev2>>1,a".to_string()]);
+        assert!(!state.workspaces().contains_key(&WorkspaceId::new(3)));
+    }
+
+    /// Any other read error ends the batch too: here a line that is not UTF-8.
+    #[test]
+    fn test_drain_batch_stops_at_a_read_error() {
+        let (batch, state) = drain_scripted(vec![
+            Ok(b"workspacev2>>2,b\n\xff\n"),
+            Ok(b"workspacev2>>3,c\n"),
+        ]);
+        assert_eq!(batch.events.len(), 2);
+        assert!(state.workspaces().contains_key(&WorkspaceId::new(2)));
+        assert!(!state.workspaces().contains_key(&WorkspaceId::new(3)));
+    }
+
+    #[test]
+    fn test_drain_batch_traces_every_non_blank_line() {
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            drain_scripted(vec![Ok(b"\ninvalid>>data\n")]);
+        });
+        assert_eq!(
+            logs,
+            format!(
+                "TRACE {TARGET}: Hyprland event received event=\"workspacev2>>1,a\"\n\
+                 TRACE {TARGET}: Hyprland event received event=\"invalid>>data\"\n"
+            )
+        );
+    }
+
+    /// Runs `check_and_resync` on `state` and `batch` against a window
+    /// manager reporting `reported`, and returns the logs it wrote.
+    fn resync_logs(
+        mut state: HyprlandState,
+        batch: &EventBatch,
+        reported: Option<WindowManagerState>,
+    ) -> String {
+        let fake = FakeWindowManager::new(reported);
+        crate::features::module_runtime::test_support::capture_logs(|| {
+            check_and_resync(&fake, &mut state, batch);
+        })
+    }
+
+    #[test]
+    fn test_check_and_resync_logs_a_forced_resync_at_debug() {
+        let batch = EventBatch {
+            events: vec!["monitoraddedv2>>1,DP-1".to_string()],
+            outcome: LineOutcome::AppliedNeedsResync,
+        };
+        let state = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
+        let logs = resync_logs(state, &batch, Some(consistent_monitor("DP-1")));
+        assert_eq!(
+            logs,
+            format!(
+                "DEBUG {TARGET}: Monitor added with no usable payload, forcing full resync \
+                 batch_events=[\"monitoraddedv2>>1,DP-1\"]\n"
+            )
+        );
+    }
+
+    /// An inconsistent state logs the warning alone, even when the batch also forced a resync.
+    #[test]
+    fn test_check_and_resync_warns_about_an_inconsistent_state() {
+        let batch = EventBatch {
+            events: vec!["e".to_string()],
+            outcome: LineOutcome::AppliedNeedsResync,
+        };
+        let logs = resync_logs(
+            inconsistent_state(),
+            &batch,
+            Some(consistent_monitor("DP-1")),
+        );
+        assert_eq!(
+            logs,
+            format!(
+                " WARN {TARGET}: Hyprland state inconsistent after event batch, forcing full resync \
+                 reasons=[WorkspaceMonitorNotFound {{ workspace_id: WorkspaceId(4), \
+                 workspace_name: WorkspaceName(\"4\"), monitor_name: MonitorName(\"HDMI-A-1\") }}] \
+                 batch_events=[\"e\"]\n"
+            )
+        );
+    }
+
+    #[test]
+    fn test_check_and_resync_logs_a_failed_resync() {
+        let logs = resync_logs(inconsistent_state(), &applied(&[]), None);
+        assert!(logs.ends_with(&format!(
+            "ERROR {TARGET}: Failed to resync Hyprland state after inconsistency: \
+             Window manager IPC error: boom\n"
+        )));
+    }
+
+    #[test]
+    fn test_fetch_initial_state_falls_back_to_an_empty_state_on_error() {
+        let empty = HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None);
+        let (hypr_tx, mut hypr_rx) = tokio::sync::watch::channel(inconsistent_state());
+        hypr_rx.borrow_and_update();
+        let mut state = inconsistent_state();
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            state = fetch_initial_state(&FakeWindowManager::new(None), &hypr_tx);
+        });
+        assert_eq!(state, empty);
+        assert!(!hypr_rx.has_changed().unwrap());
+        assert_eq!(
+            logs,
+            format!(
+                "ERROR {TARGET}: Hyprland adapter error on initial fetch: \
+                 Window manager IPC error: boom\n"
+            )
+        );
+    }
+
+    #[test]
+    fn test_fetch_initial_state_publishes_a_changed_state() {
+        let (hypr_tx, mut hypr_rx) = tokio::sync::watch::channel(inconsistent_state());
+        hypr_rx.borrow_and_update();
+        let fake = FakeWindowManager::new(Some(consistent_monitor("DP-1")));
+        let state = fetch_initial_state(&fake, &hypr_tx);
+        let (workspaces, monitors, focused) = consistent_monitor("DP-1");
+        let expected = HyprlandState::new(workspaces, monitors, focused);
+        assert_eq!(state, expected);
+        assert!(hypr_rx.has_changed().unwrap());
+        assert_eq!(*hypr_rx.borrow(), expected);
+    }
+
+    /// Runs one event stream of `lines` against a hub that already holds the
+    /// state the window manager reports, and tells whether the hub was notified.
+    fn stream_notifies(lines: &[u8], reported: &WindowManagerState) -> bool {
+        use std::io::Write;
+
+        let (mut sender, receiver) = std::os::unix::net::UnixStream::pair().unwrap();
+        sender.write_all(lines).unwrap();
+        drop(sender);
+        let (workspaces, monitors, focused) = reported.clone();
+        let (hypr_tx, mut hypr_rx) =
+            tokio::sync::watch::channel(HyprlandState::new(workspaces, monitors, focused));
+        hypr_rx.borrow_and_update();
+        let fake = FakeWindowManager::new(Some(reported.clone()));
+        process_event_stream(receiver, &fake, &hypr_tx);
+        hypr_rx.has_changed().unwrap()
+    }
+
+    #[test]
+    fn test_process_event_stream_does_not_notify_an_unchanged_state() {
+        let reported = consistent_monitor("DP-1");
+        assert!(!stream_notifies(b"invalid>>data\n", &reported));
+        assert!(!stream_notifies(b"monitoraddedv2>>1,DP-1\n", &reported));
+        assert!(stream_notifies(b"renameworkspace>>1,one\n", &reported));
+    }
+
+    #[test]
+    fn test_process_event_stream_logs_a_closed_socket() {
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            stream(b"", one_monitor("DP-1"));
+        });
+        assert_eq!(
+            logs,
+            format!(" INFO {TARGET}: Hyprland event socket closed, reconnecting...\n")
+        );
+    }
+
+    #[test]
+    fn test_process_event_stream_stops_at_a_read_error() {
+        let mut queries = 0;
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            (queries, _) = stream(b"\xff\nworkspacev2>>1,a\n", one_monitor("DP-1"));
+        });
+        assert_eq!(queries, 1);
+        assert_eq!(
+            logs,
+            format!(
+                "ERROR {TARGET}: Hyprland event socket read error: \
+                 stream did not contain valid UTF-8\n"
+            )
+        );
+    }
 }

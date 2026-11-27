@@ -102,3 +102,83 @@ fn test_find_state_inconsistencies_consistent() {
     let incs = find_state_inconsistencies(&state);
     assert_eq!(incs, []);
 }
+
+#[test]
+fn test_state_inconsistency_display_special_mismatch_without_monitor() {
+    let inconsistency = StateInconsistency::MonitorSpecialWorkspaceMismatch {
+        monitor_name: MonitorName::new("DP-1"),
+        special_workspace_id: WorkspaceId::new(-98),
+        workspace_monitor: None,
+    };
+    assert_eq!(
+        inconsistency.to_string(),
+        "monitor 'DP-1' special workspace -98 is assigned to monitor 'None' instead of 'DP-1'"
+    );
+}
+
+/// A special workspace that exists on its own monitor is consistent.
+#[test]
+fn test_find_state_inconsistencies_special_workspace_on_its_monitor() {
+    let mut workspaces = std::collections::BTreeMap::new();
+    for (id, name) in [(1, "1"), (-99, "special")] {
+        workspaces.insert(
+            WorkspaceId::new(id),
+            Workspace::new(
+                WorkspaceId::new(id),
+                WorkspaceName::new(name),
+                Some(MonitorName::new("DP-1")),
+            ),
+        );
+    }
+    let mut monitors = std::collections::BTreeMap::new();
+    monitors.insert(
+        MonitorName::new("DP-1"),
+        Monitor::new(
+            MonitorName::new("DP-1"),
+            WorkspaceId::new(1),
+            Some(WorkspaceId::new(-99)),
+        ),
+    );
+
+    let state = HyprlandState::new(workspaces, monitors, Some(MonitorName::new("DP-1")));
+    assert_eq!(find_state_inconsistencies(&state), []);
+}
+
+/// Workspace problems come first, then each monitor's active workspace
+/// before its special workspace.
+#[test]
+fn test_find_state_inconsistencies_reports_in_order() {
+    let mut workspaces = std::collections::BTreeMap::new();
+    workspaces.insert(
+        WorkspaceId::new(5),
+        Workspace::new(WorkspaceId::new(5), WorkspaceName::new("5"), None),
+    );
+    let mut monitors = std::collections::BTreeMap::new();
+    monitors.insert(
+        MonitorName::new("DP-1"),
+        Monitor::new(
+            MonitorName::new("DP-1"),
+            WorkspaceId::new(99),
+            Some(WorkspaceId::new(-99)),
+        ),
+    );
+
+    let state = HyprlandState::new(workspaces, monitors, None);
+    assert_eq!(
+        find_state_inconsistencies(&state),
+        vec![
+            StateInconsistency::WorkspaceMissingMonitor {
+                workspace_id: WorkspaceId::new(5),
+                workspace_name: WorkspaceName::new("5"),
+            },
+            StateInconsistency::MonitorActiveWorkspaceNotFound {
+                monitor_name: MonitorName::new("DP-1"),
+                workspace_id: WorkspaceId::new(99),
+            },
+            StateInconsistency::MonitorSpecialWorkspaceNotFound {
+                monitor_name: MonitorName::new("DP-1"),
+                special_workspace_id: WorkspaceId::new(-99),
+            },
+        ]
+    );
+}
