@@ -4,62 +4,19 @@
 //! `~/.local/share/cranky/styles/`, then the embedded copies; both directories are watched for hot
 //! reload, and a module's sheets are composed into one resolver.
 
-use super::lightningcss::LightningPropertyReparser;
-use crate::features::styling::domain::{
-    CascadeOrigin, ComputedStyle, ElementQuery, InheritedStyle, Layer, StyleSheetName,
-    StylingError, fold_matches,
-};
-use crate::features::styling::ports::{
-    ParsedStyleSheetPort, StyleLoaderPort, StyleReloadSender, StyleResolverPort,
-};
+pub mod composite;
+mod watch;
+
+use crate::features::styling::domain::{StyleSheetName, StylingError};
+use crate::features::styling::ports::{StyleLoaderPort, StyleReloadSender};
 use crate::shared::env::domain::AppEnvironment;
+use notify::Event;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use watch::{reload_modified_sheets, watch_if_present};
 
-pub(crate) struct CompositeStyleResolver {
-    stylesheets: Vec<Box<dyn ParsedStyleSheetPort>>,
-}
-
-impl CompositeStyleResolver {
-    #[must_use]
-    pub(crate) fn new(stylesheets: Vec<Box<dyn ParsedStyleSheetPort>>) -> Self {
-        Self { stylesheets }
-    }
-}
-
-impl StyleResolverPort for CompositeStyleResolver {
-    fn resolve_style(
-        &self,
-        query: &ElementQuery<'_>,
-        inherited: &InheritedStyle,
-    ) -> (ComputedStyle, InheritedStyle) {
-        // "base" is the one shared origin sheet, always loaded first by the
-        // registry; every other composed sheet is the module's own. Cascade
-        // layer order beats specificity, so base stays overridable by
-        // construction rather than by (previously accidental) load order.
-        let matches = self
-            .stylesheets
-            .iter()
-            .enumerate()
-            .flat_map(|(sheet_index, sheet)| {
-                let layer = if sheet.name().as_str() == "base" {
-                    Layer::BASE
-                } else {
-                    Layer::MODULE
-                };
-                let sheet_index = u32::try_from(sheet_index).unwrap_or(u32::MAX);
-                sheet
-                    .matching_rules(query)
-                    .into_iter()
-                    .map(move |rule_match| {
-                        rule_match.into_matched(CascadeOrigin::new(layer, sheet_index))
-                    })
-            })
-            .collect();
-        fold_matches(matches).collapse(inherited, &LightningPropertyReparser)
-    }
-}
+pub(crate) use composite::CompositeStyleResolver;
 
 pub(crate) struct FsStyleLoader {
     app_env: Arc<AppEnvironment>,
@@ -67,26 +24,35 @@ pub(crate) struct FsStyleLoader {
 
 impl FsStyleLoader {
     pub(crate) const BUILTIN_STYLES: &[(&'static str, &'static str)] = &[
-        ("base", include_str!("../../../../assets/styles/base.css")),
-        ("bar", include_str!("../../../../assets/styles/bar.css")),
-        ("clock", include_str!("../../../../assets/styles/clock.css")),
+        (
+            "base",
+            include_str!("../../../../../assets/styles/base.css"),
+        ),
+        ("bar", include_str!("../../../../../assets/styles/bar.css")),
+        (
+            "clock",
+            include_str!("../../../../../assets/styles/clock.css"),
+        ),
         (
             "calendar",
-            include_str!("../../../../assets/styles/calendar.css"),
+            include_str!("../../../../../assets/styles/calendar.css"),
         ),
         (
             "workspace",
-            include_str!("../../../../assets/styles/workspace.css"),
+            include_str!("../../../../../assets/styles/workspace.css"),
         ),
         (
             "metrics",
-            include_str!("../../../../assets/styles/metrics.css"),
+            include_str!("../../../../../assets/styles/metrics.css"),
         ),
         (
             "systray",
-            include_str!("../../../../assets/styles/systray.css"),
+            include_str!("../../../../../assets/styles/systray.css"),
         ),
-        ("mpris", include_str!("../../../../assets/styles/mpris.css")),
+        (
+            "mpris",
+            include_str!("../../../../../assets/styles/mpris.css"),
+        ),
     ];
 
     #[must_use]
@@ -101,55 +67,54 @@ impl FsStyleLoader {
             .find(|(style_name, _)| *style_name == name)
             .map(|(_, content)| *content)
     }
+
+    /// The directory of the user's overriding sheets, `~/.config/cranky/styles`.
+    fn user_styles_dir(&self) -> PathBuf {
+        PathBuf::from(self.app_env.home().as_path()).join(".config/cranky/styles")
+    }
+
+    /// The directory the built-in sheets are deployed to, `~/.local/share/cranky/styles`.
+    fn deployed_styles_dir(&self) -> PathBuf {
+        PathBuf::from(self.app_env.home().as_path()).join(".local/share/cranky/styles")
+    }
+
+    /// Reads sheet `name` from the user directory, else from the deployed one, logging where
+    /// it was found.
+    fn read_from_disk(&self, name: &StyleSheetName) -> Option<String> {
+        let file_name = format!("{name}.css");
+        let search_path = [
+            ("user_config", self.user_styles_dir()),
+            ("local_share", self.deployed_styles_dir()),
+        ];
+        search_path.into_iter().find_map(|(source, dir)| {
+            let path = dir.join(&file_name);
+            let content = fs::read_to_string(&path).ok()?;
+            log_loaded_from_disk(name, source, &path);
+            Some(content)
+        })
+    }
 }
 
 impl StyleLoaderPort for FsStyleLoader {
     fn ensure_builtin_styles(&self) -> Result<(), StylingError> {
-        let home = self.app_env.home().as_path();
-        let dir = PathBuf::from(home).join(".local/share/cranky/styles");
-
-        tracing::debug!(dir = ?dir, "Ensuring built-in stylesheets are present on disk");
+        let dir = self.deployed_styles_dir();
+        log_ensuring_builtins(&dir);
         fs::create_dir_all(&dir).map_err(|error| StylingError::LoaderError(error.to_string()))?;
-
         for (name, content) in Self::BUILTIN_STYLES {
-            let path = dir.join(format!("{name}.css"));
-            if !path.exists() || fs::read_to_string(&path).ok().as_deref() != Some(*content) {
-                tracing::debug!(path = ?path, stylesheet = %name, "Writing built-in stylesheet to disk");
-                let _ = fs::write(&path, content);
-            }
+            deploy_builtin(&dir, name, content);
         }
-
         Ok(())
     }
 
     fn load_stylesheet(&self, name: &StyleSheetName) -> Result<String, StylingError> {
-        let home = self.app_env.home().as_path();
-        let user_dir = PathBuf::from(home).join(".config/cranky/styles");
-        let shadow_dir = PathBuf::from(home).join(".local/share/cranky/styles");
-
-        let file_name = format!("{name}.css");
-
-        // 1. Check user config directory
-        let user_file = user_dir.join(&file_name);
-        if let Ok(content) = fs::read_to_string(&user_file) {
-            tracing::debug!(stylesheet = %name.as_str(), source = "user_config", path = ?user_file, "Loaded stylesheet");
+        if let Some(content) = self.read_from_disk(name) {
             return Ok(content);
         }
-
-        // 2. Check local share directory
-        let shadow_file = shadow_dir.join(&file_name);
-        if let Ok(content) = fs::read_to_string(&shadow_file) {
-            tracing::debug!(stylesheet = %name.as_str(), source = "local_share", path = ?shadow_file, "Loaded stylesheet");
-            return Ok(content);
-        }
-
-        // 3. Fallback to embedded builtin
         if let Some(content) = Self::builtin_content(name.as_str()) {
-            tracing::debug!(stylesheet = %name.as_str(), source = "embedded_builtin", "Loaded stylesheet");
+            log_loaded_embedded(name);
             return Ok(content.to_string());
         }
-
-        tracing::warn!(stylesheet = %name.as_str(), "Stylesheet not found in any search path");
+        log_not_found(name);
         Err(StylingError::LoaderError(format!(
             "Stylesheet '{name}' not found"
         )))
@@ -159,39 +124,58 @@ impl StyleLoaderPort for FsStyleLoader {
         &self,
         command_tx: Arc<dyn StyleReloadSender>,
     ) -> Result<Box<dyn notify::Watcher>, StylingError> {
-        use notify::{Event, RecursiveMode, Watcher};
-
-        let home = self.app_env.home().as_path();
-        let user_dir = PathBuf::from(home).join(".config/cranky/styles");
-        let shadow_dir = PathBuf::from(home).join(".local/share/cranky/styles");
-
+        let user_dir = self.user_styles_dir();
+        let shadow_dir = self.deployed_styles_dir();
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
-            if let Ok(event) = res
-                && event.kind.is_modify()
-            {
-                for path in event.paths {
-                    if let Some(stem) = path.file_stem().and_then(|file_stem| file_stem.to_str()) {
-                        tracing::debug!("Stylesheet modified: {:?}", path);
-                        if let Ok(sheet_name) = StyleSheetName::new(stem) {
-                            command_tx.reload_style(sheet_name);
-                        }
-                    }
-                }
-            }
+            reload_modified_sheets(res, command_tx.as_ref());
         })
         .map_err(|error| {
             StylingError::LoaderError(format!("Failed to create style watcher: {error}"))
         })?;
-
-        if user_dir.exists() {
-            let _ = watcher.watch(&user_dir, RecursiveMode::NonRecursive);
-        }
-        if shadow_dir.exists() {
-            let _ = watcher.watch(&shadow_dir, RecursiveMode::NonRecursive);
-        }
-
+        watch_if_present(&mut watcher, &user_dir);
+        watch_if_present(&mut watcher, &shadow_dir);
         Ok(Box::new(watcher))
     }
+}
+
+/// Writes the embedded `content` of sheet `name` into `dir` unless an identical copy is there;
+/// a failed write is ignored.
+fn deploy_builtin(dir: &Path, name: &str, content: &str) {
+    let path = dir.join(format!("{name}.css"));
+    if !path.exists() || fs::read_to_string(&path).ok().as_deref() != Some(content) {
+        log_writing_builtin(&path, name);
+        let _ = fs::write(&path, content);
+    }
+}
+
+/// Logs that the built-in sheets are about to be deployed into `dir`.
+fn log_ensuring_builtins(dir: &Path) {
+    tracing::debug!(dir = ?dir, "Ensuring built-in stylesheets are present on disk");
+}
+
+/// Logs that the built-in sheet `name` is being written to `path`.
+fn log_writing_builtin(path: &Path, name: &str) {
+    tracing::debug!(path = ?path, stylesheet = %name, "Writing built-in stylesheet to disk");
+}
+
+/// Logs that sheet `name` was loaded from `path`, found in the directory `source` names.
+fn log_loaded_from_disk(name: &StyleSheetName, source: &str, path: &Path) {
+    tracing::debug!(stylesheet = %name.as_str(), source = source, path = ?path, "Loaded stylesheet");
+}
+
+/// Logs that sheet `name` fell back to its embedded copy.
+fn log_loaded_embedded(name: &StyleSheetName) {
+    tracing::debug!(stylesheet = %name.as_str(), source = "embedded_builtin", "Loaded stylesheet");
+}
+
+/// Logs that sheet `name` exists in no search path.
+fn log_not_found(name: &StyleSheetName) {
+    tracing::warn!(stylesheet = %name.as_str(), "Stylesheet not found in any search path");
+}
+
+/// Logs that the sheet at `path` changed on disk.
+fn log_sheet_modified(path: &Path) {
+    tracing::debug!("Stylesheet modified: {:?}", path);
 }
 
 #[cfg(test)]
