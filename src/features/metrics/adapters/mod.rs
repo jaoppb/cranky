@@ -258,11 +258,20 @@ mod tests {
         assert_eq!(state.cpu_usage.value().to_bits(), 0.0_f32.to_bits());
     }
 
+    /// Says on stderr that a host test checked nothing real when the host has no `what`
+    /// (`found` is 0); the pure steps in `readings` are what cover the logic on such a host.
+    fn say_if_vacuous(found: usize, what: &str) {
+        if found == 0 {
+            eprintln!("VACUOUS: this host has no {what}, so this test checked only its absence");
+        }
+    }
+
     #[test]
     fn test_gather_reads_each_disk_when_disk_is_enabled() {
         let state =
             SysinfoSources::new().gather(&config_from(serde_json::json!({ "disk": "absolute" })));
         let fresh = Disks::new_with_refreshed_list();
+        say_if_vacuous(fresh.list().len(), "disk");
 
         assert_eq!(state.disks.len(), fresh.list().len());
         for (metric, disk) in state.disks.iter().zip(fresh.list()) {
@@ -289,6 +298,7 @@ mod tests {
         let fresh = Components::new_with_refreshed_list();
         let readings = fresh.iter().map(sysinfo::Component::temperature);
         let expected = Temperature::from_readings(readings, &TemperatureMode::Celsius);
+        say_if_vacuous(usize::from(expected.is_some()), "sensor reading");
 
         assert_eq!(state.temperature.is_some(), expected.is_some());
         assert_eq!(state.disks.len(), 0);
