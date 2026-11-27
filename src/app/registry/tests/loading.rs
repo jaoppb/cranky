@@ -67,12 +67,12 @@ fn assert_child_of_root(registry: &ModuleRegistry, root: ModuleId, name: &Module
 fn test_per_site_module_identity() {
     let mut registry = ModuleRegistry::new(env_at(std::path::Path::new("/tmp")));
     let config = config_from("[root]\nname = \"bar\"");
-    let calendar_cfg = ModuleConfig::new(ModuleName::new("calendar"), ModuleOptions::default());
+    let calendar = ModuleConfig::new(ModuleName::new("calendar"), ModuleOptions::default());
     let (parent_a, parent_b) = (ModuleId::new(100), ModuleId::new(200));
 
     let mut load_under = |parent: ModuleId| {
-        let (id, _) = registry.load_single_module(&calendar_cfg, &config).unwrap();
-        let site = ModuleSiteInfo::configured(calendar_cfg.name().clone(), Some(parent));
+        let id = registry.load_single_module(&calendar, &config).unwrap().id;
+        let site = ModuleSiteInfo::configured(calendar.name().clone(), Some(parent));
         registry.record_site(id, site);
         id
     };
@@ -278,9 +278,10 @@ fn a_failed_load_still_uses_up_an_id() {
             .load_single_module(&module("does-not-exist"), &config)
             .is_err()
     );
-    let (id, _) = registry
+    let id = registry
         .load_single_module(&module("calendar"), &config)
-        .unwrap();
+        .unwrap()
+        .id;
     assert_eq!(id, ModuleId::new(1));
 }
 

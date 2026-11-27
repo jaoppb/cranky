@@ -56,6 +56,13 @@ impl ModuleSiteInfo {
     }
 }
 
+/// A module the registry has loaded and initialised, with the id its site
+/// was given, ready for `spawn_site_actor` to run.
+struct LoadedModule {
+    id: ModuleId,
+    module: Box<dyn AnyModulePort>,
+}
+
 pub(super) struct ModuleRegistry {
     modules: HashMap<ModuleId, Box<dyn AnyModulePort>>,
     module_configs: HashMap<ModuleId, ModuleConfig>,
@@ -182,10 +189,7 @@ impl ModuleRegistry {
         &mut self,
         config: &ModuleConfig,
         full_config: &crate::shared::config::domain::Config,
-    ) -> Result<
-        (ModuleId, Box<dyn AnyModulePort>),
-        crate::features::module_runtime::ports::RegistryLoadError,
-    > {
+    ) -> Result<LoadedModule, crate::features::module_runtime::ports::RegistryLoadError> {
         let id = self.mint_module_id();
         let module = self.instantiate_module(config, full_config)?;
 
@@ -202,7 +206,7 @@ impl ModuleRegistry {
             .or_default()
             .push(id);
 
-        Ok((id, module))
+        Ok(LoadedModule { id, module })
     }
 
     /// Hands out the next `ModuleId`, never reused for the registry's
@@ -297,8 +301,8 @@ impl ModuleRegistry {
         let (parent, surface) = (site.parent(), site.surface());
         let (key, options) = site.into_key_and_options();
         let cfg = ModuleConfig::new(key.name().clone(), options);
-        let (id, module) = self.load_single_module(&cfg, setup.config())?;
-        let parent = Some(parent);
+        let loaded = self.load_single_module(&cfg, setup.config())?;
+        let (id, parent) = (loaded.id, Some(parent));
         self.record_site(
             id,
             ModuleSiteInfo {
@@ -308,7 +312,7 @@ impl ModuleRegistry {
             },
         );
 
-        let (sender, handle) = self.spawn_site_actor((id, module), setup.deps());
+        let (sender, handle) = self.spawn_site_actor(loaded, setup.deps());
         self.lazy_actor_handles.insert(id, handle);
 
         Ok(crate::features::module_runtime::ports::SpawnedModule::new(
@@ -327,7 +331,7 @@ impl ModuleRegistry {
         US: crate::features::vdom::domain::UiCommandSender + 'static,
     >(
         &self,
-        (id, module): (ModuleId, Box<dyn AnyModulePort>),
+        LoadedModule { id, module }: LoadedModule,
         deps: &crate::features::module_runtime::ports::ModuleRuntimeDependencies<Fact, LS, DS, US>,
     ) -> (WatchLayoutSender, tokio::task::JoinHandle<()>) {
         let (ctx, sender) = self.build_site_context(id, deps);
@@ -402,7 +406,10 @@ impl ModuleRegistry {
         let root_cfg = config.modules().get(root_name).cloned().unwrap_or_else(|| {
             ModuleConfig::new(root_name.clone(), config.root().options().clone())
         });
-        let (root_id, root_module) = self.load_single_module(&root_cfg, config)?;
+        let LoadedModule {
+            id: root_id,
+            module: root_module,
+        } = self.load_single_module(&root_cfg, config)?;
         self.record_site(
             root_id,
             ModuleSiteInfo::configured(root_cfg.name().clone(), None),
@@ -450,7 +457,7 @@ impl ModuleRegistry {
         cfg: &ModuleConfig,
         config: &crate::shared::config::domain::Config,
     ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
-        let (id, module) = self.load_single_module(cfg, config)?;
+        let LoadedModule { id, module } = self.load_single_module(cfg, config)?;
         self.record_site(
             id,
             ModuleSiteInfo::configured(cfg.name().clone(), self.root_module),
@@ -660,7 +667,7 @@ impl<
             std::collections::HashMap::new();
 
         for (id, module) in std::mem::take(&mut self.modules) {
-            let (sender, _) = self.spawn_site_actor((id, module), deps);
+            let (sender, _) = self.spawn_site_actor(LoadedModule { id, module }, deps);
             layout_senders.insert(id, sender);
         }
 
@@ -685,7 +692,7 @@ impl<
             self.record_style_dependencies(cfg.name(), module.styles());
             self.record_signal_subscriptions(module.as_ref());
 
-            let (sender, _) = self.spawn_site_actor((id, module), deps);
+            let (sender, _) = self.spawn_site_actor(LoadedModule { id, module }, deps);
             new_senders.insert(id, sender);
         }
 
