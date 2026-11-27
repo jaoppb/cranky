@@ -1,7 +1,7 @@
 //! How the app carries out the UI commands module actors send.
 
 use super::fakes::RecordingSni;
-use super::fixtures::{drain, harness, systray_action};
+use super::fixtures::{drain, errors_in, harness, send_all, systray_action};
 use crate::app::test_fakes::FakeRegistry;
 use crate::features::module_runtime::test_support::capture_logs;
 use crate::features::vdom::domain::UiCommand;
@@ -45,16 +45,11 @@ fn test_handle_ui_commands_drains_the_queue_in_order() {
     crate::test_utils::block_on(async {
         let mut harness = harness(Config::default(), FakeRegistry::default());
         let sni = RecordingSni::new();
-        harness
-            .ui_tx
-            .send(systray_action("nm", "Activate"))
-            .await
-            .unwrap();
-        harness
-            .ui_tx
-            .send(systray_action("vol", "ContextMenu"))
-            .await
-            .unwrap();
+        let queued = [
+            systray_action("nm", "Activate"),
+            systray_action("vol", "ContextMenu"),
+        ];
+        send_all(&harness.queues.interface, queued).await;
 
         harness
             .app
@@ -103,11 +98,8 @@ fn test_handle_ui_commands_logs_a_refused_systray_action_and_goes_on() {
         crate::test_utils::block_on(async {
             let mut harness = harness(Config::default(), FakeRegistry::default());
             let sni = RecordingSni::failing();
-            harness
-                .ui_tx
-                .send(systray_action("vol", "ContextMenu"))
-                .await
-                .unwrap();
+            let queued = [systray_action("vol", "ContextMenu")];
+            send_all(&harness.queues.interface, queued).await;
             harness
                 .app
                 .handle_ui_commands(systray_action("nm", "Activate"), &sni)
@@ -117,12 +109,8 @@ fn test_handle_ui_commands_logs_a_refused_systray_action_and_goes_on() {
     });
 
     assert_eq!(calls.len(), 2);
-    let errors: Vec<_> = logs
-        .lines()
-        .filter(|line| line.starts_with("ERROR"))
-        .collect();
     assert_eq!(
-        errors,
+        errors_in(&logs),
         [
             "ERROR cranky::app::state: SNI trigger_action failed id=SystrayId(\"nm\") action=Activate err=ActionFailed { id: \"nm\", error: \"item gone\" }",
             "ERROR cranky::app::state: SNI trigger_action failed id=SystrayId(\"vol\") action=ContextMenu err=ActionFailed { id: \"vol\", error: \"item gone\" }",

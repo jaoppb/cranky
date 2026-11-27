@@ -1,8 +1,11 @@
 //! How the app reloads modules: for a changed script or stylesheet, and for a new
 //! configuration.
 
+use super::fakes::CallLog;
 use super::fakes::RecordingDisplay;
-use super::fixtures::{config_sampling_every_2500_ms, drain, harness};
+use super::fixtures::{
+    TestApp, config_sampling_every_2500_ms, drain, errors_in, harness, layout_channel, send_all,
+};
 use crate::app::commands::SystemCommand;
 use crate::app::registry::WatchLayoutSender;
 use crate::app::test_fakes::FakeRegistry;
@@ -46,27 +49,28 @@ fn sender_ids(senders: &HashMap<ModuleId, WatchLayoutSender>) -> Vec<ModuleId> {
     ids
 }
 
+/// What reloading the stylesheet `name` over `registry` does: whether a render is then due,
+/// the registry calls it made, and the ids the app then holds a layout sender for.
+fn reload_style_over(registry: FakeRegistry, name: &str) -> (bool, Vec<String>, Vec<ModuleId>) {
+    crate::test_utils::block_on(async {
+        let calls = registry.calls.clone();
+        let mut app = harness(Config::default(), registry).app;
+        drain(&calls);
+        let deps = app.deps.clone();
+        let due = app.handle_reload_style(&sheet(name), &deps);
+        (due, drain(&calls), sender_ids(&app.layout_senders))
+    })
+}
+
 /// A change to the base stylesheet reloads every module, keeps the senders of those that
 /// reloaded, says a render is due even when a reload failed, and logs no failure.
 #[test]
 fn test_reload_of_the_base_sheet_reloads_every_module() {
-    let mut reloads = Vec::new();
-    let mut reloaded_ids = Vec::new();
-    let mut due = false;
-    let logs = capture_logs(|| {
-        crate::test_utils::block_on(async {
-            let mut registry = bar_and_clock();
-            registry.failing_reloads = HashSet::from([ModuleName::new("clock")]);
-            let calls = registry.calls.clone();
-            let mut app = harness(Config::default(), registry).app;
-            drain(&calls);
-            let deps = app.deps.clone();
-
-            due = app.handle_reload_style(&sheet("base"), &deps);
-            reloads = drain(&calls);
-            reloaded_ids = sender_ids(&app.layout_senders);
-        });
-    });
+    let mut registry = bar_and_clock();
+    registry.failing_reloads = HashSet::from([ModuleName::new("clock")]);
+    let mut outcome = None;
+    let logs = capture_logs(|| outcome = Some(reload_style_over(registry, "base")));
+    let (due, mut reloads, reloaded_ids) = outcome.unwrap();
 
     assert!(due);
     reloads.sort();
@@ -84,22 +88,12 @@ fn test_reload_of_the_base_sheet_reloads_every_module() {
 /// A change to another stylesheet reloads only the modules that use it, and keeps their senders.
 #[test]
 fn test_reload_of_a_sheet_reloads_only_the_modules_using_it() {
-    let mut due = false;
-    let logs = capture_logs(|| {
-        crate::test_utils::block_on(async {
-            let registry = bar_and_clock();
-            let calls = registry.calls.clone();
-            let mut app = harness(Config::default(), registry).app;
-            drain(&calls);
-            let deps = app.deps.clone();
+    let mut outcome = None;
+    let logs = capture_logs(|| outcome = Some(reload_style_over(bar_and_clock(), "clock-theme")));
+    let (due, reloads, reloaded_ids) = outcome.unwrap();
 
-            due = app.handle_reload_style(&sheet("clock-theme"), &deps);
-
-            assert_eq!(drain(&calls), ["reload clock"]);
-            assert_eq!(sender_ids(&app.layout_senders), [ModuleId::new(1)]);
-        });
-    });
-
+    assert_eq!(reloads, ["reload clock"]);
+    assert_eq!(reloaded_ids, [ModuleId::new(1)]);
     assert!(due);
     assert_eq!(
         logs.lines().collect::<Vec<_>>(),
@@ -128,12 +122,8 @@ fn test_reload_of_a_sheet_is_due_only_when_a_module_reloaded() {
         });
     });
 
-    let errors: Vec<_> = logs
-        .lines()
-        .filter(|line| line.starts_with("ERROR"))
-        .collect();
     assert_eq!(
-        errors,
+        errors_in(&logs),
         ["ERROR cranky::app::state: Failed to reload module clock: Module not found: clock"]
     );
 }
@@ -149,26 +139,21 @@ fn test_handle_system_commands_drains_the_queue_and_renders_once() {
         drain(&calls);
         let mut display = RecordingDisplay::new();
         let renders = display.calls();
-        for command in [
+        let queued = [
             SystemCommand::ReloadStyle(sheet("clock-theme")),
             SystemCommand::ReloadModule(ModuleName::new("bar")),
-        ] {
-            harness.system_tx.send(command).await.unwrap();
-        }
+        ];
+        send_all(&harness.queues.system, queued).await;
 
-        harness.app.handle_system_commands(
-            SystemCommand::ReloadModule(ModuleName::new("clock")),
-            &mut display,
-        );
+        let reload_clock = SystemCommand::ReloadModule(ModuleName::new("clock"));
+        harness
+            .app
+            .handle_system_commands(reload_clock, &mut display);
 
-        assert_eq!(
-            drain(&calls),
-            ["reload clock", "reload clock", "reload bar"]
-        );
-        assert_eq!(
-            sender_ids(&harness.app.layout_senders),
-            [ModuleId::new(0), ModuleId::new(1)]
-        );
+        let reloads = ["reload clock", "reload clock", "reload bar"];
+        assert_eq!(drain(&calls), reloads);
+        let ids = [ModuleId::new(0), ModuleId::new(1)];
+        assert_eq!(sender_ids(&harness.app.layout_senders), ids);
         assert_eq!(drain(&renders), ["render"]);
     });
 }
@@ -184,11 +169,8 @@ fn test_handle_system_commands_without_a_reload_does_not_render() {
             registry.failing_reloads = HashSet::from([ModuleName::new("clock")]);
             let mut harness = harness(Config::default(), registry);
             let mut display = RecordingDisplay::new();
-            harness
-                .system_tx
-                .send(SystemCommand::ReloadStyle(sheet("shared")))
-                .await
-                .unwrap();
+            let queued = [SystemCommand::ReloadStyle(sheet("shared"))];
+            send_all(&harness.queues.system, queued).await;
 
             harness.app.handle_system_commands(
                 SystemCommand::ReloadModule(ModuleName::new("clock")),
@@ -222,8 +204,18 @@ fn replace_modules(registry: &mut FakeRegistry) {
     registry.module_names = HashMap::from([(ModuleId::new(5), panel.clone())]);
     registry.name_to_ids = HashMap::from([(panel.clone(), vec![ModuleId::new(5)])]);
     registry.module_keys = HashMap::from([(ModuleId::new(5), ModuleKey::from_name(panel))]);
-    let (layout_tx, _layout_rx) = tokio::sync::watch::channel(HashMap::new());
-    registry.senders = HashMap::from([(ModuleId::new(5), WatchLayoutSender::new(layout_tx))]);
+    registry.senders = HashMap::from([(ModuleId::new(5), layout_channel().0)]);
+}
+
+/// An app over `registry` that holds a size reported on `DP-1`, whose registry then changes its
+/// module list (`replace_modules`), with the handle on the registry's calls from then on.
+fn app_with_a_changed_registry(registry: FakeRegistry) -> (TestApp, CallLog) {
+    let calls = registry.calls.clone();
+    let mut app = harness(Config::default(), registry).app;
+    drain(&calls);
+    app.read_model.module_sizes = sizes_with("DP-1", ModuleId::new(1));
+    replace_modules(&mut app.registry);
+    (app, calls)
 }
 
 /// A new configuration replaces the old one, forgets every reported size, reloads the registry
@@ -232,12 +224,7 @@ fn replace_modules(registry: &mut FakeRegistry) {
 fn test_handle_config_changed_reloads_the_registry_and_respawns_the_modules() {
     let logs = capture_logs(|| {
         crate::test_utils::block_on(async {
-            let registry = bar_and_clock();
-            let calls = registry.calls.clone();
-            let mut app = harness(Config::default(), registry).app;
-            drain(&calls);
-            app.read_model.module_sizes = sizes_with("DP-1", ModuleId::new(1));
-            replace_modules(&mut app.registry);
+            let (mut app, calls) = app_with_a_changed_registry(bar_and_clock());
 
             app.handle_config_changed(config_sampling_every_2500_ms());
 
@@ -269,14 +256,9 @@ fn test_handle_config_changed_keeps_the_modules_when_the_registry_fails_to_load(
         crate::test_utils::block_on(async {
             let mut registry = bar_and_clock();
             registry.root_module = Some(ModuleId::new(0));
-            let calls = registry.calls.clone();
-            let mut app = harness(Config::default(), registry).app;
-            let (layout_tx, _layout_rx) = tokio::sync::watch::channel(HashMap::new());
+            let (mut app, calls) = app_with_a_changed_registry(registry);
             app.layout_senders
-                .insert(ModuleId::new(1), WatchLayoutSender::new(layout_tx));
-            drain(&calls);
-            app.read_model.module_sizes = sizes_with("DP-1", ModuleId::new(1));
-            replace_modules(&mut app.registry);
+                .insert(ModuleId::new(1), layout_channel().0);
             app.registry.load_failure = Some(ModuleName::new("panel"));
 
             app.handle_config_changed(config_sampling_every_2500_ms());

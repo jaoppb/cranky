@@ -1,7 +1,7 @@
 //! How the app carries out the display commands module actors send.
 
 use super::fakes::RecordingDisplay;
-use super::fixtures::{drain, harness, hide_tooltip, show_tooltip};
+use super::fixtures::{drain, errors_in, harness, hide_tooltip, send_all, show_tooltip};
 use crate::app::test_fakes::FakeRegistry;
 use crate::features::layout_engine::domain::DisplayCommand;
 use crate::features::module_runtime::test_support::capture_logs;
@@ -21,7 +21,7 @@ fn test_handle_display_commands_drains_the_queue_and_renders_once_at_the_end() {
             DisplayCommand::RequestRender,
             show_tooltip(),
         ] {
-            harness.display_tx.send(command).await.unwrap();
+            harness.queues.display.send(command).await.unwrap();
         }
 
         harness
@@ -42,7 +42,7 @@ fn test_handle_display_commands_renders_only_when_asked() {
         let mut harness = harness(Config::default(), FakeRegistry::default());
         let mut display = RecordingDisplay::new();
         let calls = display.calls();
-        harness.display_tx.send(hide_tooltip()).await.unwrap();
+        harness.queues.display.send(hide_tooltip()).await.unwrap();
 
         harness
             .app
@@ -58,7 +58,7 @@ fn test_handle_display_commands_logs_each_floating_request_it_carries_out() {
     let logs = capture_logs(|| {
         crate::test_utils::block_on(async {
             let mut harness = harness(Config::default(), FakeRegistry::default());
-            harness.display_tx.send(hide_tooltip()).await.unwrap();
+            harness.queues.display.send(hide_tooltip()).await.unwrap();
             harness
                 .app
                 .handle_display_commands(show_tooltip(), &mut RecordingDisplay::new());
@@ -85,12 +85,8 @@ fn test_handle_display_commands_logs_a_refused_request_and_goes_on() {
         crate::test_utils::block_on(async {
             let mut harness = harness(Config::default(), FakeRegistry::default());
             let mut display = RecordingDisplay::failing();
-            harness.display_tx.send(hide_tooltip()).await.unwrap();
-            harness
-                .display_tx
-                .send(DisplayCommand::RequestRender)
-                .await
-                .unwrap();
+            let queued = [hide_tooltip(), DisplayCommand::RequestRender];
+            send_all(&harness.queues.display, queued).await;
             harness
                 .app
                 .handle_display_commands(show_tooltip(), &mut display);
@@ -99,12 +95,8 @@ fn test_handle_display_commands_logs_a_refused_request_and_goes_on() {
     });
 
     assert_eq!(calls, ["show Tooltip", "hide Tooltip", "render"]);
-    let errors: Vec<_> = logs
-        .lines()
-        .filter(|line| line.starts_with("ERROR"))
-        .collect();
     assert_eq!(
-        errors,
+        errors_in(&logs),
         [
             "ERROR cranky::app::state: display.show_floating_surface failed err=Internal(\"no compositor\")",
             "ERROR cranky::app::state: display.hide_floating_surface failed err=Internal(\"no compositor\")",
