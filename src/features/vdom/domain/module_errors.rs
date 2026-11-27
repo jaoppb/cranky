@@ -171,4 +171,201 @@ mod tests {
         let popup = result.popup().expect("popup preserved");
         assert_eq!(popup.content().tag(), NodeTag::Text);
     }
+
+    /// A failure recorded for the `calendar` module without an instance id.
+    fn calendar_not_found() -> HashMap<ModuleKey, String> {
+        HashMap::from([(
+            ModuleKey::from_name(ModuleName::new("calendar")),
+            "not found".to_string(),
+        )])
+    }
+
+    /// The text of `node` when it is a text node.
+    fn text_of(node: &VNode) -> Option<&str> {
+        match node.kind() {
+            VNodeKind::Text { text } => Some(text.as_str()),
+            _ => None,
+        }
+    }
+
+    fn text_node(label: &str) -> VNode {
+        VNode::new_text(
+            TextContent::new(label.to_string()),
+            ElementSelectors::default(),
+            Interactions::default(),
+        )
+    }
+
+    #[test]
+    fn test_substitute_recurses_into_grid_children_and_tooltip() {
+        let tree = VNode::new_grid(
+            vec![module_node("clock"), module_node("calendar")],
+            ElementSelectors::default(),
+            Interactions::new(None, None, Some(Box::new(module_node("calendar")))),
+        );
+        let result = substitute_failed_modules(&tree, &calendar_not_found());
+        let children: Vec<NodeTag> = result.children().iter().map(VNode::tag).collect();
+        assert_eq!(children, vec![NodeTag::Module, NodeTag::Text]);
+        assert_eq!(text_of(&result.children()[1]), Some("calendar: not found"));
+        assert_eq!(
+            result.tooltip().and_then(text_of),
+            Some("calendar: not found")
+        );
+    }
+
+    fn panel_margin() -> crate::shared::config::domain::MarginConfig {
+        use crate::shared::config::domain::{AxisMargins, MarginConfig, MarginOffset};
+        MarginConfig::new(
+            AxisMargins::new(MarginOffset::new(1), MarginOffset::new(2)),
+            AxisMargins::new(MarginOffset::new(3), MarginOffset::new(4)),
+        )
+    }
+
+    /// A panel around `content` with every placement field away from its default.
+    fn placed_panel(content: VNode) -> PanelSpec {
+        use crate::features::vdom::domain::{
+            ExclusiveZone, KeyboardInteractivity, PanelAnchor, PanelLayer,
+        };
+        PanelSpec::new(Box::new(content))
+            .with_layer(PanelLayer::Overlay)
+            .with_anchor(PanelAnchor::all())
+            .with_margin(panel_margin())
+            .with_exclusive_zone(ExclusiveZone::new(7))
+            .with_keyboard(KeyboardInteractivity::Exclusive)
+    }
+
+    /// A popup around `content` anchored to the top with an offset.
+    fn placed_popup(content: VNode) -> PopupSpec {
+        use crate::features::vdom::domain::{AnchorDirection, PopupOffset};
+        PopupSpec::new(Box::new(content))
+            .with_anchor(AnchorDirection::Top)
+            .with_offset(Some(PopupOffset::new(3, 4)))
+    }
+
+    #[test]
+    fn test_substitute_recurses_into_panel_content_and_keeps_its_placement() {
+        let tree = text_node("owner").with_panel(placed_panel(module_node("calendar")));
+        let result = substitute_failed_modules(&tree, &calendar_not_found());
+        let panel = result.panel().unwrap();
+        let expected = placed_panel(text_node("unused"));
+        assert_eq!(text_of(panel.content()), Some("calendar: not found"));
+        assert_eq!(
+            (
+                panel.layer(),
+                panel.anchor(),
+                panel.margin(),
+                panel.exclusive_zone()
+            ),
+            (
+                expected.layer(),
+                expected.anchor(),
+                expected.margin(),
+                expected.exclusive_zone()
+            )
+        );
+        assert_eq!(panel.keyboard(), expected.keyboard());
+    }
+
+    #[test]
+    fn test_substitute_recurses_into_popup_content_and_keeps_its_placement() {
+        let tree = text_node("owner").with_popup(placed_popup(module_node("calendar")));
+        let result = substitute_failed_modules(&tree, &calendar_not_found());
+        let popup = result.popup().unwrap();
+        assert_eq!(text_of(popup.content()), Some("calendar: not found"));
+        let expected = placed_popup(text_node("unused"));
+        assert_eq!(
+            (popup.anchor_direction(), popup.offset()),
+            (expected.anchor_direction(), expected.offset())
+        );
+    }
+
+    #[test]
+    fn test_substitute_without_failures_returns_an_equal_tree() {
+        let tree = VNode::new_flex(
+            vec![module_node("clock"), text_node("label")],
+            ElementSelectors::default(),
+            Interactions::new(None, None, Some(Box::new(text_node("tip")))),
+        )
+        .with_popup(placed_popup(module_node("clock")))
+        .with_panel(placed_panel(module_node("clock")));
+        assert_eq!(
+            substitute_failed_modules(&tree, &calendar_not_found()),
+            tree
+        );
+    }
+
+    /// A failed `calendar` module carrying classes, an id, a key, a click, a hover, a tooltip and a
+    /// popup.
+    fn decorated_failed_calendar() -> VNode {
+        use crate::features::styling::domain::ElementId;
+        use crate::features::vdom::domain::{ClickHandlers, NodeKey, UiAction};
+        VNode::new_module(
+            ModuleParams::new(
+                ModuleName::new("calendar"),
+                None,
+                crate::shared::primitives::ModuleOptions::default(),
+            ),
+            ElementSelectors::new(
+                Some(ClassNameList::parse("slot wide").unwrap()),
+                Some(ElementId::new("cal").unwrap()),
+            ),
+            Interactions::new(
+                Some(ClickHandlers::from_single(UiAction::Exec("open".into()))),
+                Some(UiAction::Exec("hover".into())),
+                Some(Box::new(text_node("tip"))),
+            ),
+        )
+        .with_key(NodeKey::new("cal").unwrap())
+        .with_popup(placed_popup(text_node("pop")))
+    }
+
+    #[test]
+    fn test_placeholder_keeps_classes_and_id_and_drops_everything_else() {
+        use crate::features::styling::domain::ElementId;
+        let failed = decorated_failed_calendar();
+        let result = substitute_failed_modules(&failed, &calendar_not_found());
+        assert_eq!(
+            (result.class_names(), result.element_id()),
+            (
+                Some(&ClassNameList::parse("slot wide module-error").unwrap()),
+                Some(&ElementId::new("cal").unwrap())
+            )
+        );
+        assert_eq!(
+            (result.on_click(), result.on_hover(), result.tooltip()),
+            (None, None, None)
+        );
+        assert_eq!(
+            (result.popup(), result.panel(), result.key()),
+            (None, None, None)
+        );
+    }
+
+    #[test]
+    fn test_substitute_matches_the_instance_id_of_the_failed_site() {
+        use crate::shared::primitives::{ModuleInstanceId, ModuleOptions};
+        let instance = |id: Option<&str>| {
+            let params = ModuleParams::new(
+                ModuleName::new("calendar"),
+                id.map(ModuleInstanceId::new),
+                ModuleOptions::default(),
+            );
+            VNode::new_module(params, ElementSelectors::default(), Interactions::default())
+        };
+        let errors = HashMap::from([(
+            ModuleKey::new(
+                ModuleName::new("calendar"),
+                Some(ModuleInstanceId::new("left")),
+            ),
+            "boom".to_string(),
+        )]);
+        let tree = VNode::new_flex(
+            vec![instance(None), instance(Some("left"))],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
+        let result = substitute_failed_modules(&tree, &errors);
+        let texts: Vec<Option<&str>> = result.children().iter().map(text_of).collect();
+        assert_eq!(texts, vec![None, Some("calendar: boom")]);
+    }
 }

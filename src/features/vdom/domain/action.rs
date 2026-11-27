@@ -204,4 +204,104 @@ mod tests {
             Some(&UiAction::Exec("extra_cmd".into()))
         );
     }
+
+    /// The `Exec` command for `command`, as a sender would receive it.
+    fn exec(command: &str) -> UiCommand {
+        UiCommand::Exec(command.to_string())
+    }
+
+    /// A shared byte buffer a test subscriber writes its formatted events into.
+    #[derive(Clone, Default)]
+    struct LogBuffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+    impl std::io::Write for LogBuffer {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .lock()
+                .map_err(|_| std::io::Error::other("log buffer poisoned"))?
+                .extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Everything logged while `action` runs, formatted without time or colour.
+    fn captured_logs(action: impl FnOnce()) -> String {
+        let buffer = LogBuffer::default();
+        let writer = buffer.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(move || writer.clone())
+            .with_ansi(false)
+            .without_time()
+            .finish();
+        tracing::subscriber::with_default(subscriber, action);
+        let bytes = buffer.0.lock().unwrap().clone();
+        String::from_utf8(bytes).unwrap()
+    }
+
+    #[test]
+    fn test_closure_sender_forwards_the_command() {
+        let received = std::sync::Mutex::new(Vec::new());
+        let sender = |cmd: UiCommand| received.lock().unwrap().push(cmd);
+        sender.send_ui_command(exec("run"));
+        assert_eq!(received.into_inner().unwrap(), vec![exec("run")]);
+    }
+
+    #[test]
+    fn test_tokio_sender_delivers_without_logging() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        let logs = captured_logs(|| tx.send_ui_command(exec("run")));
+        assert_eq!(
+            (rx.try_recv().ok(), logs),
+            (Some(exec("run")), String::new())
+        );
+    }
+
+    #[test]
+    fn test_tokio_sender_logs_and_drops_the_command_when_the_channel_is_full() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        tx.send_ui_command(exec("first"));
+        let logs = captured_logs(|| tx.send_ui_command(exec("second")));
+        assert_eq!(
+            logs,
+            "ERROR cranky::features::vdom::domain::action: failed to send ui command via tokio \
+             channel error=\"Full(..)\"\n"
+        );
+        assert_eq!(rx.try_recv().ok(), Some(exec("first")));
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn test_std_sender_delivers_without_logging() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let logs = captured_logs(|| tx.send_ui_command(exec("run")));
+        assert_eq!(
+            (rx.try_recv().ok(), logs),
+            (Some(exec("run")), String::new())
+        );
+    }
+
+    #[test]
+    fn test_std_sender_logs_when_the_receiver_is_gone() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        drop(rx);
+        let logs = captured_logs(|| tx.send_ui_command(exec("run")));
+        assert_eq!(
+            logs,
+            "ERROR cranky::features::vdom::domain::action: failed to send ui command via std \
+             channel error=SendError { .. }\n"
+        );
+    }
+
+    #[test]
+    fn test_click_handlers_deserialization_drops_unknown_button_names() {
+        let json = r#"{"left": {"Exec": "left_cmd"}, "wheel": {"Exec": "wheel_cmd"}}"#;
+        let handlers: ClickHandlers = serde_json::from_str(json).unwrap();
+        let mut expected = ClickHandlers::new();
+        expected.insert(PointerButton::Left, UiAction::Exec("left_cmd".into()));
+        assert_eq!(handlers, expected);
+    }
 }
