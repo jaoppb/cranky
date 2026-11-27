@@ -32,7 +32,7 @@ impl Sway {
             format!("xwayland disable\nexec echo \"{READY} $WAYLAND_DISPLAY $SWAYSOCK\"\n"),
         )
         .context("write the sway config")?;
-        let mut process = spawn_headless(&config, dir, bus_address)
+        let mut process = headless_sway_command(&config, dir, bus_address)
             .stderr(log)
             .kill_on_drop(true)
             .spawn()
@@ -76,7 +76,7 @@ async fn wait_until_ready(process: &mut Child, dir: &Path) -> Outcome<String> {
 
 /// The command that runs a headless sway on `config`, with its runtime
 /// directory and session bus, its stdin closed and its stdout piped.
-fn spawn_headless(config: &Path, dir: &Path, bus_address: &str) -> Command {
+fn headless_sway_command(config: &Path, dir: &Path, bus_address: &str) -> Command {
     let mut command = without_session(Command::new("sway"));
     command
         .arg("--config")
