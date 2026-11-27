@@ -3,6 +3,7 @@
 mod lifecycle;
 mod loading;
 mod reload;
+mod styles;
 
 use super::{ModuleRegistry, WatchLayoutSender};
 use crate::features::module_runtime::ports::{
@@ -128,3 +129,20 @@ impl LoadedBar {
             .map(|spawned| spawned.id())
     }
 }
+/// Writes the user module script `file` (name and extension) under `home`.
+pub(super) fn write_user_module(home: &std::path::Path, file: &str, source: &str) {
+    let dir = home.join(".config/cranky/modules");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(file), source).unwrap();
+}
+
+/// A Lua module script whose `init` raises "boom".
+pub(super) const FAILING_INIT: &str = r#"
+    function init() error("boom") end
+    function render(monitor) return ui.text("") end
+"#;
+
+/// A Lua module script that renders nothing and declares no metadata.
+pub(super) const PLAIN_MODULE: &str = r#"
+    function render(monitor) return ui.text("") end
+"#;
