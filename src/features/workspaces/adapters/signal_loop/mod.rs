@@ -36,6 +36,10 @@ struct EventBatch {
     outcome: LineOutcome,
 }
 
+/// How long the loop waits after the event socket ends or refuses a connection before it
+/// connects again.
+pub(super) const RECONNECT_PAUSE: Duration = Duration::from_secs(1);
+
 pub(super) async fn run_event_loop<P: WindowManagerPort + 'static>(
     adapter: P,
     provider: Arc<dyn HyprlandProvider>,
@@ -45,7 +49,7 @@ pub(super) async fn run_event_loop<P: WindowManagerPort + 'static>(
         let hypr_tx = hub.hyprland_tx();
         loop {
             follow_event_socket(provider.as_ref(), &adapter, &hypr_tx);
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(RECONNECT_PAUSE);
         }
     });
 }
@@ -649,6 +653,58 @@ mod tests {
         assert_eq!(
             logs,
             format!(" INFO {TARGET}: Hyprland event socket closed, reconnecting...\n")
+        );
+    }
+
+    /// A Hyprland whose event socket refuses the first connection, then hands out a socket
+    /// that has already ended.
+    #[derive(Default)]
+    struct RefusingOnceHyprland {
+        listens: AtomicUsize,
+    }
+
+    impl HyprlandProvider for RefusingOnceHyprland {
+        fn query_monitors(&self) -> Result<String, HyprError> {
+            Ok("[]".to_string())
+        }
+
+        fn query_workspaces(&self) -> Result<String, HyprError> {
+            Ok("[]".to_string())
+        }
+
+        fn listen_events(&self) -> Result<std::os::unix::net::UnixStream, HyprError> {
+            if self.listens.fetch_add(1, Ordering::SeqCst) == 0 {
+                return Err(HyprError::InputOutput(ErrorKind::ConnectionRefused.into()));
+            }
+            let (sender, receiver) = std::os::unix::net::UnixStream::pair()?;
+            drop(sender);
+            Ok(receiver)
+        }
+    }
+
+    /// A refused connection is logged as an error and gives up the attempt without querying
+    /// the window manager; the next attempt connects and follows the socket, which queries it.
+    #[test]
+    fn test_follow_event_socket_logs_a_refused_connection_then_retries() {
+        let provider = RefusingOnceHyprland::default();
+        let fake = FakeWindowManager::new(Some(one_monitor("DP-1")));
+        let (hypr_tx, _hypr_rx) =
+            tokio::sync::watch::channel(HyprlandState::new(BTreeMap::new(), BTreeMap::new(), None));
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            follow_event_socket(&provider, &fake, &hypr_tx);
+        });
+        let queries_after_refusal = fake.queries();
+        follow_event_socket(&provider, &fake, &hypr_tx);
+        assert_eq!(
+            (queries_after_refusal, fake.queries(), logs),
+            (
+                0,
+                1,
+                format!(
+                    "ERROR {TARGET}: Failed to connect to Hyprland event socket: \
+                     IO error: connection refused\n"
+                )
+            )
         );
     }
 

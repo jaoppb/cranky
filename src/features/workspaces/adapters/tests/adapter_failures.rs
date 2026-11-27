@@ -2,6 +2,7 @@
 use super::adapter::FakeHyprland;
 use crate::features::workspaces::adapters::hyprland_adapter::HyprlandAdapter;
 use crate::features::workspaces::adapters::hyprland_provider::{HyprError, HyprlandProvider};
+use crate::features::workspaces::adapters::signal_loop::RECONNECT_PAUSE;
 use crate::features::workspaces::ports::WindowManagerPort;
 use crate::shared::events::signals::SignalHub;
 use std::os::unix::net::UnixStream;
@@ -130,7 +131,7 @@ fn end_on_a_retry(attempt: usize) {
     assert_eq!(attempt, 0, "the adapter retried the event socket");
 }
 
-/// A failed connection to the event socket is retried.
+/// A failed connection to the event socket is retried after a one-second pause.
 #[test]
 fn test_hyprland_adapter_run_retries_a_refused_event_socket() {
     let provider = Arc::new(RefusingHyprland::default());
@@ -138,7 +139,10 @@ fn test_hyprland_adapter_run_retries_a_refused_event_socket() {
     let hub = Arc::new(SignalHub::new(
         crate::shared::config::domain::Config::default(),
     ));
+    let started = std::time::Instant::now();
     // The runtime waits for the reconnect thread, which ends on the retry.
     crate::test_utils::block_on(adapter.run(hub));
+    assert!(started.elapsed() >= RECONNECT_PAUSE);
+    assert_eq!(RECONNECT_PAUSE, std::time::Duration::from_secs(1));
     assert_eq!(provider.event_listens.load(Ordering::SeqCst), 2);
 }
