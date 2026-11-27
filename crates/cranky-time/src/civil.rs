@@ -45,7 +45,7 @@ pub(crate) const fn date_from_days(days: i64) -> Date {
     let shifted = days.saturating_add(EPOCH_SHIFT);
     let era = shifted.div_euclid(DAYS_PER_ERA);
     let day_of_era = shifted.rem_euclid(DAYS_PER_ERA);
-    let year_of_era = year_of_era(day_of_era);
+    let year_of_era = year_of_era_of_day(day_of_era);
     let day_of_year = day_of_era.saturating_sub(days_before_year(year_of_era));
     let month_from_march = day_of_year
         .saturating_mul(5)
@@ -86,7 +86,7 @@ const fn days_before_month(month_from_march: i64) -> i64 {
 }
 
 /// The year of an era, counted from March, that holds a day of the era.
-const fn year_of_era(day_of_era: i64) -> i64 {
+const fn year_of_era_of_day(day_of_era: i64) -> i64 {
     day_of_era
         .saturating_sub(day_of_era.div_euclid(1460))
         .saturating_add(day_of_era.div_euclid(36_524))
