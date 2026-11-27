@@ -5,3 +5,6 @@ mod floating_differ;
 pub mod kind_differ;
 
 pub use differ::*;
+
+#[cfg(test)]
+mod tests;
