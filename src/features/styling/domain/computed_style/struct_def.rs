@@ -75,59 +75,86 @@ impl ComputedStyle {
         }
     }
 
+    /// Overlays `other` on this style: every property `other` sets replaces this one, every
+    /// property it leaves `None` keeps this one.
     pub(crate) fn merge_with(&mut self, other: &Self) {
-        macro_rules! merge_fields {
-            ($($field:ident),* $(,)?) => {
-                $(
-                    if other.$field.is_some() {
-                        self.$field.clone_from(&other.$field);
-                    }
-                )*
-            };
-        }
+        self.merge_text_and_border(other);
+        self.merge_sizes_and_spacing(other);
+        self.merge_container_layout(other);
+        self.merge_position_opacity_and_flex_item(other);
+    }
 
-        merge_fields!(
-            background,
-            color,
-            accent_color,
-            font_family,
-            font_size,
-            text_align,
-            border_size,
-            border_color,
-            border_radius,
-            width,
-            height,
-            min_width,
-            min_height,
-            max_width,
-            max_height,
-            padding,
-            margin,
-            gap,
-            column_gap,
-            row_gap,
-            display,
-            flex_direction,
-            justify_content,
-            align_items,
-            justify_items,
-            justify_self,
-            align_content,
-            grid_template_columns,
-            grid_template_rows,
-            grid_auto_columns,
-            grid_auto_rows,
-            grid_auto_flow,
-            grid_column,
-            grid_row,
-            position,
-            opacity,
-            flex_grow,
-            flex_shrink,
-            flex_basis,
-            align_self,
+    /// Merges the colors, the font and text alignment, and the border.
+    fn merge_text_and_border(&mut self, other: &Self) {
+        take_if_set(&mut self.background, other.background.as_ref());
+        take_if_set(&mut self.color, other.color.as_ref());
+        take_if_set(&mut self.accent_color, other.accent_color.as_ref());
+        take_if_set(&mut self.font_family, other.font_family.as_ref());
+        take_if_set(&mut self.font_size, other.font_size.as_ref());
+        take_if_set(&mut self.text_align, other.text_align.as_ref());
+        take_if_set(&mut self.border_size, other.border_size.as_ref());
+        take_if_set(&mut self.border_color, other.border_color.as_ref());
+        take_if_set(&mut self.border_radius, other.border_radius.as_ref());
+    }
+
+    /// Merges the width and height with their bounds, the padding and margin, and the gaps.
+    fn merge_sizes_and_spacing(&mut self, other: &Self) {
+        take_if_set(&mut self.width, other.width.as_ref());
+        take_if_set(&mut self.height, other.height.as_ref());
+        take_if_set(&mut self.min_width, other.min_width.as_ref());
+        take_if_set(&mut self.min_height, other.min_height.as_ref());
+        take_if_set(&mut self.max_width, other.max_width.as_ref());
+        take_if_set(&mut self.max_height, other.max_height.as_ref());
+        take_if_set(&mut self.padding, other.padding.as_ref());
+        take_if_set(&mut self.margin, other.margin.as_ref());
+        take_if_set(&mut self.gap, other.gap.as_ref());
+        take_if_set(&mut self.column_gap, other.column_gap.as_ref());
+        take_if_set(&mut self.row_gap, other.row_gap.as_ref());
+    }
+
+    /// Merges how the element lays out its children: display, flex direction, alignment, grid.
+    fn merge_container_layout(&mut self, other: &Self) {
+        take_if_set(&mut self.display, other.display.as_ref());
+        take_if_set(&mut self.flex_direction, other.flex_direction.as_ref());
+        take_if_set(&mut self.justify_content, other.justify_content.as_ref());
+        take_if_set(&mut self.align_items, other.align_items.as_ref());
+        take_if_set(&mut self.justify_items, other.justify_items.as_ref());
+        take_if_set(&mut self.justify_self, other.justify_self.as_ref());
+        take_if_set(&mut self.align_content, other.align_content.as_ref());
+        take_if_set(
+            &mut self.grid_template_columns,
+            other.grid_template_columns.as_ref(),
         );
+        take_if_set(
+            &mut self.grid_template_rows,
+            other.grid_template_rows.as_ref(),
+        );
+        take_if_set(
+            &mut self.grid_auto_columns,
+            other.grid_auto_columns.as_ref(),
+        );
+        take_if_set(&mut self.grid_auto_rows, other.grid_auto_rows.as_ref());
+        take_if_set(&mut self.grid_auto_flow, other.grid_auto_flow.as_ref());
+        take_if_set(&mut self.grid_column, other.grid_column.as_ref());
+        take_if_set(&mut self.grid_row, other.grid_row.as_ref());
+    }
+
+    /// Merges the positioning, the opacity, and how the element sizes and aligns as a flex item.
+    fn merge_position_opacity_and_flex_item(&mut self, other: &Self) {
+        take_if_set(&mut self.position, other.position.as_ref());
+        take_if_set(&mut self.opacity, other.opacity.as_ref());
+        take_if_set(&mut self.flex_grow, other.flex_grow.as_ref());
+        take_if_set(&mut self.flex_shrink, other.flex_shrink.as_ref());
+        take_if_set(&mut self.flex_basis, other.flex_basis.as_ref());
+        take_if_set(&mut self.align_self, other.align_self.as_ref());
+    }
+}
+
+/// Replaces `target` with `later` when `later` is set, so a later rule's declaration wins and a
+/// property it leaves out keeps the earlier value.
+fn take_if_set<T: Clone>(target: &mut Option<T>, later: Option<&T>) {
+    if let Some(value) = later {
+        *target = Some(value.clone());
     }
 }
 

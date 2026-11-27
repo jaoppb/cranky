@@ -69,37 +69,26 @@ impl DeclaredLengths {
     setter!(margin_left, set_margin_left);
 
     pub(crate) fn merge_with(&mut self, other: &Self) {
-        macro_rules! merge_fields {
-            ($($field:ident),* $(,)?) => {
-                $(
-                    if !matches!(other.$field, Cascade::NotDeclared) {
-                        self.$field = other.$field.clone();
-                    }
-                )*
-            };
-        }
-        merge_fields!(
-            width,
-            height,
-            min_width,
-            min_height,
-            max_width,
-            max_height,
-            flex_basis,
-            border_size,
-            border_radius,
-            gap,
-            column_gap,
-            row_gap,
-            padding_top,
-            padding_right,
-            padding_bottom,
-            padding_left,
-            margin_top,
-            margin_right,
-            margin_bottom,
-            margin_left,
-        );
+        self.width.override_with(&other.width);
+        self.height.override_with(&other.height);
+        self.min_width.override_with(&other.min_width);
+        self.min_height.override_with(&other.min_height);
+        self.max_width.override_with(&other.max_width);
+        self.max_height.override_with(&other.max_height);
+        self.flex_basis.override_with(&other.flex_basis);
+        self.border_size.override_with(&other.border_size);
+        self.border_radius.override_with(&other.border_radius);
+        self.gap.override_with(&other.gap);
+        self.column_gap.override_with(&other.column_gap);
+        self.row_gap.override_with(&other.row_gap);
+        self.padding_top.override_with(&other.padding_top);
+        self.padding_right.override_with(&other.padding_right);
+        self.padding_bottom.override_with(&other.padding_bottom);
+        self.padding_left.override_with(&other.padding_left);
+        self.margin_top.override_with(&other.margin_top);
+        self.margin_right.override_with(&other.margin_right);
+        self.margin_bottom.override_with(&other.margin_bottom);
+        self.margin_left.override_with(&other.margin_left);
     }
 }
 
