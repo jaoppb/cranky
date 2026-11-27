@@ -11,6 +11,12 @@ use lightningcss::properties::Property;
 /// `calc()` value here still falls through to the ordinary pipeline's
 /// pixel guess, same as before this stage.
 pub(super) fn apply_spacing(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
+    apply_padding(lengths, prop);
+    apply_margin(lengths, prop);
+}
+
+/// `em`/`rem` detection for `padding` and its per-side longhands.
+fn apply_padding(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
     match prop {
         Property::Padding(padding) => {
             relative(&padding.top).inspect(|&declared| lengths.set_padding_top(declared));
@@ -30,6 +36,13 @@ pub(super) fn apply_spacing(lengths: &mut DeclaredLengths, prop: &Property<'_>) 
         Property::PaddingLeft(value) => {
             relative(value).inspect(|&declared| lengths.set_padding_left(declared));
         }
+        _ => {}
+    }
+}
+
+/// `em`/`rem` detection for `margin` and its per-side longhands.
+fn apply_margin(lengths: &mut DeclaredLengths, prop: &Property<'_>) {
+    match prop {
         Property::Margin(margin) => {
             relative(&margin.top).inspect(|&declared| lengths.set_margin_top(declared));
             relative(&margin.right).inspect(|&declared| lengths.set_margin_right(declared));

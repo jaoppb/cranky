@@ -4,109 +4,74 @@ use crate::features::layout_engine::domain::BoxMargin;
 use crate::features::styling::domain::ComputedStyle;
 use crate::shared::config::domain::AxisMargins;
 use lightningcss::properties::Property;
+use lightningcss::values::length::LengthPercentageOrAuto;
 
 pub(crate) fn apply_padding_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
-    match prop {
+    let padding = match prop {
         Property::Padding(padding) => {
-            let top = length_to_f64(&padding.top);
-            let right = length_to_f64(&padding.right);
-            let bottom = length_to_f64(&padding.bottom);
-            let left = length_to_f64(&padding.left);
-            style.set_padding(BoxMargin::new(
-                AxisMargins::new(top, bottom),
-                AxisMargins::new(left, right),
-            ));
-            true
+            box_from_sides([&padding.top, &padding.right, &padding.bottom, &padding.left])
         }
-        Property::PaddingTop(len) => {
-            let top = length_to_f64(len);
-            let current = style.padding().cloned().unwrap_or_default();
-            style.set_padding(BoxMargin::new(
-                AxisMargins::new(top, current.bottom()),
-                AxisMargins::new(current.left(), current.right()),
-            ));
-            true
-        }
-        Property::PaddingRight(len) => {
-            let right = length_to_f64(len);
-            let current = style.padding().cloned().unwrap_or_default();
-            style.set_padding(BoxMargin::new(
-                AxisMargins::new(current.top(), current.bottom()),
-                AxisMargins::new(current.left(), right),
-            ));
-            true
-        }
-        Property::PaddingBottom(len) => {
-            let bottom = length_to_f64(len);
-            let current = style.padding().cloned().unwrap_or_default();
-            style.set_padding(BoxMargin::new(
-                AxisMargins::new(current.top(), bottom),
-                AxisMargins::new(current.left(), current.right()),
-            ));
-            true
-        }
-        Property::PaddingLeft(len) => {
-            let left = length_to_f64(len);
-            let current = style.padding().cloned().unwrap_or_default();
-            style.set_padding(BoxMargin::new(
-                AxisMargins::new(current.top(), current.bottom()),
-                AxisMargins::new(left, current.right()),
-            ));
-            true
-        }
-        _ => false,
-    }
+        Property::PaddingTop(len) => with_side(style.padding(), Side::Top, len),
+        Property::PaddingRight(len) => with_side(style.padding(), Side::Right, len),
+        Property::PaddingBottom(len) => with_side(style.padding(), Side::Bottom, len),
+        Property::PaddingLeft(len) => with_side(style.padding(), Side::Left, len),
+        _ => return false,
+    };
+    style.set_padding(padding);
+    true
 }
 
 pub(crate) fn apply_margin_properties(style: &mut ComputedStyle, prop: &Property<'_>) -> bool {
-    match prop {
+    let margin = match prop {
         Property::Margin(margin) => {
-            let top = length_to_f64(&margin.top);
-            let right = length_to_f64(&margin.right);
-            let bottom = length_to_f64(&margin.bottom);
-            let left = length_to_f64(&margin.left);
-            style.set_margin(BoxMargin::new(
-                AxisMargins::new(top, bottom),
-                AxisMargins::new(left, right),
-            ));
-            true
+            box_from_sides([&margin.top, &margin.right, &margin.bottom, &margin.left])
         }
-        Property::MarginTop(len) => {
-            let top = length_to_f64(len);
-            let current = style.margin().cloned().unwrap_or_default();
-            style.set_margin(BoxMargin::new(
-                AxisMargins::new(top, current.bottom()),
-                AxisMargins::new(current.left(), current.right()),
-            ));
-            true
-        }
-        Property::MarginRight(len) => {
-            let right = length_to_f64(len);
-            let current = style.margin().cloned().unwrap_or_default();
-            style.set_margin(BoxMargin::new(
-                AxisMargins::new(current.top(), current.bottom()),
-                AxisMargins::new(current.left(), right),
-            ));
-            true
-        }
-        Property::MarginBottom(len) => {
-            let bottom = length_to_f64(len);
-            let current = style.margin().cloned().unwrap_or_default();
-            style.set_margin(BoxMargin::new(
-                AxisMargins::new(current.top(), bottom),
-                AxisMargins::new(current.left(), current.right()),
-            ));
-            true
-        }
-        Property::MarginLeft(len) => {
-            let left = length_to_f64(len);
-            let current = style.margin().cloned().unwrap_or_default();
-            style.set_margin(BoxMargin::new(
-                AxisMargins::new(current.top(), current.bottom()),
-                AxisMargins::new(left, current.right()),
-            ));
-            true
-        }
-        _ => false,
+        Property::MarginTop(len) => with_side(style.margin(), Side::Top, len),
+        Property::MarginRight(len) => with_side(style.margin(), Side::Right, len),
+        Property::MarginBottom(len) => with_side(style.margin(), Side::Bottom, len),
+        Property::MarginLeft(len) => with_side(style.margin(), Side::Left, len),
+        _ => return false,
+    };
+    style.set_margin(margin);
+    true
+}
+
+/// The side of a box a longhand such as `padding-top` writes.
+#[derive(Debug, Clone, Copy)]
+enum Side {
+    /// `*-top`.
+    Top,
+    /// `*-right`.
+    Right,
+    /// `*-bottom`.
+    Bottom,
+    /// `*-left`.
+    Left,
+}
+
+/// The box a four-side shorthand declares, its sides in CSS order: top, right, bottom, left.
+fn box_from_sides([top, right, bottom, left]: [&LengthPercentageOrAuto; 4]) -> BoxMargin {
+    BoxMargin::new(
+        AxisMargins::new(length_to_f64(top), length_to_f64(bottom)),
+        AxisMargins::new(length_to_f64(left), length_to_f64(right)),
+    )
+}
+
+/// `current` (zero on every side when undeclared) with only `side` replaced by `length`.
+fn with_side(
+    current: Option<&BoxMargin>,
+    side: Side,
+    length: &LengthPercentageOrAuto,
+) -> BoxMargin {
+    let value = length_to_f64(length);
+    let current = current.cloned().unwrap_or_default();
+    let (mut top, mut right) = (current.top(), current.right());
+    let (mut bottom, mut left) = (current.bottom(), current.left());
+    match side {
+        Side::Top => top = value,
+        Side::Right => right = value,
+        Side::Bottom => bottom = value,
+        Side::Left => left = value,
     }
+    BoxMargin::new(AxisMargins::new(top, bottom), AxisMargins::new(left, right))
 }
