@@ -4,11 +4,13 @@ use super::super::{ModuleRegistry, ModuleSiteInfo};
 use super::{
     FAILING_INIT, LoadedBar, PLAIN_MODULE, TestDeps, loaded, test_deps, write_user_module,
 };
-use crate::features::module_runtime::ports::{ModuleRegistryPort, ModuleSetup, RegistryLoadError};
+use crate::features::module_runtime::ports::{
+    LazySite, ModuleRegistryPort, ModuleSetup, RegistryLoadError,
+};
 use crate::features::styling::domain::StyleSheetName;
 use crate::shared::config::domain::{Config, EngineId, EngineSelection, ModuleConfig};
 use crate::shared::events::signals::SignalKind;
-use crate::shared::primitives::{LayoutSurface, ModuleId, ModuleName, ModuleOptions};
+use crate::shared::primitives::{LayoutSurface, ModuleId, ModuleKey, ModuleName, ModuleOptions};
 
 /// Bug A regression: `reload_module` used to rebuild a reloaded
 /// module's `ModuleContext` via `.with_parent(parent_id)` alone, never
@@ -67,16 +69,26 @@ fn a_reload_rebuilds_each_site_of_the_module_and_records_its_styles_and_signals(
     crate::test_utils::block_on(async {
         let home = crate::test_utils::TestHome::new("registry");
         let (mut registry, config, deps) = loaded_with(&home, "clock");
+        let clock = ModuleName::new("clock");
+        // A second site of the same module, embedded lazily under the first one.
+        let configured = registry.name_to_ids[&clock][0];
+        let nested = LazySite::new(configured, ModuleKey::from_name(clock.clone()));
+        registry
+            .spawn_module(nested, ModuleSetup::new(&config, &deps))
+            .unwrap();
         registry.style_to_modules.clear();
         registry.active_signals.clear();
-        let clock = ModuleName::new("clock");
+        let mut sites = registry.name_to_ids[&clock].clone();
+        sites.sort_unstable_by_key(|id| id.value());
+        assert_eq!(sites.len(), 2, "the module must sit at two sites");
 
         let senders = registry
             .reload_module(&clock, ModuleSetup::new(&config, &deps))
             .unwrap();
 
-        let reloaded: Vec<ModuleId> = senders.keys().copied().collect();
-        assert_eq!(reloaded, registry.name_to_ids[&clock]);
+        let mut reloaded: Vec<ModuleId> = senders.keys().copied().collect();
+        reloaded.sort_unstable_by_key(|id| id.value());
+        assert_eq!(reloaded, sites);
         let sheet = StyleSheetName::new("clock").unwrap();
         assert_eq!(registry.modules_using_style(&sheet), [clock]);
         assert!(registry.active_signals.contains(&SignalKind::Time));
