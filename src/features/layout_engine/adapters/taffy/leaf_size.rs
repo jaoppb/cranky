@@ -54,7 +54,9 @@ pub(super) fn apply_node_dimensions(
 }
 
 /// The content size of a leaf before padding: its measured text, or the default size of a
-/// progress bar, rect or image. Containers and modules have none.
+/// progress bar, rect or image. Containers have none; a module never gets here, as
+/// `apply_node_dimensions` sizes it from its report, and is listed only to keep the match
+/// exhaustive.
 fn leaf_intrinsic_size(node: &StyledNode, measurer: &mut dyn TextMeasurer) -> Option<Size> {
     match node {
         StyledNode::Flex { .. } | StyledNode::Grid { .. } | StyledNode::Module { .. } => None,

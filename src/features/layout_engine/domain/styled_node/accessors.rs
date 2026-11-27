@@ -60,6 +60,7 @@ impl StyledNode {
         }
     }
 
+    /// The tree shown in this node's tooltip while it is hovered, if it has one.
     #[must_use]
     pub(crate) fn tooltip(&self) -> Option<&Self> {
         match self {
@@ -73,6 +74,7 @@ impl StyledNode {
         }
     }
 
+    /// The popup this node opens, if it opens one.
     #[must_use]
     pub(crate) const fn popup(&self) -> Option<&StyledPopup> {
         match self {
@@ -86,6 +88,7 @@ impl StyledNode {
         }
     }
 
+    /// The panel this node opens, if it opens one.
     #[must_use]
     pub(crate) const fn panel(&self) -> Option<&StyledPanel> {
         match self {

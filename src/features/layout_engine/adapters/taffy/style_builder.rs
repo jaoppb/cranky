@@ -130,7 +130,7 @@ fn apply_flex_item(style: &mut Style, computed: &ComputedStyle) {
     }
 }
 
-/// The gap between columns and between rows: each axis's own gap, else the shorthand, else none.
+/// The gap between columns and between rows: each axis's own gap, else the shorthand, else zero.
 fn gaps_of(computed: &ComputedStyle) -> TaffySize<LengthPercentage> {
     let length = |gap: Option<&Gap>| {
         gap.map_or_else(

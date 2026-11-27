@@ -34,7 +34,8 @@ const fn leaf_content(node: &StyledNode) -> Option<LeafContent<'_>> {
 
 /// Diffs two leaves of the same kind: kept when nothing that sizes or styles
 /// them changed, updated in place with a fresh style otherwise. `None` for a
-/// container or a module.
+/// container or a module, and for two leaves of different kinds, which `diff`
+/// has already replaced before asking.
 fn diff_leaf<'a>(
     old_state: &'a LayoutState,
     new_layout: &'a StyledNode,
