@@ -25,14 +25,7 @@ pub(crate) struct LuaMonitor(pub ScriptMonitorInfo);
 impl UserData for LuaMonitor {
     fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
         fields.add_field_method_get("id", |_, this| Ok(this.0.id().as_str().to_string()));
-        fields.add_field_method_get("name", |_, this| {
-            let name = this.0.name();
-            if name.is_empty() {
-                Ok(this.0.id().as_str().to_string())
-            } else {
-                Ok(name.to_string())
-            }
-        });
+        fields.add_field_method_get("name", |_, this| Ok(display_name(&this.0)));
         fields.add_field_method_get("width", |_, this| Ok(this.0.size().width()));
         fields.add_field_method_get("height", |_, this| Ok(this.0.size().height()));
         fields.add_field_method_get("scale", |_, this| Ok(this.0.scale().value()));
@@ -49,5 +42,14 @@ impl UserData for LuaMonitor {
         methods.add_meta_method(mlua::MetaMethod::ToString, |_, this, ()| {
             Ok(this.0.id().as_str().to_string())
         });
+    }
+}
+
+/// The name a script sees for `info`: its name, or its id when it has none.
+fn display_name(info: &ScriptMonitorInfo) -> String {
+    if info.name().is_empty() {
+        info.id().as_str().to_string()
+    } else {
+        info.name().to_string()
     }
 }

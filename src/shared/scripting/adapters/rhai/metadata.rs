@@ -94,9 +94,7 @@ fn parse_subscriptions_array(
 ) {
     for sub in subs {
         if let Some(signal_name) = sub.clone().try_cast::<String>() {
-            if let Some(signal) = signal_kind_named(&signal_name) {
-                result.push(signal);
-            }
+            result.extend(signal_kind_named(&signal_name));
         } else if let Some(map) = sub.clone().try_cast::<rhai::Map>()
             && let Some(dbus_sub) = parse_dbus_subscription(&map)
         {

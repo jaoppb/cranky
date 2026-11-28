@@ -119,13 +119,12 @@ fn parse_subscriptions_table(
 ) {
     for (_, val) in table.pairs::<mlua::Value, mlua::Value>().flatten() {
         if let mlua::Value::String(lua_string) = &val {
-            if let Some(signal) = lua_string
-                .to_str()
-                .ok()
-                .and_then(|name| signal_kind_named(&name))
-            {
-                subs.push(signal);
-            }
+            subs.extend(
+                lua_string
+                    .to_str()
+                    .ok()
+                    .and_then(|name| signal_kind_named(&name)),
+            );
         } else if let mlua::Value::Table(dbus_sub) = &val
             && let Some(subscription) = parse_dbus_subscription(dbus_sub)
         {
