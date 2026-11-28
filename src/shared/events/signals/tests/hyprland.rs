@@ -497,4 +497,67 @@ mod tests {
         assert_eq!(workspace.name(), &WorkspaceName::new("renamed"));
         assert_eq!(workspace.monitor(), Some(&MonitorName::new("HDMI-A-1")));
     }
+
+    /// The workspace `id` named `name`, on `monitor` when there is one.
+    fn workspace(id: i32, name: &str, monitor: Option<&str>) -> Workspace {
+        Workspace::new(
+            WorkspaceId::new(id),
+            WorkspaceName::new(name),
+            monitor.map(MonitorName::new),
+        )
+    }
+
+    /// `WorkspaceActivated` for workspace `id` named `name`.
+    fn activated(id: i32, name: &str) -> WindowManagerEvent {
+        WindowManagerEvent::WorkspaceActivated {
+            id: WorkspaceId::new(id),
+            name: WorkspaceName::new(name),
+        }
+    }
+
+    #[test]
+    fn test_workspace_activated_records_an_unknown_workspace_on_the_focused_monitor() {
+        let focused = Some(MonitorName::new("DP-1"));
+        let mut state = HyprlandState::new(BTreeMap::new(), only_monitor("DP-1", 1), focused);
+
+        state.apply_event(&activated(5, "five"));
+
+        let workspaces =
+            BTreeMap::from([(WorkspaceId::new(5), workspace(5, "five", Some("DP-1")))]);
+        let expected = HyprlandState::new(
+            workspaces,
+            only_monitor("DP-1", 5),
+            Some(MonitorName::new("DP-1")),
+        );
+        assert_eq!(state, expected);
+    }
+
+    #[test]
+    fn test_workspace_activated_on_a_focused_monitor_it_does_not_know_leaves_the_monitors() {
+        let focused = Some(MonitorName::new("DP-9"));
+        let mut state = HyprlandState::new(BTreeMap::new(), only_monitor("DP-1", 1), focused);
+
+        state.apply_event(&activated(5, "five"));
+
+        let workspaces =
+            BTreeMap::from([(WorkspaceId::new(5), workspace(5, "five", Some("DP-9")))]);
+        let expected = HyprlandState::new(
+            workspaces,
+            only_monitor("DP-1", 1),
+            Some(MonitorName::new("DP-9")),
+        );
+        assert_eq!(state, expected);
+    }
+
+    #[test]
+    fn test_workspace_activated_without_a_focused_monitor_leaves_a_known_workspace() {
+        let workspaces =
+            BTreeMap::from([(WorkspaceId::new(2), workspace(2, "two", Some("HDMI-A-1")))]);
+        let mut state = HyprlandState::new(workspaces, BTreeMap::new(), None);
+        let before = state.clone();
+
+        state.apply_event(&activated(2, "renamed"));
+
+        assert_eq!(state, before);
+    }
 }
