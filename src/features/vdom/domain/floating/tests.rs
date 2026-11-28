@@ -80,18 +80,14 @@ fn panel_anchor_deserializes_from_edge_flags_with_missing_edges_off() {
 
 #[test]
 fn panel_anchor_deserializes_every_combination_of_edge_flags() {
-    for top in [false, true] {
-        for bottom in [false, true] {
-            for left in [false, true] {
-                for right in [false, true] {
-                    let json = serde_json::json!({
-                        "top": top, "bottom": bottom, "left": left, "right": right
-                    });
-                    let anchor: PanelAnchor = serde_json::from_value(json).unwrap();
-                    assert_eq!(edges(anchor), (top, bottom, left, right));
-                }
-            }
-        }
+    // Each of the 16 values of `flags` sets one combination, one bit per edge.
+    for flags in 0_u8..16 {
+        let [top, bottom, left, right] = [1, 2, 4, 8].map(|bit| flags & bit != 0);
+        let json = serde_json::json!({
+            "top": top, "bottom": bottom, "left": left, "right": right
+        });
+        let anchor: PanelAnchor = serde_json::from_value(json).unwrap();
+        assert_eq!(edges(anchor), (top, bottom, left, right));
     }
 }
 

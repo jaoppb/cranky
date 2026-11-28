@@ -41,21 +41,26 @@ impl DefaultVdomDiffAdapter {
     /// The patch for what the nodes hold: their content, or for two flex or two grid containers
     /// their reconciled children.
     fn diff_kind(&self, old_node: &VNode, new_node: &VNode) -> Patch {
-        diff_node_kinds(old_node.node_id(), old_node.kind(), new_node.kind()).unwrap_or_else(|| {
-            if matches!(
-                (old_node.kind(), new_node.kind()),
-                (VNodeKind::Flex { .. }, VNodeKind::Flex { .. })
-                    | (VNodeKind::Grid { .. }, VNodeKind::Grid { .. })
-            ) {
-                diff_children_with(
-                    old_node.node_id(),
-                    ChildLists::new(old_node.children(), new_node.children()),
-                    |old_child, new_child| self.diff_nodes(old_child, new_child),
-                )
-            } else {
-                replace_node(old_node, new_node)
-            }
-        })
+        diff_node_kinds(old_node.node_id(), old_node.kind(), new_node.kind())
+            .unwrap_or_else(|| self.diff_containers(old_node, new_node))
+    }
+
+    /// The reconciled children of two flex or two grid containers; any other pair of nodes is
+    /// replaced.
+    fn diff_containers(&self, old_node: &VNode, new_node: &VNode) -> Patch {
+        let same_container = matches!(
+            (old_node.kind(), new_node.kind()),
+            (VNodeKind::Flex { .. }, VNodeKind::Flex { .. })
+                | (VNodeKind::Grid { .. }, VNodeKind::Grid { .. })
+        );
+        if !same_container {
+            return replace_node(old_node, new_node);
+        }
+        diff_children_with(
+            old_node.node_id(),
+            ChildLists::new(old_node.children(), new_node.children()),
+            |old_child, new_child| self.diff_nodes(old_child, new_child),
+        )
     }
 }
 

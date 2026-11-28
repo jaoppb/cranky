@@ -46,12 +46,10 @@ mod tests {
             crate::features::styling::domain::ComputedStyle,
             InheritedStyle,
         ) {
-            if let Some(id) = query.id() {
-                self.seen
-                    .lock()
-                    .unwrap()
-                    .insert(id.as_str().to_string(), query.pseudo_classes().to_vec());
-            }
+            let resolved = query
+                .id()
+                .map(|id| (id.as_str().to_string(), query.pseudo_classes().to_vec()));
+            self.seen.lock().unwrap().extend(resolved);
             (
                 crate::features::styling::domain::ComputedStyle::default(),
                 InheritedStyle::default(),
@@ -251,11 +249,10 @@ mod tests {
         let resolver = resolve_hovering(&button_with_every_floating_kind(), hovered);
 
         for id in ["button", "tip", "pop", "pan"] {
-            let expected = if id == hovered_id {
-                vec![PseudoClass::Hover]
-            } else {
-                Vec::new()
-            };
+            let expected: Vec<_> = (id == hovered_id)
+                .then_some(PseudoClass::Hover)
+                .into_iter()
+                .collect();
             assert_eq!(
                 resolver.pseudo_classes_of(id),
                 expected,

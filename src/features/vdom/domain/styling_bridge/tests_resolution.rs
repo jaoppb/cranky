@@ -81,9 +81,8 @@ mod tests {
             inherited: &InheritedStyle,
         ) -> (ComputedStyle, InheritedStyle) {
             let seen = seen_of(query, inherited);
-            if query.is_empty() {
-                self.empty.lock().unwrap().push(seen.id.clone());
-            }
+            let empty_id = query.is_empty().then(|| seen.id.clone());
+            self.empty.lock().unwrap().extend(empty_id);
             let style = self.matched.get(&seen.id).cloned().unwrap_or_default();
             self.seen.lock().unwrap().push(seen);
             let child_inherited = inherited.descend(&style, Arc::new(HashMap::new()));
