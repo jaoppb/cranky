@@ -124,3 +124,12 @@ fn test_script_monitor_info_serializes_focus_as_a_bool() {
     let value = serde_json::to_value(&unfocused).unwrap();
     assert_eq!(value["is_focused"], serde_json::Value::Bool(false));
 }
+
+#[test]
+fn test_script_monitor_info_display_name_is_its_name_or_else_its_id() {
+    let id = crate::shared::primitives::MonitorId::new("DP-2");
+    let base = crate::shared::primitives::ScriptMonitorInfo::from_id(&id);
+    let named = base.clone().with_name("DisplayPort-2".to_string());
+    assert_eq!(named.display_name(), "DisplayPort-2");
+    assert_eq!(base.with_name(String::new()).display_name(), "DP-2");
+}
