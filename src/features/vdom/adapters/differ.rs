@@ -41,21 +41,26 @@ impl DefaultVdomDiffAdapter {
     /// The patch for what the nodes hold: their content, or for two flex or two grid containers
     /// their reconciled children.
     fn diff_kind(&self, old_node: &VNode, new_node: &VNode) -> Patch {
-        diff_node_kinds(old_node.node_id(), old_node.kind(), new_node.kind()).unwrap_or_else(|| {
-            if matches!(
-                (old_node.kind(), new_node.kind()),
-                (VNodeKind::Flex { .. }, VNodeKind::Flex { .. })
-                    | (VNodeKind::Grid { .. }, VNodeKind::Grid { .. })
-            ) {
-                diff_children_with(
-                    old_node.node_id(),
-                    ChildLists::new(old_node.children(), new_node.children()),
-                    |old_child, new_child| self.diff_nodes(old_child, new_child),
-                )
-            } else {
-                replace_node(old_node, new_node)
-            }
-        })
+        diff_node_kinds(old_node.node_id(), old_node.kind(), new_node.kind())
+            .unwrap_or_else(|| self.reconcile_or_replace(old_node, new_node))
+    }
+
+    /// The reconciled children of two flex or two grid containers; any other pair of nodes is
+    /// replaced.
+    fn reconcile_or_replace(&self, old_node: &VNode, new_node: &VNode) -> Patch {
+        let same_container = matches!(
+            (old_node.kind(), new_node.kind()),
+            (VNodeKind::Flex { .. }, VNodeKind::Flex { .. })
+                | (VNodeKind::Grid { .. }, VNodeKind::Grid { .. })
+        );
+        if !same_container {
+            return replace_node(old_node, new_node);
+        }
+        diff_children_with(
+            old_node.node_id(),
+            ChildLists::new(old_node.children(), new_node.children()),
+            |old_child, new_child| self.diff_nodes(old_child, new_child),
+        )
     }
 }
 
@@ -445,5 +450,33 @@ mod tests {
 
         let res = adapter.diff(Some(&make("old")), &make("new"));
         assert!(!res.is_unchanged());
+    }
+
+    /// Two nodes of different kinds, which `diff_nodes` never passes on since it replaces a
+    /// changed tag first, are replaced whole rather than reconciled.
+    #[test]
+    fn diff_kind_replaces_a_node_whose_kind_changed() {
+        let adapter = DefaultVdomDiffAdapter::new();
+        let old_node = text("label");
+        let new_node = flex(vec![text("label")]);
+
+        let expected = Patch::Replace {
+            old_node_id: old_node.node_id(),
+            new_node: Box::new(new_node.clone()),
+        };
+        assert_eq!(adapter.diff_kind(&old_node, &new_node), expected);
+        assert_eq!(adapter.diff_kind(&new_node, &new_node), Patch::NoChange);
+
+        // A flex and a grid are both containers, yet still two kinds.
+        let grid = VNode::new_grid(
+            vec![text("label")],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
+        let expected = Patch::Replace {
+            old_node_id: new_node.node_id(),
+            new_node: Box::new(grid.clone()),
+        };
+        assert_eq!(adapter.diff_kind(&new_node, &grid), expected);
     }
 }

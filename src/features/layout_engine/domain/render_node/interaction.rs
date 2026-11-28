@@ -4,8 +4,7 @@ use crate::features::layout_engine::domain::styled_node::StyledNode;
 use crate::features::vdom::domain::{ClickHandlers, KeyedTree, NodeKey, UiAction};
 
 impl RenderNode {
-    /// This node's children, or an empty slice for a leaf variant. Used to
-    /// walk an anchor chain (see `NodeRef`) back into a concrete `NodePath`.
+    /// This node's children, in order, or an empty slice for a leaf variant.
     #[must_use]
     pub(crate) fn children(&self) -> &[Self] {
         match self {

@@ -1,3 +1,4 @@
+use crate::features::systray::adapters::tests::fixtures::item;
 use crate::features::systray::adapters::tray_items::TrayItems;
 use crate::features::systray::adapters::watcher::Watcher;
 use crate::features::systray::domain::{
@@ -79,21 +80,4 @@ fn test_remove_by_destination_without_match_does_not_publish() {
         // A publish would have sent the one tracked item; the hub still holds the empty state.
         assert!(hub.systray_rx().borrow().items().is_empty());
     });
-}
-
-/// An active, activatable item `id` served by the bus name `destination`.
-fn item(id: &str, destination: &str) -> SystrayItem {
-    SystrayItem::new(CreateSystrayItemCommand::new(
-        SystrayItemParams::new(
-            SystrayId::new(id),
-            SystrayAddress::new(
-                Destination::new(destination),
-                ObjectPath::new("/StatusNotifierItem"),
-            ),
-            Title::new(id),
-        )
-        .with_status(SystrayStatus::Active)
-        .with_category(SystrayCategory::ApplicationStatus)
-        .with_item_is_menu(ItemIsMenu::Activatable),
-    ))
 }

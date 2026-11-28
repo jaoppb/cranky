@@ -49,15 +49,36 @@ impl<'a> TaffyTreeBuilder<'a> {
     /// `node_id` **must** still be live. Both taffy calls below index their
     /// `SlotMap` directly (`children` -> `self.children[key]`, `remove` ->
     /// `self.parents[key]`) and panic on a freed key rather than returning
-    /// `Err`, so the `if let Ok(..)` guard catches nothing. Taffy exposes no
-    /// way to test a key, which is why callers must never retain a freed
-    /// `NodeId` in their own bookkeeping.
+    /// `Err`, so the `unwrap_or_default` fallback catches nothing. Taffy
+    /// exposes no way to test a key, which is why callers must never retain
+    /// a freed `NodeId` in their own bookkeeping.
     pub(super) fn remove_recursive(&mut self, node_id: NodeId) {
-        if let Ok(children) = self.taffy.children(node_id) {
-            for child in children {
-                self.remove_recursive(child);
-            }
+        for child in self.taffy.children(node_id).unwrap_or_default() {
+            self.remove_recursive(child);
         }
         let _ = self.taffy.remove(node_id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remove_recursive_frees_the_node_and_its_whole_subtree() {
+        let mut taffy = TaffyTree::new();
+        let mut builder = TaffyTreeBuilder::new(&mut taffy);
+        let grandchild = builder.add_leaf(Style::default()).unwrap();
+        let child = builder.add_node(Style::default(), &[grandchild]).unwrap();
+        let sibling = builder.add_leaf(Style::default()).unwrap();
+        let root = builder
+            .add_node(Style::default(), &[child, sibling])
+            .unwrap();
+        let kept = builder.add_node(Style::default(), &[]).unwrap();
+
+        builder.remove_recursive(root);
+
+        assert_eq!(taffy.total_node_count(), 1);
+        assert_eq!(taffy.children(kept).unwrap(), Vec::<NodeId>::new());
     }
 }

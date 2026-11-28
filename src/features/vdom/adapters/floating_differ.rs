@@ -54,14 +54,9 @@ impl DefaultVdomDiffAdapter {
     ) -> Option<Box<Patch>> {
         match (old_sub, new_sub) {
             (None, None) => None,
-            (Some(old), Some(new)) => {
-                let patch = self.diff_nodes(old, new);
-                if patch.is_no_change() {
-                    None
-                } else {
-                    Some(Box::new(patch))
-                }
-            }
+            (Some(old), Some(new)) => Some(self.diff_nodes(old, new))
+                .filter(|patch| !patch.is_no_change())
+                .map(Box::new),
             (None, Some(new)) => Some(Box::new(Patch::Replace {
                 old_node_id: NodeId::new(),
                 new_node: Box::new(new.clone()),

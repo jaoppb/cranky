@@ -74,22 +74,10 @@ impl DeclaredLength {
                 px,
                 ems,
                 rem,
-            } => {
-                let px_total =
-                    rem.mul_add(root_font_size.value(), ems.mul_add(font_size.value(), px));
-                // No percent term: the whole expression is already a single
-                // concrete pixel value, so it never needs the layout
-                // engine's second pass — the same "absolute calc() is free"
-                // property that made em/rem itself free of layout changes.
-                if percent == 0.0 {
-                    CssLength::Pixels(px_total)
-                } else {
-                    CssLength::Calc {
-                        percent,
-                        px: px_total,
-                    }
-                }
-            }
+            } => calc_length(
+                percent,
+                rem.mul_add(root_font_size.value(), ems.mul_add(font_size.value(), px)),
+            ),
         }
     }
 
@@ -106,6 +94,22 @@ impl DeclaredLength {
             CssLength::Pixels(value) | CssLength::Percent(value) => value,
             CssLength::Auto => 0.0,
             CssLength::Calc { px, .. } => px,
+        }
+    }
+}
+
+/// A resolved `calc()` of `percent` plus `px_total` pixels.
+///
+/// No percent term: the whole expression is already a single concrete pixel value, so it never
+/// needs the layout engine's second pass — the same "absolute `calc()` is free" property that made
+/// em/rem itself free of layout changes.
+fn calc_length(percent: f32, px_total: f32) -> CssLength {
+    if percent == 0.0 {
+        CssLength::Pixels(px_total)
+    } else {
+        CssLength::Calc {
+            percent,
+            px: px_total,
         }
     }
 }
@@ -154,6 +158,45 @@ mod tests {
         assert_eq!(
             DeclaredLength::Rem(2.0).resolve(font_size, root),
             CssLength::Pixels(20.0)
+        );
+    }
+
+    #[test]
+    fn test_resolve_keeps_pixels_percent_and_auto_as_declared() {
+        let font_size = FontSize::new(20.0);
+        let root = FontSize::new(10.0);
+        assert_eq!(
+            DeclaredLength::Pixels(7.0).resolve(font_size, root),
+            CssLength::Pixels(7.0)
+        );
+        assert_eq!(
+            DeclaredLength::Percent(30.0).resolve(font_size, root),
+            CssLength::Percent(30.0)
+        );
+        assert_eq!(
+            DeclaredLength::Auto.resolve(font_size, root),
+            CssLength::Auto
+        );
+    }
+
+    /// Every term of a `calc()` counts: `em` against the font size, `rem` against the root's.
+    #[test]
+    fn test_calc_folds_em_and_rem_into_pixels() {
+        let font_size = FontSize::new(20.0);
+        let root = FontSize::new(10.0);
+        let calc = DeclaredLength::Calc {
+            percent: 50.0,
+            px: 1.0,
+            ems: 2.0,
+            rem: 3.0,
+        };
+        // 1px + 2em(40px) + 3rem(30px) = 71px beside the 50% term.
+        assert_eq!(
+            calc.resolve(font_size, root),
+            CssLength::Calc {
+                percent: 50.0,
+                px: 71.0
+            }
         );
     }
 

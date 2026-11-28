@@ -221,11 +221,10 @@ mod tests {
     impl ItemMethods for FakeItem {
         fn call(&self, call: ItemCall) -> impl Future<Output = zbus::Result<()>> + Send {
             self.calls.lock().unwrap().push(call.to_string());
-            std::future::ready(if self.rejects.contains(&call.method()) {
-                Err(zbus::Error::Failure(format!("{} rejected", call.method())))
-            } else {
-                Ok(())
-            })
+            let rejected = self.rejects.contains(&call.method());
+            let rejection =
+                rejected.then(|| zbus::Error::Failure(format!("{} rejected", call.method())));
+            std::future::ready(rejection.map_or(Ok(()), Err))
         }
     }
 

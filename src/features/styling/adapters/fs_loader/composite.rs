@@ -33,20 +33,22 @@ impl StyleResolverPort for CompositeStyleResolver {
             .iter()
             .enumerate()
             .flat_map(|(sheet_index, sheet)| {
-                let layer = if sheet.name().as_str() == "base" {
-                    Layer::BASE
-                } else {
-                    Layer::MODULE
-                };
-                let sheet_index = u32::try_from(sheet_index).unwrap_or(u32::MAX);
-                sheet
-                    .matching_rules(query)
-                    .into_iter()
-                    .map(move |rule_match| {
-                        rule_match.into_matched(CascadeOrigin::new(layer, sheet_index))
-                    })
+                let origin = origin_of(sheet.as_ref(), sheet_index);
+                let rule_matches = sheet.matching_rules(query).into_iter();
+                rule_matches.map(move |rule_match| rule_match.into_matched(origin))
             })
             .collect();
         fold_matches(matches).collapse(inherited, &LightningPropertyReparser)
     }
+}
+
+/// Where `sheet`, composed at `sheet_index`, sits in the cascade: the base layer for the shared
+/// `base` sheet, the module layer for every other one.
+fn origin_of(sheet: &dyn ParsedStyleSheetPort, sheet_index: usize) -> CascadeOrigin {
+    let layer = if sheet.name().as_str() == "base" {
+        Layer::BASE
+    } else {
+        Layer::MODULE
+    };
+    CascadeOrigin::new(layer, u32::try_from(sheet_index).unwrap_or(u32::MAX))
 }

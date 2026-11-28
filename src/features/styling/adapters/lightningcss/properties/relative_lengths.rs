@@ -19,19 +19,19 @@ use lightningcss::values::length::LengthPercentageOrAuto;
 /// treats it differently.
 #[must_use]
 pub(crate) fn detect_relative_font_size(props: &[Property<'_>]) -> Option<DeclaredLength> {
-    for prop in props {
-        if let Property::FontSize(LightningFontSize::Length(length)) = prop {
-            let css_text = length
-                .to_css_string(PrinterOptions::default())
-                .unwrap_or_default();
-            if let Some(len @ (DeclaredLength::Ems(_) | DeclaredLength::Rem(_))) =
-                DeclaredLength::parse(&css_text)
-            {
-                return Some(len);
-            }
-        }
-    }
-    None
+    props.iter().find_map(relative_font_size)
+}
+
+/// The `em`/`rem` length `prop` declares, if it is a `font-size` declared in one of those units.
+fn relative_font_size(prop: &Property<'_>) -> Option<DeclaredLength> {
+    let Property::FontSize(LightningFontSize::Length(length)) = prop else {
+        return None;
+    };
+    let css_text = length
+        .to_css_string(PrinterOptions::default())
+        .unwrap_or_default();
+    DeclaredLength::parse(&css_text)
+        .filter(|len| matches!(len, DeclaredLength::Ems(_) | DeclaredLength::Rem(_)))
 }
 
 /// Scans a rule's raw declarations for `em`/`rem` on any of the twenty
@@ -205,6 +205,33 @@ mod tests {
         assert_eq!(computed.width(), Some(CssLength::Pixels(20.0)));
         // height was px, not relative: nothing pending, untouched here.
         assert_eq!(computed.height(), None);
+    }
+
+    #[test]
+    fn test_relative_font_size_is_only_an_em_or_rem_one() {
+        let font_size = |css| detect_relative_font_size(&declarations(css));
+        assert_eq!(
+            font_size("bar { font-size: 1.5em; }"),
+            Some(DeclaredLength::Ems(1.5))
+        );
+        assert_eq!(
+            font_size("bar { font-size: 2rem; }"),
+            Some(DeclaredLength::Rem(2.0))
+        );
+        assert_eq!(font_size("bar { font-size: 12px; }"), None);
+        assert_eq!(font_size("bar { font-size: 50%; }"), None);
+        assert_eq!(font_size("bar { width: 2em; }"), None);
+    }
+
+    /// The scan passes over other properties and absolute font sizes to the first relative one.
+    #[test]
+    fn test_relative_font_size_is_the_first_relative_declaration() {
+        let props =
+            declarations("bar { width: 2em; font-size: 12px; font-size: 3em; font-size: 4rem; }");
+        assert_eq!(
+            detect_relative_font_size(&props),
+            Some(DeclaredLength::Ems(3.0))
+        );
     }
 
     #[test]

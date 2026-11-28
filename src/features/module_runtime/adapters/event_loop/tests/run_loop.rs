@@ -103,9 +103,7 @@ fn a_lagging_interaction_channel_is_logged_and_the_loop_goes_on() {
     let logs = capture_logs(|| {
         crate::test_utils::block_on(async {
             let running = start(RecordingModulePort::new(clickable(), SUBS.to_vec())).await;
-            for _ in 0..40 {
-                running.interact(ModuleId::new(7), click());
-            }
+            (0..40).for_each(|_| running.interact(ModuleId::new(7), click()));
             settle().await;
             running.take();
             running.interact(MODULE, click());

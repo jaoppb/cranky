@@ -44,19 +44,25 @@ impl<P: WindowManagerPort> EventStream<'_, P> {
     /// Waits for each batch's first line with no timeout, and handles the batch, until the
     /// socket closes or a read fails.
     fn run(&mut self) {
-        loop {
-            self.line.clear();
-            let _ = self.reader.get_mut().set_read_timeout(None);
-            match self.reader.read_line(&mut self.line) {
-                Ok(0) => {
-                    log_socket_closed();
-                    break;
-                }
-                Ok(_) => self.handle_batch(),
-                Err(error) => {
-                    log_read_failed(&error);
-                    break;
-                }
+        while self.read_batch_start() {
+            self.handle_batch();
+        }
+    }
+
+    /// Reads a batch's first line with no timeout; false, after logging why, when the socket
+    /// closed or the read failed.
+    fn read_batch_start(&mut self) -> bool {
+        self.line.clear();
+        let _ = self.reader.get_mut().set_read_timeout(None);
+        match self.reader.read_line(&mut self.line) {
+            Ok(0) => {
+                log_socket_closed();
+                false
+            }
+            Ok(_) => true,
+            Err(error) => {
+                log_read_failed(&error);
+                false
             }
         }
     }

@@ -82,23 +82,35 @@ fn spawn_property_listener(
     object: BusObject,
 ) {
     tokio::spawn(async move {
-        if let Ok(mut stream) = conn.subscribe_properties_changed(&object).await {
-            let dest = object.destination();
-            while let Some((changed_iface, changed_props)) = stream.next().await {
-                if changed_iface.as_str() == "org.mpris.MediaPlayer2.Player" {
-                    let mut mpris_state = tx.borrow().clone();
-                    let p_name = dest
-                        .as_str()
-                        .strip_prefix("org.mpris.MediaPlayer2.")
-                        .unwrap_or(dest.as_str());
-                    if let Some(mut player) = mpris_state.players.get(p_name).cloned() {
-                        tracing::debug!("MPRIS properties changed for player: {p_name}");
-                        update_state_from_props(&mut player, &changed_props);
-                        mpris_state.players.insert(p_name.to_string(), player);
-                        let _ = tx.send(mpris_state);
-                    }
-                }
-            }
+        let Ok(stream) = conn.subscribe_properties_changed(&object).await else {
+            return;
+        };
+        let dest = object.destination();
+        let mut player_changes = stream
+            .filter(|(changed_iface, _)| changed_iface.as_str() == "org.mpris.MediaPlayer2.Player");
+        while let Some((_, changed_props)) = player_changes.next().await {
+            apply_player_change(&tx, dest, &changed_props);
         }
     });
+}
+
+/// Applies a change of the player interface at `dest` to its published player and publishes
+/// the result; a player no longer published is left out.
+fn apply_player_change(
+    tx: &watch::Sender<MprisState>,
+    dest: &Destination,
+    changed_props: &PropertiesMap,
+) {
+    let mut mpris_state = tx.borrow().clone();
+    let p_name = dest
+        .as_str()
+        .strip_prefix("org.mpris.MediaPlayer2.")
+        .unwrap_or(dest.as_str());
+    let Some(mut player) = mpris_state.players.get(p_name).cloned() else {
+        return;
+    };
+    tracing::debug!("MPRIS properties changed for player: {p_name}");
+    update_state_from_props(&mut player, changed_props);
+    mpris_state.players.insert(p_name.to_string(), player);
+    let _ = tx.send(mpris_state);
 }

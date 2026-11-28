@@ -126,12 +126,10 @@ impl<'de> Deserialize<'de> for ClickHandlers {
         match ClickHandlersHelper::deserialize(deserializer)? {
             ClickHandlersHelper::Single(action) => Ok(Self::from_single(action)),
             ClickHandlersHelper::Map(map) => {
-                let mut handlers = HashMap::new();
-                for (name, action) in map {
-                    if let Some(btn) = PointerButton::from_name(&name) {
-                        handlers.insert(btn, action);
-                    }
-                }
+                let handlers = map
+                    .into_iter()
+                    .filter_map(|(name, action)| Some((PointerButton::from_name(&name)?, action)))
+                    .collect();
                 Ok(Self { handlers })
             }
         }

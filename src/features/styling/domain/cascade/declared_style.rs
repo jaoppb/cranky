@@ -193,12 +193,17 @@ mod tests {
     struct BackgroundReparser;
     impl PropertyReparser for BackgroundReparser {
         fn reparse(&self, name: &str, value: &str) -> ComputedStyle {
-            let mut style = ComputedStyle::default();
-            if name == "background-color" {
-                style.set_background(DrawingColor::parse(value.trim()).unwrap());
-            }
-            style
+            background_only(name, value)
         }
+    }
+
+    /// The style `value` gives when `name` is `background-color`, else the default style.
+    fn background_only(name: &str, value: &str) -> ComputedStyle {
+        let mut style = ComputedStyle::default();
+        if name == "background-color" {
+            style.set_background(DrawingColor::parse(value.trim()).unwrap());
+        }
+        style
     }
 
     fn color(hex: &str) -> DrawingColor {

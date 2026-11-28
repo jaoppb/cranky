@@ -443,10 +443,7 @@ mod tests {
 
     impl std::io::Read for ScriptedReader {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            let Some(chunk) = self.chunks.pop_front() else {
-                return Ok(0);
-            };
-            let bytes = chunk?;
+            let bytes = self.chunks.pop_front().unwrap_or(Ok(b""))?;
             buf[..bytes.len()].copy_from_slice(bytes);
             Ok(bytes.len())
         }
@@ -673,13 +670,18 @@ mod tests {
         }
 
         fn listen_events(&self) -> Result<std::os::unix::net::UnixStream, HyprError> {
-            if self.listens.fetch_add(1, Ordering::SeqCst) == 0 {
-                return Err(HyprError::InputOutput(ErrorKind::ConnectionRefused.into()));
+            match self.listens.fetch_add(1, Ordering::SeqCst) {
+                0 => Err(HyprError::InputOutput(ErrorKind::ConnectionRefused.into())),
+                _ => ended_socket(),
             }
-            let (sender, receiver) = std::os::unix::net::UnixStream::pair()?;
-            drop(sender);
-            Ok(receiver)
         }
+    }
+
+    /// The reading end of a socket whose writing end is already closed.
+    fn ended_socket() -> Result<std::os::unix::net::UnixStream, HyprError> {
+        let (sender, receiver) = std::os::unix::net::UnixStream::pair()?;
+        drop(sender);
+        Ok(receiver)
     }
 
     /// A refused connection is logged as an error and gives up the attempt without querying

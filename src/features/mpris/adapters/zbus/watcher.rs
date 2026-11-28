@@ -39,10 +39,11 @@ impl ZbusMprisAdapter {
 
     async fn load_initial_players(&self) -> Result<(), DbusConnectionError> {
         let names = self.conn.list_names(BusType::Session).await?;
-        for name in names {
-            if name.as_str().starts_with("org.mpris.MediaPlayer2.") {
-                add_player(&self.conn, &self.mpris_tx, name).await;
-            }
+        let players = names
+            .into_iter()
+            .filter(|name| name.as_str().starts_with("org.mpris.MediaPlayer2."));
+        for name in players {
+            add_player(&self.conn, &self.mpris_tx, name).await;
         }
         Ok(())
     }

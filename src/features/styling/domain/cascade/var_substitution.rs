@@ -123,19 +123,15 @@ fn resolve_reference<S: BuildHasher>(
 /// function call, e.g. `var(--x, rgb(0, 0, 0))`).
 fn matching_close_paren(text: &str) -> Option<usize> {
     let mut depth = 1i32;
-    for (index, character) in text.char_indices() {
-        match character {
-            '(' => depth = depth.saturating_add(1),
-            ')' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return Some(index);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
+    text.char_indices().find_map(|(index, character)| {
+        depth = match character {
+            '(' => depth.saturating_add(1),
+            ')' => depth.saturating_sub(1),
+            _ => depth,
+        };
+        // Only a `)` lowers the depth, and it starts at 1, so it reaches 0 only on a `)`.
+        (depth == 0).then_some(index)
+    })
 }
 
 #[cfg(test)]
@@ -147,6 +143,15 @@ mod tests {
             .iter()
             .map(|(key, value)| ((*key).to_string(), (*value).to_string()))
             .collect()
+    }
+
+    #[test]
+    fn test_matching_close_paren_skips_nested_pairs() {
+        assert_eq!(matching_close_paren("a)b)"), Some(1));
+        assert_eq!(matching_close_paren("a(b)c)d"), Some(5));
+        assert_eq!(matching_close_paren("((x))) "), Some(5));
+        assert_eq!(matching_close_paren("a(b)c"), None);
+        assert_eq!(matching_close_paren(""), None);
     }
 
     #[test]

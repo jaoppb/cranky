@@ -24,14 +24,16 @@ mod tests {
             let mut style = ComputedStyle::default();
             match name {
                 "color" => style.set_color(color(value.trim())),
-                "width" => {
-                    let pixels = value.trim().trim_end_matches("px").parse().unwrap();
-                    style.set_width(CssLength::Pixels(pixels));
-                }
-                _ => {}
+                "width" => style.set_width(CssLength::Pixels(pixels(value))),
+                _ => (),
             }
             style
         }
+    }
+
+    /// The number of pixels `value` (`8px`, or a bare `8`) declares.
+    fn pixels(value: &str) -> f32 {
+        value.trim().trim_end_matches("px").parse().unwrap()
     }
 
     fn color(hex: &str) -> DrawingColor {

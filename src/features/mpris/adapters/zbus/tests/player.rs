@@ -101,20 +101,29 @@ fn test_a_second_player_does_not_take_over_the_active_one() {
     });
 }
 
+/// The whole name keys the player both when it is added and when its changes arrive.
 #[test]
 fn test_a_name_without_the_mpris_prefix_is_kept_whole() {
     crate::test_utils::block_on(async {
         let mut bus = FakeBus::default();
-        let _changes = bus.with_player("org.example.Player", playing("Song"));
-        let Added { tx, .. } = added(bus, &["org.example.Player"]).await;
+        let changes = bus.with_player("org.example.Player", playing("Song"));
+        let Added { tx, mut rx, .. } = added(bus, &["org.example.Player"]).await;
 
         let state = tx.borrow().clone();
-        let expected = playing_state("org.example.Player", "Song");
+        let mut expected = playing_state("org.example.Player", "Song");
         assert_eq!(state.players.get("org.example.Player"), Some(&expected));
         assert_eq!(
             state.active_player,
             Some(PlayerName::new("org.example.Player"))
         );
+
+        let paused = props(vec![("PlaybackStatus", text("Paused"))]);
+        let player = Interface::new("org.mpris.MediaPlayer2.Player");
+        changes.send((player, paused)).unwrap();
+        expected.set_status(PlaybackStatus::Paused);
+        let updated =
+            |state: &MprisState| state.players.get("org.example.Player") == Some(&expected);
+        assert!(reaches(&mut rx, updated).await);
     });
 }
 

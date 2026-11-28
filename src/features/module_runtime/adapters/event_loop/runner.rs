@@ -119,7 +119,7 @@ impl<
             match self.apply_event(event, &subs) {
                 ControlFlow::Break(()) => break,
                 ControlFlow::Continue(true) => self.render_all_monitors(&mut layout_engines),
-                ControlFlow::Continue(false) => {}
+                ControlFlow::Continue(false) => (),
             }
         }
     }
