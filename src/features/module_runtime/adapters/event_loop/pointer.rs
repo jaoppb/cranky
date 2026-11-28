@@ -105,20 +105,27 @@ impl<
     fn execute_outcome(&mut self, outcome: &PointerOutcome) -> bool {
         let mut changed = false;
         for action in outcome.actions() {
-            match action {
-                PointerAction::CallFunction(func_name, mon_id) => {
-                    changed |= self.call_script_function(func_name, mon_id.as_ref());
-                }
-                PointerAction::SendUi(cmd) => {
-                    self.ctx.ui_sender().send_ui_command(cmd.clone());
-                }
-            }
+            changed |= self.execute_action(action);
         }
         if changed {
             let subs = self.port.subscriptions().to_vec();
             self.port.refresh(self.ctx.hub(), &subs);
         }
         changed || outcome.has_state_changed()
+    }
+
+    /// Runs one pointer action: calls the script function, or sends the command to the UI; true
+    /// when a script function ran.
+    fn execute_action(&mut self, action: &PointerAction) -> bool {
+        match action {
+            PointerAction::CallFunction(func_name, mon_id) => {
+                self.call_script_function(func_name, mon_id.as_ref())
+            }
+            PointerAction::SendUi(cmd) => {
+                self.ctx.ui_sender().send_ui_command(cmd.clone());
+                false
+            }
+        }
     }
 
     /// Calls the script function `func_name`, with the monitor as its argument when there is one;

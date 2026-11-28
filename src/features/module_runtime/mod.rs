@@ -215,16 +215,24 @@ pub mod test_support {
             old_tree: Option<&'a VNode>,
             new_tree: &'a VNode,
         ) -> crate::features::vdom::domain::DiffResult {
-            if old_tree.is_some_and(|old| old == new_tree) {
-                crate::features::vdom::domain::DiffResult::unchanged()
-            } else {
-                crate::features::vdom::domain::DiffResult::new(
-                    crate::features::vdom::domain::Patch::Replace {
-                        old_node_id: crate::features::vdom::domain::NodeId::new(),
-                        new_node: Box::new(new_tree.clone()),
-                    },
-                )
-            }
+            replace_unless_equal(old_tree, new_tree)
+        }
+    }
+
+    /// No change when `new_tree` equals `old_tree`, else a replacement of the whole tree.
+    fn replace_unless_equal(
+        old_tree: Option<&VNode>,
+        new_tree: &VNode,
+    ) -> crate::features::vdom::domain::DiffResult {
+        if old_tree.is_some_and(|old| old == new_tree) {
+            crate::features::vdom::domain::DiffResult::unchanged()
+        } else {
+            crate::features::vdom::domain::DiffResult::new(
+                crate::features::vdom::domain::Patch::Replace {
+                    old_node_id: crate::features::vdom::domain::NodeId::new(),
+                    new_node: Box::new(new_tree.clone()),
+                },
+            )
         }
     }
 
@@ -404,13 +412,18 @@ pub mod test_support {
             name: &FunctionName,
             args: &[&str],
         ) -> Result<(), ModuleInitError> {
-            let args = args.iter().map(ToString::to_string).collect();
-            if let Ok(mut log) = self.log.lock() {
-                log.calls.push((name.as_str().to_string(), args));
-            }
+            record_call(&self.log, name, args);
             self.call_error
                 .clone()
                 .map_or(Ok(()), |message| Err(ModuleInitError::ScriptError(message)))
+        }
+    }
+
+    /// Records in `log` the call of `name` with `args`, unless the log is poisoned.
+    fn record_call(log: &std::sync::Mutex<PortLog>, name: &FunctionName, args: &[&str]) {
+        let args = args.iter().map(ToString::to_string).collect();
+        if let Ok(mut log) = log.lock() {
+            log.calls.push((name.as_str().to_string(), args));
         }
     }
 
@@ -428,9 +441,8 @@ pub mod test_support {
     pub(crate) fn capture_logs(action: impl FnOnce()) -> String {
         GLOBAL_LOG_SUBSCRIBER.get_or_init(|| {
             use tracing_subscriber::layer::SubscriberExt;
-            let capturing = tracing_subscriber::filter::dynamic_filter_fn(|_, _| {
-                CAPTURED_LOGS.with_borrow(Option::is_some)
-            });
+            let capturing =
+                tracing_subscriber::filter::dynamic_filter_fn(|_, _| this_thread_captures());
             let subscriber = tracing_subscriber::fmt()
                 .with_max_level(tracing::Level::TRACE)
                 .without_time()
@@ -450,6 +462,11 @@ pub mod test_support {
         String::from_utf8(bytes).unwrap()
     }
 
+    /// Whether the current thread is running `capture_logs`.
+    fn this_thread_captures() -> bool {
+        CAPTURED_LOGS.with_borrow(Option::is_some)
+    }
+
     /// Set once the process-wide subscriber `capture_logs` relies on is installed.
     static GLOBAL_LOG_SUBSCRIBER: std::sync::OnceLock<()> = std::sync::OnceLock::new();
 
@@ -465,16 +482,19 @@ pub mod test_support {
 
     impl std::io::Write for ThreadCapture {
         fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            CAPTURED_LOGS.with_borrow_mut(|captured| {
-                if let Some(buffer) = captured {
-                    buffer.extend_from_slice(bytes);
-                }
-            });
+            CAPTURED_LOGS.with_borrow_mut(|captured| append_to_capture(captured, bytes));
             Ok(bytes.len())
         }
 
         fn flush(&mut self) -> std::io::Result<()> {
             Ok(())
+        }
+    }
+
+    /// Appends `bytes` to a thread's `captured` text, if that thread is capturing.
+    fn append_to_capture(captured: &mut Option<Vec<u8>>, bytes: &[u8]) {
+        if let Some(buffer) = captured {
+            buffer.extend_from_slice(bytes);
         }
     }
 }

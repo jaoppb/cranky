@@ -59,3 +59,21 @@ impl PointerHandler {
         self.focused.retain(|id, _| live.contains(id));
     }
 }
+
+/// Makes `target_ref` the node `slot` holds for `monitor_id`, none when it is `None`, and tells
+/// whether that changed it.
+pub(super) fn replace_node_ref(
+    slot: &mut HashMap<MonitorId, NodeRef>,
+    monitor_id: &MonitorId,
+    target_ref: Option<NodeRef>,
+) -> bool {
+    if slot.get(monitor_id) == target_ref.as_ref() {
+        return false;
+    }
+    if let Some(node_ref) = target_ref {
+        slot.insert(monitor_id.clone(), node_ref);
+    } else {
+        slot.remove(monitor_id);
+    }
+    true
+}

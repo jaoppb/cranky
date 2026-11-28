@@ -45,9 +45,7 @@ impl<
             layout_engines,
         };
         for monitor_id in monitors {
-            if let Some(outcome) = self.render_monitor(&mut pass, &monitor_id) {
-                self.dispatch_render_outcome(&monitor_id, &outcome);
-            }
+            self.render_and_dispatch(&mut pass, &monitor_id);
         }
 
         log_ui_updated(self.ctx.id(), started);
@@ -87,6 +85,18 @@ impl<
             .filter(|(site, _)| site.parent() == Some(self_id))
             .map(|(site, reason)| (site.key().clone(), reason.clone()))
             .collect()
+    }
+
+    /// Renders `monitor_id` and dispatches the outcome, if the render produced one.
+    fn render_and_dispatch<E: LayoutEnginePort + Default>(
+        &mut self,
+        pass: &mut RenderPass<'_, E>,
+        monitor_id: &MonitorId,
+    ) {
+        let Some(outcome) = self.render_monitor(pass, monitor_id) else {
+            return;
+        };
+        self.dispatch_render_outcome(monitor_id, &outcome);
     }
 
     /// Runs the diff, layout and paint phases on `monitor_id`, with what the hub and the

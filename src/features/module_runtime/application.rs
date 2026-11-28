@@ -234,21 +234,22 @@ mod tests {
     /// A hub on which Hyprland and Wayland both report `monitors`, if there are any.
     fn hub_with(monitors: &[&'static str]) -> Arc<SignalHub> {
         let hub = Arc::new(SignalHub::new(Config::default()));
-        if !monitors.is_empty() {
-            hub.hyprland_tx().send(hyprland_with(monitors)).unwrap();
-
-            // Wayland is the actual discovery source - mirror it here so
-            // a monitor set up via `with_monitors` is one `EventLoop`
-            // will actually render for.
-            let mut scales = hub.monitor_scales_rx().borrow().clone();
-            for monitor in monitors {
-                scales.insert(
-                    MonitorId::new(*monitor),
-                    crate::shared::primitives::geometry::Scale::new(1.0),
-                );
-            }
-            hub.monitor_scales_tx().send(scales).unwrap();
+        if monitors.is_empty() {
+            return hub;
         }
+        hub.hyprland_tx().send(hyprland_with(monitors)).unwrap();
+
+        // Wayland is the actual discovery source - mirror it here so
+        // a monitor set up via `with_monitors` is one `EventLoop`
+        // will actually render for.
+        let mut scales = hub.monitor_scales_rx().borrow().clone();
+        for monitor in monitors {
+            scales.insert(
+                MonitorId::new(*monitor),
+                crate::shared::primitives::geometry::Scale::new(1.0),
+            );
+        }
+        hub.monitor_scales_tx().send(scales).unwrap();
         hub
     }
 
@@ -628,17 +629,13 @@ mod tests {
         MonitorId,
         Vec<crate::shared::primitives::ChildModuleLayout>,
     )> {
-        sent.try_iter().find_map(|event| {
-            if let LayoutEvent::ContainerLayoutsCalculated {
+        sent.try_iter().find_map(|event| match event {
+            LayoutEvent::ContainerLayoutsCalculated {
                 parent_id,
                 monitor_id,
                 layouts,
-            } = event
-            {
-                Some((parent_id, monitor_id, layouts))
-            } else {
-                None
-            }
+            } => Some((parent_id, monitor_id, layouts)),
+            LayoutEvent::ModuleSizeChanged { .. } => None,
         })
     }
 
