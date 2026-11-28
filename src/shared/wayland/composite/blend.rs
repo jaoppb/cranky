@@ -61,24 +61,30 @@ impl<'a> PixelsMut<'a> {
         let y_start = top.saturating_neg().max(0);
         let y_end = src_height.min(dst_height.saturating_sub(top));
 
-        for src_y in y_start..y_end {
-            for src_x in x_start..x_end {
-                let dst_offset = offset(
-                    src_x.saturating_add(left),
-                    src_y.saturating_add(top),
-                    dst_width,
-                );
-                let src_offset = offset(src_x, src_y, src_width);
-                let (Some(dst_offset), Some(src_offset)) = (dst_offset, src_offset) else {
-                    continue;
-                };
-                let src_pixel = src.data().get(src_offset..src_offset.saturating_add(4));
-                let dst_pixel = self.data.get_mut(dst_offset..dst_offset.saturating_add(4));
-                if let (Some(src_pixel), Some(dst_pixel)) = (src_pixel, dst_pixel) {
-                    blend_pixel(dst_pixel, src_pixel);
-                }
-            }
+        let points =
+            (y_start..y_end).flat_map(|src_y| (x_start..x_end).map(move |src_x| (src_x, src_y)));
+        for (src_x, src_y) in points {
+            let dst_offset = offset(
+                src_x.saturating_add(left),
+                src_y.saturating_add(top),
+                dst_width,
+            );
+            let src_offset = offset(src_x, src_y, src_width);
+            blend_at(self.data, src.data(), (dst_offset, src_offset));
         }
+    }
+}
+
+/// Blends the `src` pixel at the second offset over the `dst` pixel at the first; skips it when
+/// either offset is missing or either pixel lies outside its buffer.
+fn blend_at(dst: &mut [u8], src: &[u8], (dst_offset, src_offset): (Option<usize>, Option<usize>)) {
+    let (Some(dst_offset), Some(src_offset)) = (dst_offset, src_offset) else {
+        return;
+    };
+    let src_pixel = src.get(src_offset..src_offset.saturating_add(4));
+    let dst_pixel = dst.get_mut(dst_offset..dst_offset.saturating_add(4));
+    if let (Some(src_pixel), Some(dst_pixel)) = (src_pixel, dst_pixel) {
+        blend_pixel(dst_pixel, src_pixel);
     }
 }
 
