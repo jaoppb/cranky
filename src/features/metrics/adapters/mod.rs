@@ -30,23 +30,21 @@ impl SysinfoAdapter {
         let config = self.config.clone();
         let hub = self.hub.clone();
 
-        tokio::spawn(async move {
-            let mut sources = SysinfoSources::new();
+        tokio::spawn(sample_until_closed(config, hub));
+    }
+}
 
-            loop {
-                let state = sources.gather(&config);
-
-                if hub.metrics_tx().send(state).is_err() {
-                    // Receiver dropped
-                    break;
-                }
-
-                tokio::time::sleep(std::time::Duration::from_millis(
-                    config.update_interval_ms().value(),
-                ))
-                .await;
-            }
-        });
+/// Sends a fresh sample on the hub's metrics channel every update interval, until a send fails
+/// because every receiver is gone.
+async fn sample_until_closed(config: MetricsConfig, hub: Arc<SignalHub>) {
+    let mut sources = SysinfoSources::new();
+    // Known bug: the send never fails, so this loop never ends: `hub` keeps a receiver of its
+    // own, and this task holds `hub`.
+    while hub.metrics_tx().send(sources.gather(&config)).is_ok() {
+        tokio::time::sleep(std::time::Duration::from_millis(
+            config.update_interval_ms().value(),
+        ))
+        .await;
     }
 }
 
