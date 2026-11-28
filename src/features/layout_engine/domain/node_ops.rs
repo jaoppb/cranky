@@ -80,44 +80,36 @@ impl RenderNode {
         let height_i32 = i32::try_from(rect.height()).unwrap_or(i32::MAX);
         let max_x = rect.x().saturating_add(width_i32);
         let max_y = rect.y().saturating_add(height_i32);
-        if pos.x() >= rect.x() && pos.x() < max_x && pos.y() >= rect.y() && pos.y() < max_y {
-            path.push(self);
-            if let Self::Flex { children, .. } | Self::Grid { children, .. } = self {
-                for child in children {
-                    child.hit_test_internal(pos, path);
-                }
-            }
+        if !(pos.x() >= rect.x() && pos.x() < max_x && pos.y() >= rect.y() && pos.y() < max_y) {
+            return;
+        }
+        path.push(self);
+        for child in self.children() {
+            child.hit_test_internal(pos, path);
         }
     }
 
     #[must_use]
     pub(crate) fn find_popup_with_anchor(&self) -> Option<AnchoredPopup<'_>> {
-        if let Some(popup) = self.popup() {
-            return Some(AnchoredPopup::new(self.rect(), popup));
-        }
-        if let Self::Flex { children, .. } | Self::Grid { children, .. } = self {
-            for child in children {
-                if let Some(found) = child.find_popup_with_anchor() {
-                    return Some(found);
-                }
-            }
-        }
-        None
+        self.find_depth_first(&|node| {
+            node.popup()
+                .map(|popup| AnchoredPopup::new(node.rect(), popup))
+        })
     }
 
     #[must_use]
     pub(crate) fn find_panel(&self) -> Option<ActivePanel<'_>> {
-        if let Some(panel) = self.panel() {
-            return Some(ActivePanel::new(panel));
-        }
-        if let Self::Flex { children, .. } | Self::Grid { children, .. } = self {
-            for child in children {
-                if let Some(found) = child.find_panel() {
-                    return Some(found);
-                }
-            }
-        }
-        None
+        self.find_depth_first(&|node| node.panel().map(ActivePanel::new))
+    }
+
+    /// The first result `found` gives for this node or, failing that, for its descendants in
+    /// depth-first order.
+    fn find_depth_first<'a, T>(&'a self, found: &impl Fn(&'a Self) -> Option<T>) -> Option<T> {
+        found(self).or_else(|| {
+            self.children()
+                .iter()
+                .find_map(|child| child.find_depth_first(found))
+        })
     }
 
     /// Finds the tooltip belonging to the innermost node along `path` that
@@ -129,21 +121,15 @@ impl RenderNode {
     /// responsibility — this must already be the tree that surface names.
     #[must_use]
     pub(crate) fn find_tooltip_along(&self, path: &NodePath) -> Option<&StyledNode> {
-        let mut current = self;
-        let mut found = current.tooltip();
-        for &index in path.as_slice() {
-            let (Self::Flex { children, .. } | Self::Grid { children, .. }) = current else {
-                break;
-            };
-            let Some(child) = children.get(index) else {
-                break;
-            };
-            current = child;
-            if let Some(tooltip) = current.tooltip() {
-                found = Some(tooltip);
-            }
-        }
-        found
+        path.as_slice()
+            .iter()
+            .scan(self, |current, &index| {
+                *current = current.children().get(index)?;
+                Some(*current)
+            })
+            .filter_map(Self::tooltip)
+            .last()
+            .or_else(|| self.tooltip())
     }
 }
 

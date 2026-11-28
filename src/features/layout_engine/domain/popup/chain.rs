@@ -57,18 +57,26 @@ pub(crate) fn descendants_deepest_first(
     let mut depth = 0usize;
     while !frontier.is_empty() {
         depth = depth.saturating_add(1);
-        let mut next = Vec::new();
-        for (kind, parent) in links {
-            if parent
-                .as_ref()
-                .is_some_and(|parent_kind| frontier.contains(parent_kind))
-            {
-                by_depth.push((depth, kind.clone()));
-                next.push(kind.clone());
-            }
-        }
+        let next = children_of_any(&frontier, links);
+        by_depth.extend(next.iter().map(|kind| (depth, kind.clone())));
         frontier = next;
     }
     by_depth.sort_by_key(|(depth, _)| Reverse(*depth));
     by_depth.into_iter().map(|(_, kind)| kind).collect()
+}
+
+/// Every kind in `links` whose direct parent is one of `parents`, in `links` order.
+fn children_of_any(
+    parents: &[FloatingKind],
+    links: &[(FloatingKind, Option<FloatingKind>)],
+) -> Vec<FloatingKind> {
+    links
+        .iter()
+        .filter(|(_, parent)| {
+            parent
+                .as_ref()
+                .is_some_and(|parent_kind| parents.contains(parent_kind))
+        })
+        .map(|(kind, _)| kind.clone())
+        .collect()
 }
