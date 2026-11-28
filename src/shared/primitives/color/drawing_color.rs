@@ -72,10 +72,9 @@ fn split_colors_and_angle(tokens: &[String]) -> Result<(Vec<Color>, f32), ColorE
             colors.push(color);
         } else if index == tokens.len().saturating_sub(1) && tokens.len() > 1 {
             let angle_str = token.strip_suffix("deg").unwrap_or(token);
-            let Ok(parsed_angle) = angle_str.parse::<f32>() else {
-                return Err(ColorError::InvalidAngle(token.clone()));
-            };
-            angle = parsed_angle;
+            angle = angle_str
+                .parse::<f32>()
+                .map_err(|_| ColorError::InvalidAngle(token.clone()))?;
         } else {
             return Err(ColorError::InvalidFormat(token.clone()));
         }

@@ -30,12 +30,12 @@ impl LuaModule {
             .map_err(|error| {
                 ModuleInitError::ScriptError(format!("Lua load error in {}: {error}", self.name))
             })?;
-        if let Ok(init_fn) = lua.globals().get::<mlua::Function>("init") {
-            init_fn.call::<()>(()).map_err(|error| {
-                ModuleInitError::ScriptError(format!("Lua init error in {}: {error}", self.name))
-            })?;
-        }
-        Ok(())
+        let Ok(init_fn) = lua.globals().get::<mlua::Function>("init") else {
+            return Ok(());
+        };
+        init_fn.call::<()>(()).map_err(|error| {
+            ModuleInitError::ScriptError(format!("Lua init error in {}: {error}", self.name))
+        })
     }
 }
 
@@ -114,10 +114,9 @@ impl AnyModulePort for LuaModule {
             let lua = self.locked_state();
             let globals = lua.globals();
 
-            let call_res = globals.get::<mlua::Function>(name.as_str()).map(|func| {
-                args.first()
-                    .map_or_else(|| func.call::<()>(()), |arg0| func.call::<()>(*arg0))
-            });
+            let call_res = globals
+                .get::<mlua::Function>(name.as_str())
+                .map(|func| call_with_first_arg(&func, args));
             drop(globals);
             drop(lua);
             call_res
@@ -127,6 +126,12 @@ impl AnyModulePort for LuaModule {
             ModuleInitError::ScriptError(format!("Failed to call function '{name}': {error}"))
         })
     }
+}
+
+/// Calls `func` with the first of `args`, or with no argument when `args` is empty.
+fn call_with_first_arg(func: &mlua::Function, args: &[&str]) -> mlua::Result<()> {
+    args.first()
+        .map_or_else(|| func.call::<()>(()), |arg0| func.call::<()>(*arg0))
 }
 
 /// Logs a refresh of `changed` starting.

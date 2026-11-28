@@ -99,3 +99,13 @@ fn test_lua_rich_monitor_userdata() {
     let result = lua.load(RICH_MONITOR_SCRIPT).eval::<bool>().unwrap();
     assert!(result);
 }
+
+#[test]
+fn test_lua_monitor_without_a_name_is_named_after_its_id() {
+    let lua = Lua::new();
+    let info = ScriptMonitorInfo::from_id(&MonitorId::new("DP-3")).with_name(String::new());
+    lua.globals().set("unnamed", LuaMonitor(info)).unwrap();
+
+    let name = lua.load("return unnamed.name").eval::<String>().unwrap();
+    assert_eq!(name, "DP-3");
+}

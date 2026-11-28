@@ -7,6 +7,8 @@ pub mod root;
 pub mod style;
 #[cfg(test)]
 pub mod tests;
+#[cfg(test)]
+mod tests_root;
 pub mod types;
 
 pub use config::*;

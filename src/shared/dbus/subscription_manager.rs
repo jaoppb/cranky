@@ -228,14 +228,20 @@ mod tests {
             .iter()
             .map(|(key, value)| ((*key).to_string(), value.clone()))
             .collect();
-        let wait = async {
-            while rx.borrow_and_update().properties() != &expected {
-                rx.changed().await.unwrap();
-            }
-        };
+        let wait = until_properties_equal(rx, &expected);
         tokio::time::timeout(std::time::Duration::from_secs(5), wait)
             .await
             .is_ok()
+    }
+
+    /// Waits, without a limit, until the hub's `DBus` properties equal `expected`.
+    async fn until_properties_equal(
+        rx: &mut watch::Receiver<DBusState>,
+        expected: &HashMap<String, DBusValue>,
+    ) {
+        while rx.borrow_and_update().properties() != expected {
+            rx.changed().await.unwrap();
+        }
     }
 
     #[test]

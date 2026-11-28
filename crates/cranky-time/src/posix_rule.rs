@@ -108,14 +108,19 @@ impl Day {
                 let first = civil::days_from_date(year, month, 1);
                 let to_weekday = weekday.saturating_sub(civil::weekday(first)).rem_euclid(7);
                 let day = to_weekday.saturating_add(week.saturating_sub(1).saturating_mul(7));
-                let day = if day >= civil::days_in_month(year, month) {
-                    day.saturating_sub(7)
-                } else {
-                    day
-                };
-                first.saturating_add(day)
+                first.saturating_add(within_month(day, civil::days_in_month(year, month)))
             }
         }
+    }
+}
+
+/// `day`, an offset into a month of `month_days` days, moved back a week when
+/// it falls past the month's end, as week 5 ("the last") can.
+const fn within_month(day: i64, month_days: i64) -> i64 {
+    if day >= month_days {
+        day.saturating_sub(7)
+    } else {
+        day
     }
 }
 

@@ -40,22 +40,15 @@ impl HyprlandState {
     }
 
     fn apply_workspace_activated(&mut self, id: &WorkspaceId, name: &WorkspaceName) {
-        let mon = self.effective_focused_monitor();
-        if let Some(mon_name) = mon {
-            if let Some(workspace) = self.workspaces.get_mut(id) {
-                workspace.set_monitor(mon_name.clone());
-            } else {
-                self.workspaces.insert(
-                    id.clone(),
-                    Workspace::new(id.clone(), name.clone(), Some(mon_name.clone())),
-                );
-            }
-            if let Some(monitor) = self.monitors.get_mut(&mon_name) {
-                monitor.set_active_workspace(id.clone());
-            }
-        } else if !self.workspaces.contains_key(id) {
+        let Some(mon_name) = self.effective_focused_monitor() else {
             self.workspaces
-                .insert(id.clone(), Workspace::new(id.clone(), name.clone(), None));
+                .entry(id.clone())
+                .or_insert_with(|| Workspace::new(id.clone(), name.clone(), None));
+            return;
+        };
+        place_workspace(self.workspaces.entry(id.clone()), Some(name), &mon_name);
+        if let Some(monitor) = self.monitors.get_mut(&mon_name) {
+            monitor.set_active_workspace(id.clone());
         }
     }
 

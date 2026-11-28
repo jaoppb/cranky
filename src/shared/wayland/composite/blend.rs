@@ -61,24 +61,30 @@ impl<'a> PixelsMut<'a> {
         let y_start = top.saturating_neg().max(0);
         let y_end = src_height.min(dst_height.saturating_sub(top));
 
-        for src_y in y_start..y_end {
-            for src_x in x_start..x_end {
-                let dst_offset = offset(
-                    src_x.saturating_add(left),
-                    src_y.saturating_add(top),
-                    dst_width,
-                );
-                let src_offset = offset(src_x, src_y, src_width);
-                let (Some(dst_offset), Some(src_offset)) = (dst_offset, src_offset) else {
-                    continue;
-                };
-                let src_pixel = src.data().get(src_offset..src_offset.saturating_add(4));
-                let dst_pixel = self.data.get_mut(dst_offset..dst_offset.saturating_add(4));
-                if let (Some(src_pixel), Some(dst_pixel)) = (src_pixel, dst_pixel) {
-                    blend_pixel(dst_pixel, src_pixel);
-                }
-            }
+        let points =
+            (y_start..y_end).flat_map(|src_y| (x_start..x_end).map(move |src_x| (src_x, src_y)));
+        for (src_x, src_y) in points {
+            let dst_offset = offset(
+                src_x.saturating_add(left),
+                src_y.saturating_add(top),
+                dst_width,
+            );
+            let src_offset = offset(src_x, src_y, src_width);
+            blend_at(self.data, src.data(), (dst_offset, src_offset));
         }
+    }
+}
+
+/// Blends the `src` pixel at the second offset over the `dst` pixel at the first; skips it when
+/// either offset is missing or either pixel lies outside its buffer.
+fn blend_at(dst: &mut [u8], src: &[u8], (dst_offset, src_offset): (Option<usize>, Option<usize>)) {
+    let (Some(dst_offset), Some(src_offset)) = (dst_offset, src_offset) else {
+        return;
+    };
+    let src_pixel = src.get(src_offset..src_offset.saturating_add(4));
+    let dst_pixel = dst.get_mut(dst_offset..dst_offset.saturating_add(4));
+    if let (Some(src_pixel), Some(dst_pixel)) = (src_pixel, dst_pixel) {
+        blend_pixel(dst_pixel, src_pixel);
     }
 }
 
@@ -160,5 +166,39 @@ mod tests {
         PixelsMut::new(&mut dst, Size::new(2, 2))
             .blend_over(&buf(10, 10, [3, 3, 3, 255]), Position::new(0, 0));
         assert_eq!(dst, [3, 3, 3, 255].repeat(4));
+    }
+
+    #[test]
+    fn dst_shorter_than_its_size_blends_only_the_pixels_it_holds() {
+        // Two pixels of data laid out as 2x2: the second row lies outside it.
+        let mut dst = vec![0u8; 8];
+        PixelsMut::new(&mut dst, Size::new(2, 2))
+            .blend_over(&buf(2, 2, [4, 4, 4, 255]), Position::new(0, 0));
+        assert_eq!(dst, [4, 4, 4, 255].repeat(2));
+    }
+
+    #[test]
+    fn src_shorter_than_its_size_blends_only_the_pixels_it_holds() {
+        let mut dst = vec![0u8; 16];
+        PixelsMut::new(&mut dst, Size::new(2, 2)).blend_over(
+            &RenderBuffer::new(vec![6, 6, 6, 255], Size::new(2, 2)),
+            Position::new(0, 0),
+        );
+        assert_eq!(px(&dst, 0, 0), [6, 6, 6, 255]);
+        assert_eq!(px(&dst, 1, 0), [0; 4]);
+        assert_eq!(px(&dst, 0, 1), [0; 4]);
+        assert_eq!(px(&dst, 1, 1), [0; 4]);
+    }
+
+    #[test]
+    fn src_offset_past_i64_skips_the_pixel() {
+        // Row 2^31 of a u32::MAX-wide source starts past i64::MAX bytes, and an origin of
+        // i32::MIN rows above lands exactly that row on the destination's only pixel.
+        let mut dst = vec![7u8; 4];
+        PixelsMut::new(&mut dst, Size::new(1, 1)).blend_over(
+            &RenderBuffer::new(vec![9, 9, 9, 255], Size::new(u32::MAX, u32::MAX)),
+            Position::new(0, i32::MIN),
+        );
+        assert_eq!(dst, vec![7u8; 4]);
     }
 }

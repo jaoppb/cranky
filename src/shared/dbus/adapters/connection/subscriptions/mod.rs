@@ -60,7 +60,7 @@ async fn open_message_stream(
 /// Forwards every message of `stream` that `decode` understands to the returned stream, from a
 /// spawned task that skips unreadable messages and stops once the returned stream is dropped.
 fn forward_messages<T, D>(
-    mut stream: zbus::MessageStream,
+    stream: zbus::MessageStream,
     decode: D,
 ) -> Pin<Box<dyn Stream<Item = T> + Send + Sync>>
 where
@@ -68,17 +68,25 @@ where
     D: Fn(&zbus::Message) -> Option<T> + Send + 'static,
 {
     let (tx, rx) = mpsc::unbounded_channel();
-
-    tokio::spawn(async move {
-        while let Some(msg_result) = stream.next().await {
-            if let Ok(msg) = msg_result
-                && let Some(item) = decode(&msg)
-                && tx.send(item).is_err()
-            {
-                break;
-            }
-        }
-    });
-
+    tokio::spawn(send_decoded(stream, decode, tx));
     Box::pin(tokio_stream::wrappers::UnboundedReceiverStream::new(rx))
+}
+
+/// Sends `tx` every message of `stream` that `decode` understands, skipping unreadable ones,
+/// until `stream` ends or the receiver of `tx` is dropped.
+async fn send_decoded<T, D>(
+    mut stream: zbus::MessageStream,
+    decode: D,
+    tx: mpsc::UnboundedSender<T>,
+) where
+    D: Fn(&zbus::Message) -> Option<T>,
+{
+    while let Some(msg_result) = stream.next().await {
+        if let Ok(msg) = msg_result
+            && let Some(item) = decode(&msg)
+            && tx.send(item).is_err()
+        {
+            break;
+        }
+    }
 }

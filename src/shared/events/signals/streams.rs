@@ -37,15 +37,10 @@ impl SignalHub {
         &self,
         subs: &[SignalKind],
     ) -> SelectAll<BoxStream<'static, SignalKind>> {
-        let mut events_stream = SelectAll::new();
         let mut seen = HashSet::new();
-
-        for kind in subs {
-            if seen.insert(kind) {
-                events_stream.push(self.signal_to_stream(*kind));
-            }
-        }
-
-        events_stream
+        subs.iter()
+            .filter(|kind| seen.insert(**kind))
+            .map(|kind| self.signal_to_stream(*kind))
+            .collect()
     }
 }

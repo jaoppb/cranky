@@ -141,12 +141,8 @@ impl ChildSizesMap {
         instance_id: Option<&ModuleInstanceId>,
     ) -> Option<&ChildReport> {
         let key = ModuleKey::new(name.clone(), instance_id.cloned());
-        self.0.get(&key).or_else(|| {
-            if instance_id.is_some() {
-                self.0.get(&ModuleKey::new(name.clone(), None))
-            } else {
-                None
-            }
-        })
+        self.0
+            .get(&key)
+            .or_else(|| instance_id.and_then(|_| self.0.get(&ModuleKey::new(name.clone(), None))))
     }
 }
