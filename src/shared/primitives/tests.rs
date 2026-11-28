@@ -55,6 +55,44 @@ fn test_module_key_and_child_sizes() {
 }
 
 #[test]
+fn test_child_sizes_fall_back_to_the_name_only_key_for_an_unknown_instance() {
+    let mut sizes = ChildSizesMap::new();
+    sizes.insert(ModuleKey::from_name("clock"), Size::new(80, 25));
+
+    assert_eq!(
+        sizes.get_by_name_or_key(
+            &ModuleName::new("clock"),
+            Some(&ModuleInstanceId::new("other"))
+        ),
+        Some(&Size::new(80, 25))
+    );
+    assert_eq!(
+        sizes.get_by_name_or_key(
+            &ModuleName::new("battery"),
+            Some(&ModuleInstanceId::new("b1"))
+        ),
+        None
+    );
+}
+
+#[test]
+fn test_child_sizes_never_fall_back_from_a_name_only_lookup() {
+    let mut sizes = ChildSizesMap::new();
+    sizes.insert(
+        ModuleKey::new(
+            ModuleName::new("workspace"),
+            Some(ModuleInstanceId::new("ws1")),
+        ),
+        Size::new(100, 30),
+    );
+
+    assert_eq!(
+        sizes.get_by_name_or_key(&ModuleName::new("workspace"), None),
+        None
+    );
+}
+
+#[test]
 fn test_script_monitor_info_builder() {
     let id = crate::shared::primitives::MonitorId::new("DP-2");
     let info = crate::shared::primitives::ScriptMonitorInfo::from_id(&id)

@@ -75,6 +75,15 @@ fn test_tokenize() {
 }
 
 #[test]
+fn test_tokenize_drops_leading_repeated_and_trailing_whitespace() {
+    assert_eq!(
+        tokenize("  #fff \t  rgb(1, 2, 3)   90deg  "),
+        ["#fff", "rgb(1, 2, 3)", "90deg"]
+    );
+    assert_eq!(tokenize(" \t "), Vec::<String>::new());
+}
+
+#[test]
 fn test_parse_hex_rejects_digits_that_are_not_hex() {
     for input in [
         "#gg0000",
