@@ -76,6 +76,17 @@ impl ScriptMonitorInfo {
         &self.name
     }
 
+    /// The name scripts see, in Lua and Rhai alike: the monitor's name, or
+    /// its id when it has none.
+    #[must_use]
+    pub(crate) fn display_name(&self) -> String {
+        if self.name().is_empty() {
+            self.id().as_str().to_string()
+        } else {
+            self.name().to_string()
+        }
+    }
+
     #[must_use]
     pub(crate) const fn size(&self) -> Size {
         self.size

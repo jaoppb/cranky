@@ -16,7 +16,7 @@ pub(super) fn monitor_info_to_rhai_map(info: &ScriptMonitorInfo) -> rhai::Map {
     let mut map = rhai::Map::new();
     let size = info.size();
     map.insert("id".into(), Dynamic::from(info.id().as_str().to_string()));
-    map.insert("name".into(), Dynamic::from(display_name(info)));
+    map.insert("name".into(), Dynamic::from(info.display_name()));
     map.insert("width".into(), Dynamic::from(i64::from(size.width())));
     map.insert("height".into(), Dynamic::from(i64::from(size.height())));
     map.insert(
@@ -33,15 +33,6 @@ pub(super) fn monitor_info_to_rhai_map(info: &ScriptMonitorInfo) -> rhai::Map {
         workspace_id_value(info.special_workspace_id()),
     );
     map
-}
-
-/// The name a script sees for `info`: its name, or its id when it has none.
-fn display_name(info: &ScriptMonitorInfo) -> String {
-    if info.name().is_empty() {
-        info.id().as_str().to_string()
-    } else {
-        info.name().to_string()
-    }
 }
 
 /// A workspace id as a script sees it: an integer, or unit when there is none.
