@@ -461,5 +461,17 @@ mod tests {
         };
         assert_eq!(adapter.diff_kind(&old_node, &new_node), expected);
         assert_eq!(adapter.diff_kind(&new_node, &new_node), Patch::NoChange);
+
+        // A flex and a grid are both containers, yet still two kinds.
+        let grid = VNode::new_grid(
+            vec![text("label")],
+            ElementSelectors::default(),
+            Interactions::default(),
+        );
+        let expected = Patch::Replace {
+            old_node_id: new_node.node_id(),
+            new_node: Box::new(grid.clone()),
+        };
+        assert_eq!(adapter.diff_kind(&new_node, &grid), expected);
     }
 }

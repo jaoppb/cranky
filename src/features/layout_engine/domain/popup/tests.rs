@@ -127,13 +127,15 @@ fn test_descendants_deepest_first_keeps_link_order_within_a_depth() {
     let (root, first, second, under_second, under_first) =
         (kind(1), kind(2), kind(3), kind(4), kind(5));
 
+    // `under_first` comes first in `links` though its parent comes second at the depth above,
+    // so walking the parents instead of `links` would swap the deepest two.
     let links = vec![
-        (under_second.clone(), Some(second.clone())),
+        (under_first.clone(), Some(first.clone())),
         (second.clone(), Some(root.clone())),
         (first.clone(), Some(root.clone())),
-        (under_first.clone(), Some(first.clone())),
+        (under_second.clone(), Some(second.clone())),
     ];
 
     let result = descendants_deepest_first(&root, &links);
-    assert_eq!(result, vec![under_second, under_first, second, first]);
+    assert_eq!(result, vec![under_first, under_second, second, first]);
 }
