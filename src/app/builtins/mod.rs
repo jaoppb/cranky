@@ -91,10 +91,7 @@ impl BuiltinModules {
         fs::create_dir_all(&dir).map_err(|error| BuiltinError::InputOutput(error.to_string()))?;
 
         for (filename, content) in Self::BUILTINS {
-            let path = dir.join(filename);
-            if !path.exists() || fs::read_to_string(&path).ok().as_deref() != Some(*content) {
-                let _ = fs::write(path, content);
-            }
+            write_if_stale(&dir.join(filename), content);
         }
 
         Ok(dir)
@@ -188,6 +185,15 @@ fn select_engines<'engines>(
     }
 }
 
+/// Writes `content` to `path` unless the file already holds exactly it; a failed write is
+/// ignored.
+fn write_if_stale(path: &Path, content: &str) {
+    if path.exists() && fs::read_to_string(path).ok().as_deref() == Some(content) {
+        return;
+    }
+    let _ = fs::write(path, content);
+}
+
 /// The first module named `name` that loads, searching each of `dirs` in order with every one
 /// of `engines` in order; a script that is missing or fails to load is skipped.
 fn load_first_found(
@@ -195,17 +201,21 @@ fn load_first_found(
     engines: &[&dyn crate::shared::scripting::ports::ScriptEnginePort],
     name: &crate::shared::primitives::ModuleName,
 ) -> Option<Box<dyn AnyModulePort>> {
-    for dir in dirs {
-        for engine in engines {
-            let path = dir.join(format!("{name}.{}", engine.file_extension().as_str()));
-            if let Ok(source) = fs::read_to_string(&path)
-                && let Ok(module) = engine.load_module(name.as_str(), &source)
-            {
-                return Some(module);
-            }
-        }
-    }
-    None
+    dirs.iter()
+        .flat_map(|dir| engines.iter().map(move |engine| (dir, *engine)))
+        .find_map(|(dir, engine)| load_from(dir, engine, name))
+}
+
+/// The module named `name` that `engine` loads from its script in `dir`, if the script exists
+/// and loads.
+fn load_from(
+    dir: &Path,
+    engine: &dyn crate::shared::scripting::ports::ScriptEnginePort,
+    name: &crate::shared::primitives::ModuleName,
+) -> Option<Box<dyn AnyModulePort>> {
+    let path = dir.join(format!("{name}.{}", engine.file_extension().as_str()));
+    let source = fs::read_to_string(&path).ok()?;
+    engine.load_module(name.as_str(), &source).ok()
 }
 
 /// The error for a module `name` that no allowed engine found, naming the engine when
