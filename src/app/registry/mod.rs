@@ -426,10 +426,13 @@ impl ModuleRegistry {
         config: &crate::shared::config::domain::Config,
     ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
         let root_name = config.root().name();
-        for mod_cfg in config.modules().modules().values() {
-            if mod_cfg.is_enabled() && mod_cfg.name() != root_name {
-                self.load_child(mod_cfg, config)?;
-            }
+        let children = config
+            .modules()
+            .modules()
+            .values()
+            .filter(|mod_cfg| mod_cfg.is_enabled() && mod_cfg.name() != root_name);
+        for mod_cfg in children {
+            self.load_child(mod_cfg, config)?;
         }
         Ok(())
     }
@@ -442,12 +445,23 @@ impl ModuleRegistry {
         config: &crate::shared::config::domain::Config,
     ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
         for mod_name in root_section_module_names(config) {
-            if !self.name_to_ids.contains_key(&mod_name) {
-                let auto_cfg = ModuleConfig::new(mod_name, ModuleOptions::default());
-                self.load_child(&auto_cfg, config)?;
-            }
+            self.load_section_module(mod_name, config)?;
         }
         Ok(())
+    }
+
+    /// Loads the module `mod_name`, with default options, as a child of the root, unless one by
+    /// that name is loaded already.
+    fn load_section_module(
+        &mut self,
+        mod_name: crate::shared::primitives::ModuleName,
+        config: &crate::shared::config::domain::Config,
+    ) -> Result<(), crate::features::module_runtime::ports::RegistryLoadError> {
+        if self.name_to_ids.contains_key(&mod_name) {
+            return Ok(());
+        }
+        let auto_cfg = ModuleConfig::new(mod_name, ModuleOptions::default());
+        self.load_child(&auto_cfg, config)
     }
 
     /// Loads the module `cfg` names on the bar under the root `load_root`

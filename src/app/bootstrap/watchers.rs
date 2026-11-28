@@ -76,14 +76,18 @@ mod tests {
         let mut commands = Vec::new();
         let mut quiet_since = Instant::now();
         while quiet_since.elapsed() < Duration::from_secs(2) {
-            if let Ok(command) = rx.try_recv() {
-                commands.push(command);
-                quiet_since = Instant::now();
-            } else {
-                std::thread::sleep(Duration::from_millis(20));
-            }
+            commands.extend(poll(rx).inspect(|_| quiet_since = Instant::now()));
         }
         commands
+    }
+
+    /// The command waiting on `rx`, or none after a 20 ms pause when there is not one.
+    fn poll(rx: &mut mpsc::Receiver<SystemCommand>) -> Option<SystemCommand> {
+        let command = rx.try_recv().ok();
+        if command.is_none() {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        command
     }
 
     #[test]

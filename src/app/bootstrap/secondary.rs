@@ -120,6 +120,20 @@ mod tests {
         AdapterSupervisor::new(hub, home.env(), Arc::new(DisconnectedBus))
     }
 
+    /// Asserts that `supervisor` has started every one of `kinds`.
+    fn assert_all_started(supervisor: &AdapterSupervisor, kinds: &[SignalKind]) {
+        for kind in kinds {
+            assert!(supervisor.has_started(*kind), "{kind:?}");
+        }
+    }
+
+    /// Asserts that `supervisor` has started none of `kinds`.
+    fn assert_none_started(supervisor: &AdapterSupervisor, kinds: &[SignalKind]) {
+        for kind in kinds {
+            assert!(!supervisor.has_started(*kind), "{kind:?}");
+        }
+    }
+
     #[test]
     fn test_boot_starts_only_the_active_supervised_signals() {
         crate::test_utils::block_on(async {
@@ -129,17 +143,16 @@ mod tests {
 
             start_supervised_adapters(&mut supervisor, &active).await;
 
-            for kind in [SignalKind::Metrics, SignalKind::Time] {
-                assert!(supervisor.has_started(kind), "{kind:?}");
-            }
-            for kind in [
-                SignalKind::Mpris,
-                SignalKind::Hyprland,
-                SignalKind::Systray,
-                SignalKind::DBus,
-            ] {
-                assert!(!supervisor.has_started(kind), "{kind:?}");
-            }
+            assert_all_started(&supervisor, &[SignalKind::Metrics, SignalKind::Time]);
+            assert_none_started(
+                &supervisor,
+                &[
+                    SignalKind::Mpris,
+                    SignalKind::Hyprland,
+                    SignalKind::Systray,
+                    SignalKind::DBus,
+                ],
+            );
         });
     }
 
