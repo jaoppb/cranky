@@ -126,13 +126,13 @@ impl SniAdapter {
             log_routing(id, item, call);
             let proxy = item_proxy(conn, item, id).await?;
             invoke_action(&proxy, item, call).await;
-        } else {
-            if conn_opt.is_none() {
-                log_no_connection(id, call);
-            }
-            if item_opt.is_none() {
-                log_unknown_item(id, call);
-            }
+            return Ok(());
+        }
+        if conn_opt.is_none() {
+            log_no_connection(id, call);
+        }
+        if item_opt.is_none() {
+            log_unknown_item(id, call);
         }
         Ok(())
     }

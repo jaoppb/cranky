@@ -119,11 +119,9 @@ impl ItemFollower {
     }
 
     async fn apply_all(&self, mut events: impl Stream<Item = SniEvent> + Unpin + Send) {
-        while let Some(event) = events.next().await {
-            if self.apply(event).await.is_break() {
-                break;
-            }
-        }
+        while let Some(event) = events.next().await
+            && self.apply(event).await.is_continue()
+        {}
     }
 
     /// Refetches what `event` announces into the tracked item and publishes it; breaks when the

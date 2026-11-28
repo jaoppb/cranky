@@ -62,13 +62,12 @@ fn parse_window_id(all_props: &mut AllProps) -> Option<u32> {
 
 fn parse_menu_path(all_props: &mut AllProps) -> Option<String> {
     take_prop(all_props, "Menu").or_else(|| {
-        all_props.remove("Menu").and_then(|variant| {
-            if let Variant::ObjectPath(object_path) = &*variant {
-                Some(object_path.as_str().to_string())
-            } else {
-                None
-            }
-        })
+        all_props
+            .remove("Menu")
+            .and_then(|variant| match &*variant {
+                Variant::ObjectPath(object_path) => Some(object_path.as_str().to_string()),
+                _ => None,
+            })
     })
 }
 

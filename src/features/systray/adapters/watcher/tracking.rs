@@ -47,13 +47,12 @@ impl Watcher {
         if keys_to_remove.is_empty() {
             return false;
         }
-        {
-            let mut lock = tray.items().write().await;
-            for key in keys_to_remove {
-                log_removing(&key, destination);
-                lock.remove(&key);
-            }
+        let mut lock = tray.items().write().await;
+        for key in keys_to_remove {
+            log_removing(&key, destination);
+            lock.remove(&key);
         }
+        drop(lock);
         tray.publish().await;
         true
     }
