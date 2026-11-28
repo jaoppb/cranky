@@ -1,10 +1,11 @@
 use super::canvas::TinySkiaCosmicCanvas;
+use super::factory::FontCache;
 use super::glyph::PlacedGlyph;
 use super::shaping::ShapingFont;
 use crate::shared::primitives::geometry::{LogicalPx, Rect as LogicalRect, Scale, Size};
 use crate::shared::rendering::ports::draw::RgbaImage;
 use crate::shared::rendering::ports::text::{TextPlacement, TextRun};
-use cosmic_text::{Buffer, SwashContent};
+use cosmic_text::{Buffer, PhysicalGlyph, SwashContent};
 use tiny_skia::Transform;
 
 impl TinySkiaCosmicCanvas<'_> {
@@ -17,20 +18,12 @@ impl TinySkiaCosmicCanvas<'_> {
         let physical_x = aligned_x(placement, &buffer, self.scale);
         let physical_y = scaled_coordinate(placement.origin().y(), self.scale);
 
-        for line in buffer.layout_runs() {
-            for glyph in line.glyphs {
-                let physical_glyph = glyph.physical((physical_x, physical_y + line.line_y), 1.0);
-
-                if let Some(image) = self
-                    .fonts
-                    .swash_cache
-                    .get_image(&mut self.fonts.font_system, physical_glyph.cache_key)
-                    && image.content == SwashContent::Mask
-                {
-                    PlacedGlyph::new(image, &physical_glyph).draw(pixmap, run.color());
-                }
-            }
-        }
+        let glyphs = buffer.layout_runs().flat_map(|line| {
+            line.glyphs
+                .iter()
+                .map(move |glyph| glyph.physical((physical_x, physical_y + line.line_y), 1.0))
+        });
+        for_each_mask_glyph(self.fonts, glyphs, |glyph| glyph.draw(pixmap, run.color()));
     }
 
     pub(crate) fn draw_image_impl(&mut self, image: RgbaImage<'_>, area: LogicalRect) {
@@ -48,6 +41,24 @@ impl TinySkiaCosmicCanvas<'_> {
             };
             let transform = image_transform(area, image.size(), self.scale);
             pixmap.draw_pixmap(0, 0, image_pixmap, &paint, transform, None);
+        }
+    }
+}
+
+/// Hands `draw` each of `glyphs` that `fonts` rasterizes to a coverage mask, placed for the
+/// glyph; a glyph with no image or a color image is skipped.
+fn for_each_mask_glyph(
+    fonts: &mut FontCache,
+    glyphs: impl Iterator<Item = PhysicalGlyph>,
+    mut draw: impl FnMut(&PlacedGlyph<'_>),
+) {
+    for glyph in glyphs {
+        if let Some(image) = fonts
+            .swash_cache
+            .get_image(&mut fonts.font_system, glyph.cache_key)
+            && image.content == SwashContent::Mask
+        {
+            draw(&PlacedGlyph::new(image, &glyph));
         }
     }
 }
@@ -118,4 +129,69 @@ fn image_transform(area: LogicalRect, size: Size, scale: Scale) -> Transform {
     let physical_y = scaled_coordinate(area.y(), scale);
 
     Transform::from_scale(scale_x, scale_y).post_translate(physical_x, physical_y)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::shared::config::domain::{FontFamily, FontSize};
+    use crate::shared::rendering::ports::font::Font;
+    use crate::shared::rendering::ports::text::TextFont;
+    use cosmic_text::{CacheKey, CacheKeyFlags, Weight, fontdb};
+
+    /// How many of `glyphs` `for_each_mask_glyph` hands on to be drawn.
+    fn drawn_count(fonts: &mut FontCache, glyphs: Vec<PhysicalGlyph>) -> usize {
+        let mut count = 0_usize;
+        for_each_mask_glyph(fonts, glyphs.into_iter(), |_| {
+            count = count.saturating_add(1);
+        });
+        count
+    }
+
+    /// The glyphs of `text` shaped in 14px sans-serif, placed at the origin.
+    fn shaped_glyphs(fonts: &mut FontCache, text: &str) -> Vec<PhysicalGlyph> {
+        let font = Font::new(
+            FontFamily::new("sans-serif".to_string()),
+            FontSize::new(14.0),
+        );
+        let shaping = ShapingFont::resolve(TextFont::default(), &font, Scale::new(1.0));
+        let buffer = shaping.shape(&mut fonts.font_system, text);
+        buffer
+            .layout_runs()
+            .flat_map(|line| {
+                line.glyphs
+                    .iter()
+                    .map(|glyph| glyph.physical((0.0, 0.0), 1.0))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_glyph_of_a_font_the_system_lacks_is_skipped() {
+        let mut fonts = FontCache::new();
+        let (cache_key, _, _) = CacheKey::new(
+            fontdb::ID::dummy(),
+            1,
+            14.0,
+            (0.0, 0.0),
+            Weight::NORMAL,
+            CacheKeyFlags::empty(),
+        );
+        let missing = PhysicalGlyph {
+            cache_key,
+            x: 0,
+            y: 0,
+        };
+
+        assert_eq!(drawn_count(&mut fonts, vec![missing]), 0);
+    }
+
+    #[test]
+    fn each_glyph_rasterized_to_a_mask_is_drawn_once() {
+        let mut fonts = FontCache::new();
+        let glyphs = shaped_glyphs(&mut fonts, "MW");
+
+        assert_eq!(glyphs.len(), 2);
+        assert_eq!(drawn_count(&mut fonts, glyphs), 2);
+    }
 }
