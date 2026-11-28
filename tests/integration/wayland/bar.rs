@@ -107,13 +107,15 @@ impl Bar {
         what: &str,
         done: impl Fn(&Self) -> bool + Send + Sync,
     ) -> Outcome {
-        within(what, async {
-            while !done(self) {
-                self.turn().await?;
-            }
-            self.adapter.flush().context("flush")
-        })
-        .await?
+        within(what, self.turns_until(done)).await?
+    }
+
+    /// Turns the loop until `done` holds, then flushes the requests it made.
+    async fn turns_until(&mut self, done: impl Fn(&Self) -> bool + Send + Sync) -> Outcome {
+        while !done(self) {
+            self.turn().await?;
+        }
+        self.adapter.flush().context("flush")
     }
 
     /// Runs the loop until sway has configured the bar's layer surface.
@@ -148,19 +150,25 @@ impl Bar {
     /// not below it. A screenshot is a round trip through sway, not a sleep,
     /// and the loop keeps turning while each one is taken.
     pub(crate) async fn until_on_screen(&mut self, colour: Rgb) -> Outcome {
-        within("the bar colour to be on screen", async {
-            loop {
-                let shot = std::pin::pin!(Screenshot::take());
-                if self
-                    .while_taking(shot)
-                    .await?
-                    .shows_bar(colour, Self::height_pixels()?)?
-                {
-                    return Ok(());
-                }
-            }
-        })
+        within(
+            "the bar colour to be on screen",
+            self.screenshots_until(colour),
+        )
         .await?
+    }
+
+    /// Takes screenshots, one after the other, until one shows `colour` on the bar.
+    async fn screenshots_until(&mut self, colour: Rgb) -> Outcome {
+        while !self.screenshot_shows(colour).await? {}
+        Ok(())
+    }
+
+    /// Takes one screenshot and reports whether it shows `colour` on the bar.
+    async fn screenshot_shows(&mut self, colour: Rgb) -> Outcome<bool> {
+        let shot = std::pin::pin!(Screenshot::take());
+        self.while_taking(shot)
+            .await?
+            .shows_bar(colour, Self::height_pixels()?)
     }
 
     /// Turns the loop until the screenshot `shot` is taken.

@@ -713,6 +713,21 @@ macro_rules! layout_context {
     };
 }
 
+/// Runs one full render pipeline iteration of the fixture's module.
+fn render_once(
+    fixture: &PipelineFixture,
+    canvas_factory: &mut TinySkiaCanvasFactory,
+    engines: &mut LayoutEngines,
+) {
+    let child_errors = std::collections::HashMap::new();
+    let mut pipeline = RenderPipeline::new();
+    let Some(diff) = pipeline.diff(&fixture.module, fixture.diff_input()) else {
+        return;
+    };
+    let mut ctx = layout_context!(fixture, &child_errors, canvas_factory, engines);
+    black_box(pipeline.layout(diff, &mut ctx));
+}
+
 fn bench_pipeline(criterion: &mut Criterion) {
     let mut group = criterion.benchmark_group("pipeline");
     let fixture = PipelineFixture::new();
@@ -720,16 +735,7 @@ fn bench_pipeline(criterion: &mut Criterion) {
 
     group.bench_function("full_render_pipeline_iteration", |bencher| {
         let mut engines = LayoutEngines::default();
-        let child_errors = std::collections::HashMap::new();
-        bencher.iter(|| {
-            let mut pipeline = RenderPipeline::new();
-
-            if let Some(diff) = pipeline.diff(&fixture.module, fixture.diff_input()) {
-                let mut ctx = layout_context!(fixture, &child_errors, &mut canvas_factory, engines);
-                let layout_res = pipeline.layout(diff, &mut ctx);
-                black_box(layout_res);
-            }
-        });
+        bencher.iter(|| render_once(&fixture, &mut canvas_factory, &mut engines));
     });
 
     group.finish();

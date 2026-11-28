@@ -69,10 +69,8 @@ impl Selection {
                 "--list" => selection.action = Action::List,
                 "--ignored" => selection.scope = Scope::OnlyIgnored,
                 _ if WITH_VALUE.contains(&flag) => drop(value_of(&arg, &mut args)?),
-                _ if IGNORED.contains(&flag) => {}
-                _ if flag.starts_with('-') => {
-                    return Err(Failure::new(format!("unsupported argument `{arg}`")));
-                }
+                _ if IGNORED.contains(&flag) => (),
+                _ if flag.starts_with('-') => return Err(unsupported(&arg)),
                 _ => selection.filters.push(arg),
             }
         }
@@ -96,6 +94,11 @@ impl Selection {
         (self.filters.is_empty() || self.filters.iter().any(matches))
             && !self.skips.iter().any(matches)
     }
+}
+
+/// The failure of an argument this binary does not know.
+fn unsupported(arg: &str) -> Failure {
+    Failure::new(format!("unsupported argument `{arg}`"))
 }
 
 /// The value of `flag`, written as `--flag=value` or as the next argument.
