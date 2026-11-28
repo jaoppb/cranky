@@ -530,6 +530,8 @@ fn registry_load_error(
 }
 
 /// Logs the sheets the module `config` names depends on, under its new `id`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_style_dependencies(config: &ModuleConfig, id: ModuleId, mod_styles: &[StyleSheetName]) {
     tracing::debug!(
         module = %config.name().as_str(),

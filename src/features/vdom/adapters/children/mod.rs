@@ -63,6 +63,8 @@ where
 
 /// Warns that a child list with a mix of keyed and unkeyed children, or a duplicate key, is
 /// reconciled by position this render.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_positional_fallback(parent_id: NodeId) {
     tracing::warn!(
         parent_id = %parent_id,
@@ -133,6 +135,8 @@ fn children_patch(parent_id: NodeId, child_patches: Vec<ChildPatchOp>) -> Patch 
 }
 
 /// Traces how many child patches the reconciliation of `parent_id`'s children produced.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_child_patches(parent_id: NodeId, patch_count: usize) {
     tracing::trace!(
         parent_id = %parent_id,

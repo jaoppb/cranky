@@ -33,6 +33,8 @@ pub(crate) fn gradient_from_image(image: &Image<'_>) -> Option<DrawingColor> {
 }
 
 /// Warns that a `border-image` source other than a gradient is ignored.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_unsupported_image(image: &Image<'_>) {
     tracing::warn!(
         ?image,
@@ -41,6 +43,8 @@ fn log_unsupported_image(image: &Image<'_>) {
 }
 
 /// Warns that a gradient other than a linear one is ignored.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_unsupported_gradient(other: &Gradient) {
     tracing::warn!(?other, "only linear-gradient() border images are supported");
 }
@@ -59,6 +63,8 @@ fn linear_gradient_colors(gradient: &LinearGradient) -> Option<DrawingColor> {
 }
 
 /// Warns that a gradient whose direction is not an angle is ignored.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_keyword_direction(direction: &LineDirection) {
     tracing::warn!(
         ?direction,

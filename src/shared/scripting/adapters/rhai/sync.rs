@@ -145,6 +145,8 @@ fn call_refresh(script: &mut RhaiScript<'_>) {
 }
 
 /// Logs a script `refresh` that failed with `error`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_refresh_failed(error: &rhai::EvalAltResult) {
     tracing::error!("Rhai refresh error: {error}");
 }

@@ -67,6 +67,8 @@ pub(super) fn layout_floating_content<F: CanvasFactory, E: LayoutEnginePort>(
 }
 
 /// Logs a floating layout pass that failed with `error`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_layout_failed(error: &LayoutError) {
     tracing::error!(err = ?error, "Floating content layout calculation failed");
 }

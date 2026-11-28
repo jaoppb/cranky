@@ -92,21 +92,29 @@ async fn store_signals(mut stream: SignalStream, tx: watch::Sender<DBusState>) {
 }
 
 /// Logs the `PropertiesChanged` subscription on `path`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_subscribed_to_properties(path: &Path) {
     debug!("Subscribed to DBus PropertiesChanged on {path:?}");
 }
 
 /// Logs a generic signal subscription.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_subscribed_to_signal() {
     debug!("Subscribed to generic DBus signal");
 }
 
 /// Logs a `PropertiesChanged` received from `path_str` for `iface_str`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_properties_changed(path_str: &str, iface_str: &str) {
     tracing::debug!("Received DBus PropertiesChanged on {path_str:?} for interface {iface_str:?}");
 }
 
 /// Logs a generic signal received on `path_str` for `member_str`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_signal_received(path_str: &str, member_str: &str) {
     tracing::debug!("Received generic DBus signal on {path_str:?} for member {member_str:?}");
 }

@@ -49,6 +49,8 @@ async fn read_player_properties(
 }
 
 /// Logs that the player at `dest` could not be read.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_read_failed(dest: &Destination, error: &DbusConnectionError) {
     warn!("Failed to read MPRIS properties for {dest:?}: {error}");
 }
@@ -72,6 +74,8 @@ fn publish_player(
 }
 
 /// Logs that the player `name_str` was found.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_player_found(name_str: &str) {
     tracing::debug!("Found MPRIS player: {name_str}");
 }

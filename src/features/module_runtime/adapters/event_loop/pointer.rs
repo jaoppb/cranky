@@ -151,6 +151,8 @@ impl<
 
 /// Logs a pointer event module `ctx_id` received on `monitor_id` for a surface it has no tree
 /// for.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_no_render_tree(ctx_id: ModuleId, monitor_id: &MonitorId) {
     tracing::warn!(
         module = %ctx_id,
@@ -160,6 +162,8 @@ fn log_no_render_tree(ctx_id: ModuleId, monitor_id: &MonitorId) {
 }
 
 /// Logs a script call `func_name` of module `ctx_id` that failed with `error`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_script_call_failed(ctx_id: ModuleId, func_name: &FunctionName, error: &ModuleInitError) {
     tracing::error!(
         module = %ctx_id,

@@ -79,22 +79,8 @@ impl Screenshot {
     /// Whether the bar, `bar_height` pixels tall, is `colour` from edge to
     /// edge and the output below it is not.
     pub(crate) fn shows_bar(&self, colour: Rgb, bar_height: usize) -> Outcome<bool> {
-        let last_row = bar_height.saturating_sub(1);
-        let last_column = self.width.saturating_sub(1);
-        let corners = [
-            (0, 0),
-            (last_column, 0),
-            (0, last_row),
-            (last_column, last_row),
-        ];
-        for (x, y) in corners {
-            if self
-                .pixel(x, y)
-                .context("the screenshot is smaller than the bar")?
-                != colour
-            {
-                return Ok(false);
-            }
+        if !self.corners_show(colour, bar_height)? {
+            return Ok(false);
         }
         let below = self
             .pixel(0, bar_height)
@@ -104,6 +90,29 @@ impl Screenshot {
             || format!("{colour:?} also covers the output below the bar"),
         )?;
         Ok(true)
+    }
+
+    /// Whether all four corners of the bar are `colour`; fails at the first
+    /// corner the screenshot does not reach, unless one before it is off.
+    fn corners_show(&self, colour: Rgb, bar_height: usize) -> Outcome<bool> {
+        let last_row = bar_height.saturating_sub(1);
+        let last_column = self.width.saturating_sub(1);
+        let corners = [
+            (0, 0),
+            (last_column, 0),
+            (0, last_row),
+            (last_column, last_row),
+        ];
+        corners
+            .into_iter()
+            .map(|(x, y)| {
+                let pixel = self.pixel(x, y);
+                pixel
+                    .context("the screenshot is smaller than the bar")
+                    .map(|pixel| pixel == colour)
+            })
+            .find(|matched| !matches!(matched, Ok(true)))
+            .unwrap_or(Ok(true))
     }
 
     fn pixel(&self, x: usize, y: usize) -> Option<Rgb> {

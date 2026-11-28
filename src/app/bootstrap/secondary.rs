@@ -94,6 +94,8 @@ async fn start_systray(
 }
 
 /// Logs that the SNI watcher could not start.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_sni_start_failed(error: &impl std::fmt::Debug) {
     error!("Failed to start SNI Watcher: {error:?}");
 }

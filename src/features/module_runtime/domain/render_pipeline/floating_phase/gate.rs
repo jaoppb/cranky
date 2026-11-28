@@ -71,6 +71,8 @@ pub(in super::super) fn apply_gate(
 
 /// Logs that a floating surface on `monitor_id` is presented although its embedded module never
 /// settled.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_presented_unsettled(monitor_id: &MonitorId) {
     tracing::warn!(
         monitor = %monitor_id,

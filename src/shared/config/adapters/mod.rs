@@ -164,11 +164,15 @@ fn config_watch_event_span() -> tracing::Span {
 }
 
 /// Logs that the config file changed and is being reloaded.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_reloading() {
     info!("Config file modified, reloading...");
 }
 
 /// Logs an error the file watcher reported instead of an event.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_watcher_error(error: &notify::Error) {
     error!("Config watcher error: {error:?}");
 }

@@ -101,14 +101,17 @@ async fn apply_menu(item: SystrayItem, proxy: &StatusNotifierItemProxy<'_>) -> S
     item
 }
 
+/// Logs a changed item title, out of line to keep its caller under `cognitive_complexity`.
 fn log_title(title: &str) {
     tracing::trace!("SniEvent::Title: updated title to '{title}'");
 }
 
+/// Logs a changed item status, out of line to keep its caller under `cognitive_complexity`.
 fn log_status(status: &SystrayStatus) {
     tracing::trace!("SniEvent::Status: updated status to {status:?}");
 }
 
+/// Logs a changed item icon, out of line to keep its caller under `cognitive_complexity`.
 fn log_icon(
     icon_name: Option<&str>,
     icon_theme_path: Option<&str>,
@@ -120,18 +123,22 @@ fn log_icon(
     );
 }
 
+/// Logs a changed attention icon, out of line to keep its caller under `cognitive_complexity`.
 fn log_attention_icon() {
     tracing::trace!("SniEvent::AttentionIcon: updated attention icon");
 }
 
+/// Logs a changed overlay icon, out of line to keep its caller under `cognitive_complexity`.
 fn log_overlay_icon() {
     tracing::trace!("SniEvent::OverlayIcon: updated overlay icon");
 }
 
+/// Logs a changed tool tip, out of line to keep its caller under `cognitive_complexity`.
 fn log_tool_tip() {
     tracing::trace!("SniEvent::ToolTip: updated tooltip");
 }
 
+/// Logs a changed menu, out of line to keep its caller under `cognitive_complexity`.
 fn log_menu() {
     tracing::trace!("SniEvent::Menu: updated menu");
 }

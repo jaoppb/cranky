@@ -59,6 +59,8 @@ fn child_sizes_changed(pipeline: &RenderPipeline, input: &DiffInput<'_>) -> bool
 }
 
 /// Logs that nothing changed on `monitor_id`, so no phase after the diff runs.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_render_skipped(monitor_id: &MonitorId) {
     tracing::trace!(
         monitor = %monitor_id,

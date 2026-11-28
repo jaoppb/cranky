@@ -260,6 +260,8 @@ fn reload_script(path: &Path, command_tx: &dyn crate::app::commands::SystemComma
 }
 
 /// Logs that the script at `path` changed on disk.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_script_modified(path: &Path) {
     tracing::debug!("Script modified: {path:?}");
 }

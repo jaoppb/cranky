@@ -2,7 +2,7 @@
 //! directory, each holding the icons only it should resolve.
 
 use crate::support::{Context, Outcome};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// In the main theme: the icon `NewIcon` switches to.
 pub(crate) const MAIN_ICON: &str = "cranky-it-icon";
@@ -45,6 +45,15 @@ impl Theme {
 
 const SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#ff0000"/></svg>"##;
 
+/// Writes the directory `dir` of `theme` and the icons the theme names.
+fn write_theme(dir: &Path, theme: Theme) -> Outcome {
+    std::fs::create_dir_all(dir).context("create a theme directory")?;
+    for icon in theme.icons() {
+        std::fs::write(dir.join(format!("{icon}.svg")), SVG).context("write an icon")?;
+    }
+    Ok(())
+}
+
 /// The theme directories, removed on drop.
 pub(crate) struct Themes(PathBuf);
 
@@ -54,11 +63,7 @@ impl Themes {
         let runtime = std::env::var_os("XDG_RUNTIME_DIR").context("XDG_RUNTIME_DIR is unset")?;
         let themes = Self(PathBuf::from(runtime).join("item-themes"));
         for theme in [Theme::Main, Theme::Attention, Theme::Extra] {
-            let dir = themes.0.join(theme.dir());
-            std::fs::create_dir_all(&dir).context("create a theme directory")?;
-            for icon in theme.icons() {
-                std::fs::write(dir.join(format!("{icon}.svg")), SVG).context("write an icon")?;
-            }
+            write_theme(&themes.0.join(theme.dir()), theme)?;
         }
         Ok(themes)
     }

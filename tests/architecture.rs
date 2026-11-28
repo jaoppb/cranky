@@ -32,9 +32,7 @@ fn count_prod_lines(path: &std::path::Path) -> usize {
 
         if in_test {
             brace_depth = brace_depth.saturating_add(brace_delta(line));
-            if brace_depth <= 0 && (line.contains('}') || line.contains(';')) {
-                in_test = false;
-            }
+            in_test = brace_depth > 0 || !(line.contains('}') || line.contains(';'));
             continue;
         }
 
@@ -42,6 +40,11 @@ fn count_prod_lines(path: &std::path::Path) -> usize {
     }
 
     prod_lines
+}
+
+/// Whether `path` names a Rust source file.
+fn is_rust_source(path: &std::path::Path) -> bool {
+    path.extension().and_then(|extension| extension.to_str()) == Some("rs")
 }
 
 fn collect_rs_files(dir: &std::path::Path, files: &mut Vec<std::path::PathBuf>) {
@@ -53,7 +56,9 @@ fn collect_rs_files(dir: &std::path::Path, files: &mut Vec<std::path::PathBuf>) 
         let path = entry.path();
         if path.is_dir() {
             collect_rs_files(&path, files);
-        } else if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
+            continue;
+        }
+        if is_rust_source(&path) {
             files.push(path);
         }
     }
@@ -72,11 +77,9 @@ fn verify_file_loc_limits() {
         let normalized = path_str.replace('\\', "/");
         let loc = count_prod_lines(&file);
 
-        if loc > MAX_PROD_LOC {
-            let is_allowed = ALLOWLIST.iter().any(|&allowed| allowed == normalized);
-            if !is_allowed {
-                violations.push(format!("{normalized}: {loc} LOC (limit: {MAX_PROD_LOC})"));
-            }
+        let is_allowed = ALLOWLIST.iter().any(|&allowed| allowed == normalized);
+        if loc > MAX_PROD_LOC && !is_allowed {
+            violations.push(format!("{normalized}: {loc} LOC (limit: {MAX_PROD_LOC})"));
         }
     }
 

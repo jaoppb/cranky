@@ -141,6 +141,8 @@ fn declared_style(declarations: &[Property<'_>]) -> Option<DeclaredStyle> {
 }
 
 /// Logs that the sheet `name` is about to be parsed from `css_source`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_parsing(name: &StyleSheetName, css_source: &str) {
     tracing::debug!(stylesheet = %name.as_str(), len = css_source.len(), "Parsing CSS stylesheet");
 }
@@ -152,6 +154,8 @@ fn parse_failure(name: &StyleSheetName, error: &Error<ParserError<'_>>) -> Styli
 }
 
 /// Logs that the sheet `name` parsed into `rule_count` rule entries.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_parsed(name: &StyleSheetName, rule_count: usize) {
     tracing::debug!(stylesheet = %name.as_str(), rule_count = rule_count, "CSS stylesheet parsed successfully");
 }

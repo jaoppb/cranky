@@ -112,6 +112,8 @@ impl AdapterSupervisor {
 }
 
 /// Logs that the MPRIS watcher could not start on demand.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_mpris_start_failed(error: &crate::shared::dbus::ports::DbusConnectionError) {
     tracing::error!("Failed to start MPRIS watcher on demand: {error}");
 }

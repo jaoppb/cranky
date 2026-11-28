@@ -74,11 +74,15 @@ impl DisplayCommandSender for std::sync::mpsc::Sender<DisplayCommand> {
 }
 
 /// Logs that the tokio channel refused a display command.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_tokio_send_failed(error: &tokio::sync::mpsc::error::TrySendError<DisplayCommand>) {
     tracing::error!(?error, "failed to send display command via tokio channel");
 }
 
 /// Logs that the std channel refused a display command.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_std_send_failed(error: &std::sync::mpsc::SendError<DisplayCommand>) {
     tracing::error!(?error, "failed to send display command via std channel");
 }

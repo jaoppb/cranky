@@ -143,14 +143,17 @@ impl ItemFollower {
     }
 }
 
+/// Logs that the loop subscribed to an item, out of line to keep its caller under `cognitive_complexity`.
 fn log_subscribed(id: &str) {
     tracing::debug!("Successfully subscribed to all SNI signals for {id}");
 }
 
+/// Logs an event received from an item, out of line to keep its caller under `cognitive_complexity`.
 fn log_event(event: &SniEvent, id: &str) {
     tracing::trace!("Received SNI event {event:?} for systray item {id}");
 }
 
+/// Logs that an item loop ended, out of line to keep its caller under `cognitive_complexity`.
 fn log_terminated(id: &str) {
     tracing::debug!("Systray item {id} loop terminated, cleaning up state");
 }

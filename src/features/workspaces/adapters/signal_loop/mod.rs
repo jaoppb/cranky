@@ -67,11 +67,15 @@ fn follow_event_socket<P: WindowManagerPort>(
 }
 
 /// Logs one raw event line as it arrives.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_event_received(event: &str) {
     tracing::trace!(event, "Hyprland event received");
 }
 
 /// Logs a resync forced by a monitor added, on a state with no inconsistency.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_forced_resync(batch_events: &[String]) {
     tracing::debug!(
         batch_events = ?batch_events,
@@ -80,6 +84,8 @@ fn log_forced_resync(batch_events: &[String]) {
 }
 
 /// Logs a resync forced by the inconsistencies a batch left.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_inconsistent_state(inconsistencies: &[StateInconsistency], batch_events: &[String]) {
     tracing::warn!(
         reasons = ?inconsistencies,
@@ -89,26 +95,36 @@ fn log_inconsistent_state(inconsistencies: &[StateInconsistency], batch_events: 
 }
 
 /// Logs a resync whose state query failed.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_resync_failed(error: &WindowManagerError) {
     tracing::error!("Failed to resync Hyprland state after inconsistency: {error}");
 }
 
 /// Logs an initial state query that failed.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_initial_fetch_failed(error: &WindowManagerError) {
     tracing::error!("Hyprland adapter error on initial fetch: {error}");
 }
 
 /// Logs the event socket closing.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_socket_closed() {
     tracing::info!("Hyprland event socket closed, reconnecting...");
 }
 
 /// Logs a failed read on the event socket.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_read_failed(error: &std::io::Error) {
     tracing::error!("Hyprland event socket read error: {error}");
 }
 
 /// Logs a failed connection to the event socket.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_connect_failed(error: &HyprError) {
     tracing::error!("Failed to connect to Hyprland event socket: {error}");
 }

@@ -198,17 +198,19 @@ async fn next_probe_change(
     what: &str,
     changes: &mut NameChangedStream,
 ) -> Outcome<NameOwnerChanged> {
-    within(what, async {
-        loop {
-            match changes.next().await {
-                Some(change) if change.name() == &probe_destination() => break Some(change),
-                Some(_) => {}
-                None => break None,
-            }
+    within(what, probe_change_in(changes))
+        .await?
+        .context("the name stream ended")
+}
+
+/// The next change of the probe's name on `changes`, or none once it ends.
+async fn probe_change_in(changes: &mut NameChangedStream) -> Option<NameOwnerChanged> {
+    while let Some(change) = changes.next().await {
+        if change.name() == &probe_destination() {
+            return Some(change);
         }
-    })
-    .await?
-    .context("the name stream ended")
+    }
+    None
 }
 
 async fn streams_name_owner_changes() -> Outcome {

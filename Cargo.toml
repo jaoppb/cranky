@@ -79,6 +79,7 @@ print_stderr = "forbid"
 self_named_module_files = "forbid"
 min_ident_chars = "forbid"
 cognitive_complexity = "forbid"
+excessive_nesting = "forbid"
 
 [dependencies]
 # Async Runtime

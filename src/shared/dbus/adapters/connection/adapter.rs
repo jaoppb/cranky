@@ -75,6 +75,8 @@ async fn open_bus(bus: BusType) -> Option<Connection> {
 }
 
 /// Logs the attempt to connect to the bus called `name`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_connecting(name: &str) {
     debug!("Connecting to DBus {name} Bus...");
 }

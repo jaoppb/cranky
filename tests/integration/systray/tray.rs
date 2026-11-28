@@ -75,12 +75,15 @@ impl Tray {
         F: Future<Output = Outcome> + Send,
     {
         let (item, state, id) = (&self.item, &mut self.state, &self.id);
-        loop {
+        let mut seen = None;
+        while seen.is_none() {
             emit(item).await?;
-            if let Ok(seen) = tokio::time::timeout(RE_EMIT, tracked(state, id, &accept)).await {
-                return seen.map(|_| ());
-            }
+            seen = tokio::time::timeout(RE_EMIT, tracked(state, id, &accept))
+                .await
+                .ok();
         }
+        // The loop only ends once `seen` is set, so the default is never taken.
+        seen.map_or(Ok(()), |seen| seen.map(|_| ()))
     }
 
     pub(crate) async fn trigger(

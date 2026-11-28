@@ -37,18 +37,22 @@ impl SniAdapter {
     }
 }
 
+/// Logs that no D-Bus proxy is available, out of line to keep its caller under `cognitive_complexity`.
 fn log_no_dbus_proxy() {
     error!("Failed to create DBusProxy for NameOwnerChanged monitoring");
 }
 
+/// Logs that no name owner change stream is available, out of line to keep its caller under `cognitive_complexity`.
 fn log_no_name_owner_changed() {
     error!("Failed to subscribe to NameOwnerChanged");
 }
 
+/// Logs that this process claimed the watcher name, out of line to keep its caller under `cognitive_complexity`.
 fn log_watcher_claimed() {
     info!("Successfully claimed org.kde.StatusNotifierWatcher");
 }
 
+/// Logs that another process owns the watcher, so this one is only a host, out of line to keep its caller under `cognitive_complexity`.
 fn log_host_only() {
     info!("Could not claim org.kde.StatusNotifierWatcher. Will attempt to run as host only.");
 }
@@ -149,6 +153,7 @@ fn proxy_failed(id: &SystrayId, error: &zbus::Error) -> SniPortError {
     }
 }
 
+/// Logs the action call routed to an item, out of line to keep its caller under `cognitive_complexity`.
 fn log_routing(id: &SystrayId, item: &SystrayItem, call: &SystrayActionCall) {
     let pos = call.position();
     debug!(
@@ -161,6 +166,7 @@ fn log_routing(id: &SystrayId, item: &SystrayItem, call: &SystrayActionCall) {
     );
 }
 
+/// Logs that an action call found no connection, out of line to keep its caller under `cognitive_complexity`.
 fn log_no_connection(id: &SystrayId, call: &SystrayActionCall) {
     error!(
         "trigger_action: No D-Bus connection available when trying to trigger action '{}' on {}",
@@ -169,6 +175,7 @@ fn log_no_connection(id: &SystrayId, call: &SystrayActionCall) {
     );
 }
 
+/// Logs that an action call named an unknown item, out of line to keep its caller under `cognitive_complexity`.
 fn log_unknown_item(id: &SystrayId, call: &SystrayActionCall) {
     error!(
         "trigger_action: Systray item ID '{}' not found in registry when trying to trigger action '{}'",

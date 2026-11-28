@@ -149,31 +149,43 @@ fn deploy_builtin(dir: &Path, name: &str, content: &str) {
 }
 
 /// Logs that the built-in sheets are about to be deployed into `dir`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_ensuring_builtins(dir: &Path) {
     tracing::debug!(dir = ?dir, "Ensuring built-in stylesheets are present on disk");
 }
 
 /// Logs that the built-in sheet `name` is being written to `path`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_writing_builtin(path: &Path, name: &str) {
     tracing::debug!(path = ?path, stylesheet = %name, "Writing built-in stylesheet to disk");
 }
 
 /// Logs that sheet `name` was loaded from `path`, found in the directory `source` names.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_loaded_from_disk(name: &StyleSheetName, source: &str, path: &Path) {
     tracing::debug!(stylesheet = %name.as_str(), source = source, path = ?path, "Loaded stylesheet");
 }
 
 /// Logs that sheet `name` fell back to its embedded copy.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_loaded_embedded(name: &StyleSheetName) {
     tracing::debug!(stylesheet = %name.as_str(), source = "embedded_builtin", "Loaded stylesheet");
 }
 
 /// Logs that sheet `name` exists in no search path.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_not_found(name: &StyleSheetName) {
     tracing::warn!(stylesheet = %name.as_str(), "Stylesheet not found in any search path");
 }
 
 /// Logs that the sheet at `path` changed on disk.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_sheet_modified(path: &Path) {
     tracing::debug!("Stylesheet modified: {:?}", path);
 }
