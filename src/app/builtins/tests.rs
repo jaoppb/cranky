@@ -71,6 +71,20 @@ fn test_ensure_builtins() {
     }
 }
 
+/// A deployed builtin that no longer matches the embedded one is overwritten with it.
+#[test]
+fn test_ensure_builtins_rewrites_a_stale_file() {
+    let env = get_test_env();
+    let dir = BuiltinModules::ensure_builtins(&env).expect("ensure_builtins failed");
+    let clock = dir.join("clock.lua");
+    let embedded = std::fs::read_to_string(&clock).expect("the deployed clock");
+    std::fs::write(&clock, "stale").expect("a stale clock");
+
+    BuiltinModules::ensure_builtins(&env).expect("ensure_builtins failed");
+
+    assert_eq!(std::fs::read_to_string(&clock).expect("clock"), embedded);
+}
+
 /// Metrics at 50% CPU, 1 KiB of 2 KiB of memory used, no swap, disk or traffic, and 45 °C.
 fn sample_metrics_state() -> crate::features::metrics::domain::MetricsState {
     use crate::features::metrics::domain::{
