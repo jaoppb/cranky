@@ -161,4 +161,38 @@ mod tests {
             .blend_over(&buf(10, 10, [3, 3, 3, 255]), Position::new(0, 0));
         assert_eq!(dst, [3, 3, 3, 255].repeat(4));
     }
+
+    #[test]
+    fn dst_shorter_than_its_size_blends_only_the_pixels_it_holds() {
+        // Two pixels of data laid out as 2x2: the second row lies outside it.
+        let mut dst = vec![0u8; 8];
+        PixelsMut::new(&mut dst, Size::new(2, 2))
+            .blend_over(&buf(2, 2, [4, 4, 4, 255]), Position::new(0, 0));
+        assert_eq!(dst, [4, 4, 4, 255].repeat(2));
+    }
+
+    #[test]
+    fn src_shorter_than_its_size_blends_only_the_pixels_it_holds() {
+        let mut dst = vec![0u8; 16];
+        PixelsMut::new(&mut dst, Size::new(2, 2)).blend_over(
+            &RenderBuffer::new(vec![6, 6, 6, 255], Size::new(2, 2)),
+            Position::new(0, 0),
+        );
+        assert_eq!(px(&dst, 0, 0), [6, 6, 6, 255]);
+        assert_eq!(px(&dst, 1, 0), [0; 4]);
+        assert_eq!(px(&dst, 0, 1), [0; 4]);
+        assert_eq!(px(&dst, 1, 1), [0; 4]);
+    }
+
+    #[test]
+    fn src_offset_past_i64_skips_the_pixel() {
+        // Row 2^31 of a u32::MAX-wide source starts past i64::MAX bytes, and an origin of
+        // i32::MIN rows above lands exactly that row on the destination's only pixel.
+        let mut dst = vec![7u8; 4];
+        PixelsMut::new(&mut dst, Size::new(1, 1)).blend_over(
+            &RenderBuffer::new(vec![9, 9, 9, 255], Size::new(u32::MAX, u32::MAX)),
+            Position::new(0, i32::MIN),
+        );
+        assert_eq!(dst, vec![7u8; 4]);
+    }
 }
