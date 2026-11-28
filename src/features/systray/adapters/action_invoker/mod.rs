@@ -1,16 +1,20 @@
+mod failures;
 mod item_call;
 mod plan;
 
 use crate::features::systray::domain::{ItemIsMenu, SystrayActionCall, SystrayItem};
 use crate::shared::primitives::geometry::Position;
+use failures::{ContextMenuFailures, EarlierFailures};
 use item_call::{ItemCall, ItemMethods};
 use plan::{ActionPlan, plan};
 use tracing::{debug, error, warn};
 
+/// Logs the item call about to be made, out of line to keep its caller under `cognitive_complexity`.
 fn log_calling(call: ItemCall) {
     debug!("trigger_action: Calling {call} on D-Bus");
 }
 
+/// Logs the primary call about to be made on an item, out of line to keep its caller under `cognitive_complexity`.
 fn log_primary_calling(item_is_menu: ItemIsMenu, call: ItemCall) {
     debug!(
         "trigger_action: item_is_menu={}, calling {call} on D-Bus",
@@ -18,10 +22,12 @@ fn log_primary_calling(item_is_menu: ItemIsMenu, call: ItemCall) {
     );
 }
 
+/// Logs that an item call succeeded, out of line to keep its caller under `cognitive_complexity`.
 fn log_succeeded(call: ItemCall) {
     debug!("trigger_action: {call} succeeded");
 }
 
+/// Logs that an item call failed, out of line to keep its caller under `cognitive_complexity`.
 fn log_failed(call: ItemCall, error: &zbus::Error) {
     error!("trigger_action: {call} failed: {error}");
 }
@@ -34,57 +40,19 @@ struct FailedCall<'error> {
     error: &'error zbus::Error,
 }
 
+/// Logs the fallback call tried after one failed, out of line to keep its caller under `cognitive_complexity`.
 fn log_falling_back(failed: &FailedCall<'_>, fallback: ItemCall) {
     let FailedCall { call, error } = failed;
     warn!("trigger_action: {call} failed: {error}, attempting {fallback}");
 }
 
-/// The errors of a `ContextMenu` and of its `SecondaryActivate` fallback, before the last
-/// fallback, `Activate`, is tried.
-struct EarlierFailures {
-    /// What `ContextMenu` failed with.
-    context_menu: zbus::Error,
-    /// What the `SecondaryActivate` fallback failed with.
-    secondary: zbus::Error,
-}
-
-impl EarlierFailures {
-    /// Every failure of the chain, once `Activate` failed with `activate` too.
-    fn and_activate(self, activate: zbus::Error) -> ContextMenuFailures {
-        let Self {
-            context_menu,
-            secondary,
-        } = self;
-        ContextMenuFailures {
-            context_menu,
-            secondary,
-            activate,
-        }
-    }
-}
-
-/// The three errors of a `ContextMenu` whose two fallbacks failed too.
-struct ContextMenuFailures {
-    /// What `ContextMenu` failed with.
-    context_menu: zbus::Error,
-    /// What the `SecondaryActivate` fallback failed with.
-    secondary: zbus::Error,
-    /// What the last `Activate` fallback failed with.
-    activate: zbus::Error,
-}
-
+/// Logs that every way of opening the context menu failed, out of line to keep its caller under `cognitive_complexity`.
 fn log_context_menu_failed(position: Position, failures: &ContextMenuFailures) {
     let call = ItemCall::ContextMenu(position);
-    let ContextMenuFailures {
-        context_menu,
-        secondary,
-        activate,
-    } = failures;
-    error!(
-        "trigger_action: {call} failed: {context_menu} (fallback SecondaryActivate: {secondary}, Activate: {activate})"
-    );
+    error!("trigger_action: {call} failed: {failures}");
 }
 
+/// Logs an action the invoker does not recognize, out of line to keep its caller under `cognitive_complexity`.
 fn log_unrecognized(action: &str) {
     warn!("trigger_action: Unrecognized action '{action}'");
 }
@@ -163,10 +131,7 @@ async fn context_menu_fallbacks(
     match item.call(secondary_call).await {
         Ok(()) => log_succeeded(secondary_call),
         Err(secondary) => {
-            let earlier = EarlierFailures {
-                context_menu,
-                secondary,
-            };
+            let earlier = EarlierFailures::new(context_menu, secondary);
             activate_last(item, position, earlier).await;
         }
     }
