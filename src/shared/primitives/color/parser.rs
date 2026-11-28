@@ -13,18 +13,20 @@ pub(super) fn tokenize(input: &str) -> Vec<String> {
             in_parens = in_parens.saturating_sub(1);
             current_token.push(character);
         } else if character.is_whitespace() && in_parens == 0 {
-            if !current_token.is_empty() {
-                tokens.push(current_token.clone());
-                current_token.clear();
-            }
+            end_token(&mut tokens, &mut current_token);
         } else {
             current_token.push(character);
         }
     }
-    if !current_token.is_empty() {
-        tokens.push(current_token);
-    }
+    end_token(&mut tokens, &mut current_token);
     tokens
+}
+
+/// Moves `token` onto the end of `tokens` and leaves it empty, unless it is already empty.
+fn end_token(tokens: &mut Vec<String>, token: &mut String) {
+    if !token.is_empty() {
+        tokens.push(std::mem::take(token));
+    }
 }
 
 pub(super) fn parse_single_color(input: &str) -> Option<Color> {
