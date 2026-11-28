@@ -30,28 +30,38 @@ enum ModuleEntryDto {
 impl ModulesConfigDto {
     #[must_use]
     pub(crate) fn into_domain(self) -> domain::ModulesConfig {
-        let mut map = HashMap::new();
-        for (name_str, entry) in self.modules {
-            let mod_name = ModuleName::new(name_str);
-            let mod_cfg = match entry {
-                ModuleEntryDto::Detailed {
-                    enable,
-                    engine,
-                    options,
-                } => {
-                    let selection = engine.map_or(domain::EngineSelection::Auto, |engine_name| {
-                        domain::EngineSelection::Explicit(domain::EngineId::new(engine_name))
-                    });
-                    domain::ModuleConfig::new(mod_name.clone(), json_map_to_options(options))
-                        .with_enablement(domain::Enablement::from(enable))
-                        .with_engine(selection)
-                }
-                ModuleEntryDto::OptionsOnly(options) => {
-                    domain::ModuleConfig::new(mod_name.clone(), json_map_to_options(options))
-                }
-            };
-            map.insert(mod_name, mod_cfg);
-        }
+        let map = self
+            .modules
+            .into_iter()
+            .map(|(name_str, entry)| {
+                let mod_name = ModuleName::new(name_str);
+                (mod_name.clone(), entry.into_domain(mod_name))
+            })
+            .collect();
         domain::ModulesConfig::new(map)
+    }
+}
+
+impl ModuleEntryDto {
+    /// The domain config of the module `mod_name` this entry configures.
+    fn into_domain(self, mod_name: ModuleName) -> domain::ModuleConfig {
+        match self {
+            Self::Detailed {
+                enable,
+                engine,
+                options,
+            } => {
+                let selection = engine.map(domain::EngineId::new).map_or(
+                    domain::EngineSelection::Auto,
+                    domain::EngineSelection::Explicit,
+                );
+                domain::ModuleConfig::new(mod_name, json_map_to_options(options))
+                    .with_enablement(domain::Enablement::from(enable))
+                    .with_engine(selection)
+            }
+            Self::OptionsOnly(options) => {
+                domain::ModuleConfig::new(mod_name, json_map_to_options(options))
+            }
+        }
     }
 }

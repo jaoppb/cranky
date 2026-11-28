@@ -318,14 +318,19 @@ mod tests {
 
     /// Waits up to five seconds for the hub's config to reach `height`.
     async fn reaches_height(rx: &mut tokio::sync::watch::Receiver<Config>, height: u32) -> bool {
-        let wait = async {
-            while rx.borrow_and_update().root().height().value() != height {
-                rx.changed().await.unwrap();
-            }
-        };
-        tokio::time::timeout(std::time::Duration::from_secs(5), wait)
-            .await
-            .is_ok()
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            wait_for_height(rx, height),
+        )
+        .await
+        .is_ok()
+    }
+
+    /// Waits, for as long as it takes, for the hub's config to reach `height`.
+    async fn wait_for_height(rx: &mut tokio::sync::watch::Receiver<Config>, height: u32) {
+        while rx.borrow_and_update().root().height().value() != height {
+            rx.changed().await.unwrap();
+        }
     }
 
     #[test]
