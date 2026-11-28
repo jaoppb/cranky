@@ -225,9 +225,7 @@ impl<
         let mut needs_render = false;
         let mut next = Some(initial);
         while let Some(cmd) = next {
-            if Self::apply_display_command(cmd, display) {
-                needs_render = true;
-            }
+            needs_render |= Self::apply_display_command(cmd, display);
             next = self.display_rx.try_recv().ok();
         }
         if needs_render {
@@ -279,23 +277,30 @@ impl<
     ) {
         let mut seen = std::collections::HashSet::new();
         for child_layout in layouts {
-            match self
-                .registry
-                .resolve_site(Some(parent.module), child_layout.key())
-            {
-                Some(child_id) => {
-                    seen.insert(child_id);
-                    let child = ModuleOnMonitor::new(child_id, parent.monitor);
-                    self.place_child(child, child_layout.bounds());
-                }
-                None => {
-                    self.ensure_lazy_spawn(Self::lazy_site(parent.module, child_layout))
-                        .await;
-                }
-            }
+            seen.extend(self.place_or_spawn_child(parent, child_layout).await);
         }
 
         self.suspend_stale_children(parent, &seen);
+    }
+
+    /// Places the child `child_layout` describes when its site resolves, returning its id, and
+    /// lazily spawns it when it does not.
+    async fn place_or_spawn_child(
+        &mut self,
+        parent: ModuleOnMonitor<'_>,
+        child_layout: &ChildModuleLayout,
+    ) -> Option<ModuleId> {
+        let resolved = self
+            .registry
+            .resolve_site(Some(parent.module), child_layout.key());
+        let Some(child_id) = resolved else {
+            self.ensure_lazy_spawn(Self::lazy_site(parent.module, child_layout))
+                .await;
+            return None;
+        };
+        let child = ModuleOnMonitor::new(child_id, parent.monitor);
+        self.place_child(child, child_layout.bounds());
+        Some(child_id)
     }
 
     /// Records that `child` is laid out at `bounds` on its monitor, and sends the child its
@@ -336,12 +341,14 @@ impl<
         let Some(sender) = self.layout_senders.get(&child_id) else {
             return;
         };
-        let mut child_monitors = HashMap::new();
-        for (mon, mod_map) in &self.read_model.computed_layouts {
-            if let Some(&bounds) = mod_map.get(&child_id) {
-                child_monitors.insert(mon.clone(), bounds);
-            }
-        }
+        let child_monitors = self
+            .read_model
+            .computed_layouts
+            .iter()
+            .filter_map(|(mon, mod_map)| {
+                mod_map.get(&child_id).map(|&bounds| (mon.clone(), bounds))
+            })
+            .collect();
         sender.send_layout(child_monitors);
     }
 
@@ -458,16 +465,17 @@ impl<
     /// Starts, through the adapter supervisor once it is wired in, the adapter behind every
     /// signal a loaded module subscribes to.
     async fn ensure_active_adapters(&mut self) {
-        if let Some(supervisor) = self.adapter_supervisor.as_mut() {
-            let kinds: Vec<_> = self
-                .registry
-                .active_signal_subscriptions()
-                .iter()
-                .copied()
-                .collect();
-            for kind in kinds {
-                supervisor.ensure(kind).await;
-            }
+        let Some(supervisor) = self.adapter_supervisor.as_mut() else {
+            return;
+        };
+        let kinds: Vec<_> = self
+            .registry
+            .active_signal_subscriptions()
+            .iter()
+            .copied()
+            .collect();
+        for kind in kinds {
+            supervisor.ensure(kind).await;
         }
     }
 
@@ -481,14 +489,8 @@ impl<
     /// identity rather than bare name.
     fn would_cycle(&self, parent: ModuleId, key: &crate::shared::primitives::ModuleKey) -> bool {
         let module_keys = self.registry.module_keys();
-        let mut current = Some(parent);
-        while let Some(id) = current {
-            if module_keys.get(&id) == Some(key) {
-                return true;
-            }
-            current = self.registry.parent_of(id);
-        }
-        false
+        std::iter::successors(Some(parent), |&id| self.registry.parent_of(id))
+            .any(|id| module_keys.get(&id) == Some(key))
     }
 
     fn record_module_error(&self, site: crate::shared::primitives::ModuleSite, reason: String) {
@@ -616,9 +618,7 @@ impl<
         log_reloading_dependents(sheet_name, &mods);
         let mut any_reloaded = false;
         for mod_name in mods {
-            if self.reload_or_log(&mod_name, deps) {
-                any_reloaded = true;
-            }
+            any_reloaded |= self.reload_or_log(&mod_name, deps);
         }
         any_reloaded
     }
@@ -664,9 +664,7 @@ impl<
         let mut next = Some(initial);
         let deps = self.deps.clone();
         while let Some(cmd) = next {
-            if self.apply_system_command(cmd, &deps) {
-                needs_render = true;
-            }
+            needs_render |= self.apply_system_command(cmd, &deps);
             next = self.system_rx.try_recv().ok();
         }
         if needs_render {
