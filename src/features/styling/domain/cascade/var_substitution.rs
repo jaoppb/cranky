@@ -150,6 +150,15 @@ mod tests {
     }
 
     #[test]
+    fn test_matching_close_paren_skips_nested_pairs() {
+        assert_eq!(matching_close_paren("a)b)"), Some(1));
+        assert_eq!(matching_close_paren("a(b)c)d"), Some(5));
+        assert_eq!(matching_close_paren("((x))) "), Some(5));
+        assert_eq!(matching_close_paren("a(b)c"), None);
+        assert_eq!(matching_close_paren(""), None);
+    }
+
+    #[test]
     fn test_substitutes_simple_var() {
         let custom = vars(&[("--bg", "#1a1b26")]);
         assert_eq!(substitute_vars("var(--bg)", &custom), "#1a1b26");

@@ -177,4 +177,50 @@ mod tests {
 
         assert_eq!(index.candidates(&query), vec![0]);
     }
+
+    /// Every selector of every rule is indexed under that rule's own position, not only a
+    /// rule's first selector.
+    #[test]
+    fn test_build_indexes_every_selector_of_every_rule() {
+        let rules = vec![
+            rule(vec![CompiledSelector {
+                steps: vec![class_step("first")],
+            }]),
+            rule(vec![
+                CompiledSelector {
+                    steps: vec![class_step("second")],
+                },
+                CompiledSelector {
+                    steps: vec![class_step("third")],
+                },
+            ]),
+        ];
+        let index = RuleIndex::build(&rules);
+
+        let classes = [ClassName::new("third").unwrap()];
+        let query = ElementQuery::new(ElementIdentity::new("text", None, &classes), &[], None);
+        assert_eq!(index.candidates(&query), vec![1]);
+    }
+
+    /// Every class of the element is probed, not only its first one.
+    #[test]
+    fn test_candidates_probes_every_class_of_the_element() {
+        let rules = vec![
+            rule(vec![CompiledSelector {
+                steps: vec![class_step("late")],
+            }]),
+            rule(vec![CompiledSelector {
+                steps: vec![class_step("early")],
+            }]),
+        ];
+        let index = RuleIndex::build(&rules);
+
+        let classes = [
+            ClassName::new("unindexed").unwrap(),
+            ClassName::new("early").unwrap(),
+            ClassName::new("late").unwrap(),
+        ];
+        let query = ElementQuery::new(ElementIdentity::new("text", None, &classes), &[], None);
+        assert_eq!(index.candidates(&query), vec![0, 1]);
+    }
 }

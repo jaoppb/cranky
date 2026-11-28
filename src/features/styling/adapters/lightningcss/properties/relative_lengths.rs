@@ -208,6 +208,33 @@ mod tests {
     }
 
     #[test]
+    fn test_relative_font_size_is_only_an_em_or_rem_one() {
+        let font_size = |css| detect_relative_font_size(&declarations(css));
+        assert_eq!(
+            font_size("bar { font-size: 1.5em; }"),
+            Some(DeclaredLength::Ems(1.5))
+        );
+        assert_eq!(
+            font_size("bar { font-size: 2rem; }"),
+            Some(DeclaredLength::Rem(2.0))
+        );
+        assert_eq!(font_size("bar { font-size: 12px; }"), None);
+        assert_eq!(font_size("bar { font-size: 50%; }"), None);
+        assert_eq!(font_size("bar { width: 2em; }"), None);
+    }
+
+    /// The scan passes over other properties and absolute font sizes to the first relative one.
+    #[test]
+    fn test_relative_font_size_is_the_first_relative_declaration() {
+        let props =
+            declarations("bar { width: 2em; font-size: 12px; font-size: 3em; font-size: 4rem; }");
+        assert_eq!(
+            detect_relative_font_size(&props),
+            Some(DeclaredLength::Ems(3.0))
+        );
+    }
+
+    #[test]
     fn test_detects_rem_padding_per_side() {
         let props = declarations("bar { padding: 1rem 0 0 0; }");
         let lengths = detect_relative_lengths(&props);

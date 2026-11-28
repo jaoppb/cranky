@@ -158,6 +158,45 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_keeps_pixels_percent_and_auto_as_declared() {
+        let font_size = FontSize::new(20.0);
+        let root = FontSize::new(10.0);
+        assert_eq!(
+            DeclaredLength::Pixels(7.0).resolve(font_size, root),
+            CssLength::Pixels(7.0)
+        );
+        assert_eq!(
+            DeclaredLength::Percent(30.0).resolve(font_size, root),
+            CssLength::Percent(30.0)
+        );
+        assert_eq!(
+            DeclaredLength::Auto.resolve(font_size, root),
+            CssLength::Auto
+        );
+    }
+
+    /// Every term of a `calc()` counts: `em` against the font size, `rem` against the root's.
+    #[test]
+    fn test_calc_folds_em_and_rem_into_pixels() {
+        let font_size = FontSize::new(20.0);
+        let root = FontSize::new(10.0);
+        let calc = DeclaredLength::Calc {
+            percent: 50.0,
+            px: 1.0,
+            ems: 2.0,
+            rem: 3.0,
+        };
+        // 1px + 2em(40px) + 3rem(30px) = 71px beside the 50% term.
+        assert_eq!(
+            calc.resolve(font_size, root),
+            CssLength::Calc {
+                percent: 50.0,
+                px: 71.0
+            }
+        );
+    }
+
+    #[test]
     fn test_calc_without_percent_collapses_to_plain_px() {
         let font_size = FontSize::new(20.0);
         let root = FontSize::new(10.0);

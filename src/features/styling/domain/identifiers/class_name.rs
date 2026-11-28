@@ -135,4 +135,30 @@ mod tests {
         assert!(ClassName::new("btn.active").is_err());
         assert!(ClassName::new("btn active").is_err());
     }
+
+    #[test]
+    fn test_class_name_list_deserializes_from_a_string_or_a_list() {
+        let expected = ClassNameList::new(vec![
+            ClassName::new("item").unwrap(),
+            ClassName::new("active").unwrap(),
+        ]);
+        let from_list: ClassNameList = serde_json::from_str(r#"["item", "active"]"#).unwrap();
+        let from_string: ClassNameList = serde_json::from_str(r#""item active""#).unwrap();
+        let empty: ClassNameList = serde_json::from_str("[]").unwrap();
+
+        assert_eq!(from_list, expected);
+        assert_eq!(from_string, expected);
+        assert_eq!(empty, ClassNameList::default());
+    }
+
+    #[test]
+    fn test_class_name_list_rejects_an_invalid_listed_class() {
+        let error = serde_json::from_str::<ClassNameList>(r#"["item", "1bad"]"#).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .starts_with("Invalid class name '1bad': must be a valid CSS identifier"),
+            "{error}"
+        );
+    }
 }

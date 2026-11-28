@@ -61,3 +61,26 @@ impl<'a> TaffyTreeBuilder<'a> {
         let _ = self.taffy.remove(node_id);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn remove_recursive_frees_the_node_and_its_whole_subtree() {
+        let mut taffy = TaffyTree::new();
+        let mut builder = TaffyTreeBuilder::new(&mut taffy);
+        let grandchild = builder.add_leaf(Style::default()).unwrap();
+        let child = builder.add_node(Style::default(), &[grandchild]).unwrap();
+        let sibling = builder.add_leaf(Style::default()).unwrap();
+        let root = builder
+            .add_node(Style::default(), &[child, sibling])
+            .unwrap();
+        let kept = builder.add_node(Style::default(), &[]).unwrap();
+
+        builder.remove_recursive(root);
+
+        assert_eq!(taffy.total_node_count(), 1);
+        assert_eq!(taffy.children(kept).unwrap(), Vec::<NodeId>::new());
+    }
+}

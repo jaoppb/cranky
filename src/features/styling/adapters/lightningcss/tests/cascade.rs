@@ -113,6 +113,37 @@ fn test_base_layer_wins_when_important() {
     assert_eq!(solid(&style), Color::rgb(255, 255, 255));
 }
 
+/// The background two module sheets, `first` then `second`, give `bar` when both set it with
+/// the same specificity.
+fn later_sheet_background(first: &str, second: &str) -> Color {
+    let parser = LightningCssAdapter::new();
+    let sheet = |name: &str, color: &str| {
+        parser
+            .parse_stylesheet(
+                StyleSheetName::new(name).unwrap(),
+                &format!("bar {{ background-color: {color}; }}"),
+            )
+            .unwrap()
+    };
+    let resolver =
+        CompositeStyleResolver::new(vec![sheet(first, "#ffffff"), sheet(second, "#000000")]);
+    let query = ElementQuery::new(ElementIdentity::new("bar", None, &[]), &[], None);
+    let (style, _) = resolver.resolve_style(&query, &InheritedStyle::default());
+    solid(&style)
+}
+
+#[test]
+fn test_later_module_sheet_wins_at_equal_specificity() {
+    assert_eq!(
+        later_sheet_background("clock", "workspace"),
+        Color::rgb(0, 0, 0)
+    );
+    assert_eq!(
+        later_sheet_background("workspace", "clock"),
+        Color::rgb(0, 0, 0)
+    );
+}
+
 #[test]
 fn test_workspace_hover_wins_over_active_focused() {
     let parser = LightningCssAdapter::new();
