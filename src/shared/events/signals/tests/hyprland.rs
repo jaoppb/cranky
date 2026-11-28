@@ -560,4 +560,22 @@ mod tests {
 
         assert_eq!(state, before);
     }
+
+    #[test]
+    fn test_workspace_activated_moves_a_known_workspace_to_the_focused_monitor() {
+        let workspaces =
+            BTreeMap::from([(WorkspaceId::new(2), workspace(2, "two", Some("HDMI-A-1")))]);
+        let mut monitors = only_monitor("HDMI-A-1", 2);
+        monitors.extend(only_monitor("DP-1", 1));
+        let focused = Some(MonitorName::new("DP-1"));
+        let mut state = HyprlandState::new(workspaces, monitors, focused);
+
+        state.apply_event(&activated(2, "renamed"));
+
+        let workspaces = BTreeMap::from([(WorkspaceId::new(2), workspace(2, "two", Some("DP-1")))]);
+        let mut monitors = only_monitor("HDMI-A-1", 2);
+        monitors.extend(only_monitor("DP-1", 2));
+        let expected = HyprlandState::new(workspaces, monitors, Some(MonitorName::new("DP-1")));
+        assert_eq!(state, expected);
+    }
 }

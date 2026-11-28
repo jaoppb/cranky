@@ -4,7 +4,7 @@
 mod tests {
     use std::collections::HashMap;
 
-    use futures_util::StreamExt;
+    use futures_util::{FutureExt, StreamExt};
 
     use crate::features::metrics::domain::MetricsState;
     use crate::features::systray::domain::SystrayState;
@@ -129,6 +129,8 @@ mod tests {
             assert!(second.is_some());
             let third = stream.next().await;
             assert!(third.is_some());
+            // The repeated `Time` subscribes once, so no fourth initial value is waiting.
+            assert_eq!(stream.next().now_or_never(), None);
 
             hub.time_tx().send(cranky_time::LocalTime::utc(0)).unwrap();
             let sig = stream.next().await;
