@@ -167,9 +167,10 @@ mod tests {
     use crate::features::module_runtime::domain::Change;
     use crate::features::module_runtime::domain::PointerAction;
     use crate::features::module_runtime::domain::pointer_handler::PointerOutcome;
-    use crate::features::module_runtime::test_support::RecordingModulePort;
-    use crate::features::vdom::domain::{ElementSelectors, Interactions, VNode};
-    use crate::shared::primitives::FunctionName;
+    use crate::features::module_runtime::test_support::{PortLog, RecordingModulePort};
+    use crate::features::vdom::domain::{ElementSelectors, Interactions, UiCommand, VNode};
+    use crate::shared::events::signals::SignalKind;
+    use crate::shared::primitives::{FunctionName, MonitorId};
 
     /// A call that names no monitor runs the script function with no argument.
     #[test]
@@ -184,5 +185,54 @@ mod tests {
         assert!(event_loop.execute_outcome(&outcome));
         let calls = std::mem::take(&mut log.lock().unwrap().calls);
         assert_eq!(calls, [("reset".to_string(), Vec::<String>::new())]);
+    }
+
+    /// Every call of an outcome runs in order, with its monitor as argument when it has one, and
+    /// the script is refreshed once after them all.
+    #[test]
+    fn the_calls_of_an_outcome_run_in_order_then_refresh_the_script_once() {
+        let rect = VNode::new_rect(ElementSelectors::default(), Interactions::default());
+        let port = RecordingModulePort::new(rect, vec![SignalKind::Time]);
+        let log = port.log();
+        let (mut event_loop, _wiring) = wired_event_loop(port, hub_with_dp1(1.0));
+        let open = PointerAction::CallFunction(FunctionName::new("open"), Some(dp1()));
+        let close = PointerAction::CallFunction(FunctionName::new("close"), None);
+        let outcome = PointerOutcome::new(vec![open, close], Change::Unchanged);
+
+        assert!(event_loop.execute_outcome(&outcome));
+        let log = std::mem::take(&mut *log.lock().unwrap());
+        let open_call = ("open".to_string(), vec!["DP-1".to_string()]);
+        let close_call = ("close".to_string(), Vec::new());
+        assert_eq!(log.calls, [open_call, close_call]);
+        assert_eq!(log.refreshes, [vec![SignalKind::Time]]);
+    }
+
+    /// An outcome that only sends to the UI asks for a render only when the pointer state
+    /// changed, and never refreshes the script.
+    #[test]
+    fn an_outcome_without_calls_renders_only_on_a_pointer_state_change() {
+        let rect = VNode::new_rect(ElementSelectors::default(), Interactions::default());
+        let port = RecordingModulePort::new(rect, vec![]);
+        let log = port.log();
+        let (mut event_loop, wiring) = wired_event_loop(port, hub_with_dp1(1.0));
+        let exec = || PointerAction::SendUi(exec_command());
+
+        let unchanged = PointerOutcome::new(vec![exec()], Change::Unchanged);
+        assert!(!event_loop.execute_outcome(&unchanged));
+        let changed = PointerOutcome::new(vec![exec()], Change::Changed);
+        assert!(event_loop.execute_outcome(&changed));
+
+        let sent: Vec<UiCommand> = wiring.sent.ui_commands.try_iter().collect();
+        assert_eq!(sent, [exec_command(), exec_command()]);
+        assert_eq!(*log.lock().unwrap(), PortLog::default());
+    }
+
+    /// The command the tests' `SendUi` actions carry.
+    fn exec_command() -> UiCommand {
+        UiCommand::Exec("notify-send hi".to_string())
+    }
+
+    fn dp1() -> MonitorId {
+        MonitorId::new("DP-1")
     }
 }

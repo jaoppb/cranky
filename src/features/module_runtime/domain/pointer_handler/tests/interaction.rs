@@ -93,6 +93,28 @@ mod tests {
         assert_eq!(handler.focused_node(&mon), Some(&root_ref()));
     }
 
+    /// A release on the node that already has the focus changes the state only when it ends a
+    /// press, and pressing and focusing on DP-1 leaves another monitor's state alone.
+    #[test]
+    fn test_release_on_the_focused_node_changes_state_only_when_it_ends_a_press() {
+        let mut handler = PointerHandler::new();
+        let release = PointerEvent::ButtonRelease {
+            surface: SurfaceKind::Bar,
+            button: PointerButton::Left,
+            pos: Position::new(10, 10),
+        };
+        let events = [&release, &press(), &release, &release, &press()];
+        let changes = events.map(|event| changed(&mut handler, event));
+        assert_eq!(changes, [true, true, true, false, true]);
+
+        let monitors = [MonitorId::new("DP-1"), MonitorId::new("HDMI-A-1")];
+        let states = monitors
+            .each_ref()
+            .map(|id| (handler.active_node(id), handler.focused_node(id)));
+        let root = root_ref();
+        assert_eq!(states, [(Some(&root), Some(&root)), (None, None)]);
+    }
+
     /// A click runs actions but never changes hover, active or focus state,
     /// and moving within the node already hovered changes nothing either.
     #[test]

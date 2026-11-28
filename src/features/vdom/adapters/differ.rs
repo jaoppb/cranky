@@ -446,4 +446,20 @@ mod tests {
         let res = adapter.diff(Some(&make("old")), &make("new"));
         assert!(!res.is_unchanged());
     }
+
+    /// Two nodes of different kinds, which `diff_nodes` never passes on since it replaces a
+    /// changed tag first, are replaced whole rather than reconciled.
+    #[test]
+    fn diff_kind_replaces_a_node_whose_kind_changed() {
+        let adapter = DefaultVdomDiffAdapter::new();
+        let old_node = text("label");
+        let new_node = flex(vec![text("label")]);
+
+        let expected = Patch::Replace {
+            old_node_id: old_node.node_id(),
+            new_node: Box::new(new_node.clone()),
+        };
+        assert_eq!(adapter.diff_kind(&old_node, &new_node), expected);
+        assert_eq!(adapter.diff_kind(&new_node, &new_node), Patch::NoChange);
+    }
 }
