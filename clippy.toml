@@ -29,6 +29,11 @@ too-many-arguments-threshold = 3
 # one job each does.
 too-many-lines-threshold = 25
 cognitive-complexity-threshold = 8
+# Nesting (`clippy::excessive_nesting`, forbidden in `Cargo.toml`): no block sits
+# more than three levels deep, in tests too; a deeper one is flattened with early
+# returns, `let ... else`, `?` or an iterator adapter, or moved into a helper
+# named after the one job it does.
+excessive-nesting-threshold = 3
 # Older versions that only a dependency can drop, for `clippy::multiple_crate_versions`.
 # The list names the same crates as the `skip` entries of the `[bans]` section in
 # `deny.toml`, which records the dependency that still requires each one; keep both
