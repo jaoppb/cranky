@@ -26,10 +26,13 @@ impl RuleIndex {
     #[must_use]
     pub(crate) fn build(rules: &[RuleEntry]) -> Self {
         let mut index = Self::default();
-        for (rule_index, rule) in rules.iter().enumerate() {
-            for selector in &rule.selectors {
-                index.insert(selector, rule_index);
-            }
+        let selectors = rules.iter().enumerate().flat_map(|(rule_index, rule)| {
+            rule.selectors
+                .iter()
+                .map(move |selector| (selector, rule_index))
+        });
+        for (selector, rule_index) in selectors {
+            index.insert(selector, rule_index);
         }
         index
     }
@@ -65,11 +68,11 @@ impl RuleIndex {
         {
             found.extend(indices);
         }
-        for class in query.classes() {
-            if let Some(indices) = self.by_class.get(class.as_str()) {
-                found.extend(indices);
-            }
-        }
+        let class_buckets = query
+            .classes()
+            .iter()
+            .filter_map(|class| self.by_class.get(class.as_str()));
+        found.extend(class_buckets.flatten());
         if let Some(indices) = self.by_tag.get(&query.tag().to_lowercase()) {
             found.extend(indices);
         }

@@ -47,16 +47,11 @@ fn match_ancestor_step<'query>(
             Some(parent) if step_matches(step, parent) => AncestorWalk::Matched(parent.parent()),
             _ => AncestorWalk::Failed,
         },
-        Combinator::Descendant => {
-            let mut current_query = from;
-            while let Some(ancestor) = current_query {
-                if step_matches(step, ancestor) {
-                    return AncestorWalk::Matched(ancestor.parent());
-                }
-                current_query = ancestor.parent();
-            }
-            AncestorWalk::Failed
-        }
+        Combinator::Descendant => std::iter::successors(from, |ancestor| ancestor.parent())
+            .find(|ancestor| step_matches(step, ancestor))
+            .map_or(AncestorWalk::Failed, |ancestor| {
+                AncestorWalk::Matched(ancestor.parent())
+            }),
         Combinator::NextSibling | Combinator::LaterSibling => AncestorWalk::Failed,
     }
 }

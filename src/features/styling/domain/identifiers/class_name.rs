@@ -110,13 +110,12 @@ impl<'de> Deserialize<'de> for ClassNameList {
 
         match ClassRepr::deserialize(deserializer)? {
             ClassRepr::Str(text) => Self::parse(&text).map_err(serde::de::Error::custom),
-            ClassRepr::List(list) => {
-                let mut out = Vec::new();
-                for item in list {
-                    out.push(ClassName::new(item).map_err(serde::de::Error::custom)?);
-                }
-                Ok(Self(out))
-            }
+            ClassRepr::List(list) => list
+                .into_iter()
+                .map(ClassName::new)
+                .collect::<Result<Vec<_>, _>>()
+                .map(Self)
+                .map_err(serde::de::Error::custom),
         }
     }
 }

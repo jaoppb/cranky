@@ -19,19 +19,19 @@ use lightningcss::values::length::LengthPercentageOrAuto;
 /// treats it differently.
 #[must_use]
 pub(crate) fn detect_relative_font_size(props: &[Property<'_>]) -> Option<DeclaredLength> {
-    for prop in props {
-        if let Property::FontSize(LightningFontSize::Length(length)) = prop {
-            let css_text = length
-                .to_css_string(PrinterOptions::default())
-                .unwrap_or_default();
-            if let Some(len @ (DeclaredLength::Ems(_) | DeclaredLength::Rem(_))) =
-                DeclaredLength::parse(&css_text)
-            {
-                return Some(len);
-            }
-        }
-    }
-    None
+    props.iter().find_map(relative_font_size)
+}
+
+/// The `em`/`rem` length `prop` declares, if it is a `font-size` declared in one of those units.
+fn relative_font_size(prop: &Property<'_>) -> Option<DeclaredLength> {
+    let Property::FontSize(LightningFontSize::Length(length)) = prop else {
+        return None;
+    };
+    let css_text = length
+        .to_css_string(PrinterOptions::default())
+        .unwrap_or_default();
+    DeclaredLength::parse(&css_text)
+        .filter(|len| matches!(len, DeclaredLength::Ems(_) | DeclaredLength::Rem(_)))
 }
 
 /// Scans a rule's raw declarations for `em`/`rem` on any of the twenty

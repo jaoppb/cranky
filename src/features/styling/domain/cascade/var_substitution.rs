@@ -123,19 +123,15 @@ fn resolve_reference<S: BuildHasher>(
 /// function call, e.g. `var(--x, rgb(0, 0, 0))`).
 fn matching_close_paren(text: &str) -> Option<usize> {
     let mut depth = 1i32;
-    for (index, character) in text.char_indices() {
-        match character {
-            '(' => depth = depth.saturating_add(1),
-            ')' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return Some(index);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
+    text.char_indices().find_map(|(index, character)| {
+        depth = match character {
+            '(' => depth.saturating_add(1),
+            ')' => depth.saturating_sub(1),
+            _ => depth,
+        };
+        // Only a `)` lowers the depth, and it starts at 1, so it reaches 0 only on a `)`.
+        (depth == 0).then_some(index)
+    })
 }
 
 #[cfg(test)]

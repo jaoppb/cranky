@@ -74,22 +74,10 @@ impl DeclaredLength {
                 px,
                 ems,
                 rem,
-            } => {
-                let px_total =
-                    rem.mul_add(root_font_size.value(), ems.mul_add(font_size.value(), px));
-                // No percent term: the whole expression is already a single
-                // concrete pixel value, so it never needs the layout
-                // engine's second pass — the same "absolute calc() is free"
-                // property that made em/rem itself free of layout changes.
-                if percent == 0.0 {
-                    CssLength::Pixels(px_total)
-                } else {
-                    CssLength::Calc {
-                        percent,
-                        px: px_total,
-                    }
-                }
-            }
+            } => calc_length(
+                percent,
+                rem.mul_add(root_font_size.value(), ems.mul_add(font_size.value(), px)),
+            ),
         }
     }
 
@@ -106,6 +94,22 @@ impl DeclaredLength {
             CssLength::Pixels(value) | CssLength::Percent(value) => value,
             CssLength::Auto => 0.0,
             CssLength::Calc { px, .. } => px,
+        }
+    }
+}
+
+/// A resolved `calc()` of `percent` plus `px_total` pixels.
+///
+/// No percent term: the whole expression is already a single concrete pixel value, so it never
+/// needs the layout engine's second pass — the same "absolute `calc()` is free" property that made
+/// em/rem itself free of layout changes.
+fn calc_length(percent: f32, px_total: f32) -> CssLength {
+    if percent == 0.0 {
+        CssLength::Pixels(px_total)
+    } else {
+        CssLength::Calc {
+            percent,
+            px: px_total,
         }
     }
 }

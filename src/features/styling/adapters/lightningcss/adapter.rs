@@ -71,15 +71,21 @@ impl CssParserPort for LightningCssAdapter {
             .map_err(|error| parse_failure(&name, &error))?;
 
         let mut rule_entries = Vec::new();
-        for rule in &stylesheet.rules.0 {
-            if let CssRule::Style(style_rule) = rule {
-                push_rule_entries(style_rule, &mut rule_entries);
-            }
+        for style_rule in stylesheet.rules.0.iter().filter_map(as_style_rule) {
+            push_rule_entries(style_rule, &mut rule_entries);
         }
 
         log_parsed(&name, rule_entries.len());
         Ok(Box::new(LightningParsedStyleSheet::new(name, rule_entries)))
     }
+}
+
+/// The style rule `rule` is, or `None` for an at-rule or any other kind of rule.
+const fn as_style_rule<'rule, 'i>(rule: &'rule CssRule<'i>) -> Option<&'rule StyleRule<'i>> {
+    let CssRule::Style(style_rule) = rule else {
+        return None;
+    };
+    Some(style_rule)
 }
 
 /// Appends the entries of one style rule: its `!important` half, then its normal half, each
