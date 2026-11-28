@@ -119,6 +119,7 @@ impl ItemFollower {
     }
 
     async fn apply_all(&self, mut events: impl Stream<Item = SniEvent> + Unpin + Send) {
+        // The condition does the work: it applies each event until one breaks.
         while let Some(event) = events.next().await
             && self.apply(event).await.is_continue()
         {}

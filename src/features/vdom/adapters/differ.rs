@@ -42,12 +42,12 @@ impl DefaultVdomDiffAdapter {
     /// their reconciled children.
     fn diff_kind(&self, old_node: &VNode, new_node: &VNode) -> Patch {
         diff_node_kinds(old_node.node_id(), old_node.kind(), new_node.kind())
-            .unwrap_or_else(|| self.diff_containers(old_node, new_node))
+            .unwrap_or_else(|| self.reconcile_or_replace(old_node, new_node))
     }
 
     /// The reconciled children of two flex or two grid containers; any other pair of nodes is
     /// replaced.
-    fn diff_containers(&self, old_node: &VNode, new_node: &VNode) -> Patch {
+    fn reconcile_or_replace(&self, old_node: &VNode, new_node: &VNode) -> Patch {
         let same_container = matches!(
             (old_node.kind(), new_node.kind()),
             (VNodeKind::Flex { .. }, VNodeKind::Flex { .. })

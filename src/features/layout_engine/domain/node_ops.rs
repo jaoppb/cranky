@@ -80,7 +80,9 @@ impl RenderNode {
         let height_i32 = i32::try_from(rect.height()).unwrap_or(i32::MAX);
         let max_x = rect.x().saturating_add(width_i32);
         let max_y = rect.y().saturating_add(height_i32);
-        if !(pos.x() >= rect.x() && pos.x() < max_x && pos.y() >= rect.y() && pos.y() < max_y) {
+        let inside =
+            pos.x() >= rect.x() && pos.x() < max_x && pos.y() >= rect.y() && pos.y() < max_y;
+        if !inside {
             return;
         }
         path.push(self);
