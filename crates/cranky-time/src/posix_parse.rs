@@ -93,10 +93,7 @@ impl<'a> Cursor<'a> {
     fn name(&mut self) -> Option<&'a [u8]> {
         let name = if self.eat(b'<') {
             let quoted = self.take_while(|byte| byte != b'>');
-            if !self.eat(b'>') {
-                return None;
-            }
-            quoted
+            self.eat(b'>').then_some(quoted)?
         } else {
             self.take_while(|byte| byte.is_ascii_alphabetic())
         };
@@ -109,20 +106,27 @@ impl<'a> Cursor<'a> {
         if !negative {
             self.eat(b'+');
         }
-        let mut seconds = self
+        let hours = self
             .number_in(0..=max_hours)?
             .saturating_mul(SECONDS_PER_HOUR);
-        for unit in [60, 1] {
-            if !self.eat(b':') {
-                break;
-            }
-            seconds = seconds.saturating_add(self.number_in(0..=59)?.saturating_mul(unit));
-        }
+        let seconds = hours.saturating_add(self.minutes_and_seconds()?);
         Some(if negative {
             seconds.saturating_neg()
         } else {
             seconds
         })
+    }
+
+    /// The optional `[:mm[:ss]]` after a clock's hours, in seconds (0 when absent).
+    fn minutes_and_seconds(&mut self) -> Option<i64> {
+        if !self.eat(b':') {
+            return Some(0);
+        }
+        let minutes = self.number_in(0..=59)?.saturating_mul(60);
+        if !self.eat(b':') {
+            return Some(minutes);
+        }
+        Some(minutes.saturating_add(self.number_in(0..=59)?))
     }
 
     /// `name[offset][,start,end]`: daylight time after standard time at

@@ -48,19 +48,9 @@ impl Clock {
     /// of the local time file. When that file cannot be read either, the zone
     /// is the one an earlier call read from it, and failing that UTC.
     pub fn at_instant(&mut self, instant: SystemTime, environment: &Environment) -> LocalTime {
-        let file_source = if let Some(timezone) = environment.timezone() {
-            if let Some(located) = environment.zone_from_tz() {
-                let time = LocalTime::at_instant(instant, &located, Source::TzVariable);
-                self.from_tz = Some((timezone.to_string(), located));
-                return time;
-            }
-            if let Some((_, located)) = self.from_tz.as_ref().filter(|(value, _)| value == timezone)
-            {
-                return LocalTime::at_instant(instant, located, Source::Previous);
-            }
-            Source::LocaltimeAfterInvalidTz
-        } else {
-            Source::Localtime
+        let file_source = match self.at_instant_from_tz(instant, environment) {
+            Ok(time) => return time,
+            Err(source) => source,
         };
         if let Some(located) = environment.zone_from_localtime() {
             let time = LocalTime::at_instant(instant, &located, file_source);
@@ -71,6 +61,30 @@ impl Clock {
             || LocalTime::at_instant(instant, &Located::unnamed(Zone::utc()), Source::Utc),
             |located| LocalTime::at_instant(instant, located, Source::Previous),
         )
+    }
+
+    /// The local time at an instant in the zone `TZ` names, remembered as read
+    /// from it, or in the zone an earlier call read from the same value of
+    /// `TZ` when it cannot be read; otherwise the source the local time file
+    /// is then read as: after an invalid `TZ`, or plainly when `TZ` is unset.
+    fn at_instant_from_tz(
+        &mut self,
+        instant: SystemTime,
+        environment: &Environment,
+    ) -> Result<LocalTime, Source> {
+        let Some(timezone) = environment.timezone() else {
+            return Err(Source::Localtime);
+        };
+        if let Some(located) = environment.zone_from_tz() {
+            let time = LocalTime::at_instant(instant, &located, Source::TzVariable);
+            self.from_tz = Some((timezone.to_string(), located));
+            return Ok(time);
+        }
+        self.from_tz
+            .as_ref()
+            .filter(|(value, _)| value == timezone)
+            .map(|(_, located)| LocalTime::at_instant(instant, located, Source::Previous))
+            .ok_or(Source::LocaltimeAfterInvalidTz)
     }
 }
 
