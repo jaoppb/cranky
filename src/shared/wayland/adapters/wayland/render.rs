@@ -42,11 +42,15 @@ pub(super) fn render_outputs<Snd: LayoutSender>(
 }
 
 /// Logs that there is no bar to render.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_no_bars() {
     debug!("No bars available for rendering.");
 }
 
 /// Logs that `bar` is skipped until its layer surface is configured.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_unconfigured_bar(bar: &WaylandBar) {
     debug!("Skipping render for unconfigured bar: {}", bar.output_name);
 }

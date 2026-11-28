@@ -149,6 +149,8 @@ impl TaffyLayoutAdapter {
 }
 
 /// Traces the rect of the render tree a layout pass built.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_render_tree(render_tree: &RenderNode) {
     tracing::trace!(
         rect = ?render_tree.rect(),

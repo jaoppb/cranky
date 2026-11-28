@@ -141,6 +141,8 @@ fn frame_bytes(width: u32, height: u32) -> usize {
 
 /// Notes that `mmap_mut` hands out a back slot the compositor has not
 /// released yet, which is drawn into anyway.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_busy_back_slot(slot: usize) {
     tracing::debug!(
         slot,

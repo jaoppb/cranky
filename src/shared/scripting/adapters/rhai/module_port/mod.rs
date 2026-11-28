@@ -151,11 +151,15 @@ fn ignore_missing_function(
 }
 
 /// Logs a render whose value does not deserialize into a node.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_render_output_rejected(error: &EvalAltResult) {
     tracing::error!("Failed to deserialize render output in rhai module: {error}");
 }
 
 /// Logs a failed `render` call.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_render_failed(error: &EvalAltResult) {
     tracing::error!("Module render error in rhai: {error:?}");
 }

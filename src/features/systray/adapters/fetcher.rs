@@ -136,6 +136,7 @@ impl ItemProps {
         }
     }
 
+    /// Logs that an item was fetched, out of line to keep its caller under `cognitive_complexity`.
     fn log_fetched(&self, id: &SystrayId) {
         let Self {
             title,

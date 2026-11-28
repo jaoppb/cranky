@@ -50,11 +50,15 @@ impl LayoutEventSender for std::sync::mpsc::Sender<LayoutEvent> {
 }
 
 /// Logs a layout event the tokio channel refused with `error`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_tokio_send_failed(error: &tokio::sync::mpsc::error::TrySendError<LayoutEvent>) {
     tracing::error!(?error, "failed to send layout event via tokio channel");
 }
 
 /// Logs a layout event the std channel refused with `error`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_std_send_failed(error: &std::sync::mpsc::SendError<LayoutEvent>) {
     tracing::error!(?error, "failed to send layout event via std channel");
 }

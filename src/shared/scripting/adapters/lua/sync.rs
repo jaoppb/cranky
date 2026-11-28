@@ -130,11 +130,15 @@ fn call_refresh(globals: &mlua::Table) {
 }
 
 /// Logs `item_count` tray items about to be serialised.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_serializing_systray(item_count: usize) {
     tracing::debug!(item_count, "Serializing systray to Lua");
 }
 
 /// Logs `item_count` tray items serialised, with how long it took since `start`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_systray_serialized(item_count: usize, start: Instant) {
     tracing::debug!(
         item_count,
@@ -145,11 +149,15 @@ fn log_systray_serialized(item_count: usize, start: Instant) {
 }
 
 /// Logs tray items that failed to serialise with `error`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_systray_failed(error: &mlua::Error) {
     tracing::error!(err = ?error, "Failed to serialize systray to Lua");
 }
 
 /// Logs a script `refresh` that ran, with how long it took since `start`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_refresh_called(start: Instant) {
     tracing::debug!(
         duration_ms = start.elapsed().as_millis(),
@@ -159,6 +167,8 @@ fn log_refresh_called(start: Instant) {
 }
 
 /// Logs a script `refresh` that failed with `error`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_refresh_failed(error: &mlua::Error) {
     tracing::error!(err = ?error, "Lua refresh function failed");
 }

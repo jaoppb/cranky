@@ -89,6 +89,8 @@ impl Dispatch<XdgPopup, ()> for WaylandState {
 
 /// Logs the compositor's answer to a reposition under `token`; nothing
 /// else follows from it.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_popup_repositioned(token: u32) {
     tracing::debug!("Floating surface popup repositioned (token={token})");
 }
@@ -112,6 +114,8 @@ fn on_popup_done(state: &mut WaylandState, xdg_popup: &XdgPopup) {
 }
 
 /// Logs a popup event the adapter takes no action on.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_unhandled_popup_event(event: &xdg_popup::Event) {
     tracing::debug!("xdg_popup Event: {event:?}");
 }

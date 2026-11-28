@@ -44,6 +44,8 @@ fn warn_on_zone_change(previous: &mut Option<Source>, now: &LocalTime) {
 }
 
 /// Logs `warning` about the time zone coming from `source`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_zone_warning(source: Source, warning: &str) {
     tracing::warn!(source = ?source, "{warning}");
 }

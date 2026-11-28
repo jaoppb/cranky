@@ -169,6 +169,8 @@ fn reconciles_by_key(old_children: &[LayoutState], new_layout: &StyledNode) -> b
 }
 
 /// Logs that `new_layout`'s children mix keyed and unkeyed ones, or repeat a key.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_mixed_keys(new_layout: &StyledNode) {
     tracing::warn!(
         path = ?new_layout.path(),

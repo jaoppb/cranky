@@ -135,11 +135,15 @@ fn call_with_first_arg(func: &mlua::Function, args: &[&str]) -> mlua::Result<()>
 }
 
 /// Logs a refresh of `changed` starting.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_refreshing(changed: &[SignalKind]) {
     tracing::debug!(?changed, "Refreshing LuaModulePort");
 }
 
 /// Logs a refresh that published `changed` and ran the script, with how long it took since `start`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_refresh_completed(changed: &[SignalKind], start: Instant) {
     tracing::debug!(
         ?changed,
@@ -150,11 +154,15 @@ fn log_refresh_completed(changed: &[SignalKind], start: Instant) {
 }
 
 /// Logs a refresh of `changed` that failed with `error`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_refresh_failed(changed: &[SignalKind], error: &mlua::Error) {
     tracing::error!(?changed, err = ?error, "LuaModulePort refresh failed");
 }
 
 /// Logs a render of module `name` on `monitor`, with how long it took since `start`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_render_completed(name: &str, monitor: &MonitorId, start: Instant) {
     tracing::debug!(
         module = %name,
@@ -166,6 +174,8 @@ fn log_render_completed(name: &str, monitor: &MonitorId, start: Instant) {
 }
 
 /// Logs a render of module `name` on `monitor` whose value is no node.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_render_output_rejected(name: &str, monitor: &MonitorId, error: &mlua::Error) {
     tracing::error!(
         module = %name,
@@ -176,6 +186,8 @@ fn log_render_output_rejected(name: &str, monitor: &MonitorId, error: &mlua::Err
 }
 
 /// Logs a render of module `name` on `monitor` whose `render` call failed.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_render_failed(name: &str, monitor: &MonitorId, error: &mlua::Error) {
     tracing::error!(
         module = %name,

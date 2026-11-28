@@ -60,6 +60,8 @@ impl ZbusMprisAdapter {
 }
 
 /// Logs that the watcher is starting.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_watcher_starting() {
     tracing::debug!("Starting MPRIS watcher...");
 }
@@ -113,6 +115,8 @@ fn remove_player(tx: &watch::Sender<MprisState>, player_name: &str) {
 }
 
 /// Logs that the player `player_name` left the bus.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_player_gone(player_name: &str) {
     tracing::debug!("MPRIS player gone: {player_name}");
 }

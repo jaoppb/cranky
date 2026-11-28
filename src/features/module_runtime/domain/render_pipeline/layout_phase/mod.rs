@@ -43,6 +43,8 @@ fn report_size(
 }
 
 /// Logs that the module on `monitor_id` now reports `report`, up from `old_size`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_size_changed(monitor_id: &MonitorId, report: &ChildReport, old_size: Size) {
     let size = *report.size();
     let settled_width = report.settled_width();
@@ -115,11 +117,15 @@ fn calculate_bar_layout<F: CanvasFactory, E: LayoutEnginePort>(
 }
 
 /// Logs that the module's tree on `monitor_id` is about to be styled.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_resolving_styles(monitor_id: &MonitorId) {
     tracing::trace!(monitor = %monitor_id, "Resolving styles for module VNode");
 }
 
 /// Logs a layout of the module's tree on `monitor_id` that failed with `error`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_layout_failed(monitor_id: &MonitorId, error: &LayoutError) {
     tracing::error!(monitor = %monitor_id, err = ?error, "Module layout calculation failed");
 }

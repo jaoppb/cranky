@@ -55,6 +55,8 @@ impl UiCommandSender for tokio::sync::mpsc::Sender<UiCommand> {
 }
 
 /// Logs a command the tokio channel refused (full or closed).
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_tokio_send_failed(error: &tokio::sync::mpsc::error::TrySendError<UiCommand>) {
     tracing::error!(?error, "failed to send ui command via tokio channel");
 }
@@ -68,6 +70,8 @@ impl UiCommandSender for std::sync::mpsc::Sender<UiCommand> {
 }
 
 /// Logs a command the std channel refused because its receiver is gone.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_std_send_failed(error: &std::sync::mpsc::SendError<UiCommand>) {
     tracing::error!(?error, "failed to send ui command via std channel");
 }

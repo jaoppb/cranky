@@ -68,6 +68,7 @@ async fn track_logged(conn: Connection, tray: TrayItems, address: SystrayAddress
     }
 }
 
+/// Logs that tracking an item failed, out of line to keep its caller under `cognitive_complexity`.
 fn log_track_failed(error: &zbus::Error) {
     error!("Failed to track SNI item: {error}");
 }

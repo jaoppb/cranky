@@ -139,12 +139,16 @@ fn build_core(
 
 /// Logs that the builtin style sheets could not be deployed; logged from here so the event
 /// keeps the `cranky::app::bootstrap` target it always had.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_style_deploy_failed(error: &StylingError) {
     error!("Failed to deploy builtin styles: {error}");
 }
 
 /// Logs that the style directories could not be watched, under the `cranky::app::bootstrap`
 /// target too.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_style_watch_failed(error: &StylingError) {
     error!("Failed to watch style directories: {error}");
 }

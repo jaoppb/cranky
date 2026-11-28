@@ -822,6 +822,8 @@ impl<
 // `cranky::app::state` target.
 
 /// Logs that a floating surface is about to be shown, with where and how.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_show_requested(floating: &ShowFloating) {
     tracing::debug!(
         kind = ?floating.kind,
@@ -834,16 +836,22 @@ fn log_show_requested(floating: &ShowFloating) {
 }
 
 /// Logs that the display refused to show a floating surface.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_show_failed(error: &DisplayServerError) {
     tracing::error!(err = ?error, "display.show_floating_surface failed");
 }
 
 /// Logs that the display showed a floating surface.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_show_succeeded() {
     tracing::debug!("display.show_floating_surface succeeded");
 }
 
 /// Logs that the floating surface `kind` is about to be hidden.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_hide_requested(kind: &FloatingKind) {
     tracing::debug!(
         ?kind,
@@ -852,16 +860,22 @@ fn log_hide_requested(kind: &FloatingKind) {
 }
 
 /// Logs that the display refused to hide a floating surface.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_hide_failed(error: &DisplayServerError) {
     tracing::error!(err = ?error, "display.hide_floating_surface failed");
 }
 
 /// Logs that the display hid a floating surface.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_hide_succeeded() {
     tracing::debug!("display.hide_floating_surface succeeded");
 }
 
 /// Logs that `child_id` lost its rect on `monitor_id` because its site was withdrawn.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_child_withdrawn(child_id: ModuleId, monitor_id: &MonitorId) {
     tracing::trace!(
         child = %child_id,
@@ -871,11 +885,15 @@ fn log_child_withdrawn(child_id: ModuleId, monitor_id: &MonitorId) {
 }
 
 /// Logs that the module at `key` was lazily spawned under `parent` as `id`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_lazily_spawned(key: &crate::shared::primitives::ModuleKey, parent: ModuleId, id: ModuleId) {
     tracing::info!(module = %key, parent = %parent, id = %id, "Lazily spawned module");
 }
 
 /// Logs that the module at `key` could not be lazily spawned under `parent`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_lazy_spawn_failed(
     key: &crate::shared::primitives::ModuleKey,
     parent: ModuleId,
@@ -885,6 +903,8 @@ fn log_lazy_spawn_failed(
 }
 
 /// Logs that `action` is about to be triggered on the systray item `id`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_systray_requested(
     id: &crate::features::systray::domain::SystrayId,
     action: &crate::features::systray::domain::SystrayActionName,
@@ -899,6 +919,8 @@ fn log_systray_requested(
 }
 
 /// Logs that the systray host triggered `action` on the item `id`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_systray_succeeded(
     id: &crate::features::systray::domain::SystrayId,
     action: &crate::features::systray::domain::SystrayActionName,
@@ -907,6 +929,8 @@ fn log_systray_succeeded(
 }
 
 /// Logs that the systray host could not trigger `action` on the item `id`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_systray_failed(
     id: &crate::features::systray::domain::SystrayId,
     action: &crate::features::systray::domain::SystrayActionName,
@@ -916,16 +940,22 @@ fn log_systray_failed(
 }
 
 /// Logs that the stylesheet `sheet_name` changed and its modules are about to reload.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_reloading_style(sheet_name: &crate::features::styling::domain::StyleSheetName) {
     tracing::info!("Reloading style: {sheet_name}");
 }
 
 /// Logs that the base stylesheet changed, so every module is about to reload.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_base_sheet_changed() {
     tracing::debug!("Base stylesheet changed; reloading all active modules");
 }
 
 /// Logs the modules about to reload because `sheet_name`, which they use, changed.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_reloading_dependents(
     sheet_name: &crate::features::styling::domain::StyleSheetName,
     mods: &[crate::shared::primitives::ModuleName],
@@ -938,11 +968,15 @@ fn log_reloading_dependents(
 }
 
 /// Logs that the module called `name` is about to reload.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_reloading_module(name: &crate::shared::primitives::ModuleName) {
     tracing::info!("Reloading module: {name}");
 }
 
 /// Logs that the module called `name` could not be reloaded.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_reload_failed(
     name: &crate::shared::primitives::ModuleName,
     error: &crate::features::module_runtime::ports::RegistryLoadError,
@@ -951,11 +985,15 @@ fn log_reload_failed(
 }
 
 /// Logs that a new configuration arrived and the modules are about to reload from it.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_config_reloading() {
     tracing::info!("Config hot-reload triggered in App");
 }
 
 /// Logs that the registry could not load the new configuration.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_registry_reload_failed(error: &crate::features::module_runtime::ports::RegistryLoadError) {
     tracing::error!("Failed to reload registry on config change: {error}");
 }

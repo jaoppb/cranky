@@ -71,6 +71,8 @@ fn warn_if_font_relative(text: &str) {
 }
 
 /// Warns that an `em`/`rem` grid track is ignored.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_font_relative_track(text: &str) {
     tracing::warn!(
         value = %text,

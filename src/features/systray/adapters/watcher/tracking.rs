@@ -79,10 +79,12 @@ async fn ids_at(tray: &TrayItems, destination: &str) -> Vec<SystrayId> {
         .collect()
 }
 
+/// Logs that an item is now followed, out of line to keep its caller under `cognitive_complexity`.
 fn log_following(id: &SystrayId) {
     tracing::debug!("Setting up SNI signal streams for {}", id.as_str());
 }
 
+/// Logs that an item is being removed, out of line to keep its caller under `cognitive_complexity`.
 fn log_removing(key: &SystrayId, destination: &str) {
     tracing::debug!(
         "Removing SNI systray item {} because D-Bus name {destination} disconnected",

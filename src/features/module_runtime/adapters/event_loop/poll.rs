@@ -87,11 +87,15 @@ fn input_event(
 }
 
 /// Logs that module `ctx_id` fell `count` interactions behind, which were skipped.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_input_lagged(ctx_id: ModuleId, count: u64) {
     tracing::warn!(module = %ctx_id, lagged = count, "ModuleActor input_rx lagged, skipped messages");
 }
 
 /// Logs that the interaction channel of module `ctx_id` closed.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_input_closed(ctx_id: ModuleId) {
     tracing::debug!(module = %ctx_id, "ModuleActor input_rx closed");
 }

@@ -163,6 +163,8 @@ impl<
 }
 
 /// Logs a render pass of module `module` that began at `started`.
+///
+/// Kept out of line to keep its caller under `cognitive_complexity`.
 fn log_ui_updated(module: ModuleId, started: Instant) {
     tracing::debug!(
         module = %module,
