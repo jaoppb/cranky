@@ -39,12 +39,13 @@ impl KeyboardInput {
     /// The seat lost its keyboard: releases the bound one, if any, and
     /// forgets everything about it.
     pub(crate) fn release(&mut self) {
-        if let Some(device) = self.device.take() {
-            if device.version() >= 3 {
-                device.release();
-            }
-            *self = Self::default();
+        let Some(device) = self.device.take() else {
+            return;
+        };
+        if device.version() >= 3 {
+            device.release();
         }
+        *self = Self::default();
     }
 
     pub(crate) const fn focus(&self) -> Option<&WlSurface> {
@@ -108,18 +109,20 @@ fn read_keymap(descriptor: OwnedFd, size: u32) -> Option<xkb::Keymap> {
 fn escape_codes(keymap: &xkb::Keymap) -> Vec<u32> {
     let (min, max) = (keymap.min_keycode().raw(), keymap.max_keycode().raw());
     (min..=max)
-        .filter(|&raw| {
-            let key = xkb::Keycode::new(raw);
-            (0..keymap.num_layouts_for_key(key)).any(|layout| {
-                (0..keymap.num_levels_for_key(key, layout)).any(|level| {
-                    keymap
-                        .key_get_syms_by_level(key, layout, level)
-                        .contains(&xkb::Keysym::Escape)
-                })
-            })
-        })
+        .filter(|&raw| produces_escape(keymap, xkb::Keycode::new(raw)))
         .filter_map(|raw| raw.checked_sub(EVDEV_OFFSET))
         .collect()
+}
+
+/// Whether `key` produces the Escape keysym in some layout or level of `keymap`.
+fn produces_escape(keymap: &xkb::Keymap, key: xkb::Keycode) -> bool {
+    (0..keymap.num_layouts_for_key(key)).any(|layout| {
+        (0..keymap.num_levels_for_key(key, layout)).any(|level| {
+            keymap
+                .key_get_syms_by_level(key, layout, level)
+                .contains(&xkb::Keysym::Escape)
+        })
+    })
 }
 
 #[cfg(test)]

@@ -18,20 +18,20 @@ impl Dispatch<WlSeat, ()> for WaylandState {
         _conn: &Connection,
         queue_handle: &QueueHandle<Self>,
     ) {
-        if let wl_seat::Event::Capabilities { capabilities } = event {
-            let caps =
-                wayland_client::protocol::wl_seat::Capability::from_bits(capabilities.into())
-                    .unwrap_or(wayland_client::protocol::wl_seat::Capability::empty());
-            if caps.contains(wayland_client::protocol::wl_seat::Capability::Pointer)
-                && state.pointer.is_none()
-            {
-                state.pointer = Some(proxy.get_pointer(queue_handle, ()));
-            }
-            if caps.contains(wl_seat::Capability::Keyboard) {
-                state.keyboard.bind(proxy, queue_handle);
-            } else {
-                state.keyboard.release();
-            }
+        let wl_seat::Event::Capabilities { capabilities } = event else {
+            return;
+        };
+        let caps = wayland_client::protocol::wl_seat::Capability::from_bits(capabilities.into())
+            .unwrap_or(wayland_client::protocol::wl_seat::Capability::empty());
+        if caps.contains(wayland_client::protocol::wl_seat::Capability::Pointer)
+            && state.pointer.is_none()
+        {
+            state.pointer = Some(proxy.get_pointer(queue_handle, ()));
+        }
+        if caps.contains(wl_seat::Capability::Keyboard) {
+            state.keyboard.bind(proxy, queue_handle);
+        } else {
+            state.keyboard.release();
         }
     }
 }

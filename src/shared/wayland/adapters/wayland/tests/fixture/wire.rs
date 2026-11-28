@@ -42,10 +42,9 @@ impl Fake {
         self.server.set_nonblocking(true).expect("nonblocking");
         let mut bytes = Vec::new();
         let mut chunk = [0u8; 4096];
-        while let Ok(count) = (&self.server).read(&mut chunk) {
-            if count == 0 {
-                break;
-            }
+        while let Ok(count) = (&self.server).read(&mut chunk)
+            && count != 0
+        {
             bytes.extend_from_slice(&chunk[..count]);
         }
         bytes
