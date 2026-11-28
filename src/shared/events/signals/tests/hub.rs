@@ -140,23 +140,27 @@ mod tests {
 
     #[test]
     fn test_signal_to_stream_all_kinds() {
-        crate::test_utils::block_on(async {
-            let hub = SignalHub::new(Config::default());
-            let kinds = [
-                SignalKind::Time,
-                SignalKind::Hyprland,
-                SignalKind::DBus,
-                SignalKind::Systray,
-                SignalKind::Metrics,
-                SignalKind::Mpris,
-            ];
+        crate::test_utils::block_on(each_kind_streams_its_current_value_first());
+    }
 
-            for kind in kinds {
-                let mut stream = hub.signal_to_stream(kind);
-                let initial = stream.next().await;
-                assert_eq!(initial, Some(kind));
-            }
-        });
+    /// Asserts that a fresh stream of every signal kind first yields that kind, for the value
+    /// the hub already holds.
+    async fn each_kind_streams_its_current_value_first() {
+        let hub = SignalHub::new(Config::default());
+        let kinds = [
+            SignalKind::Time,
+            SignalKind::Hyprland,
+            SignalKind::DBus,
+            SignalKind::Systray,
+            SignalKind::Metrics,
+            SignalKind::Mpris,
+        ];
+
+        for kind in kinds {
+            let mut stream = hub.signal_to_stream(kind);
+            let initial = stream.next().await;
+            assert_eq!(initial, Some(kind));
+        }
     }
 
     #[test]
