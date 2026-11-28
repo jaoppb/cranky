@@ -80,19 +80,22 @@ pub(crate) fn run_selected(selection: &Selection) -> Outcome {
         return Ok(());
     }
 
-    runtime()?.block_on(async {
-        let mut signals = STOP_SIGNALS
-            .iter()
-            .map(|kind| signal(*kind).context("watch for a stop signal"))
-            .collect::<Outcome<Vec<_>>>()?;
-        let stopped = select_all(signals.iter_mut().map(|signal| Box::pin(signal.recv())));
-        // Dropping the run, on a signal as on any error, kills the servers
-        // and the running case and removes the runtime directory.
-        tokio::select! {
-            outcome = run_in_sandbox(&names) => outcome,
-            _ = stopped => Err(Failure::new("stopped by a signal")),
-        }
-    })
+    runtime()?.block_on(run_until_stopped(&names))
+}
+
+/// Runs the cases in the sandbox unless a stop signal comes first.
+async fn run_until_stopped(names: &[&str]) -> Outcome {
+    let mut signals = STOP_SIGNALS
+        .iter()
+        .map(|kind| signal(*kind).context("watch for a stop signal"))
+        .collect::<Outcome<Vec<_>>>()?;
+    let stopped = select_all(signals.iter_mut().map(|signal| Box::pin(signal.recv())));
+    // Dropping the run, on a signal as on any error, kills the servers
+    // and the running case and removes the runtime directory.
+    tokio::select! {
+        outcome = run_in_sandbox(names) => outcome,
+        _ = stopped => Err(Failure::new("stopped by a signal")),
+    }
 }
 
 async fn run_in_sandbox(names: &[&str]) -> Outcome {

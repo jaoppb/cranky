@@ -85,9 +85,9 @@ Each feature and shared unit repeats the same shape: `domain/` (pure logic and v
 
 ### Modules are scripts, and each one is an actor
 
-Every visual element — including the bar itself (`bar.lua`) — is a Lua or Rhai script in `assets/widgets/`, embedded via `include_str!` in `src/app/builtins.rs` and deployed to `~/.local/share/cranky/modules/`. User overrides live in `~/.config/cranky/modules/` and take precedence. `EngineSelection::Auto` tries Lua then Rhai; `EngineSelection::Explicit` pins one.
+Every visual element — including the bar itself (`bar.lua`) — is a Lua or Rhai script in `assets/widgets/`, embedded via `include_str!` in `src/app/builtins/mod.rs` and deployed to `~/.local/share/cranky/modules/`. User overrides live in `~/.config/cranky/modules/` and take precedence. `EngineSelection::Auto` tries Lua then Rhai; `EngineSelection::Explicit` pins one.
 
-The Rust side sees a module only through `AnyModulePort` (`src/features/module_runtime/ports/module.rs`): `init`, `subscriptions`, `dbus_subscriptions`, `styles`, `refresh`, `render(monitor) -> VNode`, `call_function`, `call_function_with_args`. The Lua and Rhai adapters (`src/shared/scripting/adapters/`) both implement it — **any change to the scripting API must be mirrored in both, and both are covered by the same tests in `src/app/builtins.rs`.**
+The Rust side sees a module only through `AnyModulePort` (`src/features/module_runtime/ports/module.rs`): `init`, `subscriptions`, `dbus_subscriptions`, `styles`, `refresh`, `render(monitor) -> VNode`, `call_function`, `call_function_with_args`. The Lua and Rhai adapters (`src/shared/scripting/adapters/`) both implement it — **any change to the scripting API must be mirrored in both, and both are covered by the same tests in `src/app/builtins/tests.rs`.**
 
 Script-side contract: define `init()`, `metadata()` (returns `subscriptions` + `styles`), `refresh()`, `render(monitor)`. Globals injected: `ui` (element constructors `flex`/`grid`/`text`/`progress`/`rect`/`image`/`module`/`popup`/`panel`, plus `ui.action.exec|call|systray`), `signals`, `config`, `sys`. `ui.module(name)` embeds a child module — that's how `bar.lua` composes the left/center/right slots.
 

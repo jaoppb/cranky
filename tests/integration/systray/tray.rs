@@ -1,7 +1,7 @@
 //! A started tray adapter with one fake item registered on it.
 
 use super::item::{Call, ItemService};
-use crate::support::{Context, Failure, Outcome, ensure, ensure_eq, within};
+use crate::support::{Context, Outcome, ensure, ensure_eq, within};
 use cranky::features::systray::adapters::SniAdapter;
 use cranky::features::systray::domain::{
     SystrayActionCall, SystrayActionName, SystrayId, SystrayState,
@@ -178,7 +178,12 @@ pub(crate) async fn host_registered() -> Outcome<bool> {
         )
         .await
         .context("RegisterStatusNotifierHost")?;
-    let properties = zbus::fdo::PropertiesProxy::builder(&connection)
+    is_host_registered(&connection).await
+}
+
+/// Whether the watcher reports a registered host.
+async fn is_host_registered(connection: &zbus::Connection) -> Outcome<bool> {
+    let properties = zbus::fdo::PropertiesProxy::builder(connection)
         .destination(WATCHER)
         .path("/StatusNotifierWatcher")
         .build()
@@ -190,6 +195,46 @@ pub(crate) async fn host_registered() -> Outcome<bool> {
         .await
         .context("IsStatusNotifierHostRegistered")?;
     bool::try_from(value).context("IsStatusNotifierHostRegistered as a bool")
+}
+
+/// Returns once `name` has no owner: at once when it has none now, otherwise
+/// when `changes` reports that its owner left.
+async fn wait_until_unowned(
+    bus: &zbus::fdo::DBusProxy<'_>,
+    changes: &mut zbus::fdo::NameOwnerChangedStream,
+    name: &zbus::names::BusName<'_>,
+) -> Outcome {
+    if bus
+        .name_has_owner(name.clone())
+        .await
+        .context("NameHasOwner")?
+    {
+        within(
+            "the previous watcher to leave the bus",
+            owner_left(changes, name),
+        )
+        .await??;
+    }
+    Ok(())
+}
+
+/// Waits until `changes` reports that `name` lost its owner.
+async fn owner_left(
+    changes: &mut zbus::fdo::NameOwnerChangedStream,
+    name: &zbus::names::BusName<'_>,
+) -> Outcome {
+    loop {
+        let change = changes
+            .next()
+            .await
+            .context("the name change stream ended")?;
+        if let Ok(args) = change.args()
+            && args.name() == name
+            && args.new_owner().is_none()
+        {
+            return Ok(());
+        }
+    }
 }
 
 /// Starts the adapter once the watcher name is free. The previous case's
@@ -207,27 +252,7 @@ pub(crate) async fn start_adapter(hub: &Arc<SignalHub>) -> Outcome<SniAdapter> {
         .await
         .context("subscribe to name changes")?;
     let name = zbus::names::BusName::try_from(WATCHER).context("watcher name")?;
-    if bus
-        .name_has_owner(name.clone())
-        .await
-        .context("NameHasOwner")?
-    {
-        within("the previous watcher to leave the bus", async {
-            loop {
-                let change = changes
-                    .next()
-                    .await
-                    .context("the name change stream ended")?;
-                if let Ok(args) = change.args()
-                    && args.name() == &name
-                    && args.new_owner().is_none()
-                {
-                    return Ok::<_, Failure>(());
-                }
-            }
-        })
-        .await??;
-    }
+    wait_until_unowned(&bus, &mut changes, &name).await?;
 
     let mut adapter = SniAdapter::new(Arc::clone(hub));
     adapter.start().await.context("start the SNI adapter")?;

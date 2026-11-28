@@ -45,7 +45,7 @@ Generate implementation code from a structured SPDD prompt (a REASONS Canvas). F
      - `domain` and `ports` never import `adapters` or `app`; `features` and `shared` never import `app` (`arch-lint.toml`, checked by `arch_lint::check!()` in `tests/architecture.rs`)
      - `src/app/` is the composition root: it builds the adapters, wires them to the ports and starts them; nothing depends on it
      - `unsafe` code lives only in `crates/cranky-unsafe`; the `cranky` crate forbids `unsafe_code`
-     - A change to the scripting API is made in both the Lua and the Rhai adapters (`src/shared/scripting/adapters/`) and covered by the same tests in `src/app/builtins.rs`
+     - A change to the scripting API is made in both the Lua and the Rhai adapters (`src/shared/scripting/adapters/`) and covered by the same tests in `src/app/builtins/tests.rs`
      - Visibility follows `AGENTS.md` "Public surface": an item is only as visible as its uses
    - Each operation is atomic, names its slice and module, and lists its tests. Together they cover all of Structure, and they match its implementations, dependencies and boundary rules.
 

@@ -166,6 +166,31 @@ struct Block<'a> {
 
 /// A header and a block of data.
 fn file_part(version: u8, width: Width, block: &Block<'_>) -> Vec<u8> {
+    let mut bytes = header_bytes(version, block);
+    bytes.extend(data_bytes(width, block));
+    bytes
+}
+
+/// The header of a block: magic, version, reserved bytes and its counts.
+fn header_bytes(version: u8, block: &Block<'_>) -> Vec<u8> {
+    let mut bytes = b"TZif".to_vec();
+    bytes.push(version);
+    bytes.extend([0; 15]);
+    for size in [
+        0,
+        0,
+        block.leaps.len(),
+        block.transitions.len(),
+        block.kinds.len(),
+        block.names.len(),
+    ] {
+        bytes.extend(count(size));
+    }
+    bytes
+}
+
+/// The data of a block, its instants `width` bytes wide.
+fn data_bytes(width: Width, block: &Block<'_>) -> Vec<u8> {
     let &Block {
         transitions,
         kinds,
@@ -176,19 +201,7 @@ fn file_part(version: u8, width: Width, block: &Block<'_>) -> Vec<u8> {
         Width::Wide => seconds.to_be_bytes().to_vec(),
         Width::Narrow => i32::try_from(seconds).unwrap().to_be_bytes().to_vec(),
     };
-    let mut bytes = b"TZif".to_vec();
-    bytes.push(version);
-    bytes.extend([0; 15]);
-    for size in [
-        0,
-        0,
-        leaps.len(),
-        transitions.len(),
-        kinds.len(),
-        names.len(),
-    ] {
-        bytes.extend(count(size));
-    }
+    let mut bytes = Vec::new();
     for &(start, _) in transitions {
         bytes.extend(instant(start));
     }
@@ -329,16 +342,19 @@ fn a_later_version_needs_both_newlines_of_its_footer() {
 }
 
 #[test]
-fn malformed_files_are_refused() {
+fn a_file_without_a_whole_header_is_refused() {
     let good = version_one(&[(1000, 1)], KINDS, NAMES);
     assert!(parse(&good).is_some());
 
-    let mut wrong_magic = good.clone();
+    let mut wrong_magic = good;
     wrong_magic[0] = b'X';
     assert_eq!(parse(&wrong_magic), None);
     assert_eq!(parse(b"TZif"), None);
     assert_eq!(parse(b""), None);
+}
 
+#[test]
+fn a_file_with_a_missing_or_unreadable_kind_is_refused() {
     let no_kinds = version_one(&[], &[], NAMES);
     assert_eq!(parse(&no_kinds), None);
     let missing_kind = version_one(&[(1000, 2)], KINDS, NAMES);
@@ -349,12 +365,19 @@ fn malformed_files_are_refused() {
     assert_eq!(parse(&name_without_end), None);
     let name_not_utf8 = version_one(&[], &[(0, 0)], b"\xff\xfe\0");
     assert_eq!(parse(&name_not_utf8), None);
+}
 
-    // A count larger than the file must not be believed.
+#[test]
+fn a_count_larger_than_the_file_is_refused() {
+    let good = version_one(&[(1000, 1)], KINDS, NAMES);
+    assert!(parse(&good).is_some());
     let mut huge_count = good;
     huge_count[32..36].copy_from_slice(&u32::MAX.to_be_bytes());
     assert_eq!(parse(&huge_count), None);
+}
 
+#[test]
+fn a_later_version_with_a_damaged_second_header_is_refused() {
     let mut second_header_wrong = version_two(b"\n\n");
     let second = second_header_wrong
         .windows(4)
@@ -363,4 +386,79 @@ fn malformed_files_are_refused() {
     assert_ne!(second, 0);
     second_header_wrong[second] = b'X';
     assert_eq!(parse(&second_header_wrong), None);
+}
+
+/// The bytes of a header: magic, version, reserved bytes and six counts.
+const HEADER_SIZE: usize = 44;
+
+/// Reads the data of a block written by `file_part`, past its header.
+fn read_block(part: &[u8], width: usize) -> Option<Table> {
+    let mut reader = Reader { rest: part };
+    let Some((_, counts)) = header(&mut reader) else {
+        panic!("the header of a block written by file_part is read");
+    };
+    assert_eq!(reader.rest.len(), part.len().saturating_sub(HEADER_SIZE));
+    block(&mut reader, &counts, width)
+}
+
+#[test]
+fn a_block_reads_its_kinds_transitions_and_leaps_in_order() {
+    let data = Block {
+        transitions: &[(-1000, 1), (1000, 0)],
+        kinds: KINDS,
+        names: NAMES,
+        leaps: &[(1500, 1), (2500, -1)],
+    };
+    let kind = |offset, abbreviation: &str| Kind {
+        offset,
+        abbreviation: abbreviation.to_string(),
+    };
+    let transition = |instant, kind| Transition { instant, kind };
+    let leap = |instant, total| Leap { instant, total };
+    let expected = Table {
+        kinds: vec![kind(-3600, "OLD"), kind(7200, "NEW")],
+        transitions: vec![transition(-1000, 1), transition(1000, 0)],
+        leaps: vec![leap(1500, 1), leap(2500, -1)],
+    };
+    for (width, bytes) in [(Width::Narrow, 4), (Width::Wide, 8)] {
+        let part = file_part(0, width, &data);
+        assert_eq!(
+            read_block(&part, bytes),
+            Some(expected.clone()),
+            "{width:?}"
+        );
+    }
+}
+
+#[test]
+fn a_transition_instant_of_another_width_is_refused() {
+    let data = Block {
+        transitions: &[(1000, 0)],
+        kinds: KINDS,
+        names: NAMES,
+        leaps: &[],
+    };
+    let part = file_part(0, Width::Narrow, &data);
+    // Dropping the first byte of the instant leaves a block of 3-byte instants.
+    let mut odd = part.clone();
+    odd.remove(HEADER_SIZE);
+    assert!(read_block(&part, 4).is_some());
+    assert_eq!(read_block(&odd, 3), None);
+}
+
+#[test]
+fn a_leap_instant_of_another_width_is_refused() {
+    let data = Block {
+        transitions: &[],
+        kinds: KINDS,
+        names: NAMES,
+        leaps: &[(1500, 1)],
+    };
+    let part = file_part(0, Width::Narrow, &data);
+    // Dropping the first byte of the leap instant leaves a 3-byte instant
+    // before the 4-byte total.
+    let mut odd = part.clone();
+    odd.remove(part.len().saturating_sub(8));
+    assert!(read_block(&part, 4).is_some());
+    assert_eq!(read_block(&odd, 3), None);
 }

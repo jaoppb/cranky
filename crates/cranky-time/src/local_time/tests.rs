@@ -5,58 +5,62 @@ fn text(zone: &str, unix_seconds: u64) -> String {
     LocalTime::at_instant(instant(unix_seconds), &located(zone), Source::Localtime).to_string()
 }
 
+/// Zone, instant and the text of the local time there, across changes of
+/// offset in the table and under the rule after it.
+const RFC_3339_CASES: &[(&str, u64, &str)] = &[
+    (
+        "America/Sao_Paulo",
+        1_795_000_000,
+        "2026-11-18T08:06:40-03:00",
+    ),
+    (
+        "America/Sao_Paulo",
+        1_550_368_799,
+        "2019-02-16T23:59:59-02:00",
+    ),
+    (
+        "America/Sao_Paulo",
+        1_550_368_800,
+        "2019-02-16T23:00:00-03:00",
+    ),
+    (
+        "America/Sao_Paulo",
+        4_000_000_000,
+        "2096-10-02T04:06:40-03:00",
+    ),
+    ("Europe/Lisbon", 1_795_000_000, "2026-11-18T11:06:40+00:00"),
+    ("Europe/Lisbon", 1_774_745_999, "2026-03-29T00:59:59+00:00"),
+    ("Europe/Lisbon", 1_774_746_000, "2026-03-29T02:00:00+01:00"),
+    ("Europe/Lisbon", 1_792_889_999, "2026-10-25T01:59:59+01:00"),
+    ("Europe/Lisbon", 1_792_890_000, "2026-10-25T01:00:00+00:00"),
+    ("Europe/Lisbon", 2_531_955_600, "2050-03-27T02:00:00+01:00"),
+    ("Europe/Lisbon", 2_550_704_400, "2050-10-30T01:00:00+00:00"),
+    ("Asia/Kolkata", 1_795_000_000, "2026-11-18T16:36:40+05:30"),
+    (
+        "Australia/Sydney",
+        1_782_000_000,
+        "2026-06-21T10:00:00+10:00",
+    ),
+    (
+        "Australia/Sydney",
+        1_795_000_000,
+        "2026-11-18T22:06:40+11:00",
+    ),
+    (
+        "Australia/Sydney",
+        2_532_528_000,
+        "2050-04-03T02:00:00+10:00",
+    ),
+    (
+        "Australia/Sydney",
+        2_548_252_800,
+        "2050-10-02T03:00:00+11:00",
+    ),
+];
+
 #[test]
 fn the_text_is_rfc_3339_in_whole_seconds_with_a_numeric_offset() {
-    for (zone, unix_seconds, expected) in [
-        (
-            "America/Sao_Paulo",
-            1_795_000_000,
-            "2026-11-18T08:06:40-03:00",
-        ),
-        (
-            "America/Sao_Paulo",
-            1_550_368_799,
-            "2019-02-16T23:59:59-02:00",
-        ),
-        (
-            "America/Sao_Paulo",
-            1_550_368_800,
-            "2019-02-16T23:00:00-03:00",
-        ),
-        (
-            "America/Sao_Paulo",
-            4_000_000_000,
-            "2096-10-02T04:06:40-03:00",
-        ),
-        ("Europe/Lisbon", 1_795_000_000, "2026-11-18T11:06:40+00:00"),
-        ("Europe/Lisbon", 1_774_745_999, "2026-03-29T00:59:59+00:00"),
-        ("Europe/Lisbon", 1_774_746_000, "2026-03-29T02:00:00+01:00"),
-        ("Europe/Lisbon", 1_792_889_999, "2026-10-25T01:59:59+01:00"),
-        ("Europe/Lisbon", 1_792_890_000, "2026-10-25T01:00:00+00:00"),
-        ("Europe/Lisbon", 2_531_955_600, "2050-03-27T02:00:00+01:00"),
-        ("Europe/Lisbon", 2_550_704_400, "2050-10-30T01:00:00+00:00"),
-        ("Asia/Kolkata", 1_795_000_000, "2026-11-18T16:36:40+05:30"),
-        (
-            "Australia/Sydney",
-            1_782_000_000,
-            "2026-06-21T10:00:00+10:00",
-        ),
-        (
-            "Australia/Sydney",
-            1_795_000_000,
-            "2026-11-18T22:06:40+11:00",
-        ),
-        (
-            "Australia/Sydney",
-            2_532_528_000,
-            "2050-04-03T02:00:00+10:00",
-        ),
-        (
-            "Australia/Sydney",
-            2_548_252_800,
-            "2050-10-02T03:00:00+11:00",
-        ),
-    ] {
+    for &(zone, unix_seconds, expected) in RFC_3339_CASES {
         let text = text(zone, unix_seconds);
         assert_eq!(text, expected, "{zone} at {unix_seconds}");
         assert_eq!(text.len(), 25);

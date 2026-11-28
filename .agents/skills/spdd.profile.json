@@ -35,7 +35,7 @@
       "- `domain` and `ports` never import `adapters` or `app`; `features` and `shared` never import `app` (`arch-lint.toml`, checked by `arch_lint::check!()` in `tests/architecture.rs`)",
       "- `src/app/` is the composition root: it builds the adapters, wires them to the ports and starts them; nothing depends on it",
       "- `unsafe` code lives only in `crates/cranky-unsafe`; the `cranky` crate forbids `unsafe_code`",
-      "- A change to the scripting API is made in both the Lua and the Rhai adapters (`src/shared/scripting/adapters/`) and covered by the same tests in `src/app/builtins.rs`",
+      "- A change to the scripting API is made in both the Lua and the Rhai adapters (`src/shared/scripting/adapters/`) and covered by the same tests in `src/app/builtins/tests.rs`",
       "- Visibility follows `AGENTS.md` \"Public surface\": an item is only as visible as its uses"
     ],
     "SCOPES": "`layout_engine`, `metrics`, `module_runtime`, `mpris`, `styling`, `systray`, `vdom`, `workspaces`, `config`, `dbus`, `env`, `events`, `primitives`, `rendering`, `scripting`, `wayland`, `app`, `widgets`, or `tooling` for cross-cutting work",
@@ -171,7 +171,7 @@
       "3. Architecture: [layer rules; no `app` import from features or shared; `unsafe` only in `cranky-unsafe`]",
       "4. Lints: [`just lint` and `just doc-check` pass with zero exceptions]",
       "5. Errors: [exact error enum variants and Display messages]",
-      "6. Script API: [Lua and Rhai behave the same; the same tests in `src/app/builtins.rs`]",
+      "6. Script API: [Lua and Rhai behave the same; the same tests in `src/app/builtins/tests.rs`]",
       "7. Performance: [no blocking inside an `EventLoop`; render and refresh cost; `just bench-check`]",
       "8. Size: [every touched file under `src/features/` or `src/shared/` within 200 production LOC]",
       "9. Tests: [required unit and integration tests; line coverage stays at 80% or more]"

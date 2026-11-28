@@ -84,7 +84,7 @@ impl fmt::Debug for BinaryData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tracing_subscriber::layer::SubscriberExt;
+    use crate::features::module_runtime::test_support::capture_logs;
 
     #[test]
     fn test_binary_data_basic_operations() {
@@ -128,15 +128,12 @@ mod tests {
 
     #[test]
     fn test_binary_data_debug_with_tracing_filter_enabled() {
-        let filter = tracing_subscriber::EnvFilter::new("cranky::binary=trace");
-        let subscriber = tracing_subscriber::registry().with(filter);
-
         let binary = BinaryData::new(vec![1, 2, 3]);
 
-        tracing::subscriber::with_default(subscriber, || {
-            let formatted = format!("{binary:?}");
-            assert_eq!(formatted, "[1, 2, 3]");
-        });
+        // `capture_logs` enables every level on this thread only, so `cranky::binary` traces.
+        let mut formatted = String::new();
+        capture_logs(|| formatted = format!("{binary:?}"));
+        assert_eq!(formatted, "[1, 2, 3]");
     }
 
     #[test]

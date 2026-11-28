@@ -146,7 +146,18 @@ async fn reads_all_properties_with_their_types() -> Outcome {
         .get_all_properties(&probe_object(), &probe_interface())
         .await
         .context("get all properties")?;
-    let expected = [
+    for (name, value) in probe_properties() {
+        let actual = properties
+            .get(&PropertyName::new(name))
+            .context(&format!("the probe has no {name} property"))?;
+        ensure_eq(name, actual, &value)?;
+    }
+    Ok(())
+}
+
+/// Every property the probe service starts with, by name.
+fn probe_properties() -> [(&'static str, DBusValue); 5] {
+    [
         ("Label", DBusValue::String("first".to_string())),
         ("Count", DBusValue::Int(7)),
         ("Enabled", DBusValue::Bool(true)),
@@ -161,14 +172,7 @@ async fn reads_all_properties_with_their_types() -> Outcome {
             "Limits",
             DBusValue::Dict(HashMap::from([("max".to_string(), DBusValue::Int(9))])),
         ),
-    ];
-    for (name, value) in expected {
-        let actual = properties
-            .get(&PropertyName::new(name))
-            .context(&format!("the probe has no {name} property"))?;
-        ensure_eq(name, actual, &value)?;
-    }
-    Ok(())
+    ]
 }
 
 async fn streams_property_changes() -> Outcome {

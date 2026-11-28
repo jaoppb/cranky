@@ -50,6 +50,12 @@ impl AdapterSupervisor {
         self.started.insert(kind);
     }
 
+    /// Whether `kind` was started, or marked started, already.
+    #[cfg(test)]
+    pub(crate) fn has_started(&self, kind: SignalKind) -> bool {
+        self.started.contains(&kind)
+    }
+
     /// Starts the adapter behind `kind` the first time it's asked for, and
     /// does nothing on every later call — including a failed first attempt,
     /// which is treated as terminal for the session rather than retried on
@@ -61,38 +67,53 @@ impl AdapterSupervisor {
         }
 
         match kind {
-            SignalKind::Mpris => {
-                let adapter = crate::features::mpris::adapters::zbus::ZbusMprisAdapter::new(
-                    self.dbus_conn.clone(),
-                    &self.hub,
-                );
-                if let Err(error) = adapter.start_watching().await {
-                    tracing::error!("Failed to start MPRIS watcher on demand: {error}");
-                }
-            }
-            SignalKind::Metrics => {
-                let adapter = SysinfoAdapter::new(self.metrics_config.clone(), self.hub.clone());
-                adapter.start();
-            }
-            SignalKind::Hyprland => {
-                let adapter = HyprlandAdapter::new(self.app_env.clone());
-                let hub = self.hub.clone();
-                tokio::spawn(
-                    async move {
-                        adapter.run(hub).await;
-                    }
-                    .instrument(tracing::info_span!("hyprland_adapter")),
-                );
-            }
-            SignalKind::Time => {
-                let hub = self.hub.clone();
-                tokio::spawn(
-                    super::time_adapter::run(hub).instrument(tracing::info_span!("time_adapter")),
-                );
-            }
+            SignalKind::Mpris => self.start_mpris().await,
+            SignalKind::Metrics => self.start_metrics(),
+            SignalKind::Hyprland => self.spawn_hyprland(),
+            SignalKind::Time => self.spawn_time(),
             SignalKind::Systray | SignalKind::DBus => {}
         }
     }
+
+    /// Starts the MPRIS watcher on the shared bus, logging a watcher that cannot start.
+    async fn start_mpris(&self) {
+        let adapter = crate::features::mpris::adapters::zbus::ZbusMprisAdapter::new(
+            self.dbus_conn.clone(),
+            &self.hub,
+        );
+        if let Err(error) = adapter.start_watching().await {
+            log_mpris_start_failed(&error);
+        }
+    }
+
+    /// Starts the metrics sampler with the `[metrics]` settings the supervisor was built with.
+    fn start_metrics(&self) {
+        let adapter = SysinfoAdapter::new(self.metrics_config.clone(), self.hub.clone());
+        adapter.start();
+    }
+
+    /// Spawns the Hyprland event loop that feeds the hub, in its own `hyprland_adapter` span.
+    fn spawn_hyprland(&self) {
+        let adapter = HyprlandAdapter::new(self.app_env.clone());
+        let hub = self.hub.clone();
+        tokio::spawn(
+            async move {
+                adapter.run(hub).await;
+            }
+            .instrument(tracing::info_span!("hyprland_adapter")),
+        );
+    }
+
+    /// Spawns the time adapter that feeds the hub, in its own `time_adapter` span.
+    fn spawn_time(&self) {
+        let hub = self.hub.clone();
+        tokio::spawn(super::time_adapter::run(hub).instrument(tracing::info_span!("time_adapter")));
+    }
+}
+
+/// Logs that the MPRIS watcher could not start on demand.
+fn log_mpris_start_failed(error: &crate::shared::dbus::ports::DbusConnectionError) {
+    tracing::error!("Failed to start MPRIS watcher on demand: {error}");
 }
 
 #[cfg(test)]
@@ -152,5 +173,87 @@ mod tests {
         let supervisor = AdapterSupervisor::new(hub, test_env(), Arc::new(DisconnectedBus));
 
         assert_eq!(supervisor.metrics_config.update_interval_ms().value(), 2500);
+    }
+
+    /// A supervisor over a hub with the default configuration and a bus that refuses every call.
+    fn disconnected_supervisor(hub: &Arc<SignalHub>) -> AdapterSupervisor {
+        AdapterSupervisor::new(hub.clone(), test_env(), Arc::new(DisconnectedBus))
+    }
+
+    /// The tasks alive on the current runtime, to tell whether `ensure` spawned one.
+    fn alive_tasks() -> usize {
+        tokio::runtime::Handle::current()
+            .metrics()
+            .num_alive_tasks()
+    }
+
+    /// Metrics, Hyprland and Time each start as one spawned task. Nothing awaits after the
+    /// Hyprland one, so it is dropped with the runtime before it ever polls the real socket.
+    #[test]
+    fn test_ensure_spawns_one_task_per_polled_adapter() {
+        crate::test_utils::block_on(async {
+            let hub = Arc::new(SignalHub::new(Config::default()));
+            let mut supervisor = disconnected_supervisor(&hub);
+            let before = alive_tasks();
+
+            supervisor.ensure(SignalKind::Metrics).await;
+            assert_eq!(alive_tasks().checked_sub(before), Some(1), "metrics");
+            supervisor.ensure(SignalKind::Time).await;
+            assert_eq!(alive_tasks().checked_sub(before), Some(2), "time");
+            supervisor.ensure(SignalKind::Hyprland).await;
+            assert_eq!(alive_tasks().checked_sub(before), Some(3), "hyprland");
+        });
+    }
+
+    #[test]
+    fn test_ensure_systray_and_dbus_start_nothing() {
+        crate::test_utils::block_on(async {
+            let hub = Arc::new(SignalHub::new(Config::default()));
+            let mut supervisor = disconnected_supervisor(&hub);
+            let before = alive_tasks();
+
+            supervisor.ensure(SignalKind::Systray).await;
+            supervisor.ensure(SignalKind::DBus).await;
+
+            assert_eq!(alive_tasks(), before);
+            assert!(supervisor.started.contains(&SignalKind::Systray));
+            assert!(supervisor.started.contains(&SignalKind::DBus));
+        });
+    }
+
+    #[test]
+    fn test_ensure_time_feeds_the_hub() {
+        crate::test_utils::block_on(async {
+            let hub = Arc::new(SignalHub::new(Config::default()));
+            let mut time_rx = hub.time_rx();
+            let mut supervisor = disconnected_supervisor(&hub);
+
+            supervisor.ensure(SignalKind::Time).await;
+
+            tokio::time::timeout(std::time::Duration::from_secs(3), time_rx.changed())
+                .await
+                .expect("a tick within three seconds")
+                .expect("the hub is alive");
+        });
+    }
+
+    /// An MPRIS watcher that cannot start is logged, and the kind still counts as started, so
+    /// it is not retried.
+    #[test]
+    fn test_ensure_mpris_logs_a_watcher_that_cannot_start() {
+        let logs = crate::features::module_runtime::test_support::capture_logs(|| {
+            crate::test_utils::block_on(async {
+                let hub = Arc::new(SignalHub::new(Config::default()));
+                let mut supervisor = disconnected_supervisor(&hub);
+                supervisor.ensure(SignalKind::Mpris).await;
+                assert!(supervisor.started.contains(&SignalKind::Mpris));
+            });
+        });
+        assert!(
+            logs.contains(
+                "ERROR cranky::app::adapter_supervisor: Failed to start MPRIS watcher on demand: "
+            ),
+            "{logs}"
+        );
     }
 }

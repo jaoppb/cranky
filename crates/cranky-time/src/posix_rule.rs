@@ -99,13 +99,7 @@ impl Day {
         let new_year = civil::days_from_date(year, 1, 1);
         match self {
             Self::ZeroBased(day) => new_year.saturating_add(day),
-            Self::Julian(day) => {
-                let after_february = civil::is_leap_year(year) && day >= 60;
-                new_year
-                    .saturating_add(day)
-                    .saturating_sub(1)
-                    .saturating_add(i64::from(after_february))
-            }
+            Self::Julian(day) => julian_day(year, new_year, day),
             Self::Weekday {
                 month,
                 week,
@@ -123,6 +117,16 @@ impl Day {
             }
         }
     }
+}
+
+/// The day number of Julian day `day`, 1 to 365 with February 29 never
+/// counted, of a year whose January 1 is day number `new_year`.
+fn julian_day(year: i64, new_year: i64, day: i64) -> i64 {
+    let after_february = civil::is_leap_year(year) && day >= 60;
+    new_year
+        .saturating_add(day)
+        .saturating_sub(1)
+        .saturating_add(i64::from(after_february))
 }
 
 #[cfg(test)]

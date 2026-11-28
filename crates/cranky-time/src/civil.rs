@@ -31,17 +31,10 @@ pub(crate) const fn days_from_date(year: i64, month: i64, day: i64) -> i64 {
     } else {
         month.saturating_add(9)
     };
-    let day_of_year = month_from_march
-        .saturating_mul(153)
-        .saturating_add(2)
-        .div_euclid(5)
+    let day_of_year = days_before_month(month_from_march)
         .saturating_add(day)
         .saturating_sub(1);
-    let day_of_era = year_of_era
-        .saturating_mul(365)
-        .saturating_add(year_of_era.div_euclid(4))
-        .saturating_sub(year_of_era.div_euclid(100))
-        .saturating_add(day_of_year);
+    let day_of_era = days_before_year(year_of_era).saturating_add(day_of_year);
     era.saturating_mul(DAYS_PER_ERA)
         .saturating_add(day_of_era)
         .saturating_sub(EPOCH_SHIFT)
@@ -52,34 +45,16 @@ pub(crate) const fn date_from_days(days: i64) -> Date {
     let shifted = days.saturating_add(EPOCH_SHIFT);
     let era = shifted.div_euclid(DAYS_PER_ERA);
     let day_of_era = shifted.rem_euclid(DAYS_PER_ERA);
-    let year_of_era = day_of_era
-        .saturating_sub(day_of_era.div_euclid(1460))
-        .saturating_add(day_of_era.div_euclid(36_524))
-        .saturating_sub(day_of_era.div_euclid(146_096))
-        .div_euclid(365);
-    let day_of_year = day_of_era.saturating_sub(
-        year_of_era
-            .saturating_mul(365)
-            .saturating_add(year_of_era.div_euclid(4))
-            .saturating_sub(year_of_era.div_euclid(100)),
-    );
+    let year_of_era = year_of_era_of_day(day_of_era);
+    let day_of_year = day_of_era.saturating_sub(days_before_year(year_of_era));
     let month_from_march = day_of_year
         .saturating_mul(5)
         .saturating_add(2)
         .div_euclid(153);
     let day = day_of_year
-        .saturating_sub(
-            month_from_march
-                .saturating_mul(153)
-                .saturating_add(2)
-                .div_euclid(5),
-        )
+        .saturating_sub(days_before_month(month_from_march))
         .saturating_add(1);
-    let month = if month_from_march < 10 {
-        month_from_march.saturating_add(3)
-    } else {
-        month_from_march.saturating_sub(9)
-    };
+    let month = month_from_january(month_from_march);
     let year = year_of_era.saturating_add(era.saturating_mul(400));
     Date {
         year: if month <= 2 {
@@ -89,6 +64,42 @@ pub(crate) const fn date_from_days(days: i64) -> Date {
         },
         month,
         day,
+    }
+}
+
+/// The days of an era, counted from 0000-03-01, before the March of one of
+/// its years.
+const fn days_before_year(year_of_era: i64) -> i64 {
+    year_of_era
+        .saturating_mul(365)
+        .saturating_add(year_of_era.div_euclid(4))
+        .saturating_sub(year_of_era.div_euclid(100))
+}
+
+/// The days of a year that starts in March before the first of a month,
+/// counted 0 for March.
+const fn days_before_month(month_from_march: i64) -> i64 {
+    month_from_march
+        .saturating_mul(153)
+        .saturating_add(2)
+        .div_euclid(5)
+}
+
+/// The year of an era, counted from March, that holds a day of the era.
+const fn year_of_era_of_day(day_of_era: i64) -> i64 {
+    day_of_era
+        .saturating_sub(day_of_era.div_euclid(1460))
+        .saturating_add(day_of_era.div_euclid(36_524))
+        .saturating_sub(day_of_era.div_euclid(146_096))
+        .div_euclid(365)
+}
+
+/// The month numbered 1 for January from the month numbered 0 for March.
+const fn month_from_january(month_from_march: i64) -> i64 {
+    if month_from_march < 10 {
+        month_from_march.saturating_add(3)
+    } else {
+        month_from_march.saturating_sub(9)
     }
 }
 

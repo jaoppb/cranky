@@ -92,7 +92,25 @@ fn verify_file_loc_limits() {
 /// Reads whole attributes, not lines, so one split over several lines or
 /// written after other tokens is still found. Comment lines are ignored.
 fn lint_suppressions(source: &str) -> Vec<(usize, String)> {
-    let code = source
+    let code = without_comment_lines(source);
+    let mut found = Vec::new();
+    for (start, _) in code.match_indices('#') {
+        let rest = code.get(start.saturating_add(1)..).unwrap_or_default();
+        let rest = rest.strip_prefix('!').unwrap_or(rest);
+        if !rest.starts_with('[') {
+            continue;
+        }
+        let attribute = bracketed_without_whitespace(rest);
+        if attribute.contains("allow(") || attribute.contains("expect(") {
+            found.push((line_number_at(&code, start), attribute));
+        }
+    }
+    found
+}
+
+/// `source` with every comment line emptied, so line numbers stay the same.
+fn without_comment_lines(source: &str) -> String {
+    source
         .lines()
         .map(|line| {
             if line.trim_start().starts_with("//") {
@@ -102,41 +120,37 @@ fn lint_suppressions(source: &str) -> Vec<(usize, String)> {
             }
         })
         .collect::<Vec<_>>()
-        .join("\n");
+        .join("\n")
+}
 
-    let mut found = Vec::new();
-    for (start, _) in code.match_indices('#') {
-        let rest = code.get(start.saturating_add(1)..).unwrap_or_default();
-        let rest = rest.strip_prefix('!').unwrap_or(rest);
-        if !rest.starts_with('[') {
-            continue;
+/// The text from the `[` that starts `rest` to the `]` that closes it, with
+/// the whitespace taken out.
+fn bracketed_without_whitespace(rest: &str) -> String {
+    let mut depth: usize = 0;
+    let mut attribute = String::new();
+    for character in rest.chars() {
+        match character {
+            '[' => depth = depth.saturating_add(1),
+            ']' => depth = depth.saturating_sub(1),
+            _ => {}
         }
-        let mut depth: usize = 0;
-        let mut attribute = String::new();
-        for character in rest.chars() {
-            match character {
-                '[' => depth = depth.saturating_add(1),
-                ']' => depth = depth.saturating_sub(1),
-                _ => {}
-            }
-            if !character.is_whitespace() {
-                attribute.push(character);
-            }
-            if depth == 0 {
-                break;
-            }
+        if !character.is_whitespace() {
+            attribute.push(character);
         }
-        if attribute.contains("allow(") || attribute.contains("expect(") {
-            let line = code
-                .get(..start)
-                .unwrap_or_default()
-                .matches('\n')
-                .count()
-                .saturating_add(1);
-            found.push((line, attribute));
+        if depth == 0 {
+            break;
         }
     }
-    found
+    attribute
+}
+
+/// The 1-based line of `code` that byte `start` is on.
+fn line_number_at(code: &str, start: usize) -> usize {
+    code.get(..start)
+        .unwrap_or_default()
+        .matches('\n')
+        .count()
+        .saturating_add(1)
 }
 
 #[test]
