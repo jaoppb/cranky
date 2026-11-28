@@ -82,6 +82,7 @@ impl Tray {
                 .await
                 .ok();
         }
+        // The loop only ends once `seen` is set, so the default is never taken.
         seen.map_or(Ok(()), |seen| seen.map(|_| ()))
     }
 

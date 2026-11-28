@@ -79,8 +79,8 @@ impl Screenshot {
     /// Whether the bar, `bar_height` pixels tall, is `colour` from edge to
     /// edge and the output below it is not.
     pub(crate) fn shows_bar(&self, colour: Rgb, bar_height: usize) -> Outcome<bool> {
-        if let Some(result) = self.first_off_corner(colour, bar_height) {
-            return result;
+        if !self.corners_show(colour, bar_height)? {
+            return Ok(false);
         }
         let below = self
             .pixel(0, bar_height)
@@ -92,9 +92,9 @@ impl Screenshot {
         Ok(true)
     }
 
-    /// The outcome of the first corner of the bar that is not `colour`, or
-    /// that the screenshot does not reach; none when all four are `colour`.
-    fn first_off_corner(&self, colour: Rgb, bar_height: usize) -> Option<Outcome<bool>> {
+    /// Whether all four corners of the bar are `colour`; fails at the first
+    /// corner the screenshot does not reach, unless one before it is off.
+    fn corners_show(&self, colour: Rgb, bar_height: usize) -> Outcome<bool> {
         let last_row = bar_height.saturating_sub(1);
         let last_column = self.width.saturating_sub(1);
         let corners = [
@@ -112,6 +112,7 @@ impl Screenshot {
                     .map(|pixel| pixel == colour)
             })
             .find(|matched| !matches!(matched, Ok(true)))
+            .unwrap_or(Ok(true))
     }
 
     fn pixel(&self, x: usize, y: usize) -> Option<Rgb> {
