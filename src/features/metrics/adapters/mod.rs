@@ -324,4 +324,42 @@ mod tests {
             assert!(state.memory_total().value() > 0);
         });
     }
+
+    /// After a sample is sent, the sampler waits the interval and sends another, for as long
+    /// as the channel is open.
+    #[test]
+    fn test_sysinfo_adapter_keeps_sampling_every_interval() {
+        crate::test_utils::block_on(async {
+            let config: MetricsConfig = serde_json::from_value(serde_json::json!({
+                "update_interval_ms": 10
+            }))
+            .unwrap();
+            let hub = Arc::new(SignalHub::new(Config::default()));
+            let mut rx = hub.metrics_rx();
+
+            SysinfoAdapter::new(config, hub).start();
+
+            let samples = [
+                next_sample(&mut rx).await,
+                next_sample(&mut rx).await,
+                next_sample(&mut rx).await,
+            ];
+            assert!(samples.iter().all(Option::is_some));
+            assert!(
+                samples
+                    .iter()
+                    .flatten()
+                    .all(|state| state.memory_total().value() > 0)
+            );
+        });
+    }
+
+    /// The next sample sent on `rx`, or `None` when none arrives within five seconds.
+    async fn next_sample(
+        rx: &mut tokio::sync::watch::Receiver<MetricsState>,
+    ) -> Option<MetricsState> {
+        let wait = std::time::Duration::from_secs(5);
+        tokio::time::timeout(wait, rx.changed()).await.ok()?.ok()?;
+        Some(rx.borrow_and_update().clone())
+    }
 }

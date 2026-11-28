@@ -1,5 +1,9 @@
-//! Icon files on disk for the tests that resolve icons by name and theme path.
-use crate::features::systray::domain::IconImage;
+//! Fixtures for the adapter tests: icon files on disk for the tests that resolve icons by name
+//! and theme path, and tracked items.
+use crate::features::systray::domain::{
+    CreateSystrayItemCommand, Destination, IconImage, ItemIsMenu, ObjectPath, SystrayAddress,
+    SystrayCategory, SystrayId, SystrayItem, SystrayItemParams, SystrayStatus, Title,
+};
 
 /// A fresh directory of icon files for one test, removed when the test ends.
 pub(in crate::features::systray::adapters) struct TempIconDir(std::path::PathBuf);
@@ -47,4 +51,21 @@ impl Drop for TempIconDir {
 /// The first RGBA pixel of a resolved icon.
 pub(in crate::features::systray::adapters) fn first_pixel(image: &IconImage) -> &[u8] {
     &image.data()[..4]
+}
+
+/// An active, activatable item `id` served by the bus name `destination`.
+pub(in crate::features::systray::adapters) fn item(id: &str, destination: &str) -> SystrayItem {
+    SystrayItem::new(CreateSystrayItemCommand::new(
+        SystrayItemParams::new(
+            SystrayId::new(id),
+            SystrayAddress::new(
+                Destination::new(destination),
+                ObjectPath::new("/StatusNotifierItem"),
+            ),
+            Title::new(id),
+        )
+        .with_status(SystrayStatus::Active)
+        .with_category(SystrayCategory::ApplicationStatus)
+        .with_item_is_menu(ItemIsMenu::Activatable),
+    ))
 }

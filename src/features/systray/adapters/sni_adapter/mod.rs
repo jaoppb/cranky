@@ -181,6 +181,7 @@ fn log_unknown_item(id: &SystrayId, call: &SystrayActionCall) {
 mod tests {
     use super::SniAdapter;
     use crate::features::module_runtime::test_support::capture_logs;
+    use crate::features::systray::adapters::tests::fixtures::item;
     use crate::features::systray::domain::{SystrayActionCall, SystrayActionName, SystrayId};
     use crate::features::systray::ports::SniPort;
     use crate::shared::config::domain::Config;
@@ -205,6 +206,28 @@ mod tests {
                  trying to trigger action 'Activate' on ghost\n\
                  ERROR {span}: {target}: trigger_action: Systray item ID 'ghost' not found in \
                  registry when trying to trigger action 'Activate'\n"
+            )
+        );
+    }
+
+    #[test]
+    fn test_trigger_action_on_a_tracked_item_without_a_connection_logs_only_the_connection() {
+        let adapter = SniAdapter::new(Arc::new(SignalHub::new(Config::default())));
+        let id = SystrayId::new("app");
+        let tracked = item("app", ":1.42");
+        crate::test_utils::block_on(adapter.tray.insert_and_publish(id.clone(), tracked));
+        let call = SystrayActionCall::new(SystrayActionName::Activate, None);
+        let logs = capture_logs(|| {
+            let result = crate::test_utils::block_on(adapter.trigger_action(&id, &call));
+            assert!(result.is_ok());
+        });
+        let span = "trigger_action{id=SystrayId(\"app\") action=Activate pos=None}";
+        let target = "cranky::features::systray::adapters::sni_adapter";
+        assert_eq!(
+            logs,
+            format!(
+                "ERROR {span}: {target}: trigger_action: No D-Bus connection available when \
+                 trying to trigger action 'Activate' on app\n"
             )
         );
     }
