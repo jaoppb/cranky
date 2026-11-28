@@ -8,6 +8,16 @@ use crate::features::vdom::domain::UiCommand;
 use crate::shared::config::domain::Config;
 use std::time::Duration;
 
+/// Waits, for at most five seconds, until `marker` holds `ran`.
+async fn wait_for_ran(marker: &std::path::Path) {
+    for _ in 0..250 {
+        if std::fs::read_to_string(marker).is_ok_and(|text| text == "ran") {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 /// An `Exec` command runs its text through `sh -c`, and is logged first.
 #[test]
 fn test_handle_ui_commands_runs_exec_through_the_shell() {
@@ -22,12 +32,7 @@ fn test_handle_ui_commands_runs_exec_through_the_shell() {
                 .app
                 .handle_ui_commands(UiCommand::Exec(command.clone()), &RecordingSni::new())
                 .await;
-            for _ in 0..250 {
-                if std::fs::read_to_string(&marker).is_ok_and(|text| text == "ran") {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
+            wait_for_ran(&marker).await;
         });
     });
 

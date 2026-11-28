@@ -237,17 +237,20 @@ mod tests {
         });
     }
 
+    /// Asks a supervisor over a disconnected bus for MPRIS, and asserts the kind counts as started.
+    async fn ensure_mpris_and_check_it_counts_as_started() {
+        let hub = Arc::new(SignalHub::new(Config::default()));
+        let mut supervisor = disconnected_supervisor(&hub);
+        supervisor.ensure(SignalKind::Mpris).await;
+        assert!(supervisor.started.contains(&SignalKind::Mpris));
+    }
+
     /// An MPRIS watcher that cannot start is logged, and the kind still counts as started, so
     /// it is not retried.
     #[test]
     fn test_ensure_mpris_logs_a_watcher_that_cannot_start() {
         let logs = crate::features::module_runtime::test_support::capture_logs(|| {
-            crate::test_utils::block_on(async {
-                let hub = Arc::new(SignalHub::new(Config::default()));
-                let mut supervisor = disconnected_supervisor(&hub);
-                supervisor.ensure(SignalKind::Mpris).await;
-                assert!(supervisor.started.contains(&SignalKind::Mpris));
-            });
+            crate::test_utils::block_on(ensure_mpris_and_check_it_counts_as_started());
         });
         assert!(
             logs.contains(
